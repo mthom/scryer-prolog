@@ -14,7 +14,7 @@ atoms are currently supported.
 
 An example of the level of interaction currently supported is:
 
-`  l0> p(Z, Z).
+```l0> p(Z, Z).
    Program stored.  
    l0> ?- p(Z, Z).  
    yes  
@@ -40,4 +40,4 @@ An example of the level of interaction currently supported is:
    yes  
    l0> ?- p(z, h(Z, w), f(w)).  
    yes  
-   l0> quit`
+   l0> quit```
