@@ -8,9 +8,9 @@ pure Prolog.
 ## Progress
 
 The language L0 is implemented as a simple REPL. It supports
-unification on facts and queries without backtracking and clauses
-without rules, in the familiar Prolog syntax. No data types apart from
-atoms are currently supported.
+unification on facts and queries without backtracking and rules
+without clauses, in the familiar Prolog syntax. No data types apart
+from atoms are currently supported.
 
 An example of the level of interaction currently supported is:
 
