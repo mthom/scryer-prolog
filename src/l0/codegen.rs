@@ -24,7 +24,7 @@ impl fmt::Display for MachineInstruction {
 }
 
 enum IntTerm<'a> {
-    FinishedClause(usize, &'a Atom, &'a Vec<Box<Term>>),
+    FinishedClause(usize, usize, &'a Atom, &'a Vec<Box<Term>>),
     UnfinishedClause(usize, &'a Atom, &'a Vec<Box<Term>>),
     FinishedAtom(usize, &'a Atom)
 }
@@ -38,7 +38,7 @@ pub fn compile_query<'a>(t: &'a Term) -> Program
     match t {
         &Term::Clause(ref atom, ref terms) => {
             stack.push(IntTerm::UnfinishedClause(1, atom, terms));
-            variable_allocs.insert(atom, (1, true));            
+            variable_allocs.insert(atom, (1, true));
         },
         &Term::Atom(ref atom) => {
             query.push(MachineInstruction::PutStructure(atom.clone(), 0, 1));
@@ -50,48 +50,51 @@ pub fn compile_query<'a>(t: &'a Term) -> Program
         },
     };
 
+    let mut max_reg_used : usize = 1;
+
     while let Some(int_term) = stack.pop() {
         match int_term {
             IntTerm::UnfinishedClause(r, atom, terms) => {
-                stack.push(IntTerm::FinishedClause(r, atom, terms));
+                stack.push(IntTerm::FinishedClause(r, max_reg_used, atom, terms));
 
-                let mut counter : usize = r + 1;
-                
-                for t in terms {
+                let mut counter : usize = max_reg_used; // r + 1;
+
+                for t in terms {                                        
                     if t.is_variable() && !variable_allocs.contains_key(t.name()) {
-                        variable_allocs.insert(t.name(), (counter, false));                        
+                        counter += 1;
+                        variable_allocs.insert(t.name(), (counter, false));
+                    } else if !t.is_variable() {
+                        counter += 1;
                     }
-
-                    counter += 1;
                 }
 
-                counter = r + terms.len();
-                
+                max_reg_used = counter;
+
                 for t in terms.iter().rev() {
                     let r = if t.is_variable() {
                         variable_allocs.get(t.name()).unwrap().0
                     } else {
-                        counter                        
-                    };                    
-                    
-                    match t.as_ref() {
-                        &Term::Atom(ref atom) => 
-                            stack.push(IntTerm::FinishedAtom(r, atom)),
-                        &Term::Clause(ref atom, ref terms) =>                             
-                            stack.push(IntTerm::UnfinishedClause(r, atom, terms)),
-                        _ => {}
+                        let oc = counter;
+                        counter -= 1;
+                        oc
                     };
 
-                    counter -= 1;
+                    match t.as_ref() {
+                        &Term::Atom(ref atom) =>
+                            stack.push(IntTerm::FinishedAtom(r, atom)),
+                        &Term::Clause(ref atom, ref terms) =>
+                            stack.push(IntTerm::UnfinishedClause(r, atom, terms)),
+                        _ => {}
+                    };                    
                 }
             },
             IntTerm::FinishedAtom(r, atom) =>
-                query.push(MachineInstruction::PutStructure(atom.clone(), 0, r)),            
-            IntTerm::FinishedClause(r, atom, terms) => {
+                query.push(MachineInstruction::PutStructure(atom.clone(), 0, r)),
+            IntTerm::FinishedClause(r, mr, atom, terms) => {
                 query.push(MachineInstruction::PutStructure(atom.clone(), terms.len(), r));
 
-                let mut counter : usize = r + 1;
-                
+                let mut counter : usize = mr + 1;
+
                 for t in terms {
                     if let &Term::Var(ref var) = t.as_ref() {
                         let &mut (reg, ref mut seen) = variable_allocs.get_mut(var).unwrap();
@@ -102,12 +105,17 @@ pub fn compile_query<'a>(t: &'a Term) -> Program
                         } else {
                             query.push(MachineInstruction::SetValue(reg));
                         }
+
+                        if reg == counter {
+                            counter += 1;
+                        }
                     } else {
                         query.push(MachineInstruction::SetValue(counter));
-                    }
-
-                    counter += 1;
+                        counter += 1;
+                    }                    
                 }
+
+                max_reg_used = counter - 1;
             }
         };
     }
@@ -121,15 +129,15 @@ pub fn compile_fact<'a>(t: &'a Term) -> Program {
     let mut variable_allocs : HashMap<&Var, usize> = HashMap::new();
     let mut fact : Program = Vec::new();
 
-    queue.push_back((1, t));    
+    queue.push_back((1, t));
 
-    while let Some(t) = queue.pop_front() {        
+    while let Some(t) = queue.pop_front() {
         match t {
             (r, &Term::Clause(ref atom, ref terms)) => {
                 fact.push(MachineInstruction::GetStructure(atom.clone(), terms.len(), r));
-                
+
                 let mut counter : usize = reg;
-                
+
                 for t in terms {
                     if t.is_variable() && !variable_allocs.contains_key(t.name()) {
                         variable_allocs.insert(t.name(), counter);
@@ -142,7 +150,7 @@ pub fn compile_fact<'a>(t: &'a Term) -> Program {
                         fact.push(MachineInstruction::UnifyVariable(counter));
                         queue.push_back((counter, t));
                         counter += 1;
-                    }                                        
+                    }
                 }
 
                 reg = counter;

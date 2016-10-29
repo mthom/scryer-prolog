@@ -6,7 +6,7 @@ use l0::machine::{MachineState};
 
 use std::io::{self, Write};
 
-fn print_instructions(program : Program) {
+fn print_instructions(program : &Program) {
     for instruction in program {
         println!("{:}", instruction);        
     }
@@ -42,7 +42,7 @@ fn l0_repl<'a>() {
             Ok(TopLevel::Query(query)) => {
                 if let Some(program) = ms.program.clone().take() {                
                     let query = compile_query(&query);
-                
+                    
                     for instruction in query {
                         ms.execute(instruction);
                     }

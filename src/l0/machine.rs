@@ -163,37 +163,27 @@ impl MachineState {
                 self.h += 1;
             },
             MachineInstruction::UnifyVariable(reg) => {
-                if self.s < self.h {
-                    match self.mode {
-                        MachineMode::Read  => self.registers[reg] = self.heap[self.s].clone(),
-                        MachineMode::Write => {
-                            self.heap.push(HeapCell::Ref(self.h));
-                            self.registers[reg] = self.heap[self.h].clone();
-                            self.h += 1;
-                        }
-                    };
-                    
-                    self.s += 1;
-                } else {
-                    self.fail = true;
-                }
+                match self.mode {
+                    MachineMode::Read  => self.registers[reg] = self.heap[self.s].clone(),
+                    MachineMode::Write => {
+                        self.heap.push(HeapCell::Ref(self.h));
+                        self.registers[reg] = self.heap[self.h].clone();
+                        self.h += 1;
+                    }
+                };                    
             },
             MachineInstruction::UnifyValue(reg) => {
-                if self.s < self.h {                
-                    let s = self.s;
+                let s = self.s;
 
-                    match self.mode {
-                        MachineMode::Read  => self.unify(Addr::RegNum(reg), Addr::HeapCell(s)),
-                        MachineMode::Write => {
-                            self.heap.push(self.registers[reg].clone());
-                            self.h += 1;
-                        }
-                    };
-                    
-                    self.s += 1;
-                } else {
-                    self.fail = true;
-                }
+                match self.mode {
+                    MachineMode::Read  => self.unify(Addr::RegNum(reg), Addr::HeapCell(s)),
+                    MachineMode::Write => {
+                        self.heap.push(self.registers[reg].clone());
+                        self.h += 1;
+                    }
+                };
+                
+                self.s += 1;
             }
         }
     }
