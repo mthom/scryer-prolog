@@ -170,7 +170,9 @@ impl MachineState {
                         self.registers[reg] = self.heap[self.h].clone();
                         self.h += 1;
                     }
-                };                    
+                };
+
+                self.s += 1;
             },
             MachineInstruction::UnifyValue(reg) => {
                 let s = self.s;

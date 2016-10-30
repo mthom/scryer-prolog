@@ -59,7 +59,7 @@ pub fn compile_query<'a>(t: &'a Term) -> Program
 
                 let mut counter : usize = max_reg_used; // r + 1;
 
-                for t in terms {                                        
+                for t in terms {
                     if t.is_variable() && !variable_allocs.contains_key(t.name()) {
                         counter += 1;
                         variable_allocs.insert(t.name(), (counter, false));
@@ -71,9 +71,12 @@ pub fn compile_query<'a>(t: &'a Term) -> Program
                 max_reg_used = counter;
 
                 for t in terms.iter().rev() {
-                    let r = if t.is_variable() {
-                        variable_allocs.get(t.name()).unwrap().0
-                    } else {
+                    if t.is_variable() {
+                        counter -= 1;
+                        continue;
+                    }
+
+                    let r = {
                         let oc = counter;
                         counter -= 1;
                         oc
@@ -85,7 +88,7 @@ pub fn compile_query<'a>(t: &'a Term) -> Program
                         &Term::Clause(ref atom, ref terms) =>
                             stack.push(IntTerm::UnfinishedClause(r, atom, terms)),
                         _ => {}
-                    };                    
+                    };
                 }
             },
             IntTerm::FinishedAtom(r, atom) =>
@@ -112,7 +115,7 @@ pub fn compile_query<'a>(t: &'a Term) -> Program
                     } else {
                         query.push(MachineInstruction::SetValue(counter));
                         counter += 1;
-                    }                    
+                    }
                 }
 
                 max_reg_used = counter - 1;

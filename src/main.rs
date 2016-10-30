@@ -35,8 +35,8 @@ fn l0_repl<'a>() {
                 let program = compile_fact(&fact);
                 
                 ms = MachineState::new();                
-                ms.program = Some(program);
-
+                ms.program = Some(program);                
+                
                 println!("Program stored.");
             },
             Ok(TopLevel::Query(query)) => {
