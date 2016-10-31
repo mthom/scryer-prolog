@@ -17,24 +17,6 @@ pub enum Term {
     Var(Var)
 }
 
-impl Term {
-    pub fn name(&self) -> &Atom {
-        match self {
-            &Term::Atom(ref atom) => atom,
-            &Term::Var(ref var)   => var,
-            &Term::Clause(ref atom, _) => atom
-        }
-    }
-
-    pub fn is_variable(&self) -> bool {
-        if let &Term::Var(_) = self {
-            return true;
-        }
-
-        return false;
-    }
-}
-
 #[derive(Clone)]
 pub enum MachineInstruction {
     GetStructure(Atom, usize, usize),

@@ -60,10 +60,12 @@ pub fn compile_query<'a>(t: &'a Term) -> Program
                 let mut counter : usize = max_reg_used; // r + 1;
 
                 for t in terms {
-                    if t.is_variable() && !variable_allocs.contains_key(t.name()) {
-                        counter += 1;
-                        variable_allocs.insert(t.name(), (counter, false));
-                    } else if !t.is_variable() {
+                    if let &Term::Var(ref var) = t.as_ref() {
+                        if !variable_allocs.contains_key(var) {
+                            counter += 1;
+                            variable_allocs.insert(var, (counter, false));
+                        }
+                    } else {
                         counter += 1;
                     }
                 }
@@ -71,7 +73,7 @@ pub fn compile_query<'a>(t: &'a Term) -> Program
                 max_reg_used = counter;
 
                 for t in terms.iter().rev() {
-                    if t.is_variable() {
+                    if let &Term::Var(_) = t.as_ref() {
                         counter -= 1;
                         continue;
                     }
@@ -142,13 +144,15 @@ pub fn compile_fact<'a>(t: &'a Term) -> Program {
                 let mut counter : usize = reg;
 
                 for t in terms {
-                    if t.is_variable() && !variable_allocs.contains_key(t.name()) {
-                        variable_allocs.insert(t.name(), counter);
-                        fact.push(MachineInstruction::UnifyVariable(counter));
-                        counter += 1;
-                    } else if t.is_variable() {
-                        let r = variable_allocs.get(t.name()).unwrap();
-                        fact.push(MachineInstruction::UnifyValue(*r));
+                    if let &Term::Var(ref var) = t.as_ref() {
+                        if !variable_allocs.contains_key(var) {
+                            variable_allocs.insert(var, counter);
+                            fact.push(MachineInstruction::UnifyVariable(counter));
+                            counter += 1;
+                        } else {
+                            let r = variable_allocs.get(var).unwrap();
+                            fact.push(MachineInstruction::UnifyValue(*r));
+                        }
                     } else {
                         fact.push(MachineInstruction::UnifyVariable(counter));
                         queue.push_back((counter, t));
