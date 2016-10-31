@@ -147,6 +147,7 @@ pub fn compile_fact<'a>(t: &'a Term) -> Program {
                     if let &Term::Var(ref var) = t.as_ref() {
                         if !variable_allocs.contains_key(var) {
                             variable_allocs.insert(var, counter);
+
                             fact.push(MachineInstruction::UnifyVariable(counter));
                             counter += 1;
                         } else {

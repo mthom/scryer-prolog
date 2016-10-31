@@ -6,7 +6,7 @@ use std::vec::{Vec};
 #[derive(Clone)]
 enum HeapCell {
     NamedStr(usize, Atom),
-    Ref(usize), // these offsets are always in reference to cells on the Heap!
+    Ref(usize),
     Str(usize),
 }
 
@@ -53,11 +53,11 @@ impl MachineState {
 
         loop {
             if let &HeapCell::Ref(value) = self.lookup(a) {
-                if value != a.heap_offset() {
-                    a = Addr::HeapCell(value);
-                    continue;
-                } else {
-                    return a;
+                if let Addr::HeapCell(av) = a {
+                    if value != av {
+                        a = Addr::HeapCell(value);
+                        continue;
+                    }
                 }
             }
 
@@ -65,10 +65,10 @@ impl MachineState {
         };
     }
 
-    fn bind(&mut self, a: Addr, val: Addr) {
+    fn bind(&mut self, a: Addr, val: usize) {
         match a {
-            Addr::RegNum(reg)  => self.registers[reg] = HeapCell::Ref(val.heap_offset()),
-            Addr::HeapCell(hc) => self.heap[hc] = HeapCell::Ref(val.heap_offset()),
+            Addr::RegNum(reg)  => self.registers[reg] = HeapCell::Ref(val),
+            Addr::HeapCell(hc) => self.heap[hc] = HeapCell::Ref(val),
         };
     }
 
@@ -83,8 +83,10 @@ impl MachineState {
 
             if d1 != d2 {
                 match (self.lookup(d1), self.lookup(d2)) {
-                    (&HeapCell::Ref(_), _) | (_, &HeapCell::Ref(_)) =>
-                        self.bind(d1, d2),
+                    (&HeapCell::Ref(hc), _) =>
+                        self.bind(d2, hc),
+                    (_, &HeapCell::Ref(hc)) =>
+                        self.bind(d1, hc),
                     (&HeapCell::Str(a1), &HeapCell::Str(a2)) => {
                         let r1 = &self.heap[a1];
                         let r2 = &self.heap[a2];
@@ -134,7 +136,7 @@ impl MachineState {
 
                         let h = self.h;
 
-                        self.bind(Addr::RegNum(reg), Addr::HeapCell(h));
+                        self.bind(Addr::RegNum(reg), h);
 
                         self.h += 2;
                         self.mode = MachineMode::Write;

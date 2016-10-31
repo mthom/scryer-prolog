@@ -29,17 +29,8 @@ pub enum MachineInstruction {
 
 pub type Program = Vec<MachineInstruction>;
 
-#[derive(Clone, Copy, PartialEq)]    
+#[derive(Clone, Copy, PartialEq)]
 pub enum Addr {
     HeapCell(usize),
     RegNum(usize)
-}
-
-impl Addr {
-    pub fn heap_offset(&self) -> usize {
-        match self {
-            &Addr::HeapCell(hc) => hc,
-            &Addr::RegNum(reg)  => reg
-        }
-    }
 }
