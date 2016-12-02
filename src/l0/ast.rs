@@ -17,7 +17,6 @@ pub enum Term {
     Var(Var)
 }
 
-#[derive(Clone)]
 pub enum MachineInstruction {
     GetStructure(Atom, usize, usize),
     PutStructure(Atom, usize, usize),

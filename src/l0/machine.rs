@@ -112,9 +112,9 @@ impl MachineState {
         }
     }    
     
-    pub fn execute(&mut self, instr: MachineInstruction) {
+    pub fn execute<'a, 'b : 'a>(&'a mut self, instr: &'b MachineInstruction) {
         match instr {
-            MachineInstruction::GetStructure(name, arity, reg) => {
+            &MachineInstruction::GetStructure(ref name, arity, reg) => {
                 let addr = self.deref(Addr::RegNum(reg));
 
                 match self.lookup(addr) {
@@ -122,7 +122,7 @@ impl MachineState {
                         let result = &self.heap[a];
 
                         if let &HeapCell::NamedStr(named_arity, ref named_str) = result {
-                            if arity == named_arity && name == *named_str {
+                            if arity == named_arity && *name == *named_str {
                                 self.s = a + 1;
                                 self.mode = MachineMode::Read;
                             } else {
@@ -132,7 +132,7 @@ impl MachineState {
                     },
                     &HeapCell::Ref(reg) => {
                         self.heap.push(HeapCell::Str(self.h + 1));
-                        self.heap.push(HeapCell::NamedStr(arity, name));
+                        self.heap.push(HeapCell::NamedStr(arity, name.clone()));
 
                         let h = self.h;
 
@@ -146,25 +146,25 @@ impl MachineState {
                     }
                 };
             },
-            MachineInstruction::PutStructure(name, arity, reg) => {
+            &MachineInstruction::PutStructure(ref name, arity, reg) => {
                 self.heap.push(HeapCell::Str(self.h + 1));
-                self.heap.push(HeapCell::NamedStr(arity, name));
+                self.heap.push(HeapCell::NamedStr(arity, name.clone()));
 
                 self.registers[reg] = self.heap[self.h].clone();
 
                 self.h += 2;
             },
-            MachineInstruction::SetVariable(reg) => {
+            &MachineInstruction::SetVariable(reg) => {
                 self.heap.push(HeapCell::Ref(self.h));
                 self.registers[reg] = self.heap[self.h].clone();
 
                 self.h += 1;
             },
-            MachineInstruction::SetValue(reg) => {
+            &MachineInstruction::SetValue(reg) => {
                 self.heap.push(self.registers[reg].clone());
                 self.h += 1;
             },
-            MachineInstruction::UnifyVariable(reg) => {
+            &MachineInstruction::UnifyVariable(reg) => {
                 match self.mode {
                     MachineMode::Read  => self.registers[reg] = self.heap[self.s].clone(),
                     MachineMode::Write => {
@@ -176,7 +176,7 @@ impl MachineState {
 
                 self.s += 1;
             },
-            MachineInstruction::UnifyValue(reg) => {
+            &MachineInstruction::UnifyValue(reg) => {
                 let s = self.s;
 
                 match self.mode {

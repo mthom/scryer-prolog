@@ -40,14 +40,14 @@ fn l0_repl<'a>() {
                 println!("Program stored.");
             },
             Ok(TopLevel::Query(query)) => {
-                if let Some(program) = ms.program.clone().take() {                
+                if let Some(program) = ms.program.take() {                
                     let query = compile_query(&query);
                     
-                    for instruction in query {
+                    for instruction in &query {
                         ms.execute(instruction);
                     }
 
-                    for instruction in program {                    
+                    for instruction in &program {                    
                         ms.execute(instruction);
 
                         if ms.fail {                            
@@ -62,6 +62,7 @@ fn l0_repl<'a>() {
                     }
 
                     ms.reset_heap();
+                    ms.program = Some(program);
                 } else {
                     println!("No program to speak of.");
                 }
