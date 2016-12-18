@@ -12,7 +12,7 @@ fn print_instructions(program : &Program) {
     }
 }
 
-fn l0_repl<'a>() {
+fn l0_repl() {
     let mut ms = MachineState::new();
     
     loop {
