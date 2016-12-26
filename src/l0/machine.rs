@@ -20,7 +20,7 @@ type Heap = Vec<HeapCell>;
 
 type Registers = Vec<HeapCell>;
 
-pub struct MachineState {
+pub struct Machine {
     h : usize,
     s : usize,
     pub fail : bool,
@@ -30,9 +30,9 @@ pub struct MachineState {
     registers : Registers
 }
 
-impl MachineState {
-    pub fn new() -> MachineState {
-        MachineState { h : 0,
+impl Machine {
+    pub fn new() -> Machine {
+        Machine { h : 0,
                        s : 0,
                        fail : false,
                        heap : Vec::with_capacity(256),
@@ -195,7 +195,7 @@ impl MachineState {
     pub fn reset_heap(&mut self) {
         let program = self.program.take();
 
-        *self = MachineState::new();
+        *self = Machine::new();
         self.program = program;
     }
     

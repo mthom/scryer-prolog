@@ -139,7 +139,9 @@ pub fn compile_fact<'a>(t: &'a Term) -> Program {
     while let Some(t) = queue.pop_front() {
         match t {
             (r, &Term::Clause(ref atom, ref terms)) => {
-                fact.push(MachineInstruction::GetStructure(atom.clone(), terms.len(), r));
+                fact.push(MachineInstruction::GetStructure(atom.clone(),
+                                                           terms.len(),
+                                                           r));
 
                 let mut counter : usize = reg;
 

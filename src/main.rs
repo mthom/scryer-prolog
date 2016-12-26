@@ -2,7 +2,7 @@ mod l0;
 
 use l0::ast::{Atom, Program, Term, TopLevel, Var};
 use l0::codegen::{compile_fact, compile_query};
-use l0::machine::{MachineState};
+use l0::machine::{Machine};
 
 use std::io::{self, Write};
 
@@ -13,7 +13,7 @@ fn print_instructions(program : &Program) {
 }
 
 fn l0_repl() {
-    let mut ms = MachineState::new();
+    let mut ms = Machine::new();
     
     loop {
         print!("l0> ");
@@ -27,14 +27,14 @@ fn l0_repl() {
         if &*buffer == "quit\n" {
             break;
         } else if &*buffer == "clear\n" {
-            ms = MachineState::new();
+            ms = Machine::new();
         }        
         
         match result {            
             Ok(TopLevel::Fact(fact)) => {                
                 let program = compile_fact(&fact);
                 
-                ms = MachineState::new();                
+                ms = Machine::new();                
                 ms.program = Some(program);                
                 
                 println!("Program stored.");
