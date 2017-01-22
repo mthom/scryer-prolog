@@ -1,6 +1,5 @@
-use l0::ast::{Addr, Atom, MachineInstruction, Program, Term, TopLevel, Var};
+use l0::ast::{Addr, Atom, CompiledFact, FactInstruction, QueryInstruction};
 
-use std::fmt;
 use std::vec::{Vec};
 
 #[derive(Clone)]
@@ -26,7 +25,7 @@ pub struct Machine {
     pub fail : bool,
     heap : Heap,
     mode : MachineMode,
-    pub program : Option<Program>,
+    pub program : Option<CompiledFact>,
     registers : Registers
 }
 
@@ -111,10 +110,33 @@ impl Machine {
             }
         }
     }    
-    
-    pub fn execute<'a, 'b : 'a>(&'a mut self, instr: &'b MachineInstruction) {
+
+    pub fn execute_query_instr<'a, 'b : 'a>(&'a mut self, instr: &'b QueryInstruction) {
         match instr {
-            &MachineInstruction::GetStructure(ref name, arity, reg) => {
+            &QueryInstruction::PutStructure(ref name, arity, reg) => {
+                self.heap.push(HeapCell::Str(self.h + 1));
+                self.heap.push(HeapCell::NamedStr(arity, name.clone()));
+
+                self.registers[reg] = self.heap[self.h].clone();
+
+                self.h += 2;
+            },
+            &QueryInstruction::SetVariable(reg) => {
+                self.heap.push(HeapCell::Ref(self.h));
+                self.registers[reg] = self.heap[self.h].clone();
+
+                self.h += 1;
+            },
+            &QueryInstruction::SetValue(reg) => {
+                self.heap.push(self.registers[reg].clone());
+                self.h += 1;
+            },
+        }
+    }
+    
+    pub fn execute_fact_instr<'a, 'b : 'a>(&'a mut self, instr: &'b FactInstruction) {
+        match instr {
+            &FactInstruction::GetStructure(ref name, arity, reg) => {
                 let addr = self.deref(Addr::RegNum(reg));
 
                 match self.lookup(addr) {
@@ -146,25 +168,7 @@ impl Machine {
                     }
                 };
             },
-            &MachineInstruction::PutStructure(ref name, arity, reg) => {
-                self.heap.push(HeapCell::Str(self.h + 1));
-                self.heap.push(HeapCell::NamedStr(arity, name.clone()));
-
-                self.registers[reg] = self.heap[self.h].clone();
-
-                self.h += 2;
-            },
-            &MachineInstruction::SetVariable(reg) => {
-                self.heap.push(HeapCell::Ref(self.h));
-                self.registers[reg] = self.heap[self.h].clone();
-
-                self.h += 1;
-            },
-            &MachineInstruction::SetValue(reg) => {
-                self.heap.push(self.registers[reg].clone());
-                self.h += 1;
-            },
-            &MachineInstruction::UnifyVariable(reg) => {
+            &FactInstruction::UnifyVariable(reg) => {
                 match self.mode {
                     MachineMode::Read  => self.registers[reg] = self.heap[self.s].clone(),
                     MachineMode::Write => {
@@ -176,7 +180,7 @@ impl Machine {
 
                 self.s += 1;
             },
-            &MachineInstruction::UnifyValue(reg) => {
+            &FactInstruction::UnifyValue(reg) => {
                 let s = self.s;
 
                 match self.mode {
@@ -197,38 +201,5 @@ impl Machine {
 
         *self = Machine::new();
         self.program = program;
-    }
-    
-    pub fn dump_registers_and_heap(&self) {
-        let mut c = 0;
-
-        let printer = |contents, c| {
-            match contents {
-                &HeapCell::NamedStr(ref arity, ref atom) => {
-                    println!("{} = NAME({}, {})", c, arity, atom);
-                },
-                &HeapCell::Ref(hc) => {
-                    println!("{} = REF({})", c, hc);
-                },
-                &HeapCell::Str(hc) => {
-                    println!("{} = STR({})", c, hc);
-                }
-            };
-        };
-        
-        for contents in &self.registers {
-            print!("X");
-            printer(contents, c);
-            c += 1;
-        }
-
-        println!("");
-        
-        c = 0;
-
-        for contents in &self.heap {
-            printer(contents, c);
-            c += 1;
-        }
-    }
+    }    
 }

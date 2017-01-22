@@ -1,28 +1,23 @@
 mod l0;
 
-use l0::ast::{Atom, Program, Term, TopLevel, Var};
-use l0::codegen::{compile_fact, compile_query};
+use l0::ast::{TopLevel};
+use l0::codegen::{compile_target};
 use l0::machine::{Machine};
 
 use std::io::{self, Write};
-
-fn print_instructions(program : &Program) {
-    for instruction in program {
-        println!("{:}", instruction);        
-    }
-}
 
 fn l0_repl() {
     let mut ms = Machine::new();
     
     loop {
         print!("l0> ");
-        io::stdout().flush();
-
+        
+        let _ = io::stdout().flush();
         let mut buffer = String::new();
+        
         io::stdin().read_line(&mut buffer).unwrap();
         
-        let result = l0::l0_parser::parse_TopLevel(&*buffer);
+        let result = l0::parser::parse_top_level(&*buffer);
 
         if &*buffer == "quit\n" {
             break;
@@ -32,8 +27,8 @@ fn l0_repl() {
         
         match result {            
             Ok(TopLevel::Fact(fact)) => {                
-                let program = compile_fact(&fact);
-                
+                let program = compile_target(&fact);
+                                
                 ms = Machine::new();                
                 ms.program = Some(program);                
                 
@@ -41,14 +36,14 @@ fn l0_repl() {
             },
             Ok(TopLevel::Query(query)) => {
                 if let Some(program) = ms.program.take() {                
-                    let query = compile_query(&query);
+                    let query = compile_target(&query);
                     
                     for instruction in &query {
-                        ms.execute(instruction);
+                        ms.execute_query_instr(instruction);
                     }
 
                     for instruction in &program {                    
-                        ms.execute(instruction);
+                        ms.execute_fact_instr(instruction);
 
                         if ms.fail {                            
                             break;
@@ -60,7 +55,7 @@ fn l0_repl() {
                     } else {
                         println!("yes");
                     }
-
+                    
                     ms.reset_heap();
                     ms.program = Some(program);
                 } else {

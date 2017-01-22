@@ -1,178 +1,126 @@
-use l0::ast::{Atom, Term, MachineInstruction, Program, TopLevel, Var};
+use l0::ast::{Atom, Term, FactInstruction, QueryInstruction, Var};
+use l0::iterators::{BreadthFirstIterator, PostOrderIterator};
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashSet};
 use std::fmt;
 use std::vec::{Vec};
 
-impl fmt::Display for MachineInstruction {
+impl fmt::Display for QueryInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &MachineInstruction::GetStructure(ref a, ref s, ref r) =>
-                write!(f, "get_structure {}/{}, X{}", a, s, r),
-            &MachineInstruction::PutStructure(ref a, ref s, ref r) =>
+            &QueryInstruction::PutStructure(ref a, ref s, ref r) =>
                 write!(f, "put_structure {}/{}, X{}", a, s, r),
-            &MachineInstruction::SetVariable(ref r) =>
+            &QueryInstruction::SetVariable(ref r) =>
                 write!(f, "set_variable X{}", r),
-            &MachineInstruction::SetValue(ref r) =>
+            &QueryInstruction::SetValue(ref r) =>
                 write!(f, "set_value X{}", r),
-            &MachineInstruction::UnifyVariable(ref r) =>
+        }
+    }
+}
+
+impl fmt::Display for FactInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &FactInstruction::GetStructure(ref a, ref s, ref r) =>
+                write!(f, "get_structure {}/{}, X{}", a, s, r),
+            &FactInstruction::UnifyVariable(ref r) =>
                 write!(f, "unify_variable X{}", r),
-            &MachineInstruction::UnifyValue(ref r) =>
+            &FactInstruction::UnifyValue(ref r) =>
                 write!(f, "unify_value X{}", r)
         }
     }
 }
 
-enum IntTerm<'a> {
-    FinishedClause(usize, usize, &'a Atom, &'a Vec<Box<Term>>),
-    UnfinishedClause(usize, &'a Atom, &'a Vec<Box<Term>>),
-    FinishedAtom(usize, &'a Atom)
+pub trait CompilationTarget<'a> where Self : Sized {
+    type Iterator : Iterator<Item=&'a Term>;
+    
+    fn iter(term: &'a Term) -> Self::Iterator;
+
+    fn to_structure(name: Atom, arity: usize, cell_num: usize) -> Self;
+    fn to_value(cell_num: usize) -> Self;
+    fn to_variable(cell_num: usize) -> Self;
 }
 
-pub fn compile_query<'a>(t: &'a Term) -> Program
+impl<'a> CompilationTarget<'a> for FactInstruction {
+    type Iterator = BreadthFirstIterator<'a>;
+    
+    fn iter(term: &'a Term) -> Self::Iterator {
+        term.breadth_first_iter()
+    }
+
+    fn to_structure(name: Atom, arity: usize, cell_num: usize) -> Self {
+        FactInstruction::GetStructure(name, arity, cell_num)
+    }
+
+    fn to_value(cell_num: usize) -> Self {
+        FactInstruction::UnifyValue(cell_num)
+    }
+
+    fn to_variable(cell_num: usize) -> Self {
+        FactInstruction::UnifyVariable(cell_num)
+    }
+}
+
+impl<'a> CompilationTarget<'a> for QueryInstruction {
+    type Iterator = PostOrderIterator<'a>;
+
+    fn iter(term: &'a Term) -> Self::Iterator {
+        term.post_order_iter()
+    }
+
+    fn to_structure(name: Atom, arity: usize, cell_num: usize) -> Self {
+        QueryInstruction::PutStructure(name, arity, cell_num)
+    }
+
+    fn to_value(cell_num: usize) -> Self {
+        QueryInstruction::SetValue(cell_num)
+    }
+
+    fn to_variable(cell_num: usize) -> Self {
+        QueryInstruction::SetVariable(cell_num)
+    }
+}
+
+fn subterm_to_instr<'a, Target>(subterm:  &'a Term,
+                                bindings: &mut HashSet<&'a Var>)
+                                -> Target
+    where Target: CompilationTarget<'a>
 {
-    let mut stack : Vec<IntTerm<'a>> = Vec::new();
-    let mut variable_allocs : HashMap<&Var, (usize, bool)> = HashMap::new();
-    let mut query : Program = Vec::new();
-
-    match t {
-        &Term::Clause(ref atom, ref terms) => {
-            stack.push(IntTerm::UnfinishedClause(1, atom, terms));
-            variable_allocs.insert(atom, (1, true));
+    match subterm {
+        &Term::Atom(ref cell_num, _) =>
+            Target::to_value(cell_num.get()),
+        &Term::Var(ref cell_num, ref atom) if bindings.contains(atom) =>
+            Target::to_value(cell_num.get()),
+        &Term::Var(ref cell_num, ref atom) => {
+            bindings.insert(atom);
+            Target::to_variable(cell_num.get())
         },
-        &Term::Atom(ref atom) => {
-            query.push(MachineInstruction::PutStructure(atom.clone(), 0, 1));
-            return query;
-        },
-        &Term::Var(_) => {
-            query.push(MachineInstruction::SetVariable(1));
-            return query;
-        },
-    };
-
-    let mut max_reg_used : usize = 1;
-
-    while let Some(int_term) = stack.pop() {
-        match int_term {
-            IntTerm::UnfinishedClause(r, atom, terms) => {
-                stack.push(IntTerm::FinishedClause(r, max_reg_used, atom, terms));
-
-                let mut counter : usize = max_reg_used; // r + 1;
-
-                for t in terms {
-                    if let &Term::Var(ref var) = t.as_ref() {
-                        if !variable_allocs.contains_key(var) {
-                            counter += 1;
-                            variable_allocs.insert(var, (counter, false));
-                        }
-                    } else {
-                        counter += 1;
-                    }
-                }
-
-                max_reg_used = counter;
-
-                for t in terms.iter().rev() {
-                    if let &Term::Var(_) = t.as_ref() {
-                        counter -= 1;
-                        continue;
-                    }
-
-                    let r = {
-                        let oc = counter;
-                        counter -= 1;
-                        oc
-                    };
-
-                    match t.as_ref() {
-                        &Term::Atom(ref atom) =>
-                            stack.push(IntTerm::FinishedAtom(r, atom)),
-                        &Term::Clause(ref atom, ref terms) =>
-                            stack.push(IntTerm::UnfinishedClause(r, atom, terms)),
-                        _ => {}
-                    };
-                }
-            },
-            IntTerm::FinishedAtom(r, atom) =>
-                query.push(MachineInstruction::PutStructure(atom.clone(), 0, r)),
-            IntTerm::FinishedClause(r, mr, atom, terms) => {
-                query.push(MachineInstruction::PutStructure(atom.clone(), terms.len(), r));
-
-                let mut counter : usize = mr + 1;
-
-                for t in terms {
-                    if let &Term::Var(ref var) = t.as_ref() {
-                        let &mut (reg, ref mut seen) = variable_allocs.get_mut(var).unwrap();
-
-                        if !*seen {
-                            query.push(MachineInstruction::SetVariable(reg));
-                            *seen = true;
-                        } else {
-                            query.push(MachineInstruction::SetValue(reg));
-                        }
-
-                        if reg == counter {
-                            counter += 1;
-                        }
-                    } else {
-                        query.push(MachineInstruction::SetValue(counter));
-                        counter += 1;
-                    }
-                }
-
-                max_reg_used = counter - 1;
-            }
-        };
+        &Term::Clause(ref cell_num, _, _) =>
+            Target::to_value(cell_num.get())
     }
-
-    query
 }
 
-pub fn compile_fact<'a>(t: &'a Term) -> Program {
-    let mut reg : usize = 2;
-    let mut queue : VecDeque<(usize, &'a Term)> = VecDeque::new();
-    let mut variable_allocs : HashMap<&Var, usize> = HashMap::new();
-    let mut fact : Program = Vec::new();
+pub fn compile_target<'a, Target>(term: &'a Term) -> Vec<Target>
+    where Target: CompilationTarget<'a>
+{
+    let mut iter     = Target::iter(term);
+    let mut target   = Vec::<Target>::new();
+    let mut bindings = HashSet::new();
 
-    queue.push_back((1, t));
+    while let Some(term) = iter.next() {
+        match term {
+            &Term::Atom(ref cell_num, ref atom) =>
+                target.push(Target::to_structure(atom.clone(), 0, cell_num.get())),
+            &Term::Clause(ref cell_num, ref atom, ref terms) => {
+                target.push(Target::to_structure(atom.clone(), 0, cell_num.get()));
 
-    while let Some(t) = queue.pop_front() {
-        match t {
-            (r, &Term::Clause(ref atom, ref terms)) => {
-                fact.push(MachineInstruction::GetStructure(atom.clone(),
-                                                           terms.len(),
-                                                           r));
-
-                let mut counter : usize = reg;
-
-                for t in terms {
-                    if let &Term::Var(ref var) = t.as_ref() {
-                        if !variable_allocs.contains_key(var) {
-                            variable_allocs.insert(var, counter);
-
-                            fact.push(MachineInstruction::UnifyVariable(counter));
-                            counter += 1;
-                        } else {
-                            let r = variable_allocs.get(var).unwrap();
-                            fact.push(MachineInstruction::UnifyValue(*r));
-                        }
-                    } else {
-                        fact.push(MachineInstruction::UnifyVariable(counter));
-                        queue.push_back((counter, t));
-                        counter += 1;
-                    }
+                for subterm in terms {
+                    target.push(subterm_to_instr(subterm.as_ref(), &mut bindings));
                 }
-
-                reg = counter;
             },
-            (r, &Term::Atom(ref atom)) =>
-                fact.push(MachineInstruction::GetStructure(atom.clone(), 0, r)),
-            (r, &Term::Var(_)) => {
-                fact.push(MachineInstruction::UnifyVariable(r));
-                return fact;
-            }
+            _ => {},
         };
     }
 
-    fact
+    target
 }

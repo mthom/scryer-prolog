@@ -27,8 +27,6 @@ l0> ?- p(z, w).
 no  
 l0> ?- p(w, w).  
 yes  
-l0> ?- p(Z, w).  
-yes  
 l0> ?- p(Z, h(Z, W), f(W)).  
 no  
 l0> p(Z, h(Z, W), f(W)).  
@@ -42,4 +40,15 @@ yes
 l0> ?- p(z, h(Z, w), f(w)).  
 yes  
 l0> quit
+```
+
+## Occurs check
+
+There's no occurs check, so cyclic terms do unify:
+
+```
+l0> p(W, W).
+Program stored.
+l0> ?- p(f(f(W)), W).
+yes
 ```

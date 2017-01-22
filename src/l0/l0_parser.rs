@@ -1,9 +1,11 @@
+use std::cell::{Cell};
 use l0::ast::{Atom, Term, TopLevel, Var};
 extern crate lalrpop_util as __lalrpop_util;
 
 mod __parse__TopLevel {
     #![allow(non_snake_case, non_camel_case_types, unused_mut, unused_variables, unused_imports)]
 
+    use std::cell::{Cell};
     use l0::ast::{Atom, Term, TopLevel, Var};
     extern crate lalrpop_util as __lalrpop_util;
     #[allow(dead_code)]
@@ -1384,7 +1386,7 @@ pub fn __action6<
     {
      	      let mut ts = ts;
      	      ts.push(t);
-	      Term::Clause(a, ts)
+	      Term::Clause(Cell::new(0), a, ts)
      }
 }
 
@@ -1396,7 +1398,7 @@ pub fn __action7<
     (_, __0, _): (usize, Atom, usize),
 ) -> Term
 {
-    Term::Atom(__0)
+    Term::Atom(Cell::new(0), __0)
 }
 
 #[allow(unused_variables)]
@@ -1407,7 +1409,7 @@ pub fn __action8<
     (_, __0, _): (usize, Var, usize),
 ) -> Term
 {
-    Term::Var(__0)
+    Term::Var(Cell::new(0), __0)
 }
 
 #[allow(unused_variables)]
