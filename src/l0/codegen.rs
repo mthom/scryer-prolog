@@ -31,7 +31,7 @@ impl fmt::Display for FactInstruction {
     }
 }
 
-pub trait CompilationTarget<'a> where Self : Sized {
+pub trait CompilationTarget<'a> {
     type Iterator : Iterator<Item=&'a Term>;
     
     fn iter(term: &'a Term) -> Self::Iterator;
