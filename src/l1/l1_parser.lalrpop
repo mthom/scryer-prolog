@@ -1,0 +1,32 @@
+use std::cell::Cell;
+
+use l1::ast::{Atom, Reg, Term, TopLevel, Var};
+
+grammar;
+
+pub TopLevel: TopLevel = {
+    "?-" <t:Term> "." => TopLevel::Query(t),
+    <t:Term> "."      => TopLevel::Fact(t),
+};
+
+Atom : Atom = {
+    r"[a-z][a-z0-9_]*" => <>.trim().to_string(),
+};
+
+Var : Var = {
+    r"[A-Z][a-z0-9_]*" => <>.trim().to_string(),
+};
+
+BoxedTerm : Box<Term> = {
+    <t:Term> => Box::new(t),
+};
+
+Term : Term = {
+    <a:Atom> "(" <ts: (<BoxedTerm> ",")*> <t:BoxedTerm> ")" => {
+     	let mut ts = ts;
+     	ts.push(t);
+	Term::Clause(Cell::new(0), a, ts)
+    },
+    <Atom> => Term::Atom(Cell::new(0), <>),
+    <Var>  => Term::Var(Cell::new(Reg::Norm(0)), <>)
+};

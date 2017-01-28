@@ -1,13 +1,14 @@
 # rusty-wam
 
-The beginnings of the Warren Abstract Machine in Rust, according to
-the progression of languages in [Warren's Abstract Machine: A Tutorial
+An implementation of the Warren Abstract Machine in Rust, done
+according to the progression of languages in [Warren's Abstract
+Machine: A Tutorial
 Reconstruction](http://wambook.sourceforge.net/wambook.pdf), ending in
 pure Prolog.
 
 ## Progress
 
-The language L0 is implemented as a simple REPL. It supports
+The language L1 is implemented as a simple REPL. It supports
 unification on facts and queries without backtracking and rules
 without clauses, in the familiar Prolog syntax. No data types apart
 from atoms are currently supported.
@@ -15,45 +16,44 @@ from atoms are currently supported.
 An example of the level of interaction currently supported is:
 
 ```
-l0> p(Z, Z).  
-Program stored.  
-l0> ?- p(Z, Z).  
+l1> p(Z, Z).  
+l1> ?- p(Z, Z).  
 yes  
-l0> ?- p(Z, z).  
+l1> ?- p(Z, z).  
 yes  
-l0> ?- p(Z, w).  
+l1> ?- p(Z, w).  
 yes  
-l0> ?- p(z, w).  
+l1> clouds(are, nice).
+l1> ?- p(z, w).  
 no  
-l0> ?- p(w, w).  
+l1> ?- p(w, w).  
 yes
-l0> clouds(are, nice).
-Program stored.
-l0> ?- clouds(Z, Z).
+l1> ?- clouds(Z, Z).
 no
-l0> ?- clouds(Z, W).
+l1> ?- clouds(Z, W).
 yes
-l0> ?- clouds(are, W).
+l1> ?- clouds(are, W).
 yes
-l0> ?- clouds(W, nice).
+l1> ?- clouds(W, nice).
 yes
-l0> ?- clouds(nice, are).
+l1> ?- clouds(nice, are).
 no
-l0> ?- p(Z, h(Z, W), f(W)).  
+l1> ?- p(Z, h(Z, W), f(W)).  
 no  
-l0> p(Z, h(Z, W), f(W)).  
-Program stored.  
-l0> ?- p(z, h(z, z), f(w)).  
+l1> p(Z, h(Z, W), f(W)).  
+l1> ?- p(z, h(z, z), f(w)).  
 no  
-l0> ?- p(z, h(z, w), f(w)).  
+l1> ?- p(z, h(z, w), f(w)).  
 yes  
-l0> ?- p(Z, h(z, W), f(w)).  
+l1> ?- p(Z, h(z, W), f(w)).  
 yes  
-l0> ?- p(z, h(Z, w), f(w)).  
+l1> ?- p(z, h(Z, w), f(w)).  
 yes
-l0> ?- p(z, h(Z, w), f(Z)).
+l1> ?- p(Z, h(Z, w), f(Z)).
+yes
+l1> ?- p(z, h(Z, w), f(Z)).
 no
-l0> quit
+l1> quit
 ```
 
 ## Occurs check
@@ -61,8 +61,7 @@ l0> quit
 There's no occurs check, so cyclic terms do unify:
 
 ```
-l0> p(W, W).
-Program stored.
-l0> ?- p(f(f(W)), W).
+l1> p(W, W).
+l1> ?- p(f(f(W)), W).
 yes
 ```

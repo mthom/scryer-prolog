@@ -1,72 +1,62 @@
-mod l0;
+mod l1;
 
-use l0::ast::{TopLevel};
-use l0::codegen::{compile_target};
-use l0::machine::{Machine};
+use l1::ast::TopLevel;
+use l1::codegen::{compile_fact, compile_query};
+use l1::machine::Machine;
 
 use std::io::{self, Write};
 
-fn l0_repl() {
+fn l1_repl() {
     let mut ms = Machine::new();
-    
+
     loop {
-        print!("l0> ");
-        
+        print!("l1> ");
+
         let _ = io::stdout().flush();
         let mut buffer = String::new();
-        
+
         io::stdin().read_line(&mut buffer).unwrap();
-        
-        let result = l0::parser::parse_top_level(&*buffer);
+
+        let result = l1::l1_parser::parse_TopLevel(&*buffer);
 
         if &*buffer == "quit\n" {
             break;
         } else if &*buffer == "clear\n" {
             ms = Machine::new();
-        }        
-        
-        match result {            
-            Ok(TopLevel::Fact(fact)) => {                
-                let program = compile_target(&fact);
-                                
-                ms = Machine::new();                
-                ms.program = Some(program);                
+        }
+
+        match result {
+            Ok(TopLevel::Fact(fact)) => {
+                let mut compiled_fact = compile_fact(&fact);
+                let index = ms.code.len();
                 
-                println!("Program stored.");
+                ms.code.append(&mut compiled_fact);
+                ms.code_dir.insert((fact.name().clone(), fact.arity()), index);
             },
             Ok(TopLevel::Query(query)) => {
-                if let Some(program) = ms.program.take() {                
-                    let query = compile_target(&query);
-                    
-                    for instruction in &query {
-                        ms.execute_query_instr(instruction);
-                    }
+                let compiled_query = compile_query(&query);
 
-                    for instruction in &program {                    
-                        ms.execute_fact_instr(instruction);
+                for instruction in &compiled_query {
+                    ms.execute_query_instr(instruction);
 
-                        if ms.fail {                            
-                            break;
-                        }
-                    }                    
-                
                     if ms.fail {
-                        println!("no");
-                    } else {
-                        println!("yes");
+                        break;
                     }
-                    
-                    ms.reset_heap();
-                    ms.program = Some(program);
-                } else {
-                    println!("No program to speak of.");
                 }
-            },                                        
+
+                if ms.fail {
+                    println!("no");
+                } else {
+                    println!("yes");
+                }
+
+                ms.reset_machine_state();
+            },
             Err(_) => println!("Grammatical error of some kind!"),
-        };        
+        };
     }
 }
 
 fn main() {
-    l0_repl();
+    l1_repl();
 }
