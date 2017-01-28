@@ -32,12 +32,12 @@ pub struct Machine {
 impl Machine {
     pub fn new() -> Machine {
         Machine { h : 0,
-                       s : 0,
-                       fail : false,
-                       heap : Vec::with_capacity(256),
-                       mode : MachineMode::Write,
-                       program : None,
-                       registers : vec![HeapCell::Ref(0); 33] }
+                  s : 0,
+                  fail : false,
+                  heap : Vec::with_capacity(256),
+                  mode : MachineMode::Write,
+                  program : None,
+                  registers : vec![HeapCell::Ref(0); 33] }
     }
     
     fn lookup(&self, a: Addr) -> &HeapCell {
@@ -64,11 +64,44 @@ impl Machine {
         };
     }
 
+    fn is_unbound(hc: &HeapCell, index: usize) -> bool {
+        match hc {
+            &HeapCell::Ref(r) => r == index,
+            _ => false
+        }
+    }
+    
+    //TODO: try to compress this function. currently it is dog shit.
     fn bind(&mut self, a: Addr, val: usize) {
-        match a {
-            Addr::RegNum(reg)  => self.registers[reg] = HeapCell::Ref(val),
-            Addr::HeapCell(hc) => self.heap[hc] = HeapCell::Ref(val),
-        };
+        let mut a = a;
+        
+        loop {
+            match a {
+                Addr::RegNum(reg) => {
+                    if let HeapCell::Ref(hc) = self.registers[reg] {
+                        a = Addr::HeapCell(hc);
+                    } else if Machine::is_unbound(&self.heap[val], val) {
+                        self.heap[val] = self.registers[reg].clone();
+                        break;
+                    } else {
+                        self.fail = true;
+                        break;
+                    }                        
+                },
+                Addr::HeapCell(hc) if Machine::is_unbound(&self.heap[hc], hc) => {
+                    self.heap[hc] = HeapCell::Ref(val);
+                    break;
+                },
+                Addr::HeapCell(hc) if Machine::is_unbound(&self.heap[val], val) => {                
+                    self.heap[val] = HeapCell::Ref(hc);
+                    break;
+                },
+                _ => {
+                    self.fail = true;                    
+                    break;
+                }
+            };
+        }
     }
 
     fn unify(&mut self, a1: Addr, a2: Addr) {
@@ -152,13 +185,13 @@ impl Machine {
                             }
                         }
                     },
-                    &HeapCell::Ref(reg) => {
+                    &HeapCell::Ref(r) => {
                         self.heap.push(HeapCell::Str(self.h + 1));
                         self.heap.push(HeapCell::NamedStr(arity, name.clone()));
 
                         let h = self.h;
 
-                        self.bind(Addr::RegNum(reg), h);
+                        self.bind(Addr::HeapCell(r), h);
 
                         self.h += 2;
                         self.mode = MachineMode::Write;

@@ -26,7 +26,19 @@ yes
 l0> ?- p(z, w).  
 no  
 l0> ?- p(w, w).  
-yes  
+yes
+l0> clouds(are, nice).
+Program stored.
+l0> ?- clouds(Z, Z).
+no
+l0> ?- clouds(Z, W).
+yes
+l0> ?- clouds(are, W).
+yes
+l0> ?- clouds(W, nice).
+yes
+l0> ?- clouds(nice, are).
+no
 l0> ?- p(Z, h(Z, W), f(W)).  
 no  
 l0> p(Z, h(Z, W), f(W)).  
@@ -38,7 +50,9 @@ yes
 l0> ?- p(Z, h(z, W), f(w)).  
 yes  
 l0> ?- p(z, h(Z, w), f(w)).  
-yes  
+yes
+l0> ?- p(z, h(Z, w), f(Z)).
+no
 l0> quit
 ```
 
