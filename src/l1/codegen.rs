@@ -137,6 +137,8 @@ trait CompilationTarget<'a> {
     fn argument_to_value(usize, usize) -> Self;
     fn subterm_to_variable(usize) -> Self;
     fn subterm_to_value(usize) -> Self;
+
+    fn clause_arg_to_instr(usize) -> Self;
 }
 
 impl<'a> CompilationTarget<'a> for FactInstruction {
@@ -164,6 +166,10 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
 
     fn subterm_to_value(val: usize) -> Self {
         FactInstruction::UnifyValue(val)
+    }
+
+    fn clause_arg_to_instr(val: usize) -> Self {
+        FactInstruction::UnifyVariable(val)
     }
 }
 
@@ -193,6 +199,10 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
     fn subterm_to_value(val: usize) -> Self {
         QueryInstruction::SetValue(val)
     }
+    
+    fn clause_arg_to_instr(val: usize) -> Self {
+        QueryInstruction::SetValue(val)
+    }
 }
 
 fn to_structure<'a, Target>(tm: &mut TermMarker<'a>,
@@ -212,7 +222,7 @@ fn non_var_subterm<'a, Target>(tm: &mut TermMarker<'a>, cell: &'a Cell<usize>)
     where Target: CompilationTarget<'a>
 {
     tm.mark_non_var(Level::Deep, cell);
-    Target::subterm_to_value(cell.get()) // should be to_value??
+    Target::clause_arg_to_instr(cell.get())
 }
 
 fn var_term<'a, Target>(tm: &mut TermMarker<'a>,

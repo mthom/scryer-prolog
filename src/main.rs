@@ -29,13 +29,13 @@ fn l1_repl() {
             Ok(TopLevel::Fact(fact)) => {
                 let mut compiled_fact = compile_fact(&fact);
                 let index = ms.code.len();
-                
+
                 ms.code.append(&mut compiled_fact);
                 ms.code_dir.insert((fact.name().clone(), fact.arity()), index);
             },
             Ok(TopLevel::Query(query)) => {
                 let compiled_query = compile_query(&query);
-
+                
                 for instruction in &compiled_query {
                     ms.execute_query_instr(instruction);
 
