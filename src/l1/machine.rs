@@ -1,4 +1,4 @@
-use l1::ast::{Addr, Atom, FactInstruction, QueryInstruction};
+use l1::ast::{Addr, Atom, CompiledFact, FactInstruction, QueryInstruction};
 
 use std::collections::HashMap;
 use std::vec::Vec;
@@ -28,7 +28,7 @@ pub struct Machine {
     heap : Heap,
     mode : MachineMode,
     pub code_dir : HashMap<(Atom, usize), usize>,
-    pub code : Vec<FactInstruction>,
+    pub code : CompiledFact,
     registers : Registers
 }
 
