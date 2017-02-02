@@ -255,8 +255,7 @@ fn var_term<'a, Target>(tm: &mut TermMarker<'a>,
     }
 }
 
-fn subterm_to_instr<'a, Target>(tm: &mut TermMarker<'a>,
-                                subterm: &'a Term)
+fn subterm_to_instr<'a, Target>(tm: &mut TermMarker<'a>, subterm: &'a Term)
                                 -> Target
     where Target: CompilationTarget<'a>
 {
@@ -274,7 +273,7 @@ fn compile_target<'a, Target>(term: &'a Term) -> Vec<Target>
     let iter       = Target::iter(term);
     let mut target = Vec::<Target>::new();
     let mut marker = TermMarker::new(term);
-
+    
     for term in iter {
         match term {
             TermRef::Atom(lvl, term, atom) =>
@@ -302,7 +301,7 @@ pub fn compile_fact(term: &Term) -> CompiledFact {
     compiled_fact
 }
 
-pub fn compile_query(term: &Term) -> CompiledQuery {
+pub fn compile_query<'a>(term: &'a Term) -> CompiledQuery {
     let mut compiled_query = compile_target(term);
 
     if let &Term::Clause(_, ref atom, ref terms) = term {

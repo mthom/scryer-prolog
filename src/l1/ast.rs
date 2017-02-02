@@ -31,7 +31,7 @@ pub enum Reg {
     Norm(usize)
 }
 
-impl Reg {    
+impl Reg {
     pub fn has_arg(&self) -> bool {
         match self {
             &Reg::ArgAndNorm(_, _) => true,
@@ -87,6 +87,17 @@ pub enum Addr {
     RegNum(usize)
 }
 
+#[derive(Clone)]
+pub enum HeapCellValue {
+    NamedStr(usize, Atom),
+    Ref(usize),
+    Str(usize),
+}
+
+pub type Heap = Vec<HeapCellValue>;
+
+pub type Registers = Vec<HeapCellValue>;
+
 impl Term {
     pub fn subterms(&self) -> usize {
         match self {
@@ -98,11 +109,11 @@ impl Term {
     pub fn name(&self) -> &Atom {
         match self {
             &Term::Atom(_, ref atom)
-            | &Term::Var(_, ref atom)                
+            | &Term::Var(_, ref atom)
             | &Term::Clause(_, ref atom, _) => atom
         }
     }
-    
+
     pub fn arity(&self) -> usize {
         match self {
             &Term::Atom(_, _) | &Term::Var(_, _) => 0,
