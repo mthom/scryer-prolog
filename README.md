@@ -53,6 +53,9 @@ l1> ?- p(Z, h(Z, w), f(Z)).
 yes
 l1> ?- p(z, h(Z, w), f(Z)).
 no
+l1> p(f(X), h(Y, f(a)), Y).
+l1> ?- p(Z, h(Z, W), f(W)).
+yes
 l1> quit
 ```
 
