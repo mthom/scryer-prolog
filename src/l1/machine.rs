@@ -182,6 +182,8 @@ impl Machine {
         match instr {
             &QueryInstruction::Call(ref name, arity) => {
                 // why is Option<&T> not Deref?!?!?
+                // is it because if the value is None, there's nothing to
+                // dereference?
                 let compiled_fact_index =
                     self.code_dir.get(&(name.clone(), arity))
                         .map(|index| *index);
