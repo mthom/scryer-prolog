@@ -1,6 +1,6 @@
 [package]
 name = "rusty-wam"
-version = "0.1.0"
+version = "0.3.0"
 authors = ["Mark Thom"]
 
 build = "build.rs"
@@ -8,7 +8,7 @@ build = "build.rs"
 [dependencies]
 
 [dependencies.lalrpop-util]
-version = "0.12.0"
+version = "0.12.5"
 
 [build-dependencies.lalrpop]
-version = "0.12.0"
+version = "0.12.5"

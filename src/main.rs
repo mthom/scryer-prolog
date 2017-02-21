@@ -1,56 +1,56 @@
-mod l1;
+mod l2;
 
-use l1::ast::TopLevel;
-use l1::codegen::{compile_fact, compile_query};
-use l1::machine::Machine;
+use l2::ast::*;
+use l2::codegen::*;
+use l2::machine::*;
 
 use std::io::{self, Write};
 
-fn l1_repl() {
-    let mut ms = Machine::new();
+fn l2_repl() {
+    let mut wam = Machine::new();
 
     loop {
-        print!("l1> ");
+        print!("l2> ");
 
         let _ = io::stdout().flush();
         let mut buffer = String::new();
 
         io::stdin().read_line(&mut buffer).unwrap();
 
-        let result = l1::l1_parser::parse_TopLevel(&*buffer);
+        let result = l2::l2_parser::parse_TopLevel(&*buffer);
 
         if &*buffer == "quit\n" {
             break;
         } else if &*buffer == "clear\n" {
-            ms = Machine::new();
+            wam = Machine::new();
         }
 
-        match result {
-            Ok(TopLevel::Fact(fact)) => {
-                let name  = fact.name().to_owned();
-                let arity = fact.arity();
-                let fact  = compile_fact(&fact);
+        let mut cg = CodeGenerator::new();
 
-                ms.add_fact(fact, name, arity);
+        match &result {
+            &Ok(TopLevel::Fact(ref fact)) => {
+                let compiled_fact = cg.compile_fact(&fact);
+                wam.add_fact(fact, compiled_fact);
             },
-            Ok(TopLevel::Query(query)) => {
-                let compiled_query = compile_query(&query);
-                
-                ms.execute_query(&compiled_query);
-                
-                if ms.failed() {
-                    println!("no");
-                } else {
+            &Ok(TopLevel::Rule(ref rule)) => {
+                let compiled_rule = cg.compile_rule(&rule);
+                wam.add_rule(rule, compiled_rule);
+            },
+            &Ok(TopLevel::Query(ref query)) => {
+                let compiled_query = cg.compile_query(&query);
+                let succeeded = wam.execute_query(compiled_query);
+
+                if succeeded {
                     println!("yes");
+                } else {
+                    println!("no");
                 }                
-                                
-                ms.reset_machine_state();
             },
-            Err(_) => println!("Grammatical error of some kind!"),
+            &Err(_) => println!("Grammatical error of some kind!"),
         };
     }
 }
 
 fn main() {
-    l1_repl();
+    l2_repl();
 }
