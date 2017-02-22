@@ -147,19 +147,11 @@ impl MachineState {
                        registers: vec![HeapCellValue::Ref(0); 32] }
     }
 
-    fn lookup(&self, a: Addr) -> &HeapCellValue {
-        match a {
-            Addr::HeapCell(hc)  => &self.heap[hc],
-            Addr::RegNum(reg)   => &self.registers[reg],
-            Addr::StackCell(sc) => &self.stack[sc]
-        }
-    }
-
     fn deref(&self, a: Addr) -> Addr {
         let mut a = a;
 
         loop {
-            if let &HeapCellValue::Ref(value) = self.lookup(a) {
+            if let &HeapCellValue::Ref(value) = &self[a] {
                 if let Addr::HeapCell(av) = a {
                     if value != av {
                         a = Addr::HeapCell(value);
@@ -224,7 +216,7 @@ impl MachineState {
             let d2 = self.deref(pdl.pop().unwrap());
 
             if d1 != d2 {
-                match (self.lookup(d1), self.lookup(d2)) {
+                match (&self[d1], &self[d2]) {
                     (&HeapCellValue::Ref(hc), _) =>
                         self.bind(d2, hc),
                     (_, &HeapCellValue::Ref(hc)) =>
@@ -293,7 +285,7 @@ impl MachineState {
             &FactInstruction::GetStructure(_, ref name, arity, reg) => {
                 let addr = self.deref(Addr::from(reg));
 
-                match self.lookup(addr) {
+                match &self[addr] {
                     &HeapCellValue::Str(a) => {
                         let result = &self.heap[a];
 
