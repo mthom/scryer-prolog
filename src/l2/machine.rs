@@ -68,7 +68,7 @@ impl Machine {
 
     pub fn add_fact(&mut self, fact: &Term, mut code: Code) {
         let p = self.code.len();
-        let name = fact.name().clone();
+        let name  = fact.name().clone();
         let arity = fact.arity();
 
         self.code.append(&mut code);
@@ -77,8 +77,8 @@ impl Machine {
 
     pub fn add_rule(&mut self, rule: &Rule, mut code: Code) {
         let p = self.code.len();
-        let name = rule.head.0.name().clone();
-        let arity = rule.head.1.arity();
+        let name  = rule.head.0.name().clone();
+        let arity = rule.head.0.arity();
 
         self.code.append(&mut code);
         self.code_dir.insert((name, arity), p);
