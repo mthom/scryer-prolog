@@ -38,122 +38,130 @@ mod __parse__TopLevel {
         // State 0
         0, 0, 0, 0, 0, 8, 9, 10, 0,
         // State 1
-        11, 0, 0, -18, 0, 0, 0, 0, 0,
+        11, 0, 0, -20, 12, 0, 0, 0, 0,
         // State 2
-        0, 0, 0, -17, 12, 0, 0, 0, 0,
+        0, 0, 0, -19, 13, 0, 0, 0, 0,
         // State 3
-        0, 0, 0, 13, 0, 0, 0, 0, 0,
-        // State 4
         0, 0, 0, 14, 0, 0, 0, 0, 0,
+        // State 4
+        0, 0, 0, 15, 0, 0, 0, 0, 0,
         // State 5
         0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 6
-        0, 0, 0, -19, 0, 0, 0, 0, 0,
+        0, 0, 0, -21, 0, 0, 0, 0, 0,
         // State 7
-        0, 0, 0, 0, 0, 0, 9, 10, 0,
+        0, 0, 0, 0, 0, 0, 9, 19, 0,
         // State 8
-        0, 0, 0, -23, 0, 0, 0, 0, 0,
+        0, 0, 0, -25, 0, 0, 0, 0, 0,
         // State 9
-        -11, 0, 0, -11, 0, 0, 0, 0, 0,
+        -11, 0, 0, -11, -11, 0, 0, 0, 0,
         // State 10
-        0, 0, 0, 0, 0, 0, 24, 25, 0,
+        0, 0, 0, 0, 0, 0, 26, 27, 0,
         // State 11
-        0, 0, 0, 0, 0, 0, 30, 31, 0,
+        0, 0, 0, 0, 0, 0, 32, 33, 0,
         // State 12
-        0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 32, 33, 0,
         // State 13
         0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 14
-        32, 0, 0, -18, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 15
-        0, 0, 0, -17, 0, 0, 0, 0, 0,
+        35, 0, 0, -20, 0, 0, 0, 0, 0,
         // State 16
-        0, 0, 0, 33, 0, 0, 0, 0, 0,
+        0, 0, 0, -19, 0, 0, 0, 0, 0,
         // State 17
-        0, 0, 0, 0, 0, 0, 24, 25, 0,
+        0, 0, 0, 36, 0, 0, 0, 0, 0,
         // State 18
-        35, -18, -18, 0, 0, 0, 0, 0, 0,
+        -11, 0, 0, -11, 0, 0, 0, 0, 0,
         // State 19
-        0, 36, 37, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 26, 27, 0,
         // State 20
-        0, -17, -17, 0, 0, 0, 0, 0, 0,
+        38, -20, -20, 0, 0, 0, 0, 0, 0,
         // State 21
-        0, -12, -12, 0, 0, 0, 0, 0, 0,
+        0, 39, 40, 0, 0, 0, 0, 0, 0,
         // State 22
         0, -19, -19, 0, 0, 0, 0, 0, 0,
         // State 23
-        0, -23, -23, 0, 0, 0, 0, 0, 0,
+        0, -12, -12, 0, 0, 0, 0, 0, 0,
         // State 24
-        -11, -11, -11, 0, 0, 0, 0, 0, 0,
+        0, -21, -21, 0, 0, 0, 0, 0, 0,
         // State 25
-        38, 0, -18, -18, 0, 0, 0, 0, 0,
+        0, -25, -25, 0, 0, 0, 0, 0, 0,
         // State 26
-        0, 0, -17, -17, 0, 0, 0, 0, 0,
+        -11, -11, -11, 0, 0, 0, 0, 0, 0,
         // State 27
-        0, 0, 40, -15, 0, 0, 0, 0, 0,
+        41, 0, -20, -20, 0, 0, 0, 0, 0,
         // State 28
         0, 0, -19, -19, 0, 0, 0, 0, 0,
         // State 29
-        0, 0, -23, -23, 0, 0, 0, 0, 0,
+        0, 0, 43, -17, 0, 0, 0, 0, 0,
         // State 30
-        -11, 0, -11, -11, 0, 0, 0, 0, 0,
+        0, 0, -21, -21, 0, 0, 0, 0, 0,
         // State 31
-        0, 0, 0, 0, 0, 0, 24, 25, 0,
+        0, 0, -25, -25, 0, 0, 0, 0, 0,
         // State 32
-        0, 0, 0, 0, 0, 0, 0, 0, 0,
+        -11, 0, -11, -11, 0, 0, 0, 0, 0,
         // State 33
-        0, 43, 44, 0, 0, 0, 0, 0, 0,
+        0, 0, 43, -15, 0, 0, 0, 0, 0,
         // State 34
-        0, 0, 0, 0, 0, 0, 24, 25, 0,
+        0, 0, 0, 0, 0, 0, 26, 27, 0,
         // State 35
-        0, 0, 0, -13, -13, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 36
-        0, 0, 0, 0, 0, 0, -9, -9, 0,
+        0, 47, 48, 0, 0, 0, 0, 0, 0,
         // State 37
-        0, 0, 0, 0, 0, 0, 24, 25, 0,
+        0, 0, 0, 0, 0, 0, 26, 27, 0,
         // State 38
-        0, 0, 49, -16, 0, 0, 0, 0, 0,
+        0, 0, 0, -13, -13, 0, 0, 0, 0,
         // State 39
-        0, 0, 0, 0, 0, 0, 30, 31, 0,
+        0, 0, 0, 0, 0, 0, -9, -9, 0,
         // State 40
-        0, 0, 0, 0, 0, 0, 24, 25, 0,
+        0, 0, 0, 0, 0, 0, 26, 27, 0,
         // State 41
-        0, 52, 37, 0, 0, 0, 0, 0, 0,
+        0, 0, 53, -18, 0, 0, 0, 0, 0,
         // State 42
-        0, 0, 0, -14, -14, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 32, 33, 0,
         // State 43
-        0, 0, 0, 0, 0, 0, -10, -10, 0,
+        0, 0, 53, -16, 0, 0, 0, 0, 0,
         // State 44
-        0, 0, 0, 0, 0, 0, 24, 25, 0,
+        0, 0, 0, 0, 0, 0, 26, 27, 0,
         // State 45
-        0, 54, 37, 0, 0, 0, 0, 0, 0,
+        0, 56, 40, 0, 0, 0, 0, 0, 0,
         // State 46
-        0, 0, 0, 0, 0, 0, 24, 25, 0,
+        0, 0, 0, -14, -14, 0, 0, 0, 0,
         // State 47
-        0, 56, 37, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, -10, -10, 0,
         // State 48
-        0, 0, 0, 0, 0, 0, 30, 31, 0,
+        0, 0, 0, 0, 0, 0, 26, 27, 0,
         // State 49
-        0, 0, -4, -4, 0, 0, 0, 0, 0,
+        0, 58, 40, 0, 0, 0, 0, 0, 0,
         // State 50
-        0, 58, 44, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 26, 27, 0,
         // State 51
-        0, 0, 0, -13, 0, 0, 0, 0, 0,
+        0, 60, 40, 0, 0, 0, 0, 0, 0,
         // State 52
-        0, 59, 44, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 32, 33, 0,
         // State 53
-        0, -13, -13, 0, 0, 0, 0, 0, 0,
+        0, 0, -4, -4, 0, 0, 0, 0, 0,
         // State 54
-        0, 60, 44, 0, 0, 0, 0, 0, 0,
+        0, 62, 48, 0, 0, 0, 0, 0, 0,
         // State 55
-        0, 0, -13, -13, 0, 0, 0, 0, 0,
+        0, 0, 0, -13, 0, 0, 0, 0, 0,
         // State 56
-        0, 0, -5, -5, 0, 0, 0, 0, 0,
+        0, 63, 48, 0, 0, 0, 0, 0, 0,
         // State 57
-        0, 0, 0, -14, 0, 0, 0, 0, 0,
+        0, -13, -13, 0, 0, 0, 0, 0, 0,
         // State 58
-        0, -14, -14, 0, 0, 0, 0, 0, 0,
+        0, 64, 48, 0, 0, 0, 0, 0, 0,
         // State 59
+        0, 0, -13, -13, 0, 0, 0, 0, 0,
+        // State 60
+        0, 0, -5, -5, 0, 0, 0, 0, 0,
+        // State 61
+        0, 0, 0, -14, 0, 0, 0, 0, 0,
+        // State 62
+        0, -14, -14, 0, 0, 0, 0, 0, 0,
+        // State 63
         0, 0, -14, -14, 0, 0, 0, 0, 0,
     ];
     const __EOF_ACTION: &'static [i32] = &[
@@ -162,6 +170,15 @@ mod __parse__TopLevel {
         0,
         0,
         0,
+        -26,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        -23,
         -24,
         0,
         0,
@@ -169,27 +186,22 @@ mod __parse__TopLevel {
         0,
         0,
         0,
-        -21,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
         -22,
         0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        -20,
         0,
         0,
         0,
@@ -234,17 +246,17 @@ mod __parse__TopLevel {
         // State 6
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 7
-        0, 0, 0, 0, 0, 0, 15, 0, 16, 0, 17, 0, 7, 0,
+        0, 0, 0, 0, 0, 0, 16, 0, 17, 0, 18, 0, 7, 0,
         // State 8
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 9
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 10
-        0, 0, 0, 0, 0, 18, 19, 20, 21, 0, 22, 0, 23, 0,
+        0, 0, 0, 0, 0, 20, 21, 22, 23, 0, 24, 0, 25, 0,
         // State 11
-        0, 0, 0, 0, 0, 0, 26, 0, 27, 0, 28, 0, 29, 0,
+        0, 0, 0, 0, 0, 0, 28, 0, 29, 0, 30, 0, 31, 0,
         // State 12
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 28, 0, 29, 0, 34, 0, 31, 0,
         // State 13
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 14
@@ -254,11 +266,11 @@ mod __parse__TopLevel {
         // State 16
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 17
-        0, 0, 0, 0, 0, 0, 19, 34, 21, 0, 22, 0, 23, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 18
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 19
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 21, 37, 23, 0, 24, 0, 25, 0,
         // State 20
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 21
@@ -274,57 +286,57 @@ mod __parse__TopLevel {
         // State 26
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 27
-        0, 0, 39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 28
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 29
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 30
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 31
-        0, 0, 0, 0, 0, 41, 19, 42, 21, 0, 22, 0, 23, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 32
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 33
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 34
-        0, 0, 0, 0, 0, 45, 19, 46, 21, 0, 22, 0, 23, 0,
+        0, 0, 0, 0, 0, 45, 21, 46, 23, 0, 24, 0, 25, 0,
         // State 35
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 36
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 37
-        0, 0, 0, 0, 0, 47, 19, 48, 21, 0, 22, 0, 23, 0,
+        0, 0, 0, 0, 0, 49, 21, 50, 23, 0, 24, 0, 25, 0,
         // State 38
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 39
-        0, 0, 0, 0, 0, 0, 26, 0, 27, 0, 50, 0, 29, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 40
-        0, 0, 0, 0, 0, 0, 19, 51, 21, 0, 22, 0, 23, 0,
+        0, 0, 0, 0, 0, 51, 21, 52, 23, 0, 24, 0, 25, 0,
         // State 41
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 42
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 28, 0, 29, 0, 54, 0, 31, 0,
         // State 43
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 44
-        0, 0, 0, 0, 0, 0, 19, 53, 21, 0, 22, 0, 23, 0,
+        0, 0, 0, 0, 0, 0, 21, 55, 23, 0, 24, 0, 25, 0,
         // State 45
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 46
-        0, 0, 0, 0, 0, 0, 19, 55, 21, 0, 22, 0, 23, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 47
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 48
-        0, 0, 0, 0, 0, 0, 26, 0, 27, 0, 57, 0, 29, 0,
+        0, 0, 0, 0, 0, 0, 21, 57, 23, 0, 24, 0, 25, 0,
         // State 49
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 50
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 21, 59, 23, 0, 24, 0, 25, 0,
         // State 51
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 52
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 28, 0, 29, 0, 61, 0, 31, 0,
         // State 53
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 54
@@ -338,6 +350,14 @@ mod __parse__TopLevel {
         // State 58
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // State 59
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        // State 60
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        // State 61
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        // State 62
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        // State 63
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
     fn __expected_tokens(__state: usize) -> Vec<::std::string::String> {
@@ -482,116 +502,116 @@ mod __parse__TopLevel {
     {
         let __nonterminal = match -__action {
             1 => {
-                // ("," <Term>) = ",", Term => ActionFn(14);
+                // ("," <Term>) = ",", Term => ActionFn(15);
                 let __sym1 = __pop_NtTerm(__symbols);
                 let __sym0 = __pop_Term_22_2c_22(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym1.2.clone();
-                let __nt = super::__action14::<>(input, __sym0, __sym1);
+                let __nt = super::__action15::<>(input, __sym0, __sym1);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 2);
                 __symbols.push((__start, __Symbol::Nt_28_22_2c_22_20_3cTerm_3e_29(__nt), __end));
                 0
             }
             2 => {
-                // ("," <Term>)* =  => ActionFn(12);
+                // ("," <Term>)* =  => ActionFn(13);
                 let __start = __symbols.last().map(|s| s.2.clone()).unwrap_or_default();
                 let __end = __lookahead_start.cloned().unwrap_or_else(|| __start.clone());
-                let __nt = super::__action12::<>(input, &__start, &__end);
+                let __nt = super::__action13::<>(input, &__start, &__end);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 0);
                 __symbols.push((__start, __Symbol::Nt_28_22_2c_22_20_3cTerm_3e_29_2a(__nt), __end));
                 1
             }
             3 => {
-                // ("," <Term>)* = ("," <Term>)+ => ActionFn(13);
+                // ("," <Term>)* = ("," <Term>)+ => ActionFn(14);
                 let __sym0 = __pop_Nt_28_22_2c_22_20_3cTerm_3e_29_2b(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym0.2.clone();
-                let __nt = super::__action13::<>(input, __sym0);
+                let __nt = super::__action14::<>(input, __sym0);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 1);
                 __symbols.push((__start, __Symbol::Nt_28_22_2c_22_20_3cTerm_3e_29_2a(__nt), __end));
                 1
             }
             4 => {
-                // ("," <Term>)+ = ",", Term => ActionFn(22);
+                // ("," <Term>)+ = ",", Term => ActionFn(23);
                 let __sym1 = __pop_NtTerm(__symbols);
                 let __sym0 = __pop_Term_22_2c_22(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym1.2.clone();
-                let __nt = super::__action22::<>(input, __sym0, __sym1);
+                let __nt = super::__action23::<>(input, __sym0, __sym1);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 2);
                 __symbols.push((__start, __Symbol::Nt_28_22_2c_22_20_3cTerm_3e_29_2b(__nt), __end));
                 2
             }
             5 => {
-                // ("," <Term>)+ = ("," <Term>)+, ",", Term => ActionFn(23);
+                // ("," <Term>)+ = ("," <Term>)+, ",", Term => ActionFn(24);
                 let __sym2 = __pop_NtTerm(__symbols);
                 let __sym1 = __pop_Term_22_2c_22(__symbols);
                 let __sym0 = __pop_Nt_28_22_2c_22_20_3cTerm_3e_29_2b(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym2.2.clone();
-                let __nt = super::__action23::<>(input, __sym0, __sym1, __sym2);
+                let __nt = super::__action24::<>(input, __sym0, __sym1, __sym2);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 3);
                 __symbols.push((__start, __Symbol::Nt_28_22_2c_22_20_3cTerm_3e_29_2b(__nt), __end));
                 2
             }
             6 => {
-                // (<BoxedTerm> ",") = BoxedTerm, "," => ActionFn(17);
+                // (<BoxedTerm> ",") = BoxedTerm, "," => ActionFn(18);
                 let __sym1 = __pop_Term_22_2c_22(__symbols);
                 let __sym0 = __pop_NtBoxedTerm(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym1.2.clone();
-                let __nt = super::__action17::<>(input, __sym0, __sym1);
+                let __nt = super::__action18::<>(input, __sym0, __sym1);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 2);
                 __symbols.push((__start, __Symbol::Nt_28_3cBoxedTerm_3e_20_22_2c_22_29(__nt), __end));
                 3
             }
             7 => {
-                // (<BoxedTerm> ",")* =  => ActionFn(15);
+                // (<BoxedTerm> ",")* =  => ActionFn(16);
                 let __start = __symbols.last().map(|s| s.2.clone()).unwrap_or_default();
                 let __end = __lookahead_start.cloned().unwrap_or_else(|| __start.clone());
-                let __nt = super::__action15::<>(input, &__start, &__end);
+                let __nt = super::__action16::<>(input, &__start, &__end);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 0);
                 __symbols.push((__start, __Symbol::Nt_28_3cBoxedTerm_3e_20_22_2c_22_29_2a(__nt), __end));
                 4
             }
             8 => {
-                // (<BoxedTerm> ",")* = (<BoxedTerm> ",")+ => ActionFn(16);
+                // (<BoxedTerm> ",")* = (<BoxedTerm> ",")+ => ActionFn(17);
                 let __sym0 = __pop_Nt_28_3cBoxedTerm_3e_20_22_2c_22_29_2b(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym0.2.clone();
-                let __nt = super::__action16::<>(input, __sym0);
+                let __nt = super::__action17::<>(input, __sym0);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 1);
                 __symbols.push((__start, __Symbol::Nt_28_3cBoxedTerm_3e_20_22_2c_22_29_2a(__nt), __end));
                 4
             }
             9 => {
-                // (<BoxedTerm> ",")+ = BoxedTerm, "," => ActionFn(26);
+                // (<BoxedTerm> ",")+ = BoxedTerm, "," => ActionFn(29);
                 let __sym1 = __pop_Term_22_2c_22(__symbols);
                 let __sym0 = __pop_NtBoxedTerm(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym1.2.clone();
-                let __nt = super::__action26::<>(input, __sym0, __sym1);
+                let __nt = super::__action29::<>(input, __sym0, __sym1);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 2);
                 __symbols.push((__start, __Symbol::Nt_28_3cBoxedTerm_3e_20_22_2c_22_29_2b(__nt), __end));
                 5
             }
             10 => {
-                // (<BoxedTerm> ",")+ = (<BoxedTerm> ",")+, BoxedTerm, "," => ActionFn(27);
+                // (<BoxedTerm> ",")+ = (<BoxedTerm> ",")+, BoxedTerm, "," => ActionFn(30);
                 let __sym2 = __pop_Term_22_2c_22(__symbols);
                 let __sym1 = __pop_NtBoxedTerm(__symbols);
                 let __sym0 = __pop_Nt_28_3cBoxedTerm_3e_20_22_2c_22_29_2b(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym2.2.clone();
-                let __nt = super::__action27::<>(input, __sym0, __sym1, __sym2);
+                let __nt = super::__action30::<>(input, __sym0, __sym1, __sym2);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 3);
                 __symbols.push((__start, __Symbol::Nt_28_3cBoxedTerm_3e_20_22_2c_22_29_2b(__nt), __end));
@@ -620,21 +640,21 @@ mod __parse__TopLevel {
                 7
             }
             13 => {
-                // Clause = Atom, "(", BoxedTerm, ")" => ActionFn(28);
+                // Clause = Atom, "(", BoxedTerm, ")" => ActionFn(31);
                 let __sym3 = __pop_Term_22_29_22(__symbols);
                 let __sym2 = __pop_NtBoxedTerm(__symbols);
                 let __sym1 = __pop_Term_22_28_22(__symbols);
                 let __sym0 = __pop_NtAtom(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym3.2.clone();
-                let __nt = super::__action28::<>(input, __sym0, __sym1, __sym2, __sym3);
+                let __nt = super::__action31::<>(input, __sym0, __sym1, __sym2, __sym3);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 4);
                 __symbols.push((__start, __Symbol::NtClause(__nt), __end));
                 8
             }
             14 => {
-                // Clause = Atom, "(", (<BoxedTerm> ",")+, BoxedTerm, ")" => ActionFn(29);
+                // Clause = Atom, "(", (<BoxedTerm> ",")+, BoxedTerm, ")" => ActionFn(32);
                 let __sym4 = __pop_Term_22_29_22(__symbols);
                 let __sym3 = __pop_NtBoxedTerm(__symbols);
                 let __sym2 = __pop_Nt_28_3cBoxedTerm_3e_20_22_2c_22_29_2b(__symbols);
@@ -642,53 +662,69 @@ mod __parse__TopLevel {
                 let __sym0 = __pop_NtAtom(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym4.2.clone();
-                let __nt = super::__action29::<>(input, __sym0, __sym1, __sym2, __sym3, __sym4);
+                let __nt = super::__action32::<>(input, __sym0, __sym1, __sym2, __sym3, __sym4);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 5);
                 __symbols.push((__start, __Symbol::NtClause(__nt), __end));
                 8
             }
             15 => {
-                // Rule = Clause, ":-", Term => ActionFn(24);
+                // Rule = Clause, ":-", Term => ActionFn(25);
                 let __sym2 = __pop_NtTerm(__symbols);
                 let __sym1 = __pop_Term_22_3a_2d_22(__symbols);
                 let __sym0 = __pop_NtClause(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym2.2.clone();
-                let __nt = super::__action24::<>(input, __sym0, __sym1, __sym2);
+                let __nt = super::__action25::<>(input, __sym0, __sym1, __sym2);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 3);
                 __symbols.push((__start, __Symbol::NtRule(__nt), __end));
                 9
             }
             16 => {
-                // Rule = Clause, ":-", Term, ("," <Term>)+ => ActionFn(25);
+                // Rule = Clause, ":-", Term, ("," <Term>)+ => ActionFn(26);
                 let __sym3 = __pop_Nt_28_22_2c_22_20_3cTerm_3e_29_2b(__symbols);
                 let __sym2 = __pop_NtTerm(__symbols);
                 let __sym1 = __pop_Term_22_3a_2d_22(__symbols);
                 let __sym0 = __pop_NtClause(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym3.2.clone();
-                let __nt = super::__action25::<>(input, __sym0, __sym1, __sym2, __sym3);
+                let __nt = super::__action26::<>(input, __sym0, __sym1, __sym2, __sym3);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 4);
                 __symbols.push((__start, __Symbol::NtRule(__nt), __end));
                 9
             }
             17 => {
-                // Term = Clause => ActionFn(8);
-                let __sym0 = __pop_NtClause(__symbols);
+                // Rule = Atom, ":-", Term => ActionFn(27);
+                let __sym2 = __pop_NtTerm(__symbols);
+                let __sym1 = __pop_Term_22_3a_2d_22(__symbols);
+                let __sym0 = __pop_NtAtom(__symbols);
                 let __start = __sym0.0.clone();
-                let __end = __sym0.2.clone();
-                let __nt = super::__action8::<>(input, __sym0);
+                let __end = __sym2.2.clone();
+                let __nt = super::__action27::<>(input, __sym0, __sym1, __sym2);
                 let __states_len = __states.len();
-                __states.truncate(__states_len - 1);
-                __symbols.push((__start, __Symbol::NtTerm(__nt), __end));
-                10
+                __states.truncate(__states_len - 3);
+                __symbols.push((__start, __Symbol::NtRule(__nt), __end));
+                9
             }
             18 => {
-                // Term = Atom => ActionFn(9);
+                // Rule = Atom, ":-", Term, ("," <Term>)+ => ActionFn(28);
+                let __sym3 = __pop_Nt_28_22_2c_22_20_3cTerm_3e_29_2b(__symbols);
+                let __sym2 = __pop_NtTerm(__symbols);
+                let __sym1 = __pop_Term_22_3a_2d_22(__symbols);
                 let __sym0 = __pop_NtAtom(__symbols);
+                let __start = __sym0.0.clone();
+                let __end = __sym3.2.clone();
+                let __nt = super::__action28::<>(input, __sym0, __sym1, __sym2, __sym3);
+                let __states_len = __states.len();
+                __states.truncate(__states_len - 4);
+                __symbols.push((__start, __Symbol::NtRule(__nt), __end));
+                9
+            }
+            19 => {
+                // Term = Clause => ActionFn(9);
+                let __sym0 = __pop_NtClause(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym0.2.clone();
                 let __nt = super::__action9::<>(input, __sym0);
@@ -697,9 +733,9 @@ mod __parse__TopLevel {
                 __symbols.push((__start, __Symbol::NtTerm(__nt), __end));
                 10
             }
-            19 => {
-                // Term = Var => ActionFn(10);
-                let __sym0 = __pop_NtVar(__symbols);
+            20 => {
+                // Term = Atom => ActionFn(10);
+                let __sym0 = __pop_NtAtom(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym0.2.clone();
                 let __nt = super::__action10::<>(input, __sym0);
@@ -708,7 +744,18 @@ mod __parse__TopLevel {
                 __symbols.push((__start, __Symbol::NtTerm(__nt), __end));
                 10
             }
-            20 => {
+            21 => {
+                // Term = Var => ActionFn(11);
+                let __sym0 = __pop_NtVar(__symbols);
+                let __start = __sym0.0.clone();
+                let __end = __sym0.2.clone();
+                let __nt = super::__action11::<>(input, __sym0);
+                let __states_len = __states.len();
+                __states.truncate(__states_len - 1);
+                __symbols.push((__start, __Symbol::NtTerm(__nt), __end));
+                10
+            }
+            22 => {
                 // TopLevel = "?-", Term, "." => ActionFn(1);
                 let __sym2 = __pop_Term_22_2e_22(__symbols);
                 let __sym1 = __pop_NtTerm(__symbols);
@@ -721,7 +768,7 @@ mod __parse__TopLevel {
                 __symbols.push((__start, __Symbol::NtTopLevel(__nt), __end));
                 11
             }
-            21 => {
+            23 => {
                 // TopLevel = Rule, "." => ActionFn(2);
                 let __sym1 = __pop_Term_22_2e_22(__symbols);
                 let __sym0 = __pop_NtRule(__symbols);
@@ -733,7 +780,7 @@ mod __parse__TopLevel {
                 __symbols.push((__start, __Symbol::NtTopLevel(__nt), __end));
                 11
             }
-            22 => {
+            24 => {
                 // TopLevel = Term, "." => ActionFn(3);
                 let __sym1 = __pop_Term_22_2e_22(__symbols);
                 let __sym0 = __pop_NtTerm(__symbols);
@@ -745,18 +792,18 @@ mod __parse__TopLevel {
                 __symbols.push((__start, __Symbol::NtTopLevel(__nt), __end));
                 11
             }
-            23 => {
-                // Var = r#"[A-Z][a-z0-9_]*"# => ActionFn(11);
+            25 => {
+                // Var = r#"[A-Z][a-z0-9_]*"# => ActionFn(12);
                 let __sym0 = __pop_Termr_23_22_5bA_2dZ_5d_5ba_2dz0_2d9___5d_2a_22_23(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym0.2.clone();
-                let __nt = super::__action11::<>(input, __sym0);
+                let __nt = super::__action12::<>(input, __sym0);
                 let __states_len = __states.len();
                 __states.truncate(__states_len - 1);
                 __symbols.push((__start, __Symbol::NtVar(__nt), __end));
                 12
             }
-            24 => {
+            26 => {
                 // __TopLevel = TopLevel => ActionFn(0);
                 let __sym0 = __pop_NtTopLevel(__symbols);
                 let __start = __sym0.0.clone();
@@ -1385,6 +1432,21 @@ pub fn __action8<
     'input,
 >(
     input: &'input str,
+    (_, a, _): (usize, Atom, usize),
+    (_, _, _): (usize, &'input str, usize),
+    (_, h, _): (usize, Term, usize),
+    (_, cs, _): (usize, ::std::vec::Vec<Term>, usize),
+) -> Rule
+{
+    Rule { head: (Term::Atom(Cell::new(RegType::Temp(0)), a), h),
+	        clauses: cs }
+}
+
+#[allow(unused_variables)]
+pub fn __action9<
+    'input,
+>(
+    input: &'input str,
     (_, __0, _): (usize, Term, usize),
 ) -> Term
 {
@@ -1392,7 +1454,7 @@ pub fn __action8<
 }
 
 #[allow(unused_variables)]
-pub fn __action9<
+pub fn __action10<
     'input,
 >(
     input: &'input str,
@@ -1403,7 +1465,7 @@ pub fn __action9<
 }
 
 #[allow(unused_variables)]
-pub fn __action10<
+pub fn __action11<
     'input,
 >(
     input: &'input str,
@@ -1414,7 +1476,7 @@ pub fn __action10<
 }
 
 #[allow(unused_variables)]
-pub fn __action11<
+pub fn __action12<
     'input,
 >(
     input: &'input str,
@@ -1425,7 +1487,7 @@ pub fn __action11<
 }
 
 #[allow(unused_variables)]
-pub fn __action12<
+pub fn __action13<
     'input,
 >(
     input: &'input str,
@@ -1437,7 +1499,7 @@ pub fn __action12<
 }
 
 #[allow(unused_variables)]
-pub fn __action13<
+pub fn __action14<
     'input,
 >(
     input: &'input str,
@@ -1448,7 +1510,7 @@ pub fn __action13<
 }
 
 #[allow(unused_variables)]
-pub fn __action14<
+pub fn __action15<
     'input,
 >(
     input: &'input str,
@@ -1460,7 +1522,7 @@ pub fn __action14<
 }
 
 #[allow(unused_variables)]
-pub fn __action15<
+pub fn __action16<
     'input,
 >(
     input: &'input str,
@@ -1472,7 +1534,7 @@ pub fn __action15<
 }
 
 #[allow(unused_variables)]
-pub fn __action16<
+pub fn __action17<
     'input,
 >(
     input: &'input str,
@@ -1483,7 +1545,7 @@ pub fn __action16<
 }
 
 #[allow(unused_variables)]
-pub fn __action17<
+pub fn __action18<
     'input,
 >(
     input: &'input str,
@@ -1495,7 +1557,7 @@ pub fn __action17<
 }
 
 #[allow(unused_variables)]
-pub fn __action18<
+pub fn __action19<
     'input,
 >(
     input: &'input str,
@@ -1506,7 +1568,7 @@ pub fn __action18<
 }
 
 #[allow(unused_variables)]
-pub fn __action19<
+pub fn __action20<
     'input,
 >(
     input: &'input str,
@@ -1518,7 +1580,7 @@ pub fn __action19<
 }
 
 #[allow(unused_variables)]
-pub fn __action20<
+pub fn __action21<
     'input,
 >(
     input: &'input str,
@@ -1529,7 +1591,7 @@ pub fn __action20<
 }
 
 #[allow(unused_variables)]
-pub fn __action21<
+pub fn __action22<
     'input,
 >(
     input: &'input str,
@@ -1541,7 +1603,7 @@ pub fn __action21<
 }
 
 #[allow(unused_variables)]
-pub fn __action22<
+pub fn __action23<
     'input,
 >(
     input: &'input str,
@@ -1551,20 +1613,20 @@ pub fn __action22<
 {
     let __start0 = __0.0.clone();
     let __end0 = __1.2.clone();
-    let __temp0 = __action14(
+    let __temp0 = __action15(
         input,
         __0,
         __1,
     );
     let __temp0 = (__start0, __temp0, __end0);
-    __action20(
+    __action21(
         input,
         __temp0,
     )
 }
 
 #[allow(unused_variables)]
-pub fn __action23<
+pub fn __action24<
     'input,
 >(
     input: &'input str,
@@ -1575,42 +1637,15 @@ pub fn __action23<
 {
     let __start0 = __1.0.clone();
     let __end0 = __2.2.clone();
-    let __temp0 = __action14(
+    let __temp0 = __action15(
         input,
         __1,
         __2,
     );
     let __temp0 = (__start0, __temp0, __end0);
-    __action21(
+    __action22(
         input,
         __0,
-        __temp0,
-    )
-}
-
-#[allow(unused_variables)]
-pub fn __action24<
-    'input,
->(
-    input: &'input str,
-    __0: (usize, Term, usize),
-    __1: (usize, &'input str, usize),
-    __2: (usize, Term, usize),
-) -> Rule
-{
-    let __start0 = __2.2.clone();
-    let __end0 = __2.2.clone();
-    let __temp0 = __action12(
-        input,
-        &__start0,
-        &__end0,
-    );
-    let __temp0 = (__start0, __temp0, __end0);
-    __action7(
-        input,
-        __0,
-        __1,
-        __2,
         __temp0,
     )
 }
@@ -1623,14 +1658,14 @@ pub fn __action25<
     __0: (usize, Term, usize),
     __1: (usize, &'input str, usize),
     __2: (usize, Term, usize),
-    __3: (usize, ::std::vec::Vec<Term>, usize),
 ) -> Rule
 {
-    let __start0 = __3.0.clone();
-    let __end0 = __3.2.clone();
+    let __start0 = __2.2.clone();
+    let __end0 = __2.2.clone();
     let __temp0 = __action13(
         input,
-        __3,
+        &__start0,
+        &__end0,
     );
     let __temp0 = (__start0, __temp0, __end0);
     __action7(
@@ -1647,20 +1682,24 @@ pub fn __action26<
     'input,
 >(
     input: &'input str,
-    __0: (usize, Box<Term>, usize),
+    __0: (usize, Term, usize),
     __1: (usize, &'input str, usize),
-) -> ::std::vec::Vec<Box<Term>>
+    __2: (usize, Term, usize),
+    __3: (usize, ::std::vec::Vec<Term>, usize),
+) -> Rule
 {
-    let __start0 = __0.0.clone();
-    let __end0 = __1.2.clone();
-    let __temp0 = __action17(
+    let __start0 = __3.0.clone();
+    let __end0 = __3.2.clone();
+    let __temp0 = __action14(
+        input,
+        __3,
+    );
+    let __temp0 = (__start0, __temp0, __end0);
+    __action7(
         input,
         __0,
         __1,
-    );
-    let __temp0 = (__start0, __temp0, __end0);
-    __action18(
-        input,
+        __2,
         __temp0,
     )
 }
@@ -1670,22 +1709,24 @@ pub fn __action27<
     'input,
 >(
     input: &'input str,
-    __0: (usize, ::std::vec::Vec<Box<Term>>, usize),
-    __1: (usize, Box<Term>, usize),
-    __2: (usize, &'input str, usize),
-) -> ::std::vec::Vec<Box<Term>>
+    __0: (usize, Atom, usize),
+    __1: (usize, &'input str, usize),
+    __2: (usize, Term, usize),
+) -> Rule
 {
-    let __start0 = __1.0.clone();
+    let __start0 = __2.2.clone();
     let __end0 = __2.2.clone();
-    let __temp0 = __action17(
+    let __temp0 = __action13(
         input,
-        __1,
-        __2,
+        &__start0,
+        &__end0,
     );
     let __temp0 = (__start0, __temp0, __end0);
-    __action19(
+    __action8(
         input,
         __0,
+        __1,
+        __2,
         __temp0,
     )
 }
@@ -1697,13 +1738,88 @@ pub fn __action28<
     input: &'input str,
     __0: (usize, Atom, usize),
     __1: (usize, &'input str, usize),
+    __2: (usize, Term, usize),
+    __3: (usize, ::std::vec::Vec<Term>, usize),
+) -> Rule
+{
+    let __start0 = __3.0.clone();
+    let __end0 = __3.2.clone();
+    let __temp0 = __action14(
+        input,
+        __3,
+    );
+    let __temp0 = (__start0, __temp0, __end0);
+    __action8(
+        input,
+        __0,
+        __1,
+        __2,
+        __temp0,
+    )
+}
+
+#[allow(unused_variables)]
+pub fn __action29<
+    'input,
+>(
+    input: &'input str,
+    __0: (usize, Box<Term>, usize),
+    __1: (usize, &'input str, usize),
+) -> ::std::vec::Vec<Box<Term>>
+{
+    let __start0 = __0.0.clone();
+    let __end0 = __1.2.clone();
+    let __temp0 = __action18(
+        input,
+        __0,
+        __1,
+    );
+    let __temp0 = (__start0, __temp0, __end0);
+    __action19(
+        input,
+        __temp0,
+    )
+}
+
+#[allow(unused_variables)]
+pub fn __action30<
+    'input,
+>(
+    input: &'input str,
+    __0: (usize, ::std::vec::Vec<Box<Term>>, usize),
+    __1: (usize, Box<Term>, usize),
+    __2: (usize, &'input str, usize),
+) -> ::std::vec::Vec<Box<Term>>
+{
+    let __start0 = __1.0.clone();
+    let __end0 = __2.2.clone();
+    let __temp0 = __action18(
+        input,
+        __1,
+        __2,
+    );
+    let __temp0 = (__start0, __temp0, __end0);
+    __action20(
+        input,
+        __0,
+        __temp0,
+    )
+}
+
+#[allow(unused_variables)]
+pub fn __action31<
+    'input,
+>(
+    input: &'input str,
+    __0: (usize, Atom, usize),
+    __1: (usize, &'input str, usize),
     __2: (usize, Box<Term>, usize),
     __3: (usize, &'input str, usize),
 ) -> Term
 {
     let __start0 = __1.2.clone();
     let __end0 = __2.0.clone();
-    let __temp0 = __action15(
+    let __temp0 = __action16(
         input,
         &__start0,
         &__end0,
@@ -1720,7 +1836,7 @@ pub fn __action28<
 }
 
 #[allow(unused_variables)]
-pub fn __action29<
+pub fn __action32<
     'input,
 >(
     input: &'input str,
@@ -1733,7 +1849,7 @@ pub fn __action29<
 {
     let __start0 = __2.0.clone();
     let __end0 = __2.2.clone();
-    let __temp0 = __action16(
+    let __temp0 = __action17(
         input,
         __2,
     );

@@ -1,6 +1,6 @@
 [root]
 name = "rusty-wam"
-version = "0.3.0"
+version = "0.3.5"
 dependencies = [
  "lalrpop 0.12.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "lalrpop-util 0.12.5 (registry+https://github.com/rust-lang/crates.io-index)",

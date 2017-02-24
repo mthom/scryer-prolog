@@ -259,6 +259,10 @@ impl<'a> CodeGenerator<'a> {
         CodeGenerator { marker: TermMarker::new() }
     }
 
+    pub fn vars(&self) -> &HashMap<&Var, VarReg> {
+        &self.marker.bindings
+    }
+
     fn to_structure<Target>(&mut self,
                             lvl: Level,
                             name: &'a Atom,
@@ -323,7 +327,7 @@ impl<'a> CodeGenerator<'a> {
         where Target: CompilationTarget<'a>
     {
         let iter       = Target::iter(term);
-        let mut target = Vec::<Target>::new();
+        let mut target = Vec::new();
 
         self.marker.advance(term);
 
@@ -412,7 +416,7 @@ impl<'a> CodeGenerator<'a> {
 
         body.append(&mut self.compile_query(p1));
 
-        let mut body = clauses.iter()
+        body = clauses.iter()
             .map(|ref term| self.compile_query(term))
             .fold(body, |mut body, ref mut cqs| {
                 body.append(cqs);
@@ -433,13 +437,18 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub fn compile_query(&mut self, term: &'a Term) -> Code {
-        let mut compiled_query =
-            vec![Line::Query(self.compile_target(term))];
+        let mut compiled_query = vec![Line::Query(self.compile_target(term))];
 
-        if let &Term::Clause(_, ref atom, ref terms) = term {
-            let call = Line::Control(ControlInstruction::Call(atom.clone(),
-                                                              terms.len()));
-            compiled_query.push(call);
+        match term {
+            &Term::Atom(_, ref atom) => {
+                let call = ControlInstruction::Call(atom.clone(), 0);
+                compiled_query.push(Line::Control(call));
+            },
+            &Term::Clause(_, ref atom, ref terms) => {
+                let call = ControlInstruction::Call(atom.clone(), terms.len());
+                compiled_query.push(Line::Control(call));
+            },
+            _ => {}
         }
 
         compiled_query

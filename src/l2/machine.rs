@@ -1,8 +1,9 @@
 use l2::ast::*;
+use l2::codegen::*;
+use l2::heapview::*;
 use l2::stack::*;
 
 use std::collections::HashMap;
-use std::ops::{Index, IndexMut};
 use std::vec::Vec;
 
 #[derive(Clone, Copy)]
@@ -29,28 +30,6 @@ pub struct Machine {
     ms: MachineState,
     code: Code,
     code_dir: CodeDir
-}
-
-impl Index<Addr> for MachineState {
-    type Output = HeapCellValue;
-
-    fn index(&self, index: Addr) -> &Self::Output {
-        match index {
-            Addr::HeapCell(hc)  => &self.heap[hc],
-            Addr::RegNum(reg)   => &self.registers[reg],
-            Addr::StackCell(sc) => &self.stack[sc]
-        }
-    }
-}
-
-impl IndexMut<Addr> for MachineState {
-    fn index_mut(&mut self, index: Addr) -> &mut Self::Output {
-        match index {
-            Addr::HeapCell(hc)  => &mut self.heap[hc],
-            Addr::RegNum(reg)   => &mut self.registers[reg],
-            Addr::StackCell(sc) => &mut self.stack[sc]
-        }
-    }
 }
 
 impl Machine {
@@ -104,11 +83,11 @@ impl Machine {
                 &Line::Control(ref control_instr) =>
                     self.ms.execute_ctrl_instr(&self.code_dir, control_instr),
             }
-            
+
             if self.failed() {
                 return false;
             }
-            
+
             match self.ms.p {
                 CodePtr::DirEntry(p) if p < self.code.len() =>
                     instr = &self.code[p],
@@ -119,18 +98,91 @@ impl Machine {
         true
     }
 
-    pub fn execute_query(&mut self, query: Code) -> bool {
-        let mut succeeded = true;
-        
-        for instr in query {
-            succeeded = self.execute_instr(&instr);
-            if !succeeded {
-                break;
+    fn heap_view(&self, var_dir: HashMap<&Var, HeapCellRef>) -> String {
+        let mut result = String::new();
+
+        for (var, hcr) in var_dir {
+            let mut arities = Vec::new();
+
+            let viewer = HeapCellViewer::new(&self.ms.heap, hcr.heap_offset());
+
+            if result != "" {
+                result += "\n";
+            }
+
+            result += var.as_str();
+            result += " = ";
+
+            for view in viewer {
+                match arities.pop() {
+                    Some(n) => arities.push(n-1),
+                    None => {}
+                }
+
+                if !(arities.is_empty() || result.ends_with("(")) {
+                    result += ", ";
+                }
+
+                match view {
+                    HeapCellView::Str(arity, ref name) => {
+                        result += name.as_str();
+
+                        if arity > 0 {
+                            arities.push(arity);
+                            result += "(";
+                        }
+                    },
+                    HeapCellView::Var(cell_num) => {
+                        result += "_";
+                        result += cell_num.to_string().as_str();
+                    }
+                }
+
+                while let Some(&0) = arities.last() {
+                    result += ")";
+                    arities.pop();
+                }
             }
         }
 
-        self.ms.reset();
-        succeeded
+        result
+    }
+
+    pub fn run_query(&mut self, code: Code, cg: &CodeGenerator) -> Option<String>
+    {
+        let mut succeeded = true;
+
+        for instr in code.iter().take(1) {
+            succeeded = self.execute_instr(&instr);
+        }
+
+        if succeeded {
+            let mut heap_locs = HashMap::new();
+
+            for (var, vr) in cg.vars() {
+                let hcr = self.ms.registers[vr.root_register()];
+                heap_locs.insert(*var, hcr);
+            }
+
+            for instr in code.iter().skip(1) {
+                succeeded = self.execute_instr(&instr);
+                if !succeeded {
+                    break;
+                }
+            }
+
+            if succeeded {
+                let result = Some(self.heap_view(heap_locs));
+                self.ms.reset();
+                result
+            } else {
+                self.ms.reset();
+                None
+            }
+        } else {
+            self.ms.reset();
+            None
+        }
     }
 }
 
@@ -144,14 +196,29 @@ impl MachineState {
                        heap: Vec::with_capacity(256),
                        mode: MachineMode::Write,
                        stack: Stack::new(),
-                       registers: vec![HeapCellValue::Ref(0); 32] }
+                       registers: vec![HeapCellRef::Ref(0); 32] }
+    }
+
+    fn register_mut(&mut self, r: RegType) -> &mut HeapCellRef {
+        match r {
+            RegType::Temp(r) => &mut self.registers[r],
+            RegType::Perm(r) => &mut self.stack[r]
+        }
+    }
+
+    fn lookup(&self, a: Addr) -> HeapCellRef {
+        match a {
+            Addr::HeapCell(r)  => self.heap[r].as_ref(r),
+            Addr::RegNum(r)    => self.registers[r],
+            Addr::StackCell(s) => self.stack[s]
+        }
     }
 
     fn deref(&self, a: Addr) -> Addr {
         let mut a = a;
 
         loop {
-            if let &HeapCellValue::Ref(value) = &self[a] {
+            if let HeapCellRef::Ref(value) = self.lookup(a) {
                 if let Addr::HeapCell(av) = a {
                     if value != av {
                         a = Addr::HeapCell(value);
@@ -180,10 +247,10 @@ impl MachineState {
         loop {
             match a {
                 addr @ Addr::RegNum(_) | addr @ Addr::StackCell(_) => {
-                    if let HeapCellValue::Ref(hc) = self[addr] {
+                    if let HeapCellRef::Ref(hc) = self.lookup(addr) {
                         a = Addr::HeapCell(hc);
                     } else if Self::is_unbound(&self.heap[val], val) {
-                        self.heap[val] = self[addr].clone();
+                        self.heap[val] = HeapCellValue::from(self.lookup(addr));
                         break;
                     } else {
                         self.fail = true;
@@ -216,19 +283,19 @@ impl MachineState {
             let d2 = self.deref(pdl.pop().unwrap());
 
             if d1 != d2 {
-                match (&self[d1], &self[d2]) {
-                    (&HeapCellValue::Ref(hc), _) =>
+                match (self.lookup(d1), self.lookup(d2)) {
+                    (HeapCellRef::Ref(hc), _) =>
                         self.bind(d2, hc),
-                    (_, &HeapCellValue::Ref(hc)) =>
+                    (_, HeapCellRef::Ref(hc)) =>
                         self.bind(d1, hc),
-                    (&HeapCellValue::Str(a1), &HeapCellValue::Str(a2)) => {
+                    (HeapCellRef::Str(a1), HeapCellRef::Str(a2)) => {
                         let r1 = &self.heap[a1];
                         let r2 = &self.heap[a2];
 
                         if let &HeapCellValue::NamedStr(n1, ref f1) = r1 {
                             if let &HeapCellValue::NamedStr(n2, ref f2) = r2 {
                                 if n1 == n2 && *f1 == *f2 {
-                                    for i in 1 .. n1 {
+                                    for i in 1 .. n1 + 1 {
                                         pdl.push(Addr::HeapCell(a1 + i));
                                         pdl.push(Addr::HeapCell(a2 + i));
                                     }
@@ -240,7 +307,6 @@ impl MachineState {
 
                         self.fail = true;
                     },
-                    _ => self.fail = true,
                 };
             }
         }
@@ -252,29 +318,33 @@ impl MachineState {
                 self.heap.push(HeapCellValue::Str(self.h + 1));
                 self.heap.push(HeapCellValue::NamedStr(arity, name.clone()));
 
-                self[Addr::from(reg)] = self.heap[self.h].clone();
+                *self.register_mut(reg) = HeapCellRef::Str(self.h + 1);
 
                 self.h += 2;
             },
             &QueryInstruction::PutValue(norm, arg) =>
-                self.registers[arg] = self[Addr::from(norm)].clone(),
+                self.registers[arg] = match norm {
+                    RegType::Temp(reg) => self.registers[reg],
+                    RegType::Perm(reg) => self.stack[reg]
+                },
             &QueryInstruction::PutVariable(norm, arg) => {
                 self.heap.push(HeapCellValue::Ref(self.h));
 
-                self[Addr::from(norm)] = self.heap[self.h].clone();
-                self.registers[arg] = self.heap[self.h].clone();
+                *self.register_mut(norm) = HeapCellRef::Ref(self.h);
+                self.registers[arg] = HeapCellRef::Ref(self.h);
 
                 self.h += 1;
             },
             &QueryInstruction::SetVariable(reg) => {
                 self.heap.push(HeapCellValue::Ref(self.h));
-                self[Addr::from(reg)] = self.heap[self.h].clone();
+                *self.register_mut(reg) = HeapCellRef::Ref(self.h);
 
                 self.h += 1;
             },
             &QueryInstruction::SetValue(reg) => {
-                let heap_val = self[Addr::from(reg)].clone();
-                self.heap.push(heap_val);
+                let heap_val = self.lookup(Addr::from(reg));
+                self.heap.push(HeapCellValue::from(heap_val));
+
                 self.h += 1;
             },
         }
@@ -285,8 +355,8 @@ impl MachineState {
             &FactInstruction::GetStructure(_, ref name, arity, reg) => {
                 let addr = self.deref(Addr::from(reg));
 
-                match &self[addr] {
-                    &HeapCellValue::Str(a) => {
+                match self.lookup(addr) {
+                    HeapCellRef::Str(a) => {
                         let result = &self.heap[a];
 
                         if let &HeapCellValue::NamedStr(narity, ref str) = result {
@@ -298,32 +368,30 @@ impl MachineState {
                             }
                         }
                     },
-                    &HeapCellValue::Ref(r) => {
+                    HeapCellRef::Ref(_) => {
                         self.heap.push(HeapCellValue::Str(self.h + 1));
                         self.heap.push(HeapCellValue::NamedStr(arity, name.clone()));
 
                         let h = self.h;
 
-                        self.bind(Addr::HeapCell(r), h);
+                        self.bind(addr, h);
 
                         self.h += 2;
                         self.mode = MachineMode::Write;
-                    },
-                    _ => self.fail = true,
+                    }
                 };
             },
             &FactInstruction::GetVariable(norm, arg) =>
-                self[Addr::from(norm)] = self.registers[arg].clone(),
+                *self.register_mut(norm) = self.registers[arg],
             &FactInstruction::GetValue(norm, arg) =>
                 self.unify(Addr::from(norm), Addr::RegNum(arg)),
             &FactInstruction::UnifyVariable(reg) => {
                 match self.mode {
                     MachineMode::Read  =>
-                        self[Addr::from(reg)] = self.heap[self.s].clone(),
+                        *self.register_mut(reg) = self.heap[self.s].as_ref(self.s),
                     MachineMode::Write => {
                         self.heap.push(HeapCellValue::Ref(self.h));
-
-                        self[Addr::from(reg)] = self.heap[self.h].clone();
+                        *self.register_mut(reg) = HeapCellRef::Ref(self.h);
                         self.h += 1;
                     }
                 };
@@ -337,8 +405,8 @@ impl MachineState {
                     MachineMode::Read  =>
                         self.unify(Addr::from(reg), Addr::HeapCell(s)),
                     MachineMode::Write => {
-                        let heap_val = self[Addr::from(reg)].clone();
-                        self.heap.push(heap_val);
+                        let heap_val = self.lookup(Addr::from(reg));
+                        self.heap.push(HeapCellValue::from(heap_val));
                         self.h += 1;
                     }
                 };
@@ -371,12 +439,11 @@ impl MachineState {
                 self.p = self.stack.get_cp();
                 self.stack.pop();
             },
-            &ControlInstruction::Proceed => {
-                self.p = self.cp;
-            }
+            &ControlInstruction::Proceed =>
+                self.p = self.cp,
         };
     }
-    
+
     fn reset(&mut self) {
         self.h = 0;
         self.s = 0;
@@ -387,6 +454,6 @@ impl MachineState {
         self.heap.clear();
         self.mode = MachineMode::Write;
         self.stack = Stack::new();
-        self.registers = vec![HeapCellValue::Ref(0); 32];
+        self.registers = vec![HeapCellRef::Ref(0); 32];
     }
 }

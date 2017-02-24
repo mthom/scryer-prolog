@@ -29,6 +29,9 @@ Clause : Term = {
 Rule : Rule = {
     <c:Clause> ":-" <h:Term> <cs: ("," <Term>)*> =>
          Rule { head: (c, h), clauses: cs },
+    <a:Atom> ":-" <h:Term> <cs: ("," <Term>)*> =>
+         Rule { head: (Term::Atom(Cell::new(RegType::Temp(0)), a), h),
+	        clauses: cs }
 };
 
 Term : Term = {

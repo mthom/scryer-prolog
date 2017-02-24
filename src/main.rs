@@ -23,6 +23,7 @@ fn l2_repl() {
             break;
         } else if &*buffer == "clear\n" {
             wam = Machine::new();
+            continue;
         }
 
         let mut cg = CodeGenerator::new();
@@ -38,13 +39,18 @@ fn l2_repl() {
             },
             &Ok(TopLevel::Query(ref query)) => {
                 let compiled_query = cg.compile_query(&query);
-                let succeeded = wam.execute_query(compiled_query);
+                let output = wam.run_query(compiled_query, &cg);
 
-                if succeeded {
-                    println!("yes");
-                } else {
-                    println!("no");
-                }                
+                match output {
+                    Some(result) => {
+                        println!("yes");
+
+                        if result != "" {
+                            println!("{}", result);
+                        }
+                    },
+                    None => println!("no")
+                }
             },
             &Err(_) => println!("Grammatical error of some kind!"),
         };

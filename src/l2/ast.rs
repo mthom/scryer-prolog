@@ -48,6 +48,19 @@ impl RegType {
     }
 }
 
+impl fmt::Display for VarReg {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &VarReg::Norm(RegType::Perm(reg)) => write!(f, "Y{}", reg),
+            &VarReg::Norm(RegType::Temp(reg)) => write!(f, "X{}", reg),
+            &VarReg::ArgAndNorm(RegType::Perm(reg), arg) =>
+                write!(f, "Y{} A{}", reg, arg),
+            &VarReg::ArgAndNorm(RegType::Temp(reg), arg) =>
+                write!(f, "X{} A{}", reg, arg)
+        }
+    }
+}
+
 impl From<RegType> for Addr {
     fn from(reg: RegType) -> Addr {
         match reg {
@@ -76,6 +89,13 @@ impl VarReg {
     pub fn norm(self) -> RegType {
         match self {
             VarReg::ArgAndNorm(reg, _) | VarReg::Norm(reg) => reg
+        }
+    }
+
+    pub fn root_register(self) -> usize {
+        match self {
+            VarReg::ArgAndNorm(_, root) => root,
+            VarReg::Norm(root) => root.reg_num()
         }
     }
 }
@@ -139,11 +159,44 @@ pub enum Addr {
     StackCell(usize),
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum HeapCellValue {
     NamedStr(usize, Atom),
     Ref(usize),
     Str(usize)
+}
+
+impl HeapCellValue {
+    pub fn as_ref(&self, focus: usize) -> HeapCellRef {
+        match self {
+            &HeapCellValue::Ref(r) => HeapCellRef::Ref(r),
+            &HeapCellValue::Str(s) => HeapCellRef::Str(s),
+            &HeapCellValue::NamedStr(_, _) => HeapCellRef::Str(focus)
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum HeapCellRef {
+    Ref(usize),
+    Str(usize)
+}
+
+impl HeapCellRef {
+    pub fn heap_offset(&self) -> usize {
+        match self {
+            &HeapCellRef::Ref(r) | &HeapCellRef::Str(r) => r
+        }
+    }        
+}
+
+impl From<HeapCellRef> for HeapCellValue {
+    fn from(hcr: HeapCellRef) -> HeapCellValue {
+        match hcr {
+            HeapCellRef::Ref(r) => HeapCellValue::Ref(r),
+            HeapCellRef::Str(s) => HeapCellValue::Str(s)
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -173,7 +226,7 @@ impl AddAssign<usize> for CodePtr {
 
 pub type Heap = Vec<HeapCellValue>;
 
-pub type Registers = Vec<HeapCellValue>;
+pub type Registers = Vec<HeapCellRef>;
 
 impl Term {
     pub fn subterms(&self) -> usize {

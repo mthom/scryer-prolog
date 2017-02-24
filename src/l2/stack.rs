@@ -5,22 +5,22 @@ use std::vec::Vec;
 
 struct Frame {
     cp: CodePtr,
-    perms: Vec<HeapCellValue>
+    perms: Vec<HeapCellRef>
 }
 
 impl Frame {
     fn new(cp: CodePtr, n: usize) -> Self {
         Frame {
             cp: cp,
-            perms: vec![HeapCellValue::Ref(0); n]
+            perms: vec![HeapCellRef::Ref(0); n]
         }
     }
 
-    fn read_pv(&self, i: usize) -> &HeapCellValue {
+    fn read_pv(&self, i: usize) -> &HeapCellRef {
         self.perms.index(i)
     }
 
-    fn read_pv_mut(&mut self, i: usize) -> &mut HeapCellValue {
+    fn read_pv_mut(&mut self, i: usize) -> &mut HeapCellRef {
         self.perms.index_mut(i)
     }
 }
@@ -46,7 +46,7 @@ impl Stack {
 }
 
 impl Index<usize> for Stack {
-    type Output = HeapCellValue;
+    type Output = HeapCellRef;
 
     fn index(&self, index: usize) -> &Self::Output {
         self.0.last().unwrap().read_pv(index - 1)
