@@ -126,6 +126,11 @@ yes
 X = h
 Z = f(f(a), g(b), _7)
 Y = g(b)
+l2> ?- p(f(X, Y, Z), Y, h).
+yes
+X = f(a)
+Z = _4
+Y = g(b)
 l2> quit
 ```
 
