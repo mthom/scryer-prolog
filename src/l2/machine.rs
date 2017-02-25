@@ -103,7 +103,6 @@ impl Machine {
 
         for (var, hcr) in var_dir {
             let mut arities = Vec::new();
-
             let viewer = HeapCellViewer::new(&self.ms.heap, hcr.heap_offset());
 
             if result != "" {
@@ -170,19 +169,16 @@ impl Machine {
                     break;
                 }
             }
-
-            if succeeded {
-                let result = Some(self.heap_view(heap_locs));
-                self.ms.reset();
-                result
-            } else {
-                self.ms.reset();
-                None
-            }
+        }
+        
+        if succeeded {
+            let result = Some(self.heap_view(heap_locs));
+            self.ms.reset();
+            result
         } else {
             self.ms.reset();
             None
-        }
+        }   
     }
 }
 
