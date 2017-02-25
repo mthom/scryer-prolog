@@ -136,7 +136,7 @@ l2> quit
 
 Note that the values of variables belonging to successful queries are
 printed out, on one line each. Uninstantiated variables are denoted by
-a number preceded by an uniscore.
+a number preceded by an underscore.
 
 ## Occurs check
 
