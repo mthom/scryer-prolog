@@ -155,9 +155,9 @@ impl Machine {
             succeeded = self.execute_instr(&instr);
         }
 
-        if succeeded {
-            let mut heap_locs = HashMap::new();
+        let mut heap_locs = HashMap::new();
 
+        if succeeded {            
             for (var, vr) in cg.vars() {
                 let hcr = self.ms.registers[vr.root_register()];
                 heap_locs.insert(*var, hcr);
