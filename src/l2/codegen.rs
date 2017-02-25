@@ -237,7 +237,7 @@ impl<'a> TermMarker<'a> {
     }
 
     fn advance(&mut self, term: &'a Term) {
-        self.arg_c  = 1;
+        self.arg_c = 1;
         self.temp_c = term.subterms() + 1;
     }
 }
@@ -329,8 +329,6 @@ impl<'a> CodeGenerator<'a> {
         let iter       = Target::iter(term);
         let mut target = Vec::new();
 
-        self.marker.advance(term);
-
         for term in iter {
             match term {
                 TermRef::Atom(lvl, term, atom) =>
@@ -411,13 +409,18 @@ impl<'a> CodeGenerator<'a> {
 
         let mut body = Vec::new();
 
+        self.marker.advance(p0);
+        
         body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
         body.push(Line::Fact(self.compile_target(p0)));
 
         body.append(&mut self.compile_query(p1));
 
         body = clauses.iter()
-            .map(|ref term| self.compile_query(term))
+            .map(|ref term| {
+                self.marker.advance(term);
+                self.compile_query(term)
+            })
             .fold(body, |mut body, ref mut cqs| {
                 body.append(cqs);
                 body
