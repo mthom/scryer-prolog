@@ -432,6 +432,8 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub fn compile_fact(&mut self, term: &'a Term) -> Code {
+        self.marker.advance(term);
+        
         let mut compiled_fact = vec![Line::Fact(self.compile_target(term))];
         let proceed = Line::Control(ControlInstruction::Proceed);
 
@@ -440,6 +442,8 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub fn compile_query(&mut self, term: &'a Term) -> Code {
+        self.marker.advance(term);
+        
         let mut compiled_query = vec![Line::Query(self.compile_target(term))];
 
         match term {
