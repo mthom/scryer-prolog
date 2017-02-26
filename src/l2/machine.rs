@@ -41,7 +41,7 @@ impl Machine {
         }
     }
 
-    fn failed(&self) -> bool {
+    pub fn failed(&self) -> bool {
         self.ms.fail
     }
 
@@ -173,12 +173,14 @@ impl Machine {
         
         if succeeded {
             let result = Some(self.heap_view(heap_locs));
-            self.ms.reset();
             result
         } else {
-            self.ms.reset();
             None
         }   
+    }
+
+    pub fn reset(&mut self) {
+        self.ms.reset();
     }
 }
 

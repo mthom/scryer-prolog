@@ -2,6 +2,7 @@ use l2::ast::*;
 use l2::iterators::{FactIterator, QueryIterator};
 
 use std::cell::Cell;
+use std::cmp::max;
 use std::collections::HashMap;
 use std::fmt;
 use std::vec::Vec;
@@ -236,6 +237,21 @@ impl<'a> TermMarker<'a> {
         reg
     }
 
+    fn advance_at_header(&mut self, term: &'a Term) {
+        self.arg_c = 1;
+        self.temp_c = max(term.subterms() + 1,
+                          self.bindings.values()
+                          .filter_map(|vr| {
+                              match vr {
+                                  &VarReg::Norm(RegType::Temp(reg)) |
+                                  &VarReg::ArgAndNorm(RegType::Temp(reg), _) =>
+                                      Some(reg),
+                                  _ => None
+                              }
+                          })
+                          .max().unwrap_or(0));
+    }
+
     fn advance(&mut self, term: &'a Term) {
         self.arg_c = 1;
         self.temp_c = term.subterms() + 1;
@@ -396,6 +412,21 @@ impl<'a> CodeGenerator<'a> {
         vfs
     }
 
+    //TODO: remove this if it proves to be unnecessary.
+    fn add_conditional_call(compiled_query: &mut Code, term: &Term) {
+        match term {
+            &Term::Atom(_, ref atom) => {
+                let call = ControlInstruction::Call(atom.clone(), 0);
+                compiled_query.push(Line::Control(call));
+            },
+            &Term::Clause(_, ref atom, ref terms) => {
+                let call = ControlInstruction::Call(atom.clone(), terms.len());
+                compiled_query.push(Line::Control(call));
+            },
+            _ => {}
+        }
+    }
+
     pub fn compile_rule(&mut self, rule: &'a Rule) -> Code {
         let vfs = Self::mark_perm_vars(&rule);
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
@@ -409,18 +440,17 @@ impl<'a> CodeGenerator<'a> {
 
         let mut body = Vec::new();
 
-        self.marker.advance(p0);
-        
         body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
+
+        self.marker.advance(p0);
         body.push(Line::Fact(self.compile_target(p0)));
 
-        body.append(&mut self.compile_query(p1));
+        self.marker.advance_at_header(p1);
+        body.push(Line::Query(self.compile_target(p1)));
+        Self::add_conditional_call(&mut body, p1);
 
         body = clauses.iter()
-            .map(|ref term| {
-                self.marker.advance(term);
-                self.compile_query(term)
-            })
+            .map(|ref term| self.compile_query(term))
             .fold(body, |mut body, ref mut cqs| {
                 body.append(cqs);
                 body
@@ -433,7 +463,7 @@ impl<'a> CodeGenerator<'a> {
 
     pub fn compile_fact(&mut self, term: &'a Term) -> Code {
         self.marker.advance(term);
-        
+
         let mut compiled_fact = vec![Line::Fact(self.compile_target(term))];
         let proceed = Line::Control(ControlInstruction::Proceed);
 
@@ -443,20 +473,9 @@ impl<'a> CodeGenerator<'a> {
 
     pub fn compile_query(&mut self, term: &'a Term) -> Code {
         self.marker.advance(term);
-        
-        let mut compiled_query = vec![Line::Query(self.compile_target(term))];
 
-        match term {
-            &Term::Atom(_, ref atom) => {
-                let call = ControlInstruction::Call(atom.clone(), 0);
-                compiled_query.push(Line::Control(call));
-            },
-            &Term::Clause(_, ref atom, ref terms) => {
-                let call = ControlInstruction::Call(atom.clone(), terms.len());
-                compiled_query.push(Line::Control(call));
-            },
-            _ => {}
-        }
+        let mut compiled_query = vec![Line::Query(self.compile_target(term))];
+        Self::add_conditional_call(&mut compiled_query, term);
 
         compiled_query
     }
