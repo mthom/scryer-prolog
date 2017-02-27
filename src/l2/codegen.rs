@@ -239,7 +239,7 @@ impl<'a> TermMarker<'a> {
 
     fn advance_at_header(&mut self, term: &'a Term) {
         self.arg_c = 1;
-        self.temp_c = max(term.subterms() + 1,
+        self.temp_c = max(term.subterms(),
                           self.bindings.values()
                           .filter_map(|vr| {
                               match vr {
@@ -249,7 +249,7 @@ impl<'a> TermMarker<'a> {
                                   _ => None
                               }
                           })
-                          .max().unwrap_or(0));
+                          .max().unwrap_or(0)) + 1;
     }
 
     fn advance(&mut self, term: &'a Term) {
