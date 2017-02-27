@@ -411,8 +411,7 @@ impl<'a> CodeGenerator<'a> {
 
         vfs
     }
-
-    //TODO: remove this if it proves to be unnecessary.
+    
     fn add_conditional_call(compiled_query: &mut Code, term: &Term) {
         match term {
             &Term::Atom(_, ref atom) => {
