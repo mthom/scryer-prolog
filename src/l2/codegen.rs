@@ -360,15 +360,13 @@ impl<'a> CodeGenerator<'a> {
     {
         for term in iter {
             if let TermRef::Var(_, reg_cell, var) = term {
-                let mut status =
-                    vs.entry(var)
-                      .or_insert((TermStatus::New, Vec::new()));
+                let mut status = vs.entry(var)
+                                   .or_insert((TermStatus::New, Vec::new()));
 
                 status.1.push(reg_cell);
 
                 match status.0 {
-                    TermStatus::Old | TermStatus::Recurrent =>
-                        status.0 = TermStatus::Recurrent,
+                    TermStatus::Old => status.0 = TermStatus::Recurrent,
                     _ => {}
                 };
             }
