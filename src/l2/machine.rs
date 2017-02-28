@@ -172,8 +172,7 @@ impl Machine {
         }
         
         if succeeded {
-            let result = Some(self.heap_view(heap_locs));
-            result
+            Some(self.heap_view(heap_locs))
         } else {
             None
         }   
