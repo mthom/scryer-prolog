@@ -99,8 +99,8 @@ impl Machine {
     }
 
     fn heap_view(&self, var_dir: HashMap<&Var, HeapCellRef>) -> String {
-        let mut result = String::new();
-
+        let mut result = String::new();        
+        
         for (var, hcr) in var_dir {
             let mut arities = Vec::new();
             let viewer = HeapCellViewer::new(&self.ms.heap, hcr.heap_offset());
@@ -172,8 +172,7 @@ impl Machine {
         }
         
         if succeeded {
-            let result = Some(self.heap_view(heap_locs));
-            result
+            Some(self.heap_view(heap_locs))
         } else {
             None
         }   

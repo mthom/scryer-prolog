@@ -239,17 +239,7 @@ impl<'a> TermMarker<'a> {
 
     fn advance_at_header(&mut self, term: &'a Term) {
         self.arg_c = 1;
-        self.temp_c = max(term.subterms(),
-                          self.bindings.values()
-                          .filter_map(|vr| {
-                              match vr {
-                                  &VarReg::Norm(RegType::Temp(reg)) |
-                                  &VarReg::ArgAndNorm(RegType::Temp(reg), _) =>
-                                      Some(reg),
-                                  _ => None
-                              }
-                          })
-                          .max().unwrap_or(0)) + 1;
+        self.temp_c = max(term.subterms(), self.temp_c) + 1;
     }
 
     fn advance(&mut self, term: &'a Term) {
@@ -370,15 +360,13 @@ impl<'a> CodeGenerator<'a> {
     {
         for term in iter {
             if let TermRef::Var(_, reg_cell, var) = term {
-                let mut status =
-                    vs.entry(var)
-                      .or_insert((TermStatus::New, Vec::new()));
+                let mut status = vs.entry(var)
+                                   .or_insert((TermStatus::New, Vec::new()));
 
                 status.1.push(reg_cell);
 
                 match status.0 {
-                    TermStatus::Old | TermStatus::Recurrent =>
-                        status.0 = TermStatus::Recurrent,
+                    TermStatus::Old => status.0 = TermStatus::Recurrent,
                     _ => {}
                 };
             }
