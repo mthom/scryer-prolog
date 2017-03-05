@@ -1,9 +1,10 @@
 [root]
 name = "rusty-wam"
-version = "0.3.5"
+version = "0.4.0"
 dependencies = [
  "lalrpop 0.12.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "lalrpop-util 0.12.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "termion 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -198,6 +199,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "termion"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.2.16 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "thread-id"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -259,6 +268,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum rustc-serialize 0.3.19 (registry+https://github.com/rust-lang/crates.io-index)" = "6159e4e6e559c81bd706afe9c8fd68f547d3e851ce12e76b1de7914bab61691b"
 "checksum strsim 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "50c069df92e4b01425a8bf3576d5d417943a6a7272fbabaf5bd80b1aaa76442e"
 "checksum term 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "3deff8a2b3b6607d6d7cc32ac25c0b33709453ca9cceac006caac51e963cf94a"
+"checksum termion 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "6e710c59ecea168019486885ade43ea5329bb9a08a117410052fb81b250f40ae"
 "checksum thread-id 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a9539db560102d1cef46b8b78ce737ff0bb64e7e18d35b2a5688f7d097d0ff03"
 "checksum thread_local 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "55dd963dbaeadc08aa7266bf7f91c3154a7805e32bb94b820b769d2ef3b4744d"
 "checksum unicode-xid 0.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f69506a2561962651710609304bbb961fa3da598c812f877975a82e48ee144f9"
