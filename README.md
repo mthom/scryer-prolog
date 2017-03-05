@@ -29,7 +29,7 @@ h(z).
 }:
 ```
 
-Single clause predicates can entered without brackets, as in
+Single clause predicates can be entered without brackets, as in
 ```
 l3> p(X) :- q(X).
 l3> f(s).
@@ -56,7 +56,7 @@ Pressing A will abort the search and return to the prompt.
 
 Note that the values of variables belonging to successful queries are
 printed out, on one line each. Uninstantiated variables are denoted by
-a number preceded by an underscore (X = _0 is an example in the
+a number preceded by an underscore (`X = _0` is an example in the
 above).
 
 ## Occurs check
