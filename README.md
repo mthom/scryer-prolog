@@ -62,10 +62,12 @@ above).
 ## Occurs check
 
 There's no occurs check, but there soon will be. Currently, attempting
-unification on a cyclic term causes an infinite loop:
+unification on a cyclic term succeeds, and the attempt to write the
+term to a string results in an infinite loop, ie.
 
 ```
-l2> p(W, W).
-l2> ?- p(f(f(W)), W).
+l3> p(W, W).
+l3> ?- p(f(f(W)), W).
+yes
 *loops to infinity*
 ```
