@@ -9,7 +9,7 @@ pure Prolog.
 ## Progress
 
 The language L3 is implemented as a simple REPL. L3 is pure Prolog --
-Prolog without cuts, meta- or extra-logical operators, or side effects
+Prolog without cut, meta- or extra-logical operators, or side effects
 of any kind. No data types apart from atoms are currently supported.
 
 ## Tutorial
