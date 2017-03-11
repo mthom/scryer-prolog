@@ -1,13 +1,13 @@
 extern crate termion;
-mod l3;
+mod prolog;
 
-use l3::io::*;
-use l3::machine::*;
+use prolog::io::*;
+use prolog::machine::*;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use l3::ast::*;
+    use prolog::ast::*;
     
     fn submit(wam: &mut Machine, buffer: &str) -> EvalResult {
         let result = eval(wam, buffer);
@@ -174,13 +174,59 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- p(X, Y, X).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- p(f(f(X)), h(f(X)), Y).").failed_query(), true);
     }
+
+    #[test]
+    fn test_queries_on_lists() {
+        let mut wam = Machine::new();
+
+        submit(&mut wam, "p([Z, W]).");
+
+        assert_eq!(submit(&mut wam, "?- p([Z, Z]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Z, W, Y]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p([Z | W]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Z | [Z]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Z | [W]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Z | []]).").failed_query(), true);
+
+        submit(&mut wam, "p([Z, Z]).");
+
+        assert_eq!(submit(&mut wam, "?- p([Z, Z]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Z, W, Y]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p([Z | W]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Z | [Z]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Z | [W]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Z | []]).").failed_query(), true);
+
+        submit(&mut wam, "p([Z]).");
+
+        assert_eq!(submit(&mut wam, "?- p([Z, Z]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p([Z, W, Y]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p([Z | W]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Z | [Z]]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p([Z | [W]]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p([Z | []]).").failed_query(), false);
+
+        submit(&mut wam, "member(X, [X|Xs]).
+                          member(X, [Y|Xs]) :- member(X, Xs).");
+
+        assert_eq!(submit(&mut wam, "?- member(a, [c, [X, Y]]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- member(c, [a, [X, Y]]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- member(a, [a, [X, Y]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- member(a, [X, Y, Z]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- member([X, X], [a, [X, Y]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- member([X, X], [a, [b, c], [b, b], [Z, x], [d, f]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- member([X, X], [a, [b, c], [b, d], [foo, x], [d, f]]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- member([X, Y], [a, [b, c], [b, b], [Z, x], [d, f]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- member([X, Y, Y], [a, [b, c], [b, b], [Z, x], [d, f]]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- member([X, Y, Z], [a, [b, c], [b, b], [Z, x], [d, f]]).").failed_query(), true);
+    }
 }
 
-fn l3_repl() {
+fn prolog_repl() {
     let mut wam = Machine::new();
         
     loop {
-        print!("l3> ");
+        print!("prolog> ");
 
         let buffer = read();
 
@@ -199,5 +245,5 @@ fn l3_repl() {
 }
 
 fn main() {
-    l3_repl();
+    prolog_repl();
 }

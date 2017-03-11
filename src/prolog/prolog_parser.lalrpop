@@ -1,0 +1,77 @@
+use prolog::ast::*;
+
+use std::cell::Cell;
+
+grammar;
+
+pub TopLevel: TopLevel = {
+    "?-" <t:Term> "." => TopLevel::Query(t),
+    <Predicate> => TopLevel::Predicate(<>),
+    <Rule>  "." => TopLevel::Rule(<>),
+    <Term>  "." => TopLevel::Fact(<>)
+};
+
+Atom : Atom = {
+    r"[a-z][a-z0-9_]*" => <>.trim().to_string(),
+};
+
+BoxedTerm : Box<Term> = {
+    <t:Term> => Box::new(t)
+};
+
+Clause : Term = {
+    <a:Atom> "(" <ts: (<BoxedTerm> ",")*> <t:BoxedTerm> ")" => {
+     	let mut ts = ts;
+     	ts.push(t);
+	Term::Clause(Cell::default(), a, ts)
+    }
+};
+
+List : Term = {
+    "[]" => Term::Constant(Cell::default(), Constant::EmptyList),
+    "[" <ListInternals> "]" => <>
+};
+
+ListInternals : Term = {
+    <t:BoxedTerm> => Term::Cons(Cell::default(),
+                                t,
+				Box::new(Term::Constant(Cell::default(),
+				                        Constant::EmptyList))),
+    <t:BoxedTerm>  "," <li: ListInternals> => Term::Cons(Cell::default(),
+                                                         t,
+							 Box::new(li)),
+    <t1:BoxedTerm> "|" <t2:BoxedTerm> => Term::Cons(Cell::default(), t1, t2)
+};
+
+Predicate : Vec<PredicateClause> = {
+    <pcs: (<PredicateClause>)+> <pc: PredicateClause> => {
+        let mut pcs = pcs;
+	pcs.push(pc);
+	pcs
+    }
+};
+
+PredicateClause : PredicateClause = {
+    <Rule> "." => PredicateClause::Rule(<>),
+    <Term> "." => PredicateClause::Fact(<>)
+};
+
+Rule : Rule = {
+    <c:Clause> ":-" <h:Term> <cs: ("," <Term>)*> =>
+        Rule { head: (c, h), clauses: cs },
+    <a:Atom> ":-" <h:Term> <cs: ("," <Term>)*> =>
+        Rule { head: (Term::Constant(Cell::default(), Constant::Atom(a)), h),
+               clauses: cs }
+};
+
+Term : Term = {
+    <Atom>   => Term::Constant(Cell::default(), Constant::Atom(<>)),
+    <Clause> => <>,
+    <List>   => <>,
+    <Var>    => Term::Var(Cell::default(), <>),
+    "_"      => Term::AnonVar
+};
+
+Var : Var = {
+    r"[A-Z][a-z0-9_]*" => <>.trim().to_string()
+};

@@ -8,9 +8,11 @@ pure Prolog.
 
 ## Progress
 
-The language L3 is implemented as a simple REPL. L3 is pure Prolog --
-Prolog without cut, meta- or extra-logical operators, or side effects
-of any kind. No data types apart from atoms are currently supported.
+Pure Prolog is implemented as a simple REPL. "Pure Prolog" is Prolog
+without cut, meta- or extra-logical operators, or side effects of any
+kind. In terms of the tutorial pacing, the work has progressed to the
+middle of section 5.2. Atoms and lists are the only two data types
+currently supported.
 
 ## Tutorial
 To enter a multi-clause predicate, the brackets ":{" and "}:" are used
@@ -18,11 +20,11 @@ as delimiters. They must be entirely contained with their own lines.
 
 For example,
 ```
-l3> :{
+prolog> :{
 p(f(f(X)), h(W), Y) :- g(W), h(W), f(X).
 p(X, Y, Z) :- h(Y), z(Z).
 }:
-l3> :{
+prolog> :{
 h(x).
 h(y).
 h(z).
@@ -31,28 +33,49 @@ h(z).
 
 Single clause predicates can be entered without brackets, as in
 ```
-l3> p(X) :- q(X).
-l3> f(s).
-l3> z(Z).
+prolog> p(X) :- q(X).
+prolog> f(s).
+prolog> z(Z).
 ```
 
 Queries are issued as
 ```
-l3> ?- p(X, Y, Z).
+prolog> ?- p(X, Y, Z).
 ```
 
 Given the above work, the result of the query will be
 ```
-l3> ?- p(X, Y, Z).
+prolog> ?- p(X, Y, Z).
 yes
 X = _0
 Y = x
 Z = _2
-Press ; to continue or A to abort.
+Press ; to continue or . to abort.
 ```
 
 Pressing ; will backtrack through other possible answers, if any exist.
-Pressing A will abort the search and return to the prompt.
+Pressing . will abort the search and return to the prompt.
+
+Wildcards work as well:
+
+```
+prolog> prolog> :{
+member(X, [X|_]).
+member(X, [_|Xs]) :- member(X, Xs).
+}:
+prolog> ?- member(X, [a, b, c]).
+yes
+X = a
+Press ; to continue or . to abort.
+;
+X = b
+Press ; to continue or . to abort.
+;
+X = c
+Press ; to continue or . to abort.
+;
+no
+```
 
 Note that the values of variables belonging to successful queries are
 printed out, on one line each. Uninstantiated variables are denoted by
@@ -66,8 +89,8 @@ unification on a cyclic term succeeds, and the attempt to write the
 term to a string results in an infinite loop, ie.
 
 ```
-l3> p(W, W).
-l3> ?- p(f(f(W)), W).
+prolog> p(W, W).
+prolog> ?- p(f(f(W)), W).
 yes
 *loops to infinity*
 ```
