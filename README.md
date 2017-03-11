@@ -59,7 +59,7 @@ Pressing . will abort the search and return to the prompt.
 Wildcards work as well:
 
 ```
-prolog> prolog> :{
+prolog> :{
 member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
 }:
