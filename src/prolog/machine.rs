@@ -666,7 +666,7 @@ impl MachineState {
                 self.e = self.and_stack.len() - 1;
                 self.p += 1;
             },
-            &ControlInstruction::Call(ref name, arity) => {
+            &ControlInstruction::Call(ref name, arity, _) => {
                 let compiled_tl_index = code_dir.get(&(name.clone(), arity))
                                                 .map(|index| *index);
 

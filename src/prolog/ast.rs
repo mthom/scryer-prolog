@@ -166,7 +166,7 @@ pub enum ChoiceInstruction {
 
 pub enum ControlInstruction {
     Allocate(usize),
-    Call(Atom, usize),
+    Call(Atom, usize, usize),
     Deallocate,
     Execute(Atom, usize),
     Proceed

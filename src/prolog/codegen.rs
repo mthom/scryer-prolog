@@ -126,7 +126,6 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
 struct TermMarker<'a> {
     bindings: HashMap<&'a Var, VarReg>,
     arg_c:    usize,
-    perm_c:   usize,
     temp_c:   usize
 }
 
@@ -134,13 +133,11 @@ impl<'a> TermMarker<'a> {
     fn new() -> TermMarker<'a> {
         TermMarker { bindings: HashMap::new(),
                      arg_c:    1,
-                     perm_c:   1,
                      temp_c:   1 }
     }
 
     fn reset(&mut self) {
         self.bindings.clear();
-        self.perm_c = 1;
     }
 
     fn contains_var(&self, var: &'a Var) -> bool {
@@ -160,26 +157,17 @@ impl<'a> TermMarker<'a> {
 
         if reg_type.reg_num() == 0 {
             match lvl {
-                Level::Deep if reg_type.is_perm() => {
-                    let perm = self.perm_c;
-                    self.perm_c += 1;
-                    cell.set(RegType::Perm(perm));
-                },
-                Level::Deep => {
+                Level::Deep if !reg_type.is_perm() => {
                     let temp = self.temp_c;
                     self.temp_c += 1;
                     cell.set(RegType::Temp(temp));
                 },
-                Level::Shallow if reg_type.is_perm() => {
-                    let arg = self.arg_c;
-                    self.arg_c += 1;
-                    cell.set(RegType::Perm(arg));
-                },
-                Level::Shallow => {
+                Level::Shallow if !reg_type.is_perm() => {
                     let arg = self.arg_c;
                     self.arg_c += 1;
                     cell.set(RegType::Temp(arg));
-                }
+                },
+                _ => {}
             };
         }
     }
@@ -203,14 +191,12 @@ impl<'a> TermMarker<'a> {
 
     fn mark_new_var(&mut self, lvl: Level, var: &'a Var, reg: RegType) -> VarReg
     {
-        let inner_reg = if reg.is_perm() {
-            let perm = self.perm_c;
-            self.perm_c += 1;
-            RegType::Perm(perm)
-        } else {
+        let inner_reg = if !reg.is_perm() {
             let temp = self.temp_c;
             self.temp_c += 1;
             RegType::Temp(temp)
+        } else {
+            reg
         };
 
         let reg = match lvl {
@@ -259,15 +245,15 @@ impl<'a> TermMarker<'a> {
 }
 
 #[derive(Copy, Clone)]
-enum TermStatus {
-    New, Old, Recurrent
+enum VarStatus {
+    New, Old, Permanent(usize)
 }
 
 pub struct CodeGenerator<'a> {
     marker: TermMarker<'a>
 }
 
-type VariableFixture<'a>  = (TermStatus, Vec<&'a Cell<VarReg>>);
+type VariableFixture<'a>  = (VarStatus, Vec<&'a Cell<VarReg>>);
 type VariableFixtures<'a> = HashMap<&'a Var, VariableFixture<'a>>;
 
 impl<'a> CodeGenerator<'a> {
@@ -472,77 +458,109 @@ impl<'a> CodeGenerator<'a> {
         target
     }
 
-    fn mark_vars_in_term<Iter>(iter: Iter, vs: &mut VariableFixtures<'a>)
+    fn mark_vars_in_term<Iter>(iter: Iter, vs: &mut VariableFixtures<'a>, i: usize)
         where Iter : Iterator<Item=TermRef<'a>>
     {
         for term in iter {
             if let TermRef::Var(_, reg_cell, var) = term {
                 let mut status = vs.entry(var)
-                                   .or_insert((TermStatus::New, Vec::new()));
+                                   .or_insert((VarStatus::New, Vec::new()));
 
                 status.1.push(reg_cell);
 
                 match status.0 {
-                    TermStatus::Old => status.0 = TermStatus::Recurrent,
+                    VarStatus::Old =>
+                        status.0 = VarStatus::Permanent(i),
+                    VarStatus::Permanent(_) =>
+                        status.0 = VarStatus::Permanent(i),
                     _ => {}
                 };
             }
         }
 
-        for &mut (ref mut term_status, ref mut cb) in vs.values_mut() {
+        for &mut (ref mut term_status, _) in vs.values_mut() {
             match *term_status {
-                TermStatus::New => *term_status = TermStatus::Old,
-                TermStatus::Recurrent => {
-                    for cell_reg in cb.drain(0..) {
-                        cell_reg.set(VarReg::Norm(RegType::Perm(0)));
-                    }
-                },
+                VarStatus::New =>
+                    *term_status = VarStatus::Old,
                 _ => {}
+            }
+        }
+    }
+
+    fn set_perm_vals(vs: &VariableFixtures) {
+        let mut values_vec : Vec<_> = vs.values()
+            .map(|ref v| (v.0, &v.1))
+            .collect();
+
+        values_vec.sort_by_key(|ref v| {
+            match v.0 {
+                VarStatus::Permanent(i) => i,
+                _ => usize::min_value()
+            }
+        });
+
+        for (i, v) in values_vec.into_iter().rev().enumerate() {
+            if let VarStatus::Permanent(_) = v.0 {
+                for cell in v.1 {
+                    cell.set(VarReg::Norm(RegType::Perm(i + 1)));
+                }
+            } else {
+                break;
             }
         }
     }
 
     fn mark_perm_vars(rule: &'a Rule) -> VariableFixtures {
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
-        let mut vfs = HashMap::new();
+        let mut vs = HashMap::new();
 
         let iter = p0.breadth_first_iter().chain(p1.breadth_first_iter());
 
-        Self::mark_vars_in_term(iter, &mut vfs);
+        Self::mark_vars_in_term(iter, &mut vs, 0);
 
-        for term in clauses {
-            Self::mark_vars_in_term(term.breadth_first_iter(), &mut vfs);
+        for (i, term) in clauses.iter().enumerate() {
+            Self::mark_vars_in_term(term.breadth_first_iter(), &mut vs, i + 1);
         }
 
-        vfs
+        Self::set_perm_vals(&vs);
+
+        vs
     }
 
-    fn add_conditional_call(compiled_query: &mut Code, term: &Term)
+    fn add_conditional_call(compiled_query: &mut Code, term: &Term, pvs: usize)
     {
         match term {
             &Term::Constant(_, Constant::Atom(ref atom)) => {
-                let call = ControlInstruction::Call(atom.clone(), 0);
+                let call = ControlInstruction::Call(atom.clone(), 0, pvs);
                 compiled_query.push(Line::Control(call));
             },
             &Term::Clause(_, ref atom, ref terms) => {
-                let call = ControlInstruction::Call(atom.clone(), terms.len());
+                let call = ControlInstruction::Call(atom.clone(), terms.len(), pvs);
                 compiled_query.push(Line::Control(call));
             },
             _ => {}
         }
     }
 
-    pub fn compile_rule(&mut self, rule: &'a Rule) -> Code {
-        let vfs = Self::mark_perm_vars(&rule);
-        let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
-        let mut perm_vars = 0;
+    fn vars_above_threshold(vs: &VariableFixtures, index: usize) -> usize {
+        let mut var_count = 0;
 
-        for &(term_status, _) in vfs.values() {
-            if let TermStatus::Recurrent = term_status {
-                perm_vars += 1;
+        for &(term_status, _) in vs.values() {
+            if let VarStatus::Permanent(i) = term_status {
+                if i >= index {
+                    var_count += 1;
+                }
             }
         }
 
+        var_count
+    }
+
+    pub fn compile_rule(&mut self, rule: &'a Rule) -> Code {
+        let vs = Self::mark_perm_vars(&rule);
+        let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
+
+        let perm_vars = Self::vars_above_threshold(&vs, 1);
         let mut body = Vec::new();
 
         if clauses.len() > 0 {
@@ -555,15 +573,19 @@ impl<'a> CodeGenerator<'a> {
         self.marker.advance_at_head(p1);
         body.push(Line::Query(self.compile_target(p1, false)));
 
-        Self::add_conditional_call(&mut body, p1);
+        Self::add_conditional_call(&mut body, p1, perm_vars);
 
-        body = clauses.iter()
-            .map(|ref term| self.compile_internal_query(term))
+        body = clauses.iter().enumerate()
+            .map(|(i, ref term)| {
+                let num_vars = Self::vars_above_threshold(&vs, i+2);
+                self.compile_internal_query(term, num_vars)
+            })
             .fold(body, |mut body, ref mut cqs| {
                 body.append(cqs);
                 body
             });
 
+        // now perform LCO.
         let last_arity = rule.last_clause().arity();
         let mut dealloc_index = body.len() - 1;
 
@@ -580,7 +602,7 @@ impl<'a> CodeGenerator<'a> {
         if clauses.len() > 0 {
             body.insert(dealloc_index, Line::Control(ControlInstruction::Deallocate));
         }
-        
+
         body
     }
 
@@ -594,11 +616,11 @@ impl<'a> CodeGenerator<'a> {
         compiled_fact
     }
 
-    fn compile_internal_query(&mut self, term: &'a Term) -> Code {
+    fn compile_internal_query(&mut self, term: &'a Term, index: usize) -> Code {
         self.marker.advance(term);
 
         let mut compiled_query = vec![Line::Query(self.compile_target(term, false))];
-        Self::add_conditional_call(&mut compiled_query, term);
+        Self::add_conditional_call(&mut compiled_query, term, index);
 
         compiled_query
     }
@@ -607,7 +629,7 @@ impl<'a> CodeGenerator<'a> {
         self.marker.advance(term);
 
         let mut compiled_query = vec![Line::Query(self.compile_target(term, true))];
-        Self::add_conditional_call(&mut compiled_query, term);
+        Self::add_conditional_call(&mut compiled_query, term, 1);
 
         compiled_query
     }

@@ -88,8 +88,8 @@ impl fmt::Display for ControlInstruction {
         match self {
             &ControlInstruction::Allocate(num_cells) =>
                 write!(f, "allocate {}", num_cells),
-            &ControlInstruction::Call(ref name, ref arity) =>
-                write!(f, "call {}/{}", name, arity),
+            &ControlInstruction::Call(ref name, arity, pvs) =>
+                write!(f, "call {}/{}, {}", name, arity, pvs),
             &ControlInstruction::Deallocate =>
                 write!(f, "deallocate"),
             &ControlInstruction::Execute(ref name, arity) =>
