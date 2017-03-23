@@ -585,6 +585,21 @@ impl MachineState {
                 };
 
                 self.s += 1;
+            },
+            &FactInstruction::UnifyVoid(n) => {
+                match self.mode {
+                    MachineMode::Read =>
+                        self.s += n,
+                    MachineMode::Write => {
+                        let h = self.h;
+
+                        for i in h .. h + n {
+                            self.heap.push(HeapCellValue::Ref(Ref::HeapCell(i)));
+                        }
+
+                        self.h += n;
+                    }
+                };
             }
         };
     }
@@ -628,6 +643,15 @@ impl MachineState {
 
                 self.h += 1;
             },
+            &QueryInstruction::SetVoid(n) => {
+                let h = self.h;
+
+                for i in h .. h + n {
+                    self.heap.push(HeapCellValue::Ref(Ref::HeapCell(i)));
+                }
+
+                self.h += n;
+            }
         }
     }
 

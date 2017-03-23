@@ -14,7 +14,7 @@ impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Constant::Atom(ref atom) =>
-                write!(f, "{}", atom),        
+                write!(f, "{}", atom),
             &Constant::EmptyList =>
                 write!(f, "[]")
         }
@@ -45,7 +45,9 @@ impl fmt::Display for FactInstruction {
             &FactInstruction::UnifyVariable(ref r) =>
                 write!(f, "unify_variable {}", r),
             &FactInstruction::UnifyValue(ref r) =>
-                write!(f, "unify_value {}", r)
+                write!(f, "unify_value {}", r),
+            &FactInstruction::UnifyVoid(n) =>
+                write!(f, "unify_void {}", n)
         }
     }
 }
@@ -74,7 +76,9 @@ impl fmt::Display for QueryInstruction {
             &QueryInstruction::SetVariable(ref r) =>
                 write!(f, "set_variable {}", r),
             &QueryInstruction::SetValue(ref r) =>
-                write!(f, "set_value {}", r)
+                write!(f, "set_value {}", r),
+            &QueryInstruction::SetVoid(n) =>
+                write!(f, "set_void {}", n)
         }
     }
 }
@@ -207,7 +211,7 @@ pub fn eval(wam: &mut Machine, buffer: &str) -> EvalResult
         &Ok(TopLevel::Predicate(ref clauses)) => {
             if is_consistent(clauses) {
                 let compiled_pred = cg.compile_predicate(clauses);
-                wam.add_predicate(clauses, compiled_pred);                
+                wam.add_predicate(clauses, compiled_pred);
 
                 EvalResult::EntrySuccess
             } else {
@@ -229,8 +233,8 @@ Each predicate must have the same name and arity.";
             EvalResult::EntrySuccess
         },
         &Ok(TopLevel::Query(ref query)) => {
-            let compiled_query = cg.compile_query(&query);
-            wam.run_query(compiled_query, &cg)            
+            let compiled_query = cg.compile_query(&query);            
+            wam.run_query(compiled_query, &cg)
         },
         &Err(_) => {
             println!("Grammatical error of some kind!");
@@ -251,7 +255,7 @@ pub fn print(wam: &mut Machine, result: EvalResult) {
             'outer: loop {
                 let mut result = EvalResult::QueryFailure;
                 let bindings = wam.heap_view(&heap_locs);
-                
+
                 let stdin  = stdin();
                 let mut stdout = stdout().into_raw_mode().unwrap();
 

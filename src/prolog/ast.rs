@@ -80,6 +80,10 @@ impl VarReg {
         }
     }
 
+    pub fn is_temp(self) -> bool {
+        !self.norm().is_perm()
+    }
+    
     pub fn root_register(self) -> usize {
         match self {
             VarReg::ArgAndNorm(_, root) => root,
@@ -126,10 +130,11 @@ pub enum FactInstruction {
     GetList(Level, RegType),
     GetStructure(Level, Atom, usize, RegType),
     GetValue(RegType, usize),
-    GetVariable(RegType, usize),
+    GetVariable(RegType, usize),    
     UnifyConstant(Constant),
     UnifyVariable(RegType),
-    UnifyValue(RegType)
+    UnifyValue(RegType),
+    UnifyVoid(usize)
 }
 
 pub enum QueryInstruction {
@@ -140,7 +145,8 @@ pub enum QueryInstruction {
     PutVariable(RegType, usize),
     SetConstant(Constant),
     SetVariable(RegType),
-    SetValue(RegType)
+    SetValue(RegType),
+    SetVoid(usize)
 }
 
 pub enum ChoiceInstruction {

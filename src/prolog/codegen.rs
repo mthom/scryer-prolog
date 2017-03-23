@@ -11,9 +11,10 @@ trait CompilationTarget<'a> {
 
     fn iter(&'a Term) -> Self::Iterator;
 
-    fn to_structure(Level, Atom, usize, RegType) -> Self;
     fn to_constant(Level, Constant, RegType) -> Self;
     fn to_list(Level, RegType) -> Self;
+    fn to_structure(Level, Atom, usize, RegType) -> Self;
+    fn to_void(usize) -> Self;
 
     fn constant_subterm(Constant) -> Self;
 
@@ -33,16 +34,20 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         term.breadth_first_iter()
     }
 
-    fn to_structure(lvl: Level, atom: Atom, arity: usize, reg: RegType) -> Self {
-        FactInstruction::GetStructure(lvl, atom, arity, reg)
-    }
-
     fn to_constant(lvl: Level, constant: Constant, reg: RegType) -> Self {
         FactInstruction::GetConstant(lvl, constant, reg)
     }
 
+    fn to_structure(lvl: Level, atom: Atom, arity: usize, reg: RegType) -> Self {
+        FactInstruction::GetStructure(lvl, atom, arity, reg)
+    }
+
     fn to_list(lvl: Level, reg: RegType) -> Self {
         FactInstruction::GetList(lvl, reg)
+    }
+
+    fn to_void(subterms: usize) -> Self {
+        FactInstruction::UnifyVoid(subterms)
     }
 
     fn constant_subterm(constant: Constant) -> Self {
@@ -76,7 +81,7 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
     fn iter(term: &'a Term) -> Self::Iterator {
         term.post_order_iter()
     }
-
+    
     fn to_structure(lvl: Level, atom: Atom, arity: usize, reg: RegType) -> Self {
         QueryInstruction::PutStructure(lvl, atom, arity, reg)
     }
@@ -87,6 +92,10 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
 
     fn to_list(lvl: Level, reg: RegType) -> Self {
         QueryInstruction::PutList(lvl, reg)
+    }
+
+    fn to_void(subterms: usize) -> Self {
+        QueryInstruction::SetVoid(subterms)
     }
 
     fn constant_subterm(constant: Constant) -> Self {
@@ -145,7 +154,7 @@ impl<'a> TermMarker<'a> {
     fn insert(&mut self, var: &'a Var, r: VarReg) {
         self.bindings.insert(var, r);
     }
-    
+
     fn mark_non_var(&mut self, lvl: Level, cell: &Cell<RegType>) {
         let reg_type = cell.get();
 
@@ -212,18 +221,18 @@ impl<'a> TermMarker<'a> {
                 reg
             }
         };
-        
-        self.insert(var, reg);                
+
+        self.insert(var, reg);
         reg
     }
-    
+
     fn mark_anon_var(&mut self, lvl: Level) -> VarReg {
         let inner_reg = {
             let temp = self.temp_c;
             self.temp_c += 1;
             RegType::Temp(temp)
         };
-        
+
         match lvl {
             Level::Deep => VarReg::Norm(inner_reg),
             Level::Shallow => {
@@ -233,7 +242,11 @@ impl<'a> TermMarker<'a> {
             }
         }
     }
-    
+
+    fn advance_arg(&mut self) {
+        self.arg_c += 1;
+    }
+
     fn advance_at_head(&mut self, term: &'a Term) {
         self.arg_c = 1;
         self.temp_c = max(term.subterms(), self.temp_c) + 1;
@@ -264,6 +277,46 @@ impl<'a> CodeGenerator<'a> {
 
     pub fn vars(&self) -> &HashMap<&Var, VarReg> {
         &self.marker.bindings
+    }
+
+    #[allow(dead_code)]
+    fn count_vars(term: &Term) -> HashMap<&Var, usize> {
+        let mut var_count = HashMap::new();
+
+        for term in term.breadth_first_iter() {
+            if let TermRef::Var(_, _, ref var) = term {
+                let entry = var_count.entry(*var).or_insert(0);
+                *entry += 1;
+            }
+        }
+
+        var_count
+    }
+
+    #[allow(dead_code)]
+    fn all_singleton_vars(terms: &Vec<Box<Term>>,
+                          var_count: &HashMap<&Var, usize>)
+                          -> bool
+    {
+        for term in terms {
+            match term.as_ref() {
+                &Term::AnonVar => {},
+                &Term::Var(ref cell, ref var) if cell.get().is_temp() =>
+                    if var_count.get(var).unwrap() != &1 {
+                        return false;
+                    },
+                _ => return false
+            }
+        }
+
+        true
+    }
+
+    #[allow(dead_code)]
+    fn void_subterms<Target>(subterms: usize) -> Target
+        where Target: CompilationTarget<'a>
+    {
+        Target::to_void(subterms)
     }
 
     fn to_structure<Target>(&mut self,
@@ -305,10 +358,10 @@ impl<'a> CodeGenerator<'a> {
         self.marker.mark_non_var(Level::Deep, cell);
         Target::constant_subterm(constant.clone())
     }
-    
+
     fn anon_var_term<Target>(&mut self, lvl: Level) -> Target
         where Target: CompilationTarget<'a>
-    {        
+    {
         let reg = self.marker.mark_anon_var(lvl);
 
         match reg {
@@ -318,7 +371,7 @@ impl<'a> CodeGenerator<'a> {
                 Target::subterm_to_variable(norm)
         }
     }
-    
+
     fn var_term<Target>(&mut self,
                         lvl: Level,
                         cell: &'a Cell<VarReg>,
@@ -371,17 +424,26 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn compile_target<Target>(&mut self, term: &'a Term) -> Vec<Target>
+    fn compile_target<Target>(&mut self, term: &'a Term, has_exposed_vars: bool)
+                              -> Vec<Target>
         where Target: CompilationTarget<'a>
     {
         let iter       = Target::iter(term);
         let mut target = Vec::new();
+        let var_count  = Self::count_vars(term);
 
         for term in iter {
             match term {
                 TermRef::Clause(lvl, cell, atom, terms) => {
                     target.push(self.to_structure(lvl, cell, atom, terms.len()));
 
+                    if !has_exposed_vars {
+                        if Self::all_singleton_vars(terms, &var_count) {
+                            target.push(Self::void_subterms(terms.len()));
+                            continue;
+                        }
+                    }
+                    
                     for subterm in terms {
                         target.push(self.subterm_to_instr(subterm.as_ref()));
                     }
@@ -394,8 +456,13 @@ impl<'a> CodeGenerator<'a> {
                 },
                 TermRef::Constant(lvl @ Level::Shallow, cell, constant) =>
                     target.push(self.to_constant(lvl, cell, constant)),
-                TermRef::AnonVar(lvl @ Level::Shallow) =>
-                    target.push(self.anon_var_term(lvl)),
+                TermRef::AnonVar(lvl @ Level::Shallow) => {
+                    if has_exposed_vars {
+                        target.push(self.anon_var_term(lvl));
+                    } else {
+                        self.marker.advance_arg();
+                    }
+                },
                 TermRef::Var(lvl @ Level::Shallow, ref cell, ref var) =>
                     target.push(self.var_term(lvl, cell, var)),
                 _ => {}
@@ -480,15 +547,15 @@ impl<'a> CodeGenerator<'a> {
         body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
 
         self.marker.advance(p0);
-        body.push(Line::Fact(self.compile_target(p0)));
+        body.push(Line::Fact(self.compile_target(p0, false)));
 
         self.marker.advance_at_head(p1);
-        body.push(Line::Query(self.compile_target(p1)));
+        body.push(Line::Query(self.compile_target(p1, false)));
 
         Self::add_conditional_call(&mut body, p1);
 
         body = clauses.iter()
-            .map(|ref term| self.compile_query(term))
+            .map(|ref term| self.compile_internal_query(term))
             .fold(body, |mut body, ref mut cqs| {
                 body.append(cqs);
                 body
@@ -501,17 +568,26 @@ impl<'a> CodeGenerator<'a> {
     pub fn compile_fact(&mut self, term: &'a Term) -> Code {
         self.marker.advance(term);
 
-        let mut compiled_fact = vec![Line::Fact(self.compile_target(term))];
+        let mut compiled_fact = vec![Line::Fact(self.compile_target(term, false))];
         let proceed = Line::Control(ControlInstruction::Proceed);
 
         compiled_fact.push(proceed);
         compiled_fact
     }
+    
+    fn compile_internal_query(&mut self, term: &'a Term) -> Code {
+        self.marker.advance(term);
 
+        let mut compiled_query = vec![Line::Query(self.compile_target(term, false))];
+        Self::add_conditional_call(&mut compiled_query, term);
+
+        compiled_query
+    }
+    
     pub fn compile_query(&mut self, term: &'a Term) -> Code {
         self.marker.advance(term);
 
-        let mut compiled_query = vec![Line::Query(self.compile_target(term))];
+        let mut compiled_query = vec![Line::Query(self.compile_target(term, true))];
         Self::add_conditional_call(&mut compiled_query, term);
 
         compiled_query

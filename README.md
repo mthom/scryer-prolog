@@ -11,8 +11,8 @@ pure Prolog.
 Pure Prolog is implemented as a simple REPL. "Pure Prolog" is Prolog
 without cut, meta- or extra-logical operators, or side effects of any
 kind. In terms of the tutorial pacing, the work has progressed to the
-middle of section 5.2. Atoms and lists are the only two data types
-currently supported.
+to the end of section 5.3, skipping past 5.4. Atoms and lists
+are the only two data types currently supported.
 
 ## Tutorial
 To enter a multi-clause predicate, the brackets ":{" and "}:" are used
