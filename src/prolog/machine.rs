@@ -681,20 +681,23 @@ impl MachineState {
             },
             &ControlInstruction::Deallocate => {
                 let e = self.e;
+                                
+                self.cp = self.and_stack[e].cp;
+                self.e  = self.and_stack[e].e;
 
-                let num_frame_e = self.and_stack.top().unwrap().global_index;
-                let num_frame_b = self.or_stack
-                                      .top()
-                                      .map(|fr| fr.global_index)
-                                      .unwrap_or(0);
+                self.p += 1;
+            },
+            &ControlInstruction::Execute(ref name, arity) => {
+                let compiled_tl_index = code_dir.get(&(name.clone(), arity))
+                                                .map(|index| *index);
 
-                self.p = self.and_stack[e].cp;
-                self.e = self.and_stack[e].e;
-
-                if num_frame_e > num_frame_b {
-                    let top_e = self.and_stack.top().unwrap().e;
-                    self.and_stack.drop_frames(top_e - self.e + 1);
-                }
+                match compiled_tl_index {
+                    Some(compiled_tl_index) => {
+                        self.num_of_args = arity;
+                        self.p = CodePtr::DirEntry(compiled_tl_index);
+                    },
+                    None => self.fail = true
+                };
             },
             &ControlInstruction::Proceed =>
                 self.p = self.cp,

@@ -117,6 +117,15 @@ pub struct Rule {
     pub clauses: Vec<Term>
 }
 
+impl Rule {
+    pub fn last_clause(&self) -> &Term {
+        match self.clauses.last() {
+            None => &self.head.1,
+            Some(clause) => clause
+        }
+    }
+}
+
 pub enum TermRef<'a> {
     AnonVar(Level),
     Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
@@ -159,6 +168,7 @@ pub enum ControlInstruction {
     Allocate(usize),
     Call(Atom, usize),
     Deallocate,
+    Execute(Atom, usize),
     Proceed
 }
 

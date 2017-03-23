@@ -81,7 +81,7 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
     fn iter(term: &'a Term) -> Self::Iterator {
         term.post_order_iter()
     }
-    
+
     fn to_structure(lvl: Level, atom: Atom, arity: usize, reg: RegType) -> Self {
         QueryInstruction::PutStructure(lvl, atom, arity, reg)
     }
@@ -443,7 +443,7 @@ impl<'a> CodeGenerator<'a> {
                             continue;
                         }
                     }
-                    
+
                     for subterm in terms {
                         target.push(self.subterm_to_instr(subterm.as_ref()));
                     }
@@ -517,7 +517,8 @@ impl<'a> CodeGenerator<'a> {
         vfs
     }
 
-    fn add_conditional_call(compiled_query: &mut Code, term: &Term) {
+    fn add_conditional_call(compiled_query: &mut Code, term: &Term)
+    {
         match term {
             &Term::Constant(_, Constant::Atom(ref atom)) => {
                 let call = ControlInstruction::Call(atom.clone(), 0);
@@ -544,7 +545,9 @@ impl<'a> CodeGenerator<'a> {
 
         let mut body = Vec::new();
 
-        body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
+        if clauses.len() > 0 {
+            body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
+        }
 
         self.marker.advance(p0);
         body.push(Line::Fact(self.compile_target(p0, false)));
@@ -561,7 +564,23 @@ impl<'a> CodeGenerator<'a> {
                 body
             });
 
-        body.push(Line::Control(ControlInstruction::Deallocate));
+        let last_arity = rule.last_clause().arity();
+        let mut dealloc_index = body.len() - 1;
+
+        match rule.last_clause() {
+              &Term::Clause(_, ref name, _)
+            | &Term::Constant(_, Constant::Atom(ref name)) => {
+                if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
+                    *ctrl = ControlInstruction::Execute(name.clone(), last_arity);
+                }
+            },
+            _ => dealloc_index = body.len()
+        };
+
+        if clauses.len() > 0 {
+            body.insert(dealloc_index, Line::Control(ControlInstruction::Deallocate));
+        }
+        
         body
     }
 
@@ -574,7 +593,7 @@ impl<'a> CodeGenerator<'a> {
         compiled_fact.push(proceed);
         compiled_fact
     }
-    
+
     fn compile_internal_query(&mut self, term: &'a Term) -> Code {
         self.marker.advance(term);
 
@@ -583,7 +602,7 @@ impl<'a> CodeGenerator<'a> {
 
         compiled_query
     }
-    
+
     pub fn compile_query(&mut self, term: &'a Term) -> Code {
         self.marker.advance(term);
 
