@@ -241,7 +241,7 @@ Each predicate must have the same name and arity.";
             EvalResult::EntrySuccess
         },
         &Ok(TopLevel::Query(ref query)) => {
-            let compiled_query = cg.compile_query(&query);            
+            let compiled_query = cg.compile_query(&query);
             wam.run_query(compiled_query, &cg)
         },
         &Err(_) => {

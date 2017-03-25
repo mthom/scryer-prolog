@@ -234,12 +234,12 @@ impl<'a> TermMarker<'a> {
     }
 
     fn advance_at_head(&mut self, term: &'a Term) {
-        self.arg_c = 1;
-        self.temp_c = max(term.subterms(), self.temp_c) + 1;
+        self.arg_c  = 1;
+        self.temp_c = max(term.subterms() + 1, self.temp_c);
     }
 
     fn advance(&mut self, term: &'a Term) {
-        self.arg_c = 1;
+        self.arg_c  = 1;
         self.temp_c = term.subterms() + 1;
     }
 }
@@ -339,13 +339,9 @@ impl<'a> CodeGenerator<'a> {
         Target::to_list(lvl, cell.get())
     }
 
-    fn constant_subterm<Target>(&mut self,
-                                cell: &'a Cell<RegType>,
-                                constant: &'a Constant)
-                                -> Target
+    fn constant_subterm<Target>(&mut self, constant: &'a Constant) -> Target
         where Target: CompilationTarget<'a>
     {
-        self.marker.mark_non_var(Level::Deep, cell);
         Target::constant_subterm(constant.clone())
     }
 
@@ -407,8 +403,8 @@ impl<'a> CodeGenerator<'a> {
                 self.anon_var_term(Level::Deep),
             &Term::Cons(ref cell, _, _) | &Term::Clause(ref cell, _, _) =>
                 self.non_var_subterm(cell),
-            &Term::Constant(ref cell, ref constant) =>
-                self.constant_subterm(cell, constant),
+            &Term::Constant(_, ref constant) =>
+                self.constant_subterm(constant),
             &Term::Var(ref cell, ref var) =>
                 self.var_term(Level::Deep, cell, var)
         }
