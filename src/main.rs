@@ -8,13 +8,13 @@ use prolog::machine::*;
 mod tests {
     use super::*;
     use prolog::ast::*;
-    
+
     fn submit(wam: &mut Machine, buffer: &str) -> EvalResult {
         let result = eval(wam, buffer);
         wam.reset();
         result
     }
-    
+
     #[test]
     fn test_queries_on_facts() {
         let mut wam = Machine::new();
@@ -90,6 +90,13 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- p(f(X, g(Y), Z), g(Z), h).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- p(Z, Y, X).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- p(f(X, Y, Z), Y, h).").failed_query(), false);
+
+        submit(&mut wam, "p(_, f(_, Y, _)) :- h(Y).");
+        submit(&mut wam, "h(y).");
+
+        assert_eq!(submit(&mut wam, "?- p(_, f(_, Y, _)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(_, f(_, y, _)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(_, f(_, z, _)).").failed_query(), true);
     }
 
     #[test]
@@ -110,7 +117,7 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- p(c, d, X).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- p(a, a, a).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- p(b, c, d).").failed_query(), true);
-        
+
         submit(&mut wam, "p(X, a). p(X, Y) :- q(Z), p(X, X).");
 
         assert_eq!(submit(&mut wam, "?- p(X, Y).").failed_query(), false);
@@ -137,7 +144,7 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- p(a, X).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- p(b, a).").failed_query(), true);
 
-        submit(&mut wam, "p(X, Y, Z) :- q(X), r(Y), s(Z). 
+        submit(&mut wam, "p(X, Y, Z) :- q(X), r(Y), s(Z).
                         p(a, b, Z) :- q(Z).");
 
         submit(&mut wam, "q(x).");
@@ -154,7 +161,7 @@ mod tests {
 
         submit(&mut wam, "s(x, t).");
         submit(&mut wam, "t(y, u).");
-        
+
         assert_eq!(submit(&mut wam, "?- p(X).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- p(x).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- p(y).").failed_query(), false);
@@ -173,6 +180,18 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- p(X, X, X).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- p(X, Y, X).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- p(f(f(X)), h(f(X)), Y).").failed_query(), true);
+
+        submit(&mut wam, "p(X) :- f(Y), g(Y), i(X, Y).");
+        submit(&mut wam, "g(f(a)). g(f(b)). g(f(c)).");
+        submit(&mut wam, "f(f(a)). f(f(b)). f(f(c)).");
+        submit(&mut wam, "i(X, X).");
+
+        assert_eq!(submit(&mut wam, "?- p(X).").failed_query(), false);
+
+        submit(&mut wam, "p(X) :- f(f(Y)), g(Y, f(Y)), i(X, f(Y)).");
+        submit(&mut wam, "g(Y, f(Y)) :- g(f(Y)).");
+
+        assert_eq!(submit(&mut wam, "?- p(X).").failed_query(), false);
     }
 
     #[test]
@@ -224,7 +243,7 @@ mod tests {
 
 fn prolog_repl() {
     let mut wam = Machine::new();
-        
+
     loop {
         print!("prolog> ");
 
@@ -239,7 +258,7 @@ fn prolog_repl() {
 
         let result = eval(&mut wam, buffer.trim());
         print(&mut wam, result);
-        
+
         wam.reset();
     }
 }

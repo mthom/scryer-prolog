@@ -11,8 +11,8 @@ pure Prolog.
 Pure Prolog is implemented as a simple REPL. "Pure Prolog" is Prolog
 without cut, meta- or extra-logical operators, or side effects of any
 kind. In terms of the tutorial pacing, the work has progressed to the
-to the end of section 5.7, skipping past 5.4. Atoms and lists are the
-only two data types currently supported.
+end of section 5.9, skipping past 5.4. Atoms and lists are the only
+two data types currently supported.
 
 While proper environment trimming code is emitted by the code
 generator, it has no effect on the bytecode WAM, which lacks
@@ -21,7 +21,7 @@ frames.
 
 ## Tutorial
 To enter a multi-clause predicate, the brackets ":{" and "}:" are used
-as delimiters. They must be entirely contained with their own lines.
+as delimiters. They must be contained entirely within their own lines.
 
 For example,
 ```

@@ -250,7 +250,8 @@ enum VarStatus {
 }
 
 pub struct CodeGenerator<'a> {
-    marker: TermMarker<'a>
+    marker: TermMarker<'a>,
+    var_count: HashMap<&'a Var, usize>
 }
 
 type VariableFixture<'a>  = (VarStatus, Vec<&'a Cell<VarReg>>);
@@ -258,37 +259,41 @@ type VariableFixtures<'a> = HashMap<&'a Var, VariableFixture<'a>>;
 
 impl<'a> CodeGenerator<'a> {
     pub fn new() -> Self {
-        CodeGenerator { marker: TermMarker::new() }
+        CodeGenerator { marker: TermMarker::new(),
+                        var_count: HashMap::new() }
     }
 
     pub fn vars(&self) -> &HashMap<&Var, VarReg> {
         &self.marker.bindings
     }
 
-    #[allow(dead_code)]
-    fn count_vars(term: &Term) -> HashMap<&Var, usize> {
+    fn update_var_count<Iter>(&mut self, iter: Iter)
+        where Iter : Iterator<Item=TermRef<'a>>
+    {
         let mut var_count = HashMap::new();
 
-        for term in term.breadth_first_iter() {
-            if let TermRef::Var(_, _, ref var) = term {
-                let entry = var_count.entry(*var).or_insert(0);
+        for term in iter {
+            if let TermRef::Var(_, _, var) = term {
+                if self.marker.contains_var(var) {
+                    var_count.insert(var, 2);
+                    continue;
+                }
+
+                let entry = var_count.entry(var).or_insert(0);
                 *entry += 1;
             }
         }
 
-        var_count
+        self.var_count = var_count;
     }
 
-    #[allow(dead_code)]
-    fn all_singleton_vars(terms: &Vec<Box<Term>>,
-                          var_count: &HashMap<&Var, usize>)
-                          -> bool
+    fn all_singleton_vars(&self, terms: &Vec<Box<Term>>) -> bool
     {
         for term in terms {
             match term.as_ref() {
                 &Term::AnonVar => {},
                 &Term::Var(ref cell, ref var) if cell.get().is_temp() =>
-                    if var_count.get(var).unwrap() != &1 {
+                    if self.var_count.get(var).unwrap() != &1 {
                         return false;
                     },
                 _ => return false
@@ -298,7 +303,6 @@ impl<'a> CodeGenerator<'a> {
         true
     }
 
-    #[allow(dead_code)]
     fn void_subterms<Target>(subterms: usize) -> Target
         where Target: CompilationTarget<'a>
     {
@@ -416,7 +420,6 @@ impl<'a> CodeGenerator<'a> {
     {
         let iter       = Target::iter(term);
         let mut target = Vec::new();
-        let var_count  = Self::count_vars(term);
 
         for term in iter {
             match term {
@@ -424,7 +427,7 @@ impl<'a> CodeGenerator<'a> {
                     target.push(self.to_structure(lvl, cell, atom, terms.len()));
 
                     if !has_exposed_vars {
-                        if Self::all_singleton_vars(terms, &var_count) {
+                        if self.all_singleton_vars(terms) {
                             target.push(Self::void_subterms(terms.len()));
                             continue;
                         }
@@ -547,7 +550,7 @@ impl<'a> CodeGenerator<'a> {
 
         for &(term_status, _) in vs.values() {
             if let VarStatus::Permanent(i) = term_status {
-                if i >= index {
+                if i > index {
                     var_count += 1;
                 }
             }
@@ -556,36 +559,7 @@ impl<'a> CodeGenerator<'a> {
         var_count
     }
 
-    pub fn compile_rule(&mut self, rule: &'a Rule) -> Code {
-        let vs = Self::mark_perm_vars(&rule);
-        let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
-
-        let perm_vars = Self::vars_above_threshold(&vs, 1);
-        let mut body = Vec::new();
-
-        if clauses.len() > 0 {
-            body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
-        }
-
-        self.marker.advance(p0);
-        body.push(Line::Fact(self.compile_target(p0, false)));
-
-        self.marker.advance_at_head(p1);
-        body.push(Line::Query(self.compile_target(p1, false)));
-
-        Self::add_conditional_call(&mut body, p1, perm_vars);
-
-        body = clauses.iter().enumerate()
-            .map(|(i, ref term)| {
-                let num_vars = Self::vars_above_threshold(&vs, i+2);
-                self.compile_internal_query(term, num_vars)
-            })
-            .fold(body, |mut body, ref mut cqs| {
-                body.append(cqs);
-                body
-            });
-
-        // now perform LCO.
+    fn lco(body: &mut Code, rule: &'a Rule) -> usize {
         let last_arity = rule.last_clause().arity();
         let mut dealloc_index = body.len() - 1;
 
@@ -599,6 +573,103 @@ impl<'a> CodeGenerator<'a> {
             _ => dealloc_index = body.len()
         };
 
+        dealloc_index
+    }
+
+    fn mark_unsafe_query_vars(head: &Term,
+                              vs: &VariableFixtures,
+                              query: &mut CompiledQuery)
+    {
+        let mut unsafe_vars = HashMap::new();
+
+        for &(_, ref cb) in vs.values() {
+            if !cb.is_empty() {
+                let index = cb.first().unwrap().get().norm();
+                unsafe_vars.insert(index, false);
+            }
+        }
+
+        for term_ref in head.breadth_first_iter() {
+            match term_ref {
+                TermRef::Var(_, cell, _) => {
+                    unsafe_vars.remove(&cell.get().norm());
+                },
+                _ => {}
+            };
+        }
+
+        for query_instr in query.iter_mut() {
+            match query_instr {
+                &mut QueryInstruction::PutValue(RegType::Perm(i), arg) =>
+                    if let Some(found) = unsafe_vars.get_mut(&RegType::Perm(i)) {
+                        if !*found {
+                            *found = true;
+                            *query_instr = QueryInstruction::PutUnsafeValue(i, arg);
+                        }
+                    },
+                &mut QueryInstruction::SetVariable(reg)
+              | &mut QueryInstruction::PutVariable(reg, _) =>
+                    if let Some(found) = unsafe_vars.get_mut(&reg) {
+                        *found = true;
+                    },
+                &mut QueryInstruction::SetValue(reg) =>
+                    if let Some(found) = unsafe_vars.get_mut(&reg) {
+                        if !*found {
+                            *found = true;
+                            *query_instr = QueryInstruction::SetLocalValue(reg);
+                        }
+                    },
+                _ => {}
+            };
+        }
+    }
+
+    pub fn compile_rule(&mut self, rule: &'a Rule) -> Code {
+        let vs = Self::mark_perm_vars(&rule);
+        let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
+
+        let perm_vars = Self::vars_above_threshold(&vs, 0);
+        let mut body = Vec::new();
+
+        if clauses.len() > 0 {
+            body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
+        }
+
+        let iter = p0.breadth_first_iter().chain(p1.breadth_first_iter());
+        self.update_var_count(iter);
+
+        self.marker.advance(p0);
+        body.push(Line::Fact(self.compile_target(p0, false)));
+
+        self.marker.advance_at_head(p1);
+        body.push(Line::Query(self.compile_target(p1, false)));
+
+        Self::add_conditional_call(&mut body, p1, perm_vars);
+
+        body = clauses.iter().enumerate()
+            .map(|(i, ref term)| {
+                let num_vars = Self::vars_above_threshold(&vs, i+1);
+                self.compile_internal_query(term, num_vars)
+            })
+            .fold(body, |mut body, ref mut cqs| {
+                body.append(cqs);
+                body
+            });
+
+        if clauses.len() > 0 {
+            let mut index = body.len() - 1;
+
+            if let &Line::Control(_) = body.last().unwrap() {
+                index -= 1;
+            }
+
+            if let &mut Line::Query(ref mut query) = &mut body[index] {
+                Self::mark_unsafe_query_vars(p0, &vs, query);
+            }
+        }
+
+        let dealloc_index = Self::lco(&mut body, &rule);
+
         if clauses.len() > 0 {
             body.insert(dealloc_index, Line::Control(ControlInstruction::Deallocate));
         }
@@ -606,18 +677,51 @@ impl<'a> CodeGenerator<'a> {
         body
     }
 
+    fn mark_unsafe_fact_vars(fact: &mut CompiledFact, bindings: &HashMap<&Var, VarReg>)
+    {
+        let mut unsafe_vars = HashMap::new();
+
+        for var_reg in bindings.values() {
+            unsafe_vars.insert(var_reg.norm(), false);
+        }
+
+        for fact_instr in fact.iter_mut() {
+            match fact_instr {
+                &mut FactInstruction::UnifyValue(reg) =>
+                    if let Some(found) = unsafe_vars.get_mut(&reg) {
+                        if !*found {
+                            *found = true;
+                            *fact_instr = FactInstruction::UnifyLocalValue(reg);
+                        }
+                    },
+                &mut FactInstruction::UnifyVariable(reg) => {
+                    if let Some(found) = unsafe_vars.get_mut(&reg) {
+                        *found = true;
+                    }
+                },
+                _ => {}
+            };
+        }
+    }
+
     pub fn compile_fact(&mut self, term: &'a Term) -> Code {
         self.marker.advance(term);
+        self.update_var_count(term.breadth_first_iter());
 
-        let mut compiled_fact = vec![Line::Fact(self.compile_target(term, false))];
+        let mut compiled_fact = self.compile_target(term, false);
+        Self::mark_unsafe_fact_vars(&mut compiled_fact, self.vars());
+
+        let mut compiled_fact = vec![Line::Fact(compiled_fact)];
         let proceed = Line::Control(ControlInstruction::Proceed);
 
         compiled_fact.push(proceed);
         compiled_fact
     }
 
-    fn compile_internal_query(&mut self, term: &'a Term, index: usize) -> Code {
+    fn compile_internal_query(&mut self, term: &'a Term, index: usize) -> Code
+    {
         self.marker.advance(term);
+        self.update_var_count(term.breadth_first_iter());
 
         let mut compiled_query = vec![Line::Query(self.compile_target(term, false))];
         Self::add_conditional_call(&mut compiled_query, term, index);
@@ -627,9 +731,10 @@ impl<'a> CodeGenerator<'a> {
 
     pub fn compile_query(&mut self, term: &'a Term) -> Code {
         self.marker.advance(term);
+        self.update_var_count(term.breadth_first_iter());
 
         let mut compiled_query = vec![Line::Query(self.compile_target(term, true))];
-        Self::add_conditional_call(&mut compiled_query, term, 1);
+        Self::add_conditional_call(&mut compiled_query, term, 0);
 
         compiled_query
     }

@@ -463,6 +463,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+
             &FactInstruction::GetList(_, reg) => {
                 let addr = self.deref(self[reg].clone());
 
@@ -536,10 +537,14 @@ impl MachineState {
                         let addr = self.deref(Addr::HeapCell(self.s));
 
                         match self.store(addr) {
-                            Addr::HeapCell(hc) =>
-                                self.heap[hc] = HeapCellValue::Con(c.clone()),
-                            Addr::StackCell(fr, sc) =>
-                                self.and_stack[fr][sc] = Addr::Con(c.clone()),
+                            Addr::HeapCell(hc) => {
+                                self.heap[hc] = HeapCellValue::Con(c.clone());
+                                self.trail(Ref::HeapCell(hc));
+                            },
+                            Addr::StackCell(fr, sc) => {
+                                self.and_stack[fr][sc] = Addr::Con(c.clone());
+                                self.trail(Ref::StackCell(fr, sc));
+                            },
                             Addr::Con(c1) => {
                                 if c1 != *c {
                                     self.fail = true;
@@ -563,6 +568,39 @@ impl MachineState {
 
                         self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
                         self[reg] = Addr::HeapCell(self.h);
+                        self.h += 1;
+                    }
+                };
+
+                self.s += 1;
+            },
+            &FactInstruction::UnifyLocalValue(reg) => {
+                let s = self.s;
+
+                match self.mode {
+                    MachineMode::Read  => {
+                        let reg_addr = self[reg].clone();
+                        self.unify(reg_addr, Addr::HeapCell(s));
+                    },
+                    MachineMode::Write => {
+                        let addr = self.deref(self[reg].clone());
+                        let h    = self.h;
+
+                        if let Addr::HeapCell(hc) = addr {
+                            if hc < h {
+                                let val = self.heap[hc].clone();
+                                self.heap.push(val);
+
+                                self.h += 1;
+                                self.s += 1;
+
+                                return;
+                            }
+                        }
+
+                        self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                        self.bind(Ref::HeapCell(h), addr);
+
                         self.h += 1;
                     }
                 };
@@ -615,19 +653,61 @@ impl MachineState {
                 self[reg] = Addr::Str(self.h);
                 self.h += 1;
             },
+            &QueryInstruction::PutUnsafeValue(n, arg) => {
+                let e    = self.e;
+                let addr = self.deref(Addr::StackCell(e, n));
+
+                if addr.is_protected(e) {
+                    self.registers[arg] = self.store(addr);
+                } else {
+                    let h = self.h;
+
+                    self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                    self.bind(Ref::HeapCell(h), addr);
+
+                    self.registers[arg] = self.heap[h].as_addr(h);
+                    self.h += 1;
+                }
+            },
             &QueryInstruction::PutValue(norm, arg) =>
                 self.registers[arg] = self[norm].clone(),
             &QueryInstruction::PutVariable(norm, arg) => {
-                let h = self.h;
-                self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                match norm {
+                    RegType::Perm(n) => {
+                        let e = self.e;
+                        self[norm] = Addr::StackCell(e, n);
+                        self.registers[arg] = self[norm].clone();
+                    },
+                    RegType::Temp(_) => {
+                        let h = self.h;
+                        self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
 
-                self[norm] = Addr::HeapCell(h);
-                self.registers[arg] = Addr::HeapCell(h);
+                        self[norm] = Addr::HeapCell(h);
+                        self.registers[arg] = Addr::HeapCell(h);
 
-                self.h += 1;
+                        self.h += 1;
+                    }
+                };
             },
             &QueryInstruction::SetConstant(ref constant) => {
                 self.heap.push(HeapCellValue::Con(constant.clone()));
+                self.h += 1;
+            },
+            &QueryInstruction::SetLocalValue(reg) => {
+                let addr = self.deref(self[reg].clone());
+                let h    = self.h;
+
+                if let Addr::HeapCell(hc) = addr {
+                    if hc < h {
+                        self.heap.push(HeapCellValue::from(addr));
+                        self.h += 1;
+                        return;
+                    }
+                }
+
+                self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                self.bind(Ref::HeapCell(h), addr);
+
                 self.h += 1;
             },
             &QueryInstruction::SetVariable(reg) => {
@@ -681,7 +761,7 @@ impl MachineState {
             },
             &ControlInstruction::Deallocate => {
                 let e = self.e;
-                                
+
                 self.cp = self.and_stack[e].cp;
                 self.e  = self.and_stack[e].e;
 

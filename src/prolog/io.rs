@@ -44,6 +44,8 @@ impl fmt::Display for FactInstruction {
                 write!(f, "unify_constant {}", constant),
             &FactInstruction::UnifyVariable(ref r) =>
                 write!(f, "unify_variable {}", r),
+            &FactInstruction::UnifyLocalValue(ref r) =>
+                write!(f, "unify_local_value {}", r),
             &FactInstruction::UnifyValue(ref r) =>
                 write!(f, "unify_value {}", r),
             &FactInstruction::UnifyVoid(n) =>
@@ -67,12 +69,16 @@ impl fmt::Display for QueryInstruction {
                 write!(f, "put_structure {}/{}, {}", name, arity, r),
             &QueryInstruction::PutStructure(Level::Shallow, ref name, ref arity, ref r) =>
                 write!(f, "put_structure {}/{}, A{}", name, arity, r.reg_num()),
+            &QueryInstruction::PutUnsafeValue(y, a) =>
+                write!(f, "put_unsafe_value Y{}, A{}", y, a),
             &QueryInstruction::PutValue(ref x, ref a) =>
                 write!(f, "put_value {}, A{}", x, a),
             &QueryInstruction::PutVariable(ref x, ref a) =>
                 write!(f, "put_variable {}, A{}", x, a),
             &QueryInstruction::SetConstant(ref constant) =>
                 write!(f, "set_constant {}", constant),
+            &QueryInstruction::SetLocalValue(ref r) =>
+                write!(f, "set_local_value {}", r),
             &QueryInstruction::SetVariable(ref r) =>
                 write!(f, "set_variable {}", r),
             &QueryInstruction::SetValue(ref r) =>
@@ -213,6 +219,7 @@ pub fn eval(wam: &mut Machine, buffer: &str) -> EvalResult
         &Ok(TopLevel::Predicate(ref clauses)) => {
             if is_consistent(clauses) {
                 let compiled_pred = cg.compile_predicate(clauses);
+                print_code(&compiled_pred);
                 wam.add_predicate(clauses, compiled_pred);
 
                 EvalResult::EntrySuccess
@@ -226,16 +233,18 @@ Each predicate must have the same name and arity.";
         },
         &Ok(TopLevel::Fact(ref fact)) => {
             let compiled_fact = cg.compile_fact(&fact);
+            print_code(&compiled_fact);
             wam.add_fact(fact, compiled_fact);
             EvalResult::EntrySuccess
         },
         &Ok(TopLevel::Rule(ref rule)) => {
             let compiled_rule = cg.compile_rule(&rule);
+            print_code(&compiled_rule);
             wam.add_rule(rule, compiled_rule);
             EvalResult::EntrySuccess
         },
         &Ok(TopLevel::Query(ref query)) => {
-            let compiled_query = cg.compile_query(&query);
+            let compiled_query = cg.compile_query(&query);            
             wam.run_query(compiled_query, &cg)
         },
         &Err(_) => {

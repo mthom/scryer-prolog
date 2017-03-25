@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::{Add, AddAssign};
 use std::vec::Vec;
@@ -40,7 +41,7 @@ pub enum Level {
     Deep, Shallow
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RegType {
     Perm(usize),
     Temp(usize)
@@ -83,7 +84,7 @@ impl VarReg {
     pub fn is_temp(self) -> bool {
         !self.norm().is_perm()
     }
-    
+
     pub fn root_register(self) -> usize {
         match self {
             VarReg::ArgAndNorm(_, root) => root,
@@ -139,8 +140,9 @@ pub enum FactInstruction {
     GetList(Level, RegType),
     GetStructure(Level, Atom, usize, RegType),
     GetValue(RegType, usize),
-    GetVariable(RegType, usize),    
+    GetVariable(RegType, usize),
     UnifyConstant(Constant),
+    UnifyLocalValue(RegType),
     UnifyVariable(RegType),
     UnifyValue(RegType),
     UnifyVoid(usize)
@@ -150,9 +152,11 @@ pub enum QueryInstruction {
     PutConstant(Level, Constant, RegType),
     PutList(Level, RegType),
     PutStructure(Level, Atom, usize, RegType),
+    PutUnsafeValue(usize, usize),
     PutValue(RegType, usize),
     PutVariable(RegType, usize),
     SetConstant(Constant),
+    SetLocalValue(RegType),
     SetVariable(RegType),
     SetValue(RegType),
     SetVoid(usize)
@@ -196,6 +200,7 @@ impl<'a> From<&'a Line> for LineOrCodeOffset<'a> {
 
 pub type Code = Vec<Line>;
 
+
 #[derive(Clone, PartialEq)]
 pub enum Addr {
     Con(Constant),
@@ -218,6 +223,13 @@ impl Addr {
             &Addr::HeapCell(hc) => Some(Ref::HeapCell(hc)),
             &Addr::StackCell(fr, sc) => Some(Ref::StackCell(fr, sc)),
             _ => None
+        }
+    }
+
+    pub fn is_protected(&self, e: usize) -> bool {
+        match self {
+            &Addr::StackCell(fr, _) if fr > e => false,
+            _ => true
         }
     }
 }
@@ -271,6 +283,26 @@ impl HeapCellValue {
             &HeapCellValue::Ref(r) => Addr::from(r),
             &HeapCellValue::Str(s) => Addr::Str(s),
             &HeapCellValue::NamedStr(_, _) => Addr::Str(focus)
+        }
+    }
+}
+
+impl PartialOrd for Ref {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (*self, *other) {
+            (Ref::HeapCell(hc1), Ref::HeapCell(hc2)) =>
+                Some(hc1.cmp(&hc2)),
+            (Ref::HeapCell(_), _) =>
+                Some(Ordering::Less),
+            (Ref::StackCell(fr1, sc1), Ref::StackCell(fr2, sc2)) =>
+                if fr1 < fr2 {
+                    Some(Ordering::Less)
+                } else if fr1 == fr2 {
+                    Some(sc1.cmp(&sc2))
+                } else {
+                    Some(Ordering::Greater)
+                },
+            _ => Some(Ordering::Greater)
         }
     }
 }
