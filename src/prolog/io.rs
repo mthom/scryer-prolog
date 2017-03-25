@@ -219,7 +219,6 @@ pub fn eval(wam: &mut Machine, buffer: &str) -> EvalResult
         &Ok(TopLevel::Predicate(ref clauses)) => {
             if is_consistent(clauses) {
                 let compiled_pred = cg.compile_predicate(clauses);
-                print_code(&compiled_pred);
                 wam.add_predicate(clauses, compiled_pred);
 
                 EvalResult::EntrySuccess
@@ -233,13 +232,11 @@ Each predicate must have the same name and arity.";
         },
         &Ok(TopLevel::Fact(ref fact)) => {
             let compiled_fact = cg.compile_fact(&fact);
-            print_code(&compiled_fact);
             wam.add_fact(fact, compiled_fact);
             EvalResult::EntrySuccess
         },
         &Ok(TopLevel::Rule(ref rule)) => {
             let compiled_rule = cg.compile_rule(&rule);
-            print_code(&compiled_rule);
             wam.add_rule(rule, compiled_rule);
             EvalResult::EntrySuccess
         },
