@@ -69,7 +69,7 @@ impl OrStack {
     pub fn clear(&mut self) {
         self.0.clear()
     }
-
+    
     pub fn top(&self) -> Option<&Frame> {
         self.0.last()
     }

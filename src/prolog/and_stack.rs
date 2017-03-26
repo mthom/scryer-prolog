@@ -32,6 +32,7 @@ impl AndStack {
         self.0.push(Frame::new(global_index, e, cp, n));
     }
 
+    #[allow(dead_code)]
     pub fn top(&self) -> Option<&Frame> {
         self.0.last()
     }
@@ -45,6 +46,7 @@ impl AndStack {
     }
 
     // drop the last n frames.
+    #[allow(dead_code)]
     pub fn drop_frames(&mut self, n: usize) {
         let len = self.0.len();
         self.0.truncate(len - n);

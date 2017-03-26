@@ -344,6 +344,14 @@ pub type Heap = Vec<HeapCellValue>;
 pub type Registers = Vec<Addr>;
 
 impl Term {
+    pub fn is_clause(&self) -> bool {
+        if let &Term::Clause(_, _, _) = self {
+            true
+        } else {
+            false
+        }
+    }        
+    
     pub fn subterms(&self) -> usize {
         match self {
             &Term::Clause(_, _, ref terms) => terms.len(),
@@ -354,7 +362,6 @@ impl Term {
     pub fn name(&self) -> Option<&Atom> {
         match self {
             &Term::Constant(_, Constant::Atom(ref atom))
-            | &Term::Var(_, ref atom)
             | &Term::Clause(_, ref atom, _) => Some(atom),
             _ => None
         }

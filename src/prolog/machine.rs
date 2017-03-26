@@ -81,24 +81,22 @@ impl Machine {
     }
 
     pub fn add_fact(&mut self, fact: &Term, mut code: Code) {
-        if fact.name().is_some() {
-            let p = self.code.len();
-            let name  = fact.name().unwrap().clone();
+        if let Some(name) = fact.name() {
+            let p = self.code.len();            
             let arity = fact.arity();
 
             self.code.append(&mut code);
-            self.code_dir.insert((name, arity), p);
+            self.code_dir.insert((name.clone(), arity), p);
         }
     }
 
     pub fn add_rule(&mut self, rule: &Rule, mut code: Code) {
-        if rule.head.0.name().is_some() {
+        if let Some(name) = rule.head.0.name() {
             let p = self.code.len();
-            let name  = rule.head.0.name().unwrap().clone();
             let arity = rule.head.0.arity();
 
             self.code.append(&mut code);
-            self.code_dir.insert((name, arity), p);
+            self.code_dir.insert((name.clone(), arity), p);
         }
     }
 

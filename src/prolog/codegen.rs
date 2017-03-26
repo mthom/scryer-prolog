@@ -704,14 +704,18 @@ impl<'a> CodeGenerator<'a> {
         self.marker.advance(term);
         self.update_var_count(term.breadth_first_iter());
 
-        let mut compiled_fact = self.compile_target(term, false);
-        Self::mark_unsafe_fact_vars(&mut compiled_fact, self.vars());
-
-        let mut compiled_fact = vec![Line::Fact(compiled_fact)];
+        let mut code = Vec::new();
+        
+        if term.is_clause() {
+            let mut compiled_fact = self.compile_target(term, false);            
+            Self::mark_unsafe_fact_vars(&mut compiled_fact, self.vars());
+            code.push(Line::Fact(compiled_fact));
+        }
+        
         let proceed = Line::Control(ControlInstruction::Proceed);
 
-        compiled_fact.push(proceed);
-        compiled_fact
+        code.push(proceed);
+        code
     }
 
     fn compile_internal_query(&mut self, term: &'a Term, index: usize) -> Code
@@ -719,20 +723,32 @@ impl<'a> CodeGenerator<'a> {
         self.marker.advance(term);
         self.update_var_count(term.breadth_first_iter());
 
-        let mut compiled_query = vec![Line::Query(self.compile_target(term, false))];
-        Self::add_conditional_call(&mut compiled_query, term, index);
+        let mut code = Vec::new();
 
-        compiled_query
+        if term.is_clause() {                
+            let compiled_query = Line::Query(self.compile_target(term, false));
+            code.push(compiled_query);
+        }
+        
+        Self::add_conditional_call(&mut code, term, index);
+
+        code
     }
 
     pub fn compile_query(&mut self, term: &'a Term) -> Code {
         self.marker.advance(term);
         self.update_var_count(term.breadth_first_iter());
 
-        let mut compiled_query = vec![Line::Query(self.compile_target(term, true))];
-        Self::add_conditional_call(&mut compiled_query, term, 0);
+        let mut code = Vec::new();
 
-        compiled_query
+        if term.is_clause() {                
+            let compiled_query = Line::Query(self.compile_target(term, false));
+            code.push(compiled_query);
+        }
+        
+        Self::add_conditional_call(&mut code, term, 0);
+
+        code
     }
 
     pub fn compile_predicate(&mut self, clauses: &'a Vec<PredicateClause>) -> Code
