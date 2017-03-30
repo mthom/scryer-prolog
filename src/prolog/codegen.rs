@@ -250,15 +250,6 @@ enum IntIndex {
     External(usize), Fail, Internal(usize)
 }
 
-impl Into<usize> for IntIndex {
-    fn into(self) -> usize {
-        match self {
-            IntIndex::Internal(i) => i,
-            _ => 0
-        }
-    }
-}
-
 struct CodeOffsets {
     constants:  HashMap<Constant, ThirdLevelIndex>,
     lists: ThirdLevelIndex,
