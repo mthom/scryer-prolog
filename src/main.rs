@@ -239,6 +239,154 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- member([X, Y, Y], [a, [b, c], [b, b], [Z, x], [d, f]]).").failed_query(), true);
         assert_eq!(submit(&mut wam, "?- member([X, Y, Z], [a, [b, c], [b, b], [Z, x], [d, f]]).").failed_query(), true);
     }
+
+    #[test]
+    fn test_queries_on_indexed_predicates() {
+        let mut wam = Machine::new();
+
+        submit(&mut wam, "p(a) :- a.
+                          p(b) :- b, f(X).
+                          p(c) :- c, g(X).
+                          p(f(a)) :- a.
+                          p(g(b, c)) :- b.
+                          p(g(b)) :- b.
+                          p([a|b]) :- a.
+                          p([]).
+                          p(X) :- x.
+                          p([c, d, e]).");
+
+        assert_eq!(submit(&mut wam, "?- p(a).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(b).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(c).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(f(a)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(g(b, X)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(g(Y, X)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(g(Y, c)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(g(b)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p([]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c, d, e]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c, d | X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c|X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Y|X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Y|[d|Xs]]).").failed_query(), false);        
+
+        submit(&mut wam, "a.");
+        
+        assert_eq!(submit(&mut wam, "?- p(a).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(b).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(c).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(f(a)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(b, X)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(g(Y, X)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(g(Y, c)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(g(b)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p([]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c, d, e]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c, d | X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c|X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Y|X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Y|[d|Xs]]).").failed_query(), false);        
+
+        submit(&mut wam, "b.");
+        submit(&mut wam, "f(x).");
+        
+        assert_eq!(submit(&mut wam, "?- p(a).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(b).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(c).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- p(f(a)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(b, X)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(Y, X)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(Y, c)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(b)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c, d, e]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c, d | X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c|X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Y|X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Y|[d|Xs]]).").failed_query(), false);
+
+        submit(&mut wam, "c.");
+        submit(&mut wam, "g(X).");
+
+        assert_eq!(submit(&mut wam, "?- p(a).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(b).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(c).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(f(a)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(b, X)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(Y, X)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(Y, c)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(b)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c, d, e]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c, d | X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c|X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Y|X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Y|[d|Xs]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(blah).").failed_query(), true);
+
+        submit(&mut wam, "x.");
+       
+        assert_eq!(submit(&mut wam, "?- p(a).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(b).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(c).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(f(a)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(b, X)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(Y, X)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(Y, c)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(g(b)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c, d, e]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c, d | X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([c|X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Y|X]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p([Y|[d|Xs]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- p(blah).").failed_query(), false);
+
+        submit(&mut wam, "call(or(X, Y)) :- call(X).
+                          call(trace) :- trace.
+                          call(or(X, Y)) :- call(Y).
+                          call(notrace) :- notrace.
+                          call(nl) :- nl.
+                          call(X) :- builtin(X).
+                          call(X) :- extern(X).
+                          call(call(X)) :- call(X).
+                          call(repeat).
+                          call(repeat) :- call(repeat).
+                          call(true).");
+
+        assert_eq!(submit(&mut wam, "?- call(repeat).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(true).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(call(repeat)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(call(true)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(notrace).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- call(nl).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- call(builtin(X)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- call(extern(X)).").failed_query(), true);
+        
+        submit(&mut wam, "notrace.");
+        submit(&mut wam, "nl.");
+        
+        assert_eq!(submit(&mut wam, "?- call(repeat).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(true).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(call(repeat)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(call(true)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(notrace).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(nl).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(builtin(X)).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- call(extern(X)).").failed_query(), true);        
+        
+        submit(&mut wam, "builtin(X).");
+        submit(&mut wam, "extern(x).");
+
+        assert_eq!(submit(&mut wam, "?- call(repeat).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(true).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(call(repeat)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(call(true)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(notrace).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(nl).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(builtin(X)).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- call(extern(X)).").failed_query(), false);
+    }
 }
 
 fn prolog_repl() {

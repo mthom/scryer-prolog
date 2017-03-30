@@ -106,8 +106,8 @@ impl<'a> Iterator for QueryIterator<'a> {
                 },
                 IteratorState::InitialCons(lvl, cell, head, tail) => {
                     self.push_final_cons(lvl, cell, head, tail);
-                    self.push_subterm(Level::Deep, head);
                     self.push_subterm(Level::Deep, tail);
+                    self.push_subterm(Level::Deep, head);                    
                 },
                 IteratorState::FinalCons(lvl, cell, head, tail) =>
                     return Some(TermRef::Cons(lvl, cell, head, tail)),

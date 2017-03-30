@@ -21,8 +21,8 @@ mod __parse__TopLevel {
         Term_22_5d_22(&'input str),
         Term_22___22(&'input str),
         Term_22_7c_22(&'input str),
-        Termr_23_22_5bA_2dZ_5d_5ba_2dz0_2d9___5d_2a_22_23(&'input str),
-        Termr_23_22_5ba_2dz_5d_5ba_2dz0_2d9___5d_2a_22_23(&'input str),
+        Termr_23_22_5bA_2dZ_5d_5bA_2dZa_2dz0_2d9___5d_2a_22_23(&'input str),
+        Termr_23_22_5ba_2dz_5d_5bA_2dZa_2dz0_2d9___5d_2a_22_23(&'input str),
         Termerror(__lalrpop_util::ErrorRecovery<usize, (usize, &'input str), ()>),
         Nt_28_22_2c_22_20_3cTerm_3e_29(Term),
         Nt_28_22_2c_22_20_3cTerm_3e_29_2a(::std::vec::Vec<Term>),
@@ -719,8 +719,8 @@ mod __parse__TopLevel {
             r###""]""###,
             r###""_""###,
             r###""|""###,
-            r###"r#"[A-Z][a-z0-9_]*"#"###,
-            r###"r#"[a-z][a-z0-9_]*"#"###,
+            r###"r#"[A-Z][A-Za-z0-9_]*"#"###,
+            r###"r#"[a-z][A-Za-z0-9_]*"#"###,
         ];
         __ACTION[(__state * 14)..].iter().zip(__TERMINAL).filter_map(|(&state, terminal)| {
             if state == 0 {
@@ -822,11 +822,11 @@ mod __parse__TopLevel {
                             _ => unreachable!(),
                         },
                         11 => match __lookahead.1 {
-                            (11, __tok0) => __Symbol::Termr_23_22_5bA_2dZ_5d_5ba_2dz0_2d9___5d_2a_22_23(__tok0),
+                            (11, __tok0) => __Symbol::Termr_23_22_5bA_2dZ_5d_5bA_2dZa_2dz0_2d9___5d_2a_22_23(__tok0),
                             _ => unreachable!(),
                         },
                         12 => match __lookahead.1 {
-                            (12, __tok0) => __Symbol::Termr_23_22_5ba_2dz_5d_5ba_2dz0_2d9___5d_2a_22_23(__tok0),
+                            (12, __tok0) => __Symbol::Termr_23_22_5ba_2dz_5d_5bA_2dZa_2dz0_2d9___5d_2a_22_23(__tok0),
                             _ => unreachable!(),
                         },
                         _ => unreachable!(),
@@ -1028,8 +1028,8 @@ mod __parse__TopLevel {
                 7
             }
             14 => {
-                // Atom = r#"[a-z][a-z0-9_]*"# => ActionFn(5);
-                let __sym0 = __pop_Termr_23_22_5ba_2dz_5d_5ba_2dz0_2d9___5d_2a_22_23(__symbols);
+                // Atom = r#"[a-z][A-Za-z0-9_]*"# => ActionFn(5);
+                let __sym0 = __pop_Termr_23_22_5ba_2dz_5d_5bA_2dZa_2dz0_2d9___5d_2a_22_23(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym0.2.clone();
                 let __nt = super::__action5::<>(input, __sym0);
@@ -1333,8 +1333,8 @@ mod __parse__TopLevel {
                 17
             }
             39 => {
-                // Var = r#"[A-Z][a-z0-9_]*"# => ActionFn(23);
-                let __sym0 = __pop_Termr_23_22_5bA_2dZ_5d_5ba_2dz0_2d9___5d_2a_22_23(__symbols);
+                // Var = r#"[A-Z][A-Za-z0-9_]*"# => ActionFn(23);
+                let __sym0 = __pop_Termr_23_22_5bA_2dZ_5d_5bA_2dZa_2dz0_2d9___5d_2a_22_23(__symbols);
                 let __start = __sym0.0.clone();
                 let __end = __sym0.2.clone();
                 let __nt = super::__action23::<>(input, __sym0);
@@ -1468,23 +1468,23 @@ mod __parse__TopLevel {
             _ => panic!("symbol type mismatch")
         }
     }
-    fn __pop_Termr_23_22_5bA_2dZ_5d_5ba_2dz0_2d9___5d_2a_22_23<
+    fn __pop_Termr_23_22_5bA_2dZ_5d_5bA_2dZa_2dz0_2d9___5d_2a_22_23<
       'input,
     >(
         __symbols: &mut ::std::vec::Vec<(usize,__Symbol<'input>,usize)>
     ) -> (usize, &'input str, usize) {
         match __symbols.pop().unwrap() {
-            (__l, __Symbol::Termr_23_22_5bA_2dZ_5d_5ba_2dz0_2d9___5d_2a_22_23(__v), __r) => (__l, __v, __r),
+            (__l, __Symbol::Termr_23_22_5bA_2dZ_5d_5bA_2dZa_2dz0_2d9___5d_2a_22_23(__v), __r) => (__l, __v, __r),
             _ => panic!("symbol type mismatch")
         }
     }
-    fn __pop_Termr_23_22_5ba_2dz_5d_5ba_2dz0_2d9___5d_2a_22_23<
+    fn __pop_Termr_23_22_5ba_2dz_5d_5bA_2dZa_2dz0_2d9___5d_2a_22_23<
       'input,
     >(
         __symbols: &mut ::std::vec::Vec<(usize,__Symbol<'input>,usize)>
     ) -> (usize, &'input str, usize) {
         match __symbols.pop().unwrap() {
-            (__l, __Symbol::Termr_23_22_5ba_2dz_5d_5ba_2dz0_2d9___5d_2a_22_23(__v), __r) => (__l, __v, __r),
+            (__l, __Symbol::Termr_23_22_5ba_2dz_5d_5bA_2dZa_2dz0_2d9___5d_2a_22_23(__v), __r) => (__l, __v, __r),
             _ => panic!("symbol type mismatch")
         }
     }
@@ -1845,6 +1845,11 @@ mod __intern_token {
                             __current_state = 16;
                             continue;
                         }
+                        65 ... 90 => {
+                            __current_match = Some((11, __index + __ch.len_utf8()));
+                            __current_state = 16;
+                            continue;
+                        }
                         95 => /* '_' */ {
                             __current_match = Some((11, __index + 1));
                             __current_state = 16;
@@ -1893,6 +1898,11 @@ mod __intern_token {
                     let (__index, __ch) = match __chars.next() { Some(p) => p, None => return __current_match };
                     match __ch as u32 {
                         48 ... 57 => {
+                            __current_match = Some((12, __index + __ch.len_utf8()));
+                            __current_state = 18;
+                            continue;
+                        }
+                        65 ... 90 => {
                             __current_match = Some((12, __index + __ch.len_utf8()));
                             __current_state = 18;
                             continue;
@@ -1952,6 +1962,11 @@ mod __intern_token {
                             __current_state = 16;
                             continue;
                         }
+                        65 ... 90 => {
+                            __current_match = Some((11, __index + __ch.len_utf8()));
+                            __current_state = 16;
+                            continue;
+                        }
                         95 => /* '_' */ {
                             __current_match = Some((11, __index + 1));
                             __current_state = 16;
@@ -1979,6 +1994,11 @@ mod __intern_token {
                     let (__index, __ch) = match __chars.next() { Some(p) => p, None => return __current_match };
                     match __ch as u32 {
                         48 ... 57 => {
+                            __current_match = Some((12, __index + __ch.len_utf8()));
+                            __current_state = 18;
+                            continue;
+                        }
+                        65 ... 90 => {
                             __current_match = Some((12, __index + __ch.len_utf8()));
                             __current_state = 18;
                             continue;

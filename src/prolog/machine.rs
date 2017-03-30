@@ -110,7 +110,7 @@ impl Machine {
         self.code_dir.insert((name, arity), p);
     }
 
-    fn execute_instr<'a>(&mut self, instr_src: LineOrCodeOffset<'a>) -> bool
+    fn execute_instr<'b>(&mut self, instr_src: LineOrCodeOffset<'b>) -> bool
     {
         let mut instr = match instr_src {
             LineOrCodeOffset::Instruction(instr) => instr,
@@ -121,6 +121,8 @@ impl Machine {
             match instr {
                 &Line::Choice(ref choice_instr) =>
                     self.ms.execute_choice_instr(choice_instr),
+                &Line::Control(ref control_instr) =>
+                    self.ms.execute_ctrl_instr(&self.code_dir, control_instr),
                 &Line::Fact(ref fact) => {
                     for fact_instr in fact {
                         if self.failed() {
@@ -130,7 +132,11 @@ impl Machine {
                         self.ms.execute_fact_instr(&fact_instr);
                     }
                     self.ms.p += 1;
-                },
+                },                
+                &Line::Indexing(ref indexing_instr) =>
+                    self.ms.execute_indexing_instr(&indexing_instr),
+                &Line::IndexedChoice(ref choice_instr) =>
+                    self.ms.execute_indexed_choice_instr(choice_instr),
                 &Line::Query(ref query) => {
                     for query_instr in query {
                         if self.failed() {
@@ -140,9 +146,7 @@ impl Machine {
                         self.ms.execute_query_instr(&query_instr);
                     }
                     self.ms.p += 1;
-                },
-                &Line::Control(ref control_instr) =>
-                    self.ms.execute_ctrl_instr(&self.code_dir, control_instr),
+                }                
             }
 
             if self.failed() {
@@ -556,6 +560,8 @@ impl MachineState {
                         self.h += 1;
                     }
                 };
+
+                self.s += 1;
             },
             &FactInstruction::UnifyVariable(reg) => {
                 match self.mode {
@@ -640,6 +646,69 @@ impl MachineState {
         };
     }
 
+    fn execute_indexing_instr(&mut self, instr: &IndexingInstruction) {
+        match instr {
+            &IndexingInstruction::SwitchOnTerm(v, c, l, s) => {
+                let a1 = self.registers[1].clone();
+                let addr = self.store(self.deref(a1));
+
+                let offset = match addr {
+                    Addr::HeapCell(_) | Addr::StackCell(_, _) => v,
+                    Addr::Con(_) => c,
+                    Addr::Lis(_) => l,
+                    Addr::Str(_) => s
+                };
+
+                match offset {
+                    0 => self.fail = true,
+                    o => self.p += o
+                };
+            },
+            &IndexingInstruction::SwitchOnConstant(_, ref hm) => {
+                let a1 = self.registers[1].clone();
+                let addr = self.store(self.deref(a1));
+
+                let offset = match addr {
+                    Addr::Con(constant) => {
+                        match hm.get(&constant) {
+                            Some(offset) => *offset,
+                            _ => 0
+                        }
+                    },
+                    _ => 0
+                };
+
+                match offset {
+                    0 => self.fail = true,
+                    o => self.p += o,
+                };
+            },
+            &IndexingInstruction::SwitchOnStructure(_, ref hm) => {
+                let a1 = self.registers[1].clone();
+                let addr = self.store(self.deref(a1));
+
+                let offset = match addr {
+                    Addr::Str(s) => {
+                        if let &HeapCellValue::NamedStr(arity, ref name) = &self.heap[s] {
+                            match hm.get(&(name.clone(), arity)) {
+                                Some(offset) => *offset,
+                                _ => 0
+                            }
+                        } else {
+                            0
+                        }
+                    },
+                    _ => 0
+                };
+
+                match offset {
+                    0 => self.fail = true,
+                    o => self.p += o                    
+                };            
+            }
+        };
+    }
+    
     fn execute_query_instr(&mut self, instr: &QueryInstruction) {
         match instr {
             &QueryInstruction::PutConstant(_, ref constant, reg) =>
@@ -782,9 +851,94 @@ impl MachineState {
         };
     }
 
-    fn execute_choice_instr(&mut self, instr: &ChoiceInstruction)
+    fn execute_indexed_choice_instr(&mut self, instr: &IndexedChoiceInstruction)
     {
         match instr {
+            &IndexedChoiceInstruction::Try(l) => {
+                let n = self.num_of_args;
+                let num_frames = self.num_frames();
+
+                self.or_stack.push(num_frames + 1,
+                                   self.e,
+                                   self.cp,
+                                   self.b,
+                                   self.p + 1,
+                                   self.tr,
+                                   self.h,
+                                   self.num_of_args);
+
+                self.b = self.or_stack.len() - 1;
+                let b = self.b;
+
+                for i in 1 .. n + 1 {
+                    self.or_stack[b][i] = self.registers[i].clone();
+                }
+
+                self.hb = self.h;
+                self.p += l;
+            },
+            &IndexedChoiceInstruction::Retry(l) => {
+                let b = self.b;
+                let n = self.or_stack[b].num_args();
+
+                for i in 1 .. n + 1 {
+                    self.registers[i] = self.or_stack[b][i].clone();
+                }
+
+                self.e = self.or_stack[b].e;
+                self.cp = self.or_stack[b].cp;
+
+                self.or_stack[b].bp = self.p + 1;
+
+                let old_tr  = self.or_stack[b].tr;
+                let curr_tr = self.tr;
+
+                self.unwind_trail(old_tr, curr_tr);
+                self.tr = self.or_stack[b].tr;
+
+                self.trail.truncate(self.tr);
+                self.heap.truncate(self.or_stack[b].h);
+
+                self.h  = self.or_stack[b].h;
+                self.hb = self.h;
+
+                self.p += l;
+            },
+            &IndexedChoiceInstruction::Trust(l) => {
+                let b = self.b;
+                let n = self.or_stack[b].num_args();
+
+                for i in 1 .. n + 1 {
+                    self.registers[i] = self.or_stack[b][i].clone();
+                }
+
+                self.e  = self.or_stack[b].e;
+                self.cp = self.or_stack[b].cp;
+
+                let old_tr  = self.or_stack[b].tr;
+                let curr_tr = self.tr;
+
+                self.unwind_trail(old_tr, curr_tr);
+
+                self.tr = self.or_stack[b].tr;
+                self.trail.truncate(self.tr);
+
+                self.h = self.or_stack[b].h;
+                self.heap.truncate(self.h);
+
+                self.b = self.or_stack[b].b;
+
+                self.or_stack.pop();
+
+                self.hb = self.h;
+                self.p += l;
+            }
+        };
+    }
+    
+    fn execute_choice_instr(&mut self, instr: &ChoiceInstruction)
+    {
+        match instr {            
             &ChoiceInstruction::TryMeElse(offset) => {
                 let n = self.num_of_args;
                 let num_frames = self.num_frames();
@@ -807,7 +961,7 @@ impl MachineState {
 
                 self.hb = self.h;
                 self.p += 1;
-            },
+            },            
             &ChoiceInstruction::RetryMeElse(offset) => {
                 let b = self.b;
                 let n = self.or_stack[b].num_args();

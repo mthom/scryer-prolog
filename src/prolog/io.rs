@@ -106,15 +106,41 @@ impl fmt::Display for ControlInstruction {
     }
 }
 
-impl fmt::Display for ChoiceInstruction {
+impl fmt::Display for IndexedChoiceInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &IndexedChoiceInstruction::Try(offset) =>
+                write!(f, "try {}", offset),
+            &IndexedChoiceInstruction::Retry(offset) =>
+                write!(f, "retry {}", offset),
+            &IndexedChoiceInstruction::Trust(offset) =>
+                write!(f, "trust {}", offset)
+        }
+    }
+}
+
+impl fmt::Display for ChoiceInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {            
             &ChoiceInstruction::TryMeElse(offset) =>
                 write!(f, "try_me_else {}", offset),
             &ChoiceInstruction::RetryMeElse(offset) =>
-                write!(f, "retry_me_else {}", offset),
+                write!(f, "retry_me_else {}", offset),            
             &ChoiceInstruction::TrustMe =>
                 write!(f, "trust_me")
+        }
+    }
+}
+
+impl fmt::Display for IndexingInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &IndexingInstruction::SwitchOnTerm(v, c, l, s) =>
+                write!(f, "switch_on_term {}, {}, {}, {}", v, c, l, s),
+            &IndexingInstruction::SwitchOnConstant(num_cs, _) =>
+                write!(f, "switch_on_constant {}", num_cs),
+            &IndexingInstruction::SwitchOnStructure(num_ss, _) =>
+                write!(f, "switch_on_structure {}", num_ss)
         }
     }
 }
@@ -176,6 +202,10 @@ pub fn print_code(code: &Code) {
                 println!("{}", choice),
             &Line::Control(ref control) =>
                 println!("{}", control),
+            &Line::IndexedChoice(ref choice) =>
+                println!("{}", choice),
+            &Line::Indexing(ref indexing) =>
+                println!("{}", indexing),
             &Line::Query(ref query) =>
                 for query_instr in query {
                     println!("{}", query_instr);
@@ -218,7 +248,7 @@ pub fn eval(wam: &mut Machine, buffer: &str) -> EvalResult
     match &result {
         &Ok(TopLevel::Predicate(ref clauses)) => {
             if is_consistent(clauses) {
-                let compiled_pred = cg.compile_predicate(clauses);                
+                let compiled_pred = cg.compile_predicate(clauses);
                 wam.add_predicate(clauses, compiled_pred);
 
                 EvalResult::EntrySuccess
@@ -231,17 +261,17 @@ Each predicate must have the same name and arity.";
             }
         },
         &Ok(TopLevel::Fact(ref fact)) => {
-            let compiled_fact = cg.compile_fact(&fact);            
+            let compiled_fact = cg.compile_fact(&fact);
             wam.add_fact(fact, compiled_fact);
             EvalResult::EntrySuccess
         },
         &Ok(TopLevel::Rule(ref rule)) => {
-            let compiled_rule = cg.compile_rule(&rule);            
+            let compiled_rule = cg.compile_rule(&rule);
             wam.add_rule(rule, compiled_rule);
             EvalResult::EntrySuccess
         },
         &Ok(TopLevel::Query(ref query)) => {
-            let compiled_query = cg.compile_query(&query);            
+            let compiled_query = cg.compile_query(&query);
             wam.run_query(compiled_query, &cg)
         },
         &Err(_) => {

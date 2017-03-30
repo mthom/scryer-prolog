@@ -1,6 +1,5 @@
 use std::cell::Cell;
-use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::ops::{Add, AddAssign};
 use std::vec::Vec;
 
@@ -18,6 +17,13 @@ impl PredicateClause {
         match self {
             &PredicateClause::Fact(ref t) => t.name().unwrap(),
             &PredicateClause::Rule(ref rule) => rule.head.0.name().unwrap()
+        }
+    }
+
+    pub fn first_arg(&self) -> Option<&Term> {
+        match self {
+            &PredicateClause::Fact(ref t) => t.first_arg(),
+            &PredicateClause::Rule(ref rule) => rule.head.0.first_arg()
         }
     }
 
@@ -99,7 +105,7 @@ impl Default for VarReg {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub enum Constant {
     Atom(Atom),
     EmptyList
@@ -118,7 +124,7 @@ pub struct Rule {
     pub clauses: Vec<Term>
 }
 
-impl Rule {
+impl Rule {    
     pub fn last_clause(&self) -> &Term {
         match self.clauses.last() {
             None => &self.head.1,
@@ -133,6 +139,54 @@ pub enum TermRef<'a> {
     Constant(Level, &'a Cell<RegType>, &'a Constant),
     Clause(Level, &'a Cell<RegType>, &'a Atom, &'a Vec<Box<Term>>),
     Var(Level, &'a Cell<VarReg>, &'a Var)
+}
+
+pub enum ChoiceInstruction {    
+    RetryMeElse(usize),        
+    TrustMe,    
+    TryMeElse(usize)
+}
+
+pub enum IndexedChoiceInstruction {
+    Retry(usize),
+    Trust(usize),
+    Try(usize)
+}
+
+impl From<IndexedChoiceInstruction> for Line {
+    fn from(i: IndexedChoiceInstruction) -> Self {
+        Line::IndexedChoice(i)
+    }
+}
+
+impl IndexedChoiceInstruction {
+    pub fn offset(&self) -> usize {
+        match self {
+            &IndexedChoiceInstruction::Retry(offset) => offset,
+            &IndexedChoiceInstruction::Trust(offset) => offset,
+            &IndexedChoiceInstruction::Try(offset)   => offset
+        }
+    }
+}
+
+pub enum ControlInstruction {
+    Allocate(usize),
+    Call(Atom, usize, usize),
+    Deallocate,
+    Execute(Atom, usize),
+    Proceed
+}
+
+pub enum IndexingInstruction {
+    SwitchOnTerm(usize, usize, usize, usize),
+    SwitchOnConstant(usize, HashMap<Constant, usize>),
+    SwitchOnStructure(usize, HashMap<(Atom, usize), usize>)
+}
+
+impl From<IndexingInstruction> for Line {
+    fn from(i: IndexingInstruction) -> Self {
+        Line::Indexing(i)
+    }
 }
 
 pub enum FactInstruction {
@@ -162,20 +216,6 @@ pub enum QueryInstruction {
     SetVoid(usize)
 }
 
-pub enum ChoiceInstruction {
-    RetryMeElse(usize),
-    TrustMe,
-    TryMeElse(usize)
-}
-
-pub enum ControlInstruction {
-    Allocate(usize),
-    Call(Atom, usize, usize),
-    Deallocate,
-    Execute(Atom, usize),
-    Proceed
-}
-
 pub type CompiledFact = Vec<FactInstruction>;
 
 pub type CompiledQuery = Vec<QueryInstruction>;
@@ -184,6 +224,8 @@ pub enum Line {
     Choice(ChoiceInstruction),
     Control(ControlInstruction),
     Fact(CompiledFact),
+    Indexing(IndexingInstruction),
+    IndexedChoice(IndexedChoiceInstruction),
     Query(CompiledQuery)
 }
 
@@ -198,8 +240,11 @@ impl<'a> From<&'a Line> for LineOrCodeOffset<'a> {
     }
 }
 
+pub type ThirdLevelIndex = Vec<IndexedChoiceInstruction>;
+
 pub type Code = Vec<Line>;
 
+pub type CodeDeque = VecDeque<Line>;
 
 #[derive(Clone, PartialEq)]
 pub enum Addr {
@@ -287,26 +332,6 @@ impl HeapCellValue {
     }
 }
 
-impl PartialOrd for Ref {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (*self, *other) {
-            (Ref::HeapCell(hc1), Ref::HeapCell(hc2)) =>
-                Some(hc1.cmp(&hc2)),
-            (Ref::HeapCell(_), _) =>
-                Some(Ordering::Less),
-            (Ref::StackCell(fr1, sc1), Ref::StackCell(fr2, sc2)) =>
-                if fr1 < fr2 {
-                    Some(Ordering::Less)
-                } else if fr1 == fr2 {
-                    Some(sc1.cmp(&sc2))
-                } else {
-                    Some(Ordering::Greater)
-                },
-            _ => Some(Ordering::Greater)
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 pub enum CodePtr {
     DirEntry(usize),
@@ -344,6 +369,14 @@ pub type Heap = Vec<HeapCellValue>;
 pub type Registers = Vec<Addr>;
 
 impl Term {
+    pub fn first_arg(&self) -> Option<&Term> {
+        match self {
+            &Term::Clause(_, _, ref terms) =>
+                terms.first().map(|bt| bt.as_ref()),
+            _ => None                
+        }
+    }
+    
     pub fn is_clause(&self) -> bool {
         if let &Term::Clause(_, _, _) = self {
             true
@@ -362,7 +395,7 @@ impl Term {
     pub fn name(&self) -> Option<&Atom> {
         match self {
             &Term::Constant(_, Constant::Atom(ref atom))
-            | &Term::Clause(_, ref atom, _) => Some(atom),
+          | &Term::Clause(_, ref atom, _) => Some(atom),
             _ => None
         }
     }

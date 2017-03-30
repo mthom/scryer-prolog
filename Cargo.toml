@@ -1,6 +1,6 @@
 [package]
 name = "rusty-wam"
-version = "0.5.10"
+version = "0.5.11"
 authors = ["Mark Thom"]
 
 build = "build.rs"
