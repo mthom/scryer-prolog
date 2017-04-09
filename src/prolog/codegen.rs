@@ -411,6 +411,39 @@ impl CodeOffsets {
         }
     }
 
+
+    fn switch_on_str_offset_from(str_loc: IntIndex, prelude_len: usize, con_loc: IntIndex)
+                                 -> usize
+    {
+        match str_loc {
+            IntIndex::External(o) => o + prelude_len + 1,
+            IntIndex::Fail => 0,
+            IntIndex::Internal(_) => match con_loc {
+                IntIndex::Internal(_) => 2,
+                _ => 1
+            }
+        }
+    }
+
+    fn switch_on_con_offset_from(con_loc: IntIndex, prelude_len: usize) -> usize
+    {
+        match con_loc {
+            IntIndex::External(offset) => offset + prelude_len + 1,
+            IntIndex::Fail => 0,
+            IntIndex::Internal(offset) => offset,
+        }
+    }
+
+    fn switch_on_lst_offset_from(lst_loc: IntIndex, prelude_len: usize, lst_offset: usize)
+                                 -> usize
+    {
+        match lst_loc {
+            IntIndex::External(o) => o + prelude_len + 1,
+            IntIndex::Fail => 0,
+            IntIndex::Internal(_) => prelude_len - lst_offset + 1
+        }        
+    }
+    
     fn add_indices(self, code: &mut Code, mut code_body: Code)
     {
         if self.no_indices() {
@@ -420,11 +453,11 @@ impl CodeOffsets {
 
         let mut prelude = VecDeque::new();
 
-        let lst_step = Self::switch_on_list(self.lists, &mut prelude);
+        let lst_loc = Self::switch_on_list(self.lists, &mut prelude);
         let lst_offset = prelude.len();
 
-        let str_step = Self::switch_on_structure(self.structures, &mut prelude);
-        let con_step = Self::switch_on_constant(self.constants, &mut prelude);
+        let str_loc = Self::switch_on_structure(self.structures, &mut prelude);
+        let con_loc = Self::switch_on_constant(self.constants, &mut prelude);
 
         let prelude_length = prelude.len();
 
@@ -437,30 +470,15 @@ impl CodeOffsets {
                 _ => {}
             }
         }
-
-        let str_step = match str_step {
-            IntIndex::External(o) => o + prelude.len() + 1,
-            IntIndex::Fail => 0,
-            IntIndex::Internal(_) => match con_step {
-                IntIndex::Internal(_) => 2,
-                _ => 1
-            }
-        };
-        let con_step = match con_step {
-            IntIndex::External(offset) => offset + prelude.len() + 1,
-            IntIndex::Fail => 0,
-            IntIndex::Internal(offset) => offset,
-        };
-        let lst_step = match lst_step {
-            IntIndex::External(o) => o + prelude.len() + 1,
-            IntIndex::Fail => 0,
-            IntIndex::Internal(_) => prelude.len() - lst_offset + 1
-        };
-
+                
+        let str_loc = Self::switch_on_str_offset_from(str_loc, prelude.len(), con_loc);
+        let con_loc = Self::switch_on_con_offset_from(con_loc, prelude.len());
+        let lst_loc = Self::switch_on_lst_offset_from(lst_loc, prelude.len(), lst_offset);
+        
         let switch_instr = IndexingInstruction::SwitchOnTerm(prelude.len() + 1,
-                                                             con_step,
-                                                             lst_step,
-                                                             str_step);
+                                                             con_loc,
+                                                             lst_loc,
+                                                             str_loc);
 
         prelude.push_front(Line::from(switch_instr));
 
