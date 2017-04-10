@@ -729,7 +729,7 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn set_perm_vals(vs: &VariableFixtures) {
+    fn set_perm_vals(vs: &VariableFixtures, offset: usize) {
         let mut values_vec : Vec<_> = vs.values()
             .map(|ref v| (v.0, &v.1))
             .collect();
@@ -744,7 +744,7 @@ impl<'a> CodeGenerator<'a> {
         for (i, v) in values_vec.into_iter().rev().enumerate() {
             if let VarStatus::Permanent(_) = v.0 {
                 for cell in v.1 {
-                    cell.set(VarReg::Norm(RegType::Perm(i + 1)));
+                    cell.set(VarReg::Norm(RegType::Perm(i + 1 + offset)));
                 }
             } else {
                 break;
@@ -783,7 +783,7 @@ impl<'a> CodeGenerator<'a> {
             }
         }
         
-        Self::set_perm_vals(&vs);
+        Self::set_perm_vals(&vs, deep_cuts as usize);
 
         (vs, deep_cuts)
     }
@@ -887,7 +887,7 @@ impl<'a> CodeGenerator<'a> {
         let (vs, deep_cuts) = Self::mark_perm_vars(&rule);
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
 
-        let perm_vars = Self::vars_above_threshold(&vs, 0);
+        let perm_vars = Self::vars_above_threshold(&vs, 0) + deep_cuts as usize;
         let mut body = Vec::new();
 
         if clauses.len() > 0 {
