@@ -8,11 +8,11 @@ pure Prolog.
 
 ## Progress
 
-Pure Prolog is implemented as a simple REPL. "Pure Prolog" is Prolog
-without cut, meta- or extra-logical operators, or side effects of any
-kind. In terms of the tutorial pacing, the work has progressed to the
-end of section 5.10, skipping past 5.4. Atoms and lists are the only
-two data types currently supported.
+Prolog is implemented as a simple REPL. It is without without meta- or
+extra-logical operators, or side effects of any kind, with the lone
+exception of cut. In terms of the tutorial pacing, the work has
+progressed to the end of section 5.11, skipping past 5.4. Atoms and
+lists are the only two data types currently supported.
 
 While proper environment trimming code is emitted by the code
 generator, it has no effect on the bytecode WAM, which lacks

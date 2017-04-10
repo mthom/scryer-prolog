@@ -5,6 +5,7 @@ use std::vec::Vec;
 
 pub struct Frame {
     pub global_index: usize,
+    pub b0: usize,
     pub e: usize,
     pub cp: CodePtr,
     perms: Vec<Addr>
@@ -14,6 +15,7 @@ impl Frame {
     fn new(global_index: usize, e: usize, cp: CodePtr, n: usize) -> Self {
         Frame {
             global_index: global_index,
+            b0: 0,
             e: e,
             cp: cp,
             perms: vec![Addr::HeapCell(0); n]

@@ -195,6 +195,87 @@ mod tests {
     }
 
     #[test]
+    fn test_queries_on_cuts() {
+        let mut wam = Machine::new();
+
+        // test shallow cuts.
+        submit(&mut wam, "memberchk(X, [X|_]) :- !.
+                          memberchk(X, [_|Xs]) :- !, memberchk(X, Xs).");
+
+        assert_eq!(submit(&mut wam, "?- memberchk(X, [a,b,c]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- memberchk([X,X], [a,b,c,[d,e],[d,d]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- memberchk([X,X], [a,b,c,[D,d],[e,e]]).").failed_query(), false);
+        assert_eq!(submit(&mut wam, "?- memberchk([X,X], [a,b,c,[e,d],[f,e]]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- memberchk([X,X,Y], [a,b,c,[e,d],[f,e]]).").failed_query(), true);
+        assert_eq!(submit(&mut wam, "?- memberchk([X,X,Y], [a,b,c,[e,e,d],[f,e]]).").failed_query(), false);
+
+        // test deep cuts.
+        submit(&mut wam, "commit :- a, !.");        
+
+        assert_eq!(submit(&mut wam, "?- commit.").failed_query(), true);
+        
+        submit(&mut wam, "a.");
+
+        assert_eq!(submit(&mut wam, "?- commit.").failed_query(), false);
+
+        submit(&mut wam, "commit(X) :- a(X), !.");
+
+        assert_eq!(submit(&mut wam, "?- commit(X).").failed_query(), true);
+
+        submit(&mut wam, "a(x).");
+
+        assert_eq!(submit(&mut wam, "?- commit(X).").failed_query(), false);
+
+        submit(&mut wam, "a :- b, !, c. a :- d.");
+
+        assert_eq!(submit(&mut wam, "?- a.").failed_query(), true);
+
+        submit(&mut wam, "b.");
+
+        assert_eq!(submit(&mut wam, "?- a.").failed_query(), true);
+
+        submit(&mut wam, "d.");
+
+        // we've committed to the first clause since the query on b
+        // succeeds, so we expect failure here.
+        assert_eq!(submit(&mut wam, "?- a.").failed_query(), true);
+
+        submit(&mut wam, "c.");
+
+        assert_eq!(submit(&mut wam, "?- a.").failed_query(), false);
+
+        submit(&mut wam, "a(X) :- b, !, c(X). a(X) :- d(X).");
+
+        assert_eq!(submit(&mut wam, "?- a(X).").failed_query(), true);
+
+        submit(&mut wam, "c(c).");
+        submit(&mut wam, "d(d).");
+
+        assert_eq!(submit(&mut wam, "?- a(X).").failed_query(), false);
+
+        submit(&mut wam, "b.");
+
+        assert_eq!(submit(&mut wam, "?- a(X).").failed_query(), false);
+
+        wam.clear();
+
+        assert_eq!(submit(&mut wam, "?- c(X).").failed_query(), true);
+        
+        submit(&mut wam, "a(X) :- b, c(X), !. a(X) :- d(X).");
+        submit(&mut wam, "b.");
+
+        assert_eq!(submit(&mut wam, "?- a(X).").failed_query(), true);
+
+        submit(&mut wam, "d(d).");
+
+        assert_eq!(submit(&mut wam, "?- a(X).").failed_query(), false);
+
+        submit(&mut wam, "c(c).");
+        
+        assert_eq!(submit(&mut wam, "?- a(X).").failed_query(), false);
+    }
+    
+    #[test]
     fn test_queries_on_lists() {
         let mut wam = Machine::new();
 

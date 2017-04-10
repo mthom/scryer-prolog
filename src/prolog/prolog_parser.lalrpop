@@ -57,11 +57,17 @@ PredicateClause : PredicateClause = {
 };
 
 Rule : Rule = {
-    <c:Clause> ":-" <h:Term> <cs: ("," <Term>)*> =>
+    <c:Clause> ":-" <h:TermOrCut> <cs: ("," <TermOrCut>)*> =>
         Rule { head: (c, h), clauses: cs },
-    <a:Atom> ":-" <h:Term> <cs: ("," <Term>)*> =>
-        Rule { head: (Term::Constant(Cell::default(), Constant::Atom(a)), h),
+    <a:Atom> ":-" <h:TermOrCut> <cs: ("," <TermOrCut>)*> =>
+        Rule { head: (Term::Constant(Cell::default(), Constant::Atom(a)),
+	              h),
                clauses: cs }
+};
+
+TermOrCut : TermOrCut = {
+    "!"    => TermOrCut::Cut,
+    <Term> => TermOrCut::Term(<>)
 };
 
 Term : Term = {
@@ -69,7 +75,7 @@ Term : Term = {
     <Clause> => <>,
     <List>   => <>,
     <Var>    => Term::Var(Cell::default(), <>),
-    "_"      => Term::AnonVar
+    "_"      => Term::AnonVar    
 };
 
 Var : Var = {

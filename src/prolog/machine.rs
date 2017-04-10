@@ -19,6 +19,7 @@ struct MachineState {
     s: usize,
     p: CodePtr,
     b: usize,
+    b0: usize,
     e: usize,
     num_of_args: usize,
     cp: CodePtr,
@@ -82,7 +83,7 @@ impl Machine {
 
     pub fn add_fact(&mut self, fact: &Term, mut code: Code) {
         if let Some(name) = fact.name() {
-            let p = self.code.len();            
+            let p = self.code.len();
             let arity = fact.arity();
 
             self.code.append(&mut code);
@@ -121,6 +122,8 @@ impl Machine {
             match instr {
                 &Line::Choice(ref choice_instr) =>
                     self.ms.execute_choice_instr(choice_instr),
+                &Line::Cut(ref cut_instr) =>
+                    self.ms.execute_cut_instr(cut_instr),
                 &Line::Control(ref control_instr) =>
                     self.ms.execute_ctrl_instr(&self.code_dir, control_instr),
                 &Line::Fact(ref fact) => {
@@ -132,7 +135,7 @@ impl Machine {
                         self.ms.execute_fact_instr(&fact_instr);
                     }
                     self.ms.p += 1;
-                },                
+                },
                 &Line::Indexing(ref indexing_instr) =>
                     self.ms.execute_indexing_instr(&indexing_instr),
                 &Line::IndexedChoice(ref choice_instr) =>
@@ -146,21 +149,29 @@ impl Machine {
                         self.ms.execute_query_instr(&query_instr);
                     }
                     self.ms.p += 1;
-                }                
+                }
             }
 
             if self.failed() {
-                let p = self.ms
-                            .or_stack
-                            .top()
-                            .map(|fr| fr.bp)
-                            .unwrap_or_default();
+                let b0 = self.ms
+                    .or_stack
+                    .top()
+                    .map(|fr| fr.b0)
+                    .unwrap_or(0);
+                
+                let p = if self.ms.b > 0 {
+                    let b = self.ms.b - 1;
+                    self.ms.or_stack[b].bp
+                } else {
+                    CodePtr::TopLevel
+                };
 
                 if let CodePtr::TopLevel = p {
                     return false;
                 } else {
                     self.ms.fail = false;
                     self.ms.p = p;
+                    self.ms.b0 = b0;
                 }
             }
 
@@ -267,7 +278,11 @@ impl Machine {
     pub fn continue_query(&mut self) -> EvalResult
     {
         if !self.or_stack_is_empty() {
-            let b = self.ms.b;
+            if self.ms.b == 0 {
+                return EvalResult::QueryFailure;
+            }
+
+            let b = self.ms.b - 1;
             self.ms.p = self.ms.or_stack[b].bp;
 
             let succeeded = if let CodePtr::DirEntry(p) = self.ms.p {
@@ -286,6 +301,13 @@ impl Machine {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn clear(&mut self) {
+        self.reset();
+        self.code.clear();
+        self.code_dir.clear();
+    }
+    
     pub fn reset(&mut self) {
         self.ms.reset();
     }
@@ -297,6 +319,7 @@ impl MachineState {
                        s: 0,
                        p: CodePtr::TopLevel,
                        b: 0,
+                       b0: 0,
                        e: 0,
                        num_of_args: 0,
                        cp: CodePtr::TopLevel,
@@ -419,7 +442,12 @@ impl MachineState {
             Ref::StackCell(fr, _) => {
                 let fr_gi = self.and_stack[fr].global_index;
                 let b_gi  = if !self.or_stack.is_empty() {
-                    self.or_stack[self.b].global_index
+                    if self.b > 0 {
+                        let b = self.b - 1;
+                        self.or_stack[b].global_index
+                    } else {
+                        0
+                    }
                 } else {
                     0
                 };
@@ -440,6 +468,48 @@ impl MachineState {
                 Ref::StackCell(fr, sc) =>
                     self.and_stack[fr][sc] = Addr::StackCell(fr, sc)
             }
+        }
+    }
+
+    fn tidy_trail(&mut self) {
+        if self.b == 0 {
+            return;
+        }
+
+        let b = self.b - 1;
+        let mut i = self.or_stack[b].tr;
+
+        while i < self.tr {
+            let tr_i = self.trail[i];
+            let hb = self.hb;
+
+            match tr_i {
+                Ref::HeapCell(tr_i) =>
+                    if tr_i < hb { //|| ((h < tr_i) && tr_i < b) {
+                        i += 1;
+                    } else {
+                        let tr = self.tr;
+                        let val = self.trail[tr - 1];
+                        self.trail[i] = val;
+                    },
+                Ref::StackCell(fr, _) => {
+                    let b = self.b - 1;
+                    let fr_gi = self.and_stack[fr].global_index;
+                    let b_gi  = if !self.or_stack.is_empty() {
+                        self.or_stack[b].global_index
+                    } else {
+                        0
+                    };
+
+                    if fr_gi < b_gi {
+                        i += 1;
+                    } else {
+                        let tr = self.tr;
+                        let val = self.trail[tr - 1];
+                        self.trail[i] = val;
+                    }
+                }
+            };
         }
     }
 
@@ -703,12 +773,12 @@ impl MachineState {
 
                 match offset {
                     0 => self.fail = true,
-                    o => self.p += o                    
-                };            
+                    o => self.p += o
+                };
             }
         };
     }
-    
+
     fn execute_query_instr(&mut self, instr: &QueryInstruction) {
         match instr {
             &QueryInstruction::PutConstant(_, ref constant, reg) =>
@@ -821,6 +891,7 @@ impl MachineState {
                     Some(compiled_tl_index) => {
                         self.cp = self.p + 1;
                         self.num_of_args = arity;
+                        self.b0 = self.b;
                         self.p  = CodePtr::DirEntry(compiled_tl_index);
                     },
                     None => self.fail = true
@@ -841,7 +912,8 @@ impl MachineState {
                 match compiled_tl_index {
                     Some(compiled_tl_index) => {
                         self.num_of_args = arity;
-                        self.p = CodePtr::DirEntry(compiled_tl_index);
+                        self.b0 = self.b;
+                        self.p  = CodePtr::DirEntry(compiled_tl_index);
                     },
                     None => self.fail = true
                 };
@@ -865,10 +937,11 @@ impl MachineState {
                                    self.p + 1,
                                    self.tr,
                                    self.h,
+                                   self.b0,
                                    self.num_of_args);
 
-                self.b = self.or_stack.len() - 1;
-                let b = self.b;
+                self.b = self.or_stack.len();
+                let b = self.b - 1;
 
                 for i in 1 .. n + 1 {
                     self.or_stack[b][i] = self.registers[i].clone();
@@ -878,7 +951,7 @@ impl MachineState {
                 self.p += l;
             },
             &IndexedChoiceInstruction::Retry(l) => {
-                let b = self.b;
+                let b = self.b - 1;
                 let n = self.or_stack[b].num_args();
 
                 for i in 1 .. n + 1 {
@@ -905,7 +978,7 @@ impl MachineState {
                 self.p += l;
             },
             &IndexedChoiceInstruction::Trust(l) => {
-                let b = self.b;
+                let b = self.b - 1;
                 let n = self.or_stack[b].num_args();
 
                 for i in 1 .. n + 1 {
@@ -935,10 +1008,10 @@ impl MachineState {
             }
         };
     }
-    
+
     fn execute_choice_instr(&mut self, instr: &ChoiceInstruction)
     {
-        match instr {            
+        match instr {
             &ChoiceInstruction::TryMeElse(offset) => {
                 let n = self.num_of_args;
                 let num_frames = self.num_frames();
@@ -950,10 +1023,11 @@ impl MachineState {
                                    self.p + offset,
                                    self.tr,
                                    self.h,
+                                   self.b0,
                                    self.num_of_args);
 
-                self.b = self.or_stack.len() - 1;
-                let b = self.b;
+                self.b = self.or_stack.len();
+                let b = self.b - 1;
 
                 for i in 1 .. n + 1 {
                     self.or_stack[b][i] = self.registers[i].clone();
@@ -961,9 +1035,9 @@ impl MachineState {
 
                 self.hb = self.h;
                 self.p += 1;
-            },            
+            },
             &ChoiceInstruction::RetryMeElse(offset) => {
-                let b = self.b;
+                let b = self.b - 1;
                 let n = self.or_stack[b].num_args();
 
                 for i in 1 .. n + 1 {
@@ -990,7 +1064,7 @@ impl MachineState {
                 self.p += 1;
             },
             &ChoiceInstruction::TrustMe => {
-                let b = self.b;
+                let b = self.b - 1;
                 let n = self.or_stack[b].num_args();
 
                 for i in 1 .. n + 1 {
@@ -1021,11 +1095,55 @@ impl MachineState {
         }
     }
 
+    fn execute_cut_instr(&mut self, instr: &CutInstruction) {
+        match instr {
+            &CutInstruction::Cut(ref term) => {
+                let b = self.b;
+                let e = self.e;
+                let b0 = self.and_stack[e].b0; // STACK[E+2+1]
+
+                if b > b0 {
+                    self.b = b0;
+                    self.tidy_trail();
+                }
+
+                if let &Terminal::Terminal = term {
+                    self.p = CodePtr::TopLevel;
+                } else {
+                    self.p += 1;
+                }
+            },
+            &CutInstruction::GetLevel => {
+                let b0 = self.b0;
+                let e  = self.e;
+
+                self.and_stack[e].b0 = b0;
+                self.p += 1;
+            },
+            &CutInstruction::NeckCut(ref term) => {
+                let b = self.b;
+                let b0 = self.b0;
+
+                if b > b0 {
+                    self.b = b0;
+                    self.tidy_trail();
+                }
+                
+                if let &Terminal::Terminal = term {
+                    self.p = CodePtr::TopLevel;
+                } else {
+                    self.p += 1;
+                }
+            }
+        }
+    }
+
     fn reset(&mut self) {
         self.h = 0;
         self.hb = 0;
         self.e = 0;
         self.b = 0;
+        self.b0 = 0;
         self.s = 0;
         self.tr = 0;
         self.p = CodePtr::TopLevel;
@@ -1039,5 +1157,5 @@ impl MachineState {
         self.and_stack.clear();
         self.or_stack.clear();
         self.registers = vec![Addr::HeapCell(0); 64];
-    }
+    }    
 }

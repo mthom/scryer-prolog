@@ -119,13 +119,27 @@ pub enum Term {
     Var(Cell<VarReg>, Var)
 }
 
-pub struct Rule {
-    pub head: (Term, Term),
-    pub clauses: Vec<Term>
+pub enum TermOrCut {
+    Cut,
+    Term(Term)
 }
 
-impl Rule {    
-    pub fn last_clause(&self) -> &Term {
+impl TermOrCut {    
+    pub fn arity(&self) -> usize {
+        match self {
+            &TermOrCut::Term(ref term) => term.arity(),
+            _ => 0
+        }
+    }
+}
+
+pub struct Rule {
+    pub head: (Term, TermOrCut),
+    pub clauses: Vec<TermOrCut>
+}
+
+impl Rule {
+    pub fn last_clause(&self) -> &TermOrCut {
         match self.clauses.last() {
             None => &self.head.1,
             Some(clause) => clause
@@ -141,10 +155,20 @@ pub enum TermRef<'a> {
     Var(Level, &'a Cell<VarReg>, &'a Var)
 }
 
-pub enum ChoiceInstruction {    
-    RetryMeElse(usize),        
-    TrustMe,    
+pub enum ChoiceInstruction {
+    RetryMeElse(usize),
+    TrustMe,
     TryMeElse(usize)
+}
+
+pub enum Terminal {
+    Terminal, Non
+}
+
+pub enum CutInstruction {
+    Cut(Terminal),
+    GetLevel,
+    NeckCut(Terminal)
 }
 
 pub enum IndexedChoiceInstruction {
@@ -223,6 +247,7 @@ pub type CompiledQuery = Vec<QueryInstruction>;
 pub enum Line {
     Choice(ChoiceInstruction),
     Control(ControlInstruction),
+    Cut(CutInstruction),
     Fact(CompiledFact),
     Indexing(IndexingInstruction),
     IndexedChoice(IndexedChoiceInstruction),
@@ -373,18 +398,18 @@ impl Term {
         match self {
             &Term::Clause(_, _, ref terms) =>
                 terms.first().map(|bt| bt.as_ref()),
-            _ => None                
+            _ => None
         }
     }
-    
+
     pub fn is_clause(&self) -> bool {
         if let &Term::Clause(_, _, _) = self {
             true
         } else {
             false
         }
-    }        
-    
+    }
+
     pub fn subterms(&self) -> usize {
         match self {
             &Term::Clause(_, _, ref terms) => terms.len(),

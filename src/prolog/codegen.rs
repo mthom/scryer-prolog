@@ -441,9 +441,9 @@ impl CodeOffsets {
             IntIndex::External(o) => o + prelude_len + 1,
             IntIndex::Fail => 0,
             IntIndex::Internal(_) => prelude_len - lst_offset + 1
-        }        
+        }
     }
-    
+
     fn add_indices(self, code: &mut Code, mut code_body: Code)
     {
         if self.no_indices() {
@@ -470,11 +470,11 @@ impl CodeOffsets {
                 _ => {}
             }
         }
-                
+
         let str_loc = Self::switch_on_str_offset_from(str_loc, prelude.len(), con_loc);
         let con_loc = Self::switch_on_con_offset_from(con_loc, prelude.len());
         let lst_loc = Self::switch_on_lst_offset_from(lst_loc, prelude.len(), lst_offset);
-        
+
         let switch_instr = IndexingInstruction::SwitchOnTerm(prelude.len() + 1,
                                                              con_loc,
                                                              lst_loc,
@@ -752,21 +752,40 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn mark_perm_vars(rule: &'a Rule) -> VariableFixtures {
+    fn mark_perm_vars(rule: &'a Rule) -> (VariableFixtures, bool)
+    {
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
-        let mut vs = HashMap::new();
-
-        let iter = p0.breadth_first_iter().chain(p1.breadth_first_iter());
-
-        Self::mark_vars_in_term(iter, &mut vs, 0);
-
-        for (i, term) in clauses.iter().enumerate() {
-            Self::mark_vars_in_term(term.breadth_first_iter(), &mut vs, i + 1);
+        let mut vs = HashMap::new();        
+        
+        match p1 {
+            &TermOrCut::Cut => {
+                let iter = p0.breadth_first_iter();
+                Self::mark_vars_in_term(iter, &mut vs, 0);
+            },
+            &TermOrCut::Term(ref p1) => {
+                let iter = p0.breadth_first_iter().chain(p1.breadth_first_iter());
+                Self::mark_vars_in_term(iter, &mut vs, 0);
+            }
         }
 
+        for (i, term) in clauses.iter().enumerate() {
+            if let &TermOrCut::Term(ref term) = term {
+                Self::mark_vars_in_term(term.breadth_first_iter(), &mut vs, i + 1)
+            }
+        }
+
+        let mut deep_cuts = false;
+
+        for term in clauses {
+            if let &TermOrCut::Cut = term {
+                deep_cuts = true;
+                break;
+            }
+        }
+        
         Self::set_perm_vals(&vs);
 
-        vs
+        (vs, deep_cuts)
     }
 
     fn add_conditional_call(compiled_query: &mut Code, term: &Term, pvs: usize)
@@ -787,8 +806,8 @@ impl<'a> CodeGenerator<'a> {
     fn vars_above_threshold(vs: &VariableFixtures, index: usize) -> usize {
         let mut var_count = 0;
 
-        for &(term_status, _) in vs.values() {
-            if let VarStatus::Permanent(i) = term_status {
+        for &(var_status, _) in vs.values() {
+            if let VarStatus::Permanent(i) = var_status {
                 if i > index {
                     var_count += 1;
                 }
@@ -803,8 +822,8 @@ impl<'a> CodeGenerator<'a> {
         let mut dealloc_index = body.len() - 1;
 
         match rule.last_clause() {
-              &Term::Clause(_, ref name, _)
-            | &Term::Constant(_, Constant::Atom(ref name)) => {
+              &TermOrCut::Term(Term::Clause(_, ref name, _))
+            | &TermOrCut::Term(Term::Constant(_, Constant::Atom(ref name))) => {
                 if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
                     *ctrl = ControlInstruction::Execute(name.clone(), last_arity);
                 }
@@ -863,8 +882,9 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn compile_rule(&mut self, rule: &'a Rule) -> Code {
-        let vs = Self::mark_perm_vars(&rule);
+    pub fn compile_rule(&mut self, rule: &'a Rule) -> Code
+    {
+        let (vs, deep_cuts) = Self::mark_perm_vars(&rule);
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
 
         let perm_vars = Self::vars_above_threshold(&vs, 0);
@@ -872,23 +892,63 @@ impl<'a> CodeGenerator<'a> {
 
         if clauses.len() > 0 {
             body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
+
+            if deep_cuts {
+                body.push(Line::Cut(CutInstruction::GetLevel));
+            }
         }
 
-        let iter = p0.breadth_first_iter().chain(p1.breadth_first_iter());
-        self.update_var_count(iter);
+        match p1 {
+            &TermOrCut::Cut => {
+                let iter = p0.breadth_first_iter();
+                self.update_var_count(iter);
+            },
+            &TermOrCut::Term(ref p1) => {
+                let iter = p0.breadth_first_iter().chain(p1.breadth_first_iter());
+                self.update_var_count(iter);
+            }
+        };
 
+        
         self.marker.advance(p0);
-        body.push(Line::Fact(self.compile_target(p0, false)));
 
-        self.marker.advance_at_head(p1);
-        body.push(Line::Query(self.compile_target(p1, false)));
+        if p0.is_clause() {
+            body.push(Line::Fact(self.compile_target(p0, false)));
+        }
 
-        Self::add_conditional_call(&mut body, p1, perm_vars);
+        match p1 {
+            &TermOrCut::Cut => {
+                let term = if clauses.is_empty() {
+                    Terminal::Terminal
+                } else {
+                    Terminal::Non
+                };
+                
+                body.push(Line::Cut(CutInstruction::NeckCut(term)));
+            },
+            &TermOrCut::Term(ref p1) => {
+                self.marker.advance_at_head(p1);
+
+                if p1.is_clause() {
+                    body.push(Line::Query(self.compile_target(p1, false)));
+                }
+                
+                Self::add_conditional_call(&mut body, p1, perm_vars);
+            }
+        };
 
         body = clauses.iter().enumerate()
             .map(|(i, term)| {
-                let num_vars = Self::vars_above_threshold(&vs, i+1);
-                self.compile_internal_query(term, num_vars)
+                match term {
+                    &TermOrCut::Cut if i + 1 < clauses.len() =>
+                        vec![Line::Cut(CutInstruction::Cut(Terminal::Non))],
+                    &TermOrCut::Cut =>
+                        vec![Line::Cut(CutInstruction::Cut(Terminal::Terminal))],
+                    &TermOrCut::Term(ref term) => {
+                        let num_vars = Self::vars_above_threshold(&vs, i + 1);
+                        self.compile_internal_query(term, num_vars)
+                    }
+                }
             })
             .fold(body, |mut body, ref mut cqs| {
                 body.append(cqs);

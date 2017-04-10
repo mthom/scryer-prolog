@@ -145,6 +145,19 @@ impl fmt::Display for IndexingInstruction {
     }
 }
 
+impl fmt::Display for CutInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &CutInstruction::Cut(_) =>
+                write!(f, "cut"),
+            &CutInstruction::NeckCut(_) =>
+                write!(f, "neck_cut"),
+            &CutInstruction::GetLevel =>
+                write!(f, "get_level")
+        }
+    }
+}
+
 impl fmt::Display for Level {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -198,6 +211,8 @@ pub fn print_code(code: &Code) {
                 for fact_instr in fact {
                     println!("{}", fact_instr);
                 },
+            &Line::Cut(ref cut) =>
+                println!("{}", cut),
             &Line::Choice(ref choice) =>
                 println!("{}", choice),
             &Line::Control(ref control) =>
