@@ -755,8 +755,8 @@ impl<'a> CodeGenerator<'a> {
     fn mark_perm_vars(rule: &'a Rule) -> (VariableFixtures, bool)
     {
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
-        let mut vs = HashMap::new();        
-        
+        let mut vs = HashMap::new();
+
         match p1 {
             &TermOrCut::Cut => {
                 let iter = p0.breadth_first_iter();
@@ -768,21 +768,21 @@ impl<'a> CodeGenerator<'a> {
             }
         }
 
-        for (i, term) in clauses.iter().enumerate() {
-            if let &TermOrCut::Term(ref term) = term {
-                Self::mark_vars_in_term(term.breadth_first_iter(), &mut vs, i + 1)
-            }
-        }
-
         let mut deep_cuts = false;
 
-        for term in clauses {
-            if let &TermOrCut::Cut = term {
-                deep_cuts = true;
-                break;
+        for (i, term) in clauses.iter().enumerate() {
+            match term {
+                &TermOrCut::Cut => {
+                    deep_cuts = true;
+                },
+                &TermOrCut::Term(ref term) => {
+                    Self::mark_vars_in_term(term.breadth_first_iter(),
+                                            &mut vs,
+                                            i + 1);
+                }
             }
         }
-        
+
         Self::set_perm_vals(&vs, deep_cuts as usize);
 
         (vs, deep_cuts)
@@ -834,9 +834,7 @@ impl<'a> CodeGenerator<'a> {
         dealloc_index
     }
 
-    fn mark_unsafe_query_vars(head: &Term,
-                              vs: &VariableFixtures,
-                              query: &mut CompiledQuery)
+    fn mark_unsafe_query_vars(head: &Term, vs: &VariableFixtures, query: &mut CompiledQuery)
     {
         let mut unsafe_vars = HashMap::new();
 
@@ -888,7 +886,7 @@ impl<'a> CodeGenerator<'a> {
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
 
         let perm_vars = Self::vars_above_threshold(&vs, 0) + deep_cuts as usize;
-        let mut body = Vec::new();
+        let mut body  = Vec::new();
 
         if clauses.len() > 0 {
             body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
@@ -909,7 +907,6 @@ impl<'a> CodeGenerator<'a> {
             }
         };
 
-        
         self.marker.advance(p0);
 
         if p0.is_clause() {
@@ -923,7 +920,7 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     Terminal::Non
                 };
-                
+
                 body.push(Line::Cut(CutInstruction::NeckCut(term)));
             },
             &TermOrCut::Term(ref p1) => {
@@ -932,7 +929,7 @@ impl<'a> CodeGenerator<'a> {
                 if p1.is_clause() {
                     body.push(Line::Query(self.compile_target(p1, false)));
                 }
-                
+
                 Self::add_conditional_call(&mut body, p1, perm_vars);
             }
         };
@@ -1003,7 +1000,8 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn compile_fact(&mut self, term: &'a Term) -> Code {
+    pub fn compile_fact(&mut self, term: &'a Term) -> Code
+    {
         self.marker.advance(term);
         self.update_var_count(term.breadth_first_iter());
 
@@ -1038,7 +1036,8 @@ impl<'a> CodeGenerator<'a> {
         code
     }
 
-    pub fn compile_query(&mut self, term: &'a Term) -> Code {
+    pub fn compile_query(&mut self, term: &'a Term) -> Code
+    {
         self.marker.advance(term);
         self.update_var_count(term.breadth_first_iter());
 
