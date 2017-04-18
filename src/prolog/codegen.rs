@@ -1119,11 +1119,11 @@ impl<'a> CodeGenerator<'a> {
 
     pub fn compile_predicate(&mut self, clauses: &'a Vec<PredicateClause>) -> Code
     {
-        let mut code = Vec::new();
+        let mut code   = Vec::new();
         let split_pred = Self::split_predicate(clauses);
         let multi_seq  = split_pred.len() > 1;
 
-        for &(l, r) in split_pred.iter() {
+        for (l, r) in split_pred {
             let mut code_segment = self.compile_pred_subseq(&clauses[l .. r]);
 
             if multi_seq {
