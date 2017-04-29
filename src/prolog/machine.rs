@@ -251,8 +251,9 @@ impl Machine {
         }
 
         if succeeded {
-            for (var, vr) in cg.vars() {
-                let addr = self.ms.registers[vr.root_register()].clone();
+            for (var, var_status) in cg.vars() {
+                let r = var_status.as_reg_type().reg_num();
+                let addr = self.ms.registers[r].clone();                
                 heap_locs.insert((*var).clone(), addr);
             }
 

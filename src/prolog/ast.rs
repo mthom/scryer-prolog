@@ -7,6 +7,11 @@ pub type Var = String;
 
 pub type Atom = String;
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum GenContext {
+    Head, Mid(usize), Last(usize) // Mid/Last: chunk_num
+}
+
 pub enum PredicateClause {
     Fact(Term),
     Rule(Rule)
@@ -90,13 +95,6 @@ impl VarReg {
     pub fn is_temp(self) -> bool {
         !self.norm().is_perm()
     }
-
-    pub fn root_register(self) -> usize {
-        match self {
-            VarReg::ArgAndNorm(_, root) => root,
-            VarReg::Norm(root) => root.reg_num()
-        }
-    }
 }
 
 impl Default for VarReg {
@@ -124,7 +122,7 @@ pub enum TermOrCut {
     Term(Term)
 }
 
-impl TermOrCut {    
+impl TermOrCut {
     pub fn arity(&self) -> usize {
         match self {
             &TermOrCut::Term(ref term) => term.arity(),
@@ -147,12 +145,29 @@ impl Rule {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum TermRef<'a> {
     AnonVar(Level),
     Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     Constant(Level, &'a Cell<RegType>, &'a Constant),
     Clause(Level, &'a Cell<RegType>, &'a Atom, &'a Vec<Box<Term>>),
     Var(Level, &'a Cell<VarReg>, &'a Var)
+}
+
+impl<'a> TermRef<'a> {
+    pub fn level(self) -> Level {
+        match self {
+            TermRef::AnonVar(lvl)
+          | TermRef::Cons(lvl, _, _, _)
+          | TermRef::Constant(lvl, _, _)
+          | TermRef::Clause(lvl, _, _, _)
+          | TermRef::Var(lvl, _, _) => lvl
+        }
+    }
+}
+
+pub enum TermOrCutRef<'a> {
+    Cut, Term(&'a Term)
 }
 
 pub enum ChoiceInstruction {
@@ -407,6 +422,14 @@ impl Term {
             true
         } else {
             false
+        }
+    }
+
+    pub fn is_callable(&self) -> bool {
+        match self {
+            &Term::Clause(_, _, _) | &Term::Constant(_, Constant::Atom(_)) =>
+                true,
+            _ => false
         }
     }
 

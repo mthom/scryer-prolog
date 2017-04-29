@@ -200,7 +200,7 @@ mod tests {
 
         // test shallow cuts.
         submit(&mut wam, "memberchk(X, [X|_]) :- !.
-                          memberchk(X, [_|Xs]) :- !, memberchk(X, Xs).");
+                          memberchk(X, [_|Xs]) :- memberchk(X, Xs).");
 
         assert_eq!(submit(&mut wam, "?- memberchk(X, [a,b,c]).").failed_query(), false);
         assert_eq!(submit(&mut wam, "?- memberchk([X,X], [a,b,c,[d,e],[d,d]]).").failed_query(), false);

@@ -2,6 +2,7 @@ use prolog::ast::*;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
+use std::iter::*;
 use std::vec::Vec;
 
 enum IteratorState<'a> {
@@ -107,7 +108,7 @@ impl<'a> Iterator for QueryIterator<'a> {
                 IteratorState::InitialCons(lvl, cell, head, tail) => {
                     self.push_final_cons(lvl, cell, head, tail);
                     self.push_subterm(Level::Deep, tail);
-                    self.push_subterm(Level::Deep, head);                    
+                    self.push_subterm(Level::Deep, head);
                 },
                 IteratorState::FinalCons(lvl, cell, head, tail) =>
                     return Some(TermRef::Cons(lvl, cell, head, tail)),
@@ -205,5 +206,122 @@ impl Term {
 
     pub fn breadth_first_iter(&self) -> FactIterator {
         FactIterator::new(self)
+    }
+}
+
+pub struct ChunkedIterator<'a>
+{
+    at_head: bool,
+    iter: Box<Iterator<Item=TermOrCutRef<'a>> + 'a>,
+    deep_cut_encountered: bool
+}
+
+impl<'a> ChunkedIterator<'a>
+{
+    pub fn from_term(term: &'a Term, at_head: bool) -> Self
+    {
+        let inner_iter: Box<Iterator<Item=TermOrCutRef<'a>>> =
+            Box::new(once(TermOrCutRef::Term(term)));
+
+        ChunkedIterator {
+            at_head: at_head,
+            iter: inner_iter,
+            deep_cut_encountered: false
+        }
+    }
+
+    pub fn from_term_sequence(terms: &'a Vec<TermOrCut>) -> Self
+    {
+        let iter = terms.iter().map(|c| {
+            match c {
+                &TermOrCut::Cut => TermOrCutRef::Cut,
+                &TermOrCut::Term(ref term) => TermOrCutRef::Term(term)
+            }
+        });
+
+        ChunkedIterator {
+            at_head: false,
+            iter: Box::new(iter),
+            deep_cut_encountered: false
+        }
+    }
+    
+    pub fn from_rule(rule: &'a Rule) -> Self
+    {
+        let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
+        let iter = once(TermOrCutRef::Term(p0));
+
+        let inner_iter : Box<Iterator<Item=TermOrCutRef<'a>>> = match p1 {
+            &TermOrCut::Term(ref p1) => Box::new(once(TermOrCutRef::Term(p1))),
+            _ => Box::new(empty())
+        };
+
+        let iter = iter.chain(inner_iter.chain(clauses.iter().map(|c| {
+            match c {
+                &TermOrCut::Cut => TermOrCutRef::Cut,
+                &TermOrCut::Term(ref term) => TermOrCutRef::Term(term)
+            }
+        })));
+                              
+        ChunkedIterator {
+            at_head: true,
+            iter: Box::new(iter),
+            deep_cut_encountered: false
+        }
+    }
+
+    pub fn contains_deep_cut(&self) -> bool {
+        self.deep_cut_encountered
+    }
+
+    pub fn at_head(&self) -> bool {
+        self.at_head
+    }
+    
+    fn take_chunk(&mut self, term: TermOrCutRef<'a>) -> (usize, Vec<TermOrCutRef<'a>>)
+    {
+        let mut result = vec![term];
+        let mut arity = 0;
+
+        while let Some(term) = self.iter.next() {
+            match term {
+                TermOrCutRef::Term(inner_term) => {
+                    result.push(term);
+
+                    if inner_term.is_callable() {
+                        arity = inner_term.arity();
+                        break;
+                    }
+                },
+                _ => {
+                    result.push(term);
+                    self.deep_cut_encountered = true;                    
+                }
+            };
+        }
+
+        (arity, result)
+    }
+}
+
+impl<'a> Iterator for ChunkedIterator<'a>
+{
+    // the last term arity, and the reference.
+    type Item = (usize, Vec<TermOrCutRef<'a>>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.iter.next() {
+                None => return None,
+                Some(TermOrCutRef::Term(term)) if self.at_head => {
+                    self.at_head = false;
+                    return Some(self.take_chunk(TermOrCutRef::Term(term)));
+                },
+                Some(TermOrCutRef::Term(term)) if term.is_callable() =>
+                    return Some((term.arity(), vec![TermOrCutRef::Term(term)])),
+                Some(term_or_cut_ref) =>
+                    return Some(self.take_chunk(term_or_cut_ref))
+            }
+        }
     }
 }

@@ -121,11 +121,11 @@ impl fmt::Display for IndexedChoiceInstruction {
 
 impl fmt::Display for ChoiceInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {            
+        match self {
             &ChoiceInstruction::TryMeElse(offset) =>
                 write!(f, "try_me_else {}", offset),
             &ChoiceInstruction::RetryMeElse(offset) =>
-                write!(f, "retry_me_else {}", offset),            
+                write!(f, "retry_me_else {}", offset),
             &ChoiceInstruction::TrustMe =>
                 write!(f, "trust_me")
         }
@@ -277,12 +277,12 @@ Each predicate must have the same name and arity.";
         },
         &Ok(TopLevel::Fact(ref fact)) => {
             let compiled_fact = cg.compile_fact(&fact);
-            wam.add_fact(fact, compiled_fact);
+            wam.add_fact(fact, compiled_fact);            
             EvalResult::EntrySuccess
         },
         &Ok(TopLevel::Rule(ref rule)) => {
             let compiled_rule = cg.compile_rule(&rule);
-            wam.add_rule(rule, compiled_rule);
+            wam.add_rule(rule, compiled_rule);            
             EvalResult::EntrySuccess
         },
         &Ok(TopLevel::Query(ref query)) => {
