@@ -24,10 +24,10 @@ impl<'a> TermMarker<'a> {
         }
     }
 
-    fn occurs_shallowly_in_head(&self, var: &'a Var, term_loc: GenContext, r: usize) -> bool
+    fn occurs_shallowly_in_head(&self, var: &'a Var, r: usize) -> bool
     {
-        match (term_loc, self.bindings.get(var).unwrap()) {
-            (GenContext::Head, &VarData::Temp(_, _, ref tvd)) =>
+        match self.bindings.get(var).unwrap() {
+            &VarData::Temp(_, _, ref tvd) =>
                 tvd.use_set.contains(&(GenContext::Head, r)),
             _ => false
         }
@@ -304,11 +304,15 @@ impl<'a> TermMarker<'a> {
                 }
             },
             Level::Deep if is_new_var =>
-                if self.occurs_shallowly_in_head(var, term_loc, r.reg_num()) {
-                    target.push(Target::subterm_to_value(r));
+                if let GenContext::Head = term_loc {
+                    if self.occurs_shallowly_in_head(var, r.reg_num()) {
+                        target.push(Target::subterm_to_value(r));
+                    } else {
+                        target.push(Target::subterm_to_variable(r));
+                    }
                 } else {
                     target.push(Target::subterm_to_variable(r));
-                },
+                },                    
             Level::Deep =>
                 target.push(Target::subterm_to_value(r))
         };
