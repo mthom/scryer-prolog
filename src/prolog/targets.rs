@@ -16,6 +16,8 @@ pub trait CompilationTarget<'a> {
     fn argument_to_variable(RegType, usize) -> Self;
     fn argument_to_value(RegType, usize) -> Self;
 
+    fn move_to_register(RegType, usize) -> Self;
+
     fn subterm_to_variable(RegType) -> Self;
     fn subterm_to_value(RegType) -> Self;
 
@@ -50,6 +52,10 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
     }
 
     fn argument_to_variable(arg: RegType, val: usize) -> Self {
+        FactInstruction::GetVariable(arg, val)
+    }
+
+    fn move_to_register(arg: RegType, val: usize) -> Self {
         FactInstruction::GetVariable(arg, val)
     }
 
@@ -99,6 +105,10 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
 
     fn argument_to_variable(arg: RegType, val: usize) -> Self {
         QueryInstruction::PutVariable(arg, val)
+    }
+    
+    fn move_to_register(arg: RegType, val: usize) -> Self {
+        QueryInstruction::GetVariable(arg, val)
     }
 
     fn argument_to_value(arg: RegType, val: usize) -> Self {

@@ -9,7 +9,7 @@ pub type Atom = String;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GenContext {
-    Head, Mid(usize), Last(usize) // Mid/Last: chunk_num
+    Head, Mid(usize), Last(usize) // Mid & Last: chunk_num
 }
 
 pub enum PredicateClause {
@@ -70,7 +70,7 @@ impl RegType {
             RegType::Perm(reg_num) | RegType::Temp(reg_num) => reg_num
         }
     }
-
+    
     pub fn is_perm(self) -> bool {
         match self {
             RegType::Perm(_) => true,
@@ -91,7 +91,7 @@ impl VarReg {
             VarReg::ArgAndNorm(reg, _) | VarReg::Norm(reg) => reg
         }
     }
-
+    
     pub fn is_temp(self) -> bool {
         !self.norm().is_perm()
     }
@@ -242,6 +242,7 @@ pub enum FactInstruction {
 }
 
 pub enum QueryInstruction {
+    GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
     PutList(Level, RegType),
     PutStructure(Level, Atom, usize, RegType),
@@ -430,13 +431,6 @@ impl Term {
             &Term::Clause(_, _, _) | &Term::Constant(_, Constant::Atom(_)) =>
                 true,
             _ => false
-        }
-    }
-
-    pub fn subterms(&self) -> usize {
-        match self {
-            &Term::Clause(_, _, ref terms) => terms.len(),
-            _ => 1
         }
     }
 

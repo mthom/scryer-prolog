@@ -57,6 +57,8 @@ impl fmt::Display for FactInstruction {
 impl fmt::Display for QueryInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &QueryInstruction::GetVariable(ref x, ref a) =>
+                write!(f, "get_variable {}, A{}", x, a),
             &QueryInstruction::PutConstant(Level::Shallow, ref constant, ref r) =>
                 write!(f, "put_constant {}, A{}", constant, r.reg_num()),
             &QueryInstruction::PutConstant(Level::Deep, ref constant, ref r) =>

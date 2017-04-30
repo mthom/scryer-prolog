@@ -1,8 +1,8 @@
 use prolog::ast::*;
+use prolog::debray_allocator::*;
 use prolog::fixtures::*;
 use prolog::indexing::*;
 use prolog::iterators::*;
-use prolog::naive_allocator::*;
 use prolog::targets::*;
 
 use std::cell::Cell;
@@ -69,30 +69,39 @@ impl<'a> CodeGenerator<'a> {
     fn to_structure<Target>(&mut self,
                             lvl: Level,
                             cell: &'a Cell<RegType>,
+                            term_loc: GenContext,
                             name: &'a Atom,
-                            arity: usize)
+                            arity: usize,
+                            target: &mut Vec<Target>)
                             -> Target
         where Target: CompilationTarget<'a>
     {
-        self.marker.mark_non_var(lvl, cell);
+        self.marker.mark_non_var(lvl, term_loc, cell, target);
         Target::to_structure(lvl, name.clone(), arity, cell.get())
     }
 
     fn to_constant<Target>(&mut self,
                            lvl: Level,
                            cell: &'a Cell<RegType>,
-                           constant: &'a Constant)
+                           term_loc: GenContext,                           
+                           constant: &'a Constant,
+                           target: &mut Vec<Target>)
                            -> Target
         where Target: CompilationTarget<'a>
     {
-        self.marker.mark_non_var(lvl, cell);
+        self.marker.mark_non_var(lvl, term_loc, cell, target);
         Target::to_constant(lvl, constant.clone(), cell.get())
     }
 
-    fn to_list<Target>(&mut self, lvl: Level, cell: &'a Cell<RegType>) -> Target
+    fn to_list<Target>(&mut self,
+                       lvl: Level,
+                       term_loc: GenContext,
+                       cell: &'a Cell<RegType>,
+                       target: &mut Vec<Target>)
+                       -> Target
         where Target: CompilationTarget<'a>
     {
-        self.marker.mark_non_var(lvl, cell);
+        self.marker.mark_non_var(lvl, term_loc, cell, target);
         Target::to_list(lvl, cell.get())
     }
 
@@ -102,56 +111,15 @@ impl<'a> CodeGenerator<'a> {
         Target::constant_subterm(constant.clone())
     }
 
-    fn anon_var_term<Target>(&mut self, lvl: Level, target: &mut Vec<Target>)
+    fn non_var_subterm<Target>(&mut self,
+                               lvl: Level,
+                               term_loc: GenContext,
+                               cell: &'a Cell<RegType>,
+                               target: &mut Vec<Target>)
+                               -> Target
         where Target: CompilationTarget<'a>
     {
-        let reg = self.marker.mark_anon_var(lvl);
-
-        let instr = match reg {
-            VarReg::ArgAndNorm(arg, norm) =>
-                Target::argument_to_variable(arg, norm),
-            VarReg::Norm(norm) =>
-                Target::subterm_to_variable(norm)
-        };
-
-        target.push(instr);
-    }
-
-    fn var_term<Target>(&mut self,
-                        lvl: Level,
-                        cell: &'a Cell<VarReg>,
-                        var: &'a Var,
-                        _: GenContext,
-                        target: &mut Vec<Target>)
-        where Target: CompilationTarget<'a>
-    {
-        if !self.marker.marked_var(var) {
-            let reg = self.marker.mark_new_var(lvl, var, cell.get().norm());
-            cell.set(reg);
-
-            match reg {
-                VarReg::ArgAndNorm(arg, norm) => // if arg.reg_num() != norm =>
-                    target.push(Target::argument_to_variable(arg, norm)),
-                VarReg::Norm(norm) =>
-                    target.push(Target::subterm_to_variable(norm)),
-            };
-        } else {
-            let reg = self.marker.mark_old_var(lvl, var);
-            cell.set(reg);
-
-            match reg {
-                VarReg::ArgAndNorm(arg, norm) => // if arg.reg_num() != norm =>
-                    target.push(Target::argument_to_value(arg, norm)),
-                VarReg::Norm(norm) =>
-                    target.push(Target::subterm_to_value(norm)),
-            };
-        }
-    }
-
-    fn non_var_subterm<Target>(&mut self, cell: &'a Cell<RegType>) -> Target
-        where Target: CompilationTarget<'a>
-    {
-        self.marker.mark_non_var(Level::Deep, cell);
+        self.marker.mark_non_var(lvl, term_loc, cell, target);
         Target::clause_arg_to_instr(cell.get())
     }
 
@@ -163,13 +131,15 @@ impl<'a> CodeGenerator<'a> {
     {
         match subterm {
             &Term::AnonVar =>
-                self.anon_var_term(Level::Deep, target),
-            &Term::Cons(ref cell, _, _) | &Term::Clause(ref cell, _, _) =>
-                target.push(self.non_var_subterm(cell)),
+                self.marker.mark_anon_var(Level::Deep, target),
+            &Term::Cons(ref cell, _, _) | &Term::Clause(ref cell, _, _) => {
+                let instr = self.non_var_subterm(Level::Deep, term_loc, cell, target);
+                target.push(instr);
+            },
             &Term::Constant(_, ref constant) =>
                 target.push(self.constant_subterm(constant)),
             &Term::Var(ref cell, ref var) =>
-                self.var_term(Level::Deep, cell, var, term_loc, target)
+                self.marker.mark_var(var, Level::Deep, cell, term_loc, target)
         };
     }
 
@@ -186,7 +156,14 @@ impl<'a> CodeGenerator<'a> {
         for term in iter {
             match term {
                 TermRef::Clause(lvl, cell, atom, terms) => {
-                    target.push(self.to_structure(lvl, cell, atom, terms.len()));
+                    let str_instr = self.to_structure(lvl,
+                                                      cell,
+                                                      term_loc,
+                                                      atom,
+                                                      terms.len(),
+                                                      &mut target);
+
+                    target.push(str_instr);
 
                     if !has_exposed_vars {
                         if self.all_singleton_vars(terms) {
@@ -200,21 +177,24 @@ impl<'a> CodeGenerator<'a> {
                     }
                 },
                 TermRef::Cons(lvl, cell, head, tail) => {
-                    target.push(self.to_list(lvl, cell));
+                    let list_instr = self.to_list(lvl, term_loc, cell, &mut target);
+                    target.push(list_instr);
 
                     self.subterm_to_instr(head, term_loc, &mut target);
                     self.subterm_to_instr(tail, term_loc, &mut target);
                 },
-                TermRef::Constant(lvl @ Level::Shallow, cell, constant) =>
-                    target.push(self.to_constant(lvl, cell, constant)),
+                TermRef::Constant(lvl @ Level::Shallow, cell, constant) => {
+                    let const_instr = self.to_constant(lvl, cell, term_loc, constant, &mut target);
+                    target.push(const_instr);
+                },
                 TermRef::AnonVar(lvl @ Level::Shallow) =>
                     if has_exposed_vars {
-                        self.anon_var_term(lvl, &mut target);
+                        self.marker.mark_anon_var(lvl, &mut target);
                     } else {
                         self.marker.advance_arg();
                     },
                 TermRef::Var(lvl @ Level::Shallow, ref cell, ref var) =>
-                    self.var_term(lvl, cell, var, term_loc, &mut target),
+                    self.marker.mark_var(var, lvl, cell, term_loc, &mut target),
                 _ => {}
             };
         }
@@ -332,7 +312,7 @@ impl<'a> CodeGenerator<'a> {
                 body.push(Line::Cut(CutInstruction::NeckCut(term)));
             },
             &TermOrCut::Term(ref p1) => {
-                self.marker.advance_at_head(p1);
+                self.marker.advance(p1);
 
                 if p1.is_clause() {
                     let term_loc = if p1.is_callable() {

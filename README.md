@@ -10,14 +10,9 @@ pure Prolog.
 
 Prolog is implemented as a simple REPL. It is without without meta- or
 extra-logical operators, or side effects of any kind, with the lone
-exception of cut. In terms of the tutorial pacing, the work has
-progressed to the end of section 5.11, skipping past 5.4. Atoms and
-lists are the only two data types currently supported.
-
-While proper environment trimming code is emitted by the code
-generator, it has no effect on the bytecode WAM, which lacks
-fine-grained control over the alignment and allocation of stack
-frames.
+exception of cut. In terms of the tutorial pacing, the work covers in
+some form all of the WAM book, including lists, cuts, Debray
+allocation, and indexing.
 
 ## Tutorial
 To enter a multi-clause predicate, the brackets ":{" and "}:" are used

@@ -10,19 +10,20 @@ pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
 
 pub struct TempVarData {
     last_term_arity: usize,
-    use_set: OccurrenceSet,
-    no_use_set: BTreeSet<usize>,
-    conflict_set: BTreeSet<usize>
-}
-
-// labeled with chunk_num and temp offset (unassigned if 0).
-pub enum VarData {
-    Perm(usize), Temp(usize, usize, TempVarData)
+    pub use_set: OccurrenceSet,
+    pub no_use_set: BTreeSet<usize>,
+    pub conflict_set: BTreeSet<usize>
 }
 
 // labeled with chunk numbers.
 pub enum VarStatus {
     Perm(usize), Temp(usize, TempVarData) // Perm(chunk_num) | Temp(chunk_num, _)
+}
+
+// Perm: 0 initially, a stack register once processed.
+// Temp: labeled with chunk_num and temp offset (unassigned if 0), arg (0 if unassigned).
+pub enum VarData {
+    Perm(usize), Temp(usize, usize, TempVarData)
 }
 
 impl VarData {

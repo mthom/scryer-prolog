@@ -111,7 +111,7 @@ impl Machine {
         self.code_dir.insert((name, arity), p);
     }
 
-    fn execute_instr<'b>(&mut self, instr_src: LineOrCodeOffset<'b>) -> bool
+    fn execute_instr<'a>(&mut self, instr_src: LineOrCodeOffset<'a>) -> bool
     {
         let mut instr = match instr_src {
             LineOrCodeOffset::Instruction(instr) => instr,
@@ -251,9 +251,10 @@ impl Machine {
         }
 
         if succeeded {
-            for (var, var_status) in cg.vars() {
-                let r = var_status.as_reg_type().reg_num();
-                let addr = self.ms.registers[r].clone();                
+            for (var, var_data) in cg.vars() {
+                let r = var_data.as_reg_type();
+                
+                let addr = self.ms[r].clone();
                 heap_locs.insert((*var).clone(), addr);
             }
 
@@ -536,7 +537,6 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-
             &FactInstruction::GetList(_, reg) => {
                 let addr = self.deref(self[reg].clone());
 
@@ -782,6 +782,8 @@ impl MachineState {
 
     fn execute_query_instr(&mut self, instr: &QueryInstruction) {
         match instr {
+            &QueryInstruction::GetVariable(norm, arg) =>
+                self[norm] = self.registers[arg].clone(),
             &QueryInstruction::PutConstant(_, ref constant, reg) =>
                 self[reg] = Addr::Con(constant.clone()),
             &QueryInstruction::PutList(_, reg) =>
@@ -813,6 +815,7 @@ impl MachineState {
                 match norm {
                     RegType::Perm(n) => {
                         let e = self.e;
+                        
                         self[norm] = Addr::StackCell(e, n);
                         self.registers[arg] = self[norm].clone();
                     },
