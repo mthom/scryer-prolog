@@ -27,43 +27,17 @@ impl<'a> CodeGenerator<'a> {
     fn update_var_count<Iter>(&mut self, iter: Iter)
         where Iter : Iterator<Item=TermRef<'a>>
     {
-        let mut var_count = HashMap::new();
-
         for term in iter {
             if let TermRef::Var(_, _, var) = term {
-                if self.marker.contains_var(var) {
-                    var_count.insert(var, 2);
-                    continue;
-                }
 
-                let entry = var_count.entry(var).or_insert(0);
+                let entry = self.var_count.entry(var).or_insert(0);
                 *entry += 1;
             }
         }
-
-        self.var_count = var_count;
     }
 
-    fn all_singleton_vars(&self, terms: &Vec<Box<Term>>) -> bool
-    {
-        for term in terms {
-            match term.as_ref() {
-                &Term::AnonVar => {},
-                &Term::Var(ref cell, ref var) if cell.get().is_temp() =>
-                    if self.var_count.get(var).unwrap() != &1 {
-                        return false;
-                    },
-                _ => return false
-            }
-        }
-
-        true
-    }
-
-    fn void_subterms<Target>(subterms: usize) -> Target
-        where Target: CompilationTarget<'a>
-    {
-        Target::to_void(subterms)
+    fn get_var_count(&self, var: &'a Var) -> usize {
+        *self.var_count.get(var).unwrap()
     }
 
     fn to_structure<Target>(&mut self,
@@ -83,7 +57,7 @@ impl<'a> CodeGenerator<'a> {
     fn to_constant<Target>(&mut self,
                            lvl: Level,
                            cell: &'a Cell<RegType>,
-                           term_loc: GenContext,                           
+                           term_loc: GenContext,
                            constant: &'a Constant,
                            target: &mut Vec<Target>)
                            -> Target
@@ -123,15 +97,44 @@ impl<'a> CodeGenerator<'a> {
         Target::clause_arg_to_instr(cell.get())
     }
 
+    fn flatten_void_instrs<Target>(target: Vec<Target>) -> Vec<Target>
+        where Target: CompilationTarget<'a>
+    {
+        let mut compressed_target = Vec::new();
+        let mut void_count = 0;
+
+        for term in target.into_iter() {
+            if Target::is_void_instr(&term) {
+                void_count += 1;
+            } else {
+                if void_count > 0 {
+                    compressed_target.push(Target::to_void(void_count));
+                    void_count = 0;
+                }
+
+                compressed_target.push(term);
+            }
+        }
+
+        if void_count > 0 {
+            compressed_target.push(Target::to_void(void_count));
+        }
+
+        compressed_target
+    }
+
     fn subterm_to_instr<Target>(&mut self,
                                 subterm: &'a Term,
                                 term_loc: GenContext,
+                                is_exposed: bool,
                                 target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
         match subterm {
-            &Term::AnonVar =>
+            &Term::AnonVar if is_exposed =>
                 self.marker.mark_anon_var(Level::Deep, target),
+            &Term::AnonVar =>
+                target.push(Target::to_void(1)),
             &Term::Cons(ref cell, _, _) | &Term::Clause(ref cell, _, _) => {
                 let instr = self.non_var_subterm(Level::Deep, term_loc, cell, target);
                 target.push(instr);
@@ -139,14 +142,15 @@ impl<'a> CodeGenerator<'a> {
             &Term::Constant(_, ref constant) =>
                 target.push(self.constant_subterm(constant)),
             &Term::Var(ref cell, ref var) =>
-                self.marker.mark_var(var, Level::Deep, cell, term_loc, target)
+                if is_exposed || self.get_var_count(var) > 1 {
+                    self.marker.mark_var(var, Level::Deep, cell, term_loc, target);
+                } else {
+                    target.push(Target::to_void(1));
+                }
         };
     }
 
-    fn compile_target<Target>(&mut self,
-                              term: &'a Term,
-                              term_loc: GenContext,
-                              has_exposed_vars: bool)
+    fn compile_target<Target>(&mut self, term: &'a Term, term_loc: GenContext, is_exposed: bool)
                               -> Vec<Target>
         where Target: CompilationTarget<'a>
     {
@@ -165,33 +169,26 @@ impl<'a> CodeGenerator<'a> {
 
                     target.push(str_instr);
 
-                    if !has_exposed_vars {
-                        if self.all_singleton_vars(terms) {
-                            target.push(Self::void_subterms(terms.len()));
-                            continue;
-                        }
-                    }
-
                     for subterm in terms {
-                        self.subterm_to_instr(subterm.as_ref(), term_loc, &mut target);
+                        self.subterm_to_instr(subterm.as_ref(), term_loc, is_exposed, &mut target);
                     }
                 },
                 TermRef::Cons(lvl, cell, head, tail) => {
                     let list_instr = self.to_list(lvl, term_loc, cell, &mut target);
                     target.push(list_instr);
 
-                    self.subterm_to_instr(head, term_loc, &mut target);
-                    self.subterm_to_instr(tail, term_loc, &mut target);
+                    self.subterm_to_instr(head, term_loc, is_exposed, &mut target);
+                    self.subterm_to_instr(tail, term_loc, is_exposed, &mut target);
                 },
                 TermRef::Constant(lvl @ Level::Shallow, cell, constant) => {
                     let const_instr = self.to_constant(lvl, cell, term_loc, constant, &mut target);
                     target.push(const_instr);
                 },
                 TermRef::AnonVar(lvl @ Level::Shallow) =>
-                    if has_exposed_vars {
-                        self.marker.mark_anon_var(lvl, &mut target);
-                    } else {
+                    if let GenContext::Head = term_loc {
                         self.marker.advance_arg();
+                    } else {
+                        self.marker.mark_anon_var(lvl, &mut target);
                     },
                 TermRef::Var(lvl @ Level::Shallow, ref cell, ref var) =>
                     self.marker.mark_var(var, lvl, cell, term_loc, &mut target),
@@ -199,10 +196,10 @@ impl<'a> CodeGenerator<'a> {
             };
         }
 
-        target
+        Self::flatten_void_instrs(target)
     }
 
-    fn collect_var_data(iter: ChunkedIterator<'a>) -> (VariableFixtures, bool)
+    fn collect_var_data(&mut self, iter: ChunkedIterator<'a>) -> (VariableFixtures<'a>, bool)
     {
         let mut vs = VariableFixtures::new();
         let has_deep_cut = iter.contains_deep_cut();
@@ -219,8 +216,10 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 match term_or_cut_ref {
-                    &TermOrCutRef::Term(term) =>
-                        vs.mark_vars_in_chunk(term, last_term_arity, chunk_num, term_loc),
+                    &TermOrCutRef::Term(term) => {
+                        self.update_var_count(term.breadth_first_iter());
+                        vs.mark_vars_in_chunk(term, last_term_arity, chunk_num, term_loc);
+                    },
                     _ => {}
                 };
             }
@@ -268,7 +267,7 @@ impl<'a> CodeGenerator<'a> {
     pub fn compile_rule(&mut self, rule: &'a Rule) -> Code
     {
         let iter = ChunkedIterator::from_rule(rule);
-        let (mut vs, deep_cuts) = Self::collect_var_data(iter);
+        let (mut vs, deep_cuts) = self.collect_var_data(iter);
         vs = self.marker.drain_var_data(vs);
 
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
@@ -285,17 +284,6 @@ impl<'a> CodeGenerator<'a> {
                 body.push(Line::Cut(CutInstruction::GetLevel));
             }
         }
-
-        match p1 {
-            &TermOrCut::Cut => {
-                let iter = p0.breadth_first_iter();
-                self.update_var_count(iter);
-            },
-            &TermOrCut::Term(ref p1) => {
-                let iter = p0.breadth_first_iter().chain(p1.breadth_first_iter());
-                self.update_var_count(iter);
-            }
-        };
 
         if p0.is_clause() {
             body.push(Line::Fact(self.compile_target(p0, GenContext::Head, false)));
@@ -404,10 +392,9 @@ impl<'a> CodeGenerator<'a> {
     pub fn compile_fact(&mut self, term: &'a Term) -> Code
     {
         let iter = ChunkedIterator::from_term(term, true);
-        let (vs, _) = Self::collect_var_data(iter);
+        let (vs, _) = self.collect_var_data(iter);
         self.marker.drain_var_data(vs);
 
-        self.update_var_count(term.breadth_first_iter());
         self.marker.advance(term);
 
         let mut code = Vec::new();
@@ -427,7 +414,6 @@ impl<'a> CodeGenerator<'a> {
     fn compile_internal_query(&mut self, term: &'a Term, term_loc: GenContext, index: usize) -> Code
     {
         self.marker.advance(term);
-        self.update_var_count(term.breadth_first_iter());
 
         let mut code = Vec::new();
 
@@ -444,17 +430,15 @@ impl<'a> CodeGenerator<'a> {
     pub fn compile_query(&mut self, term: &'a Term) -> Code
     {
         let iter = ChunkedIterator::from_term(term, true);
-        let (vs, _) = Self::collect_var_data(iter);
+        let (vs, _) = self.collect_var_data(iter);
 
         self.marker.drain_var_data(vs);
-
         self.marker.advance(term);
-        self.update_var_count(term.breadth_first_iter());
 
         let mut code = Vec::new();
 
         if term.is_clause() {
-            let compiled_query = self.compile_target(term, GenContext::Last(0), false);
+            let compiled_query = self.compile_target(term, GenContext::Last(0), true);
             code.push(Line::Query(compiled_query));
         }
 

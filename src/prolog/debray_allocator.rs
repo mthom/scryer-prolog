@@ -200,8 +200,7 @@ impl<'a> TermMarker<'a> {
                  }
         }
     }
-
-    // delete after anon_vars are handled by means of *_void stuff.
+    
     pub fn mark_anon_var<Target>(&mut self, lvl: Level, target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
@@ -324,10 +323,6 @@ impl<'a> TermMarker<'a> {
             self.record_register(var, r);
             self.in_use.insert(o);
         }
-    }
-
-    pub fn contains_var(&self, var: &'a Var) -> bool {
-        self.bindings.contains_key(var)
     }
 
     fn record_register(&mut self, var: &'a Var, r: RegType) {

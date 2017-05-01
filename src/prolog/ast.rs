@@ -90,11 +90,7 @@ impl VarReg {
         match self {
             VarReg::ArgAndNorm(reg, _) | VarReg::Norm(reg) => reg
         }
-    }
-    
-    pub fn is_temp(self) -> bool {
-        !self.norm().is_perm()
-    }
+    }   
 }
 
 impl Default for VarReg {

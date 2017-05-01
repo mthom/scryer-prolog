@@ -11,6 +11,8 @@ pub trait CompilationTarget<'a> {
     fn to_structure(Level, Atom, usize, RegType) -> Self;
     fn to_void(usize) -> Self;
 
+    fn is_void_instr(&self) -> bool;
+    
     fn constant_subterm(Constant) -> Self;
 
     fn argument_to_variable(RegType, usize) -> Self;
@@ -47,6 +49,13 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         FactInstruction::UnifyVoid(subterms)
     }
 
+    fn is_void_instr(&self) -> bool {
+        match self {
+            &FactInstruction::UnifyVoid(_) => true,
+            _ => false
+        }
+    }
+    
     fn constant_subterm(constant: Constant) -> Self {
         FactInstruction::UnifyConstant(constant)
     }
@@ -99,6 +108,13 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         QueryInstruction::SetVoid(subterms)
     }
 
+    fn is_void_instr(&self) -> bool {
+        match self {
+            &QueryInstruction::SetVoid(_) => true,
+            _ => false
+        }
+    }
+    
     fn constant_subterm(constant: Constant) -> Self {
         QueryInstruction::SetConstant(constant)
     }
