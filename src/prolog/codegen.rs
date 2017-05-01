@@ -29,7 +29,6 @@ impl<'a> CodeGenerator<'a> {
     {
         for term in iter {
             if let TermRef::Var(_, _, var) = term {
-
                 let entry = self.var_count.entry(var).or_insert(0);
                 *entry += 1;
             }
