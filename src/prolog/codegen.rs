@@ -96,30 +96,17 @@ impl<'a> CodeGenerator<'a> {
         Target::clause_arg_to_instr(cell.get())
     }
 
-    fn flatten_void_instrs<Target>(target: Vec<Target>) -> Vec<Target>
+    fn add_or_increment_void_instr<Target>(target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
-    {
-        let mut compressed_target = Vec::new();
-        let mut void_count = 0;
-
-        for term in target.into_iter() {
-            if Target::is_void_instr(&term) {
-                void_count += 1;
-            } else {
-                if void_count > 0 {
-                    compressed_target.push(Target::to_void(void_count));
-                    void_count = 0;
-                }
-
-                compressed_target.push(term);
+    {        
+        if let Some(ref mut instr) = target.last_mut() {
+            if Target::is_void_instr(&*instr) {
+                Target::incr_void_instr(instr);
+                return;
             }
         }
 
-        if void_count > 0 {
-            compressed_target.push(Target::to_void(void_count));
-        }
-
-        compressed_target
+        target.push(Target::to_void(1));
     }
 
     fn subterm_to_instr<Target>(&mut self,
@@ -133,7 +120,7 @@ impl<'a> CodeGenerator<'a> {
             &Term::AnonVar if is_exposed =>
                 self.marker.mark_anon_var(Level::Deep, target),
             &Term::AnonVar =>
-                target.push(Target::to_void(1)),
+                Self::add_or_increment_void_instr(target),
             &Term::Cons(ref cell, _, _) | &Term::Clause(ref cell, _, _) => {
                 let instr = self.non_var_subterm(Level::Deep, term_loc, cell, target);
                 target.push(instr);
@@ -144,7 +131,7 @@ impl<'a> CodeGenerator<'a> {
                 if is_exposed || self.get_var_count(var) > 1 {
                     self.marker.mark_var(var, Level::Deep, cell, term_loc, target);
                 } else {
-                    target.push(Target::to_void(1));
+                    Self::add_or_increment_void_instr(target);
                 }
         };
     }
@@ -195,7 +182,7 @@ impl<'a> CodeGenerator<'a> {
             };
         }
 
-        Self::flatten_void_instrs(target)
+        target
     }
 
     fn collect_var_data(&mut self, iter: ChunkedIterator<'a>) -> (VariableFixtures<'a>, bool)

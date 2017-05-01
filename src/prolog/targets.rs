@@ -9,9 +9,10 @@ pub trait CompilationTarget<'a> {
     fn to_constant(Level, Constant, RegType) -> Self;
     fn to_list(Level, RegType) -> Self;
     fn to_structure(Level, Atom, usize, RegType) -> Self;
+    
     fn to_void(usize) -> Self;
-
     fn is_void_instr(&self) -> bool;
+    fn incr_void_instr(&mut self);
     
     fn constant_subterm(Constant) -> Self;
 
@@ -53,6 +54,13 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         match self {
             &FactInstruction::UnifyVoid(_) => true,
             _ => false
+        }
+    }
+    
+    fn incr_void_instr(&mut self) {
+        match self {
+            &mut FactInstruction::UnifyVoid(ref mut incr) => *incr += 1,
+            _ => {}
         }
     }
     
@@ -112,6 +120,13 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         match self {
             &QueryInstruction::SetVoid(_) => true,
             _ => false
+        }
+    }
+
+    fn incr_void_instr(&mut self) {
+        match self {
+            &mut QueryInstruction::SetVoid(ref mut incr) => *incr += 1,
+            _ => {}
         }
     }
     
