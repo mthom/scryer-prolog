@@ -1,5 +1,5 @@
+use prolog::allocator::*;
 use prolog::ast::*;
-use prolog::debray_allocator::*;
 use prolog::fixtures::*;
 use prolog::indexing::*;
 use prolog::iterators::*;
@@ -9,21 +9,40 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::vec::Vec;
 
-pub struct CodeGenerator<'a> {
-    marker: TermMarker<'a>,
+pub struct CodeGenerator<'a, TermMarker> {
+    marker: TermMarker,
     var_count: HashMap<&'a Var, usize>
 }
 
-impl<'a> CodeGenerator<'a> {
+pub enum EvalResult<'a> {
+    EntryFailure,
+    EntrySuccess,
+    InitialQuerySuccess(AllocVarDict<'a>, HeapVarDict<'a>),
+    QueryFailure,
+    SubsequentQuerySuccess,
+}
+
+impl<'a> EvalResult<'a> {
+    #[allow(dead_code)]
+    pub fn failed_query(&self) -> bool {
+        if let &EvalResult::QueryFailure = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker> {
     pub fn new() -> Self {
-        CodeGenerator { marker: TermMarker::new(),
+        CodeGenerator { marker: Allocator::new(),
                         var_count: HashMap::new() }
     }
 
-    pub fn vars(&self) -> &HashMap<&Var, VarData> {
-        &self.marker.bindings
+    pub fn take_vars(self) -> AllocVarDict<'a> {
+        self.marker.take_bindings()
     }
-
+    
     fn update_var_count<Iter>(&mut self, iter: Iter)
         where Iter : Iterator<Item=TermRef<'a>>
     {
@@ -98,7 +117,7 @@ impl<'a> CodeGenerator<'a> {
 
     fn add_or_increment_void_instr<Target>(target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
-    {        
+    {
         if let Some(ref mut instr) = target.last_mut() {
             if Target::is_void_instr(&*instr) {
                 Target::incr_void_instr(instr);
@@ -232,76 +251,30 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn lco(body: &mut Code, rule: &'a Rule) -> usize
+    fn lco(body: &mut Code, toc: &TermOrCut) -> usize
     {
-        let last_arity = rule.last_clause().arity();
+        let last_arity = toc.arity();
         let mut dealloc_index = body.len() - 1;
 
-        match rule.last_clause() {
-              &TermOrCut::Term(Term::Clause(_, ref name, _))
-            | &TermOrCut::Term(Term::Constant(_, Constant::Atom(ref name))) => {
-                if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
-                    *ctrl = ControlInstruction::Execute(name.clone(), last_arity);
-                }
-            },
+        match toc {
+            &TermOrCut::Term(Term::Clause(_, ref name, _))
+                | &TermOrCut::Term(Term::Constant(_, Constant::Atom(ref name))) => {
+                    if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
+                        *ctrl = ControlInstruction::Execute(name.clone(), last_arity);
+                    }
+                },
             _ => dealloc_index = body.len()
         };
 
         dealloc_index
     }
 
-    pub fn compile_rule(&mut self, rule: &'a Rule) -> Code
+    fn compile_seq(&mut self,
+                   clauses: &'a [TermOrCut],
+                   vs: &VariableFixtures<'a>,
+                   body: &mut Code,
+                   is_exposed: bool)
     {
-        let iter = ChunkedIterator::from_rule(rule);
-        let (mut vs, deep_cuts) = self.collect_var_data(iter);
-        vs = self.marker.drain_var_data(vs);
-
-        let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
-
-        self.marker.advance(p0);
-
-        let perm_vars = vs.vars_above_threshold(0) + deep_cuts as usize;
-        let mut body  = Vec::new();
-
-        if clauses.len() > 0 {
-            body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
-
-            if deep_cuts {
-                body.push(Line::Cut(CutInstruction::GetLevel));
-            }
-        }
-
-        if p0.is_clause() {
-            body.push(Line::Fact(self.compile_target(p0, GenContext::Head, false)));
-        }
-
-        match p1 {
-            &TermOrCut::Cut => {
-                let term = if clauses.is_empty() {
-                    Terminal::Terminal
-                } else {
-                    Terminal::Non
-                };
-
-                body.push(Line::Cut(CutInstruction::NeckCut(term)));
-            },
-            &TermOrCut::Term(ref p1) => {
-                self.marker.advance(p1);
-
-                if p1.is_clause() {
-                    let term_loc = if p1.is_callable() {
-                        GenContext::Last(0)
-                    } else {
-                        GenContext::Mid(0)
-                    };
-
-                    body.push(Line::Query(self.compile_target(p1, term_loc, false)));
-                }
-
-                Self::add_conditional_call(&mut body, p1, perm_vars);
-            }
-        };
-
         let iter = ChunkedIterator::from_term_sequence(clauses);
 
         for (chunk_num, (_, terms)) in iter.enumerate() {
@@ -315,17 +288,114 @@ impl<'a> CodeGenerator<'a> {
                         vec![Line::Cut(CutInstruction::Cut(Terminal::Terminal))],
                     &TermOrCutRef::Term(term) if i + 1 < terms.len() => {
                         let num_vars = vs.vars_above_threshold(i + 1);
-                        self.compile_internal_query(term, GenContext::Mid(chunk_num), num_vars)
+                        self.compile_internal_query(term,
+                                                    GenContext::Mid(chunk_num),
+                                                    num_vars,
+                                                    is_exposed)
                     },
                     &TermOrCutRef::Term(term) => {
                         let num_vars = vs.vars_above_threshold(i + 1);
-                        self.compile_internal_query(term, GenContext::Last(chunk_num), num_vars)
+                        self.compile_internal_query(term,
+                                                    GenContext::Last(chunk_num),
+                                                    num_vars,
+                                                    is_exposed)
                     }
                 };
 
                 body.append(&mut body_appendage);
             }
         }
+    }
+
+    fn compile_seq_prelude(&mut self,
+                           num_clauses: usize,
+                           vs: &VariableFixtures<'a>,
+                           deep_cuts: bool,
+                           body: &mut Code)
+                           -> usize
+    {
+        let perm_vars = vs.vars_above_threshold(0) + deep_cuts as usize;
+
+        if num_clauses > 0 {
+            body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
+
+            if deep_cuts {
+                body.push(Line::Cut(CutInstruction::GetLevel));
+            }
+        }
+
+        perm_vars
+    }
+
+    fn compile_neck_cut_or(&mut self,
+                           p1: &'a TermOrCut,
+                           clauses: &'a [TermOrCut],
+                           body: &mut Code,
+                           perm_vars: usize,
+                           is_exposed: bool)
+    {
+        match p1 {
+            &TermOrCut::Cut => {
+                let term = if clauses.is_empty() {
+                    Terminal::Terminal
+                } else {
+                    Terminal::Non
+                };
+
+                body.push(Line::Cut(CutInstruction::NeckCut(term)));
+            },
+            &TermOrCut::Term(ref p1) => {
+                self.marker.advance(GenContext::Head, p1);
+
+                if p1.is_clause() {
+                    let term_loc = if p1.is_callable() {
+                        GenContext::Last(0)
+                    } else {
+                        GenContext::Mid(0)
+                    };
+
+                    body.push(Line::Query(self.compile_target(p1, term_loc, is_exposed)));
+                }
+
+                Self::add_conditional_call(body, p1, perm_vars);
+            }
+        };
+    }
+
+    fn compile_cleanup(body: &mut Code, num_clauses: usize, toc: &TermOrCut)
+    {
+        let dealloc_index = Self::lco(body, toc);
+
+        if num_clauses > 0 {
+            body.insert(dealloc_index, Line::Control(ControlInstruction::Deallocate));
+        }
+    }
+
+    pub fn compile_rule<'b: 'a>(&mut self, rule: &'b Rule) -> Code
+    {
+        let iter = ChunkedIterator::from_rule(rule);
+        let (mut vs, deep_cuts) = self.collect_var_data(iter);
+        vs = self.marker.drain_var_data(vs);
+
+        let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
+        let mut body = Vec::new();
+
+        self.marker.advance(GenContext::Head, p0);
+
+        let perm_vars = self.compile_seq_prelude(clauses.len(), &vs, deep_cuts, &mut body);
+
+        if p0.is_clause() {
+            body.push(Line::Fact(self.compile_target(p0, GenContext::Head, false)));
+        }
+
+        let clauses_slice = if clauses.len() > 1 {
+            &clauses[1 .. ]
+        } else {
+            &[]
+        };
+
+        self.compile_neck_cut_or(p1, clauses_slice, &mut body, perm_vars, false);
+        self.compile_seq(clauses, &vs, &mut body, false);
 
         if clauses.len() > 0 {
             let mut index = body.len() - 1;
@@ -335,15 +405,11 @@ impl<'a> CodeGenerator<'a> {
             }
 
             if let &mut Line::Query(ref mut query) = &mut body[index] {
-                vs.mark_unsafe_query_vars(p0, query);
+                vs.mark_unsafe_vars_in_rule(p0, query);
             }
         }
 
-        let dealloc_index = Self::lco(&mut body, &rule);
-
-        if clauses.len() > 0 {
-            body.insert(dealloc_index, Line::Control(ControlInstruction::Deallocate));
-        }
+        Self::compile_cleanup(&mut body, clauses.len(), rule.last_clause());
 
         body
     }
@@ -352,7 +418,7 @@ impl<'a> CodeGenerator<'a> {
     {
         let mut unsafe_vars = HashMap::new();
 
-        for var_status in self.marker.bindings.values() {
+        for var_status in self.marker.bindings().values() {
             unsafe_vars.insert(var_status.as_reg_type(), false);
         }
 
@@ -375,13 +441,13 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn compile_fact(&mut self, term: &'a Term) -> Code
+    pub fn compile_fact<'b: 'a>(&mut self, term: &'b Term) -> Code
     {
         let iter = ChunkedIterator::from_term(term, true);
         let (vs, _) = self.collect_var_data(iter);
         self.marker.drain_var_data(vs);
 
-        self.marker.advance(term);
+        self.marker.advance(GenContext::Head, term);
 
         let mut code = Vec::new();
 
@@ -397,14 +463,19 @@ impl<'a> CodeGenerator<'a> {
         code
     }
 
-    fn compile_internal_query(&mut self, term: &'a Term, term_loc: GenContext, index: usize) -> Code
+    fn compile_internal_query(&mut self,
+                              term: &'a Term,
+                              term_loc: GenContext,
+                              index: usize,
+                              is_exposed: bool)
+                              -> Code
     {
-        self.marker.advance(term);
+        self.marker.advance(term_loc, term);
 
         let mut code = Vec::new();
 
         if term.is_clause() {
-            let compiled_query = Line::Query(self.compile_target(term, term_loc, false));
+            let compiled_query = Line::Query(self.compile_target(term, term_loc, is_exposed));
             code.push(compiled_query);
         }
 
@@ -413,23 +484,39 @@ impl<'a> CodeGenerator<'a> {
         code
     }
 
-    pub fn compile_query(&mut self, term: &'a Term) -> Code
+    pub fn compile_query(&mut self, query: &'a Vec<TermOrCut>) -> Code
     {
-        let iter = ChunkedIterator::from_term(term, true);
-        let (vs, _) = self.collect_var_data(iter);
+        let iter = ChunkedIterator::from_term_sequence(query);
+        let (mut vs, deep_cuts) = self.collect_var_data(iter);
+        let p1 = query.first().unwrap();
 
-        self.marker.drain_var_data(vs);
-        self.marker.advance(term);
+        vs = self.marker.drain_var_data(vs);
 
-        let mut code = Vec::new();
+        let mut code  = Vec::new();
+        let perm_vars = self.compile_seq_prelude(query.len() - 1,
+                                                 &vs,
+                                                 deep_cuts,
+                                                 &mut code);
 
-        if term.is_clause() {
-            let compiled_query = self.compile_target(term, GenContext::Last(0), true);
-            code.push(Line::Query(compiled_query));
+        let query_slice = if query.len() > 1 {
+            &query[1 .. ]
+        } else {
+            &[]
+        };
+
+        self.compile_neck_cut_or(p1, query_slice, &mut code, perm_vars, true);
+        self.compile_seq(query_slice, &vs, &mut code, true);
+
+        for line in code.iter_mut() {
+            match line {
+                &mut Line::Query(ref mut query) =>
+                    vs.mark_unsafe_vars_in_query(query),
+                _ => {}
+            };
         }
-
-        Self::add_conditional_call(&mut code, term, 0);
-
+        
+        Self::compile_cleanup(&mut code, query.len() - 1, query.last().unwrap());        
+        
         code
     }
 
@@ -456,12 +543,12 @@ impl<'a> CodeGenerator<'a> {
         subseqs
     }
 
-    fn compile_pred_subseq(&mut self, clauses: &'a [PredicateClause]) -> Code
+    fn compile_pred_subseq<'b: 'a>(&mut self, clauses: &'b [PredicateClause]) -> Code
     {
         let mut code_body = Vec::new();
         let mut code_offsets = CodeOffsets::new();
 
-        let multi_clause = clauses.len() > 1;
+        let num_clauses  = clauses.len();
 
         for (i, clause) in clauses.iter().enumerate() {
             self.marker.reset();
@@ -473,10 +560,10 @@ impl<'a> CodeGenerator<'a> {
                     self.compile_rule(rule)
             };
 
-            if multi_clause {
+            if num_clauses > 1 {
                 let choice = match i {
                     0 => ChoiceInstruction::TryMeElse(clause_code.len() + 1),
-                    _ if i == clauses.len() - 1 => ChoiceInstruction::TrustMe,
+                    _ if i == num_clauses - 1 => ChoiceInstruction::TrustMe,
                     _ => ChoiceInstruction::RetryMeElse(clause_code.len() + 1)
                 };
 
@@ -497,10 +584,10 @@ impl<'a> CodeGenerator<'a> {
         code
     }
 
-    pub fn compile_predicate(&mut self, clauses: &'a Vec<PredicateClause>) -> Code
+    pub fn compile_predicate<'b: 'a>(&mut self, clauses: &'b Vec<PredicateClause>) -> Code
     {
         let mut code   = Vec::new();
-        let split_pred = Self::split_predicate(clauses);
+        let split_pred = Self::split_predicate(&clauses);
         let multi_seq  = split_pred.len() > 1;
 
         for (l, r) in split_pred {

@@ -1,3 +1,4 @@
+use prolog::allocator::*;
 use prolog::ast::*;
 use prolog::fixtures::*;
 use prolog::targets::*;
@@ -5,25 +6,15 @@ use prolog::targets::*;
 use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap};
 
-pub struct TermMarker<'a> {
-    pub bindings: HashMap<&'a Var, VarData>,
+pub struct DebrayAllocator<'a> {
+    bindings: HashMap<&'a Var, VarData>,
     arg_c:    usize,
     temp_lb:  usize,
     contents: HashMap<usize, &'a Var>,
     in_use:   BTreeSet<usize>,
 }
 
-impl<'a> TermMarker<'a> {
-    pub fn new() -> TermMarker<'a> {
-        TermMarker {
-            arg_c:   1,
-            temp_lb: 1,
-            bindings: HashMap::new(),
-            contents: HashMap::new(),
-            in_use: BTreeSet::new()
-        }
-    }
-
+impl<'a> DebrayAllocator<'a> {    
     fn occurs_shallowly_in_head(&self, var: &'a Var, r: usize) -> bool
     {
         match self.bindings.get(var).unwrap() {
@@ -31,25 +22,6 @@ impl<'a> TermMarker<'a> {
                 tvd.use_set.contains(&(GenContext::Head, r)),
             _ => false
         }
-    }
-
-    pub fn drain_var_data(&mut self, vs: VariableFixtures<'a>) -> VariableFixtures<'a>
-    {
-        let mut perm_vs = VariableFixtures::new();
-
-        for (var, (var_status, cells)) in vs.into_iter() {
-            match var_status {
-                VarStatus::Temp(chunk_num, tvd) => {
-                    self.bindings.insert(var, VarData::Temp(chunk_num, 0, tvd));
-                },
-                VarStatus::Perm(_) => {
-                    self.bindings.insert(var, VarData::Perm(0));
-                    perm_vs.insert(var, (var_status, cells));
-                }
-            };
-        }
-
-        perm_vs
     }
 
     fn alloc_with_cr(&self, var: &'a Var) -> usize
@@ -186,38 +158,6 @@ impl<'a> TermMarker<'a> {
         }
     }
 
-    fn get(&self, var: &'a Var) -> RegType {
-        self.bindings.get(var).unwrap().as_reg_type()
-    }
-
-    fn in_place(&self, var: &'a Var, term_loc: GenContext, r: RegType, k: usize) -> bool
-    {
-        match term_loc {
-            GenContext::Head if !r.is_perm() => r.reg_num() == k,
-            _ => match self.bindings.get(var).unwrap() {
-                     &VarData::Temp(_, o, _) if r.reg_num() == k => o == k,
-                     _ => false
-                 }
-        }
-    }
-    
-    pub fn mark_anon_var<Target>(&mut self, lvl: Level, target: &mut Vec<Target>)
-        where Target: CompilationTarget<'a>
-    {
-        let r = RegType::Temp(self.alloc_reg_to_non_var());
-
-        match lvl {
-            Level::Shallow => {
-                let k = self.arg_c;
-                self.arg_c += 1;
-
-                target.push(Target::argument_to_variable(r, k));
-            },
-            Level::Deep =>
-                target.push(Target::subterm_to_variable(r))
-        };
-    }
-
     fn alloc_reg_to_non_var(&mut self) -> usize
     {
         let mut final_index = 0;
@@ -234,11 +174,51 @@ impl<'a> TermMarker<'a> {
         final_index
     }
 
-    pub fn mark_non_var<Target>(&mut self,
-                                lvl: Level,
-                                term_loc: GenContext,
-                                cell: &Cell<RegType>,
-                                target: &mut Vec<Target>)
+    fn in_place(&self, var: &'a Var, term_loc: GenContext, r: RegType, k: usize) -> bool
+    {
+        match term_loc {
+            GenContext::Head if !r.is_perm() => r.reg_num() == k,
+            _ => match self.bindings().get(var).unwrap() {
+                     &VarData::Temp(_, o, _) if r.reg_num() == k => o == k,
+                     _ => false
+                 }
+        }
+    }    
+}
+
+impl<'a> Allocator<'a> for DebrayAllocator<'a>
+{
+    fn new() -> DebrayAllocator<'a> {
+        DebrayAllocator {
+            arg_c:   1,
+            temp_lb: 1,
+            bindings: HashMap::new(),
+            contents: HashMap::new(),
+            in_use: BTreeSet::new()
+        }
+    }
+    
+    fn mark_anon_var<Target>(&mut self, lvl: Level, target: &mut Vec<Target>)
+        where Target: CompilationTarget<'a>
+    {
+        let r = RegType::Temp(self.alloc_reg_to_non_var());
+
+        match lvl {
+            Level::Deep => target.push(Target::subterm_to_variable(r)),
+            Level::Shallow => {
+                let k = self.arg_c;
+                self.arg_c += 1;
+
+                target.push(Target::argument_to_variable(r, k));
+            }
+        };
+    }
+
+    fn mark_non_var<Target>(&mut self,
+                            lvl: Level,
+                            term_loc: GenContext,
+                            cell: &Cell<RegType>,
+                            target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
         let r = cell.get();
@@ -262,12 +242,12 @@ impl<'a> TermMarker<'a> {
         }
     }
 
-    pub fn mark_var<Target>(&mut self,
-                            var: &'a Var,
-                            lvl: Level,
-                            cell: &'a Cell<VarReg>,
-                            term_loc: GenContext,
-                            target: &mut Vec<Target>)
+    fn mark_var<Target>(&mut self,
+                        var: &'a Var,
+                        lvl: Level,
+                        cell: &'a Cell<VarReg>,
+                        term_loc: GenContext,
+                        target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
         let (r, is_new_var) = match self.get(var) {
@@ -311,7 +291,7 @@ impl<'a> TermMarker<'a> {
                     }
                 } else {
                     target.push(Target::subterm_to_variable(r));
-                },                    
+                },
             Level::Deep =>
                 target.push(Target::subterm_to_value(r))
         };
@@ -325,30 +305,35 @@ impl<'a> TermMarker<'a> {
         }
     }
 
-    fn record_register(&mut self, var: &'a Var, r: RegType) {
-        match self.bindings.get_mut(var).unwrap() {
-            &mut VarData::Temp(_, ref mut s, _) => *s = r.reg_num(),
-            &mut VarData::Perm(ref mut s) => *s = r.reg_num()
-        }
-    }
-
-    pub fn advance_arg(&mut self) {
-        self.arg_c += 1;
-    }
-
-    pub fn advance(&mut self, term: &'a Term) {
-        self.arg_c = 1;
-        self.temp_lb = term.arity() + 1;
-    }
-
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.bindings.clear();
         self.contents.clear();
         self.in_use.clear();
     }
 
-    pub fn reset_contents(&mut self) {
+    fn reset_contents(&mut self) {
         self.contents.clear();
         self.in_use.clear();
+    }
+    
+    fn advance_arg(&mut self) {
+        self.arg_c += 1;
+    }
+
+    fn bindings(&self) -> &AllocVarDict<'a> {
+        &self.bindings
+    }
+    
+    fn bindings_mut(&mut self) -> &mut AllocVarDict<'a> {
+        &mut self.bindings
+    }
+
+    fn take_bindings(self) -> AllocVarDict<'a> {
+        self.bindings
+    }
+    
+    fn advance(&mut self, _: GenContext, term: &'a Term) {
+        self.arg_c   = 1;
+        self.temp_lb = term.arity() + 1;
     }
 }

@@ -5,7 +5,7 @@ use std::cell::Cell;
 grammar;
 
 pub TopLevel: TopLevel = {
-    "?-" <t:Term> "." => TopLevel::Query(t),
+    "?-" <q:Query> "." => TopLevel::Query(q),
     <Predicate> => TopLevel::Predicate(<>),
     <Rule>  "." => TopLevel::Rule(<>),
     <Term>  "." => TopLevel::Fact(<>)
@@ -54,6 +54,14 @@ Predicate : Vec<PredicateClause> = {
 PredicateClause : PredicateClause = {
     <Rule> "." => PredicateClause::Rule(<>),
     <Term> "." => PredicateClause::Fact(<>)
+};
+
+Query : Vec<TermOrCut> = {
+    <tcs: (<TermOrCut> ",")*> <tc: TermOrCut> => {
+        let mut tcs = tcs;
+        tcs.push(tc);
+        tcs
+    }        
 };
 
 Rule : Rule = {

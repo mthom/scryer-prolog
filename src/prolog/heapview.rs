@@ -30,6 +30,7 @@ impl TToken {
 
 #[derive(Clone, Copy)]
 enum CellRef<'a> {
+    Lis(usize),
     View(CellView<'a>),
     Redirect(usize),
     TToken(TToken)
@@ -56,7 +57,9 @@ impl<'a> HeapCellViewer<'a> {
             match focus {
                 &Addr::Con(ref c) =>
                     return CellRef::View(CellView::Con(c)),
-                &Addr::Lis(hc) | &Addr::HeapCell(hc) | &Addr::Str(hc) =>
+                &Addr::Lis(hc) =>
+                    return CellRef::Lis(hc),
+                &Addr::HeapCell(hc) | &Addr::Str(hc) =>
                     return CellRef::Redirect(hc),
                 &Addr::StackCell(fr, sc) => {
                     match &self.and_stack[fr][sc] {
@@ -108,22 +111,25 @@ impl<'a> HeapCellViewer<'a> {
         }
     }
 
+    fn handle_list(&mut self, focus: usize) -> CellView<'a> {
+        self.state_stack.push(CellRef::TToken(TToken::RSBracket));
+
+        self.state_stack.push(CellRef::Redirect(focus + 1));
+        self.state_stack.push(CellRef::TToken(TToken::Bar));
+        self.state_stack.push(CellRef::Redirect(focus));
+
+        let len = self.state_stack.len() - 4;
+
+        return CellView::TToken(TToken::LSBracket(len));
+    }
+    
     fn from_heap(&mut self, mut focus: usize) -> CellView<'a> {
         loop {
             match &self.heap[focus] {
                 &HeapCellValue::Con(ref c) =>
                     return CellView::Con(c),
-                &HeapCellValue::Lis(a) => {
-                    self.state_stack.push(CellRef::TToken(TToken::RSBracket));
-
-                    self.state_stack.push(CellRef::Redirect(a + 1));
-                    self.state_stack.push(CellRef::TToken(TToken::Bar));
-                    self.state_stack.push(CellRef::Redirect(a));
-
-                    let len = self.state_stack.len() - 4;
-
-                    return CellView::TToken(TToken::LSBracket(len));
-                },
+                &HeapCellValue::Lis(a) =>
+                    return self.handle_list(a),                
                 &HeapCellValue::NamedStr(arity, ref name) => {
                     self.state_stack.push(CellRef::TToken(TToken::RRBracket));
 
@@ -146,6 +152,7 @@ impl<'a> HeapCellViewer<'a> {
                 },
                 &HeapCellValue::Ref(Ref::StackCell(fr, sc)) => {
                     match self.cell_ref_from_addr(&self.and_stack[fr][sc]) {
+                        CellRef::Lis(hc)         => return self.handle_list(hc),
                         CellRef::View(cell_view) => return cell_view,
                         CellRef::Redirect(hc)    => focus = hc,
                         CellRef::TToken(token)   => return CellView::TToken(token)
@@ -160,6 +167,8 @@ impl<'a> HeapCellViewer<'a> {
     fn follow(&mut self, cell_ref: CellRef<'a>) -> CellView<'a>
     {
         match cell_ref {
+            CellRef::Lis(hc) =>
+                self.handle_list(hc),
             CellRef::Redirect(hc) =>
                 self.from_heap(hc),
             CellRef::View(cell_view) =>

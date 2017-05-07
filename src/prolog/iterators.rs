@@ -230,7 +230,7 @@ impl<'a> ChunkedIterator<'a>
         }
     }
 
-    pub fn from_term_sequence(terms: &'a Vec<TermOrCut>) -> Self
+    pub fn from_term_sequence(terms: &'a [TermOrCut]) -> Self
     {
         let iter = terms.iter().map(|c| {
             match c {

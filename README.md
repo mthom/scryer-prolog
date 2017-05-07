@@ -8,11 +8,11 @@ pure Prolog.
 
 ## Progress
 
-Prolog is implemented as a simple REPL. It is without without meta- or
+Prolog is implemented as a simple REPL. It is without meta- or
 extra-logical operators, or side effects of any kind, with the lone
 exception of cut. In terms of the tutorial pacing, the work covers in
 some form all of the WAM book, including lists, cuts, Debray
-allocation, and indexing.
+allocation, indexing, and conjunctive queries.
 
 ## Tutorial
 To enter a multi-clause predicate, the brackets ":{" and "}:" are used
@@ -75,6 +75,29 @@ X = c
 Press ; to continue or . to abort.
 ;
 no
+```
+and so do conjunctive queries:
+
+```
+prolog> ?- member([X,X],[a,b,c,[d,d],[e,d]]), member(X, [a,b,c,d,e,f,g]), member(Y, [X, a, b, c, d]).
+yes
+Y = d
+X = d
+Press ; to continue or . to abort.
+Y = a
+X = d
+Press ; to continue or . to abort.
+Y = b
+X = d
+Press ; to continue or . to abort.
+Y = c
+X = d
+Press ; to continue or . to abort.
+Y = d
+X = d
+Press ; to continue or . to abort.
+no
+prolog>
 ```
 
 Note that the values of variables belonging to successful queries are

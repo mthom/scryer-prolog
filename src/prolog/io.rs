@@ -1,6 +1,6 @@
 use prolog::ast::*;
 use prolog::codegen::*;
-use prolog::prolog_parser::*;
+use prolog::debray_allocator::*;
 use prolog::machine::*;
 
 use termion::raw::IntoRawMode;
@@ -257,13 +257,12 @@ pub fn read() -> String {
     result
 }
 
-pub fn eval(wam: &mut Machine, buffer: &str) -> EvalResult
+pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalResult<'b>
 {
-    let result = parse_TopLevel(buffer);
-    let mut cg = CodeGenerator::new();
+    match tl {
+        &TopLevel::Predicate(ref clauses) => {
+            let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
-    match &result {
-        &Ok(TopLevel::Predicate(ref clauses)) => {
             if is_consistent(clauses) {
                 let compiled_pred = cg.compile_predicate(clauses);
                 wam.add_predicate(clauses, compiled_pred);
@@ -277,30 +276,34 @@ Each predicate must have the same name and arity.";
                 EvalResult::EntryFailure
             }
         },
-        &Ok(TopLevel::Fact(ref fact)) => {
-            let compiled_fact = cg.compile_fact(&fact);
-            wam.add_fact(fact, compiled_fact);            
+        &TopLevel::Fact(ref fact) => {
+            let mut cg = CodeGenerator::<DebrayAllocator>::new();
+
+            let compiled_fact = cg.compile_fact(fact);
+            wam.add_fact(fact, compiled_fact);
+
             EvalResult::EntrySuccess
         },
-        &Ok(TopLevel::Rule(ref rule)) => {
-            let compiled_rule = cg.compile_rule(&rule);
-            wam.add_rule(rule, compiled_rule);            
+        &TopLevel::Rule(ref rule) => {
+            let mut cg = CodeGenerator::<DebrayAllocator>::new();
+
+            let compiled_rule = cg.compile_rule(rule);
+            wam.add_rule(rule, compiled_rule);
+
             EvalResult::EntrySuccess
         },
-        &Ok(TopLevel::Query(ref query)) => {
-            let compiled_query = cg.compile_query(&query);
-            wam.run_query(compiled_query, &cg)
-        },
-        &Err(_) => {
-            println!("Grammatical error of some kind!");
-            EvalResult::EntryFailure
+        &TopLevel::Query(ref query) => {
+            let mut cg = CodeGenerator::<DebrayAllocator>::new();
+
+            let compiled_query = cg.compile_query(query);
+            wam.submit_query(compiled_query, cg.take_vars())
         }
     }
 }
 
 pub fn print(wam: &mut Machine, result: EvalResult) {
     match result {
-        EvalResult::InitialQuerySuccess(heap_locs) => {
+        EvalResult::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
             println!("yes");
 
             if heap_locs.is_empty() {
@@ -324,14 +327,14 @@ pub fn print(wam: &mut Machine, result: EvalResult) {
                     for c in stdin.keys() {
                         match c.unwrap() {
                             Key::Char(';') => {
-                                result = wam.continue_query();
+                                result = wam.continue_query(&alloc_locs, &mut heap_locs);
                                 break;
                             },
                             Key::Char('.') =>
                                 break 'outer,
                             _ => {}
                         }
-                    };
+                    }
 
                     if let &EvalResult::QueryFailure = &result {
                         write!(stdout, "no\n\r").unwrap();

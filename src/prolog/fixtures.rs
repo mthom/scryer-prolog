@@ -8,6 +8,9 @@ use std::vec::Vec;
 
 pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
 
+pub type HeapVarDict<'a>  = HashMap<&'a Var, Addr>;
+pub type AllocVarDict<'a> = HashMap<&'a Var, VarData>;
+
 pub struct TempVarData {
     last_term_arity: usize,
     pub use_set: OccurrenceSet,
@@ -232,26 +235,8 @@ impl<'a> VariableFixtures<'a>
         }
     }
 
-    pub fn mark_unsafe_query_vars(&self, head: &Term, query: &mut CompiledQuery)
+    fn mark_unsafe_vars(&self, unsafe_vars: &mut HashMap<RegType, bool>, query: &mut CompiledQuery)
     {
-        let mut unsafe_vars = HashMap::new();
-
-        for &(_, ref cb) in self.values() {
-            if !cb.is_empty() {
-                let index = cb.first().unwrap().get().norm();
-                unsafe_vars.insert(index, false);
-            }
-        }
-
-        for term_ref in head.breadth_first_iter() {
-            match term_ref {
-                TermRef::Var(_, cell, _) => {
-                    unsafe_vars.remove(&cell.get().norm());
-                },
-                _ => {}
-            };
-        }
-
         for query_instr in query.iter_mut() {
             match query_instr {
                 &mut QueryInstruction::PutValue(RegType::Perm(i), arg) =>
@@ -262,7 +247,7 @@ impl<'a> VariableFixtures<'a>
                         }
                     },
                 &mut QueryInstruction::SetVariable(reg)
-                    | &mut QueryInstruction::PutVariable(reg, _) =>
+              | &mut QueryInstruction::PutVariable(reg, _) =>
                     if let Some(found) = unsafe_vars.get_mut(&reg) {
                         *found = true;
                     },
@@ -276,5 +261,44 @@ impl<'a> VariableFixtures<'a>
                 _ => {}
             };
         }
+    }
+
+    fn record_unsafe_vars(&self, unsafe_vars: &mut HashMap<RegType, bool>) {        
+        for &(_, ref cb) in self.values() {
+            match cb.first() {
+                Some(index) => {
+                    unsafe_vars.insert(index.get().norm(), false);
+                },
+                None => {}
+            };
+        }
+    }
+    
+    fn mark_head_vars_as_safe(&self, head: &Term, unsafe_vars: &mut HashMap<RegType, bool>)
+    {                
+        for term_ref in head.breadth_first_iter() {
+            match term_ref {
+                TermRef::Var(_, cell, _) => {
+                    unsafe_vars.remove(&cell.get().norm());
+                },
+                _ => {}
+            };
+        }
+    }
+
+    pub fn mark_unsafe_vars_in_query(&self, query: &mut CompiledQuery) {
+        let mut unsafe_vars = HashMap::new();
+
+        self.record_unsafe_vars(&mut unsafe_vars);
+        self.mark_unsafe_vars(&mut unsafe_vars, query);
+    }
+    
+    pub fn mark_unsafe_vars_in_rule(&self, head: &Term, query: &mut CompiledQuery)
+    {
+        let mut unsafe_vars = HashMap::new();
+
+        self.record_unsafe_vars(&mut unsafe_vars);        
+        self.mark_head_vars_as_safe(head, &mut unsafe_vars);
+        self.mark_unsafe_vars(&mut unsafe_vars, query);
     }
 }

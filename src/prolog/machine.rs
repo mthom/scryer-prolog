@@ -3,6 +3,7 @@ use prolog::codegen::*;
 use prolog::heapview::*;
 use prolog::and_stack::*;
 use prolog::or_stack::*;
+use prolog::fixtures::*;
 
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
@@ -31,7 +32,7 @@ struct MachineState {
     registers: Registers,
     trail: Vec<Ref>,
     tr: usize,
-    hb: usize
+    hb: usize,
 }
 
 type CodeDir = HashMap<(Atom, usize), usize>;
@@ -39,7 +40,8 @@ type CodeDir = HashMap<(Atom, usize), usize>;
 pub struct Machine {
     ms: MachineState,
     code: Code,
-    code_dir: CodeDir
+    code_dir: CodeDir,
+    cached_query: Option<Code>
 }
 
 impl Index<RegType> for MachineState {
@@ -68,12 +70,29 @@ impl IndexMut<RegType> for MachineState {
     }
 }
 
+impl Index<CodePtr> for Machine {
+    type Output = Line;
+
+    fn index(&self, ptr: CodePtr) -> &Self::Output {
+        match ptr {
+            CodePtr::TopLevel(_, _, p) => {
+                match &self.cached_query {
+                    &Some(ref cq) => &cq[p],
+                    &None => panic!("Out-of-bounds top level index.")
+                }
+            },
+            CodePtr::DirEntry(p) => &self.code[p]
+        }
+    }
+}
+
 impl Machine {
     pub fn new() -> Self {
         Machine {
             ms: MachineState::new(),
             code: Vec::new(),
-            code_dir: HashMap::new()
+            code_dir: HashMap::new(),
+            cached_query: None
         }
     }
 
@@ -84,105 +103,239 @@ impl Machine {
     pub fn add_fact(&mut self, fact: &Term, mut code: Code) {
         if let Some(name) = fact.name() {
             let p = self.code.len();
+
+            let name  = name.clone();
             let arity = fact.arity();
 
             self.code.append(&mut code);
-            self.code_dir.insert((name.clone(), arity), p);
+            self.code_dir.insert((name, arity), p);
         }
     }
 
     pub fn add_rule(&mut self, rule: &Rule, mut code: Code) {
         if let Some(name) = rule.head.0.name() {
             let p = self.code.len();
+
+            let name  = name.clone();
             let arity = rule.head.0.arity();
 
             self.code.append(&mut code);
-            self.code_dir.insert((name.clone(), arity), p);
+            self.code_dir.insert((name, arity), p);
         }
     }
 
-    pub fn add_predicate(&mut self, pred: &Vec<PredicateClause>, mut code: Code)
+    pub fn add_predicate(&mut self, clauses: &Vec<PredicateClause>, mut code: Code)
     {
         let p = self.code.len();
-        let name  = pred.first().unwrap().name().clone();
-        let arity = pred.first().unwrap().arity();
+
+        let arity = clauses.first().unwrap().arity();
+        let name  = clauses.first().unwrap().name().clone();
 
         self.code.append(&mut code);
         self.code_dir.insert((name, arity), p);
     }
 
-    fn execute_instr<'a>(&mut self, instr_src: LineOrCodeOffset<'a>) -> bool
+    fn cached_query_size(&self) -> usize {
+        match &self.cached_query {
+            &Some(ref query) => query.len(),
+            _ => 0
+        }
+    }
+
+    fn execute_instr(&mut self, ptr: CodePtr)
     {
-        let mut instr = match instr_src {
-            LineOrCodeOffset::Instruction(instr) => instr,
-            LineOrCodeOffset::Offset(p) => &self.code[p]
+        // can't use self[ptr] or self.index(ptr) to set the value of
+        // instr! instr is then typed as Line, not &Line. WHY????
+        // This is a compiler bug. Has to be.
+        let instr = match ptr {
+            CodePtr::TopLevel(_, _, p) => {
+                match &self.cached_query {
+                    &Some(ref cq) => &cq[p],
+                    &None => return
+                }
+            },
+            CodePtr::DirEntry(p) => &self.code[p]
         };
 
-        loop {
-            match instr {
-                &Line::Choice(ref choice_instr) =>
-                    self.ms.execute_choice_instr(choice_instr),
-                &Line::Cut(ref cut_instr) =>
-                    self.ms.execute_cut_instr(cut_instr),
-                &Line::Control(ref control_instr) =>
-                    self.ms.execute_ctrl_instr(&self.code_dir, control_instr),
-                &Line::Fact(ref fact) => {
-                    for fact_instr in fact {
-                        if self.failed() {
-                            break;
-                        }
-
-                        self.ms.execute_fact_instr(&fact_instr);
+        match instr {
+            &Line::Choice(ref choice_instr) =>
+                self.ms.execute_choice_instr(choice_instr),
+            &Line::Cut(ref cut_instr) =>
+                self.ms.execute_cut_instr(cut_instr),
+            &Line::Control(ref control_instr) =>
+                self.ms.execute_ctrl_instr(&self.code_dir, control_instr),
+            &Line::Fact(ref fact) => {
+                for fact_instr in fact {
+                    if self.failed() {
+                        break;
                     }
-                    self.ms.p += 1;
-                },
-                &Line::Indexing(ref indexing_instr) =>
-                    self.ms.execute_indexing_instr(&indexing_instr),
-                &Line::IndexedChoice(ref choice_instr) =>
-                    self.ms.execute_indexed_choice_instr(choice_instr),
-                &Line::Query(ref query) => {
-                    for query_instr in query {
-                        if self.failed() {
-                            break;
-                        }
 
-                        self.ms.execute_query_instr(&query_instr);
-                    }
-                    self.ms.p += 1;
+                    self.ms.execute_fact_instr(&fact_instr);
                 }
+                self.ms.p += 1;
+            },
+            &Line::Indexing(ref indexing_instr) =>
+                self.ms.execute_indexing_instr(&indexing_instr),
+            &Line::IndexedChoice(ref choice_instr) =>
+                self.ms.execute_indexed_choice_instr(choice_instr),
+            &Line::Query(ref query) => {
+                for query_instr in query {
+                    if self.failed() {
+                        break;
+                    }
+
+                    self.ms.execute_query_instr(&query_instr);
+                }
+                self.ms.p += 1;
             }
+        }
+    }
+
+    fn backtrack(&mut self)
+    {
+        let b0 = self.ms
+            .or_stack
+            .top()
+            .map(|fr| fr.b0)
+            .unwrap_or(0);
+
+        let p = if self.ms.b > 0 {
+            let b = self.ms.b - 1;
+            self.ms.or_stack[b].bp
+        } else {
+            self.ms.p = CodePtr::TopLevel(0, 0, 0);
+            return;
+        };
+
+        self.ms.p = p;
+
+        if let CodePtr::TopLevel(_, _, p) = p {
+            self.ms.fail = p == 0;
+            self.ms.b0 = b0;
+
+            return;
+        } else {
+            self.ms.fail = false;
+        }
+    }
+
+    fn query_stepper<'a>(&mut self, mut ptr: CodePtr)
+    {
+        loop
+        {
+            self.execute_instr(ptr);
 
             if self.failed() {
-                let b0 = self.ms
-                    .or_stack
-                    .top()
-                    .map(|fr| fr.b0)
-                    .unwrap_or(0);
-                
-                let p = if self.ms.b > 0 {
-                    let b = self.ms.b - 1;
-                    self.ms.or_stack[b].bp
-                } else {
-                    CodePtr::TopLevel
-                };
-
-                if let CodePtr::TopLevel = p {
-                    return false;
-                } else {
-                    self.ms.fail = false;
-                    self.ms.p = p;
-                    self.ms.b0 = b0;
-                }
+                self.backtrack();
             }
 
             match self.ms.p {
                 CodePtr::DirEntry(p) if p < self.code.len() =>
-                    instr = &self.code[p],
+                    ptr = self.ms.p,
                 _ => break
+            };
+        }
+    }
+
+    fn record_var_places<'a>(&self,
+                             chunk_num: usize,
+                             e: usize,
+                             alloc_locs: &AllocVarDict<'a>,
+                             heap_locs: &mut HeapVarDict<'a>)
+    {
+        for (var, var_data) in alloc_locs {
+            match var_data {
+                &VarData::Perm(_) => {
+                    let r = var_data.as_reg_type().reg_num();
+                    let addr = self.ms.and_stack[e][r].clone();
+
+                    heap_locs.insert(var, addr);
+                },
+                &VarData::Temp(cn, _, _) if cn == chunk_num => {
+                    let r = var_data.as_reg_type();
+                    let addr = self.ms[r].clone();
+
+                    heap_locs.insert(var, addr);
+                },
+                _ => {}
             }
         }
+    }
 
-        true
+    fn run_query<'a>(&mut self, alloc_locs: &AllocVarDict<'a>, heap_locs: &mut HeapVarDict<'a>)
+    {
+        let end_ptr    = CodePtr::TopLevel(0, 0, self.cached_query_size());
+        let mut tl_ptr = self.ms.p;
+
+        while tl_ptr < end_ptr {
+            self.query_stepper(tl_ptr);
+
+            tl_ptr = self.ms.p;
+
+            if let &mut CodePtr::TopLevel(ref mut cn, ref mut e, p) = &mut tl_ptr {
+                if p == 0 {
+                    break;
+                }
+
+                match &self[CodePtr::TopLevel(*cn, *e, p)] {
+                    &Line::Control(ControlInstruction::Call(_, _, _))
+                  | &Line::Control(ControlInstruction::Execute(_, _)) => {
+                      self.record_var_places(*cn, *e, alloc_locs, heap_locs);
+                      *cn += 1;
+                  },
+                    &Line::Control(ControlInstruction::Allocate(_)) =>
+                        *e = self.ms.e,
+                    _ => {}
+                };
+
+                self.ms.p = CodePtr::TopLevel(*cn, *e, p);
+            } else {
+                break;
+            }
+        }
+    }
+
+    pub fn submit_query<'a>(&mut self, code: Code, alloc_locs: AllocVarDict<'a>) -> EvalResult<'a>
+    {
+        let mut heap_locs = HashMap::new();
+        self.cached_query = Some(code);
+
+        self.run_query(&alloc_locs, &mut heap_locs);
+
+        if self.failed() {
+            EvalResult::QueryFailure
+        } else {
+            EvalResult::InitialQuerySuccess(alloc_locs, heap_locs)
+        }
+    }
+
+    pub fn continue_query<'a>(&mut self,
+                              alloc_locs: &AllocVarDict<'a>,
+                              heap_locs: &mut HeapVarDict<'a>)
+                              -> EvalResult
+    {
+        if !self.or_stack_is_empty() {
+            if self.ms.b == 0 {
+                return EvalResult::QueryFailure;
+            }
+
+            let b = self.ms.b - 1;
+            self.ms.p = self.ms.or_stack[b].bp;
+
+            if let CodePtr::TopLevel(_, _, 0) = self.ms.p {
+                return EvalResult::QueryFailure
+            }
+
+            self.run_query(alloc_locs, heap_locs);
+
+            if self.failed() {
+                EvalResult::QueryFailure
+            } else {
+                EvalResult::SubsequentQuerySuccess
+            }
+        } else {
+            EvalResult::QueryFailure
+        }
     }
 
     pub fn heap_view(&self, var_dir: &HeapVarDict) -> String {
@@ -241,75 +394,16 @@ impl Machine {
         result
     }
 
-    pub fn run_query(&mut self, code: Code, cg: &CodeGenerator) -> EvalResult
-    {
-        let mut succeeded = true;
-        let mut heap_locs = HashMap::new();
-
-        for instr in code.iter().take(1) {
-            succeeded = self.execute_instr(LineOrCodeOffset::from(instr));
-        }
-
-        if succeeded {
-            for (var, var_data) in cg.vars() {
-                let r = var_data.as_reg_type();
-                
-                let addr = self.ms[r].clone();
-                heap_locs.insert((*var).clone(), addr);
-            }
-
-            for instr in code.iter().skip(1) {
-                succeeded = self.execute_instr(LineOrCodeOffset::from(instr));
-                if !succeeded {
-                    break;
-                }
-            }
-        }
-
-        if succeeded {
-            EvalResult::InitialQuerySuccess(heap_locs)
-        } else {
-            EvalResult::QueryFailure
-        }
-    }
-
     pub fn or_stack_is_empty(&self) -> bool {
         self.ms.or_stack.is_empty()
     }
 
-    pub fn continue_query(&mut self) -> EvalResult
-    {
-        if !self.or_stack_is_empty() {
-            if self.ms.b == 0 {
-                return EvalResult::QueryFailure;
-            }
-
-            let b = self.ms.b - 1;
-            self.ms.p = self.ms.or_stack[b].bp;
-
-            let succeeded = if let CodePtr::DirEntry(p) = self.ms.p {
-                self.execute_instr(LineOrCodeOffset::Offset(p))
-            } else {
-                false
-            };
-
-            if succeeded {
-                EvalResult::SubsequentQuerySuccess
-            } else {
-                EvalResult::QueryFailure
-            }
-        } else {
-            EvalResult::QueryFailure
-        }
-    }
-
-    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.reset();
         self.code.clear();
         self.code_dir.clear();
     }
-    
+
     pub fn reset(&mut self) {
         self.ms.reset();
     }
@@ -319,12 +413,12 @@ impl MachineState {
     fn new() -> MachineState {
         MachineState { h: 0,
                        s: 0,
-                       p: CodePtr::TopLevel,
+                       p: CodePtr::default(),
                        b: 0,
                        b0: 0,
                        e: 0,
                        num_of_args: 0,
-                       cp: CodePtr::TopLevel,
+                       cp: CodePtr::default(),
                        fail: false,
                        heap: Vec::with_capacity(256),
                        mode: MachineMode::Write,
@@ -815,7 +909,7 @@ impl MachineState {
                 match norm {
                     RegType::Perm(n) => {
                         let e = self.e;
-                        
+
                         self[norm] = Addr::StackCell(e, n);
                         self.registers[arg] = self[norm].clone();
                     },
@@ -1112,7 +1206,7 @@ impl MachineState {
                 }
 
                 if let &Terminal::Terminal = term {
-                    self.p = CodePtr::TopLevel;
+                    self.p = CodePtr::default();
                 } else {
                     self.p += 1;
                 }
@@ -1132,9 +1226,9 @@ impl MachineState {
                     self.b = b0;
                     self.tidy_trail();
                 }
-                
+
                 if let &Terminal::Terminal = term {
-                    self.p = CodePtr::TopLevel;
+                    self.p = CodePtr::default();
                 } else {
                     self.p += 1;
                 }
@@ -1150,8 +1244,8 @@ impl MachineState {
         self.b0 = 0;
         self.s = 0;
         self.tr = 0;
-        self.p = CodePtr::TopLevel;
-        self.cp = CodePtr::TopLevel;
+        self.p = CodePtr::default();
+        self.cp = CodePtr::default();
         self.num_of_args = 0;
 
         self.fail = false;
@@ -1161,5 +1255,5 @@ impl MachineState {
         self.and_stack.clear();
         self.or_stack.clear();
         self.registers = vec![Addr::HeapCell(0); 64];
-    }    
+    }
 }

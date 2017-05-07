@@ -1,163 +1,157 @@
+use prolog::allocator::*;
 use prolog::ast::*;
 use prolog::fixtures::*;
+use prolog::targets::*;
 
 use std::cell::Cell;
 use std::cmp::max;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
-pub struct TermMarker<'a> {    
-    pub bindings: HashMap<&'a Var, VarData>,
+pub struct NaiveAllocator<'a> {    
+    bindings: AllocVarDict<'a>,
     arg_c:    usize,
     temp_c:   usize,
-    contents: HashMap<usize, &'a Var>,
-    in_use:   BTreeSet<usize>,
 }
-
-impl<'a> TermMarker<'a> {
-    pub fn new() -> TermMarker<'a> {
-        TermMarker {
+    
+impl<'a> Allocator<'a> for NaiveAllocator<'a>
+{
+    fn new() -> Self {
+        NaiveAllocator {
             arg_c:    1,
             temp_c:   1,
             bindings: HashMap::new(),
-            contents: HashMap::new(),
-            in_use: BTreeSet::new()
         }
     }
-
-    pub fn drain_var_data(&mut self, vs: VariableFixtures<'a>) -> VariableFixtures<'a>
+    
+    fn mark_anon_var<Target>(&mut self, lvl: Level, target: &mut Vec<Target>)
+        where Target: CompilationTarget<'a>
     {
-        let mut perm_vs = VariableFixtures::new();
+        let r = {
+            let temp = self.temp_c;
+            self.temp_c += 1;
+            RegType::Temp(temp)
+        };
 
-        for (var, (var_status, cells)) in vs.into_iter() {
-            match var_status {
-                VarStatus::Temp(chunk_num, tvd) => {
-                    self.bindings.insert(var, VarData::Temp(chunk_num, 0, tvd));
+        match lvl {
+            Level::Deep => target.push(Target::subterm_to_variable(r)),
+            Level::Shallow => {
+                let k = self.arg_c;
+                self.arg_c += 1;
+
+                target.push(Target::argument_to_variable(r, k));
+            }
+        }
+    }
+
+    fn mark_non_var<Target>(&mut self,
+                            lvl: Level,
+                            _: GenContext,
+                            cell: &Cell<RegType>,
+                            _: &mut Vec<Target>)
+        where Target: CompilationTarget<'a>
+    {
+        let r = cell.get();
+
+        if r.reg_num() == 0 {
+            let r = match lvl {                
+                Level::Shallow => {
+                    let k = self.arg_c;
+                    self.arg_c += 1;
+                    
+                    RegType::Temp(k)
                 },
-                VarStatus::Perm(_) => {
-                    self.bindings.insert(var, VarData::Perm(0));
-                    perm_vs.insert(var, (var_status, cells));
-                }
-            };
-        }
-
-        perm_vs
-    }
-
-    fn get(&self, var: &'a Var) -> RegType {
-        self.bindings.get(var).unwrap().as_reg_type()
-    }
-
-    pub fn contains_var(&self, var: &'a Var) -> bool {
-        self.bindings.contains_key(var)
-    }
-
-    pub fn marked_var(&self, var: &'a Var) -> bool {
-        self.get(var).reg_num() != 0
-    }
-
-    fn record_register(&mut self, var: &'a Var, r: RegType) {
-        match self.bindings.get_mut(var).unwrap() {
-            &mut VarData::Temp(_, ref mut s, _) => *s = r.reg_num(),
-            &mut VarData::Perm(ref mut s) => *s = r.reg_num()
-        }
-    }
-
-    pub fn mark_non_var(&mut self, lvl: Level, cell: &Cell<RegType>) {
-        let reg_type = cell.get();
-
-        if reg_type.reg_num() == 0 {
-            match lvl {
-                Level::Deep if !reg_type.is_perm() => {
+                _ => {
                     let temp = self.temp_c;
                     self.temp_c += 1;
-                    cell.set(RegType::Temp(temp));
-                },
-                Level::Shallow if !reg_type.is_perm() => {
-                    let arg = self.arg_c;
-                    self.arg_c += 1;
-                    cell.set(RegType::Temp(arg));
-                },
-                _ => {}
+                    
+                    RegType::Temp(temp)
+                }
             };
+
+            cell.set(r);
         }
-    }
+    }    
 
-    pub fn mark_old_var(&mut self, lvl: Level, var: &'a Var) -> VarReg
+    fn mark_var<Target>(&mut self,
+                        var: &'a Var,
+                        lvl: Level,
+                        cell: &'a Cell<VarReg>,
+                        _: GenContext,
+                        target: &mut Vec<Target>)
+        where Target: CompilationTarget<'a>
     {
-        let inner_reg = self.get(var);
-
-        match lvl {
-            Level::Deep => VarReg::Norm(inner_reg),
+        let (r, is_new_var) = match self.get(var) {
+            RegType::Temp(0) => {
+                let o = self.temp_c;
+                self.temp_c += 1;
+                
+                (RegType::Temp(o), true)
+            },
+            RegType::Perm(0) => {
+                let pr = cell.get().norm();
+                self.record_register(var, pr);
+                
+                (pr, true)
+            },
+            r => (r, false)
+        };
+        
+        match lvl {            
             Level::Shallow => {
-                let reg = VarReg::ArgAndNorm(inner_reg, self.arg_c);
-                self.arg_c += 1;
-                reg
+                let k = self.arg_c;                
+                self.arg_c += 1;                               
+
+                cell.set(VarReg::ArgAndNorm(r, k));
+                
+                if is_new_var {
+                    target.push(Target::argument_to_variable(r, k));
+                } else {
+                    target.push(Target::argument_to_value(r, k));
+                }                
+            },
+            Level::Deep => {
+                cell.set(VarReg::Norm(r));
+
+                if is_new_var {
+                    target.push(Target::subterm_to_variable(r));
+                } else {
+                    target.push(Target::subterm_to_value(r));
+                }
             }
+        };
+
+        if !r.is_perm() {
+            self.record_register(var, r);
         }
     }
-
-    pub fn mark_new_var(&mut self, lvl: Level, var: &'a Var, reg: RegType) -> VarReg
-    {
-        let inner_reg = if !reg.is_perm() {
-            let temp = self.temp_c;
-            self.temp_c += 1;
-            RegType::Temp(temp)
+    
+    fn reset(&mut self) {
+        self.bindings.clear();
+    }
+    
+    fn advance(&mut self, term_loc: GenContext, term: &'a Term) {
+        if let GenContext::Head = term_loc {
+            self.arg_c  = 1;
+            self.temp_c = max(term.subterms() + 1, self.temp_c);
         } else {
-            reg
-        };
-
-        let reg = match lvl {
-            Level::Deep => VarReg::Norm(inner_reg),
-            Level::Shallow => {
-                let reg = VarReg::ArgAndNorm(inner_reg, self.arg_c);
-                self.arg_c += 1;
-                reg
-            }
-        };
-
-        self.record_register(var, inner_reg);
-        reg
-    }
-
-    pub fn mark_anon_var(&mut self, lvl: Level) -> VarReg {
-        let inner_reg = {
-            let temp = self.temp_c;
-            self.temp_c += 1;
-            RegType::Temp(temp)
-        };
-
-        match lvl {
-            Level::Deep => VarReg::Norm(inner_reg),
-            Level::Shallow => {
-                let reg = VarReg::ArgAndNorm(inner_reg, self.arg_c);
-                self.arg_c += 1;
-                reg
-            }
+            self.arg_c  = 1;
+            self.temp_c = term.subterms() + 1;
         }
     }
 
-    pub fn advance_arg(&mut self) {
+    fn advance_arg(&mut self) {
         self.arg_c += 1;
     }
 
-    pub fn advance_at_head(&mut self, term: &'a Term) {
-        self.arg_c  = 1;
-        self.temp_c = max(term.subterms() + 1, self.temp_c);
+    fn bindings(&self) -> &AllocVarDict<'a> {
+        &self.bindings
     }
-
-    pub fn advance(&mut self, term: &'a Term) {
-        self.arg_c  = 1;
-        self.temp_c = term.subterms() + 1;
+    
+    fn bindings_mut(&mut self) -> &mut AllocVarDict<'a> {
+        &mut self.bindings
     }
-
-    pub fn reset(&mut self) {
-        self.bindings.clear();
-        self.contents.clear();
-        self.in_use.clear();
-    }
-
-    pub fn reset_contents(&mut self) {
-        self.contents.clear();
-        self.in_use.clear();
+    
+    fn take_bindings(self) -> AllocVarDict<'a> {
+        self.bindings
     }
 }

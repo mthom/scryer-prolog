@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
 use std::ops::{Add, AddAssign};
 use std::vec::Vec;
@@ -43,7 +44,7 @@ impl PredicateClause {
 pub enum TopLevel {
     Fact(Term),
     Predicate(Vec<PredicateClause>),
-    Query(Term),
+    Query(Vec<TermOrCut>),
     Rule(Rule)
 }
 
@@ -70,7 +71,7 @@ impl RegType {
             RegType::Perm(reg_num) | RegType::Temp(reg_num) => reg_num
         }
     }
-    
+
     pub fn is_perm(self) -> bool {
         match self {
             RegType::Perm(_) => true,
@@ -90,7 +91,7 @@ impl VarReg {
         match self {
             VarReg::ArgAndNorm(reg, _) | VarReg::Norm(reg) => reg
         }
-    }   
+    }
 }
 
 impl Default for VarReg {
@@ -266,17 +267,6 @@ pub enum Line {
     Query(CompiledQuery)
 }
 
-pub enum LineOrCodeOffset<'a> {
-    Instruction(&'a Line),
-    Offset(usize)
-}
-
-impl<'a> From<&'a Line> for LineOrCodeOffset<'a> {
-    fn from(line: &'a Line) -> Self {
-        LineOrCodeOffset::Instruction(line)
-    }
-}
-
 pub type ThirdLevelIndex = Vec<IndexedChoiceInstruction>;
 
 pub type Code = Vec<Line>;
@@ -369,15 +359,29 @@ impl HeapCellValue {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum CodePtr {
     DirEntry(usize),
-    TopLevel
+    TopLevel(usize, usize, usize) // chunk_num, e, offset.
+}
+
+impl PartialOrd<CodePtr> for CodePtr {
+    fn partial_cmp(&self, other: &CodePtr) -> Option<Ordering> {
+        match (self, other) {
+            (&CodePtr::DirEntry(p1), &CodePtr::DirEntry(ref p2)) =>
+                p1.partial_cmp(p2),
+            (&CodePtr::DirEntry(_), &CodePtr::TopLevel(_, _, _)) =>
+                Some(Ordering::Less),
+            (&CodePtr::TopLevel(_, _, p1), &CodePtr::TopLevel(_, _, ref p2)) =>
+                p1.partial_cmp(p2),
+            _ => Some(Ordering::Greater)
+        }
+    }
 }
 
 impl Default for CodePtr {
     fn default() -> Self {
-        CodePtr::TopLevel
+        CodePtr::TopLevel(0, 0, 0)
     }
 }
 
@@ -387,7 +391,7 @@ impl Add<usize> for CodePtr {
     fn add(self, rhs: usize) -> Self::Output {
         match self {
             CodePtr::DirEntry(p) => CodePtr::DirEntry(p + rhs),
-            CodePtr::TopLevel => CodePtr::TopLevel
+            CodePtr::TopLevel(cn, e, p) => CodePtr::TopLevel(cn, e, p + rhs)
         }
     }
 }
@@ -395,8 +399,8 @@ impl Add<usize> for CodePtr {
 impl AddAssign<usize> for CodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut CodePtr::DirEntry(ref mut p) => *p += rhs,
-            _ => {}
+            &mut CodePtr::DirEntry(ref mut p) |
+            &mut CodePtr::TopLevel(_, _, ref mut p) => *p += rhs
         }
     }
 }
@@ -430,6 +434,13 @@ impl Term {
         }
     }
 
+    pub fn subterms(&self) -> usize {
+        match self {
+            &Term::Clause(_, _, ref terms) => terms.len(),
+            _ => 1
+        }
+    }
+
     pub fn name(&self) -> Option<&Atom> {
         match self {
             &Term::Constant(_, Constant::Atom(ref atom))
@@ -442,27 +453,6 @@ impl Term {
         match self {
             &Term::Clause(_, _, ref child_terms) => child_terms.len(),
             _ => 0
-        }
-    }
-}
-
-pub type HeapVarDict = HashMap<Var, Addr>;
-
-pub enum EvalResult {
-    EntryFailure,
-    EntrySuccess,
-    InitialQuerySuccess(HeapVarDict),
-    QueryFailure,
-    SubsequentQuerySuccess,
-}
-
-impl EvalResult {
-    #[allow(dead_code)]
-    pub fn failed_query(&self) -> bool {
-        if let &EvalResult::QueryFailure = self {
-            true
-        } else {
-            false
         }
     }
 }
