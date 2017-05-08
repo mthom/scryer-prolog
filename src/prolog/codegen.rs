@@ -14,7 +14,7 @@ pub struct CodeGenerator<'a, TermMarker> {
     var_count: HashMap<&'a Var, usize>
 }
 
-pub enum EvalResult<'a> {
+pub enum EvalSession<'a> {
     EntryFailure,
     EntrySuccess,
     InitialQuerySuccess(AllocVarDict<'a>, HeapVarDict<'a>),
@@ -22,10 +22,10 @@ pub enum EvalResult<'a> {
     SubsequentQuerySuccess,
 }
 
-impl<'a> EvalResult<'a> {
+impl<'a> EvalSession<'a> {
     #[allow(dead_code)]
     pub fn failed_query(&self) -> bool {
-        if let &EvalResult::QueryFailure = self {
+        if let &EvalSession::QueryFailure = self {
             true
         } else {
             false

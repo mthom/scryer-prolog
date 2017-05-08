@@ -257,7 +257,7 @@ pub fn read() -> String {
     result
 }
 
-pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalResult<'b>
+pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'b>
 {
     match tl {
         &TopLevel::Predicate(ref clauses) => {
@@ -267,13 +267,13 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalResult<'b
                 let compiled_pred = cg.compile_predicate(clauses);
                 wam.add_predicate(clauses, compiled_pred);
 
-                EvalResult::EntrySuccess
+                EvalSession::EntrySuccess
             } else {
                 let msg = r"Error: predicate is inconsistent.
 Each predicate must have the same name and arity.";
 
                 println!("{}", msg);
-                EvalResult::EntryFailure
+                EvalSession::EntryFailure
             }
         },
         &TopLevel::Fact(ref fact) => {
@@ -282,7 +282,7 @@ Each predicate must have the same name and arity.";
             let compiled_fact = cg.compile_fact(fact);
             wam.add_fact(fact, compiled_fact);
 
-            EvalResult::EntrySuccess
+            EvalSession::EntrySuccess
         },
         &TopLevel::Rule(ref rule) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
@@ -290,7 +290,7 @@ Each predicate must have the same name and arity.";
             let compiled_rule = cg.compile_rule(rule);
             wam.add_rule(rule, compiled_rule);
 
-            EvalResult::EntrySuccess
+            EvalSession::EntrySuccess
         },
         &TopLevel::Query(ref query) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
@@ -301,9 +301,9 @@ Each predicate must have the same name and arity.";
     }
 }
 
-pub fn print(wam: &mut Machine, result: EvalResult) {
+pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
-        EvalResult::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
+        EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
             println!("yes");
 
             if heap_locs.is_empty() {
@@ -311,7 +311,7 @@ pub fn print(wam: &mut Machine, result: EvalResult) {
             }
 
             'outer: loop {
-                let mut result = EvalResult::QueryFailure;
+                let mut result = EvalSession::QueryFailure;
                 let bindings = wam.heap_view(&heap_locs);
 
                 let stdin  = stdin();
@@ -336,7 +336,7 @@ pub fn print(wam: &mut Machine, result: EvalResult) {
                         }
                     }
 
-                    if let &EvalResult::QueryFailure = &result {
+                    if let &EvalSession::QueryFailure = &result {
                         write!(stdout, "no\n\r").unwrap();
                         stdout.flush().unwrap();
                         break;
@@ -346,7 +346,7 @@ pub fn print(wam: &mut Machine, result: EvalResult) {
                 }
             }
         },
-        EvalResult::QueryFailure => println!("no"),
+        EvalSession::QueryFailure => println!("no"),
         _ => {}
     };
 }

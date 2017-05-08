@@ -75,7 +75,7 @@ impl Index<CodePtr> for Machine {
 
     fn index(&self, ptr: CodePtr) -> &Self::Output {
         match ptr {
-            CodePtr::TopLevel(_, _, p) => {
+            CodePtr::TopLevel(_, p) => {
                 match &self.cached_query {
                     &Some(ref cq) => &cq[p],
                     &None => panic!("Out-of-bounds top level index.")
@@ -142,13 +142,13 @@ impl Machine {
         }
     }
 
-    fn execute_instr(&mut self, ptr: CodePtr)
+    fn execute_instr(&mut self)
     {
         // can't use self[ptr] or self.index(ptr) to set the value of
         // instr! instr is then typed as Line, not &Line. WHY????
         // This is a compiler bug. Has to be.
-        let instr = match ptr {
-            CodePtr::TopLevel(_, _, p) => {
+        let instr = match self.ms.p {
+            CodePtr::TopLevel(_, p) => {
                 match &self.cached_query {
                     &Some(ref cq) => &cq[p],
                     &None => return
@@ -203,13 +203,13 @@ impl Machine {
             let b = self.ms.b - 1;
             self.ms.or_stack[b].bp
         } else {
-            self.ms.p = CodePtr::TopLevel(0, 0, 0);
+            self.ms.p = CodePtr::TopLevel(0, 0);
             return;
         };
 
         self.ms.p = p;
 
-        if let CodePtr::TopLevel(_, _, p) = p {
+        if let CodePtr::TopLevel(_, p) = p {
             self.ms.fail = p == 0;
             self.ms.b0 = b0;
 
@@ -219,19 +219,18 @@ impl Machine {
         }
     }
 
-    fn query_stepper<'a>(&mut self, mut ptr: CodePtr)
+    fn query_stepper<'a>(&mut self)
     {
         loop
         {
-            self.execute_instr(ptr);
+            self.execute_instr();
 
             if self.failed() {
                 self.backtrack();
             }
 
             match self.ms.p {
-                CodePtr::DirEntry(p) if p < self.code.len() =>
-                    ptr = self.ms.p,
+                CodePtr::DirEntry(p) if p < self.code.len() => {},
                 _ => break
             };
         }
@@ -239,22 +238,22 @@ impl Machine {
 
     fn record_var_places<'a>(&self,
                              chunk_num: usize,
-                             e: usize,
                              alloc_locs: &AllocVarDict<'a>,
                              heap_locs: &mut HeapVarDict<'a>)
     {
         for (var, var_data) in alloc_locs {
             match var_data {
                 &VarData::Perm(_) => {
+                    let e = self.ms.e;
                     let r = var_data.as_reg_type().reg_num();
                     let addr = self.ms.and_stack[e][r].clone();
-
+                    
                     heap_locs.insert(var, addr);
                 },
                 &VarData::Temp(cn, _, _) if cn == chunk_num => {
                     let r = var_data.as_reg_type();
                     let addr = self.ms[r].clone();
-
+                    
                     heap_locs.insert(var, addr);
                 },
                 _ => {}
@@ -264,38 +263,30 @@ impl Machine {
 
     fn run_query<'a>(&mut self, alloc_locs: &AllocVarDict<'a>, heap_locs: &mut HeapVarDict<'a>)
     {
-        let end_ptr    = CodePtr::TopLevel(0, 0, self.cached_query_size());
-        let mut tl_ptr = self.ms.p;
+        let end_ptr = CodePtr::TopLevel(0, self.cached_query_size());
 
-        while tl_ptr < end_ptr {
-            self.query_stepper(tl_ptr);
-
-            tl_ptr = self.ms.p;
-
-            if let &mut CodePtr::TopLevel(ref mut cn, ref mut e, p) = &mut tl_ptr {
-                if p == 0 {
-                    break;
+        while self.ms.p < end_ptr {
+            if let CodePtr::TopLevel(mut cn, p) = self.ms.p {
+                if let &Line::Control(ref ctrl_instr) = &self[CodePtr::TopLevel(cn, p)] {
+                    if ctrl_instr.is_jump_instr() {
+                        self.record_var_places(cn, alloc_locs, heap_locs);
+                        cn += 1;
+                    }
                 }
 
-                match &self[CodePtr::TopLevel(*cn, *e, p)] {
-                    &Line::Control(ControlInstruction::Call(_, _, _))
-                  | &Line::Control(ControlInstruction::Execute(_, _)) => {
-                      self.record_var_places(*cn, *e, alloc_locs, heap_locs);
-                      *cn += 1;
-                  },
-                    &Line::Control(ControlInstruction::Allocate(_)) =>
-                        *e = self.ms.e,
-                    _ => {}
-                };
-
-                self.ms.p = CodePtr::TopLevel(*cn, *e, p);
-            } else {
-                break;
+                self.ms.p = CodePtr::TopLevel(cn, p);
             }
+                
+            self.query_stepper();
+
+            match self.ms.p {
+                CodePtr::TopLevel(_, p) if p > 0 => {},
+                _ => break                    
+            };            
         }
     }
 
-    pub fn submit_query<'a>(&mut self, code: Code, alloc_locs: AllocVarDict<'a>) -> EvalResult<'a>
+    pub fn submit_query<'a>(&mut self, code: Code, alloc_locs: AllocVarDict<'a>) -> EvalSession<'a>
     {
         let mut heap_locs = HashMap::new();
         self.cached_query = Some(code);
@@ -303,38 +294,38 @@ impl Machine {
         self.run_query(&alloc_locs, &mut heap_locs);
 
         if self.failed() {
-            EvalResult::QueryFailure
+            EvalSession::QueryFailure
         } else {
-            EvalResult::InitialQuerySuccess(alloc_locs, heap_locs)
+            EvalSession::InitialQuerySuccess(alloc_locs, heap_locs)
         }
     }
 
     pub fn continue_query<'a>(&mut self,
                               alloc_locs: &AllocVarDict<'a>,
                               heap_locs: &mut HeapVarDict<'a>)
-                              -> EvalResult
+                              -> EvalSession
     {
         if !self.or_stack_is_empty() {
             if self.ms.b == 0 {
-                return EvalResult::QueryFailure;
+                return EvalSession::QueryFailure;
             }
 
             let b = self.ms.b - 1;
             self.ms.p = self.ms.or_stack[b].bp;
 
-            if let CodePtr::TopLevel(_, _, 0) = self.ms.p {
-                return EvalResult::QueryFailure
+            if let CodePtr::TopLevel(_, 0) = self.ms.p {
+                return EvalSession::QueryFailure
             }
 
             self.run_query(alloc_locs, heap_locs);
 
             if self.failed() {
-                EvalResult::QueryFailure
+                EvalSession::QueryFailure
             } else {
-                EvalResult::SubsequentQuerySuccess
+                EvalSession::SubsequentQuerySuccess
             }
         } else {
-            EvalResult::QueryFailure
+            EvalSession::QueryFailure
         }
     }
 

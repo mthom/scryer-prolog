@@ -213,6 +213,16 @@ pub enum ControlInstruction {
     Proceed
 }
 
+impl ControlInstruction {
+    pub fn is_jump_instr(&self) -> bool {
+        match self {
+            &ControlInstruction::Call(_, _, _) => true,
+            &ControlInstruction::Execute(_, _) => true,
+            _ => false
+        }
+    }
+}
+
 pub enum IndexingInstruction {
     SwitchOnTerm(usize, usize, usize, usize),
     SwitchOnConstant(usize, HashMap<Constant, usize>),
@@ -362,7 +372,7 @@ impl HeapCellValue {
 #[derive(Clone, Copy, PartialEq)]
 pub enum CodePtr {
     DirEntry(usize),
-    TopLevel(usize, usize, usize) // chunk_num, e, offset.
+    TopLevel(usize, usize) // chunk_num, offset.
 }
 
 impl PartialOrd<CodePtr> for CodePtr {
@@ -370,9 +380,9 @@ impl PartialOrd<CodePtr> for CodePtr {
         match (self, other) {
             (&CodePtr::DirEntry(p1), &CodePtr::DirEntry(ref p2)) =>
                 p1.partial_cmp(p2),
-            (&CodePtr::DirEntry(_), &CodePtr::TopLevel(_, _, _)) =>
+            (&CodePtr::DirEntry(_), &CodePtr::TopLevel(_, _)) =>
                 Some(Ordering::Less),
-            (&CodePtr::TopLevel(_, _, p1), &CodePtr::TopLevel(_, _, ref p2)) =>
+            (&CodePtr::TopLevel(_, p1), &CodePtr::TopLevel(_, ref p2)) =>
                 p1.partial_cmp(p2),
             _ => Some(Ordering::Greater)
         }
@@ -381,7 +391,7 @@ impl PartialOrd<CodePtr> for CodePtr {
 
 impl Default for CodePtr {
     fn default() -> Self {
-        CodePtr::TopLevel(0, 0, 0)
+        CodePtr::TopLevel(0, 0)
     }
 }
 
@@ -391,7 +401,7 @@ impl Add<usize> for CodePtr {
     fn add(self, rhs: usize) -> Self::Output {
         match self {
             CodePtr::DirEntry(p) => CodePtr::DirEntry(p + rhs),
-            CodePtr::TopLevel(cn, e, p) => CodePtr::TopLevel(cn, e, p + rhs)
+            CodePtr::TopLevel(cn, p) => CodePtr::TopLevel(cn, p + rhs)
         }
     }
 }
@@ -400,7 +410,7 @@ impl AddAssign<usize> for CodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
             &mut CodePtr::DirEntry(ref mut p) |
-            &mut CodePtr::TopLevel(_, _, ref mut p) => *p += rhs
+            &mut CodePtr::TopLevel(_, ref mut p) => *p += rhs
         }
     }
 }

@@ -16,9 +16,9 @@ mod tests {
         match parse_TopLevel(buffer.trim()) {
             Ok(tl) =>
                 match eval(wam, &tl) {
-                    EvalResult::InitialQuerySuccess(_, _) |
-                    EvalResult::EntrySuccess |
-                    EvalResult::SubsequentQuerySuccess =>
+                    EvalSession::InitialQuerySuccess(_, _) |
+                    EvalSession::EntrySuccess |
+                    EvalSession::SubsequentQuerySuccess =>
                         true,
                     _ => false
                 },
