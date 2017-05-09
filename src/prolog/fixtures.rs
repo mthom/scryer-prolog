@@ -24,7 +24,7 @@ pub enum VarStatus {
 }
 
 // Perm: 0 initially, a stack register once processed.
-// Temp: labeled with chunk_num and temp offset (unassigned if 0), arg (0 if unassigned).
+// Temp: labeled with chunk_num and temp offset (unassigned if 0).
 pub enum VarData {
     Perm(usize), Temp(usize, usize, TempVarData)
 }

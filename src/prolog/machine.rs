@@ -306,10 +306,6 @@ impl Machine {
                               -> EvalSession
     {
         if !self.or_stack_is_empty() {
-            if self.ms.b == 0 {
-                return EvalSession::QueryFailure;
-            }
-
             let b = self.ms.b - 1;
             self.ms.p = self.ms.or_stack[b].bp;
 
@@ -386,7 +382,7 @@ impl Machine {
     }
 
     pub fn or_stack_is_empty(&self) -> bool {
-        self.ms.or_stack.is_empty()
+        self.ms.b == 0
     }
 
     pub fn clear(&mut self) {

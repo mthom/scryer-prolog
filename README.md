@@ -46,11 +46,10 @@ prolog> ?- p(X, Y, Z).
 Given the above work, the result of the query will be
 ```
 prolog> ?- p(X, Y, Z).
-yes
-X = _0
+true
 Y = x
+X = _0
 Z = _2
-Press ; to continue or . to abort.
 ```
 
 Pressing ; will backtrack through other possible answers, if any exist.
@@ -63,40 +62,29 @@ prolog> :{
 member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
 }:
-prolog> ?- member(X, [a, b, c]).
-yes
-X = a
-Press ; to continue or . to abort.
-;
-X = b
-Press ; to continue or . to abort.
-;
-X = c
-Press ; to continue or . to abort.
-;
-no
+prolog> ?- member(X, [a, b, c]).      
+true
+X = a ;
+X = b ;
+X = c ;
+false.
 ```
 and so do conjunctive queries:
 
 ```
 prolog> ?- member([X,X],[a,b,c,[d,d],[e,d]]), member(X, [a,b,c,d,e,f,g]), member(Y, [X, a, b, c, d]).
-yes
+true
 Y = d
-X = d
-Press ; to continue or . to abort.
+X = d ;
 Y = a
-X = d
-Press ; to continue or . to abort.
+X = d ;
 Y = b
-X = d
-Press ; to continue or . to abort.
+X = d ;
 Y = c
-X = d
-Press ; to continue or . to abort.
+X = d ;
 Y = d
-X = d
-Press ; to continue or . to abort.
-no
+X = d ;
+false.
 prolog>
 ```
 
@@ -114,6 +102,6 @@ term to a string results in an infinite loop, ie.
 ```
 prolog> p(W, W).
 prolog> ?- p(f(f(W)), W).
-yes
+true
 *loops to infinity*
 ```

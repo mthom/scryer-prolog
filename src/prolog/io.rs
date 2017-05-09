@@ -304,49 +304,53 @@ Each predicate must have the same name and arity.";
 pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
         EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
-            println!("yes");
+            println!("true");
 
             if heap_locs.is_empty() {
                 return;
             }
 
-            'outer: loop {
+            loop {
                 let mut result = EvalSession::QueryFailure;
                 let bindings = wam.heap_view(&heap_locs);
 
                 let stdin  = stdin();
                 let mut stdout = stdout().into_raw_mode().unwrap();
 
-                write!(stdout, "{}\n\r", bindings).unwrap();
+                write!(stdout, "{}", bindings).unwrap();
                 stdout.flush().unwrap();
 
                 if !wam.or_stack_is_empty() {
-                    write!(stdout, "Press ; to continue or . to abort.\n\r").unwrap();
                     stdout.flush().unwrap();
 
                     for c in stdin.keys() {
                         match c.unwrap() {
                             Key::Char(';') => {
+                                write!(stdout, " ;\n\r").unwrap();
                                 result = wam.continue_query(&alloc_locs, &mut heap_locs);
                                 break;
                             },
-                            Key::Char('.') =>
-                                break 'outer,
+                            Key::Char('.') => {
+                                write!(stdout, " .\n\r").unwrap();
+                                return;
+                            },
                             _ => {}
                         }
                     }
 
                     if let &EvalSession::QueryFailure = &result {
-                        write!(stdout, "no\n\r").unwrap();
+                        write!(stdout, "false.\n\r").unwrap();
                         stdout.flush().unwrap();
-                        break;
+                        return;
                     }
-                } else {
+                } else {                    
                     break;
                 }
             }
+
+            write!(stdout(), ".\n").unwrap();
         },
-        EvalSession::QueryFailure => println!("no"),
+        EvalSession::QueryFailure => println!("false."),
         _ => {}
     };
 }
