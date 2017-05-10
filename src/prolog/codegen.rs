@@ -22,27 +22,17 @@ pub enum EvalSession<'a> {
     SubsequentQuerySuccess,
 }
 
-impl<'a> EvalSession<'a> {
-    #[allow(dead_code)]
-    pub fn failed_query(&self) -> bool {
-        if let &EvalSession::QueryFailure = self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker> {
+impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
+{
     pub fn new() -> Self {
-        CodeGenerator { marker: Allocator::new(),
+        CodeGenerator { marker:  Allocator::new(),
                         var_count: HashMap::new() }
     }
 
     pub fn take_vars(self) -> AllocVarDict<'a> {
         self.marker.take_bindings()
     }
-    
+
     fn update_var_count<Iter>(&mut self, iter: Iter)
         where Iter : Iterator<Item=TermRef<'a>>
     {
@@ -258,11 +248,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker> {
 
         match toc {
             &TermOrCut::Term(Term::Clause(_, ref name, _))
-          | &TermOrCut::Term(Term::Constant(_, Constant::Atom(ref name))) => {
-                    if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
-                        *ctrl = ControlInstruction::Execute(name.clone(), last_arity);
-                    }
-                },
+          | &TermOrCut::Term(Term::Constant(_, Constant::Atom(ref name))) =>
+              if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
+                  *ctrl = ControlInstruction::Execute(name.clone(), last_arity);
+              },
             _ => dealloc_index = body.len()
         };
 
@@ -514,9 +503,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker> {
                 _ => {}
             };
         }
-        
-        Self::compile_cleanup(&mut code, query.len() - 1, query.last().unwrap());        
-        
+
+        Self::compile_cleanup(&mut code, query.len() - 1, query.last().unwrap());
+
         code
     }
 
