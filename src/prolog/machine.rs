@@ -310,7 +310,7 @@ impl Machine {
             self.ms.p = self.ms.or_stack[b].bp;
 
             if let CodePtr::TopLevel(_, 0) = self.ms.p {
-                return EvalSession::QueryFailure
+                return EvalSession::QueryFailure;
             }
 
             self.run_query(alloc_locs, heap_locs);
@@ -346,15 +346,9 @@ impl Machine {
                         result += "[]",
                     CellView::Con(&Constant::Atom(ref atom)) =>
                         result += atom.as_str(),
-                    CellView::HeapVar(cell_num) => {
+                    CellView::HeapVar(cell_num) | CellView::StackVar(_, cell_num) => {
                         result += "_";
                         result += cell_num.to_string().as_str();
-                    },
-                    CellView::StackVar(fr, sc) => {
-                        result += "_";
-                        result += fr.to_string().as_str();
-                        result += "_";
-                        result += sc.to_string().as_str();
                     },
                     CellView::Str(_, ref name) =>
                         result += name.as_str(),

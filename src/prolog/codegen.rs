@@ -258,7 +258,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker> {
 
         match toc {
             &TermOrCut::Term(Term::Clause(_, ref name, _))
-                | &TermOrCut::Term(Term::Constant(_, Constant::Atom(ref name))) => {
+          | &TermOrCut::Term(Term::Constant(_, Constant::Atom(ref name))) => {
                     if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
                         *ctrl = ControlInstruction::Execute(name.clone(), last_arity);
                     }
