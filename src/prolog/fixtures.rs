@@ -125,8 +125,8 @@ impl<'a> VariableFixtures<'a>
             }
 
             // 3.
-            match self.get_mut(u) {
-                Some(&mut (VarStatus::Temp(_, ref mut u_data), _)) => {
+            match self.get_mut(u).unwrap() {
+                &mut (VarStatus::Temp(_, ref mut u_data), _) => {
                     u_data.use_set = use_set;
                     u_data.populate_conflict_set();
                 },
