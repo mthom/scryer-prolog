@@ -306,16 +306,14 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
         EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
             print!("true");
 
+            if !wam.or_stack_is_empty() {
+                print!(" ");
+            }
+
+            println!(".");
+
             if heap_locs.is_empty() {
-                if !wam.or_stack_is_empty() {
-                    print!(" ");
-                }
-
-                println!(".");
-
                 return;
-            } else {
-                println!("");
             }
 
             loop {
