@@ -133,15 +133,6 @@ pub struct Rule {
     pub clauses: Vec<TermOrCut>
 }
 
-impl Rule {
-    pub fn last_clause(&self) -> &TermOrCut {
-        match self.clauses.last() {
-            None => &self.head.1,
-            Some(clause) => clause
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 pub enum TermRef<'a> {
     AnonVar(Level),
