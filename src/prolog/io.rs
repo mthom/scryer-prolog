@@ -304,8 +304,14 @@ Each predicate must have the same name and arity.";
 pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
         EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
-            println!("true");
+            print!("true");
 
+            if !wam.or_stack_is_empty() {
+                print!(" ");                    
+            }
+            
+            println!(".");
+            
             if heap_locs.is_empty() {
                 return;
             }
