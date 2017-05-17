@@ -225,7 +225,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
         (vs, has_deep_cut)
     }
-    
+
     fn add_conditional_call(compiled_query: &mut Code, term: &Term, pvs: usize)
     {
         match term {
@@ -317,7 +317,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     }
 
     fn compile_neck_cut_or(&mut self,
-                           p1: &'a TermOrCut,                           
+                           p1: &'a TermOrCut,
                            body: &mut Code,
                            perm_vars: usize,
                            is_exposed: bool,
@@ -359,7 +359,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             body.insert(dealloc_index, Line::Control(ControlInstruction::Deallocate));
         }
     }
-    
+
     pub fn compile_rule<'b: 'a>(&mut self, rule: &'b Rule) -> Code
     {
         let iter = ChunkedIterator::from_rule(rule);
@@ -483,10 +483,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
         self.compile_neck_cut_or(p1, &mut code, perm_vars, true, query.len() == 1);
         self.compile_seq(&query[1 .. ], &vs, &mut code, true);
-        
+
         if perm_vars > 0 {
             let index = if let &Line::Control(_) = code.last().unwrap() {
-                code.len() - 2 
+                code.len() - 2
             } else {
                 code.len() - 1
             };
@@ -495,7 +495,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 vs.mark_unsafe_vars_in_query(query);
             }
         }
-        
+
         Self::compile_cleanup(&mut code, query.len() - 1, query.last().unwrap());
 
         code
