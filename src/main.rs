@@ -593,6 +593,25 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- f(r, X, X)."), true);
         assert_eq!(submit(&mut wam, "?- f(r, f(X), g(Y))."), true);
         assert_eq!(submit(&mut wam, "?- f(r, j(X), h(Y))."), false);
+
+        submit(&mut wam, "p(one, one). p(one, two). p(two, two).");
+
+        assert_eq!(submit(&mut wam, "?- f(p(one), X, Y)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p(one), X, X)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p(one), one, Y)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p(one), one, two)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p(one), one, three)."), false);
+
+        assert_eq!(submit(&mut wam, "?- f(p(two), one, two)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(two), two, one)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(two), two, two)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p(two), two, three)."), false);
+
+        assert_eq!(submit(&mut wam, "?- f(p(three), X, Y)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(three), X, X)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(three), one, Y)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(three), one, two)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(three), one, three)."), false);        
     }
 }
 

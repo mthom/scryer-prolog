@@ -17,19 +17,21 @@ Extend rusty-wam to include the following, among other features:
 
 * call/N as a built-in meta-predicate (_done_).
 * ISO Prolog compliant throw/catch.
-* Support for built-in and user-defined operators of all fixities,
+* Built-in and user-defined operators of all fixities,
   with custom associativity and precedence.
 * Bignum and floating point arithmetic.
-* Standard built-in control operators (`;`, `->`, etc.).
+* Built-in control operators (`;`, `->`, etc.).
 * Attributed variables using the SICStus Prolog interface and
-  semantics. Implementing coroutines like `dif/2`, `freeze/2`
-  is easy with attributed variables. 
+  semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
+  is straightforward with attributed variables. 
 * An occurs check.
 * Built-in predicates for list processing and top-level declarative
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
   etc.)
 * Mode declarations.
-* Extensions for clp(FD). 
+* Extensions for clp(FD).
+* `if_` and related predicates, following the developments of the
+  paper "Indexing `dif/2`".
 
 ## Tutorial
 To enter a multi-clause predicate, the brackets ":{" and "}:" are used
