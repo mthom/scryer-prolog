@@ -269,7 +269,6 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
 
             if is_consistent(clauses) {
                 let compiled_pred = cg.compile_predicate(clauses);
-                print_code(&compiled_pred);
                 wam.add_predicate(clauses, compiled_pred);
 
                 EvalSession::EntrySuccess
@@ -285,7 +284,6 @@ Each predicate must have the same name and arity.";
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_fact = cg.compile_fact(fact);
-            print_code(&compiled_fact);
             wam.add_fact(fact, compiled_fact);
 
             EvalSession::EntrySuccess
@@ -294,7 +292,6 @@ Each predicate must have the same name and arity.";
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_rule = cg.compile_rule(rule);
-            print_code(&compiled_rule);
             wam.add_rule(rule, compiled_rule);
 
             EvalSession::EntrySuccess
@@ -303,7 +300,6 @@ Each predicate must have the same name and arity.";
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_query = cg.compile_query(query);
-            print_code(&compiled_query);
             wam.submit_query(compiled_query, cg.take_vars())            
         }
     }
