@@ -171,15 +171,16 @@ impl<'a> VariableFixtures<'a>
         var_count
     }
 
-    pub fn mark_vars_in_chunk(&mut self,
-                              term: &'a Term,
-                              last_term_arity: usize,
-                              chunk_num: usize,
-                              term_loc: GenContext)
+    pub fn mark_vars_in_chunk<Iter>(&mut self,
+                                    iter: Iter,
+                                    last_term_arity: usize,
+                                    chunk_num: usize,
+                                    term_loc: GenContext)
+        where Iter: Iterator<Item=TermRef<'a>>
     {
         let mut arg_c = 1;
 
-        for term_ref in term.breadth_first_iter() {
+        for term_ref in iter {
             if let TermRef::Var(lvl, cell, var) = term_ref {
                 let mut status = self.0.remove(var)
                     .unwrap_or((VarStatus::Temp(chunk_num, TempVarData::new(last_term_arity)),

@@ -1,18 +1,35 @@
 # rusty-wam
 
+## Phase 1
+
 An implementation of the Warren Abstract Machine in Rust, done
 according to the progression of languages in [Warren's Abstract
 Machine: A Tutorial
-Reconstruction](http://wambook.sourceforge.net/wambook.pdf), ending in
-pure Prolog.
+Reconstruction](http://wambook.sourceforge.net/wambook.pdf).
 
-## Progress
+Phase 1 has been completed, in that rusty-wam implements in some form
+all of the WAM book, including lists, cuts, Debray allocation, first
+argument indexing, and conjunctive queries.
 
-Prolog is implemented as a simple REPL. It is without meta- or
-extra-logical operators, or side effects of any kind, with the lone
-exception of cut. In terms of the tutorial pacing, the work covers in
-some form all of the WAM book, including lists, cuts, Debray
-allocation, indexing, and conjunctive queries.
+## Phase 2
+
+Extend rusty-wam to include the following, among other features:
+
+* call/N as a built-in meta-predicate (_done_).
+* ISO Prolog compliant throw/catch.
+* Support for built-in and user-defined operators of all fixities,
+  with custom associativity and precedence.
+* Bignum and floating point arithmetic.
+* Standard built-in control operators (`;`, `->`, etc.).
+* Attributed variables using the SICStus Prolog interface and
+  semantics. Implementing coroutines like `dif/2`, `freeze/2`
+  is easy with attributed variables. 
+* An occurs check.
+* Built-in predicates for list processing and top-level declarative
+  control (`setup_call_control/3`, `call_with_inference_limit/3`,
+  etc.)
+* Mode declarations.
+* Extensions for clp(FD). 
 
 ## Tutorial
 To enter a multi-clause predicate, the brackets ":{" and "}:" are used
@@ -92,16 +109,3 @@ Note that the values of variables belonging to successful queries are
 printed out, on one line each. Uninstantiated variables are denoted by
 a number preceded by an underscore (`X = _0` is an example in the
 above).
-
-## Occurs check
-
-There's no occurs check, but there soon will be. Currently, attempting
-unification on a cyclic term succeeds, and the attempt to write the
-term to a string results in an infinite loop, ie.
-
-```
-prolog> p(W, W).
-prolog> ?- p(f(f(W)), W).
-true
-*loops to infinity*
-```

@@ -44,7 +44,7 @@ impl PredicateClause {
 pub enum TopLevel {
     Fact(Term),
     Predicate(Vec<PredicateClause>),
-    Query(Vec<TermOrCut>),
+    Query(Vec<QueryTerm>),
     Rule(Rule)
 }
 
@@ -114,31 +114,61 @@ pub enum Term {
     Var(Cell<VarReg>, Var)
 }
 
-pub enum TermOrCut {
+pub enum QueryTerm {
+    CallN(Cell<VarReg>, Var, Vec<Box<Term>>),
     Cut,
     Term(Term)
 }
 
-impl TermOrCut {
+impl QueryTerm {
     pub fn arity(&self) -> usize {
         match self {
-            &TermOrCut::Term(ref term) => term.arity(),
+            &QueryTerm::Term(ref term) => term.arity(),
+            &QueryTerm::CallN(_, _, ref terms) => terms.len() + 1,
             _ => 0
+        }
+    }
+
+    pub fn to_ref(&self) -> QueryTermRef {
+        match self {
+            &QueryTerm::CallN(ref cell, ref var, ref terms) =>
+                QueryTermRef::CallN(cell, var, terms),
+            &QueryTerm::Cut =>
+                QueryTermRef::Cut,
+            &QueryTerm::Term(ref term) =>
+                QueryTermRef::Term(term)
         }
     }
 }
 
 pub struct Rule {
-    pub head: (Term, TermOrCut),
-    pub clauses: Vec<TermOrCut>
+    pub head: (Term, QueryTerm),
+    pub clauses: Vec<QueryTerm>
+}
+
+#[derive(Clone, Copy)]
+pub enum ClauseType<'a> {
+    CallN(&'a Cell<VarReg>, &'a Var),    
+    Deep(Level, &'a Cell<RegType>, &'a Atom),
+    Root
+}
+
+impl<'a> ClauseType<'a> {
+    pub fn level_of_subterms(self) -> Level {
+        match self {
+            ClauseType::CallN(_, _) => Level::Shallow,
+            ClauseType::Deep(_, _, _) => Level::Deep,
+            ClauseType::Root => Level::Shallow
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
 pub enum TermRef<'a> {
-    AnonVar(Level),
+    AnonVar(Level),    
     Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     Constant(Level, &'a Cell<RegType>, &'a Constant),
-    Clause(Level, &'a Cell<RegType>, &'a Atom, &'a Vec<Box<Term>>),
+    Clause(ClauseType<'a>, &'a Vec<Box<Term>>),
     Var(Level, &'a Cell<VarReg>, &'a Var)
 }
 
@@ -147,15 +177,40 @@ impl<'a> TermRef<'a> {
         match self {
             TermRef::AnonVar(lvl)
           | TermRef::Cons(lvl, _, _, _)
-          | TermRef::Constant(lvl, _, _)
-          | TermRef::Clause(lvl, _, _, _)
-          | TermRef::Var(lvl, _, _) => lvl
+          | TermRef::Constant(lvl, _, _)          
+          | TermRef::Var(lvl, _, _) => lvl,
+            TermRef::Clause(ClauseType::Root, _) => Level::Shallow,
+            TermRef::Clause(ClauseType::Deep(lvl, _, _), _) => lvl,
+            TermRef::Clause(ClauseType::CallN(_, _), _) => Level::Shallow
         }
     }
 }
 
-pub enum TermOrCutRef<'a> {
-    Cut, Term(&'a Term)
+#[derive(Clone, Copy)]
+pub enum QueryTermRef<'a> {
+    CallN(&'a Cell<VarReg>, &'a Var, &'a Vec<Box<Term>>),
+    Cut,
+    Term(&'a Term)
+}
+
+impl<'a> QueryTermRef<'a> {
+    pub fn arity(self) -> usize {
+        match self {
+            QueryTermRef::Term(term) => term.arity(),
+            QueryTermRef::CallN(_, _, terms) => terms.len() + 1,
+            _ => 0
+        }
+    }
+    
+    pub fn is_callable(self) -> bool {
+        match self {
+            QueryTermRef::Term(&Term::Clause(_, _, _))
+          | QueryTermRef::Term(&Term::Constant(_, Constant::Atom(_)))
+          | QueryTermRef::CallN(_, _, _) =>
+                true,
+            _ => false
+        }
+    }    
 }
 
 pub enum ChoiceInstruction {
@@ -199,6 +254,8 @@ impl IndexedChoiceInstruction {
 pub enum ControlInstruction {
     Allocate(usize),
     Call(Atom, usize, usize),
+    CallN(usize),
+    ExecuteN(usize),
     Deallocate,
     Execute(Atom, usize),
     Proceed
@@ -209,6 +266,8 @@ impl ControlInstruction {
         match self {
             &ControlInstruction::Call(_, _, _) => true,
             &ControlInstruction::Execute(_, _) => true,
+            &ControlInstruction::CallN(_) => true,
+            &ControlInstruction::ExecuteN(_) => true,
             _ => false
         }
     }
@@ -432,13 +491,6 @@ impl Term {
             &Term::Clause(_, _, _) | &Term::Constant(_, Constant::Atom(_)) =>
                 true,
             _ => false
-        }
-    }
-
-    pub fn subterms(&self) -> usize {
-        match self {
-            &Term::Clause(_, _, ref terms) => terms.len(),
-            _ => 1
         }
     }
 

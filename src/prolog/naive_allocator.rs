@@ -129,13 +129,13 @@ impl<'a> Allocator<'a> for NaiveAllocator<'a>
         self.bindings.clear();
     }
     
-    fn advance(&mut self, term_loc: GenContext, term: &'a Term) {
+    fn advance(&mut self, term_loc: GenContext, term: QueryTermRef<'a>) {
         if let GenContext::Head = term_loc {
             self.arg_c  = 1;
-            self.temp_c = max(term.subterms() + 1, self.temp_c);
+            self.temp_c = max(term.arity() + 1, self.temp_c);
         } else {
             self.arg_c  = 1;
-            self.temp_c = term.subterms() + 1;
+            self.temp_c = term.arity() + 1;
         }
     }
 

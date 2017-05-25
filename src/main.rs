@@ -434,50 +434,50 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- p([Y|[d|Xs]])."), true);
         assert_eq!(submit(&mut wam, "?- p(blah)."), true);
 
-        submit(&mut wam, "call(or(X, Y)) :- call(X).
-                          call(trace) :- trace.
-                          call(or(X, Y)) :- call(Y).
-                          call(notrace) :- notrace.
-                          call(nl) :- nl.
-                          call(X) :- builtin(X).
-                          call(X) :- extern(X).
-                          call(call(X)) :- call(X).
-                          call(repeat).
-                          call(repeat) :- call(repeat).
-                          call(false).");
+        submit(&mut wam, "ind_call(or(X, Y)) :- ind_call(X).
+                          ind_call(trace) :- trace.
+                          ind_call(or(X, Y)) :- ind_call(Y).
+                          ind_call(notrace) :- notrace.
+                          ind_call(nl) :- nl.
+                          ind_call(X) :- builtin(X).
+                          ind_call(X) :- extern(X).
+                          ind_call(ind_call(X)) :- ind_call(X).
+                          ind_call(repeat).
+                          ind_call(repeat) :- ind_call(repeat).
+                          ind_call(false).");
 
-        assert_eq!(submit(&mut wam, "?- call(repeat)."), true);
-        assert_eq!(submit(&mut wam, "?- call(false)."), true);
-        assert_eq!(submit(&mut wam, "?- call(call(repeat))."), true);
-        assert_eq!(submit(&mut wam, "?- call(call(false))."), true);
-        assert_eq!(submit(&mut wam, "?- call(notrace)."), false);
-        assert_eq!(submit(&mut wam, "?- call(nl)."), false);
-        assert_eq!(submit(&mut wam, "?- call(builtin(X))."), false);
-        assert_eq!(submit(&mut wam, "?- call(extern(X))."), false);
+        assert_eq!(submit(&mut wam, "?- ind_call(repeat)."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(false)."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(ind_call(repeat))."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(ind_call(false))."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(notrace)."), false);
+        assert_eq!(submit(&mut wam, "?- ind_call(nl)."), false);
+        assert_eq!(submit(&mut wam, "?- ind_call(builtin(X))."), false);
+        assert_eq!(submit(&mut wam, "?- ind_call(extern(X))."), false);
 
         submit(&mut wam, "notrace.");
         submit(&mut wam, "nl.");
 
-        assert_eq!(submit(&mut wam, "?- call(repeat)."), true);
-        assert_eq!(submit(&mut wam, "?- call(false)."), true);
-        assert_eq!(submit(&mut wam, "?- call(call(repeat))."), true);
-        assert_eq!(submit(&mut wam, "?- call(call(false))."), true);
-        assert_eq!(submit(&mut wam, "?- call(notrace)."), true);
-        assert_eq!(submit(&mut wam, "?- call(nl)."), true);
-        assert_eq!(submit(&mut wam, "?- call(builtin(X))."), false);
-        assert_eq!(submit(&mut wam, "?- call(extern(X))."), false);
+        assert_eq!(submit(&mut wam, "?- ind_call(repeat)."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(false)."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(ind_call(repeat))."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(ind_call(false))."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(notrace)."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(nl)."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(builtin(X))."), false);
+        assert_eq!(submit(&mut wam, "?- ind_call(extern(X))."), false);
 
         submit(&mut wam, "builtin(X).");
         submit(&mut wam, "extern(x).");
 
-        assert_eq!(submit(&mut wam, "?- call(repeat)."), true);
-        assert_eq!(submit(&mut wam, "?- call(false)."), true);
-        assert_eq!(submit(&mut wam, "?- call(call(repeat))."), true);
-        assert_eq!(submit(&mut wam, "?- call(call(false))."), true);
-        assert_eq!(submit(&mut wam, "?- call(notrace)."), true);
-        assert_eq!(submit(&mut wam, "?- call(nl)."), true);
-        assert_eq!(submit(&mut wam, "?- call(builtin(X))."), true);
-        assert_eq!(submit(&mut wam, "?- call(extern(X))."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(repeat)."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(false)."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(ind_call(repeat))."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(ind_call(false))."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(notrace)."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(nl)."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(builtin(X))."), true);
+        assert_eq!(submit(&mut wam, "?- ind_call(extern(X))."), true);
     }
 
     #[test]
@@ -540,6 +540,59 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- p(X, Y), q(X, Y)."), true);
         assert_eq!(submit(&mut wam, "?- p(X, Y), q(Y, X)."), true);
         assert_eq!(submit(&mut wam, "?- q(X, Y), p(Y, X)."), true);
+    }
+
+    #[test]
+    fn test_queries_on_call_n()
+    {
+        let mut wam = Machine::new();
+        
+        submit(&mut wam, "maplist(Pred, []).
+                          maplist(Pred, [X|Xs]) :- call(Pred, X), maplist(Pred, Xs).");
+        submit(&mut wam, "f(a). f(b). f(c).");
+
+        assert_eq!(submit(&mut wam, "?- maplist(f, [X,Y,Z])."), true);
+        assert_eq!(submit(&mut wam, "?- maplist(f, [a,Y,Z])."), true);
+        assert_eq!(submit(&mut wam, "?- maplist(f, [X,a,b])."), true);
+        assert_eq!(submit(&mut wam, "?- maplist(f, [c,a,b])."), true);
+        assert_eq!(submit(&mut wam, "?- maplist(f, [d,e,f])."), false);
+        assert_eq!(submit(&mut wam, "?- maplist(f, [])."), true);
+        assert_eq!(submit(&mut wam, "?- maplist(f(X), [a,b,c])."), false);
+
+        submit(&mut wam, "f(X) :- call(X), call(X).");
+        submit(&mut wam, "p(x). p(y).");
+
+        assert_eq!(submit(&mut wam, "?- f(p)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(X))."), true);
+        assert_eq!(submit(&mut wam, "?- f(p(x))."), true);
+        assert_eq!(submit(&mut wam, "?- f(p(w))."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(X, Y))."), false);
+
+        submit(&mut wam, "f(P) :- call(P, X), call(P, Y).");
+
+        assert_eq!(submit(&mut wam, "?- f(p)."), true);
+        assert_eq!(submit(&mut wam, "?- f(non_existent)."), false);
+
+        submit(&mut wam, "f(P, X, Y) :- call(P, X), call(P, Y).");
+
+        assert_eq!(submit(&mut wam, "?- f(p, X, Y)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p, x, Y)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p, X, y)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p, x, y)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p, X, z)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p, z, Y)."), false);
+        
+        assert_eq!(submit(&mut wam, "?- call(p, X)."), true);
+        assert_eq!(submit(&mut wam, "?- call(p, x)."), true);
+        assert_eq!(submit(&mut wam, "?- call(p, y)."), true);
+        assert_eq!(submit(&mut wam, "?- call(p, z)."), false);
+
+        submit(&mut wam, "r(f(X)) :- p(X). r(g(Y)) :- p(Y).");
+
+        assert_eq!(submit(&mut wam, "?- f(r, X, Y)."), true);
+        assert_eq!(submit(&mut wam, "?- f(r, X, X)."), true);
+        assert_eq!(submit(&mut wam, "?- f(r, f(X), g(Y))."), true);
+        assert_eq!(submit(&mut wam, "?- f(r, j(X), h(Y))."), false);
     }
 }
 

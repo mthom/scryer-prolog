@@ -332,7 +332,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
         self.bindings
     }
     
-    fn advance(&mut self, _: GenContext, term: &'a Term) {
+    fn advance(&mut self, _: GenContext, term: QueryTermRef<'a>) {
         self.arg_c   = 1;
         self.temp_lb = term.arity() + 1;
     }

@@ -19,6 +19,23 @@ BoxedTerm : Box<Term> = {
     <t:Term> => Box::new(t)
 };
 
+Call : QueryTerm = {
+    "call" "(" <a:Atom> "(" <ts: (<BoxedTerm> ",")*> <t:BoxedTerm> ")"
+    <tss: ("," <BoxedTerm>)*> ")" => {
+        let mut ts  = ts;
+        let mut tss = tss;
+
+	ts.push(t);
+
+        ts.append(&mut tss);
+        QueryTerm::Term(Term::Clause(Cell::default(), a, ts))
+    },
+    "call" "(" <a:Atom> <ts: ("," <BoxedTerm>)*> ")" =>        
+        QueryTerm::Term(Term::Clause(Cell::default(), a, ts)),    
+    "call" "(" <v:Var> <ts: ("," <BoxedTerm>)*> ")" =>
+        QueryTerm::CallN(Cell::default(), v, ts)
+};
+
 Clause : Term = {
     <a:Atom> "(" <ts: (<BoxedTerm> ",")*> <t:BoxedTerm> ")" => {
      	let mut ts = ts;
@@ -56,26 +73,29 @@ PredicateClause : PredicateClause = {
     <Term> "." => PredicateClause::Fact(<>)
 };
 
-Query : Vec<TermOrCut> = {
-    <tcs: (<TermOrCut> ",")*> <tc: TermOrCut> => {
+Query : Vec<QueryTerm> = {
+    <tcs: (<QueryTerm> ",")*> <tc: QueryTerm> => {
         let mut tcs = tcs;
         tcs.push(tc);
         tcs
-    }        
+    }
 };
 
 Rule : Rule = {
-    <c:Clause> ":-" <h:TermOrCut> <cs: ("," <TermOrCut>)*> =>
+    <c:Clause> ":-" <h:QueryTerm> <cs: ("," <QueryTerm>)*> =>
         Rule { head: (c, h), clauses: cs },
-    <a:Atom> ":-" <h:TermOrCut> <cs: ("," <TermOrCut>)*> =>
+    <a:Atom> ":-" <h:QueryTerm> <cs: ("," <QueryTerm>)*> =>
         Rule { head: (Term::Constant(Cell::default(), Constant::Atom(a)),
 	              h),
                clauses: cs }
 };
 
-TermOrCut : TermOrCut = {
-    "!"    => TermOrCut::Cut,
-    <Term> => TermOrCut::Term(<>)
+QueryTerm : QueryTerm = {
+    <Call>   => <>,
+    "!"      => QueryTerm::Cut,
+    <Var>    => QueryTerm::CallN(Cell::default(), <>, Vec::new()),
+    <Clause> => QueryTerm::Term(<>),
+    <Atom>   => QueryTerm::Term(Term::Constant(Cell::default(), Constant::Atom(<>)))
 };
 
 Term : Term = {
@@ -83,7 +103,7 @@ Term : Term = {
     <Clause> => <>,
     <List>   => <>,
     <Var>    => Term::Var(Cell::default(), <>),
-    "_"      => Term::AnonVar    
+    "_"      => Term::AnonVar
 };
 
 Var : Var = {

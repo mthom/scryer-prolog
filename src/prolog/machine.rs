@@ -247,13 +247,13 @@ impl Machine {
                     let e = self.ms.e;
                     let r = var_data.as_reg_type().reg_num();
                     let addr = self.ms.and_stack[e][r].clone();
-                    
+
                     heap_locs.insert(var, addr);
                 },
                 &VarData::Temp(cn, _, _) if cn == chunk_num => {
                     let r = var_data.as_reg_type();
                     let addr = self.ms[r].clone();
-                    
+
                     heap_locs.insert(var, addr);
                 },
                 _ => {}
@@ -276,21 +276,21 @@ impl Machine {
 
                 self.ms.p = CodePtr::TopLevel(cn, p);
             }
-                
+
             self.query_stepper();
 
             match self.ms.p {
                 CodePtr::TopLevel(_, p) if p > 0 => {},
-                _ => break                    
-            };            
+                _ => break
+            };
         }
     }
 
     pub fn submit_query<'a>(&mut self, code: Code, alloc_locs: AllocVarDict<'a>) -> EvalSession<'a>
     {
         let mut heap_locs = HashMap::new();
-        self.cached_query = Some(code);
-
+        
+        self.cached_query = Some(code);            
         self.run_query(&alloc_locs, &mut heap_locs);
 
         if self.failed() {
@@ -951,6 +951,35 @@ impl MachineState {
         }
     }
 
+    fn try_call_predicate(&mut self, code_dir: &CodeDir, name: Atom, arity: usize)
+    {
+        let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| *index);
+
+        match compiled_tl_index {
+            Some(compiled_tl_index) => {
+                self.cp = self.p + 1;
+                self.num_of_args = arity;
+                self.b0 = self.b;
+                self.p  = CodePtr::DirEntry(compiled_tl_index);
+            },
+            None => self.fail = true
+        };
+    }
+
+    fn try_execute_predicate(&mut self, code_dir: &CodeDir, name: Atom, arity: usize)
+    {
+        let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| *index);
+
+        match compiled_tl_index {
+            Some(compiled_tl_index) => {
+                self.num_of_args = arity;
+                self.b0 = self.b;
+                self.p  = CodePtr::DirEntry(compiled_tl_index);
+            },
+            None => self.fail = true
+        };        
+    }
+    
     fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
     {
         match instr {
@@ -958,22 +987,33 @@ impl MachineState {
                 let num_frames = self.num_frames();
 
                 self.and_stack.push(num_frames + 1, self.e, self.cp, num_cells);
-
+                
                 self.e = self.and_stack.len() - 1;
                 self.p += 1;
             },
-            &ControlInstruction::Call(ref name, arity, _) => {
-                let compiled_tl_index = code_dir.get(&(name.clone(), arity))
-                                                .map(|index| *index);
+            &ControlInstruction::Call(ref name, arity, _) =>
+                self.try_call_predicate(code_dir, name.clone(), arity),
+            &ControlInstruction::CallN(arity) => {
+                let addr = self.deref(self.registers[arity + 1].clone());
 
-                match compiled_tl_index {
-                    Some(compiled_tl_index) => {
-                        self.cp = self.p + 1;
-                        self.num_of_args = arity;
-                        self.b0 = self.b;
-                        self.p  = CodePtr::DirEntry(compiled_tl_index);
+                match self.store(addr) {
+                    Addr::Str(a) => {
+                        let result = self.heap[a].clone();
+
+                        if let HeapCellValue::NamedStr(narity, name) = result {
+                            for i in 1 .. narity + 1 {
+                                self.registers[i + narity] = self.registers[i].clone();
+                                self.registers[i] = self.heap[a + i].as_addr(a + i);
+                            }
+
+                            self.try_call_predicate(code_dir, name, arity + narity);
+                        } else {
+                            self.fail = true;
+                        }
                     },
-                    None => self.fail = true
+                    Addr::Con(Constant::Atom(name)) =>
+                        self.try_call_predicate(code_dir, name, arity),
+                    _ => self.fail = true
                 };
             },
             &ControlInstruction::Deallocate => {
@@ -984,18 +1024,30 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &ControlInstruction::Execute(ref name, arity) => {
-                let compiled_tl_index = code_dir.get(&(name.clone(), arity))
-                                                .map(|index| *index);
+            &ControlInstruction::Execute(ref name, arity) =>
+                self.try_execute_predicate(code_dir, name.clone(), arity),            
+            &ControlInstruction::ExecuteN(arity) => {
+                let addr = self.deref(self.registers[arity + 1].clone());
 
-                match compiled_tl_index {
-                    Some(compiled_tl_index) => {
-                        self.num_of_args = arity;
-                        self.b0 = self.b;
-                        self.p  = CodePtr::DirEntry(compiled_tl_index);
+                match self.store(addr) {
+                    Addr::Str(a) => {
+                        let result = self.heap[a].clone();
+
+                        if let HeapCellValue::NamedStr(narity, name) = result {
+                            for i in 1 .. narity + 1 {
+                                self.registers[i + narity] = self.registers[i].clone();
+                                self.registers[i] = self.heap[a + i].as_addr(a + i);
+                            }
+
+                            self.try_execute_predicate(code_dir, name, arity + narity);
+                        } else {
+                            self.fail = true;
+                        }
                     },
-                    None => self.fail = true
-                };
+                    Addr::Con(Constant::Atom(name)) =>
+                        self.try_execute_predicate(code_dir, name, arity),
+                    _ => self.fail = true
+                };                
             },
             &ControlInstruction::Proceed =>
                 self.p = self.cp,
