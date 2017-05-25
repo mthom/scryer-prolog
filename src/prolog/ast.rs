@@ -13,6 +13,15 @@ pub enum GenContext {
     Head, Mid(usize), Last(usize) // Mid & Last: chunk_num
 }
 
+impl GenContext {
+    pub fn chunk_num(self) -> usize {
+        match self {
+            GenContext::Head => 0,
+            GenContext::Mid(cn) | GenContext::Last(cn) => cn
+        }
+    }        
+}
+
 pub enum PredicateClause {
     Fact(Term),
     Rule(Rule)
@@ -115,7 +124,7 @@ pub enum Term {
 }
 
 pub enum QueryTerm {
-    CallN(Cell<VarReg>, Var, Vec<Box<Term>>),
+    CallN(Vec<Box<Term>>),
     Cut,
     Term(Term)
 }
@@ -124,15 +133,15 @@ impl QueryTerm {
     pub fn arity(&self) -> usize {
         match self {
             &QueryTerm::Term(ref term) => term.arity(),
-            &QueryTerm::CallN(_, _, ref terms) => terms.len() + 1,
+            &QueryTerm::CallN(ref terms) => terms.len(),
             _ => 0
         }
     }
 
     pub fn to_ref(&self) -> QueryTermRef {
         match self {
-            &QueryTerm::CallN(ref cell, ref var, ref terms) =>
-                QueryTermRef::CallN(cell, var, terms),
+            &QueryTerm::CallN(ref terms) =>
+                QueryTermRef::CallN(terms),
             &QueryTerm::Cut =>
                 QueryTermRef::Cut,
             &QueryTerm::Term(ref term) =>
@@ -148,7 +157,7 @@ pub struct Rule {
 
 #[derive(Clone, Copy)]
 pub enum ClauseType<'a> {
-    CallN(&'a Cell<VarReg>, &'a Var),    
+    CallN,
     Deep(Level, &'a Cell<RegType>, &'a Atom),
     Root
 }
@@ -156,7 +165,7 @@ pub enum ClauseType<'a> {
 impl<'a> ClauseType<'a> {
     pub fn level_of_subterms(self) -> Level {
         match self {
-            ClauseType::CallN(_, _) => Level::Shallow,
+            ClauseType::CallN => Level::Shallow,
             ClauseType::Deep(_, _, _) => Level::Deep,
             ClauseType::Root => Level::Shallow
         }
@@ -181,14 +190,14 @@ impl<'a> TermRef<'a> {
           | TermRef::Var(lvl, _, _) => lvl,
             TermRef::Clause(ClauseType::Root, _) => Level::Shallow,
             TermRef::Clause(ClauseType::Deep(lvl, _, _), _) => lvl,
-            TermRef::Clause(ClauseType::CallN(_, _), _) => Level::Shallow
+            TermRef::Clause(ClauseType::CallN, _) => Level::Shallow
         }
     }
 }
 
 #[derive(Clone, Copy)]
 pub enum QueryTermRef<'a> {
-    CallN(&'a Cell<VarReg>, &'a Var, &'a Vec<Box<Term>>),
+    CallN(&'a Vec<Box<Term>>),
     Cut,
     Term(&'a Term)
 }
@@ -197,7 +206,7 @@ impl<'a> QueryTermRef<'a> {
     pub fn arity(self) -> usize {
         match self {
             QueryTermRef::Term(term) => term.arity(),
-            QueryTermRef::CallN(_, _, terms) => terms.len() + 1,
+            QueryTermRef::CallN(terms) => terms.len(),
             _ => 0
         }
     }
@@ -206,8 +215,7 @@ impl<'a> QueryTermRef<'a> {
         match self {
             QueryTermRef::Term(&Term::Clause(_, _, _))
           | QueryTermRef::Term(&Term::Constant(_, Constant::Atom(_)))
-          | QueryTermRef::CallN(_, _, _) =>
-                true,
+          | QueryTermRef::CallN(_) => true,
             _ => false
         }
     }    

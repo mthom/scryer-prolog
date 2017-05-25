@@ -69,9 +69,8 @@ impl<'a> QueryIterator<'a> {
 
     fn new(term: QueryTermRef<'a>) -> Self {
         match term {
-            QueryTermRef::CallN(cell, var, child_terms) => {
-                let state = IteratorState::Clause(0, ClauseType::CallN(cell, var), child_terms);
-
+            QueryTermRef::CallN(child_terms) => {
+                let state = IteratorState::Clause(0, ClauseType::CallN, child_terms);
                 QueryIterator { state_stack: vec![state] }
             },
             QueryTermRef::Term(term) => Self::from_term(term),
@@ -97,14 +96,10 @@ impl<'a> Iterator for QueryIterator<'a> {
                 IteratorState::Clause(child_num, ct, child_terms) => {
                     if child_num == child_terms.len() {
                         match ct {
-                            ClauseType::Root =>
+                            ClauseType::CallN | ClauseType::Root =>
                                 return None,
                             ClauseType::Deep(_, _, _) =>
-                                return Some(TermRef::Clause(ct, child_terms)),
-                            ClauseType::CallN(cell, var) => {
-                                let state = IteratorState::Var(Level::Shallow, cell, var);
-                                self.state_stack.push(state);
-                            }
+                                return Some(TermRef::Clause(ct, child_terms))
                         };
                     } else {
                         self.push_clause(child_num + 1, ct, child_terms);
@@ -172,15 +167,11 @@ impl<'a> Iterator for FactIterator<'a> {
                         self.push_subterm(ct.level_of_subterms(), child_term);
                     }
 
-                    match ct {
-                        ClauseType::Root =>
-                            continue,
+                    match ct {                        
                         ClauseType::Deep(_, _, _) =>
                             return Some(TermRef::Clause(ct, child_terms)),
-                        ClauseType::CallN(cell, var) => {
-                            let state = IteratorState::Var(Level::Shallow, cell, var);
-                            self.state_queue.push_back(state);
-                        }
+                        _ =>
+                            continue
                     };
                 },
                 IteratorState::InitialCons(lvl, cell, head, tail) => {
@@ -249,8 +240,8 @@ impl<'a> ChunkedIterator<'a>
         let iter = once(QueryTermRef::Term(p0));
 
         let inner_iter : Box<Iterator<Item=QueryTermRef<'a>>> = match p1 {
-            &QueryTerm::CallN(ref cell, ref var, ref child_terms) =>
-                Box::new(once(QueryTermRef::CallN(cell, var, child_terms))),
+            &QueryTerm::CallN(ref child_terms) =>
+                Box::new(once(QueryTermRef::CallN(child_terms))),
             &QueryTerm::Term(ref p1) =>
                 Box::new(once(QueryTermRef::Term(p1))),
             _ => Box::new(empty())
@@ -288,7 +279,7 @@ impl<'a> ChunkedIterator<'a>
                         break;
                     }
                 },
-                QueryTermRef::CallN(_, _, child_terms) => {
+                QueryTermRef::CallN(child_terms) => {
                     result.push(term);
                     arity = child_terms.len() + 1;
                     break;

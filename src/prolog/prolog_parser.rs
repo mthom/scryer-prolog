@@ -2901,7 +2901,13 @@ pub fn __action9<
     (_, _, _): (usize, &'input str, usize),
 ) -> QueryTerm
 {
-    QueryTerm::CallN(Cell::default(), v, ts)
+    {
+        let mut ts = ts;
+    	let bv = Box::new(Term::Var(Cell::default(), v));
+        
+        ts.push(bv);
+        QueryTerm::CallN(ts)
+     }
 }
 
 #[allow(unused_variables)]
@@ -3105,7 +3111,7 @@ pub fn __action24<
     (_, __0, _): (usize, Var, usize),
 ) -> QueryTerm
 {
-    QueryTerm::CallN(Cell::default(), __0, Vec::new())
+    QueryTerm::CallN(vec![Box::new(Term::Var(Cell::default(), __0))])
 }
 
 #[allow(unused_variables)]

@@ -32,8 +32,13 @@ Call : QueryTerm = {
     },
     "call" "(" <a:Atom> <ts: ("," <BoxedTerm>)*> ")" =>        
         QueryTerm::Term(Term::Clause(Cell::default(), a, ts)),    
-    "call" "(" <v:Var> <ts: ("," <BoxedTerm>)*> ")" =>
-        QueryTerm::CallN(Cell::default(), v, ts)
+    "call" "(" <v:Var> <ts: ("," <BoxedTerm>)*> ")" => {
+        let mut ts = ts;
+    	let bv = Box::new(Term::Var(Cell::default(), v));
+        
+        ts.push(bv);
+        QueryTerm::CallN(ts)
+     }       
 };
 
 Clause : Term = {
@@ -93,7 +98,7 @@ Rule : Rule = {
 QueryTerm : QueryTerm = {
     <Call>   => <>,
     "!"      => QueryTerm::Cut,
-    <Var>    => QueryTerm::CallN(Cell::default(), <>, Vec::new()),
+    <Var>    => QueryTerm::CallN(vec![Box::new(Term::Var(Cell::default(), <>))]),
     <Clause> => QueryTerm::Term(<>),
     <Atom>   => QueryTerm::Term(Term::Constant(Cell::default(), Constant::Atom(<>)))
 };

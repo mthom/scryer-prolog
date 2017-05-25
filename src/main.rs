@@ -611,7 +611,11 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- f(p(three), X, X)."), false);
         assert_eq!(submit(&mut wam, "?- f(p(three), one, Y)."), false);
         assert_eq!(submit(&mut wam, "?- f(p(three), one, two)."), false);
-        assert_eq!(submit(&mut wam, "?- f(p(three), one, three)."), false);        
+        assert_eq!(submit(&mut wam, "?- f(p(three), one, three)."), false);
+
+        submit(&mut wam, "f(P, X) :- call(P, X).");
+
+        assert_eq!(submit(&mut wam, "?- f(p(one), one)."), true); 
     }
 }
 

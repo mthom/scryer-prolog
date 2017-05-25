@@ -97,10 +97,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         where Target: CompilationTarget<'a>
     {
         match ct {
-            ClauseType::CallN(_, _) =>
-                for subterm in terms {
-                    self.subterm_to_instr(subterm.as_ref(), term_loc, is_exposed, target);
-                },
             ClauseType::Deep(lvl, cell, atom) => {
                 self.marker.mark_non_var(lvl, term_loc, cell, target);
                 target.push(Target::to_structure(lvl, atom.clone(), terms.len(), cell.get()));
@@ -182,7 +178,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     fn add_conditional_call(compiled_query: &mut Code, qt: QueryTermRef, pvs: usize)
     {
         match qt {
-            QueryTermRef::CallN(_, _, terms) => {
+            QueryTermRef::CallN(terms) => {
                 let call = ControlInstruction::CallN(terms.len());
                 compiled_query.push(Line::Control(call));
             },
@@ -209,7 +205,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
                     *ctrl = ControlInstruction::Execute(name.clone(), last_arity);
                 },
-            &QueryTerm::CallN(_, _, ref terms) =>
+            &QueryTerm::CallN(ref terms) =>
                 if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
                     *ctrl = ControlInstruction::ExecuteN(terms.len());
                 },

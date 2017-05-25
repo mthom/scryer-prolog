@@ -285,7 +285,7 @@ Each predicate must have the same name and arity.";
 
             let compiled_fact = cg.compile_fact(fact);
             wam.add_fact(fact, compiled_fact);
-
+            
             EvalSession::EntrySuccess
         },
         &TopLevel::Rule(ref rule) => {

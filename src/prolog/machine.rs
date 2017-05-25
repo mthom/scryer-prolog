@@ -994,7 +994,7 @@ impl MachineState {
             &ControlInstruction::Call(ref name, arity, _) =>
                 self.try_call_predicate(code_dir, name.clone(), arity),
             &ControlInstruction::CallN(arity) => {
-                let addr = self.deref(self.registers[arity + 1].clone());
+                let addr = self.deref(self.registers[arity].clone());
 
                 match self.store(addr) {
                     Addr::Str(a) => {
@@ -1006,13 +1006,13 @@ impl MachineState {
                                 self.registers[i] = self.heap[a + i].as_addr(a + i);
                             }
 
-                            self.try_call_predicate(code_dir, name, arity + narity);
+                            self.try_call_predicate(code_dir, name, arity + narity - 1);
                         } else {
                             self.fail = true;
                         }
                     },
                     Addr::Con(Constant::Atom(name)) =>
-                        self.try_call_predicate(code_dir, name, arity),
+                        self.try_call_predicate(code_dir, name, arity - 1),
                     _ => self.fail = true
                 };
             },
@@ -1027,7 +1027,7 @@ impl MachineState {
             &ControlInstruction::Execute(ref name, arity) =>
                 self.try_execute_predicate(code_dir, name.clone(), arity),            
             &ControlInstruction::ExecuteN(arity) => {
-                let addr = self.deref(self.registers[arity + 1].clone());
+                let addr = self.deref(self.registers[arity].clone());
 
                 match self.store(addr) {
                     Addr::Str(a) => {
@@ -1039,13 +1039,13 @@ impl MachineState {
                                 self.registers[i] = self.heap[a + i].as_addr(a + i);
                             }
 
-                            self.try_execute_predicate(code_dir, name, arity + narity);
+                            self.try_execute_predicate(code_dir, name, arity + narity - 1);
                         } else {
                             self.fail = true;
                         }
                     },
                     Addr::Con(Constant::Atom(name)) =>
-                        self.try_execute_predicate(code_dir, name, arity),
+                        self.try_execute_predicate(code_dir, name, arity - 1),
                     _ => self.fail = true
                 };                
             },

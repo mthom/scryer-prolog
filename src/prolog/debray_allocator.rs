@@ -14,7 +14,14 @@ pub struct DebrayAllocator<'a> {
     in_use:   BTreeSet<usize>,
 }
 
-impl<'a> DebrayAllocator<'a> {    
+impl<'a> DebrayAllocator<'a> {
+    fn is_curr_arg_distinct_from(&self, var: &'a Var) -> bool {
+        match self.contents.get(&self.arg_c) {
+            Some(t_var) if **t_var != *var => true,
+            _ => false
+        }
+    }
+    
     fn occurs_shallowly_in_head(&self, var: &'a Var, r: usize) -> bool
     {
         match self.bindings.get(var).unwrap() {
@@ -142,6 +149,7 @@ impl<'a> DebrayAllocator<'a> {
         match term_loc {
             GenContext::Head =>
                 if let Level::Shallow = lvl {
+                    self.evacuate_arg(0, target);
                     self.alloc_with_cr(var)
                 } else {
                     self.alloc_with_ca(var)
@@ -262,14 +270,22 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
             RegType::Perm(0) => {
                 let pr = cell.get().norm();
                 self.record_register(var, pr);
+                
                 (pr, true)
             },
-            r => (r, false)
+            r => (r, false)            
         };
 
         match lvl {
             Level::Shallow => {
                 let k = self.arg_c;
+
+                if !r.is_perm() {                    
+                    if self.is_curr_arg_distinct_from(var) {
+                        self.evacuate_arg(term_loc.chunk_num(), target);
+                    }
+                }
+                
                 self.arg_c += 1;
 
                 cell.set(VarReg::ArgAndNorm(r, k));
@@ -295,14 +311,14 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
             Level::Deep =>
                 target.push(Target::subterm_to_value(r))
         };
-
+        
         if !r.is_perm() {
             let o = r.reg_num();
 
             self.contents.insert(o, var);
             self.record_register(var, r);
             self.in_use.insert(o);
-        }
+        }        
     }
 
     fn reset(&mut self) {
