@@ -31,9 +31,8 @@ Extend rusty-wam to include the following, among other features:
 * Mode declarations.
 * Extensions for clp(FD).
 * `if_` and related predicates, following the developments of the
-  paper "Indexing `dif/2`".  
-* Strings, blobs, and other data types typical of Prolog that may not yet
-  know of or have left out.
+  paper "Indexing `dif/2`".
+* Strings, blobs, and other data types.
   
 ## Phase 3
 
