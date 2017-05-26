@@ -13,6 +13,15 @@ pub enum GenContext {
     Head, Mid(usize), Last(usize) // Mid & Last: chunk_num
 }
 
+impl GenContext {
+    pub fn chunk_num(self) -> usize {
+        match self {
+            GenContext::Head => 0,
+            GenContext::Mid(cn) | GenContext::Last(cn) => cn
+        }
+    }        
+}
+
 pub enum PredicateClause {
     Fact(Term),
     Rule(Rule)
