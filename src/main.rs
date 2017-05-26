@@ -615,7 +615,16 @@ mod tests {
 
         submit(&mut wam, "f(P, X) :- call(P, X).");
 
-        assert_eq!(submit(&mut wam, "?- f(p(one), one)."), true); 
+        assert_eq!(submit(&mut wam, "?- f(p(one), one)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p(two), two)."), true);
+        assert_eq!(submit(&mut wam, "?- f(p(two), one)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(three), one)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(one), three)."), false);
+        assert_eq!(submit(&mut wam, "?- f(p(two), three)."), false);
+
+        submit(&mut wam, "p(f(g(X)), compound, [lists,are,good]).");
+
+        assert_eq!(submit(&mut wam, "?- call(p(f(g(X))), Y, Z)."), true);
     }
 }
 
