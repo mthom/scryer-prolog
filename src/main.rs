@@ -625,6 +625,19 @@ mod tests {
         submit(&mut wam, "p(f(g(X)), compound, [lists,are,good]).");
 
         assert_eq!(submit(&mut wam, "?- call(p(f(g(X))), Y, Z)."), true);
+
+        submit(&mut wam, "david_lynch(coffee).
+                          david_lynch(pie).
+                          david_lynch(kyle(Film)) :- kyle(Film).");
+
+        submit(&mut wam, "kyle(dune).
+                          kyle(blue_velvet).
+                          kyle(showgirls).
+                          kyle(flintstones).");
+
+        assert_eq!(submit(&mut wam, "?- call(david_lynch, X)."), true);
+        assert_eq!(submit(&mut wam, "?- call(david_lynch, kyle(Film))."), true);
+        assert_eq!(submit(&mut wam, "?- call(david_lynch, kyle(Film), _)."), false);
     }
 }
 
