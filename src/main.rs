@@ -638,6 +638,15 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- call(david_lynch, X)."), true);
         assert_eq!(submit(&mut wam, "?- call(david_lynch, kyle(Film))."), true);
         assert_eq!(submit(&mut wam, "?- call(david_lynch, kyle(Film), _)."), false);
+
+        submit(&mut wam, "call_mult(P, X) :- call(call(P), X).");
+        
+        assert_eq!(submit(&mut wam, "?- call_mult(p(X), Y)."), true);
+        assert_eq!(submit(&mut wam, "?- call_mult(p(X), X)."), true);
+        assert_eq!(submit(&mut wam, "?- call_mult(p(one), X)."), true);
+        assert_eq!(submit(&mut wam, "?- call_mult(p(X), one)."), true);
+        assert_eq!(submit(&mut wam, "?- call_mult(p(two), one)."), false);
+        assert_eq!(submit(&mut wam, "?- call_mult(p(two), two)."), true);
     }
 }
 

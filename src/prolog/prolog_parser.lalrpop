@@ -20,6 +20,25 @@ BoxedTerm : Box<Term> = {
 };
 
 Call : QueryTerm = {
+    "call" "(" <c:Call> <ts: ("," <BoxedTerm>)*> ")" => {
+        match c {
+            QueryTerm::CallN(mut terms) => {
+                let vt = terms.pop().unwrap();
+                let mut ts = ts;
+                
+                terms.append(&mut ts);
+                terms.push(vt);
+                
+                QueryTerm::CallN(terms)
+            },
+            QueryTerm::Term(Term::Clause(cell, atom, mut terms)) => {
+                let mut ts = ts;                
+                terms.append(&mut ts);
+                QueryTerm::Term(Term::Clause(cell, atom, terms))
+            },
+            _ => c
+        }
+    },    
     "call" "(" <a:Atom> "(" <ts: (<BoxedTerm> ",")*> <t:BoxedTerm> ")"
     <tss: ("," <BoxedTerm>)*> ")" => {
         let mut ts  = ts;
