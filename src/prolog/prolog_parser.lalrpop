@@ -1,4 +1,5 @@
 use prolog::ast::*;
+//use prolog::prolog_parser_utils::*;
 
 use std::cell::Cell;
 
@@ -19,49 +20,8 @@ BoxedTerm : Box<Term> = {
     <t:Term> => Box::new(t)
 };
 
-Call : QueryTerm = {
-    "call" "(" <c:Call> <ts: ("," <BoxedTerm>)*> ")" => {
-        match c {
-            QueryTerm::CallN(mut terms) => {
-                let vt = terms.pop().unwrap();
-                let mut ts = ts;
-                
-                terms.append(&mut ts);
-                terms.push(vt);
-                
-                QueryTerm::CallN(terms)
-            },
-            QueryTerm::Term(Term::Clause(cell, atom, mut terms)) => {
-                let mut ts = ts;                
-                terms.append(&mut ts);
-                QueryTerm::Term(Term::Clause(cell, atom, terms))
-            },
-            _ => c
-        }
-    },    
-    "call" "(" <a:Atom> "(" <ts: (<BoxedTerm> ",")*> <t:BoxedTerm> ")"
-    <tss: ("," <BoxedTerm>)*> ")" => {
-        let mut ts  = ts;
-        let mut tss = tss;
-
-	ts.push(t);
-
-        ts.append(&mut tss);
-        QueryTerm::Term(Term::Clause(Cell::default(), a, ts))
-    },
-    "call" "(" <a:Atom> <ts: ("," <BoxedTerm>)*> ")" =>        
-        QueryTerm::Term(Term::Clause(Cell::default(), a, ts)),    
-    "call" "(" <v:Var> <ts: ("," <BoxedTerm>)*> ")" => {
-        let mut ts = ts;
-    	let bv = Box::new(Term::Var(Cell::default(), v));
-        
-        ts.push(bv);
-        QueryTerm::CallN(ts)
-     }       
-};
-
 Clause : Term = {
-    <a:Atom> "(" <ts: (<BoxedTerm> ",")*> <t:BoxedTerm> ")" => {
+    <a: Atom> "(" <ts: (<BoxedTerm> ",")*> <t:BoxedTerm> ")" => {
      	let mut ts = ts;
      	ts.push(t);
 	Term::Clause(Cell::default(), a, ts)
@@ -109,22 +69,20 @@ Rule : Rule = {
     <c:Clause> ":-" <h:QueryTerm> <cs: ("," <QueryTerm>)*> =>
         Rule { head: (c, h), clauses: cs },
     <a:Atom> ":-" <h:QueryTerm> <cs: ("," <QueryTerm>)*> =>
-        Rule { head: (Term::Constant(Cell::default(), Constant::Atom(a)),
-	              h),
+        Rule { head: (Term::Constant(Cell::default(), Constant::Atom(a)), h),
                clauses: cs }
 };
 
 QueryTerm : QueryTerm = {
-    <Call>   => <>,
     "!"      => QueryTerm::Cut,
     <Var>    => QueryTerm::CallN(vec![Box::new(Term::Var(Cell::default(), <>))]),
-    <Clause> => QueryTerm::Term(<>),
+    <Clause> => QueryTerm::Term(<>),        
     <Atom>   => QueryTerm::Term(Term::Constant(Cell::default(), Constant::Atom(<>)))
 };
 
 Term : Term = {
-    <Atom>   => Term::Constant(Cell::default(), Constant::Atom(<>)),
     <Clause> => <>,
+    <Atom>   => Term::Constant(Cell::default(), Constant::Atom(<>)),
     <List>   => <>,
     <Var>    => Term::Var(Cell::default(), <>),
     "_"      => Term::AnonVar

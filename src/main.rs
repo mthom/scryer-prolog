@@ -3,7 +3,6 @@ mod prolog;
 
 use prolog::io::*;
 use prolog::machine::*;
-use prolog::prolog_parser::*;
 
 #[cfg(test)]
 mod tests {
@@ -13,8 +12,8 @@ mod tests {
     fn submit(wam: &mut Machine, buffer: &str) -> bool {
         wam.reset();
 
-        match parse_TopLevel(buffer.trim()) {
-            Ok(tl) =>
+        match parse_code(buffer.trim()) {
+            Some(tl) =>
                 match eval(wam, &tl) {
                     EvalSession::InitialQuerySuccess(_, _) |
                     EvalSession::EntrySuccess |
@@ -22,7 +21,7 @@ mod tests {
                         true,
                     _ => false
                 },
-            Err(_) => panic!("Bad parse in test case!")
+            None => panic!("Grammatical error of some kind!")
         }
     }
 
@@ -647,19 +646,31 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- call_mult(p(X), one)."), true);
         assert_eq!(submit(&mut wam, "?- call_mult(p(two), one)."), false);
         assert_eq!(submit(&mut wam, "?- call_mult(p(two), two)."), true);
+
+        submit(&mut wam, "f(call(f, undefined)). f(undefined).");
+        submit(&mut wam, "call_var(P) :- P.");
+                
+        assert_eq!(submit(&mut wam, "?- f(X), call_var(X)."), true);
+        assert_eq!(submit(&mut wam, "?- f(call(f, Q)), call_var(call(f, Q))."), true);
+        assert_eq!(submit(&mut wam, "?- call_var(call(undefined, Q))."), false);
+
+        assert_eq!(submit(&mut wam, "?- call(call)."), false);
+        assert_eq!(submit(&mut wam, "?- call(call(call))."), false);
+        assert_eq!(submit(&mut wam, "?- call(call(call(call)))."), false);
+        assert_eq!(submit(&mut wam, "?- call(call(call(call(call))))."), false);
+        assert_eq!(submit(&mut wam, "?- call(call(call(call(call(call)))))."), false);
+        assert_eq!(submit(&mut wam, "?- call(call(call(call(call(call(p(X)))))))."), true);
     }
 }
 
 fn process_buffer(wam: &mut Machine, buffer: &str)
 {
-    match parse_TopLevel(buffer.trim()) {
-        Ok(tl) => {
+    match parse_code(buffer.trim()) {
+        Some(tl) => {
             let result = eval(wam, &tl);
             print(wam, result);
         },
-        Err(_) => {
-            println!("Grammatical error of some kind!");
-        }
+        None => println!("Grammatical error!")
     };
 }
 

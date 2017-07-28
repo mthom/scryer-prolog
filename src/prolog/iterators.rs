@@ -70,7 +70,7 @@ impl<'a> QueryIterator<'a> {
     fn new(term: QueryTermRef<'a>) -> Self {
         match term {
             QueryTermRef::CallN(child_terms) => {
-                let state = IteratorState::Clause(0, ClauseType::CallN, child_terms);
+                let state = IteratorState::Clause(1, ClauseType::CallN, child_terms);
                 QueryIterator { state_stack: vec![state] }
             },
             QueryTermRef::Term(term) => Self::from_term(term),
@@ -96,7 +96,9 @@ impl<'a> Iterator for QueryIterator<'a> {
                 IteratorState::Clause(child_num, ct, child_terms) => {
                     if child_num == child_terms.len() {
                         match ct {
-                            ClauseType::CallN | ClauseType::Root =>
+                            ClauseType::CallN =>
+                                self.push_subterm(Level::Shallow, child_terms[0].as_ref()),
+                            ClauseType::Root =>
                                 return None,
                             ClauseType::Deep(_, _, _) =>
                                 return Some(TermRef::Clause(ct, child_terms))

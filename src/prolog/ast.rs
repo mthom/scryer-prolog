@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
+use std::iter::*;
 use std::ops::{Add, AddAssign};
 use std::vec::Vec;
 
@@ -55,6 +56,38 @@ pub enum TopLevel {
     Predicate(Vec<PredicateClause>),
     Query(Vec<QueryTerm>),
     Rule(Rule)
+}
+
+impl TopLevel {
+    pub fn query_iter_mut<'a>(&'a mut self) -> Box<Iterator<Item=&'a mut QueryTerm> + 'a>
+    {
+        let mut iter: Box<Iterator<Item=&'a mut QueryTerm> + 'a> = Box::new(empty());
+
+        match self {
+            &mut TopLevel::Rule(Rule { head: (_, ref mut head), ref mut clauses }) => {
+                iter = Box::new(once(head));
+                iter = Box::new(iter.chain(clauses.iter_mut()));
+            },
+            &mut TopLevel::Query(ref mut clauses) =>
+                iter = Box::new(iter.chain(clauses.iter_mut())),
+            &mut TopLevel::Predicate(ref mut pred_clauses) =>
+                for pred_clause in pred_clauses.iter_mut() {
+                    match pred_clause {
+                        &mut PredicateClause::Rule(Rule { head: (_, ref mut head),
+                                                          ref mut clauses })
+                            =>
+                        {
+                            iter = Box::new(once(head));
+                            iter = Box::new(iter.chain(clauses.iter_mut()));
+                        },
+                        _ => {}
+                    }
+                },
+            _ => {}
+        }
+        
+        iter
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -517,3 +550,4 @@ impl Term {
         }
     }
 }
+

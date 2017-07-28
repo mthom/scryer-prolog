@@ -15,13 +15,17 @@ enum MachineMode {
     Write
 }
 
-struct MachineState {
+//TODO: probably.. the wrong solution. should integrate deeply with the WAM.
+//type SpecialHandler<'a> = fn(&'a mut MachineState, bool, usize);
+
+struct MachineState { //<'a> {
     h: usize,
     s: usize,
     p: CodePtr,
     b: usize,
     b0: usize,
     e: usize,
+    //special_handlers: HashMap<&'a Atom, SpecialHandler<'a>>,
     num_of_args: usize,
     cp: CodePtr,
     fail: bool,
@@ -99,7 +103,7 @@ impl Machine {
     pub fn failed(&self) -> bool {
         self.ms.fail
     }
-
+    
     pub fn add_fact(&mut self, fact: &Term, mut code: Code) {
         if let Some(name) = fact.name() {
             let p = self.code.len();
@@ -289,8 +293,8 @@ impl Machine {
     pub fn submit_query<'a>(&mut self, code: Code, alloc_locs: AllocVarDict<'a>) -> EvalSession<'a>
     {
         let mut heap_locs = HashMap::new();
-        
-        self.cached_query = Some(code);            
+
+        self.cached_query = Some(code);
         self.run_query(&alloc_locs, &mut heap_locs);
 
         if self.failed() {
@@ -977,7 +981,76 @@ impl MachineState {
                 self.p  = CodePtr::DirEntry(compiled_tl_index);
             },
             None => self.fail = true
-        };        
+        };
+    }
+
+    fn dispatch_call_n(&mut self,
+                       code_dir: &CodeDir,
+                       name: Atom,
+                       is_call: bool,
+                       arity: &mut usize,
+                       narity: usize)
+                       -> bool
+    {
+        if name == "call" {
+            let new_pred = self.registers[1].clone();
+
+            for i in 2 .. *arity + narity {
+                self.registers[i-1] = self.registers[i].clone();
+            }
+
+            self.registers[*arity + narity - 1] = new_pred;
+
+            if *arity + narity - 1 > 0 {
+                *arity = *arity + narity - 1;
+                return true;
+            } else {
+                self.fail = true;
+                return false;
+            }
+        }
+
+        if is_call {
+            self.try_call_predicate(code_dir, name, *arity + narity - 1);
+        } else {
+            self.try_execute_predicate(code_dir, name, *arity + narity - 1);
+        }
+        
+        false
+    }
+
+    fn execute_call_n(&mut self, code_dir: &CodeDir, is_call: bool, mut arity: usize)
+    {
+        loop {
+            let addr = self.deref(self.registers[arity].clone());
+
+            match self.store(addr) {
+                Addr::Str(a) => {
+                    let result = self.heap[a].clone();
+
+                    if let HeapCellValue::NamedStr(narity, name) = result {
+                        for i in (1 .. arity).rev() {
+                            self.registers[i + narity] = self.registers[i].clone();
+                        }
+
+                        for i in 1 .. narity + 1 {
+                            self.registers[i] = self.heap[a + i].as_addr(a + i);
+                        }
+
+                        if self.dispatch_call_n(code_dir, name, is_call, &mut arity, narity) {
+                            continue;
+                        }
+                    }
+                },
+                Addr::Con(Constant::Atom(name)) =>
+                    if self.dispatch_call_n(code_dir, name, is_call, &mut arity, 0) {
+                        continue;
+                    },
+                _ => self.fail = true
+            };
+            
+            break;
+        }
     }
     
     fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
@@ -987,35 +1060,14 @@ impl MachineState {
                 let num_frames = self.num_frames();
 
                 self.and_stack.push(num_frames + 1, self.e, self.cp, num_cells);
-                
+
                 self.e = self.and_stack.len() - 1;
                 self.p += 1;
             },
             &ControlInstruction::Call(ref name, arity, _) =>
                 self.try_call_predicate(code_dir, name.clone(), arity),
-            &ControlInstruction::CallN(arity) => {
-                let addr = self.deref(self.registers[arity].clone());
-
-                match self.store(addr) {
-                    Addr::Str(a) => {
-                        let result = self.heap[a].clone();
-
-                        if let HeapCellValue::NamedStr(narity, name) = result {
-                            for i in 1 .. narity + 1 {
-                                self.registers[i + narity] = self.registers[i].clone();
-                                self.registers[i] = self.heap[a + i].as_addr(a + i);
-                            }
-
-                            self.try_call_predicate(code_dir, name, arity + narity - 1);
-                        } else {
-                            self.fail = true;
-                        }
-                    },
-                    Addr::Con(Constant::Atom(name)) =>
-                        self.try_call_predicate(code_dir, name, arity - 1),
-                    _ => self.fail = true
-                };
-            },
+            &ControlInstruction::CallN(arity) =>
+                self.execute_call_n(code_dir, true, arity),
             &ControlInstruction::Deallocate => {
                 let e = self.e;
 
@@ -1025,30 +1077,9 @@ impl MachineState {
                 self.p += 1;
             },
             &ControlInstruction::Execute(ref name, arity) =>
-                self.try_execute_predicate(code_dir, name.clone(), arity),            
-            &ControlInstruction::ExecuteN(arity) => {
-                let addr = self.deref(self.registers[arity].clone());
-
-                match self.store(addr) {
-                    Addr::Str(a) => {
-                        let result = self.heap[a].clone();
-
-                        if let HeapCellValue::NamedStr(narity, name) = result {
-                            for i in 1 .. narity + 1 {
-                                self.registers[i + narity] = self.registers[i].clone();
-                                self.registers[i] = self.heap[a + i].as_addr(a + i);
-                            }
-
-                            self.try_execute_predicate(code_dir, name, arity + narity - 1);
-                        } else {
-                            self.fail = true;
-                        }
-                    },
-                    Addr::Con(Constant::Atom(name)) =>
-                        self.try_execute_predicate(code_dir, name, arity - 1),
-                    _ => self.fail = true
-                };                
-            },
+                self.try_execute_predicate(code_dir, name.clone(), arity),
+            &ControlInstruction::ExecuteN(arity) =>
+                self.execute_call_n(code_dir, false, arity),
             &ControlInstruction::Proceed =>
                 self.p = self.cp,
         };

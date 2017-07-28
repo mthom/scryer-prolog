@@ -210,7 +210,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     *ctrl = ControlInstruction::ExecuteN(terms.len());
                 },
             _ => dealloc_index = body.len()
-            
         };
 
         dealloc_index

@@ -2,6 +2,7 @@ use prolog::ast::*;
 use prolog::codegen::*;
 use prolog::debray_allocator::*;
 use prolog::machine::*;
+use prolog::prolog_parser::*;
 
 use termion::raw::IntoRawMode;
 use termion::input::TermRead;
@@ -9,6 +10,7 @@ use termion::event::Key;
 
 use std::io::{Write, stdin, stdout};
 use std::fmt;
+use std::mem::swap;
 
 impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -195,6 +197,35 @@ impl fmt::Display for RegType {
     }
 }
 
+pub fn parse_code(input: &str) -> Option<TopLevel>
+{
+    match parse_TopLevel(input) {
+        Ok(mut tl) => {
+            for query in tl.query_iter_mut() {
+                let cts = match query {
+                    &mut QueryTerm::Term(Term::Clause(_, ref name, ref mut cts)) => {     
+                        if name == "call" {
+                            let mut new_cts = Vec::with_capacity(0);
+                            swap(&mut new_cts, cts);
+                            
+                            Some(new_cts)
+                        } else {
+                            None
+                        }
+                    },
+                    _ => None
+                };
+
+                if let Some(cts) = cts {
+                    swap(&mut QueryTerm::CallN(cts), query);
+                }
+            }
+
+            Some(tl)
+        },
+        Err(_) => None
+    }
+}
 
 fn is_consistent(predicate: &Vec<PredicateClause>) -> bool {
     let name  = predicate.first().unwrap().name();
@@ -285,7 +316,7 @@ Each predicate must have the same name and arity.";
 
             let compiled_fact = cg.compile_fact(fact);
             wam.add_fact(fact, compiled_fact);
-            
+
             EvalSession::EntrySuccess
         },
         &TopLevel::Rule(ref rule) => {
@@ -300,7 +331,8 @@ Each predicate must have the same name and arity.";
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_query = cg.compile_query(query);
-            wam.submit_query(compiled_query, cg.take_vars())            
+            print_code(&compiled_query);
+            wam.submit_query(compiled_query, cg.take_vars())
         }
     }
 }
