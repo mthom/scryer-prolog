@@ -244,6 +244,7 @@ fn is_consistent(predicate: &Vec<PredicateClause>) -> bool {
 pub fn print_code(code: &Code) {
     for clause in code {
         match clause {
+            &Line::BuiltIn(_) => {},
             &Line::Fact(ref fact) =>
                 for fact_instr in fact {
                     println!("{}", fact_instr);
@@ -300,38 +301,30 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
 
             if is_consistent(clauses) {
                 let compiled_pred = cg.compile_predicate(clauses);
-                wam.add_predicate(clauses, compiled_pred);
-
-                EvalSession::EntrySuccess
+                wam.add_predicate(clauses, compiled_pred)                
             } else {
                 let msg = r"Error: predicate is inconsistent.
 Each predicate must have the same name and arity.";
-
-                println!("{}", msg);
-                EvalSession::EntryFailure
+                
+                EvalSession::EntryFailure(String::from(msg))
             }
         },
         &TopLevel::Fact(ref fact) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_fact = cg.compile_fact(fact);
-            wam.add_fact(fact, compiled_fact);
-
-            EvalSession::EntrySuccess
+            wam.add_fact(fact, compiled_fact)
         },
         &TopLevel::Rule(ref rule) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_rule = cg.compile_rule(rule);
-            wam.add_rule(rule, compiled_rule);
-
-            EvalSession::EntrySuccess
+            wam.add_rule(rule, compiled_rule)
         },
         &TopLevel::Query(ref query) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_query = cg.compile_query(query);
-            print_code(&compiled_query);
             wam.submit_query(compiled_query, cg.take_vars())
         }
     }
@@ -393,6 +386,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
             write!(stdout(), ".\n").unwrap();
         },
         EvalSession::QueryFailure => println!("false."),
+        EvalSession::EntryFailure(msg) => println!("{}", msg),
         _ => {}
     };
 }

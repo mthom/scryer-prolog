@@ -15,17 +15,13 @@ enum MachineMode {
     Write
 }
 
-//TODO: probably.. the wrong solution. should integrate deeply with the WAM.
-//type SpecialHandler<'a> = fn(&'a mut MachineState, bool, usize);
-
-struct MachineState { //<'a> {
+struct MachineState {
     h: usize,
     s: usize,
     p: CodePtr,
     b: usize,
     b0: usize,
     e: usize,
-    //special_handlers: HashMap<&'a Atom, SpecialHandler<'a>>,
     num_of_args: usize,
     cp: CodePtr,
     fail: bool,
@@ -37,9 +33,18 @@ struct MachineState { //<'a> {
     trail: Vec<Ref>,
     tr: usize,
     hb: usize,
+    lco: bool
 }
 
-type CodeDir = HashMap<(Atom, usize), usize>;
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum PredicateKeyType {
+    BuiltIn,
+    User
+}
+
+type PredicateKey = (Atom, usize); // name, arity, type.
+
+type CodeDir = HashMap<PredicateKey, (PredicateKeyType, usize)>;
 
 pub struct Machine {
     ms: MachineState,
@@ -92,10 +97,19 @@ impl Index<CodePtr> for Machine {
 
 impl Machine {
     pub fn new() -> Self {
+        let mut code_dir = HashMap::new();
+        let code = vec![Line::BuiltIn(BuiltInInstruction::InternalCallN)];
+
+        // there are 64 registers in the VM, so call/N is defined for all 0 <= N <= 63
+        // (an extra register is needed for the predicate name)
+        for arity in 0 .. 64 {
+            code_dir.insert((String::from("call"), arity), (PredicateKeyType::BuiltIn, 0));
+        }
+
         Machine {
             ms: MachineState::new(),
-            code: Vec::new(),
-            code_dir: HashMap::new(),
+            code: code,
+            code_dir: code_dir,
             cached_query: None
         }
     }
@@ -103,8 +117,23 @@ impl Machine {
     pub fn failed(&self) -> bool {
         self.ms.fail
     }
-    
-    pub fn add_fact(&mut self, fact: &Term, mut code: Code) {
+
+    fn add_user_code<'a>(&mut self, name: Atom, arity: usize, offset: usize) -> EvalSession<'a>
+    {
+        match self.code_dir.get(&(name.clone(), arity)) {
+            Some(&(PredicateKeyType::BuiltIn, _)) =>
+                return EvalSession::EntryFailure(format!("error: cannot replace built-in predicate {}/{}",
+                                                         name,
+                                                         arity)),
+            _ => {}
+        };
+
+        self.code_dir.insert((name, arity), (PredicateKeyType::User, offset));
+        EvalSession::EntrySuccess
+    }
+
+    pub fn add_fact<'a>(&mut self, fact: &Term, mut code: Code) -> EvalSession<'a>
+    {
         if let Some(name) = fact.name() {
             let p = self.code.len();
 
@@ -112,11 +141,14 @@ impl Machine {
             let arity = fact.arity();
 
             self.code.append(&mut code);
-            self.code_dir.insert((name, arity), p);
+            self.add_user_code(name, arity, p)
+        } else {
+            EvalSession::EntryFailure(format!("error: the fact has no name."))
         }
     }
 
-    pub fn add_rule(&mut self, rule: &Rule, mut code: Code) {
+    pub fn add_rule<'a>(&mut self, rule: &Rule, mut code: Code) -> EvalSession<'a>
+    {
         if let Some(name) = rule.head.0.name() {
             let p = self.code.len();
 
@@ -124,11 +156,14 @@ impl Machine {
             let arity = rule.head.0.arity();
 
             self.code.append(&mut code);
-            self.code_dir.insert((name, arity), p);
+            self.add_user_code(name, arity, p)
+        } else {
+            EvalSession::EntryFailure(format!("error: the rule has no name."))
         }
     }
 
-    pub fn add_predicate(&mut self, clauses: &Vec<PredicateClause>, mut code: Code)
+    pub fn add_predicate<'a>(&mut self, clauses: &Vec<PredicateClause>, mut code: Code)
+        -> EvalSession<'a>
     {
         let p = self.code.len();
 
@@ -136,7 +171,7 @@ impl Machine {
         let name  = clauses.first().unwrap().name().clone();
 
         self.code.append(&mut code);
-        self.code_dir.insert((name, arity), p);
+        self.add_user_code(name, arity, p)
     }
 
     fn cached_query_size(&self) -> usize {
@@ -162,6 +197,8 @@ impl Machine {
         };
 
         match instr {
+            &Line::BuiltIn(ref builtin_instr) =>
+                self.ms.execute_builtin_instr(&self.code_dir, builtin_instr),
             &Line::Choice(ref choice_instr) =>
                 self.ms.execute_choice_instr(choice_instr),
             &Line::Cut(ref cut_instr) =>
@@ -412,7 +449,8 @@ impl MachineState {
                        registers: vec![Addr::HeapCell(0); 64],
                        trail: Vec::new(),
                        tr: 0,
-                       hb: 0
+                       hb: 0,
+                       lco: false
         }
     }
 
@@ -955,12 +993,21 @@ impl MachineState {
         }
     }
 
-    fn try_call_predicate(&mut self, code_dir: &CodeDir, name: Atom, arity: usize)
+    fn try_call_predicate(&mut self, code_dir: &CodeDir, name: Atom, arity: usize, lco: bool)
     {
-        let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| *index);
-
+        let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| index.1);        
+        
         match compiled_tl_index {
+            Some(compiled_tl_index) if lco => {
+                self.lco = true;
+                
+                self.num_of_args = arity;
+                self.b0 = self.b;
+                self.p  = CodePtr::DirEntry(compiled_tl_index);
+            },
             Some(compiled_tl_index) => {
+                self.lco = false;
+                
                 self.cp = self.p + 1;
                 self.num_of_args = arity;
                 self.b0 = self.b;
@@ -970,89 +1017,57 @@ impl MachineState {
         };
     }
 
-    fn try_execute_predicate(&mut self, code_dir: &CodeDir, name: Atom, arity: usize)
+    fn handle_internal_call_n(&mut self, code_dir: &CodeDir)
     {
-        let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| *index);
+        let arity = self.num_of_args + 1;
+        let lco   = self.lco;
+        let pred  = self.registers[1].clone();
 
-        match compiled_tl_index {
-            Some(compiled_tl_index) => {
-                self.num_of_args = arity;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(compiled_tl_index);
-            },
-            None => self.fail = true
-        };
-    }
-
-    fn dispatch_call_n(&mut self,
-                       code_dir: &CodeDir,
-                       name: Atom,
-                       is_call: bool,
-                       arity: &mut usize,
-                       narity: usize)
-                       -> bool
-    {
-        if name == "call" {
-            let new_pred = self.registers[1].clone();
-
-            for i in 2 .. *arity + narity {
-                self.registers[i-1] = self.registers[i].clone();
-            }
-
-            self.registers[*arity + narity - 1] = new_pred;
-
-            if *arity + narity - 1 > 0 {
-                *arity = *arity + narity - 1;
-                return true;
-            } else {
-                self.fail = true;
-                return false;
-            }
+        for i in 2 .. arity {
+            self.registers[i-1] = self.registers[i].clone();
         }
 
-        if is_call {
-            self.try_call_predicate(code_dir, name, *arity + narity - 1);
+        if arity > 1 {
+            self.registers[arity - 1] = pred;
+            self.execute_call_n(code_dir, arity - 1, lco);
         } else {
-            self.try_execute_predicate(code_dir, name, *arity + narity - 1);
+            self.fail = true;
         }
-        
-        false
     }
 
-    fn execute_call_n(&mut self, code_dir: &CodeDir, is_call: bool, mut arity: usize)
+    fn execute_call_n(&mut self, code_dir: &CodeDir, arity: usize, lco: bool)
     {
-        loop {
-            let addr = self.deref(self.registers[arity].clone());
+        let addr  = self.deref(self.registers[arity].clone());
 
-            match self.store(addr) {
-                Addr::Str(a) => {
-                    let result = self.heap[a].clone();
+        let (name, narity) = match self.store(addr) {
+            Addr::Str(a) => {
+                let result = self.heap[a].clone();
 
-                    if let HeapCellValue::NamedStr(narity, name) = result {
-                        for i in (1 .. arity).rev() {
-                            self.registers[i + narity] = self.registers[i].clone();
-                        }
-
-                        for i in 1 .. narity + 1 {
-                            self.registers[i] = self.heap[a + i].as_addr(a + i);
-                        }
-
-                        if self.dispatch_call_n(code_dir, name, is_call, &mut arity, narity) {
-                            continue;
-                        }
+                if let HeapCellValue::NamedStr(narity, name) = result {
+                    for i in (1 .. arity).rev() {
+                        self.registers[i + narity] = self.registers[i].clone();
                     }
-                },
-                Addr::Con(Constant::Atom(name)) =>
-                    if self.dispatch_call_n(code_dir, name, is_call, &mut arity, 0) {
-                        continue;
-                    },
-                _ => self.fail = true
-            };
-            
-            break;
-        }
+
+                    for i in 1 .. narity + 1 {
+                        self.registers[i] = self.heap[a + i].as_addr(a + i);
+                    }
+
+                    (name, narity)
+                } else {
+                    self.fail = true;
+                    return;
+                }
+            },
+            Addr::Con(Constant::Atom(name)) => (name, 0),
+            _ => {
+                self.fail = true;
+                return;
+            }
+        };
+
+        self.try_call_predicate(code_dir, name, arity + narity - 1, lco);
     }
-    
+
     fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
     {
         match instr {
@@ -1065,9 +1080,9 @@ impl MachineState {
                 self.p += 1;
             },
             &ControlInstruction::Call(ref name, arity, _) =>
-                self.try_call_predicate(code_dir, name.clone(), arity),
+                self.try_call_predicate(code_dir, name.clone(), arity, false),
             &ControlInstruction::CallN(arity) =>
-                self.execute_call_n(code_dir, true, arity),
+                self.execute_call_n(code_dir, arity, false),            
             &ControlInstruction::Deallocate => {
                 let e = self.e;
 
@@ -1076,10 +1091,10 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &ControlInstruction::Execute(ref name, arity) =>
-                self.try_execute_predicate(code_dir, name.clone(), arity),
+            &ControlInstruction::Execute(ref name, arity) =>                
+                self.try_call_predicate(code_dir, name.clone(), arity, true),            
             &ControlInstruction::ExecuteN(arity) =>
-                self.execute_call_n(code_dir, false, arity),
+                self.execute_call_n(code_dir, arity, true),            
             &ControlInstruction::Proceed =>
                 self.p = self.cp,
         };
@@ -1169,6 +1184,13 @@ impl MachineState {
                 self.p += l;
             }
         };
+    }
+
+    fn execute_builtin_instr(&mut self, code_dir: &CodeDir, instr: &BuiltInInstruction)
+    {
+        match instr {
+            &BuiltInInstruction::InternalCallN => self.handle_internal_call_n(code_dir)            
+        }
     }
 
     fn execute_choice_instr(&mut self, instr: &ChoiceInstruction)

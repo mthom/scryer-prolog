@@ -14,7 +14,7 @@ pub struct CodeGenerator<'a, TermMarker> {
 }
 
 pub enum EvalSession<'a> {
-    EntryFailure,
+    EntryFailure(String),
     EntrySuccess,
     InitialQuerySuccess(AllocVarDict<'a>, HeapVarDict<'a>),
     QueryFailure,

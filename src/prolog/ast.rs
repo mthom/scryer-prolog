@@ -292,6 +292,10 @@ impl IndexedChoiceInstruction {
     }
 }
 
+pub enum BuiltInInstruction {
+    InternalCallN
+}
+
 pub enum ControlInstruction {
     Allocate(usize),
     Call(Atom, usize, usize),
@@ -359,6 +363,7 @@ pub type CompiledFact = Vec<FactInstruction>;
 pub type CompiledQuery = Vec<QueryInstruction>;
 
 pub enum Line {
+    BuiltIn(BuiltInInstruction),
     Choice(ChoiceInstruction),
     Control(ControlInstruction),
     Cut(CutInstruction),
