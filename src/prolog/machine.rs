@@ -97,8 +97,7 @@ impl Index<CodePtr> for Machine {
 impl Machine {
     pub fn new() -> Self {
         let mut code_dir = HashMap::new();
-        let code = vec![Line::BuiltIn(BuiltInInstruction::InternalCallN),
-                        Line::Control(ControlInstruction::Proceed)];                        
+        let code = vec![Line::BuiltIn(BuiltInInstruction::InternalCallN)];                        
 
         // there are 64 registers in the VM, so call/N is defined for all 0 <= N <= 63
         // (an extra register is needed for the predicate name)

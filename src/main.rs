@@ -655,6 +655,7 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- call(call(p), X, Y), call(call(call(p)), X, Y)."), true);
         assert_eq!(submit(&mut wam, "?- call(call(p), X, Y), call(call(call(p(X))), Y)."), true);
         assert_eq!(submit(&mut wam, "?- call(call(p), X, Y), call(call(call(p(X))), X, Y)."), false);
+        assert_eq!(submit(&mut wam, "?- call(call(p), X, Y), call(call(call(p(X))), X)."), true);
         
         submit(&mut wam, "f(call(f, undefined)). f(undefined).");
         submit(&mut wam, "call_var(P) :- P.");
