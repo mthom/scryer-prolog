@@ -648,7 +648,13 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- call_mult(p(two), two)."), true);
 
         assert_eq!(submit(&mut wam, "?- call(call(p(one)), X), call(call(p(two)), two)."), true);
+        assert_eq!(submit(&mut wam, "?- call(call(p(one, X))), call(call(p(two, two)))."), true);
         assert_eq!(submit(&mut wam, "?- call(call(p(one)), X), call(call(p(two)), one)."), false);
+        assert_eq!(submit(&mut wam, "?- call(call(p(X)), X), call(call(p(Y)), Y)."), true);
+        assert_eq!(submit(&mut wam, "?- call(call(p(X)), Y), call(call(p(Y)), X)."), true);
+        assert_eq!(submit(&mut wam, "?- call(call(p), X, Y), call(call(call(p)), X, Y)."), true);
+        assert_eq!(submit(&mut wam, "?- call(call(p), X, Y), call(call(call(p(X))), Y)."), true);
+        assert_eq!(submit(&mut wam, "?- call(call(p), X, Y), call(call(call(p(X))), X, Y)."), false);
         
         submit(&mut wam, "f(call(f, undefined)). f(undefined).");
         submit(&mut wam, "call_var(P) :- P.");
