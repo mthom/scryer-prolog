@@ -549,7 +549,7 @@ mod tests {
         submit(&mut wam, "maplist(Pred, []).
                           maplist(Pred, [X|Xs]) :- call(Pred, X), maplist(Pred, Xs).");
         submit(&mut wam, "f(a). f(b). f(c).");
-
+        
         assert_eq!(submit(&mut wam, "?- maplist(f, [X,Y,Z])."), true);
         assert_eq!(submit(&mut wam, "?- maplist(f, [a,Y,Z])."), true);
         assert_eq!(submit(&mut wam, "?- maplist(f, [X,a,b])."), true);
@@ -647,6 +647,9 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- call_mult(p(two), one)."), false);
         assert_eq!(submit(&mut wam, "?- call_mult(p(two), two)."), true);
 
+        assert_eq!(submit(&mut wam, "?- call(call(p(one)), X), call(call(p(two)), two)."), true);
+        assert_eq!(submit(&mut wam, "?- call(call(p(one)), X), call(call(p(two)), one)."), false);
+        
         submit(&mut wam, "f(call(f, undefined)). f(undefined).");
         submit(&mut wam, "call_var(P) :- P.");
                 

@@ -285,7 +285,7 @@ impl<'a> ChunkedIterator<'a>
                     result.push(term);
                     arity = child_terms.len() + 1;
                     break;
-                },
+                },              
                 _ => {
                     result.push(term);
                     self.deep_cut_encountered = true;
@@ -312,6 +312,8 @@ impl<'a> Iterator for ChunkedIterator<'a>
                 },
                 Some(QueryTermRef::Term(term)) if term.is_callable() =>
                     return Some((term.arity(), vec![QueryTermRef::Term(term)])),
+                Some(QueryTermRef::CallN(child_terms)) =>
+                    return Some((child_terms.len() + 1, vec![QueryTermRef::CallN(child_terms)])),
                 Some(term_or_cut_ref) =>
                     return Some(self.take_chunk(term_or_cut_ref))
             }
