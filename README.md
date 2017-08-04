@@ -98,22 +98,15 @@ X = c ;
 false.
 ```
 and so do conjunctive queries:
-
 ```
-prolog> ?- member([X,X],[a,b,c,[d,d],[e,d]]), member(X, [a,b,c,d,e,f,g]), member(Y, [X, a, b, c, d]).
-true
-Y = d
-X = d ;
-Y = a
-X = d ;
-Y = b
-X = d ;
-Y = c
-X = d ;
-Y = d
-X = d ;
-false.
-prolog>
+prolog> f(X) :- g(X).
+prolog> g(x). g(y). g(z).
+prolog> h(call(f, X)).
+prolog> ?- h(X), X.
+true .
+X = call(f, x) ;
+X = call(f, y) ;
+X = call(f, z).
 ```
 
 Note that the values of variables belonging to successful queries are
