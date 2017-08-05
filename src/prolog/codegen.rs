@@ -256,17 +256,19 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                            body: &mut Code)
                            -> usize
     {
-        let perm_vars = vs.vars_above_threshold(0) + deep_cuts as usize;
-
         if num_clauses > 0 {
+            let perm_vars = vs.vars_above_threshold(0) + deep_cuts as usize;
+
             body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
 
             if deep_cuts {
                 body.push(Line::Cut(CutInstruction::GetLevel));
             }
+
+            return perm_vars;
         }
 
-        perm_vars
+        0
     }
 
     fn compile_neck_cut_or(&mut self,
