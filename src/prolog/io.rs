@@ -392,7 +392,6 @@ Each predicate must have the same name and arity.";
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_query = cg.compile_query(query);
-            print_code(&compiled_query);
             wam.submit_query(compiled_query, cg.take_vars())
         }
     }
