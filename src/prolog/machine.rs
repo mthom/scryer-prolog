@@ -1148,7 +1148,7 @@ impl MachineState {
 
     fn has_null_ball(&self) -> bool
     {
-        if let &Addr::Con(Constant::UInt64(0)) = &self.ball {
+        if let &Addr::Con(Constant::UInt64(_)) = &self.ball {
             true
         } else {
             false
