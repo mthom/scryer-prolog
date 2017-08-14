@@ -1286,6 +1286,12 @@ impl MachineState {
             },
             &ControlInstruction::Call(ref name, arity, _) =>
                 self.try_call_predicate(code_dir, name.clone(), arity),
+            &ControlInstruction::Catch => {
+                self.cp = self.p + 1;
+                self.num_of_args = 3;
+                self.b0 = self.b;
+                self.p  = CodePtr::DirEntry(5);
+            },
             &ControlInstruction::CallN(arity) =>
                 if let Some((name, arity)) = self.setup_call_n(arity) {
                     self.try_call_predicate(code_dir, name, arity);
@@ -1306,6 +1312,12 @@ impl MachineState {
                 },
             &ControlInstruction::Proceed =>
                 self.p = self.cp,
+            &ControlInstruction::Throw => {
+                self.cp = self.p + 1;
+                self.num_of_args = 1;
+                self.b0 = self.b;
+                self.p  = CodePtr::DirEntry(56);
+            }
         };
     }
 

@@ -159,8 +159,10 @@ pub enum Term {
 
 pub enum QueryTerm {
     CallN(Vec<Box<Term>>),
+    Catch(Vec<Box<Term>>),
     Cut,
-    Term(Term)
+    Term(Term),
+    Throw(Vec<Box<Term>>)
 }
 
 impl QueryTerm {
@@ -168,10 +170,14 @@ impl QueryTerm {
         match self {
             &QueryTerm::CallN(ref terms) =>
                 QueryTermRef::CallN(terms),
+            &QueryTerm::Catch(ref terms) =>
+                QueryTermRef::Catch(terms),
             &QueryTerm::Cut =>
                 QueryTermRef::Cut,
             &QueryTerm::Term(ref term) =>
                 QueryTermRef::Term(term),
+            &QueryTerm::Throw(ref t) =>
+                QueryTermRef::Throw(t)
         }
     }
 }
@@ -184,14 +190,16 @@ pub struct Rule {
 #[derive(Clone, Copy)]
 pub enum ClauseType<'a> {
     CallN,
+    Catch,
     Deep(Level, &'a Cell<RegType>, &'a Atom),
-    Root
+    Root,
+    Throw
 }
 
 impl<'a> ClauseType<'a> {
     pub fn level_of_subterms(self) -> Level {
         match self {
-            ClauseType::CallN => Level::Shallow,
+            ClauseType::CallN | ClauseType::Catch | ClauseType::Throw => Level::Shallow,
             ClauseType::Deep(_, _, _) => Level::Deep,
             ClauseType::Root => Level::Shallow
         }
@@ -216,7 +224,9 @@ impl<'a> TermRef<'a> {
           | TermRef::Var(lvl, _, _) => lvl,
             TermRef::Clause(ClauseType::Root, _) => Level::Shallow,
             TermRef::Clause(ClauseType::Deep(lvl, _, _), _) => lvl,
-            TermRef::Clause(ClauseType::CallN, _) => Level::Shallow
+            TermRef::Clause(ClauseType::CallN, _) => Level::Shallow,
+            TermRef::Clause(ClauseType::Throw, _) => Level::Shallow,
+            TermRef::Clause(ClauseType::Catch, _) => Level::Shallow
         }
     }
 }
@@ -224,13 +234,17 @@ impl<'a> TermRef<'a> {
 #[derive(Clone, Copy)]
 pub enum QueryTermRef<'a> {
     CallN(&'a Vec<Box<Term>>),
+    Catch(&'a Vec<Box<Term>>),
     Cut,
     Term(&'a Term),
+    Throw(&'a Vec<Box<Term>>)
 }
 
 impl<'a> QueryTermRef<'a> {
     pub fn arity(self) -> usize {
         match self {
+            QueryTermRef::Catch(_) => 3,
+            QueryTermRef::Throw(_) => 1,
             QueryTermRef::CallN(terms) => terms.len(),
             QueryTermRef::Cut => 0,
             QueryTermRef::Term(term) => term.arity(),
@@ -276,7 +290,7 @@ impl IndexedChoiceInstruction {
     }
 }
 
-pub enum BuiltInInstruction {    
+pub enum BuiltInInstruction {
     CleanUpBlock,
     CopyTerm,
     Fail,
@@ -297,19 +311,23 @@ pub enum ControlInstruction {
     Allocate(usize),
     Call(Atom, usize, usize),
     CallN(usize),
+    Catch,
     Deallocate,
     Execute(Atom, usize),
     ExecuteN(usize),
-    Proceed
+    Proceed,
+    Throw
 }
 
 impl ControlInstruction {
     pub fn is_jump_instr(&self) -> bool {
         match self {
-            &ControlInstruction::Call(_, _, _) => true,
-            &ControlInstruction::Execute(_, _) => true,
+            &ControlInstruction::Call(_, _, _)  => true,
+            &ControlInstruction::Catch => true,
+            &ControlInstruction::Execute(_, _)  => true,
             &ControlInstruction::CallN(_) => true,
             &ControlInstruction::ExecuteN(_) => true,
+            &ControlInstruction::Throw => true,
             _ => false
         }
     }

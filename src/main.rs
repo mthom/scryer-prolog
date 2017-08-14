@@ -504,15 +504,15 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- member(X, [a,b,c,d]), !, member(X, [a,d])."), true);
         assert_eq!(submit(&mut wam, "?- member(X, [a,b,c,d]), !, member(X, [e])."), false);
         assert_eq!(submit(&mut wam, "?- member([X,X],[a,b,c,[d,d],[e,d]]),
-                                        member(X, [a,b,c,d,e,f,g]), 
+                                        member(X, [a,b,c,d,e,f,g]),
                                         member(Y, [X, a, b, c, d])."),
                           true);
         assert_eq!(submit(&mut wam, "?- member([X,X],[a,b,c,[d,d],[e,d]]),
-                                        member(X, [a,b,c,d,e,f,g]), 
+                                        member(X, [a,b,c,d,e,f,g]),
                                         !,
                                         member(Y, [X, a, b, c, d])."),
                           true);
-        
+
         submit(&mut wam, "p(a, [f(g(X))]).");
         submit(&mut wam, "q(Y, c).");
 
@@ -545,11 +545,11 @@ mod tests {
     fn test_queries_on_call_n()
     {
         let mut wam = Machine::new();
-        
+
         submit(&mut wam, "maplist(Pred, []).
                           maplist(Pred, [X|Xs]) :- call(Pred, X), maplist(Pred, Xs).");
         submit(&mut wam, "f(a). f(b). f(c).");
-        
+
         assert_eq!(submit(&mut wam, "?- maplist(f, [X,Y,Z])."), true);
         assert_eq!(submit(&mut wam, "?- maplist(f, [a,Y,Z])."), true);
         assert_eq!(submit(&mut wam, "?- maplist(f, [X,a,b])."), true);
@@ -580,7 +580,7 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- f(p, x, y)."), true);
         assert_eq!(submit(&mut wam, "?- f(p, X, z)."), false);
         assert_eq!(submit(&mut wam, "?- f(p, z, Y)."), false);
-        
+
         assert_eq!(submit(&mut wam, "?- call(p, X)."), true);
         assert_eq!(submit(&mut wam, "?- call(p, x)."), true);
         assert_eq!(submit(&mut wam, "?- call(p, y)."), true);
@@ -639,7 +639,7 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- call(david_lynch, kyle(Film), _)."), false);
 
         submit(&mut wam, "call_mult(P, X) :- call(call(P), X).");
-        
+
         assert_eq!(submit(&mut wam, "?- call_mult(p(X), Y)."), true);
         assert_eq!(submit(&mut wam, "?- call_mult(p(X), X)."), true);
         assert_eq!(submit(&mut wam, "?- call_mult(p(one), X)."), true);
@@ -656,10 +656,10 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- call(call(p), X, Y), call(call(call(p(X))), Y)."), true);
         assert_eq!(submit(&mut wam, "?- call(call(p), X, Y), call(call(call(p(X))), X, Y)."), false);
         assert_eq!(submit(&mut wam, "?- call(call(p), X, Y), call(call(call(p(X))), X)."), true);
-        
+
         submit(&mut wam, "f(call(f, undefined)). f(undefined).");
         submit(&mut wam, "call_var(P) :- P.");
-                
+
         assert_eq!(submit(&mut wam, "?- f(X), call_var(X)."), true);
         assert_eq!(submit(&mut wam, "?- f(call(f, Q)), call_var(call(f, Q))."), true);
         assert_eq!(submit(&mut wam, "?- call_var(call(undefined, Q))."), false);
@@ -681,25 +681,49 @@ mod tests {
         submit(&mut wam, "handle(stuff).");
 
         assert_eq!(submit(&mut wam, "?- catch(f(X), Exception, handle(Exception))."), true);
-        
+
         submit(&mut wam, "f(a). f(X) :- g(X).");
         submit(&mut wam, "g(x). g(y). g(z).");
         submit(&mut wam, "handle(x). handle(y).");
-        
+
         assert_eq!(submit(&mut wam, "?- catch(f(X), X, handle(X))."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(a), _, handle(X))."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(b), _, handle(X))."), false);
 
         submit(&mut wam, "g(x). g(X) :- throw(x).");
-        
+
         assert_eq!(submit(&mut wam, "?- catch(f(X), x, handle(X))."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(X), x, handle(z))."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(x))."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(y))."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(z))."), false);
+
+        submit(&mut wam, "f(X) :- throw(stuff). f(X) :- throw(other_stuff).");
+        submit(&mut wam, "handle(stuff). handle(other_stuff).");
+
+        // this should deterministically succeed with Exception = stuff.
+        assert_eq!(submit(&mut wam, "?- catch(f(X), Exception, handle(Exception))."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(X), Exception, handle(stuff))."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(X), Exception, handle(other_stuff))."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(X), Exception, handle(not_stuff))."), false);
+
+        submit(&mut wam, "f(success). f(X) :- catch(g(X), E, handle(E)).");
+        submit(&mut wam, "g(g_success). g(g_success_2). g(X) :- throw(X).");
+        submit(&mut wam, "handle(x). handle(y). handle(z).");
+
+        assert_eq!(submit(&mut wam, "?- catch(f(X), E, E)."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(fail), _, _)."), false);
+        assert_eq!(submit(&mut wam, "?- catch(f(x), _, _)."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(y), _, _)."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(z), _, _)."), true);
         
-        //TODO: write more tests: multi-layered throw/catch, catch
-        // within catch, throw within catch, etc.
+        submit(&mut wam, "f(success). f(E) :- catch(g(E), E, handle(E)).");
+        submit(&mut wam, "g(g_success). g(g_success_2). g(X) :- throw(X).");
+        submit(&mut wam, "handle(x). handle(y). handle(z). handle(v) :- throw(X).");
+
+        //TODO: fix this test. record the ball properly. currently it
+        // is unwound when the heap is truncated.
+        assert_eq!(submit(&mut wam, "?- catch(f(X), E, E)."), true);
     }
 }
 

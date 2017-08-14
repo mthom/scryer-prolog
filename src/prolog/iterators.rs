@@ -72,11 +72,19 @@ impl<'a> QueryIterator<'a> {
 
     fn new(term: QueryTermRef<'a>) -> Self {
         match term {
-            QueryTermRef::CallN(child_terms) => {
-                let state = IteratorState::Clause(1, ClauseType::CallN, child_terms);
+            QueryTermRef::CallN(terms) => {
+                let state = IteratorState::Clause(1, ClauseType::CallN, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            QueryTermRef::Term(term) => Self::from_term(term),
+            QueryTermRef::Catch(terms) => {
+                let state = IteratorState::Clause(0, ClauseType::Catch, terms);
+                QueryIterator { state_stack: vec![state] }
+            },
+            QueryTermRef::Term(term)  => Self::from_term(term),
+            QueryTermRef::Throw(term) => {
+                let state = IteratorState::Clause(0, ClauseType::Throw, term);
+                QueryIterator { state_stack: vec![state] }
+            },
             _ => QueryIterator { state_stack: vec![] }
         }
     }
@@ -101,7 +109,7 @@ impl<'a> Iterator for QueryIterator<'a> {
                         match ct {
                             ClauseType::CallN =>
                                 self.push_subterm(Level::Shallow, child_terms[0].as_ref()),
-                            ClauseType::Root =>
+                            ClauseType::Root | ClauseType::Throw | ClauseType::Catch =>
                                 return None,
                             ClauseType::Deep(_, _, _) =>
                                 return Some(TermRef::Clause(ct, child_terms))
@@ -211,8 +219,7 @@ pub struct ChunkedIterator<'a>
 {
     term_loc: GenContext,
     iter: Box<Iterator<Item=QueryTermRef<'a>> + 'a>,
-    deep_cut_encountered: bool,
-    catch_encountered: bool
+    deep_cut_encountered: bool
 }
 
 impl<'a> ChunkedIterator<'a>
@@ -226,7 +233,6 @@ impl<'a> ChunkedIterator<'a>
             term_loc: GenContext::Head,
             iter: inner_iter,
             deep_cut_encountered: false,
-            catch_encountered: false
         }
     }
 
@@ -237,58 +243,39 @@ impl<'a> ChunkedIterator<'a>
         ChunkedIterator {
             term_loc: GenContext::Last(0),
             iter: Box::new(iter),
-            deep_cut_encountered: false,
-            catch_encountered: false
-        }
-    }
-
-    fn iterate_over_query_term(p1: &'a QueryTerm) -> Box<Iterator<Item=QueryTermRef<'a>> + 'a>
-    {
-        match p1 {
-            &QueryTerm::CallN(ref child_terms) =>
-                Box::new(once(QueryTermRef::CallN(child_terms))),
-            &QueryTerm::Term(ref p1) =>
-                Box::new(once(QueryTermRef::Term(p1))),
-            &QueryTerm::Cut =>
-                Box::new(once(QueryTermRef::Cut))
+            deep_cut_encountered: false
         }
     }
 
     pub fn from_rule_body(p1: &'a QueryTerm, clauses: &'a Vec<QueryTerm>) -> Self
     {
-        let inner_iter = Self::iterate_over_query_term(p1);
+        let inner_iter = Box::new(once(p1.to_ref()));
         let iter = inner_iter.chain(clauses.iter().map(|c| c.to_ref()));
 
         ChunkedIterator {
             term_loc: GenContext::Last(0),
             iter: Box::new(iter),
-            deep_cut_encountered: false,
-            catch_encountered: false
+            deep_cut_encountered: false
         }
     }
 
     pub fn from_rule(rule: &'a Rule) -> Self
     {
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
-        let iter = once(QueryTermRef::Term(p0));
 
-        let inner_iter = Self::iterate_over_query_term(p1);
+        let iter = once(QueryTermRef::Term(p0));
+        let inner_iter = Box::new(once(p1.to_ref()));
         let iter = iter.chain(inner_iter.chain(clauses.iter().map(|c| c.to_ref())));
 
         ChunkedIterator {
             term_loc: GenContext::Head,
             iter: Box::new(iter),
-            deep_cut_encountered: false,
-            catch_encountered: false
+            deep_cut_encountered: false
         }
     }
 
     pub fn encountered_deep_cut(&self) -> bool {
         self.deep_cut_encountered
-    }
-
-    pub fn encountered_catch(&self) -> bool {
-        self.catch_encountered
     }
 
     pub fn at_rule_head(&self) -> bool {
@@ -307,6 +294,9 @@ impl<'a> ChunkedIterator<'a>
 
         while let Some(term) = item {
             match term {
+                //TODO: This can refer to the term at the head of a
+                // goal, not technically a QueryTerm (ie. a term in a
+                // query).  Think of a better name.
                 QueryTermRef::Term(inner_term) => {
                     if let GenContext::Head = self.term_loc {
                         result.push(term);
@@ -323,6 +313,11 @@ impl<'a> ChunkedIterator<'a>
                 QueryTermRef::CallN(child_terms) => {
                     result.push(term);
                     arity = child_terms.len() + 1;
+                    break;
+                },
+                QueryTermRef::Catch(child_terms) | QueryTermRef::Throw(child_terms) => {
+                    result.push(term);
+                    arity = child_terms.len();
                     break;
                 },
                 QueryTermRef::Cut => {

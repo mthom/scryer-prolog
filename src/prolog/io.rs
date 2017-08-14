@@ -104,6 +104,8 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "call {}/{}, {}", name, arity, pvs),
             &ControlInstruction::CallN(arity) =>
                 write!(f, "call_N {}", arity),
+            &ControlInstruction::Catch =>
+                write!(f, "catch"),
             &ControlInstruction::ExecuteN(arity) =>
                 write!(f, "execute_N {}", arity),
             &ControlInstruction::Deallocate =>
@@ -111,7 +113,9 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::Execute(ref name, arity) =>
                 write!(f, "execute {}/{}", name, arity),
             &ControlInstruction::Proceed =>
-                write!(f, "proceed")
+                write!(f, "proceed"),
+            &ControlInstruction::Throw =>
+                write!(f, "throw")
         }
     }
 }
@@ -239,10 +243,28 @@ fn rewrite_call_n(terms: &mut Vec<Box<Term>>) -> QueryTerm {
     QueryTerm::CallN(new_terms)
 }
 
+fn rewrite_catch(terms: &mut Vec<Box<Term>>) -> QueryTerm {
+    let mut new_terms = Vec::with_capacity(0);
+    swap(&mut new_terms, terms);
+
+    QueryTerm::Catch(new_terms)
+}
+
+fn rewrite_throw(terms: &mut Vec<Box<Term>>) -> QueryTerm {
+    let mut new_terms = Vec::with_capacity(0);
+    swap(&mut new_terms, terms);
+
+    QueryTerm::Throw(new_terms)
+}
+
 fn rewrite_clause(name: &Atom, terms: &mut Vec<Box<Term>>) -> Option<QueryTerm>
 {
     if name == "call" {
         Some(rewrite_call_n(terms))
+    } else if name == "catch" && terms.len() == 3 {
+        Some(rewrite_catch(terms))
+    } else if name == "throw" && terms.len() == 1 {
+        Some(rewrite_throw(terms))
     } else {
         None
     }
@@ -370,6 +392,7 @@ Each predicate must have the same name and arity.";
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_query = cg.compile_query(query);
+            print_code(&compiled_query);
             wam.submit_query(compiled_query, cg.take_vars())
         }
     }

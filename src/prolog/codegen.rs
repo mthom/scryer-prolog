@@ -24,20 +24,18 @@ pub enum EvalSession<'a> {
 pub struct ConjunctInfo<'a> {
     pub perm_vs: VariableFixtures<'a>,
     pub num_of_chunks: usize,
-    pub has_deep_cut: bool,
-    pub has_catch: bool
+    pub has_deep_cut: bool
 }
 
 impl<'a> ConjunctInfo<'a>
 {
-    fn new(perm_vs: VariableFixtures<'a>, num_of_chunks: usize, has_deep_cut: bool, has_catch: bool)
-        -> Self
+    fn new(perm_vs: VariableFixtures<'a>, num_of_chunks: usize, has_deep_cut: bool) -> Self
     {
-        ConjunctInfo { perm_vs, num_of_chunks, has_deep_cut, has_catch }
+        ConjunctInfo { perm_vs, num_of_chunks, has_deep_cut }
     }
 
     fn allocates(&self) -> bool {
-        self.perm_vs.size() > 0 || self.num_of_chunks > 1 || self.has_deep_cut || self.has_catch
+        self.perm_vs.size() > 0 || self.num_of_chunks > 1 || self.has_deep_cut
     }
 
     fn perm_vars(&self) -> usize {
@@ -45,7 +43,7 @@ impl<'a> ConjunctInfo<'a>
     }
 
     fn perm_var_offset(&self) -> usize {
-        self.has_deep_cut as usize + 2 * (self.has_catch as usize)
+        self.has_deep_cut as usize
     }
 }
 
@@ -197,14 +195,13 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
         let num_of_chunks = iter.chunk_num();
         let has_deep_cut  = iter.encountered_deep_cut();
-        let has_catch     = iter.encountered_catch();
 
         vs.populate_restricting_sets();
-        vs.set_perm_vals(has_deep_cut, has_catch);
+        vs.set_perm_vals(has_deep_cut);
 
         let vs = self.marker.drain_var_data(vs);
 
-        ConjunctInfo::new(vs, num_of_chunks, has_deep_cut, has_catch)
+        ConjunctInfo::new(vs, num_of_chunks, has_deep_cut)
     }
 
     fn add_conditional_call(compiled_query: &mut Code, qt: QueryTermRef, pvs: usize)
@@ -214,6 +211,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 let call = ControlInstruction::CallN(terms.len());
                 compiled_query.push(Line::Control(call));
             },
+            QueryTermRef::Catch(_) =>
+                compiled_query.push(Line::Control(ControlInstruction::Catch)),            
             QueryTermRef::Term(&Term::Constant(_, Constant::Atom(ref atom))) => {
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);
                 compiled_query.push(Line::Control(call));
@@ -222,6 +221,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 let call = ControlInstruction::Call(atom.clone(), terms.len(), pvs);
                 compiled_query.push(Line::Control(call));
             },
+            QueryTermRef::Throw(_) =>
+                compiled_query.push(Line::Control(ControlInstruction::Throw)),
             _ => {}
         }
     }

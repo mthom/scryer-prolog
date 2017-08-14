@@ -87,7 +87,7 @@ fn get_builtins() -> Code {
          deallocate!(),
          goto!(58, 0), // goto false.
          set_ball!(), // throw/1, 56.
-         unwind_stack!(),         
+         unwind_stack!(),
          fail!(), // false/0, 58.
          proceed!(),
          try_me_else!(7), // not/1, 60.

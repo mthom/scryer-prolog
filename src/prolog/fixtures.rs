@@ -218,7 +218,7 @@ impl<'a> VariableFixtures<'a>
         self.0.len()
     }
     
-    pub fn set_perm_vals(&self, has_deep_cuts: bool, has_catch: bool)
+    pub fn set_perm_vals(&self, has_deep_cuts: bool)
     {
         let mut values_vec : Vec<_> = self.values()
             .filter_map(|ref v| {
@@ -231,7 +231,7 @@ impl<'a> VariableFixtures<'a>
 
         values_vec.sort_by_key(|ref v| v.0);
 
-        let offset = has_deep_cuts as usize + 2 * has_catch as usize;
+        let offset = has_deep_cuts as usize;
 
         for (i, (_, cells)) in values_vec.into_iter().rev().enumerate() {
             for cell in cells {
