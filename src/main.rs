@@ -671,6 +671,36 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- call(call(call(call(call(call)))))."), false);
         assert_eq!(submit(&mut wam, "?- call(call(call(call(call(call(p(X)))))))."), true);
     }
+
+    #[test]
+    fn test_queries_on_exceptions()
+    {
+        let mut wam = Machine::new();
+
+        submit(&mut wam, "f(a). f(_) :- throw(stuff).");
+        submit(&mut wam, "handle(stuff).");
+
+        assert_eq!(submit(&mut wam, "?- catch(f(X), Exception, handle(Exception))."), true);
+        
+        submit(&mut wam, "f(a). f(X) :- g(X).");
+        submit(&mut wam, "g(x). g(y). g(z).");
+        submit(&mut wam, "handle(x). handle(y).");
+        
+        assert_eq!(submit(&mut wam, "?- catch(f(X), X, handle(X))."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(a), _, handle(X))."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(b), _, handle(X))."), false);
+
+        submit(&mut wam, "g(x). g(X) :- throw(x).");
+        
+        assert_eq!(submit(&mut wam, "?- catch(f(X), x, handle(X))."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(X), x, handle(z))."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(x))."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(y))."), true);
+        assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(z))."), false);
+        
+        //TODO: write more tests: multi-layered throw/catch, catch
+        // within catch, throw within catch, etc.
+    }
 }
 
 fn process_buffer(wam: &mut Machine, buffer: &str)

@@ -1,4 +1,5 @@
 use prolog::ast::*;
+use prolog::builtins::*;
 use prolog::codegen::*;
 use prolog::heapview::*;
 use prolog::and_stack::*;
@@ -33,17 +34,9 @@ struct MachineState {
     trail: Vec<Ref>,
     tr: usize,
     hb: usize,
+    block: usize, // an offset into the OR stack.
+    ball: Addr
 }
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum PredicateKeyType {
-    BuiltIn,
-    User
-}
-
-type PredicateKey = (Atom, usize); // name, arity, type.
-
-type CodeDir = HashMap<PredicateKey, (PredicateKeyType, usize)>;
 
 pub struct Machine {
     ms: MachineState,
@@ -96,14 +89,7 @@ impl Index<CodePtr> for Machine {
 
 impl Machine {
     pub fn new() -> Self {
-        let mut code_dir = HashMap::new();
-        let code = vec![Line::BuiltIn(BuiltInInstruction::InternalCallN)];                        
-
-        // there are 64 registers in the VM, so call/N is defined for all 0 <= N <= 63
-        // (an extra register is needed for the predicate name)
-        for arity in 0 .. 64 {
-            code_dir.insert((String::from("call"), arity), (PredicateKeyType::BuiltIn, 0));
-        }
+        let (code, code_dir) = build_code_dir();
 
         Machine {
             ms: MachineState::new(),
@@ -196,8 +182,8 @@ impl Machine {
         };
 
         match instr {
-            &Line::BuiltIn(ref builtin_instr) =>
-                self.ms.execute_builtin_instr(&self.code_dir, builtin_instr),
+            &Line::BuiltIn(ref built_in_instr) =>
+                self.ms.execute_built_in_instr(&self.code_dir, built_in_instr),
             &Line::Choice(ref choice_instr) =>
                 self.ms.execute_choice_instr(choice_instr),
             &Line::Cut(ref cut_instr) =>
@@ -382,12 +368,18 @@ impl Machine {
 
             while let Some(view) = viewer.next() {
                 match view {
+                    CellView::Con(&Constant::UInt64(integer)) =>
+                        result += integer.to_string().as_str(),
                     CellView::Con(&Constant::EmptyList) =>
                         result += "[]",
                     CellView::Con(&Constant::Atom(ref atom)) =>
                         result += atom.as_str(),
-                    CellView::HeapVar(cell_num) | CellView::StackVar(_, cell_num) => {
+                    CellView::HeapVar(cell_num) => {
                         result += "_";
+                        result += cell_num.to_string().as_str();
+                    },
+                    CellView::StackVar(_, cell_num) => {
+                        result += "s_";
                         result += cell_num.to_string().as_str();
                     },
                     CellView::Str(_, ref name) =>
@@ -449,6 +441,8 @@ impl MachineState {
                        trail: Vec::new(),
                        tr: 0,
                        hb: 0,
+                       block: 0,
+                       ball: Addr::Con(Constant::UInt64(0))
         }
     }
 
@@ -630,27 +624,32 @@ impl MachineState {
         }
     }
 
+    fn write_constant_to_var(&mut self, addr: Addr, c: &Constant) {
+        let addr = self.deref(addr);
+
+        match self.store(addr) {
+            Addr::HeapCell(hc) => {
+                self.heap[hc] = HeapCellValue::Con(c.clone());
+                self.trail(Ref::HeapCell(hc));
+            },
+            Addr::StackCell(fr, sc) => {
+                self.and_stack[fr][sc] = Addr::Con(c.clone());
+                self.trail(Ref::StackCell(fr, sc));
+            },
+            Addr::Con(c1) => {
+                if c1 != *c {
+                    self.fail = true;
+                }
+            },
+            _ => self.fail = true
+        };
+    }
+
     fn execute_fact_instr(&mut self, instr: &FactInstruction) {
         match instr {
-            &FactInstruction::GetConstant(_, ref constant, reg) => {
-                let addr = self.deref(self[reg].clone());
-
-                match self.store(addr) {
-                    Addr::HeapCell(hc) => {
-                        self.heap[hc] = HeapCellValue::Con(constant.clone());
-                        self.trail(Ref::HeapCell(hc));
-                    },
-                    Addr::StackCell(fr, sc) => {
-                        self.and_stack[fr][sc] = Addr::Con(constant.clone());
-                        self.trail(Ref::StackCell(fr, sc));
-                    },
-                    Addr::Con(c) => {
-                        if c != *constant {
-                            self.fail = true;
-                        }
-                    },
-                    _ => self.fail = true
-                };
+            &FactInstruction::GetConstant(_, ref c, reg) => {
+                let addr = self[reg].clone();
+                self.write_constant_to_var(addr, c);
             },
             &FactInstruction::GetList(_, reg) => {
                 let addr = self.deref(self[reg].clone());
@@ -722,24 +721,8 @@ impl MachineState {
             &FactInstruction::UnifyConstant(ref c) => {
                 match self.mode {
                     MachineMode::Read  => {
-                        let addr = self.deref(Addr::HeapCell(self.s));
-
-                        match self.store(addr) {
-                            Addr::HeapCell(hc) => {
-                                self.heap[hc] = HeapCellValue::Con(c.clone());
-                                self.trail(Ref::HeapCell(hc));
-                            },
-                            Addr::StackCell(fr, sc) => {
-                                self.and_stack[fr][sc] = Addr::Con(c.clone());
-                                self.trail(Ref::StackCell(fr, sc));
-                            },
-                            Addr::Con(c1) => {
-                                if c1 != *c {
-                                    self.fail = true;
-                                }
-                            },
-                            _ => self.fail = true
-                        };
+                        let addr = Addr::HeapCell(self.s);
+                        self.write_constant_to_var(addr, c);
                     },
                     MachineMode::Write => {
                         self.heap.push(HeapCellValue::Con(c.clone()));
@@ -1009,7 +992,7 @@ impl MachineState {
     fn try_execute_predicate(&mut self, code_dir: &CodeDir, name: Atom, arity: usize)
     {
         let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| index.1);
-        
+
         match compiled_tl_index {
             Some(compiled_tl_index) => {
                 self.num_of_args = arity;
@@ -1018,6 +1001,96 @@ impl MachineState {
             },
             None => self.fail = true
         };
+    }
+
+    // copy_term(L1, L2) uses Cheney's algorithm to copy the term at
+    // L1 to L2. forwarding_terms is kept to restore the innards of L1
+    // after it's been copied to L2.
+    fn copy_term(&mut self, a: Addr)
+    {
+        let mut forward_trail = Vec::new(); // list of (Ref, HeapCellValue) items.
+        let mut scan  = self.h;
+        let old_h = self.h;
+
+        self.heap.push(HeapCellValue::from(a));
+        self.h += 1;
+
+        while scan < self.h {
+            match self.heap[scan].clone() {
+                HeapCellValue::Con(_) | HeapCellValue::NamedStr(_, _) =>
+                    scan += 1,
+                HeapCellValue::Lis(a) => {
+                    let hcv = self.heap[a].clone();
+                    self.heap.push(hcv);
+
+                    let hcv = self.heap[a+1].clone();
+                    self.heap.push(hcv);
+
+                    self.heap[scan] = HeapCellValue::Lis(self.h);
+
+                    self.h += 2;
+                    scan += 1;
+                },
+                HeapCellValue::Ref(r) => {
+                    let ra = Addr::from(r);
+                    let rd = self.store(self.deref(ra.clone()));
+
+                    match rd {
+                        Addr::HeapCell(hc) if hc >= old_h => {
+                            self.heap[scan] = HeapCellValue::Ref(Ref::HeapCell(hc));
+                            scan += 1;
+                        },
+                        _ if ra == rd => {
+                            self.heap[scan] = HeapCellValue::Ref(Ref::HeapCell(scan));
+
+                            match r {
+                                Ref::HeapCell(hc) =>
+                                    self.heap[hc] = HeapCellValue::Ref(Ref::HeapCell(scan)),
+                                Ref::StackCell(fr, sc) =>
+                                    self.and_stack[fr][sc] = Addr::HeapCell(scan),
+                            };
+
+                            forward_trail.push((r, HeapCellValue::Ref(r)));
+                            scan += 1;
+                        },
+                        _ => self.heap[scan] = HeapCellValue::from(rd)
+                    }
+                },
+                HeapCellValue::Str(s) => {
+                    match self.heap[s].clone() {
+                        HeapCellValue::NamedStr(arity, name) => {
+                            self.heap[scan] = HeapCellValue::Str(self.h);
+                            self.heap[s] = HeapCellValue::Str(self.h);
+
+                            forward_trail.push((Ref::HeapCell(s),
+                                                HeapCellValue::NamedStr(arity, name.clone())));
+
+                            self.heap.push(HeapCellValue::NamedStr(arity, name));
+                            self.h += 1;
+
+                            for i in 0 .. arity {
+                                let hcv = self.heap[s + 1 + i].clone();
+                                self.heap.push(hcv);
+                                self.h += 1;
+                            }
+
+                        },
+                        HeapCellValue::Str(o) =>
+                            self.heap[scan] = HeapCellValue::Str(o),
+                        _ => {}
+                    }
+
+                    scan += 1;
+                }
+            };
+        }
+
+        for (r, hcv) in forward_trail {
+            match r {
+                Ref::HeapCell(hc) => self.heap[hc] = hcv,
+                Ref::StackCell(fr, sc) => self.and_stack[fr][sc] = hcv.as_addr(0)
+            }
+        }
     }
 
     fn handle_internal_call_n(&mut self, code_dir: &CodeDir)
@@ -1032,7 +1105,7 @@ impl MachineState {
         if arity > 1 {
             self.registers[arity - 1] = pred;
 
-            if let Some((name, arity)) = self.setup_call_n(arity - 1) {                
+            if let Some((name, arity)) = self.setup_call_n(arity - 1) {
                 self.try_execute_predicate(code_dir, name, arity);
             }
         } else {
@@ -1071,6 +1144,133 @@ impl MachineState {
         };
 
         Some((name, arity + narity - 1))
+    }
+
+    fn has_null_ball(&self) -> bool
+    {
+        if let &Addr::Con(Constant::UInt64(0)) = &self.ball {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn execute_built_in_instr(&mut self, code_dir: &CodeDir, instr: &BuiltInInstruction)
+    {
+        match instr {
+            &BuiltInInstruction::CopyTerm => {
+                let old_h = self.h;
+                let a = self[temp_v!(1)].clone();
+                self.copy_term(a);
+
+                let a2 = self[temp_v!(2)].clone();
+                self.unify(Addr::HeapCell(old_h), a2);
+
+                self.p += 1;
+            },
+            &BuiltInInstruction::GetCurrentBlock => {
+                let c = Constant::UInt64(self.block);
+                let addr = self[temp_v!(1)].clone();
+
+                self.write_constant_to_var(addr, &c);
+                self.p += 1;
+            },
+            &BuiltInInstruction::Unify => {
+                let a1 = self[temp_v!(1)].clone();
+                let a2 = self[temp_v!(2)].clone();
+
+                self.unify(a1, a2);
+                self.p += 1;
+            },
+            &BuiltInInstruction::GetBall => {
+                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+                let ball = self.ball.clone();
+
+                if self.has_null_ball() {
+                    self.fail = true;
+                    return;
+                }
+
+                match addr.as_ref() {
+                    Some(r) => {
+                        self.bind(r, ball);
+                        self.p += 1;
+                    },
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::SetBall => {
+                self.ball = self[temp_v!(1)].clone();
+                self.p += 1;
+            },
+            &BuiltInInstruction::CleanUpBlock => {
+                let nb = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                match nb {
+                    Addr::Con(Constant::UInt64(nb)) => {
+                        let b = self.b - 1;
+
+                        if nb > 0 && self.or_stack[b].b == nb {
+                            self.b = self.or_stack[nb - 1].b;
+                        }
+
+                        self.p += 1;
+                    },
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::InstallNewBlock => {
+                self.block = self.b;
+                let c = Constant::UInt64(self.block);
+                let addr = self[temp_v!(1)].clone();
+
+                self.write_constant_to_var(addr, &c);
+                self.p += 1;
+            },
+            &BuiltInInstruction::ResetBlock => {
+                let addr = self.deref(self[temp_v!(1)].clone());
+
+                match self.store(addr) {
+                    Addr::Con(Constant::UInt64(b)) => {
+                        self.block = b;
+                        self.p += 1;
+                    },
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::UnwindStack => {
+                self.b = self.block;
+                self.fail = true;
+            },
+            &BuiltInInstruction::IsAtomic => {
+                let d = self.deref(self[temp_v!(1)].clone());
+
+                match d {
+                    Addr::Con(_) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsVar => {
+                let d = self.deref(self[temp_v!(1)].clone());
+
+                match d {
+                    Addr::HeapCell(_) | Addr::StackCell(_,_) =>
+                        self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::InternalCallN =>
+                self.handle_internal_call_n(code_dir),
+            &BuiltInInstruction::Fail => {
+                self.fail = true;
+                self.p += 1;
+            },
+            &BuiltInInstruction::Goto(p, arity) => {
+                self.num_of_args = arity;
+                self.b0 = self.b;
+                self.p  = CodePtr::DirEntry(p);
+            }
+        };
     }
 
     fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
@@ -1195,13 +1395,6 @@ impl MachineState {
         };
     }
 
-    fn execute_builtin_instr(&mut self, code_dir: &CodeDir, instr: &BuiltInInstruction)
-    {
-        match instr {
-            &BuiltInInstruction::InternalCallN => self.handle_internal_call_n(code_dir)
-        }
-    }
-
     fn execute_choice_instr(&mut self, instr: &ChoiceInstruction)
     {
         match instr {
@@ -1220,7 +1413,7 @@ impl MachineState {
                                    self.num_of_args);
 
                 self.b = self.or_stack.len();
-                let b = self.b - 1;
+                let b  = self.b - 1;
 
                 for i in 1 .. n + 1 {
                     self.or_stack[b][i] = self.registers[i].clone();

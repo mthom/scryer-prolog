@@ -25,7 +25,7 @@ pub trait Allocator<'a>
     fn bindings_mut(&mut self) -> &mut AllocVarDict<'a>;
 
     fn take_bindings(self) -> AllocVarDict<'a>;
-    
+
     fn drain_var_data(&mut self, vs: VariableFixtures<'a>) -> VariableFixtures<'a>
     {
         let mut perm_vs = VariableFixtures::new();

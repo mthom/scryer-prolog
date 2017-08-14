@@ -18,7 +18,9 @@ impl fmt::Display for Constant {
             &Constant::Atom(ref atom) =>
                 write!(f, "{}", atom),
             &Constant::EmptyList =>
-                write!(f, "[]")
+                write!(f, "[]"),
+            &Constant::UInt64(integer) =>
+                write!(f, "u{}", integer)
         }
     }
 }
@@ -197,27 +199,70 @@ impl fmt::Display for RegType {
     }
 }
 
+/*
+// Wait until constexprs are supported in stable before trying to
+// switch to this.
+
+struct ClauseRewriter { field: fn(&mut Vec<Box<Term>>) -> QueryTerm }
+
+impl Clone for ClauseRewriter {
+    fn clone(&self) -> Self {
+        ClauseRewriter { field: self.field }
+    }
+}
+
+struct ClauseRewriters {
+    rewriter_map: HashMap<&'static str, ClauseRewriter>
+}
+
+impl ClauseRewriters {
+    fn new() -> Self {
+        let mut rewriter_map =
+            [("call", ClauseRewriter { field: rewrite_call_N })]//,
+        //("catch", rewrite_catch),
+        //("throw", rewrite_throw)]
+            .iter().cloned().collect();
+
+        ClauseRewriters { rewriter_map: rewriter_map }
+    }
+
+    fn get(&self, name: &str) -> Option<&ClauseRewriter> {
+        self.rewriter_map.get(name)
+    }
+}
+*/
+
+fn rewrite_call_n(terms: &mut Vec<Box<Term>>) -> QueryTerm {
+    let mut new_terms = Vec::with_capacity(0);
+    swap(&mut new_terms, terms);
+
+    QueryTerm::CallN(new_terms)
+}
+
+fn rewrite_clause(name: &Atom, terms: &mut Vec<Box<Term>>) -> Option<QueryTerm>
+{
+    if name == "call" {
+        Some(rewrite_call_n(terms))
+    } else {
+        None
+    }
+}
+
 pub fn parse_code(input: &str) -> Option<TopLevel>
 {
     match parse_TopLevel(input) {
         Ok(mut tl) => {
             for query in tl.query_iter_mut() {
-                let cts = match query {
-                    &mut QueryTerm::Term(Term::Clause(_, ref name, ref mut cts)) => {     
-                        if name == "call" {
-                            let mut new_cts = Vec::with_capacity(0);
-                            swap(&mut new_cts, cts);
-                            
-                            Some(new_cts)
-                        } else {
-                            None
-                        }
-                    },
+                let new_query = match query {
+                    &mut QueryTerm::Term(Term::Clause(_, ref name, ref mut cts)) =>
+                        rewrite_clause(name, cts),
+                    &mut QueryTerm::Term(Term::Var(_, _)) =>
+                        Some(QueryTerm::CallN(Vec::new())),
                     _ => None
                 };
 
-                if let Some(cts) = cts {
-                    swap(&mut QueryTerm::CallN(cts), query);
+                if let Some(mut new_query) = new_query {
+                    swap(&mut new_query, query);
                 }
             }
 
@@ -244,11 +289,11 @@ fn is_consistent(predicate: &Vec<PredicateClause>) -> bool {
 pub fn print_code(code: &Code) {
     for clause in code {
         match clause {
-            &Line::BuiltIn(_) => {},
             &Line::Fact(ref fact) =>
                 for fact_instr in fact {
                     println!("{}", fact_instr);
                 },
+            &Line::BuiltIn(_) => {},
             &Line::Cut(ref cut) =>
                 println!("{}", cut),
             &Line::Choice(ref choice) =>
@@ -301,11 +346,11 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
 
             if is_consistent(clauses) {
                 let compiled_pred = cg.compile_predicate(clauses);
-                wam.add_predicate(clauses, compiled_pred)                
+                wam.add_predicate(clauses, compiled_pred)
             } else {
                 let msg = r"Error: predicate is inconsistent.
 Each predicate must have the same name and arity.";
-                
+
                 EvalSession::EntryFailure(String::from(msg))
             }
         },

@@ -20,7 +20,7 @@ impl GenContext {
             GenContext::Head => 0,
             GenContext::Mid(cn) | GenContext::Last(cn) => cn
         }
-    }        
+    }
 }
 
 pub enum PredicateClause {
@@ -77,7 +77,7 @@ impl TopLevel {
                                                           ref mut clauses })
                             =>
                         {
-                            iter = Box::new(once(head));
+                            iter = Box::new(iter.chain(once(head)));
                             iter = Box::new(iter.chain(clauses.iter_mut()));
                         },
                         _ => {}
@@ -85,7 +85,7 @@ impl TopLevel {
                 },
             _ => {}
         }
-        
+
         iter
     }
 }
@@ -145,6 +145,7 @@ impl Default for VarReg {
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum Constant {
     Atom(Atom),
+    UInt64(usize),
     EmptyList
 }
 
@@ -163,14 +164,6 @@ pub enum QueryTerm {
 }
 
 impl QueryTerm {
-    pub fn arity(&self) -> usize {
-        match self {
-            &QueryTerm::Term(ref term) => term.arity(),
-            &QueryTerm::CallN(ref terms) => terms.len(),
-            _ => 0
-        }
-    }
-
     pub fn to_ref(&self) -> QueryTermRef {
         match self {
             &QueryTerm::CallN(ref terms) =>
@@ -178,7 +171,7 @@ impl QueryTerm {
             &QueryTerm::Cut =>
                 QueryTermRef::Cut,
             &QueryTerm::Term(ref term) =>
-                QueryTermRef::Term(term)
+                QueryTermRef::Term(term),
         }
     }
 }
@@ -207,7 +200,7 @@ impl<'a> ClauseType<'a> {
 
 #[derive(Clone, Copy)]
 pub enum TermRef<'a> {
-    AnonVar(Level),    
+    AnonVar(Level),
     Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     Constant(Level, &'a Cell<RegType>, &'a Constant),
     Clause(ClauseType<'a>, &'a Vec<Box<Term>>),
@@ -219,7 +212,7 @@ impl<'a> TermRef<'a> {
         match self {
             TermRef::AnonVar(lvl)
           | TermRef::Cons(lvl, _, _, _)
-          | TermRef::Constant(lvl, _, _)          
+          | TermRef::Constant(lvl, _, _)
           | TermRef::Var(lvl, _, _) => lvl,
             TermRef::Clause(ClauseType::Root, _) => Level::Shallow,
             TermRef::Clause(ClauseType::Deep(lvl, _, _), _) => lvl,
@@ -232,26 +225,17 @@ impl<'a> TermRef<'a> {
 pub enum QueryTermRef<'a> {
     CallN(&'a Vec<Box<Term>>),
     Cut,
-    Term(&'a Term)
+    Term(&'a Term),
 }
 
 impl<'a> QueryTermRef<'a> {
     pub fn arity(self) -> usize {
         match self {
-            QueryTermRef::Term(term) => term.arity(),
             QueryTermRef::CallN(terms) => terms.len(),
-            _ => 0
+            QueryTermRef::Cut => 0,
+            QueryTermRef::Term(term) => term.arity(),
         }
     }
-    
-    pub fn is_callable(self) -> bool {
-        match self {
-            QueryTermRef::Term(&Term::Clause(_, _, _))
-          | QueryTermRef::Term(&Term::Constant(_, Constant::Atom(_)))
-          | QueryTermRef::CallN(_) => true,
-            _ => false
-        }
-    }    
 }
 
 pub enum ChoiceInstruction {
@@ -292,17 +276,30 @@ impl IndexedChoiceInstruction {
     }
 }
 
-pub enum BuiltInInstruction {
-    InternalCallN
+pub enum BuiltInInstruction {    
+    CleanUpBlock,
+    CopyTerm,
+    Fail,
+    GetBall,
+    GetCurrentBlock,
+    Goto(usize, usize),
+    InstallNewBlock,
+    InternalCallN,
+    IsAtomic,
+    IsVar,
+    ResetBlock,
+    SetBall, 
+    Unify, 
+    UnwindStack
 }
 
 pub enum ControlInstruction {
     Allocate(usize),
     Call(Atom, usize, usize),
     CallN(usize),
-    ExecuteN(usize),
     Deallocate,
     Execute(Atom, usize),
+    ExecuteN(usize),
     Proceed
 }
 
@@ -547,7 +544,7 @@ impl Term {
             _ => None
         }
     }
-
+    
     pub fn arity(&self) -> usize {
         match self {
             &Term::Clause(_, _, ref child_terms) => child_terms.len(),
@@ -555,4 +552,3 @@ impl Term {
         }
     }
 }
-

@@ -16,7 +16,7 @@ argument indexing, and conjunctive queries.
 Extend rusty-wam to include the following, among other features:
 
 * call/N as a built-in meta-predicate (_done_).
-* ISO Prolog compliant throw/catch.
+* ISO Prolog compliant throw/catch (_done_).
 * Built-in and user-defined operators of all fixities,
   with custom associativity and precedence.
 * Bignum and floating point arithmetic.
