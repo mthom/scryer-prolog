@@ -36,7 +36,7 @@ struct MachineState {
     tr: usize,
     hb: usize,
     block: usize, // an offset into the OR stack.
-    ball: Heap
+    ball: (usize, Heap) // heap boundary, and a term copy
 }
 
 struct DuplicateTerm<'a> {
@@ -111,7 +111,7 @@ impl<'a> Index<usize> for DuplicateBallTerm<'a> {
             &self.state.heap[index]
         } else {
             let index = index - self.heap_boundary;
-            &self.state.ball[index]
+            &self.state.ball.1[index]
         }
     }
 }
@@ -122,7 +122,7 @@ impl<'a> IndexMut<usize> for DuplicateBallTerm<'a> {
             &mut self.state.heap[index]
         } else {
             let index = index - self.heap_boundary;
-            &mut self.state.ball[index]
+            &mut self.state.ball.1[index]
         }
     }
 }
@@ -134,11 +134,11 @@ impl<'a> CopierTarget for DuplicateBallTerm<'a> {
     }
 
     fn threshold(&self) -> usize {
-        self.heap_boundary + self.state.ball.len()
+        self.heap_boundary + self.state.ball.1.len()
     }
     
     fn push(&mut self, hcv: HeapCellValue) {
-        self.state.ball.push(hcv);        
+        self.state.ball.1.push(hcv);        
     }
 
     fn store(&self, a: Addr) -> Addr {
@@ -377,7 +377,7 @@ impl Machine {
             };
         }
     }
-
+    
     fn record_var_places<'a>(&self,
                              chunk_num: usize,
                              alloc_locs: &AllocVarDict<'a>,
@@ -409,6 +409,10 @@ impl Machine {
 
         while self.ms.p < end_ptr {
             if let CodePtr::TopLevel(mut cn, p) = self.ms.p {
+                //TODO: Shouldn't have to work nearly this hard!! Why
+                // are we only recording addresses, for instance? Why
+                // not just offsets into the heap? Not like they
+                // change.
                 if let &Line::Control(ref ctrl_instr) = &self[CodePtr::TopLevel(cn, p)] {
                     if ctrl_instr.is_jump_instr() {
                         self.record_var_places(cn, alloc_locs, heap_locs);
@@ -558,7 +562,7 @@ impl MachineState {
                        tr: 0,
                        hb: 0,
                        block: 0,
-                       ball: Vec::new()
+                       ball: (0, Vec::new())
         }
     }
     
@@ -1207,17 +1211,29 @@ impl MachineState {
                 self.p += 1;
             },
             &BuiltInInstruction::EraseBall => {
-                self.ball.truncate(0);
+                self.ball.0 = 0;
+                self.ball.1.truncate(0);
                 self.p += 1;
             },
             &BuiltInInstruction::GetBall => {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));                
                 let h = self.h;
 
-                if self.ball.len() > 0 {
-                    let copied_ball_iter = self.ball.iter().cloned();
-                    self.heap.extend(copied_ball_iter);
-                    self.h += self.ball.len();
+                if self.ball.1.len() > 0 {
+                    let diff = self.ball.0 - h;
+                    
+                    for heap_value in self.ball.1.iter().cloned() {
+                        self.heap.push(match heap_value {
+                            HeapCellValue::Con(c) => HeapCellValue::Con(c),
+                            HeapCellValue::Lis(a) => HeapCellValue::Lis(a - diff),
+                            HeapCellValue::Ref(Ref::HeapCell(hc)) =>
+                                HeapCellValue::Ref(Ref::HeapCell(hc - diff)),
+                            HeapCellValue::Str(s) => HeapCellValue::Str(s - diff),
+                            _ => heap_value
+                        });
+                    }
+                                        
+                    self.h += self.ball.1.len();
                 } else {
                     self.fail = true;
                     return;
@@ -1237,6 +1253,8 @@ impl MachineState {
                 let addr = self[temp_v!(1)].clone();
 
                 {
+                    self.ball.0 = self.h;
+                    
                     let mut duplicator = DuplicateBallTerm::new(self);                
                     duplicator.duplicate_term(addr);
                 }
@@ -1304,12 +1322,7 @@ impl MachineState {
             &BuiltInInstruction::Fail => {
                 self.fail = true;
                 self.p += 1;
-            },
-            &BuiltInInstruction::Goto(p, arity) => {
-                self.num_of_args = arity;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(p);
-            }
+            }            
         };
     }
 
@@ -1355,6 +1368,11 @@ impl MachineState {
                 if let Some((name, arity)) = self.setup_call_n(arity) {
                     self.try_execute_predicate(code_dir, name, arity);
                 },
+            &ControlInstruction::Goto(p, arity) => {
+                self.num_of_args = arity;
+                self.b0 = self.b;
+                self.p  = CodePtr::DirEntry(p);
+            },
             &ControlInstruction::Proceed =>
                 self.p = self.cp,
             &ControlInstruction::ThrowCall => {
@@ -1605,5 +1623,7 @@ impl MachineState {
         self.and_stack.clear();
         self.or_stack.clear();
         self.registers = vec![Addr::HeapCell(0); 64];
+        self.block = 0;
+        self.ball = (0, Vec::new());
     }
 }

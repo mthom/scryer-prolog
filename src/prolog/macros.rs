@@ -146,7 +146,7 @@ macro_rules! install_new_block {
 
 macro_rules! goto {
     ($line:expr, $arity:expr) => (
-        Line::BuiltIn(BuiltInInstruction::Goto($line, $arity))
+        Line::Control(ControlInstruction::Goto($line, $arity))
     )
 }
 

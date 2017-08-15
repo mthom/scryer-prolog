@@ -114,6 +114,8 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "deallocate"),
             &ControlInstruction::Execute(ref name, arity) =>
                 write!(f, "execute {}/{}", name, arity),
+            &ControlInstruction::Goto(p, arity) =>
+                write!(f, "goto {}/{}", p, arity),
             &ControlInstruction::Proceed =>
                 write!(f, "proceed"),
             &ControlInstruction::ThrowCall =>
@@ -372,7 +374,6 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
 
             if is_consistent(clauses) {
                 let compiled_pred = cg.compile_predicate(clauses);
-                print_code(&compiled_pred);
                 wam.add_predicate(clauses, compiled_pred)
             } else {
                 let msg = r"Error: predicate is inconsistent.
@@ -391,14 +392,12 @@ Each predicate must have the same name and arity.";
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_rule = cg.compile_rule(rule);
-            print_code(&compiled_rule);
             wam.add_rule(rule, compiled_rule)
         },
         &TopLevel::Query(ref query) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_query = cg.compile_query(query);
-            print_code(&compiled_query);
             wam.submit_query(compiled_query, cg.take_vars())
         }
     }

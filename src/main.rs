@@ -721,9 +721,16 @@ mod tests {
         submit(&mut wam, "g(g_success). g(g_success_2). g(X) :- throw(X).");
         submit(&mut wam, "handle(x). handle(y). handle(z). handle(v) :- throw(X).");
 
-        //TODO: fix this test. record the ball properly. currently it
-        // is unwound when the heap is truncated.
         assert_eq!(submit(&mut wam, "?- catch(f(X), E, E)."), true);
+
+        submit(&mut wam, "handle(x). handle(y). handle(z). handle(v) :- throw(handle_top(X)).");
+        submit(&mut wam, "handle_top(an_error_1). handle_top(an_error_2).");
+
+        assert_eq!(submit(&mut wam, "?- catch(f(X), E, E)."), true);
+
+        submit(&mut wam, "handle(x). handle(y). handle(z). handle(v) :- throw(X).");
+
+        assert_eq!(submit(&mut wam, "?- catch(f(X), E, handle_top(E))."), true);
     }
 }
 

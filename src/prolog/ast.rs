@@ -297,7 +297,6 @@ pub enum BuiltInInstruction {
     Fail,
     GetBall,
     GetCurrentBlock,
-    Goto(usize, usize),
     InstallNewBlock,
     InternalCallN,
     IsAtomic,
@@ -317,6 +316,7 @@ pub enum ControlInstruction {
     Deallocate,
     Execute(Atom, usize),
     ExecuteN(usize),
+    Goto(usize, usize),
     Proceed,
     ThrowCall,
     ThrowExecute
@@ -333,6 +333,7 @@ impl ControlInstruction {
             &ControlInstruction::ExecuteN(_) => true,
             &ControlInstruction::ThrowCall => true,
             &ControlInstruction::ThrowExecute => true,
+            &ControlInstruction::Goto(_, _) => true,
             _ => false
         }
     }

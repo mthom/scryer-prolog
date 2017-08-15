@@ -12,6 +12,12 @@ pub trait CopierTarget
     fn deref(&self, Addr) -> Addr;
     fn stack(&mut self) -> &mut AndStack;
 
+    //TODO: extend this so include a boundary() function which is constant!!
+    // this will return self.h. the threshold() will be used to set the addresses
+    // contained within the terms so that the offsets match those of the heap
+    // to be truncated by BLOCK, ie. starting at the BLOCK.H value. This should
+    // allow us to get around the latest bug.
+
     // duplicate_term(L1, L2) uses Cheney's algorithm to copy the term at
     // L1 to L2. forwarding_terms is kept to restore the innards of L1
     // after it's been copied to L2.
@@ -67,7 +73,7 @@ pub trait CopierTarget
                     match self[s].clone() {
                         HeapCellValue::NamedStr(arity, name) => {
                             let threshold = self.threshold();
-                            
+
                             self[scan] = HeapCellValue::Str(threshold);
                             self[s] = HeapCellValue::Str(threshold);
 
@@ -89,8 +95,8 @@ pub trait CopierTarget
                     scan += 1;
                 }
             };
-        }   
-        
+        }
+
         for (r, hcv) in forward_trail {
             match r {
                 Ref::HeapCell(hc) => self[hc] = hcv,
@@ -99,4 +105,3 @@ pub trait CopierTarget
         }
     }
 }
-    

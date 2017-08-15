@@ -16,7 +16,7 @@ argument indexing, and conjunctive queries.
 Extend rusty-wam to include the following, among other features:
 
 * call/N as a built-in meta-predicate (_done_).
-* ISO Prolog compliant throw/catch (_in progress_).
+* ISO Prolog compliant throw/catch (_done_).
 * Built-in and user-defined operators of all fixities,
   with custom associativity and precedence.
 * Bignum and floating point arithmetic.
@@ -41,6 +41,18 @@ IR to get JIT-compiled and -executed Prolog programs.
 
 It's my hope to use rusty-wam as the logic engine of a low level (and
 ideally, very fast) [Shen](http://shenlanguage.org) implementation.
+
+## Built-in predicates
+
+The following predicates are built-in to rusty-wam.
+
+* atomic
+* call/N (0 <= N <= 62)
+* catch/3
+* duplicate_term/2
+* false/0
+* not/1
+* var/1
 
 ## Tutorial
 To enter a multi-clause predicate, the brackets ":{" and "}:" are used
