@@ -93,8 +93,8 @@ X = _0
 Z = _2
 ```
 
-Pressing ; will backtrack through other possible answers, if any exist.
-Pressing . will abort the search and return to the prompt.
+Pressing `SPACE` will backtrack through other possible answers, if any exist.
+Pressing `.` will abort the search and return to the prompt.
 
 Wildcards work as well:
 
