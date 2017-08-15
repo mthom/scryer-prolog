@@ -22,6 +22,12 @@ macro_rules! query {
     )
 }
 
+macro_rules! fact {
+    [$($x:expr),+] => (
+        Line::Fact(vec![$($x),+])
+    )
+}
+
 macro_rules! temp_v {
     ($x:expr) => (
         RegType::Temp($x)
@@ -37,6 +43,12 @@ macro_rules! perm_v {
 macro_rules! get_var_in_query {
     ($r:expr, $arg:expr) => (
         QueryInstruction::GetVariable($r, $arg)
+    )
+}
+
+macro_rules! get_var_in_fact {
+    ($r:expr, $arg:expr) => (
+        FactInstruction::GetVariable($r, $arg)
     )
 }
 
@@ -150,6 +162,12 @@ macro_rules! get_ball {
     )
 }
 
+macro_rules! erase_ball {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::EraseBall)
+    )
+}
+
 macro_rules! unify {
     () => (
         Line::BuiltIn(BuiltInInstruction::Unify)
@@ -180,9 +198,9 @@ macro_rules! fail {
     )
 }
 
-macro_rules! copy_term {
+macro_rules! duplicate_term {
     () => (
-        Line::BuiltIn(BuiltInInstruction::CopyTerm)
+        Line::BuiltIn(BuiltInInstruction::DuplicateTerm)
     )
 }
 

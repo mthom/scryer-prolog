@@ -145,7 +145,7 @@ impl Default for VarReg {
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum Constant {
     Atom(Atom),
-    UInt64(usize),
+    BlockNum(usize),
     EmptyList
 }
 
@@ -292,7 +292,8 @@ impl IndexedChoiceInstruction {
 
 pub enum BuiltInInstruction {
     CleanUpBlock,
-    CopyTerm,
+    DuplicateTerm,
+    EraseBall,
     Fail,
     GetBall,
     GetCurrentBlock,
@@ -311,23 +312,27 @@ pub enum ControlInstruction {
     Allocate(usize),
     Call(Atom, usize, usize),
     CallN(usize),
-    Catch,
+    CatchCall,
+    CatchExecute,
     Deallocate,
     Execute(Atom, usize),
     ExecuteN(usize),
     Proceed,
-    Throw
+    ThrowCall,
+    ThrowExecute
 }
 
 impl ControlInstruction {
     pub fn is_jump_instr(&self) -> bool {
         match self {
             &ControlInstruction::Call(_, _, _)  => true,
-            &ControlInstruction::Catch => true,
+            &ControlInstruction::CatchCall => true,
+            &ControlInstruction::CatchExecute => true,
             &ControlInstruction::Execute(_, _)  => true,
             &ControlInstruction::CallN(_) => true,
             &ControlInstruction::ExecuteN(_) => true,
-            &ControlInstruction::Throw => true,
+            &ControlInstruction::ThrowCall => true,
+            &ControlInstruction::ThrowExecute => true,
             _ => false
         }
     }

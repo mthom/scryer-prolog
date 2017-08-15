@@ -2,6 +2,7 @@ pub mod allocator;
 pub mod and_stack;
 pub mod ast;
 pub mod codegen;
+pub mod copier;
 pub mod debray_allocator;
 pub mod fixtures;
 pub mod heapview;

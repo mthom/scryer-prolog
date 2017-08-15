@@ -212,7 +212,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 compiled_query.push(Line::Control(call));
             },
             QueryTermRef::Catch(_) =>
-                compiled_query.push(Line::Control(ControlInstruction::Catch)),            
+                compiled_query.push(Line::Control(ControlInstruction::CatchCall)),            
             QueryTermRef::Term(&Term::Constant(_, Constant::Atom(ref atom))) => {
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);
                 compiled_query.push(Line::Control(call));
@@ -222,7 +222,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 compiled_query.push(Line::Control(call));
             },
             QueryTermRef::Throw(_) =>
-                compiled_query.push(Line::Control(ControlInstruction::Throw)),
+                compiled_query.push(Line::Control(ControlInstruction::ThrowCall)),
             _ => {}
         }
     }
@@ -241,6 +241,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             QueryTermRef::CallN(terms) =>
                 if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
                     *ctrl = ControlInstruction::ExecuteN(terms.len());
+                },
+            QueryTermRef::Catch(_) =>
+                if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
+                    *ctrl = ControlInstruction::CatchExecute;
+                },
+            QueryTermRef::Throw(_) =>
+                if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
+                    *ctrl = ControlInstruction::ThrowExecute;
                 },
             _ => dealloc_index = body.len()
         };

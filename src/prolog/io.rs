@@ -19,7 +19,7 @@ impl fmt::Display for Constant {
                 write!(f, "{}", atom),
             &Constant::EmptyList =>
                 write!(f, "[]"),
-            &Constant::UInt64(integer) =>
+            &Constant::BlockNum(integer) =>
                 write!(f, "u{}", integer)
         }
     }
@@ -43,7 +43,7 @@ impl fmt::Display for FactInstruction {
             &FactInstruction::GetValue(ref x, ref a) =>
                 write!(f, "get_value {}, A{}", x, a),
             &FactInstruction::GetVariable(ref x, ref a) =>
-                write!(f, "get_variable {}, A{}", x, a),
+                write!(f, "fact:get_variable {}, A{}", x, a),
             &FactInstruction::UnifyConstant(ref constant) =>
                 write!(f, "unify_constant {}", constant),
             &FactInstruction::UnifyVariable(ref r) =>
@@ -62,7 +62,7 @@ impl fmt::Display for QueryInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &QueryInstruction::GetVariable(ref x, ref a) =>
-                write!(f, "get_variable {}, A{}", x, a),
+                write!(f, "query:get_variable {}, A{}", x, a),
             &QueryInstruction::PutConstant(Level::Shallow, ref constant, ref r) =>
                 write!(f, "put_constant {}, A{}", constant, r.reg_num()),
             &QueryInstruction::PutConstant(Level::Deep, ref constant, ref r) =>
@@ -104,8 +104,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "call {}/{}, {}", name, arity, pvs),
             &ControlInstruction::CallN(arity) =>
                 write!(f, "call_N {}", arity),
-            &ControlInstruction::Catch =>
-                write!(f, "catch"),
+            &ControlInstruction::CatchCall =>
+                write!(f, "call_catch"),
+            &ControlInstruction::CatchExecute =>
+                write!(f, "execute_catch"),
             &ControlInstruction::ExecuteN(arity) =>
                 write!(f, "execute_N {}", arity),
             &ControlInstruction::Deallocate =>
@@ -114,8 +116,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "execute {}/{}", name, arity),
             &ControlInstruction::Proceed =>
                 write!(f, "proceed"),
-            &ControlInstruction::Throw =>
-                write!(f, "throw")
+            &ControlInstruction::ThrowCall =>
+                write!(f, "call_throw"),
+            &ControlInstruction::ThrowExecute =>
+                write!(f, "execute_throw")
         }
     }
 }
@@ -368,6 +372,7 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
 
             if is_consistent(clauses) {
                 let compiled_pred = cg.compile_predicate(clauses);
+                print_code(&compiled_pred);
                 wam.add_predicate(clauses, compiled_pred)
             } else {
                 let msg = r"Error: predicate is inconsistent.
@@ -386,12 +391,14 @@ Each predicate must have the same name and arity.";
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_rule = cg.compile_rule(rule);
+            print_code(&compiled_rule);
             wam.add_rule(rule, compiled_rule)
         },
         &TopLevel::Query(ref query) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_query = cg.compile_query(query);
+            print_code(&compiled_query);
             wam.submit_query(compiled_query, cg.take_vars())
         }
     }

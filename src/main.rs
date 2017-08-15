@@ -698,10 +698,10 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(y))."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(z))."), false);
 
-        submit(&mut wam, "f(X) :- throw(stuff). f(X) :- throw(other_stuff).");
+        submit(&mut wam, "f(X) :- throw(stuff).");
         submit(&mut wam, "handle(stuff). handle(other_stuff).");
 
-        // this should deterministically succeed with Exception = stuff.
+        // the first 3 cases should deterministically succeed.
         assert_eq!(submit(&mut wam, "?- catch(f(X), Exception, handle(Exception))."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(X), Exception, handle(stuff))."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(X), Exception, handle(other_stuff))."), true);
