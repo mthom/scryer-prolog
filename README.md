@@ -52,6 +52,7 @@ The following predicates are built-in to rusty-wam.
 * duplicate_term/2
 * false/0
 * not/1
+* throw/1
 * var/1
 
 ## Tutorial
