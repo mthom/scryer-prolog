@@ -124,5 +124,4 @@ X = call(f, z).
 
 Note that the values of variables belonging to successful queries are
 printed out, on one line each. Uninstantiated variables are denoted by
-a number preceded by an underscore (`X = _0` is an example in the
-above).
+a number preceded by an underscore (`X = _0` in an example above).
