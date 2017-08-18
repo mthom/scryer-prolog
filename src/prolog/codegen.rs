@@ -18,6 +18,7 @@ pub enum EvalSession<'a> {
     EntrySuccess,
     InitialQuerySuccess(AllocVarDict<'a>, HeapVarDict<'a>),
     QueryFailure,
+    QueryFailureWithException(String),
     SubsequentQuerySuccess,
 }
 

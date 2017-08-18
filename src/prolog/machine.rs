@@ -51,7 +51,7 @@ impl<'a> DuplicateTerm<'a> {
 
 impl<'a> Index<usize> for DuplicateTerm<'a> {
     type Output = HeapCellValue;
-    
+
     fn index(&self, index: usize) -> &Self::Output {
         &self.state.heap[index]
     }
@@ -72,7 +72,7 @@ impl<'a> CopierTarget for DuplicateTerm<'a> {
     fn threshold(&self) -> usize {
         self.state.h
     }
-    
+
     fn push(&mut self, hcv: HeapCellValue) {
         self.state.heap.push(hcv);
         self.state.h += 1;
@@ -105,7 +105,7 @@ impl<'a> DuplicateBallTerm<'a> {
 
 impl<'a> Index<usize> for DuplicateBallTerm<'a> {
     type Output = HeapCellValue;
-    
+
     fn index(&self, index: usize) -> &Self::Output {
         if index < self.heap_boundary {
             &self.state.heap[index]
@@ -136,9 +136,9 @@ impl<'a> CopierTarget for DuplicateBallTerm<'a> {
     fn threshold(&self) -> usize {
         self.heap_boundary + self.state.ball.1.len()
     }
-    
+
     fn push(&mut self, hcv: HeapCellValue) {
-        self.state.ball.1.push(hcv);        
+        self.state.ball.1.push(hcv);
     }
 
     fn store(&self, a: Addr) -> Addr {
@@ -284,9 +284,6 @@ impl Machine {
 
     fn execute_instr(&mut self)
     {
-        // can't use self[ptr] or self.index(ptr) to set the value of
-        // instr! instr is then typed as Line, not &Line. WHY????
-        // This is a compiler bug. Has to be.
         let instr = match self.ms.p {
             CodePtr::TopLevel(_, p) => {
                 match &self.cached_query {
@@ -377,7 +374,7 @@ impl Machine {
             };
         }
     }
-    
+
     fn record_var_places<'a>(&self,
                              chunk_num: usize,
                              alloc_locs: &AllocVarDict<'a>,
@@ -409,10 +406,6 @@ impl Machine {
 
         while self.ms.p < end_ptr {
             if let CodePtr::TopLevel(mut cn, p) = self.ms.p {
-                //TODO: Shouldn't have to work nearly this hard!! Why
-                // are we only recording addresses, for instance? Why
-                // not just offsets into the heap? Not like they
-                // change.
                 if let &Line::Control(ref ctrl_instr) = &self[CodePtr::TopLevel(cn, p)] {
                     if ctrl_instr.is_jump_instr() {
                         self.record_var_places(cn, alloc_locs, heap_locs);
@@ -432,6 +425,18 @@ impl Machine {
         }
     }
 
+    fn fail<'a>(&mut self) -> EvalSession<'a>
+    {
+        if self.ms.ball.1.len() > 0 {
+            let h = self.ms.h;
+            self.ms.copy_and_align_ball_to_heap();
+
+            EvalSession::QueryFailureWithException(self.print_term(&Addr::HeapCell(h)))
+        } else {
+            EvalSession::QueryFailure
+        }
+    }
+
     pub fn submit_query<'a>(&mut self, code: Code, alloc_locs: AllocVarDict<'a>) -> EvalSession<'a>
     {
         let mut heap_locs = HashMap::new();
@@ -440,16 +445,14 @@ impl Machine {
         self.run_query(&alloc_locs, &mut heap_locs);
 
         if self.failed() {
-            EvalSession::QueryFailure
+            self.fail()
         } else {
             EvalSession::InitialQuerySuccess(alloc_locs, heap_locs)
         }
     }
 
-    pub fn continue_query<'a>(&mut self,
-                              alloc_locs: &AllocVarDict<'a>,
-                              heap_locs: &mut HeapVarDict<'a>)
-                              -> EvalSession
+    pub fn continue_query<'a>(&mut self, alloc_locs: &AllocVarDict<'a>, heap_locs: &mut HeapVarDict<'a>)
+                              -> EvalSession<'a>
     {
         if !self.or_stack_is_empty() {
             let b = self.ms.b - 1;
@@ -462,7 +465,7 @@ impl Machine {
             self.run_query(alloc_locs, heap_locs);
 
             if self.failed() {
-                EvalSession::QueryFailure
+                self.fail()
             } else {
                 EvalSession::SubsequentQuerySuccess
             }
@@ -471,14 +474,58 @@ impl Machine {
         }
     }
 
+    fn print_term(&self, addr: &Addr) -> String
+    {
+        let mut viewer = HeapCellViewer::new(&self.ms.heap,
+                                             &self.ms.and_stack,
+                                             addr);
+
+        let mut result = String::new();
+
+        while let Some(view) = viewer.next() {
+            match view {
+                CellView::Con(&Constant::BlockNum(integer)) =>
+                    result += integer.to_string().as_str(),
+                CellView::Con(&Constant::EmptyList) =>
+                    result += "[]",
+                CellView::Con(&Constant::Atom(ref atom)) =>
+                    result += atom.as_str(),
+                CellView::HeapVar(cell_num) => {
+                    result += "_";
+                    result += cell_num.to_string().as_str();
+                },
+                CellView::StackVar(_, cell_num) => {
+                        result += "s_";
+                    result += cell_num.to_string().as_str();
+                },
+                CellView::Str(_, ref name) =>
+                    result += name.as_str(),
+                CellView::TToken(TToken::Bar) => {
+                    match viewer.peek() {
+                        Some(CellView::Con(&Constant::EmptyList)) => {
+                            viewer.next();
+                        },
+                        Some(CellView::TToken(TToken::LSBracket(loc))) => {
+                            result += ", ";
+
+                            viewer.next();
+                            viewer.remove_token(loc);
+                        },
+                        _ => result += " | "
+                    };
+                },
+                CellView::TToken(token) =>
+                    result += token.as_str()
+            };
+        }
+
+        result
+    }
+
     pub fn heap_view(&self, var_dir: &HeapVarDict) -> String {
         let mut result = String::new();
 
         for (var, addr) in var_dir {
-            let mut viewer = HeapCellViewer::new(&self.ms.heap,
-                                                 &self.ms.and_stack,
-                                                 addr);
-
             if result != "" {
                 result += "\n\r";
             }
@@ -486,42 +533,7 @@ impl Machine {
             result += var.as_str();
             result += " = ";
 
-            while let Some(view) = viewer.next() {
-                match view {
-                    CellView::Con(&Constant::BlockNum(integer)) =>
-                        result += integer.to_string().as_str(),
-                    CellView::Con(&Constant::EmptyList) =>
-                        result += "[]",
-                    CellView::Con(&Constant::Atom(ref atom)) =>
-                        result += atom.as_str(),
-                    CellView::HeapVar(cell_num) => {
-                        result += "_";
-                        result += cell_num.to_string().as_str();
-                    },
-                    CellView::StackVar(_, cell_num) => {
-                        result += "s_";
-                        result += cell_num.to_string().as_str();
-                    },
-                    CellView::Str(_, ref name) =>
-                        result += name.as_str(),
-                    CellView::TToken(TToken::Bar) => {
-                        match viewer.peek() {
-                            Some(CellView::Con(&Constant::EmptyList)) => {
-                                viewer.next();
-                            },
-                            Some(CellView::TToken(TToken::LSBracket(loc))) => {
-                                result += ", ";
-
-                                viewer.next();
-                                viewer.remove_token(loc);
-                            },
-                            _ => result += " | "
-                        };
-                    },
-                    CellView::TToken(token) =>
-                        result += token.as_str()
-                };
-            }
+            result += self.print_term(addr).as_str();
         }
 
         result
@@ -565,7 +577,7 @@ impl MachineState {
                        ball: (0, Vec::new())
         }
     }
-    
+
     fn num_frames(&self) -> usize {
         self.and_stack.len() + self.or_stack.len()
     }
@@ -1143,15 +1155,38 @@ impl MachineState {
         }
     }
 
+    fn goto_throw(&mut self) {
+        self.num_of_args = 1;
+        self.b0 = self.b;
+        self.p  = CodePtr::DirEntry(59);
+    }
+
+    fn throw_exception(&mut self, mut hcv: Vec<HeapCellValue>) {
+        let h = self.h;
+        
+        self.registers[1] = Addr::HeapCell(h);
+        self.h += hcv.len();
+        
+        self.heap.append(&mut hcv);        
+        self.goto_throw();
+    }
+
     fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
     {
-        let addr = self.deref(self.registers[arity].clone());
+        let addr = self.store(self.deref(self.registers[arity].clone()));
 
-        let (name, narity) = match self.store(addr) {
+        let (name, narity) = match addr {
             Addr::Str(a) => {
                 let result = self.heap[a].clone();
 
                 if let HeapCellValue::NamedStr(narity, name) = result {
+                    if narity + arity > 63 {
+                        self.throw_exception(functor!("representation_error",
+                                                      1,
+                                                      [atom!("exceeds_max_arity")]));
+                        return None;
+                    }
+
                     for i in (1 .. arity).rev() {
                         self.registers[i + narity] = self.registers[i].clone();
                     }
@@ -1167,8 +1202,15 @@ impl MachineState {
                 }
             },
             Addr::Con(Constant::Atom(name)) => (name, 0),
+            Addr::HeapCell(_) | Addr::StackCell(_, _) => {
+                self.throw_exception(functor!("instantiation_error", 0, []));
+                return None;
+            },
             _ => {
-                self.fail = true;
+                self.throw_exception(functor!("type_error",
+                                              2,
+                                              [atom!("callable"),
+                                               HeapCellValue::from(addr)]));
                 return None;
             }
         };
@@ -1176,22 +1218,39 @@ impl MachineState {
         Some((name, arity + narity - 1))
     }
 
+    fn copy_and_align_ball_to_heap(&mut self) {
+        let diff = self.ball.0 - self.h;
+
+        for heap_value in self.ball.1.iter().cloned() {
+            self.heap.push(match heap_value {
+                HeapCellValue::Con(c) => HeapCellValue::Con(c),
+                HeapCellValue::Lis(a) => HeapCellValue::Lis(a - diff),
+                HeapCellValue::Ref(Ref::HeapCell(hc)) =>
+                    HeapCellValue::Ref(Ref::HeapCell(hc - diff)),
+                HeapCellValue::Str(s) => HeapCellValue::Str(s - diff),
+                _ => heap_value
+            });
+        }
+
+        self.h += self.ball.1.len();
+    }
+
     fn execute_built_in_instr(&mut self, code_dir: &CodeDir, instr: &BuiltInInstruction)
     {
         match instr {
             &BuiltInInstruction::DuplicateTerm => {
                 let old_h = self.h;
-                
+
                 let a1 = self[temp_v!(1)].clone();
                 let a2 = self[temp_v!(2)].clone();
 
                 // drop the mutable references contained in gadget
                 // once the term has been duplicated.
-                {   
-                    let mut gadget = DuplicateTerm::new(self);                    
+                {
+                    let mut gadget = DuplicateTerm::new(self);
                     gadget.duplicate_term(a1);
                 }
-                
+
                 self.unify(Addr::HeapCell(old_h), a2);
 
                 self.p += 1;
@@ -1216,31 +1275,18 @@ impl MachineState {
                 self.p += 1;
             },
             &BuiltInInstruction::GetBall => {
-                let addr = self.store(self.deref(self[temp_v!(1)].clone()));                
+                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
                 let h = self.h;
 
                 if self.ball.1.len() > 0 {
-                    let diff = self.ball.0 - h;
-                    
-                    for heap_value in self.ball.1.iter().cloned() {
-                        self.heap.push(match heap_value {
-                            HeapCellValue::Con(c) => HeapCellValue::Con(c),
-                            HeapCellValue::Lis(a) => HeapCellValue::Lis(a - diff),
-                            HeapCellValue::Ref(Ref::HeapCell(hc)) =>
-                                HeapCellValue::Ref(Ref::HeapCell(hc - diff)),
-                            HeapCellValue::Str(s) => HeapCellValue::Str(s - diff),
-                            _ => heap_value
-                        });
-                    }
-                                        
-                    self.h += self.ball.1.len();
+                    self.copy_and_align_ball_to_heap();
                 } else {
                     self.fail = true;
                     return;
                 }
 
                 let ball = self.heap[h].as_addr(h);
-                
+
                 match addr.as_ref() {
                     Some(r) => {
                         self.bind(r, ball);
@@ -1254,11 +1300,11 @@ impl MachineState {
 
                 {
                     self.ball.0 = self.h;
-                    
-                    let mut duplicator = DuplicateBallTerm::new(self);                
+
+                    let mut duplicator = DuplicateBallTerm::new(self);
                     duplicator.duplicate_term(addr);
                 }
-                
+
                 self.p += 1;
             },
             &BuiltInInstruction::CleanUpBlock => {
@@ -1322,7 +1368,7 @@ impl MachineState {
             &BuiltInInstruction::Fail => {
                 self.fail = true;
                 self.p += 1;
-            }            
+            }
         };
     }
 
@@ -1349,7 +1395,7 @@ impl MachineState {
                 self.num_of_args = 3;
                 self.b0 = self.b;
                 self.p  = CodePtr::DirEntry(5);
-            },            
+            },
             &ControlInstruction::CallN(arity) =>
                 if let Some((name, arity)) = self.setup_call_n(arity) {
                     self.try_call_predicate(code_dir, name, arity);
@@ -1377,14 +1423,10 @@ impl MachineState {
                 self.p = self.cp,
             &ControlInstruction::ThrowCall => {
                 self.cp = self.p + 1;
-                self.num_of_args = 1;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(59);
+                self.goto_throw();
             },
             &ControlInstruction::ThrowExecute => {
-                self.num_of_args = 1;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(59);
+                self.goto_throw();
             }
         };
     }

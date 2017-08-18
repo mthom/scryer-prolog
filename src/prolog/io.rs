@@ -403,6 +403,10 @@ Each predicate must have the same name and arity.";
     }
 }
 
+fn error_string(e: &String) -> String {
+    format!("error: {}", e)
+}
+
 pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
         EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
@@ -451,6 +455,12 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                         stdout.flush().unwrap();
                         return;
                     }
+
+                    if let &EvalSession::QueryFailureWithException(ref e) = &result {
+                        write!(stdout, "{}\n\r", error_string(e)).unwrap();
+                        stdout.flush().unwrap();
+                        return;
+                    }
                 } else {
                     break;
                 }
@@ -459,6 +469,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
             write!(stdout(), ".\n").unwrap();
         },
         EvalSession::QueryFailure => println!("false."),
+        EvalSession::QueryFailureWithException(e) => println!("{}", error_string(&e)),
         EvalSession::EntryFailure(msg) => println!("{}", msg),
         _ => {}
     };

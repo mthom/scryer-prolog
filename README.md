@@ -47,7 +47,7 @@ ideally, very fast) [Shen](http://shenlanguage.org) implementation.
 The following predicates are built-in to rusty-wam.
 
 * atomic/1
-* call/N (0 <= N <= 62)
+* call/N (1 <= N <= 63)
 * catch/3
 * duplicate_term/2
 * false/0

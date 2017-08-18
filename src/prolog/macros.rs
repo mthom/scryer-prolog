@@ -22,6 +22,22 @@ macro_rules! query {
     )
 }
 
+macro_rules! functor {
+    ($name:expr, $len:expr, [$($args:expr),*]) => {{
+        if $len > 0 {
+            vec![ HeapCellValue::NamedStr($len, String::from($name)), $($args),* ]
+        } else {
+            vec![ atom!($name) ]
+        }
+    }}
+}
+
+macro_rules! atom {
+    ($name:expr) => (
+        HeapCellValue::Con(Constant::Atom(String::from($name)))
+    )
+}
+
 macro_rules! fact {
     [$($x:expr),+] => (
         Line::Fact(vec![$($x),+])
