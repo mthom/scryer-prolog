@@ -404,7 +404,7 @@ Each predicate must have the same name and arity.";
 }
 
 fn error_string(e: &String) -> String {
-    format!("error: {}", e)
+    format!("error: exception thrown: {}", e)
 }
 
 pub fn print(wam: &mut Machine, result: EvalSession) {
