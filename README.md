@@ -20,7 +20,7 @@ Extend rusty-wam to include the following, among other features:
 * Built-in and user-defined operators of all fixities,
   with custom associativity and precedence.
 * Bignum and floating point arithmetic.
-* Built-in control operators (`;`, `->`, etc.).
+* Built-in control operators (`,`, `;`, `->`, etc.).
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
   is straightforward with attributed variables. 
