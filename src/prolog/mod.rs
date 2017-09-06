@@ -1,6 +1,13 @@
+extern crate num;
+extern crate ordered_float;
+
 pub mod allocator;
 pub mod and_stack;
+#[macro_use]
 pub mod ast;
+#[macro_use]
+pub mod macros;
+pub mod builtins;
 pub mod codegen;
 pub mod copier;
 pub mod debray_allocator;
@@ -9,12 +16,7 @@ pub mod heapview;
 pub mod indexing;
 pub mod io;
 pub mod iterators;
-#[macro_use]
-pub mod macros;
-pub mod naive_allocator;
-pub mod prolog_parser;
 pub mod machine;
 pub mod or_stack;
+pub mod parser;
 pub mod targets;
-
-pub mod builtins;

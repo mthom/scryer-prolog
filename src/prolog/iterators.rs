@@ -53,15 +53,12 @@ impl<'a> QueryIterator<'a> {
     fn from_term(term: &'a Term) -> Self {
         let state = match term {
             &Term::AnonVar =>
-            //IteratorState::AnonVar(Level::Shallow),
                 return QueryIterator { state_stack: vec![] },
             &Term::Clause(_, _, ref terms) =>
                 IteratorState::Clause(0, ClauseType::Root, terms),
             &Term::Cons(_, _, _) =>
-            //IteratorState::InitialCons(Level::Shallow, cell, head.as_ref(), tail.as_ref()),
                 return QueryIterator { state_stack: vec![] },
             &Term::Constant(_, _) =>
-            //IteratorState::Constant(Level::Shallow, cell, constant),
                 return QueryIterator { state_stack: vec![] },
             &Term::Var(ref cell, ref var) =>
                 IteratorState::Var(Level::Shallow, cell, var)

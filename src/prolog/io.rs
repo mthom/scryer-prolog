@@ -2,7 +2,6 @@ use prolog::ast::*;
 use prolog::codegen::*;
 use prolog::debray_allocator::*;
 use prolog::machine::*;
-use prolog::prolog_parser::*;
 
 use termion::raw::IntoRawMode;
 use termion::input::TermRead;
@@ -10,20 +9,6 @@ use termion::event::Key;
 
 use std::io::{Write, stdin, stdout};
 use std::fmt;
-use std::mem::swap;
-
-impl fmt::Display for Constant {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Constant::Atom(ref atom) =>
-                write!(f, "{}", atom),
-            &Constant::EmptyList =>
-                write!(f, "[]"),
-            &Constant::BlockNum(integer) =>
-                write!(f, "u{}", integer)
-        }
-    }
-}
 
 impl fmt::Display for FactInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -209,110 +194,6 @@ impl fmt::Display for RegType {
     }
 }
 
-/*
-// Wait until constexprs are supported in stable before trying to
-// switch to this.
-
-struct ClauseRewriter { field: fn(&mut Vec<Box<Term>>) -> QueryTerm }
-
-impl Clone for ClauseRewriter {
-    fn clone(&self) -> Self {
-        ClauseRewriter { field: self.field }
-    }
-}
-
-struct ClauseRewriters {
-    rewriter_map: HashMap<&'static str, ClauseRewriter>
-}
-
-impl ClauseRewriters {
-    fn new() -> Self {
-        let mut rewriter_map =
-            [("call", ClauseRewriter { field: rewrite_call_N })]//,
-        //("catch", rewrite_catch),
-        //("throw", rewrite_throw)]
-            .iter().cloned().collect();
-
-        ClauseRewriters { rewriter_map: rewriter_map }
-    }
-
-    fn get(&self, name: &str) -> Option<&ClauseRewriter> {
-        self.rewriter_map.get(name)
-    }
-}
-*/
-
-fn rewrite_call_n(terms: &mut Vec<Box<Term>>) -> QueryTerm {
-    let mut new_terms = Vec::with_capacity(0);
-    swap(&mut new_terms, terms);
-
-    QueryTerm::CallN(new_terms)
-}
-
-fn rewrite_catch(terms: &mut Vec<Box<Term>>) -> QueryTerm {
-    let mut new_terms = Vec::with_capacity(0);
-    swap(&mut new_terms, terms);
-
-    QueryTerm::Catch(new_terms)
-}
-
-fn rewrite_throw(terms: &mut Vec<Box<Term>>) -> QueryTerm {
-    let mut new_terms = Vec::with_capacity(0);
-    swap(&mut new_terms, terms);
-
-    QueryTerm::Throw(new_terms)
-}
-
-fn rewrite_clause(name: &Atom, terms: &mut Vec<Box<Term>>) -> Option<QueryTerm>
-{
-    if name == "call" {
-        Some(rewrite_call_n(terms))
-    } else if name == "catch" && terms.len() == 3 {
-        Some(rewrite_catch(terms))
-    } else if name == "throw" && terms.len() == 1 {
-        Some(rewrite_throw(terms))
-    } else {
-        None
-    }
-}
-
-pub fn parse_code(input: &str) -> Option<TopLevel>
-{
-    match parse_TopLevel(input) {
-        Ok(mut tl) => {
-            for query in tl.query_iter_mut() {
-                let new_query = match query {
-                    &mut QueryTerm::Term(Term::Clause(_, ref name, ref mut cts)) =>
-                        rewrite_clause(name, cts),
-                    &mut QueryTerm::Term(Term::Var(_, _)) =>
-                        Some(QueryTerm::CallN(Vec::new())),
-                    _ => None
-                };
-
-                if let Some(mut new_query) = new_query {
-                    swap(&mut new_query, query);
-                }
-            }
-
-            Some(tl)
-        },
-        Err(_) => None
-    }
-}
-
-fn is_consistent(predicate: &Vec<PredicateClause>) -> bool {
-    let name  = predicate.first().unwrap().name();
-    let arity = predicate.first().unwrap().arity();
-
-    for clause in predicate.iter().skip(1) {
-        if !(name == clause.name() && arity == clause.arity()) {
-            return false;
-        }
-    }
-
-    true
-}
-
 #[allow(dead_code)]
 pub fn print_code(code: &Code) {
     for clause in code {
@@ -371,16 +252,9 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
     match tl {
         &TopLevel::Predicate(ref clauses) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
-
-            if is_consistent(clauses) {
-                let compiled_pred = cg.compile_predicate(clauses);
-                wam.add_predicate(clauses, compiled_pred)
-            } else {
-                let msg = r"Error: predicate is inconsistent.
-Each predicate must have the same name and arity.";
-
-                EvalSession::EntryFailure(String::from(msg))
-            }
+            let compiled_pred = cg.compile_predicate(clauses);
+            
+            wam.add_predicate(clauses, compiled_pred)
         },
         &TopLevel::Fact(ref fact) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();

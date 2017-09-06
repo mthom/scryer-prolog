@@ -36,7 +36,7 @@ struct MachineState {
     tr: usize,
     hb: usize,
     block: usize, // an offset into the OR stack.
-    ball: (usize, Heap) // heap boundary, and a term copy
+    ball: (usize, Heap) // heap boundary, and a term copy    
 }
 
 struct DuplicateTerm<'a> {
@@ -158,6 +158,7 @@ pub struct Machine {
     ms: MachineState,
     code: Code,
     code_dir: CodeDir,
+    op_dir: OpDir,
     cached_query: Option<Code>
 }
 
@@ -205,12 +206,13 @@ impl Index<CodePtr> for Machine {
 
 impl Machine {
     pub fn new() -> Self {
-        let (code, code_dir) = build_code_dir();
+        let (code, code_dir, op_dir) = build_code_dir();
 
         Machine {
             ms: MachineState::new(),
             code: code,
             code_dir: code_dir,
+            op_dir: op_dir,
             cached_query: None
         }
     }
@@ -484,12 +486,8 @@ impl Machine {
 
         while let Some(view) = viewer.next() {
             match view {
-                CellView::Con(&Constant::BlockNum(integer)) =>
-                    result += integer.to_string().as_str(),
-                CellView::Con(&Constant::EmptyList) =>
-                    result += "[]",
-                CellView::Con(&Constant::Atom(ref atom)) =>
-                    result += atom.as_str(),
+                CellView::Con(ref r) =>
+                    result += format!("{}", r).as_str(),
                 CellView::HeapVar(cell_num) => {
                     result += "_";
                     result += cell_num.to_string().as_str();
@@ -551,6 +549,10 @@ impl Machine {
 
     pub fn reset(&mut self) {
         self.ms.reset();
+    }
+
+    pub fn op_dir(&self) -> &OpDir {
+        &self.op_dir
     }
 }
 
@@ -1163,11 +1165,11 @@ impl MachineState {
 
     fn throw_exception(&mut self, mut hcv: Vec<HeapCellValue>) {
         let h = self.h;
-        
+
         self.registers[1] = Addr::HeapCell(h);
         self.h += hcv.len();
-        
-        self.heap.append(&mut hcv);        
+
+        self.heap.append(&mut hcv);
         self.goto_throw();
     }
 
@@ -1256,7 +1258,7 @@ impl MachineState {
                 self.p += 1;
             },
             &BuiltInInstruction::GetCurrentBlock => {
-                let c = Constant::BlockNum(self.block);
+                let c = Constant::Usize(self.block);
                 let addr = self[temp_v!(1)].clone();
 
                 self.write_constant_to_var(addr, &c);
@@ -1297,10 +1299,9 @@ impl MachineState {
             },
             &BuiltInInstruction::SetBall => {
                 let addr = self[temp_v!(1)].clone();
+                self.ball.0 = self.h;
 
                 {
-                    self.ball.0 = self.h;
-
                     let mut duplicator = DuplicateBallTerm::new(self);
                     duplicator.duplicate_term(addr);
                 }
@@ -1311,7 +1312,7 @@ impl MachineState {
                 let nb = self.store(self.deref(self[temp_v!(1)].clone()));
 
                 match nb {
-                    Addr::Con(Constant::BlockNum(nb)) => {
+                    Addr::Con(Constant::Usize(nb)) => {
                         let b = self.b - 1;
 
                         if nb > 0 && self.or_stack[b].b == nb {
@@ -1325,7 +1326,7 @@ impl MachineState {
             },
             &BuiltInInstruction::InstallNewBlock => {
                 self.block = self.b;
-                let c = Constant::BlockNum(self.block);
+                let c = Constant::Usize(self.block);
                 let addr = self[temp_v!(1)].clone();
 
                 self.write_constant_to_var(addr, &c);
@@ -1335,7 +1336,7 @@ impl MachineState {
                 let addr = self.deref(self[temp_v!(1)].clone());
 
                 match self.store(addr) {
-                    Addr::Con(Constant::BlockNum(b)) => {
+                    Addr::Con(Constant::Usize(b)) => {
                         self.block = b;
                         self.p += 1;
                     },

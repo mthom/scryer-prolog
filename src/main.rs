@@ -1,8 +1,10 @@
+#[macro_use] extern crate lazy_static;
 extern crate termion;
 mod prolog;
 
 use prolog::io::*;
 use prolog::machine::*;
+use prolog::parser::toplevel::*;
 
 #[cfg(test)]
 mod tests {
@@ -12,8 +14,8 @@ mod tests {
     fn submit(wam: &mut Machine, buffer: &str) -> bool {
         wam.reset();
 
-        match parse_code(buffer.trim()) {
-            Some(tl) =>
+        match parse_code(buffer.trim(), wam.op_dir()) {
+            Ok(tl) =>
                 match eval(wam, &tl) {
                     EvalSession::InitialQuerySuccess(_, _) |
                     EvalSession::EntrySuccess |
@@ -21,7 +23,7 @@ mod tests {
                         true,
                     _ => false
                 },
-            None => panic!("Grammatical error of some kind!")
+            Err(e) => panic!("parse error: {:?}", e)
         }
     }
 
@@ -716,7 +718,7 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- catch(f(x), _, _)."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(y), _, _)."), true);
         assert_eq!(submit(&mut wam, "?- catch(f(z), _, _)."), true);
-        
+
         submit(&mut wam, "f(success). f(E) :- catch(g(E), E, handle(E)).");
         submit(&mut wam, "g(g_success). g(g_success_2). g(X) :- throw(X).");
         submit(&mut wam, "handle(x). handle(y). handle(z). handle(v) :- throw(X).");
@@ -736,12 +738,12 @@ mod tests {
 
 fn process_buffer(wam: &mut Machine, buffer: &str)
 {
-    match parse_code(buffer.trim()) {
-        Some(tl) => {
+    match parse_code(buffer, wam.op_dir()) {
+        Ok(tl) => {
             let result = eval(wam, &tl);
             print(wam, result);
         },
-        None => println!("Grammatical error!")
+        Err(s) => println!("{:?}", s)
     };
 }
 
@@ -760,7 +762,7 @@ fn prolog_repl() {
             continue;
         }
 
-        process_buffer(&mut wam, buffer.trim());
+        process_buffer(&mut wam, buffer.as_str());
         wam.reset();
     }
 }

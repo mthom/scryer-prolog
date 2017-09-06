@@ -1,13 +1,22 @@
+use prolog::num::bigint::BigInt;
+
+use prolog::ordered_float::*;
+
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
-use std::iter::*;
+use std::fmt;
+use std::io::Error as IOError;
+use std::num::{ParseFloatError};
 use std::ops::{Add, AddAssign};
+use std::str::Utf8Error;
 use std::vec::Vec;
+
+pub type Atom = String;
 
 pub type Var = String;
 
-pub type Atom = String;
+pub const LEXER_BUF_SIZE: usize = 4096;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GenContext {
@@ -56,38 +65,6 @@ pub enum TopLevel {
     Predicate(Vec<PredicateClause>),
     Query(Vec<QueryTerm>),
     Rule(Rule)
-}
-
-impl TopLevel {
-    pub fn query_iter_mut<'a>(&'a mut self) -> Box<Iterator<Item=&'a mut QueryTerm> + 'a>
-    {
-        let mut iter: Box<Iterator<Item=&'a mut QueryTerm> + 'a> = Box::new(empty());
-
-        match self {
-            &mut TopLevel::Rule(Rule { head: (_, ref mut head), ref mut clauses }) => {
-                iter = Box::new(once(head));
-                iter = Box::new(iter.chain(clauses.iter_mut()));
-            },
-            &mut TopLevel::Query(ref mut clauses) =>
-                iter = Box::new(iter.chain(clauses.iter_mut())),
-            &mut TopLevel::Predicate(ref mut pred_clauses) =>
-                for pred_clause in pred_clauses.iter_mut() {
-                    match pred_clause {
-                        &mut PredicateClause::Rule(Rule { head: (_, ref mut head),
-                                                          ref mut clauses })
-                            =>
-                        {
-                            iter = Box::new(iter.chain(once(head)));
-                            iter = Box::new(iter.chain(clauses.iter_mut()));
-                        },
-                        _ => {}
-                    }
-                },
-            _ => {}
-        }
-
-        iter
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -142,11 +119,140 @@ impl Default for VarReg {
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+pub type Specifier = u32;
+
+pub const XFX: u32 = 0x0001;
+pub const XFY: u32 = 0x0002;
+pub const YFX: u32 = 0x0004;
+pub const XF: u32  = 0x0010;
+pub const YF: u32  = 0x0020;
+pub const FX: u32  = 0x0040;
+pub const FY: u32  = 0x0080;
+pub const DELIMITER: u32 = 0x0100;
+pub const TERM: u32  = 0x1000;
+pub const LTERM: u32 = 0x3000;
+
+macro_rules! is_term {
+    ($x:expr) => ( ($x & TERM) != 0 )
+}
+
+macro_rules! is_lterm {
+    ($x:expr) => ( ($x & LTERM) != 0 )
+}
+
+macro_rules! is_op {
+    ($x:expr) => ( $x & (XF | YF | FX | FY | XFX | XFY | YFX) != 0 )
+}
+
+macro_rules! is_infix {
+    ($x:expr) => ( ($x & (XFX | XFY | YFX)) != 0 )
+}
+
+macro_rules! is_xfx {
+    ($x:expr) => ( ($x & XFX) != 0 )
+}
+
+macro_rules! is_xfy {
+    ($x:expr) => ( ($x & XFY) != 0 )
+}
+
+macro_rules! is_yfx {
+    ($x:expr) => ( ($x & YFX) != 0 )
+}
+
+macro_rules! is_yf {
+    ($x:expr) => ( ($x & YF) != 0 )
+}
+
+macro_rules! is_xf {
+    ($x:expr) => ( ($x & XF) != 0 )
+}
+
+macro_rules! is_fx {
+    ($x:expr) => ( ($x & FX) != 0 )
+}
+
+macro_rules! is_fy {
+    ($x:expr) => ( ($x & FY) != 0 )
+}
+
+macro_rules! prefix {
+    ($x:expr) => ($x & (FX | FY))
+}
+
+/* 'TokenTooLong' is hard to detect reliably if we don't process the
+input one character at a time. It would be easy to detect if the regex
+library supported matching on iterator inputs, but it currently does
+not. This is fine, mostly; the typical Prolog program will not contain
+tokens exceeding 4096 chars in length. */
+
+#[derive(Debug)]
+pub enum ParserError
+{
+    CommaArityMismatch,
+    UnexpectedEOF,
+    FailedMatch(String),
+    IO(IOError),
+    InadmissibleFact,
+    InadmissibleQueryTerm,
+    IncompleteReduction,
+    InconsistentPredicate,
+    ParseBigInt,
+    ParseFloat(ParseFloatError),
+    // TokenTooLong,
+    Utf8Conversion(Utf8Error)
+}
+
+impl From<IOError> for ParserError {
+    fn from(err: IOError) -> ParserError {
+        ParserError::IO(err)
+    }
+}
+
+impl From<Utf8Error> for ParserError {
+    fn from(err: Utf8Error) -> ParserError {
+        ParserError::Utf8Conversion(err)
+    }
+}
+
+impl From<ParseFloatError> for ParserError {
+    fn from(err: ParseFloatError) -> ParserError {
+        ParserError::ParseFloat(err)
+    }
+}
+
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub enum Fixity {
+    In, Post, Pre
+}
+
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub enum Constant {
     Atom(Atom),
-    BlockNum(usize),
+    Float(OrderedFloat<f64>),
+    Integer(BigInt),
+    String(String),
+    Usize(usize),
     EmptyList
+}
+
+impl fmt::Display for Constant {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Constant::Atom(ref atom) =>
+                write!(f, "{}", atom),
+            &Constant::EmptyList =>
+                write!(f, "[]"),
+            &Constant::Float(fl) =>
+                write!(f, "{}", fl),
+            &Constant::Integer(ref i) =>
+                write!(f, "{}", i),
+            &Constant::String(ref s) =>
+                write!(f, "{}", s),
+            &Constant::Usize(integer) =>
+                write!(f, "u{}", integer)
+        }
+    }
 }
 
 pub enum Term {
@@ -193,7 +299,7 @@ pub enum ClauseType<'a> {
     Catch,
     Deep(Level, &'a Cell<RegType>, &'a Atom),
     Root,
-    Throw
+    Throw,
 }
 
 impl<'a> ClauseType<'a> {
@@ -201,7 +307,7 @@ impl<'a> ClauseType<'a> {
         match self {
             ClauseType::CallN | ClauseType::Catch | ClauseType::Throw => Level::Shallow,
             ClauseType::Deep(_, _, _) => Level::Deep,
-            ClauseType::Root => Level::Shallow
+            ClauseType::Root => Level::Shallow,
         }
     }
 }
@@ -302,8 +408,8 @@ pub enum BuiltInInstruction {
     IsAtomic,
     IsVar,
     ResetBlock,
-    SetBall, 
-    Unify, 
+    SetBall,
+    Unify,
     UnwindStack
 }
 
@@ -568,7 +674,7 @@ impl Term {
             _ => None
         }
     }
-    
+
     pub fn arity(&self) -> usize {
         match self {
             &Term::Clause(_, _, ref child_terms) => child_terms.len(),

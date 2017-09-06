@@ -17,8 +17,8 @@ Extend rusty-wam to include the following, among other features:
 
 * call/N as a built-in meta-predicate (_done_).
 * ISO Prolog compliant throw/catch (_done_).
-* Built-in and user-defined operators of all fixities,
-  with custom associativity and precedence.
+* Built-in and user-defined operators of all fixities, with custom
+  associativity and precedence (_in progress_). 
 * Bignum and floating point arithmetic.
 * Built-in control operators (`,`, `;`, `->`, etc.).
 * Attributed variables using the SICStus Prolog interface and

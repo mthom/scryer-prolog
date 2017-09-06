@@ -10,9 +10,13 @@ pub enum PredicateKeyType {
     User
 }
 
+pub type OpDirKey = (Atom, Fixity);
+// name and fixity -> operator type and precedence.
+pub type OpDir = HashMap<OpDirKey, (Specifier, usize)>;
+
 pub type CodeDir = HashMap<PredicateKey, (PredicateKeyType, usize)>;
-     
-fn get_builtins() -> Code {    
+
+fn get_builtins() -> Code {
     vec![internal_call_n!(), // callN/N, 0.
          is_atomic!(), // atomic/1, 1.
          proceed!(),
@@ -78,7 +82,7 @@ fn get_builtins() -> Code {
          reset_block!(),
          proceed!(),
          trust_me!(), // 53.
-         allocate!(0),   
+         allocate!(0),
          query![get_var_in_query!(temp_v!(3), 1),
                 put_value!(temp_v!(2), 1)],
          reset_block!(),
@@ -86,7 +90,7 @@ fn get_builtins() -> Code {
          goto!(61, 0),
          set_ball!(), // throw/1, 59.
          unwind_stack!(),
-         fail!(), // false/0, 61.         
+         fail!(), // false/0, 61.
          try_me_else!(7), // not/1, 62.
          allocate!(1),
          get_level!(),
@@ -100,10 +104,16 @@ fn get_builtins() -> Code {
          proceed!()]
 }
 
-pub fn build_code_dir() -> (Code, CodeDir) {
+pub fn build_code_dir() -> (Code, CodeDir, OpDir)
+{
     let mut code_dir = HashMap::new();
+    let mut op_dir   = HashMap::new();
+
     let builtin_code = get_builtins();
-    
+
+    op_dir.insert((String::from(":-"), Fixity::In),  (XFX, 1200));
+    op_dir.insert((String::from("?-"), Fixity::Pre), (FX, 1200));
+
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
@@ -118,5 +128,5 @@ pub fn build_code_dir() -> (Code, CodeDir) {
     code_dir.insert((String::from("catch"), 3), (PredicateKeyType::BuiltIn, 5));
     code_dir.insert((String::from("throw"), 1), (PredicateKeyType::BuiltIn, 59));
 
-    (builtin_code, code_dir)
+    (builtin_code, code_dir, op_dir)
 }
