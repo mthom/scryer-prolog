@@ -51,7 +51,8 @@ The following predicates are built-in to rusty-wam.
 * catch/3
 * duplicate_term/2
 * false/0
-* (\+)/1
+* (\\+)/1
+* (=)/2
 * throw/1
 * var/1
 
