@@ -250,6 +250,8 @@ pub fn read() -> String {
 pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'b>
 {
     match tl {
+        &TopLevel::Declaration(ref decl) =>
+            wam.submit_decl(decl),
         &TopLevel::Predicate(ref clauses) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
             let compiled_pred = cg.compile_predicate(clauses);

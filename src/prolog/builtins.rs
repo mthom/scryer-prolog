@@ -101,7 +101,10 @@ fn get_builtins() -> Code {
          trust_me!(),
          proceed!(),
          duplicate_term!(), // duplicate_term/2, 71.
-         proceed!()]
+         proceed!(),
+         fact![get_value!(temp_v!(1), 2)], // =/2, 73.
+         proceed!(),
+    ]
 }
 
 pub fn build_code_dir() -> (Code, CodeDir, OpDir)
@@ -111,9 +114,12 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
 
     let builtin_code = get_builtins();
 
-    op_dir.insert((String::from(":-"), Fixity::In),  (XFX, 1200));
-    op_dir.insert((String::from("?-"), Fixity::Pre), (FX, 1200));
-
+    op_dir.insert((String::from(":-"), Fixity::In),   (XFX, 1200));
+    op_dir.insert((String::from(":-"), Fixity::Pre),  (FX, 1200));
+    op_dir.insert((String::from("?-"), Fixity::Pre),  (FX, 1200));
+    op_dir.insert((String::from("\\+"), Fixity::Pre), (FY, 900));
+    op_dir.insert((String::from("="), Fixity::In), (XFX, 700));
+    
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
@@ -123,10 +129,11 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     code_dir.insert((String::from("atomic"), 1), (PredicateKeyType::BuiltIn, 1));
     code_dir.insert((String::from("var"), 1), (PredicateKeyType::BuiltIn, 3));
     code_dir.insert((String::from("false"), 0), (PredicateKeyType::BuiltIn, 61));
-    code_dir.insert((String::from("not"), 1), (PredicateKeyType::BuiltIn, 62));
+    code_dir.insert((String::from("\\+"), 1), (PredicateKeyType::BuiltIn, 62));
     code_dir.insert((String::from("duplicate_term"), 2), (PredicateKeyType::BuiltIn, 71));
     code_dir.insert((String::from("catch"), 3), (PredicateKeyType::BuiltIn, 5));
     code_dir.insert((String::from("throw"), 1), (PredicateKeyType::BuiltIn, 59));
+    code_dir.insert((String::from("="), 2), (PredicateKeyType::BuiltIn, 73));
 
     (builtin_code, code_dir, op_dir)
 }

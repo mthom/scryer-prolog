@@ -18,7 +18,7 @@ Extend rusty-wam to include the following, among other features:
 * call/N as a built-in meta-predicate (_done_).
 * ISO Prolog compliant throw/catch (_done_).
 * Built-in and user-defined operators of all fixities, with custom
-  associativity and precedence (_in progress_). 
+  associativity and precedence (_done_). 
 * Bignum and floating point arithmetic.
 * Built-in control operators (`,`, `;`, `->`, etc.).
 * Attributed variables using the SICStus Prolog interface and
@@ -51,7 +51,7 @@ The following predicates are built-in to rusty-wam.
 * catch/3
 * duplicate_term/2
 * false/0
-* not/1
+* (\+)/1
 * throw/1
 * var/1
 
@@ -125,3 +125,15 @@ X = call(f, z).
 Note that the values of variables belonging to successful queries are
 printed out, on one line each. Uninstantiated variables are denoted by
 a number preceded by an underscore (`X = _0` in an example above).
+
+Lastly, rusty-wam supports dynamic operators:
+```
+prolog> :- op(500, yfx, +).
+prolog> :- op(500, yfx, -).
+prolog> :- op(200, fy, -).
+prolog> :- op(400, yfx, *).
+prolog> :- op(400, yfx, /).
+prolog> ?- X = -5 + 3 - (2 * 4) / 8.
+true.
+X = -(+(-(5), 3), /(*(2, 4), 8)).
+```

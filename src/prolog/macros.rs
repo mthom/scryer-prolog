@@ -62,6 +62,13 @@ macro_rules! get_var_in_query {
     )
 }
 
+
+macro_rules! get_value {
+    ($r:expr, $arg:expr) => (
+        FactInstruction::GetValue($r, $arg)
+    )
+}
+
 macro_rules! get_var_in_fact {
     ($r:expr, $arg:expr) => (
         FactInstruction::GetVariable($r, $arg)

@@ -60,7 +60,12 @@ impl PredicateClause {
     }
 }
 
+pub enum Declaration {
+    Op(usize, Specifier, Atom)
+}
+
 pub enum TopLevel {
+    Declaration(Declaration),
     Fact(Term),
     Predicate(Vec<PredicateClause>),
     Query(Vec<QueryTerm>),
@@ -144,6 +149,10 @@ macro_rules! is_op {
     ($x:expr) => ( $x & (XF | YF | FX | FY | XFX | XFY | YFX) != 0 )
 }
 
+macro_rules! is_postfix {
+    ($x:expr) => ( $x & (XF | YF) != 0 )
+}
+
 macro_rules! is_infix {
     ($x:expr) => ( ($x & (XFX | XFY | YFX)) != 0 )
 }
@@ -196,7 +205,8 @@ pub enum ParserError
     InadmissibleFact,
     InadmissibleQueryTerm,
     IncompleteReduction,
-    InconsistentPredicate,
+    InconsistentDeclaration,
+    InconsistentPredicate,    
     ParseBigInt,
     ParseFloat(ParseFloatError),
     // TokenTooLong,

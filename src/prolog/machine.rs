@@ -439,6 +439,47 @@ impl Machine {
         }
     }
 
+    pub fn submit_decl<'a>(&mut self, decl: &Declaration) -> EvalSession<'a> {
+        match decl {
+            &Declaration::Op(prec, spec, ref name) => {
+                lazy_static! {
+                    static ref ERR_STRING: String = String::from("an operator can't be both \
+                                                                  infix and postfix.");
+                }
+                
+                if is_infix!(spec) {
+                    match self.op_dir.get(&(name.clone(), Fixity::Post)) {
+                        Some(_) => return EvalSession::EntryFailure(ERR_STRING.clone()),
+                        _ => {}
+                    };
+                }
+
+                if is_postfix!(spec) {
+                    match self.op_dir.get(&(name.clone(), Fixity::In)) {
+                        Some(_) => return EvalSession::EntryFailure(ERR_STRING.clone()),
+                        _ => {}
+                    };
+                }
+
+                if prec > 0 {
+                    match spec {
+                        XFY | XFX | YFX => self.op_dir.insert((name.clone(), Fixity::In),
+                                                              (spec, prec)),
+                        XF | YF => self.op_dir.insert((name.clone(), Fixity::Post), (spec, prec)),
+                        FX | FY => self.op_dir.insert((name.clone(), Fixity::Pre), (spec,prec)),
+                        _ => None
+                    };
+                } else {
+                    self.op_dir.remove(&(name.clone(), Fixity::Pre));
+                    self.op_dir.remove(&(name.clone(), Fixity::In));
+                    self.op_dir.remove(&(name.clone(), Fixity::Post));
+                }
+
+                EvalSession::EntrySuccess
+            }
+        }
+    }
+    
     pub fn submit_query<'a>(&mut self, code: Code, alloc_locs: AllocVarDict<'a>) -> EvalSession<'a>
     {
         let mut heap_locs = HashMap::new();
