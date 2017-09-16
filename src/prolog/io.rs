@@ -254,8 +254,8 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
             wam.submit_decl(decl),
         &TopLevel::Predicate(ref clauses) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
-            let compiled_pred = cg.compile_predicate(clauses);
-            
+
+            let compiled_pred = cg.compile_predicate(clauses);            
             wam.add_predicate(clauses, compiled_pred)
         },
         &TopLevel::Fact(ref fact) => {

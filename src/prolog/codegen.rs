@@ -462,13 +462,16 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         let mut left_index = 0;
 
         for (right_index, clause) in clauses.iter().enumerate() {
-            if let Some(&Term::Var(_, _)) = clause.first_arg() {
-                if left_index < right_index {
-                    subseqs.push((left_index, right_index));
-                }
+            match clause.first_arg() {
+                Some(&Term::Var(_, _)) | Some(&Term::AnonVar) => {
+                    if left_index < right_index {
+                        subseqs.push((left_index, right_index));
+                    }
 
-                subseqs.push((right_index, right_index + 1));
-                left_index = right_index + 1;
+                    subseqs.push((right_index, right_index + 1));
+                    left_index = right_index + 1;
+                },
+                _ => {}
             }
         }
 
