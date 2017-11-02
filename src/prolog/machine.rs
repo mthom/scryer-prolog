@@ -36,7 +36,7 @@ struct MachineState {
     tr: usize,
     hb: usize,
     block: usize, // an offset into the OR stack.
-    ball: (usize, Heap) // heap boundary, and a term copy    
+    ball: (usize, Heap) // heap boundary, and a term copy
 }
 
 struct DuplicateTerm<'a> {
@@ -446,7 +446,7 @@ impl Machine {
                     static ref ERR_STRING: String = String::from("an operator can't be both \
                                                                   infix and postfix.");
                 }
-                
+
                 if is_infix!(spec) {
                     match self.op_dir.get(&(name.clone(), Fixity::Post)) {
                         Some(_) => return EvalSession::EntryFailure(ERR_STRING.clone()),
@@ -479,7 +479,7 @@ impl Machine {
             }
         }
     }
-    
+
     pub fn submit_query<'a>(&mut self, code: Code, alloc_locs: AllocVarDict<'a>) -> EvalSession<'a>
     {
         let mut heap_locs = HashMap::new();
@@ -1658,7 +1658,7 @@ impl MachineState {
                 }
 
                 if let &Terminal::Terminal = term {
-                    self.p = CodePtr::default();
+                    self.p = self.cp;
                 } else {
                     self.p += 1;
                 }
@@ -1680,7 +1680,7 @@ impl MachineState {
                 }
 
                 if let &Terminal::Terminal = term {
-                    self.p = CodePtr::default();
+                    self.p = self.cp;
                 } else {
                     self.p += 1;
                 }
