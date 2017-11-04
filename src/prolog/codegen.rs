@@ -291,10 +291,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     &QueryTermRef::IsAtomic(term) =>
                         match term {
                             &Term::AnonVar | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
-                                code.push(goto!(61, 0)); // goto false/0.
+                                code.push(fail!()); //goto!(61, 0)); // goto false/0.
                             },
                             &Term::Constant(_, _) => {
-                                code.push(goto!(75, 0)); // goto succeed/0.
+                                code.push(succeed!()); //goto!(75, 0)); // goto succeed/0.
                             },
                             &Term::Var(ref vr, ref name) => {
                                 let mut target = Vec::new();
@@ -308,10 +308,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     &QueryTermRef::IsVar(term) =>
                         match term {
                             &Term::Constant(_, _) | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
-                                code.push(goto!(61, 0)); // goto false/0.
+                                code.push(fail!()); //goto!(61, 0)); // goto false/0.
                             },
                             &Term::AnonVar => {
-                                code.push(goto!(75, 0)); // goto succeed/0.
+                                code.push(succeed!()); //goto!(75, 0)); // goto succeed/0.
                             },
                             &Term::Var(ref vr, ref name) => {
                                 let mut target = Vec::new();
