@@ -408,11 +408,16 @@ impl Machine {
 
         while self.ms.p < end_ptr {
             if let CodePtr::TopLevel(mut cn, p) = self.ms.p {
-                if let &Line::Control(ref ctrl_instr) = &self[CodePtr::TopLevel(cn, p)] {
-                    if ctrl_instr.is_jump_instr() {
+                match &self[CodePtr::TopLevel(cn, p)] {                    
+                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
                         self.record_var_places(cn, alloc_locs, heap_locs);
                         cn += 1;
-                    }
+                    },
+                    &Line::BuiltIn(BuiltInInstruction::IsAtomic(_))
+                  | &Line::BuiltIn(BuiltInInstruction::IsVar(_)) => {
+                      self.record_var_places(cn, alloc_locs, heap_locs);
+                    },
+                    _ => {}
                 }
 
                 self.ms.p = CodePtr::TopLevel(cn, p);
@@ -424,11 +429,7 @@ impl Machine {
                 CodePtr::TopLevel(_, p) if p > 0 => {},                
                 _ => break
             };
-        }
-
-        if let CodePtr::TopLevel(cn, _) = self.ms.p {
-            self.record_var_places(cn, alloc_locs, heap_locs);
-        }
+        }        
     }
 
     fn fail<'a>(&mut self) -> EvalSession<'a>
