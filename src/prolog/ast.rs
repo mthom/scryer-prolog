@@ -457,6 +457,7 @@ impl ControlInstruction {
             &ControlInstruction::ThrowCall => true,
             &ControlInstruction::ThrowExecute => true,
             &ControlInstruction::Goto(_, _) => true,
+            &ControlInstruction::Proceed => true,
             _ => false
         }
     }

@@ -412,11 +412,7 @@ impl Machine {
                     &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
                         self.record_var_places(cn, alloc_locs, heap_locs);
                         cn += 1;
-                    },
-                    &Line::BuiltIn(BuiltInInstruction::IsAtomic(_))
-                  | &Line::BuiltIn(BuiltInInstruction::IsVar(_)) => {
-                      self.record_var_places(cn, alloc_locs, heap_locs);
-                    },
+                    },                    
                     _ => {}
                 }
 
