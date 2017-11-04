@@ -77,7 +77,8 @@ impl<'a> QueryIterator<'a> {
                 let state = IteratorState::Clause(0, ClauseType::Catch, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            QueryTermRef::Term(term)  => Self::from_term(term),
+            QueryTermRef::IsAtomic(term) | QueryTermRef::IsVar(term) | QueryTermRef::Term(term) =>
+                Self::from_term(term),
             QueryTermRef::Throw(term) => {
                 let state = IteratorState::Clause(0, ClauseType::Throw, term);
                 QueryIterator { state_stack: vec![state] }
@@ -106,10 +107,10 @@ impl<'a> Iterator for QueryIterator<'a> {
                         match ct {
                             ClauseType::CallN =>
                                 self.push_subterm(Level::Shallow, child_terms[0].as_ref()),
-                            ClauseType::Root | ClauseType::Throw | ClauseType::Catch =>
-                                return None,
                             ClauseType::Deep(_, _, _) =>
-                                return Some(TermRef::Clause(ct, child_terms))
+                                return Some(TermRef::Clause(ct, child_terms)),
+                            _ =>
+                                return None
                         };
                     } else {
                         self.push_clause(child_num + 1, ct, child_terms);
@@ -317,6 +318,8 @@ impl<'a> ChunkedIterator<'a>
                     arity = child_terms.len();
                     break;
                 },
+                QueryTermRef::IsAtomic(_) | QueryTermRef::IsVar(_) =>
+                    result.push(term),
                 QueryTermRef::Cut => {
                     result.push(term);
 

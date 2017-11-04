@@ -273,10 +273,12 @@ pub enum Term {
     Var(Cell<VarReg>, Var)
 }
 
-pub enum QueryTerm {
+pub enum QueryTerm {    
     CallN(Vec<Box<Term>>),
     Catch(Vec<Box<Term>>),
     Cut,
+    IsAtomic(Vec<Box<Term>>),
+    IsVar(Vec<Box<Term>>),
     Term(Term),
     Throw(Vec<Box<Term>>)
 }
@@ -290,6 +292,10 @@ impl QueryTerm {
                 QueryTermRef::Catch(terms),
             &QueryTerm::Cut =>
                 QueryTermRef::Cut,
+            &QueryTerm::IsAtomic(ref terms) =>
+                QueryTermRef::IsAtomic(terms.first().unwrap()),
+            &QueryTerm::IsVar(ref terms) =>
+                QueryTermRef::IsVar(terms.first().unwrap()),
             &QueryTerm::Term(ref term) =>
                 QueryTermRef::Term(term),
             &QueryTerm::Throw(ref t) =>
@@ -314,10 +320,9 @@ pub enum ClauseType<'a> {
 
 impl<'a> ClauseType<'a> {
     pub fn level_of_subterms(self) -> Level {
-        match self {
-            ClauseType::CallN | ClauseType::Catch | ClauseType::Throw => Level::Shallow,
+        match self {            
             ClauseType::Deep(_, _, _) => Level::Deep,
-            ClauseType::Root => Level::Shallow,
+            _ => Level::Shallow
         }
     }
 }
@@ -338,11 +343,8 @@ impl<'a> TermRef<'a> {
           | TermRef::Cons(lvl, _, _, _)
           | TermRef::Constant(lvl, _, _)
           | TermRef::Var(lvl, _, _) => lvl,
-            TermRef::Clause(ClauseType::Root, _) => Level::Shallow,
             TermRef::Clause(ClauseType::Deep(lvl, _, _), _) => lvl,
-            TermRef::Clause(ClauseType::CallN, _) => Level::Shallow,
-            TermRef::Clause(ClauseType::Throw, _) => Level::Shallow,
-            TermRef::Clause(ClauseType::Catch, _) => Level::Shallow
+            _ => Level::Shallow
         }
     }
 }
@@ -352,6 +354,8 @@ pub enum QueryTermRef<'a> {
     CallN(&'a Vec<Box<Term>>),
     Catch(&'a Vec<Box<Term>>),
     Cut,
+    IsAtomic(&'a Term),
+    IsVar(&'a Term),
     Term(&'a Term),
     Throw(&'a Vec<Box<Term>>)
 }
@@ -361,6 +365,8 @@ impl<'a> QueryTermRef<'a> {
         match self {
             QueryTermRef::Catch(_) => 3,
             QueryTermRef::Throw(_) => 1,
+            QueryTermRef::IsAtomic(_) => 1,
+            QueryTermRef::IsVar(_) => 1,
             QueryTermRef::CallN(terms) => terms.len(),
             QueryTermRef::Cut => 0,
             QueryTermRef::Term(term) => term.arity(),
@@ -415,10 +421,11 @@ pub enum BuiltInInstruction {
     GetCurrentBlock,
     InstallNewBlock,
     InternalCallN,
-    IsAtomic,
-    IsVar,
+    IsAtomic(RegType),
+    IsVar(RegType),
     ResetBlock,
     SetBall,
+    Succeed,
     Unify,
     UnwindStack
 }
@@ -432,7 +439,7 @@ pub enum ControlInstruction {
     Deallocate,
     Execute(Atom, usize),
     ExecuteN(usize),
-    Goto(usize, usize),
+    Goto(usize, usize), // p, arity.
     Proceed,
     ThrowCall,
     ThrowExecute

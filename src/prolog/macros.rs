@@ -100,14 +100,14 @@ macro_rules! try_me_else {
 }
 
 macro_rules! is_atomic {
-    () => (
-        Line::BuiltIn(BuiltInInstruction::IsAtomic)
+    ($reg:expr) => (
+        Line::BuiltIn(BuiltInInstruction::IsAtomic($reg))
     )
 }
 
 macro_rules! is_var {
-    () => (
-        Line::BuiltIn(BuiltInInstruction::IsVar)
+    ($reg:expr) => (
+        Line::BuiltIn(BuiltInInstruction::IsVar($reg))
     )
 }
 
@@ -218,6 +218,12 @@ macro_rules! set_ball {
 macro_rules! fail {
     () => (
         Line::BuiltIn(BuiltInInstruction::Fail)
+    )
+}
+
+macro_rules! succeed {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::Succeed)
     )
 }
 

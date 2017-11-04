@@ -421,9 +421,13 @@ impl Machine {
             self.query_stepper();
 
             match self.ms.p {
-                CodePtr::TopLevel(_, p) if p > 0 => {},
+                CodePtr::TopLevel(_, p) if p > 0 => {},                
                 _ => break
             };
+        }
+
+        if let CodePtr::TopLevel(cn, _) = self.ms.p {
+            self.record_var_places(cn, alloc_locs, heap_locs);
         }
     }
 
@@ -1388,16 +1392,16 @@ impl MachineState {
                 self.b = self.block;
                 self.fail = true;
             },
-            &BuiltInInstruction::IsAtomic => {
-                let d = self.deref(self[temp_v!(1)].clone());
+            &BuiltInInstruction::IsAtomic(r) => {
+                let d = self.deref(self[r].clone());
 
                 match d {
                     Addr::Con(_) => self.p += 1,
                     _ => self.fail = true
                 };
             },
-            &BuiltInInstruction::IsVar => {
-                let d = self.deref(self[temp_v!(1)].clone());
+            &BuiltInInstruction::IsVar(r) => {
+                let d = self.deref(self[r].clone());
 
                 match d {
                     Addr::HeapCell(_) | Addr::StackCell(_,_) =>
@@ -1409,6 +1413,9 @@ impl MachineState {
                 self.handle_internal_call_n(code_dir),
             &BuiltInInstruction::Fail => {
                 self.fail = true;
+                self.p += 1;
+            },
+            &BuiltInInstruction::Succeed => {
                 self.p += 1;
             }
         };

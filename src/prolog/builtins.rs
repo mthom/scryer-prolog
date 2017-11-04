@@ -18,9 +18,9 @@ pub type CodeDir = HashMap<PredicateKey, (PredicateKeyType, usize)>;
 
 fn get_builtins() -> Code {
     vec![internal_call_n!(), // callN/N, 0.
-         is_atomic!(), // atomic/1, 1.
+         is_atomic!(temp_v!(1)), // atomic/1, 1.
          proceed!(),
-         is_var!(),    // var/1, 3.
+         is_var!(temp_v!(1)),    // var/1, 3.
          proceed!(),
          allocate!(4), // catch/3, 5.
          fact![get_var_in_fact!(perm_v!(2), 1),
@@ -104,6 +104,7 @@ fn get_builtins() -> Code {
          proceed!(),
          fact![get_value!(temp_v!(1), 2)], // =/2, 73.
          proceed!(),
+         succeed!(), // true/0, 75.
     ]
 }
 
@@ -134,6 +135,7 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     code_dir.insert((String::from("catch"), 3), (PredicateKeyType::BuiltIn, 5));
     code_dir.insert((String::from("throw"), 1), (PredicateKeyType::BuiltIn, 59));
     code_dir.insert((String::from("="), 2), (PredicateKeyType::BuiltIn, 73));
+    code_dir.insert((String::from("true"), 0), (PredicateKeyType::BuiltIn, 75));
 
     (builtin_code, code_dir, op_dir)
 }

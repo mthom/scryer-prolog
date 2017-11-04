@@ -47,7 +47,7 @@ pub trait Allocator<'a>
     
     fn get(&self, var: &'a Var) -> RegType {
         self.bindings().get(var).unwrap().as_reg_type()
-    }    
+    }
     
     fn record_register(&mut self, var: &'a Var, r: RegType) {
         match self.bindings_mut().get_mut(var).unwrap() {

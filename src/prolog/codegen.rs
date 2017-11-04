@@ -207,13 +207,13 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
     fn add_conditional_call(compiled_query: &mut Code, qt: QueryTermRef, pvs: usize)
     {
-        match qt {            
+        match qt {
             QueryTermRef::CallN(terms) => {
                 let call = ControlInstruction::CallN(terms.len());
                 compiled_query.push(Line::Control(call));
             },
             QueryTermRef::Catch(_) =>
-                compiled_query.push(Line::Control(ControlInstruction::CatchCall)),            
+                compiled_query.push(Line::Control(ControlInstruction::CatchCall)),
             QueryTermRef::Term(&Term::Constant(_, Constant::Atom(ref atom))) => {
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);
                 compiled_query.push(Line::Control(call));
@@ -228,31 +228,31 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         }
     }
 
-    fn lco(body: &mut Code, toc: QueryTermRef<'a>) -> usize
+    fn lco(code: &mut Code, toc: QueryTermRef<'a>) -> usize
     {
         let last_arity = toc.arity();
-        let mut dealloc_index = body.len() - 1;
+        let mut dealloc_index = code.len() - 1;
 
         match toc {
             QueryTermRef::Term(&Term::Clause(_, ref name, _))
           | QueryTermRef::Term(&Term::Constant(_, Constant::Atom(ref name))) =>
-                if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
+                if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
                     *ctrl = ControlInstruction::Execute(name.clone(), last_arity);
                 },
             QueryTermRef::CallN(terms) =>
-                if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
+                if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
                     *ctrl = ControlInstruction::ExecuteN(terms.len());
                 },
             QueryTermRef::Catch(_) =>
-                if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
+                if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
                     *ctrl = ControlInstruction::CatchExecute;
                 },
             QueryTermRef::Cut => {},
             QueryTermRef::Throw(_) =>
-                if let &mut Line::Control(ref mut ctrl) = body.last_mut().unwrap() {
+                if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
                     *ctrl = ControlInstruction::ThrowExecute;
                 },
-            _ => dealloc_index = body.len()
+            _ => dealloc_index = code.len()
         };
 
         dealloc_index
@@ -261,7 +261,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     fn compile_seq(&mut self,
                    iter: ChunkedIterator<'a>,
                    conjunct_info: &ConjunctInfo<'a>,
-                   body: &mut Code,
+                   code: &mut Code,
                    is_exposed: bool)
     {
         for (chunk_num, _, terms) in iter {
@@ -275,29 +275,63 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
                 match term {
                     &QueryTermRef::Cut if i + 1 < terms.len() => {
-                        body.push(if chunk_num == 0 {
+                        code.push(if chunk_num == 0 {
                             Line::Cut(CutInstruction::NeckCut(Terminal::Non))
                         } else {
                             Line::Cut(CutInstruction::Cut(Terminal::Non))
                         });
                     },
                     &QueryTermRef::Cut => {
-                        body.push(if chunk_num == 0 {
+                        code.push(if chunk_num == 0 {
                             Line::Cut(CutInstruction::NeckCut(Terminal::Terminal))
                         } else {
                             Line::Cut(CutInstruction::Cut(Terminal::Terminal))
                         });
                     },
+                    &QueryTermRef::IsAtomic(term) =>
+                        match term {
+                            &Term::AnonVar | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
+                                code.push(goto!(61, 0)); // goto false/0.
+                            },
+                            &Term::Constant(_, _) => {
+                                code.push(goto!(75, 0)); // goto succeed/0.
+                            },
+                            &Term::Var(ref vr, ref name) => {
+                                let mut target = Vec::new();
+
+                                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
+
+                                code.push(Line::Query(target));
+                                code.push(is_atomic!(vr.get().norm()));
+                            }
+                        },
+                    &QueryTermRef::IsVar(term) =>
+                        match term {
+                            &Term::Constant(_, _) | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
+                                code.push(goto!(61, 0)); // goto false/0.
+                            },
+                            &Term::AnonVar => {
+                                code.push(goto!(75, 0)); // goto succeed/0.
+                            },
+                            &Term::Var(ref vr, ref name) => {
+                                let mut target = Vec::new();
+
+                                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
+
+                                code.push(Line::Query(target));
+                                code.push(is_var!(vr.get().norm()));
+                            }
+                        },
                     _ if chunk_num == 0 => {
                         self.marker.advance(GenContext::Head, *term);
 
                         let iter = term.post_order_iter();
-                        body.push(Line::Query(self.compile_target(iter, term_loc, is_exposed)));
-                        Self::add_conditional_call(body, *term, conjunct_info.perm_vars());
+                        code.push(Line::Query(self.compile_target(iter, term_loc, is_exposed)));
+                        Self::add_conditional_call(code, *term, conjunct_info.perm_vars());
                     },
                     _ => {
                         let num_vars = conjunct_info.perm_vs.vars_above_threshold(i + 1);
-                        self.compile_query_line(*term, term_loc, body, num_vars, is_exposed);
+                        self.compile_query_line(*term, term_loc, code, num_vars, is_exposed);
                     },
                 };
 
@@ -393,7 +427,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     pub fn compile_fact<'b: 'a>(&mut self, term: &'b Term) -> Code
     {
         let iter = ChunkedIterator::from_fact(term);
-        
+
         self.collect_var_data(iter);
         self.marker.advance(GenContext::Head, QueryTermRef::Term(term));
 

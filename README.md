@@ -54,6 +54,7 @@ The following predicates are built-in to rusty-wam.
 * (\\+)/1
 * (=)/2
 * throw/1
+* true/0
 * var/1
 
 ## Tutorial
