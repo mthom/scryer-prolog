@@ -124,6 +124,44 @@ impl fmt::Display for IndexedChoiceInstruction {
     }
 }
 
+
+impl fmt::Display for BuiltInInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &BuiltInInstruction::CleanUpBlock =>
+                write!(f, "clean_up_block"),
+            &BuiltInInstruction::DuplicateTerm =>
+                write!(f, "duplicate_term X1"),
+            &BuiltInInstruction::EraseBall =>
+                write!(f, "erase_ball"),
+            &BuiltInInstruction::Fail =>
+                write!(f, "false"),
+            &BuiltInInstruction::GetBall =>
+                write!(f, "get_ball X1"),
+            &BuiltInInstruction::GetCurrentBlock =>
+                write!(f, "get_current_block X1"),
+            &BuiltInInstruction::InstallNewBlock =>
+                write!(f, "install_new_block"),
+            &BuiltInInstruction::InternalCallN =>
+                write!(f, "internal_call_N"),
+            &BuiltInInstruction::IsAtomic(r) =>
+                write!(f, "is_atomic {}", r),
+            &BuiltInInstruction::IsVar(r) =>
+                write!(f, "is_var {}", r),
+            &BuiltInInstruction::ResetBlock =>
+                write!(f, "reset_block"),
+            &BuiltInInstruction::SetBall =>
+                write!(f, "set_ball"),
+            &BuiltInInstruction::Succeed =>
+                write!(f, "true"),
+            &BuiltInInstruction::Unify =>
+                write!(f, "unify"),
+            &BuiltInInstruction::UnwindStack =>
+                write!(f, "unwind_stack")
+        }
+    }
+}
+
 impl fmt::Display for ChoiceInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -202,7 +240,8 @@ pub fn print_code(code: &Code) {
                 for fact_instr in fact {
                     println!("{}", fact_instr);
                 },
-            &Line::BuiltIn(_) => {},
+            &Line::BuiltIn(ref instr) =>
+                println!("{}", instr),
             &Line::Cut(ref cut) =>
                 println!("{}", cut),
             &Line::Choice(ref choice) =>

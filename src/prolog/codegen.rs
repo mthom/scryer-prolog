@@ -214,6 +214,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             },
             QueryTermRef::Catch(_) =>
                 compiled_query.push(Line::Control(ControlInstruction::CatchCall)),
+            QueryTermRef::IsAtomic(_) =>
+                compiled_query.push(proceed!()),
+            QueryTermRef::IsVar(_) =>
+                compiled_query.push(proceed!()),
             QueryTermRef::Term(&Term::Constant(_, Constant::Atom(ref atom))) => {
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);
                 compiled_query.push(Line::Control(call));
@@ -252,6 +256,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
                     *ctrl = ControlInstruction::ThrowExecute;
                 },
+            QueryTermRef::IsAtomic(_) => {
+                dealloc_index = code.len();
+                code.push(proceed!());
+            },
+            QueryTermRef::IsVar(_) => {
+                dealloc_index = code.len();
+                code.push(proceed!());
+            },
             _ => dealloc_index = code.len()
         };
 
@@ -288,8 +300,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                             Line::Cut(CutInstruction::Cut(Terminal::Terminal))
                         });
                     },
-                    &QueryTermRef::IsAtomic(term) =>
-                        match term {
+                    &QueryTermRef::IsAtomic(inner_term) =>
+                        match inner_term {
                             &Term::AnonVar | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
                                 code.push(fail!()); //goto!(61, 0)); // goto false/0.
                             },
@@ -299,14 +311,15 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                             &Term::Var(ref vr, ref name) => {
                                 let mut target = Vec::new();
 
+                                self.marker.advance(term_loc, *term); // reset self.marker.arg_c to 1.
                                 self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
                                 code.push(Line::Query(target));
                                 code.push(is_atomic!(vr.get().norm()));
                             }
                         },
-                    &QueryTermRef::IsVar(term) =>
-                        match term {
+                    &QueryTermRef::IsVar(inner_term) =>
+                        match inner_term {
                             &Term::Constant(_, _) | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
                                 code.push(fail!()); //goto!(61, 0)); // goto false/0.
                             },
@@ -316,6 +329,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                             &Term::Var(ref vr, ref name) => {
                                 let mut target = Vec::new();
 
+                                self.marker.advance(term_loc, *term); // reset self.marker.arg_c to 1.
                                 self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
                                 code.push(Line::Query(target));
@@ -441,9 +455,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             code.push(Line::Fact(compiled_fact));
         }
 
-        let proceed = Line::Control(ControlInstruction::Proceed);
-
-        code.push(proceed);
+        code.push(proceed!());
         code
     }
 
