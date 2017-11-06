@@ -1,4 +1,5 @@
 use prolog::ast::*;
+use prolog::fixtures::*;
 
 use std::cell::Cell;
 use std::cmp::{min, max};
@@ -81,14 +82,15 @@ impl<'a> Iterator for ArithExprIterator<'a> {
     }
 }
 
-pub struct ArithmeticEvaluator {
+pub struct ArithmeticEvaluator<'a> {
+    bindings: &'a AllocVarDict<'a>,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize
 }
 
-impl ArithmeticEvaluator {
-    pub fn new() -> Self {
-        ArithmeticEvaluator { interm: Vec::new(), interm_c: 1 }
+impl<'a> ArithmeticEvaluator<'a> {
+    pub fn new(bindings: &'a AllocVarDict<'a>) -> Self {
+        ArithmeticEvaluator { bindings, interm: Vec::new(), interm_c: 1 }
     }
 
     fn get_un_instr(name: &Atom, a1: ArithmeticTerm, t: ArithEvalPlace)
@@ -122,8 +124,8 @@ impl ArithmeticEvaluator {
         temp
     }
 
-    fn instr_from_clause<'a>(&mut self, name: &'a Atom, terms: &'a Vec<Box<Term>>, deep: bool)
-                             -> Result<ArithmeticInstruction, ArithmeticError>
+    fn instr_from_clause(&mut self, name: &Atom, terms: &Vec<Box<Term>>, deep: bool)
+                         -> Result<ArithmeticInstruction, ArithmeticError>
     {
         match terms.len() {
             1 => {
@@ -194,12 +196,19 @@ impl ArithmeticEvaluator {
             match term_ref {
                 TermRef::Constant(_, _, c) =>
                     try!(self.push_constant(c)),
-                TermRef::Var(_, var_reg, _) =>
-                    if var_reg.get().norm().reg_num() == 0 {
-                        return Err(ArithmeticError::UninstantiatedVar);
+                TermRef::Var(_, vr, name) => {
+                    let r = if vr.get().norm().reg_num() == 0 {
+                        match self.bindings.get(name) {
+                            Some(&VarData::Temp(_, t, _)) if t != 0 => RegType::Temp(t),
+                            Some(&VarData::Perm(p)) => RegType::Perm(p),
+                            _ => return Err(ArithmeticError::UninstantiatedVar)
+                        }
                     } else {
-                        self.interm.push(ArithmeticTerm::Reg(var_reg.get().norm()));
-                    },
+                        vr.get().norm()
+                    };
+
+                    self.interm.push(ArithmeticTerm::Reg(r));
+                },
                 TermRef::Clause(ClauseType::Deep(_, _, name), terms) => {
                     code.push(Line::Arithmetic(self.instr_from_clause(name, terms, true)?));
                 },
