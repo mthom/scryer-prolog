@@ -306,6 +306,20 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         });
                     },
                     &QueryTermRef::Is(terms) => {
+                        let mut target = Vec::new();
+                        self.marker.advance(term_loc, *term);
+
+                        // instantiate any vars introduced in the expr.
+                        for term_ref in terms[1].post_order_iter() {
+                            if let TermRef::Var(lvl, vr, name) = term_ref {
+                                self.marker.mark_var(name, lvl, vr,  term_loc, &mut target);                                
+                            }
+                        }
+
+                        if !target.is_empty() {
+                            code.push(Line::Query(target));
+                        }
+                        
                         let mut evaluator = ArithmeticEvaluator::new();
 
                         let mut arith_code = evaluator.eval(terms[1].as_ref())?;
