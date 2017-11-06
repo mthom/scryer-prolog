@@ -47,7 +47,7 @@ ideally, very fast) [Shen](http://shenlanguage.org) implementation.
 The following predicates are built-in to rusty-wam.
 
 * Arithmetic support:
-  ** is/2 works for (+)/2, (-)/{1,2}, (*)/2, (//)/2, (div)/2.
+    * is/2 works for (+)/2, (-)/{1,2}, (*)/2, (//)/2, (div)/2.
 * atomic/1
 * call/N (1 <= N <= 63)
 * catch/3
@@ -136,5 +136,5 @@ arithmetic operators with the usual precedences,
 ```
 prolog> ?- X = -5 + 3 - (2 * 4) // 8.
 true.
-X = -(+(-(5), 3), /(*(2, 4), 8)).
+X = -(+(-(5), 3), //(*(2, 4), 8)).
 ```
