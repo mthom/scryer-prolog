@@ -1,4 +1,5 @@
 use prolog::num::bigint::BigInt;
+use prolog::num::ToPrimitive;
 
 use prolog::ordered_float::*;
 
@@ -8,7 +9,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::io::Error as IOError;
 use std::num::{ParseFloatError};
-use std::ops::{Add, AddAssign};
+use std::ops::{Add, AddAssign, Sub, Mul, Div, Neg};
 use std::str::Utf8Error;
 use std::vec::Vec;
 
@@ -189,6 +190,14 @@ macro_rules! prefix {
     ($x:expr) => ($x & (FX | FY))
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ArithmeticError {
+    InvalidAtom,
+    InvalidOp,
+    InvalidTerm,
+    UninstantiatedVar
+}
+
 /* 'TokenTooLong' is hard to detect reliably if we don't process the
 input one character at a time. It would be easy to detect if the regex
 library supported matching on iterator inputs, but it currently does
@@ -198,6 +207,7 @@ tokens exceeding 4096 chars in length. */
 #[derive(Debug)]
 pub enum ParserError
 {
+    Arithmetic(ArithmeticError),
     CommaArityMismatch,
     UnexpectedEOF,
     FailedMatch(String),
@@ -206,11 +216,17 @@ pub enum ParserError
     InadmissibleQueryTerm,
     IncompleteReduction,
     InconsistentDeclaration,
-    InconsistentPredicate,    
+    InconsistentPredicate,
     ParseBigInt,
     ParseFloat(ParseFloatError),
     // TokenTooLong,
     Utf8Conversion(Utf8Error)
+}
+
+impl From<ArithmeticError> for ParserError {
+    fn from(err: ArithmeticError) -> ParserError {
+        ParserError::Arithmetic(err)
+    }
 }
 
 impl From<IOError> for ParserError {
@@ -265,6 +281,15 @@ impl fmt::Display for Constant {
     }
 }
 
+impl From<Number> for Constant {
+    fn from(n: Number) -> Self {
+        match n {
+            Number::Integer(n) => Constant::Integer(n),
+            Number::Float(f) => Constant::Float(f)
+        }
+    }
+}
+
 pub enum Term {
     AnonVar,
     Clause(Cell<RegType>, Atom, Vec<Box<Term>>),
@@ -273,10 +298,11 @@ pub enum Term {
     Var(Cell<VarReg>, Var)
 }
 
-pub enum QueryTerm {    
+pub enum QueryTerm {
     CallN(Vec<Box<Term>>),
     Catch(Vec<Box<Term>>),
     Cut,
+    Is(Vec<Box<Term>>),
     IsAtomic(Vec<Box<Term>>),
     IsVar(Vec<Box<Term>>),
     Term(Term),
@@ -292,6 +318,8 @@ impl QueryTerm {
                 QueryTermRef::Catch(terms),
             &QueryTerm::Cut =>
                 QueryTermRef::Cut,
+            &QueryTerm::Is(ref terms) =>
+                QueryTermRef::Is(terms),
             &QueryTerm::IsAtomic(ref terms) =>
                 QueryTermRef::IsAtomic(terms.first().unwrap()),
             &QueryTerm::IsVar(ref terms) =>
@@ -314,13 +342,14 @@ pub enum ClauseType<'a> {
     CallN,
     Catch,
     Deep(Level, &'a Cell<RegType>, &'a Atom),
+    Is,
     Root,
     Throw,
 }
 
 impl<'a> ClauseType<'a> {
     pub fn level_of_subterms(self) -> Level {
-        match self {            
+        match self {
             ClauseType::Deep(_, _, _) => Level::Deep,
             _ => Level::Shallow
         }
@@ -354,6 +383,7 @@ pub enum QueryTermRef<'a> {
     CallN(&'a Vec<Box<Term>>),
     Catch(&'a Vec<Box<Term>>),
     Cut,
+    Is(&'a Vec<Box<Term>>),
     IsAtomic(&'a Term),
     IsVar(&'a Term),
     Term(&'a Term),
@@ -365,6 +395,7 @@ impl<'a> QueryTermRef<'a> {
         match self {
             QueryTermRef::Catch(_) => 3,
             QueryTermRef::Throw(_) => 1,
+            QueryTermRef::Is(_) => 2,
             QueryTermRef::IsAtomic(_) => 1,
             QueryTermRef::IsVar(_) => 1,
             QueryTermRef::CallN(terms) => terms.len(),
@@ -412,6 +443,132 @@ impl IndexedChoiceInstruction {
     }
 }
 
+#[derive(Clone)]
+pub enum Number {
+    Float(OrderedFloat<f64>),
+    Integer(BigInt)
+}
+
+impl Add<Number> for Number {
+    type Output = Number;
+
+    fn add(self, rhs: Number) -> Self::Output {
+        match (self, rhs) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                Number::Integer(n1 + n2),
+            (Number::Float(n1), Number::Float(n2)) =>
+                Number::Float(OrderedFloat(n1.into_inner() + n2.into_inner())),
+            (Number::Integer(n1), Number::Float(n2))
+          | (Number::Float(n2), Number::Integer(n1)) =>
+                match n1.to_f64() {
+                    Some(n1) => Number::Float(OrderedFloat(n1 + n2.into_inner())),
+                    None     => Number::Integer(n1)
+                }
+        }
+    }
+}
+
+impl Sub<Number> for Number {
+    type Output = Number;
+
+    fn sub(self, rhs: Number) -> Self::Output {
+        match (self, rhs) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                Number::Integer(n1 - n2),
+            (Number::Float(n1), Number::Float(n2)) =>
+                Number::Float(OrderedFloat(n1.into_inner() - n2.into_inner())),
+            (Number::Integer(n1), Number::Float(n2))
+          | (Number::Float(n2), Number::Integer(n1)) =>
+                match n1.to_f64() {
+                    Some(n1) => Number::Float(OrderedFloat(n1 - n2.into_inner())),
+                    None     => Number::Integer(n1)
+                }
+        }
+    }
+}
+
+impl Mul<Number> for Number {
+    type Output = Number;
+
+    fn mul(self, rhs: Number) -> Self::Output {
+        match (self, rhs) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                Number::Integer(n1 * n2),
+            (Number::Float(n1), Number::Float(n2)) =>
+                Number::Float(OrderedFloat(n1.into_inner() * n2.into_inner())),
+            (Number::Integer(n1), Number::Float(n2))
+          | (Number::Float(n2), Number::Integer(n1)) =>
+                match n1.to_f64() {
+                    Some(n1) => Number::Float(OrderedFloat(n1 * n2.into_inner())),
+                    None     => Number::Integer(n1)
+                }
+        }
+    }
+}
+
+/*TODO: reserved for proper division.
+impl Div<Number> for Number {
+    type Output = Number;
+
+    fn div(self, rhs: Number) -> Self::Output {
+        match (self, rhs) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                Number::Integer(n1 / n2),
+            (Number::Float(n1), Number::Float(n2)) =>
+                Number::Float(OrderedFloat(n1.into_inner() / n2.into_inner())),
+            (Number::Integer(n1), Number::Float(n2))
+          | (Number::Float(n2), Number::Integer(n1)) =>
+                match n1.to_f64() {
+                    Some(n1) => Number::Float(OrderedFloat(n1 / n2.into_inner())),
+                    None     => Number::Integer(n1)
+                }
+        }
+    }
+}
+*/
+
+impl Neg for Number {
+    type Output = Number;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Number::Integer(n) => Number::Integer(-n),
+            Number::Float(f) => Number::Float(OrderedFloat(-1.0 * f.into_inner()))
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum ArithmeticTerm {
+    Reg(RegType),
+    Interm(usize),
+    Float(OrderedFloat<f64>),
+    Integer(BigInt)
+}
+
+impl ArithmeticTerm {
+    pub fn interm_or(&self, interm: usize) -> usize {
+        if let &ArithmeticTerm::Interm(interm) = self {
+            interm
+        } else {
+            interm
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum ArithEvalPlace {
+    Interm(usize), Reg(RegType)
+}
+
+pub enum ArithmeticInstruction {
+    Add(ArithmeticTerm, ArithmeticTerm, ArithEvalPlace),
+    Sub(ArithmeticTerm, ArithmeticTerm, ArithEvalPlace),
+    Mul(ArithmeticTerm, ArithmeticTerm, ArithEvalPlace),
+    IDiv(ArithmeticTerm, ArithmeticTerm, ArithEvalPlace),
+    Neg(ArithmeticTerm, ArithEvalPlace)
+}
+
 pub enum BuiltInInstruction {
     CleanUpBlock,
     DuplicateTerm,
@@ -442,7 +599,9 @@ pub enum ControlInstruction {
     Goto(usize, usize), // p, arity.
     Proceed,
     ThrowCall,
-    ThrowExecute
+    ThrowExecute,
+    UnifyCall,
+    UnifyExecute
 }
 
 impl ControlInstruction {
@@ -458,6 +617,8 @@ impl ControlInstruction {
             &ControlInstruction::ThrowExecute => true,
             &ControlInstruction::Goto(_, _) => true,
             &ControlInstruction::Proceed => true,
+            &ControlInstruction::UnifyCall => true,
+            &ControlInstruction::UnifyExecute => true,            
             _ => false
         }
     }
@@ -508,6 +669,7 @@ pub type CompiledFact = Vec<FactInstruction>;
 pub type CompiledQuery = Vec<QueryInstruction>;
 
 pub enum Line {
+    Arithmetic(ArithmeticInstruction),
     BuiltIn(BuiltInInstruction),
     Choice(ChoiceInstruction),
     Control(ControlInstruction),
@@ -697,6 +859,32 @@ impl Term {
         match self {
             &Term::Clause(_, _, ref child_terms) => child_terms.len(),
             _ => 0
+        }
+    }
+}
+
+pub enum IteratorState<'a> {
+    AnonVar(Level),
+    Clause(usize, ClauseType<'a>, &'a Vec<Box<Term>>),
+    Constant(Level, &'a Cell<RegType>, &'a Constant),
+    InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
+    FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
+    Var(Level, &'a Cell<VarReg>, &'a Var)
+}
+
+impl<'a> IteratorState<'a> {
+    pub fn to_state(lvl: Level, term: &'a Term) -> IteratorState<'a> {
+        match term {
+            &Term::AnonVar =>
+                IteratorState::AnonVar(lvl),
+            &Term::Clause(ref cell, ref atom, ref child_terms) =>
+                IteratorState::Clause(0, ClauseType::Deep(lvl, cell, atom), child_terms),
+            &Term::Cons(ref cell, ref head, ref tail) =>
+                IteratorState::InitialCons(lvl, cell, head.as_ref(), tail.as_ref()),
+            &Term::Constant(ref cell, ref constant) =>
+                IteratorState::Constant(lvl, cell, constant),
+            &Term::Var(ref cell, ref var) =>
+                IteratorState::Var(lvl, cell, var)
         }
     }
 }

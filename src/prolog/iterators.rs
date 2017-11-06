@@ -5,32 +5,6 @@ use std::collections::VecDeque;
 use std::iter::*;
 use std::vec::Vec;
 
-enum IteratorState<'a> {
-    AnonVar(Level),
-    Clause(usize, ClauseType<'a>, &'a Vec<Box<Term>>),
-    Constant(Level, &'a Cell<RegType>, &'a Constant),
-    InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
-    FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
-    Var(Level, &'a Cell<VarReg>, &'a Var)
-}
-
-impl<'a> IteratorState<'a> {
-    fn to_state(lvl: Level, term: &'a Term) -> IteratorState<'a> {
-        match term {
-            &Term::AnonVar =>
-                IteratorState::AnonVar(lvl),
-            &Term::Clause(ref cell, ref atom, ref child_terms) =>
-                IteratorState::Clause(0, ClauseType::Deep(lvl, cell, atom), child_terms),
-            &Term::Cons(ref cell, ref head, ref tail) =>
-                IteratorState::InitialCons(lvl, cell, head.as_ref(), tail.as_ref()),
-            &Term::Constant(ref cell, ref constant) =>
-                IteratorState::Constant(lvl, cell, constant),
-            &Term::Var(ref cell, ref var) =>
-                IteratorState::Var(lvl, cell, var)
-        }
-    }
-}
-
 pub struct QueryIterator<'a> {
     state_stack: Vec<IteratorState<'a>>
 }
@@ -77,13 +51,17 @@ impl<'a> QueryIterator<'a> {
                 let state = IteratorState::Clause(0, ClauseType::Catch, terms);
                 QueryIterator { state_stack: vec![state] }
             },
+            QueryTermRef::Is(terms) => {
+                let state = IteratorState::Clause(0, ClauseType::Is, terms);
+                QueryIterator { state_stack: vec![state] }
+            },
             QueryTermRef::IsAtomic(term) | QueryTermRef::IsVar(term) | QueryTermRef::Term(term) =>
                 Self::from_term(term),
             QueryTermRef::Throw(term) => {
                 let state = IteratorState::Clause(0, ClauseType::Throw, term);
                 QueryIterator { state_stack: vec![state] }
             },
-            _ => QueryIterator { state_stack: vec![] }
+            QueryTermRef::Cut => QueryIterator { state_stack: vec![] }
         }
     }
 }
@@ -316,6 +294,11 @@ impl<'a> ChunkedIterator<'a>
                 QueryTermRef::Catch(child_terms) | QueryTermRef::Throw(child_terms) => {
                     result.push(term);
                     arity = child_terms.len();
+                    break;
+                },
+                QueryTermRef::Is(_) => {
+                    result.push(term);
+                    arity = 2;
                     break;
                 },
                 QueryTermRef::IsAtomic(_) | QueryTermRef::IsVar(_) =>

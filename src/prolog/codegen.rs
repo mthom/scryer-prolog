@@ -1,4 +1,5 @@
 use prolog::allocator::*;
+use prolog::arithmetic::*;
 use prolog::ast::*;
 use prolog::fixtures::*;
 use prolog::indexing::*;
@@ -14,7 +15,10 @@ pub struct CodeGenerator<'a, TermMarker> {
 }
 
 pub enum EvalSession<'a> {
-    EntryFailure(String),
+    OpIsInfixAndPostFix,
+    NamelessEntry,
+    ParserError(ParserError),
+    ImpermissibleEntry(String),
     EntrySuccess,
     InitialQuerySuccess(AllocVarDict<'a>, HeapVarDict<'a>),
     QueryFailure,
@@ -256,11 +260,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
                     *ctrl = ControlInstruction::ThrowExecute;
                 },
-            QueryTermRef::IsAtomic(_) => {
-                dealloc_index = code.len();
-                code.push(proceed!());
-            },
-            QueryTermRef::IsVar(_) => {
+            QueryTermRef::Is(_) =>
+                if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
+                    *ctrl = ControlInstruction::UnifyExecute;
+                },
+            QueryTermRef::IsAtomic(_) | QueryTermRef::IsVar(_) => {
                 dealloc_index = code.len();
                 code.push(proceed!());
             },
@@ -275,6 +279,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                    conjunct_info: &ConjunctInfo<'a>,
                    code: &mut Code,
                    is_exposed: bool)
+        -> Result<(), ParserError>
     {
         for (chunk_num, _, terms) in iter {
             for (i, term) in terms.iter().enumerate()
@@ -300,13 +305,47 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                             Line::Cut(CutInstruction::Cut(Terminal::Terminal))
                         });
                     },
+                    &QueryTermRef::Is(terms) => {
+                        let mut evaluator = ArithmeticEvaluator::new();
+
+                        let mut arith_code = evaluator.eval(terms[1].as_ref())?;
+                        code.append(&mut arith_code);
+
+                        match terms[0].as_ref() {
+                            &Term::Var(ref vr, ref name) => {
+                                let mut target = Vec::new();
+
+                                self.marker.advance(term_loc, *term);
+                                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
+
+                                code.push(Line::Query(target));
+                                code.push(unify_call!());
+                            },
+                            &Term::Constant(_, Constant::Float(fl)) => {
+                                code.push(query![put_constant!(Level::Shallow,
+                                                               Constant::Float(fl),
+                                                               temp_v!(1))]);
+                                code.push(unify_call!());
+                            },
+                            &Term::Constant(_, Constant::Integer(ref bi)) => {
+                                let bi = bi.clone();
+                                code.push(query![put_constant!(Level::Shallow,
+                                                               Constant::Integer(bi),
+                                                               temp_v!(1))]);
+                                code.push(unify_call!());
+                            },
+                            _ => {
+                                return Err(ParserError::from(ArithmeticError::InvalidTerm));
+                            }
+                        }
+                    },
                     &QueryTermRef::IsAtomic(inner_term) =>
                         match inner_term {
                             &Term::AnonVar | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
-                                code.push(fail!()); //goto!(61, 0)); // goto false/0.
+                                code.push(fail!());
                             },
                             &Term::Constant(_, _) => {
-                                code.push(succeed!()); //goto!(75, 0)); // goto succeed/0.
+                                code.push(succeed!());
                             },
                             &Term::Var(ref vr, ref name) => {
                                 let mut target = Vec::new();
@@ -321,10 +360,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     &QueryTermRef::IsVar(inner_term) =>
                         match inner_term {
                             &Term::Constant(_, _) | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
-                                code.push(fail!()); //goto!(61, 0)); // goto false/0.
+                                code.push(fail!());
                             },
                             &Term::AnonVar => {
-                                code.push(succeed!()); //goto!(75, 0)); // goto succeed/0.
+                                code.push(succeed!());
                             },
                             &Term::Var(ref vr, ref name) => {
                                 let mut target = Vec::new();
@@ -352,6 +391,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 self.marker.reset_contents();
             }
         }
+
+        Ok(())
     }
 
     fn compile_seq_prelude(&mut self, conjunct_info: &ConjunctInfo, body: &mut Code)
@@ -376,7 +417,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         }
     }
 
-    pub fn compile_rule<'b: 'a>(&mut self, rule: &'b Rule) -> Code
+    pub fn compile_rule<'b: 'a>(&mut self, rule: &'b Rule) -> Result<Code, ParserError>
     {
         let iter = ChunkedIterator::from_rule(rule);
         let conjunct_info = self.collect_var_data(iter);
@@ -393,7 +434,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         }
 
         let iter = ChunkedIterator::from_rule_body(p1, clauses);
-        self.compile_seq(iter, &conjunct_info, &mut code, false);
+        try!(self.compile_seq(iter, &conjunct_info, &mut code, false));
 
         if conjunct_info.allocates() {
             let index = if let &Line::Control(_) = code.last().unwrap() {
@@ -408,7 +449,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         }
 
         Self::compile_cleanup(&mut code, &conjunct_info, clauses.last().unwrap_or(p1).to_ref());
-        code
+        Ok(code)
     }
 
     fn mark_unsafe_fact_vars(&self, fact: &mut CompiledFact)
@@ -476,7 +517,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         Self::add_conditional_call(code, term, index);
     }
 
-    pub fn compile_query(&mut self, query: &'a Vec<QueryTerm>) -> Code
+    pub fn compile_query(&mut self, query: &'a Vec<QueryTerm>) -> Result<Code, ParserError>
     {
         let iter = ChunkedIterator::from_term_sequence(query);
         let conjunct_info = self.collect_var_data(iter);
@@ -485,7 +526,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         self.compile_seq_prelude(&conjunct_info, &mut code);
 
         let iter = ChunkedIterator::from_term_sequence(query);
-        self.compile_seq(iter, &conjunct_info, &mut code, true);
+        try!(self.compile_seq(iter, &conjunct_info, &mut code, true));
 
         if conjunct_info.allocates() {
             let index = if let &Line::Control(_) = code.last().unwrap() {
@@ -500,7 +541,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         }
 
         Self::compile_cleanup(&mut code, &conjunct_info, query.last().unwrap().to_ref());
-        code
+        Ok(code)
     }
 
     fn split_predicate(clauses: &Vec<PredicateClause>) -> Vec<(usize, usize)>
@@ -529,7 +570,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         subseqs
     }
 
-    fn compile_pred_subseq<'b: 'a>(&mut self, clauses: &'b [PredicateClause]) -> Code
+    fn compile_pred_subseq<'b: 'a>(&mut self, clauses: &'b [PredicateClause])
+                                   -> Result<Code, ParserError>
     {
         let mut code_body = Vec::new();
         let mut code_offsets = CodeOffsets::new();
@@ -543,7 +585,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 &PredicateClause::Fact(ref fact) =>
                     self.compile_fact(fact),
                 &PredicateClause::Rule(ref rule) =>
-                    self.compile_rule(rule)
+                    try!(self.compile_rule(rule))
             };
 
             if num_clauses > 1 {
@@ -567,17 +609,18 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         let mut code = Vec::new();
 
         code_offsets.add_indices(&mut code, code_body);
-        code
+        Ok(code)
     }
 
-    pub fn compile_predicate<'b: 'a>(&mut self, clauses: &'b Vec<PredicateClause>) -> Code
+    pub fn compile_predicate<'b: 'a>(&mut self, clauses: &'b Vec<PredicateClause>)
+                                     -> Result<Code, ParserError>
     {
         let mut code   = Vec::new();
         let split_pred = Self::split_predicate(&clauses);
         let multi_seq  = split_pred.len() > 1;
 
         for (l, r) in split_pred {
-            let mut code_segment = self.compile_pred_subseq(&clauses[l .. r]);
+            let mut code_segment = try!(self.compile_pred_subseq(&clauses[l .. r]));
 
             if multi_seq {
                 let choice = match l {
@@ -592,6 +635,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             code.append(&mut code_segment);
         }
 
-        code
+        Ok(code)
     }
 }

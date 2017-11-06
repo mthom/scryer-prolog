@@ -734,6 +734,41 @@ mod tests {
 
         assert_eq!(submit(&mut wam, "?- catch(f(X), E, handle_top(E))."), true);
     }
+    
+    #[test]
+    fn test_queries_on_arithmetic()
+    {
+        let mut wam = Machine::new();
+
+        assert_eq!(submit(&mut wam, "?- X is 1, X is X."), true);
+        assert_eq!(submit(&mut wam, "?- X is 1, X is X + 1."), false);
+        assert_eq!(submit(&mut wam, "?- X is 1, X is X + 0."), true);
+        assert_eq!(submit(&mut wam, "?- X is 1, X is X * 1."), true);
+        assert_eq!(submit(&mut wam, "?- X is 1, X is X * 2."), false);
+
+        assert_eq!(submit(&mut wam, "?- X is 1 + a."), false);
+        assert_eq!(submit(&mut wam, "?- X is 1 + Y."), false);
+        assert_eq!(submit(&mut wam, "?- Y is 2 + 2 - 2, X is 1 + Y, X = 3."), true);
+        assert_eq!(submit(&mut wam, "?- Y is 2 + 2 - 2, X is 1 + Y, X = 2."), false);
+
+        assert_eq!(submit(&mut wam, "?- 6 is 6."), true);
+        assert_eq!(submit(&mut wam, "?- 6 is 3 + 3."), true);
+        assert_eq!(submit(&mut wam, "?- 6 is 3 * 2."), true);
+        assert_eq!(submit(&mut wam, "?- 7 is 3 * 2."), false);
+        assert_eq!(submit(&mut wam, "?- 7 is 3.5 * 2."), false);
+        assert_eq!(submit(&mut wam, "?- 7.0 is 3.5 * 2."), true);
+
+        submit(&mut wam, "f(X) :- X is 5 // 0.");
+
+        assert_eq!(submit(&mut wam, "?- catch(f(X), evaluation_error(E), true), E = zero_divisor."),
+                   true);
+
+        assert_eq!(submit(&mut wam, "?- X is ((3 + 4) // 2) + 2 - 1 // 1, Y is 2+2, Z is X+Y."),
+                   true);
+
+        assert_eq!(submit(&mut wam, "?- X is ((3 + 4) // 2) + 2 - 1 // 1, Y is 2+2, Z = 8, Y is 4."),
+                   true);
+    }
 }
 
 fn process_buffer(wam: &mut Machine, buffer: &str)

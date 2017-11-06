@@ -22,6 +22,12 @@ macro_rules! query {
     )
 }
 
+macro_rules! string {
+    ($str:expr) => {
+        vec![HeapCellValue::Con(Constant::String(String::from($str)))]
+    }
+}
+
 macro_rules! functor {
     ($name:expr, $len:expr, [$($args:expr),*]) => {{
         if $len > 0 {
@@ -78,6 +84,12 @@ macro_rules! get_var_in_fact {
 macro_rules! put_var {
     ($r:expr, $arg:expr) => (
         QueryInstruction::PutVariable($r, $arg)
+    )
+}
+
+macro_rules! put_constant {
+    ($lvl:expr, $cons:expr, $r:expr) => (
+        QueryInstruction::PutConstant($lvl, $cons, $r)
     )
 }
 
@@ -194,6 +206,12 @@ macro_rules! erase_ball {
 macro_rules! unify {
     () => (
         Line::BuiltIn(BuiltInInstruction::Unify)
+    )
+}
+
+macro_rules! unify_call {
+    () => (
+        Line::Control(ControlInstruction::UnifyCall)
     )
 }
 

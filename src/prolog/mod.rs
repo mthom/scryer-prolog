@@ -7,6 +7,7 @@ pub mod and_stack;
 pub mod ast;
 #[macro_use]
 pub mod macros;
+pub mod arithmetic;
 pub mod builtins;
 pub mod codegen;
 pub mod copier;

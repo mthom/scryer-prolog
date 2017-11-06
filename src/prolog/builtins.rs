@@ -104,7 +104,7 @@ fn get_builtins() -> Code {
          proceed!(),
          fact![get_value!(temp_v!(1), 2)], // =/2, 73.
          proceed!(),
-         succeed!(), // true/0, 75.
+         proceed!() // true/0, 75.
     ]
 }
 
@@ -118,8 +118,19 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     op_dir.insert((String::from(":-"), Fixity::In),   (XFX, 1200));
     op_dir.insert((String::from(":-"), Fixity::Pre),  (FX, 1200));
     op_dir.insert((String::from("?-"), Fixity::Pre),  (FX, 1200));
+
+    // control operators.
     op_dir.insert((String::from("\\+"), Fixity::Pre), (FY, 900));
     op_dir.insert((String::from("="), Fixity::In), (XFX, 700));
+
+    // arithmetic operators.
+    op_dir.insert((String::from("is"), Fixity::In), (XFX, 700));
+    op_dir.insert((String::from("+"), Fixity::In), (YFX, 500));
+    op_dir.insert((String::from("-"), Fixity::In), (YFX, 500));
+    op_dir.insert((String::from("//"), Fixity::In), (YFX, 400));
+    op_dir.insert((String::from("div"), Fixity::In), (YFX, 400));
+    op_dir.insert((String::from("*"), Fixity::In), (YFX, 400));
+    op_dir.insert((String::from("-"), Fixity::Pre), (FY, 200));
     
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)

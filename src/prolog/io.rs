@@ -106,7 +106,11 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::ThrowCall =>
                 write!(f, "call_throw"),
             &ControlInstruction::ThrowExecute =>
-                write!(f, "execute_throw")
+                write!(f, "execute_throw"),
+            &ControlInstruction::UnifyCall =>
+                write!(f, "unify_call"),
+            &ControlInstruction::UnifyExecute =>
+                write!(f, "unify_execute"),
         }
     }
 }
@@ -154,10 +158,10 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "set_ball"),
             &BuiltInInstruction::Succeed =>
                 write!(f, "true"),
+            &BuiltInInstruction::UnwindStack =>
+                write!(f, "unwind_stack"),
             &BuiltInInstruction::Unify =>
                 write!(f, "unify"),
-            &BuiltInInstruction::UnwindStack =>
-                write!(f, "unwind_stack")
         }
     }
 }
@@ -184,6 +188,45 @@ impl fmt::Display for IndexingInstruction {
                 write!(f, "switch_on_constant {}", num_cs),
             &IndexingInstruction::SwitchOnStructure(num_ss, _) =>
                 write!(f, "switch_on_structure {}", num_ss)
+        }
+    }
+}
+
+impl fmt::Display for ArithmeticTerm {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &ArithmeticTerm::Reg(r) => write!(f, "{}", r),
+            &ArithmeticTerm::Interm(i) => write!(f, "@{}", i),
+            &ArithmeticTerm::Float(fl) => write!(f, "{}", fl),
+            &ArithmeticTerm::Integer(ref bi) => write!(f, "{}", bi)
+        }
+    }
+}
+
+impl fmt::Display for ArithEvalPlace {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &ArithEvalPlace::Reg(r) =>
+                write!(f, "{}", r),
+            &ArithEvalPlace::Interm(i) =>
+                write!(f, "@{}", i)
+        }
+    }
+}   
+
+impl fmt::Display for ArithmeticInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &ArithmeticInstruction::Add(ref a1, ref a2, ref t) =>
+                write!(f, "add {}, {}, {}", a1, a2, t),
+            &ArithmeticInstruction::Sub(ref a1, ref a2, ref t) =>
+                write!(f, "sub {}, {}, {}", a1, a2, t),
+            &ArithmeticInstruction::Mul(ref a1, ref a2, ref t) =>
+                write!(f, "mul {}, {}, {}", a1, a2, t),
+            &ArithmeticInstruction::IDiv(ref a1, ref a2, ref t) =>
+                write!(f, "idiv {}, {}, {}", a1, a2, t),
+            &ArithmeticInstruction::Neg(ref a, ref t) =>
+                write!(f, "neg {}, {}", a, t)
         }
     }
 }
@@ -236,6 +279,8 @@ impl fmt::Display for RegType {
 pub fn print_code(code: &Code) {
     for clause in code {
         match clause {
+            &Line::Arithmetic(ref arith) =>
+                println!("{}", arith),
             &Line::Fact(ref fact) =>
                 for fact_instr in fact {
                     println!("{}", fact_instr);
@@ -294,7 +339,11 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
         &TopLevel::Predicate(ref clauses) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
-            let compiled_pred = cg.compile_predicate(clauses);
+            let compiled_pred = match cg.compile_predicate(clauses) {
+                Ok(pred) => pred,
+                Err(e)   => return EvalSession::ParserError(e)
+            };
+        
             wam.add_predicate(clauses, compiled_pred)
         },
         &TopLevel::Fact(ref fact) => {
@@ -306,13 +355,21 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
         &TopLevel::Rule(ref rule) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
-            let compiled_rule = cg.compile_rule(rule);
+            let compiled_rule = match cg.compile_rule(rule) {
+                Ok(rule) => rule,
+                Err(e) => return EvalSession::ParserError(e)                
+            };
+            
             wam.add_rule(rule, compiled_rule)
         },
         &TopLevel::Query(ref query) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
-            let compiled_query = cg.compile_query(query);
+            let compiled_query = match cg.compile_query(query) {
+                Ok(query) => query,
+                Err(e) => return EvalSession::ParserError(e)
+            };
+            
             wam.submit_query(compiled_query, cg.take_vars())
         }
     }
@@ -385,7 +442,10 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
         },
         EvalSession::QueryFailure => println!("false."),
         EvalSession::QueryFailureWithException(e) => println!("{}", error_string(&e)),
-        EvalSession::EntryFailure(msg) => println!("{}", msg),
+        EvalSession::ImpermissibleEntry(msg) => println!("cannot overwrite builtin {}", msg),
+        EvalSession::OpIsInfixAndPostFix => println!("cannot define an op to be both postfix and infix."),
+        EvalSession::NamelessEntry => println!("the predicate head is not an atom or clause."),
+        EvalSession::ParserError(e) => println!("{:?}", e),
         _ => {}
     };
 }

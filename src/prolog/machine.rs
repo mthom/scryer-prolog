@@ -4,7 +4,10 @@ use prolog::codegen::*;
 use prolog::copier::*;
 use prolog::heapview::*;
 use prolog::and_stack::*;
+use prolog::num::Zero;
+use prolog::num::bigint::BigInt;
 use prolog::or_stack::*;
+use prolog::ordered_float::OrderedFloat;
 use prolog::fixtures::*;
 
 use std::collections::HashMap;
@@ -36,7 +39,8 @@ struct MachineState {
     tr: usize,
     hb: usize,
     block: usize, // an offset into the OR stack.
-    ball: (usize, Heap) // heap boundary, and a term copy
+    ball: (usize, Heap), // heap boundary, and a term copy
+    interms: Vec<Number> // intermediate numbers.
 }
 
 struct DuplicateTerm<'a> {
@@ -225,9 +229,7 @@ impl Machine {
     {
         match self.code_dir.get(&(name.clone(), arity)) {
             Some(&(PredicateKeyType::BuiltIn, _)) =>
-                return EvalSession::EntryFailure(format!("error: cannot replace built-in predicate {}/{}",
-                                                         name,
-                                                         arity)),
+                return EvalSession::ImpermissibleEntry(format!("{}/{}", name, arity)),
             _ => {}
         };
 
@@ -246,7 +248,7 @@ impl Machine {
             self.code.append(&mut code);
             self.add_user_code(name, arity, p)
         } else {
-            EvalSession::EntryFailure(format!("error: the fact has no name."))
+            EvalSession::NamelessEntry
         }
     }
 
@@ -261,7 +263,7 @@ impl Machine {
             self.code.append(&mut code);
             self.add_user_code(name, arity, p)
         } else {
-            EvalSession::EntryFailure(format!("error: the rule has no name."))
+            EvalSession::NamelessEntry
         }
     }
 
@@ -297,6 +299,8 @@ impl Machine {
         };
 
         match instr {
+            &Line::Arithmetic(ref arith_instr) =>
+                self.ms.execute_arith_instr(arith_instr),
             &Line::BuiltIn(ref built_in_instr) =>
                 self.ms.execute_built_in_instr(&self.code_dir, built_in_instr),
             &Line::Choice(ref choice_instr) =>
@@ -408,11 +412,11 @@ impl Machine {
 
         while self.ms.p < end_ptr {
             if let CodePtr::TopLevel(mut cn, p) = self.ms.p {
-                match &self[CodePtr::TopLevel(cn, p)] {                    
+                match &self[CodePtr::TopLevel(cn, p)] {
                     &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
                         self.record_var_places(cn, alloc_locs, heap_locs);
                         cn += 1;
-                    },                    
+                    },
                     _ => {}
                 }
 
@@ -422,10 +426,10 @@ impl Machine {
             self.query_stepper();
 
             match self.ms.p {
-                CodePtr::TopLevel(_, p) if p > 0 => {},                
+                CodePtr::TopLevel(_, p) if p > 0 => {},
                 _ => break
             };
-        }        
+        }
     }
 
     fn fail<'a>(&mut self) -> EvalSession<'a>
@@ -443,21 +447,16 @@ impl Machine {
     pub fn submit_decl<'a>(&mut self, decl: &Declaration) -> EvalSession<'a> {
         match decl {
             &Declaration::Op(prec, spec, ref name) => {
-                lazy_static! {
-                    static ref ERR_STRING: String = String::from("an operator can't be both \
-                                                                  infix and postfix.");
-                }
-
                 if is_infix!(spec) {
                     match self.op_dir.get(&(name.clone(), Fixity::Post)) {
-                        Some(_) => return EvalSession::EntryFailure(ERR_STRING.clone()),
+                        Some(_) => return EvalSession::OpIsInfixAndPostFix,
                         _ => {}
                     };
                 }
 
                 if is_postfix!(spec) {
                     match self.op_dir.get(&(name.clone(), Fixity::In)) {
-                        Some(_) => return EvalSession::EntryFailure(ERR_STRING.clone()),
+                        Some(_) => return EvalSession::OpIsInfixAndPostFix,
                         _ => {}
                     };
                 }
@@ -598,6 +597,18 @@ impl Machine {
     }
 }
 
+macro_rules! try_or_fail {
+    ($s:ident, $e:expr) => {{
+        match $e {
+            Ok(val)  => val,
+            Err(msg) => {
+                $s.throw_exception(string!(msg));
+                return;
+            }
+        }
+    }}
+}
+
 impl MachineState {
     fn new() -> MachineState {
         MachineState { h: 0,
@@ -618,7 +629,8 @@ impl MachineState {
                        tr: 0,
                        hb: 0,
                        block: 0,
-                       ball: (0, Vec::new())
+                       ball: (0, Vec::new()),
+                       interms: vec![Number::Float(OrderedFloat(0f64)); 256],
         }
     }
 
@@ -753,7 +765,7 @@ impl MachineState {
                 Ref::HeapCell(r) =>
                     self.heap[r] = HeapCellValue::Ref(Ref::HeapCell(r)),
                 Ref::StackCell(fr, sc) =>
-                    self.and_stack[fr][sc] = Addr::StackCell(fr, sc)
+                    self.and_stack[fr][sc] = Addr::StackCell(fr, sc)                   
             }
         }
     }
@@ -818,6 +830,92 @@ impl MachineState {
                 }
             },
             _ => self.fail = true
+        };
+    }
+
+    fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, &'static str> {
+        match at {
+            &ArithmeticTerm::Reg(r) => {
+                let addr = self[r].clone();
+                let item = self.deref(addr);
+
+                match item {
+                    Addr::Con(Constant::Integer(bi)) =>
+                        Ok(Number::Integer(bi)),
+                    Addr::Con(Constant::Float(fl)) =>
+                        Ok(Number::Float(fl)),
+                    _ =>
+                        Err("is/2: variable not instantiated to number.")
+                }
+            },
+            &ArithmeticTerm::Interm(i)   => Ok(self.interms[i].clone()),
+            &ArithmeticTerm::Float(fl)   => Ok(Number::Float(fl)),
+            &ArithmeticTerm::Integer(ref bi) => Ok(Number::Integer(bi.clone()))
+        }
+    }
+
+    fn assign_arith(&mut self, t: ArithEvalPlace, n: Number) {
+        match t {
+            ArithEvalPlace::Reg(r) =>
+                self[r] = Addr::Con(Constant::from(n)),
+            ArithEvalPlace::Interm(i) =>
+                self.interms[i] = n
+        }
+    }
+
+    fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
+        match instr {
+            &ArithmeticInstruction::Add(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                self.assign_arith(t, n1 + n2);
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Sub(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                self.assign_arith(t, n1 - n2);
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Mul(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                self.assign_arith(t, n1 * n2);
+                self.p += 1;
+            },
+            &ArithmeticInstruction::IDiv(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                match (n1, n2) {
+                    (Number::Integer(n1), Number::Integer(n2)) => {
+                        if n2 == BigInt::zero() {
+                            self.throw_exception(functor!("evaluation_error",
+                                                          1,
+                                                          [atom!("zero_divisor")]));
+                            return;
+                        }
+
+                        self.assign_arith(t, Number::Integer(n1 / n2));
+                        self.p += 1;
+                    },
+                    _ => {
+                        self.throw_exception(functor!("evaluation_error",
+                                                      1,
+                                                      [atom!("expected_integer_args")]));
+                        return;
+                    }
+                }
+            },
+            &ArithmeticInstruction::Neg(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.assign_arith(t, - n1);
+                self.p += 1;
+            }
         };
     }
 
@@ -1306,13 +1404,6 @@ impl MachineState {
                 self.write_constant_to_var(addr, &c);
                 self.p += 1;
             },
-            &BuiltInInstruction::Unify => {
-                let a1 = self[temp_v!(1)].clone();
-                let a2 = self[temp_v!(2)].clone();
-
-                self.unify(a1, a2);
-                self.p += 1;
-            },
             &BuiltInInstruction::EraseBall => {
                 self.ball.0 = 0;
                 self.ball.1.truncate(0);
@@ -1414,16 +1505,26 @@ impl MachineState {
             },
             &BuiltInInstruction::Succeed => {
                 self.p += 1;
+            },
+            &BuiltInInstruction::Unify => {
+                self.inline_unify();
+                self.p += 1;
             }
         };
     }
 
+    fn inline_unify(&mut self) {
+        let a1 = self[temp_v!(1)].clone();
+        let a2 = self[temp_v!(2)].clone();
+        
+        self.unify(a1, a2);        
+    }
+    
     fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
     {
         match instr {
-            &ControlInstruction::Allocate(num_cells) => {
+            &ControlInstruction::Allocate(num_cells) => {                
                 let num_frames = self.num_frames();
-
                 self.and_stack.push(num_frames + 1, self.e, self.cp, num_cells);
 
                 self.e = self.and_stack.len() - 1;
@@ -1473,7 +1574,15 @@ impl MachineState {
             },
             &ControlInstruction::ThrowExecute => {
                 self.goto_throw();
-            }
+            },
+            &ControlInstruction::UnifyCall => {
+                self.inline_unify();
+                self.p += 1;
+            },
+            &ControlInstruction::UnifyExecute => {
+                self.inline_unify();
+                self.p = self.cp;
+            }            
         };
     }
 
@@ -1512,7 +1621,7 @@ impl MachineState {
                     self.registers[i] = self.or_stack[b][i].clone();
                 }
 
-                self.e = self.or_stack[b].e;
+                self.e  = self.or_stack[b].e;
                 self.cp = self.or_stack[b].cp;
 
                 self.or_stack[b].bp = self.p + 1;
@@ -1559,7 +1668,7 @@ impl MachineState {
 
                 self.hb = self.h;
                 self.p += l;
-            }
+            },
         };
     }
 
@@ -1598,7 +1707,7 @@ impl MachineState {
                     self.registers[i] = self.or_stack[b][i].clone();
                 }
 
-                self.e = self.or_stack[b].e;
+                self.e  = self.or_stack[b].e;
                 self.cp = self.or_stack[b].cp;
 
                 self.or_stack[b].bp = self.p + offset;

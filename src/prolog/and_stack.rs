@@ -12,13 +12,13 @@ pub struct Frame {
 }
 
 impl Frame {
-    fn new(global_index: usize, e: usize, cp: CodePtr, n: usize) -> Self {
+    fn new(global_index: usize, sz: usize, e: usize, cp: CodePtr, n: usize) -> Self {
         Frame {
             global_index: global_index,
             b0: 0,
             e: e,
             cp: cp,
-            perms: vec![Addr::HeapCell(0); n]
+            perms: (1 .. n+1).map(|i| Addr::StackCell(sz, i)).collect()
         }
     }
 }
@@ -31,7 +31,8 @@ impl AndStack {
     }
 
     pub fn push(&mut self, global_index: usize, e: usize, cp: CodePtr, n: usize) {
-        self.0.push(Frame::new(global_index, e, cp, n));
+        let len = self.0.len();
+        self.0.push(Frame::new(global_index, len, e, cp, n));
     }
 
     #[allow(dead_code)]
@@ -45,13 +46,6 @@ impl AndStack {
 
     pub fn clear(&mut self) {
         self.0.clear()
-    }
-
-    // drop the last n frames.
-    #[allow(dead_code)]
-    pub fn drop_frames(&mut self, n: usize) {
-        let len = self.0.len();
-        self.0.truncate(len - n);
     }
 }
 

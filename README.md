@@ -19,15 +19,15 @@ Extend rusty-wam to include the following, among other features:
 * ISO Prolog compliant throw/catch (_done_).
 * Built-in and user-defined operators of all fixities, with custom
   associativity and precedence (_done_). 
-* Bignum and floating point arithmetic.
+* Bignum and floating point arithmetic (_in progress_).
 * Built-in control operators (`,`, `;`, `->`, etc.).
+* Built-in predicates for list processing and top-level declarative
+  control (`setup_call_control/3`, `call_with_inference_limit/3`,
+  etc.)
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
   is straightforward with attributed variables. 
 * An occurs check.
-* Built-in predicates for list processing and top-level declarative
-  control (`setup_call_control/3`, `call_with_inference_limit/3`,
-  etc.)
 * Mode declarations.
 * Extensions for clp(FD).
 * `if_` and related predicates, following the developments of the
@@ -46,6 +46,8 @@ ideally, very fast) [Shen](http://shenlanguage.org) implementation.
 
 The following predicates are built-in to rusty-wam.
 
+* Arithmetic support:
+  ** is/2 works for (+)/2, (-)/{1,2}, (*)/2, (//)/2, (div)/2.
 * atomic/1
 * call/N (1 <= N <= 63)
 * catch/3
@@ -128,14 +130,11 @@ Note that the values of variables belonging to successful queries are
 printed out, on one line each. Uninstantiated variables are denoted by
 a number preceded by an underscore (`X = _0` in an example above).
 
-Lastly, rusty-wam supports dynamic operators:
+Lastly, rusty-wam supports dynamic operators. Using the built-in
+arithmetic operators with the usual precedences,
+
 ```
-prolog> :- op(500, yfx, +).
-prolog> :- op(500, yfx, -).
-prolog> :- op(200, fy, -).
-prolog> :- op(400, yfx, *).
-prolog> :- op(400, yfx, /).
-prolog> ?- X = -5 + 3 - (2 * 4) / 8.
+prolog> ?- X = -5 + 3 - (2 * 4) // 8.
 true.
 X = -(+(-(5), 3), /(*(2, 4), 8)).
 ```
