@@ -1,5 +1,7 @@
 use prolog::ast::*;
 use prolog::fixtures::*;
+use prolog::num::{BigInt, Zero};
+use prolog::ordered_float::{OrderedFloat};
 
 use std::cell::Cell;
 use std::cmp::{min, max};
@@ -93,7 +95,7 @@ impl<'a> ArithmeticEvaluator<'a> {
         ArithmeticEvaluator { bindings, interm: Vec::new(), interm_c: 1 }
     }
 
-    fn get_un_instr(name: &Atom, a1: ArithmeticTerm, t: ArithEvalPlace)
+    fn get_un_instr(name: &Atom, a1: ArithmeticTerm, t: usize)
                     -> Result<ArithmeticInstruction, ArithmeticError>
     {
         match name.as_str() {
@@ -102,7 +104,7 @@ impl<'a> ArithmeticEvaluator<'a> {
         }
     }
 
-    fn gen_bin_instr(name: &Atom, a1: ArithmeticTerm, a2: ArithmeticTerm, t: ArithEvalPlace)
+    fn gen_bin_instr(name: &Atom, a1: ArithmeticTerm, a2: ArithmeticTerm, t: usize)
                      -> Result<ArithmeticInstruction, ArithmeticError>
     {
         match name.as_str() {
@@ -124,53 +126,45 @@ impl<'a> ArithmeticEvaluator<'a> {
         temp
     }
 
-    fn instr_from_clause(&mut self, name: &Atom, terms: &Vec<Box<Term>>, deep: bool)
+    fn instr_from_clause(&mut self, name: &Atom, terms: &Vec<Box<Term>>)
                          -> Result<ArithmeticInstruction, ArithmeticError>
     {
         match terms.len() {
             1 => {
                 let a1 = self.interm.pop().unwrap();
 
-                if deep {
-                    let ninterm = if a1.interm_or(0) == 0 {
-                        self.incr_interm()
-                    } else {
-                        self.interm.push(a1.clone());
-                        a1.interm_or(0)
-                    };
-
-                    Self::get_un_instr(name, a1, ArithEvalPlace::Interm(ninterm))
+                let ninterm = if a1.interm_or(0) == 0 {
+                    self.incr_interm()
                 } else {
-                    Self::get_un_instr(name, a1, ArithEvalPlace::Reg(RegType::Temp(2)))
-                }
+                    self.interm.push(a1.clone());
+                    a1.interm_or(0)
+                };
+
+                Self::get_un_instr(name, a1, ninterm)
             },
             2 => {
                 let a2 = self.interm.pop().unwrap();
                 let a1 = self.interm.pop().unwrap();
 
-                if deep {
-                    let min_interm = min(a1.interm_or(0), a2.interm_or(0));
+                let min_interm = min(a1.interm_or(0), a2.interm_or(0));
 
-                    let ninterm = if min_interm == 0 {
-                        let max_interm = max(a1.interm_or(0), a2.interm_or(0));
+                let ninterm = if min_interm == 0 {
+                    let max_interm = max(a1.interm_or(0), a2.interm_or(0));
 
-                        if max_interm == 0 {
-                            self.incr_interm()
-                        } else {
-                            self.interm.push(ArithmeticTerm::Interm(max_interm));
-                            self.interm_c = max_interm + 1;
-                            max_interm
-                        }
+                    if max_interm == 0 {
+                        self.incr_interm()
                     } else {
-                        self.interm.push(ArithmeticTerm::Interm(min_interm));
-                        self.interm_c = min_interm + 1;
-                        min_interm
-                    };
-
-                    Self::gen_bin_instr(name, a1, a2, ArithEvalPlace::Interm(ninterm))
+                        self.interm.push(ArithmeticTerm::Interm(max_interm));
+                        self.interm_c = max_interm + 1;
+                        max_interm
+                    }
                 } else {
-                    Self::gen_bin_instr(name, a1, a2, ArithEvalPlace::Reg(RegType::Temp(2)))
-                }
+                    self.interm.push(ArithmeticTerm::Interm(min_interm));
+                    self.interm_c = min_interm + 1;
+                    min_interm
+                };
+
+                Self::gen_bin_instr(name, a1, a2, ninterm)
             },
             _ => Err(ArithmeticError::InvalidOp)
         }
@@ -200,7 +194,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                     let r = if vr.get().norm().reg_num() == 0 {
                         match self.bindings.get(name) {
                             Some(&VarData::Temp(_, t, _)) if t != 0 => RegType::Temp(t),
-                            Some(&VarData::Perm(p)) => RegType::Perm(p),
+                            Some(&VarData::Perm(p)) if p != 0 => RegType::Perm(p),
                             _ => return Err(ArithmeticError::UninstantiatedVar)
                         }
                     } else {
@@ -210,11 +204,11 @@ impl<'a> ArithmeticEvaluator<'a> {
                     self.interm.push(ArithmeticTerm::Reg(r));
                 },
                 TermRef::Clause(ClauseType::Deep(_, _, name), terms) => {
-                    code.push(Line::Arithmetic(self.instr_from_clause(name, terms, true)?));
+                    code.push(Line::Arithmetic(self.instr_from_clause(name, terms)?));
                 },
                 TermRef::Clause(ClauseType::Root, terms) => {
                     let name = term.name().unwrap();
-                    code.push(Line::Arithmetic(self.instr_from_clause(name, terms, false)?));
+                    code.push(Line::Arithmetic(self.instr_from_clause(name, terms)?));
                 },
                 _ =>
                     return Err(ArithmeticError::InvalidTerm)
@@ -223,20 +217,22 @@ impl<'a> ArithmeticEvaluator<'a> {
 
         if let Some(arith_term) = self.interm.pop() {
             match arith_term {
-                ArithmeticTerm::Integer(n) => {
-                    let n = Constant::Integer(n);
-                    code.push(query![put_constant!(Level::Shallow, n, temp_v!(2))]);
+                n @ ArithmeticTerm::Integer(_) => {
+                    let zero = ArithmeticTerm::Integer(BigInt::zero());
+                    code.push(arith![add!(zero, n, 1)]);
                 },
-                ArithmeticTerm::Float(n) => {
-                    let n = Constant::Float(n);
-                    code.push(query![put_constant!(Level::Shallow, n, temp_v!(2))]);
+                n @ ArithmeticTerm::Float(_) => {
+                    let zero = ArithmeticTerm::Float(OrderedFloat(0f64));
+                    code.push(arith![add!(zero, n, 1)]);
                 },
-                ArithmeticTerm::Reg(r) =>
-                    code.push(query![put_value!(r, 2)]),                
-                _ => return Err(ArithmeticError::InvalidTerm)
+                r @ ArithmeticTerm::Reg(_) => {
+                    let zero = ArithmeticTerm::Integer(BigInt::zero());
+                    code.push(arith![add!(zero, r, 1)]);
+                },
+                _ => {}
             };
         }
-
+        
         Ok(code)
     }
 }

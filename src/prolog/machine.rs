@@ -765,7 +765,7 @@ impl MachineState {
                 Ref::HeapCell(r) =>
                     self.heap[r] = HeapCellValue::Ref(Ref::HeapCell(r)),
                 Ref::StackCell(fr, sc) =>
-                    self.and_stack[fr][sc] = Addr::StackCell(fr, sc)                   
+                    self.and_stack[fr][sc] = Addr::StackCell(fr, sc)
             }
         }
     }
@@ -848,18 +848,9 @@ impl MachineState {
                         Err("is/2: variable not instantiated to number.")
                 }
             },
-            &ArithmeticTerm::Interm(i)   => Ok(self.interms[i].clone()),
+            &ArithmeticTerm::Interm(i)   => Ok(self.interms[i-1].clone()),
             &ArithmeticTerm::Float(fl)   => Ok(Number::Float(fl)),
             &ArithmeticTerm::Integer(ref bi) => Ok(Number::Integer(bi.clone()))
-        }
-    }
-
-    fn assign_arith(&mut self, t: ArithEvalPlace, n: Number) {
-        match t {
-            ArithEvalPlace::Reg(r) =>
-                self[r] = Addr::Con(Constant::from(n)),
-            ArithEvalPlace::Interm(i) =>
-                self.interms[i] = n
         }
     }
 
@@ -869,21 +860,21 @@ impl MachineState {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.assign_arith(t, n1 + n2);
+                self.interms[t - 1] = n1 + n2;
                 self.p += 1;
             },
             &ArithmeticInstruction::Sub(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.assign_arith(t, n1 - n2);
+                self.interms[t - 1] = n1 - n2;
                 self.p += 1;
             },
             &ArithmeticInstruction::Mul(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.assign_arith(t, n1 * n2);
+                self.interms[t - 1] = n1 * n2;
                 self.p += 1;
             },
             &ArithmeticInstruction::IDiv(ref a1, ref a2, t) => {
@@ -899,7 +890,7 @@ impl MachineState {
                             return;
                         }
 
-                        self.assign_arith(t, Number::Integer(n1 / n2));
+                        self.interms[t - 1] = Number::Integer(n1 / n2);
                         self.p += 1;
                     },
                     _ => {
@@ -913,7 +904,7 @@ impl MachineState {
             &ArithmeticInstruction::Neg(ref a1, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
 
-                self.assign_arith(t, - n1);
+                self.interms[t - 1] = - n1;
                 self.p += 1;
             }
         };
@@ -1492,8 +1483,7 @@ impl MachineState {
                 let d = self.deref(self[r].clone());
 
                 match d {
-                    Addr::HeapCell(_) | Addr::StackCell(_,_) =>
-                        self.p += 1,
+                    Addr::HeapCell(_) | Addr::StackCell(_,_) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1507,23 +1497,19 @@ impl MachineState {
                 self.p += 1;
             },
             &BuiltInInstruction::Unify => {
-                self.inline_unify();
+                let a1 = self[temp_v!(1)].clone();
+                let a2 = self[temp_v!(2)].clone();
+
+                self.unify(a1, a2);
                 self.p += 1;
             }
         };
     }
 
-    fn inline_unify(&mut self) {
-        let a1 = self[temp_v!(1)].clone();
-        let a2 = self[temp_v!(2)].clone();
-        
-        self.unify(a1, a2);        
-    }
-    
     fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
     {
         match instr {
-            &ControlInstruction::Allocate(num_cells) => {                
+            &ControlInstruction::Allocate(num_cells) => {
                 let num_frames = self.num_frames();
                 self.and_stack.push(num_frames + 1, self.e, self.cp, num_cells);
 
@@ -1575,14 +1561,20 @@ impl MachineState {
             &ControlInstruction::ThrowExecute => {
                 self.goto_throw();
             },
-            &ControlInstruction::UnifyCall => {
-                self.inline_unify();
+            &ControlInstruction::IsCall(r) => {
+                let a1 = self[r].clone();
+                let a2 = Addr::Con(Constant::from(self.interms[0].clone()));
+
+                self.unify(a1, a2);
                 self.p += 1;
             },
-            &ControlInstruction::UnifyExecute => {
-                self.inline_unify();
+            &ControlInstruction::IsExecute(r) => {
+                let a1 = self[r].clone();
+                let a2 = Addr::Con(Constant::from(self.interms[0].clone()));
+
+                self.unify(a1, a2);
                 self.p = self.cp;
-            }            
+            }
         };
     }
 

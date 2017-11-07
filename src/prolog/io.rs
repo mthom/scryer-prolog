@@ -107,10 +107,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "call_throw"),
             &ControlInstruction::ThrowExecute =>
                 write!(f, "execute_throw"),
-            &ControlInstruction::UnifyCall =>
-                write!(f, "unify_call"),
-            &ControlInstruction::UnifyExecute =>
-                write!(f, "unify_execute"),
+            &ControlInstruction::IsCall(r) =>
+                write!(f, "is_call {}", r),
+            &ControlInstruction::IsExecute(r) =>
+                write!(f, "is_execute {}", r),
         }
     }
 }
@@ -203,30 +203,19 @@ impl fmt::Display for ArithmeticTerm {
     }
 }
 
-impl fmt::Display for ArithEvalPlace {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &ArithEvalPlace::Reg(r) =>
-                write!(f, "{}", r),
-            &ArithEvalPlace::Interm(i) =>
-                write!(f, "@{}", i)
-        }
-    }
-}   
-
 impl fmt::Display for ArithmeticInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &ArithmeticInstruction::Add(ref a1, ref a2, ref t) =>
-                write!(f, "add {}, {}, {}", a1, a2, t),
+                write!(f, "add {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Sub(ref a1, ref a2, ref t) =>
-                write!(f, "sub {}, {}, {}", a1, a2, t),
+                write!(f, "sub {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Mul(ref a1, ref a2, ref t) =>
-                write!(f, "mul {}, {}, {}", a1, a2, t),
+                write!(f, "mul {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::IDiv(ref a1, ref a2, ref t) =>
-                write!(f, "idiv {}, {}, {}", a1, a2, t),
+                write!(f, "idiv {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Neg(ref a, ref t) =>
-                write!(f, "neg {}, {}", a, t)
+                write!(f, "neg {}, @{}", a, t)
         }
     }
 }
@@ -343,7 +332,7 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
                 Ok(pred) => pred,
                 Err(e)   => return EvalSession::ParserError(e)
             };
-        
+
             wam.add_predicate(clauses, compiled_pred)
         },
         &TopLevel::Fact(ref fact) => {
@@ -359,7 +348,7 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
                 Ok(rule) => rule,
                 Err(e) => return EvalSession::ParserError(e)                
             };
-            
+
             wam.add_rule(rule, compiled_rule)
         },
         &TopLevel::Query(ref query) => {
@@ -369,7 +358,7 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
                 Ok(query) => query,
                 Err(e) => return EvalSession::ParserError(e)
             };
-            
+
             wam.submit_query(compiled_query, cg.take_vars())
         }
     }

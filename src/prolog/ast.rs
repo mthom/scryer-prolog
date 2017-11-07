@@ -556,17 +556,12 @@ impl ArithmeticTerm {
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum ArithEvalPlace {
-    Interm(usize), Reg(RegType)
-}
-
 pub enum ArithmeticInstruction {
-    Add(ArithmeticTerm, ArithmeticTerm, ArithEvalPlace),
-    Sub(ArithmeticTerm, ArithmeticTerm, ArithEvalPlace),
-    Mul(ArithmeticTerm, ArithmeticTerm, ArithEvalPlace),
-    IDiv(ArithmeticTerm, ArithmeticTerm, ArithEvalPlace),
-    Neg(ArithmeticTerm, ArithEvalPlace)
+    Add(ArithmeticTerm, ArithmeticTerm, usize),
+    Sub(ArithmeticTerm, ArithmeticTerm, usize),
+    Mul(ArithmeticTerm, ArithmeticTerm, usize),
+    IDiv(ArithmeticTerm, ArithmeticTerm, usize),
+    Neg(ArithmeticTerm, usize)
 }
 
 pub enum BuiltInInstruction {
@@ -588,20 +583,20 @@ pub enum BuiltInInstruction {
 }
 
 pub enum ControlInstruction {
-    Allocate(usize),
-    Call(Atom, usize, usize),
-    CallN(usize),
+    Allocate(usize), // num_frames.
+    Call(Atom, usize, usize), // name, arity, perm_vars after threshold.
+    CallN(usize), // arity.
     CatchCall,
     CatchExecute,
     Deallocate,
     Execute(Atom, usize),
     ExecuteN(usize),
     Goto(usize, usize), // p, arity.
+    IsCall(RegType),
+    IsExecute(RegType),
     Proceed,
     ThrowCall,
-    ThrowExecute,
-    UnifyCall,
-    UnifyExecute
+    ThrowExecute,    
 }
 
 impl ControlInstruction {
@@ -617,8 +612,8 @@ impl ControlInstruction {
             &ControlInstruction::ThrowExecute => true,
             &ControlInstruction::Goto(_, _) => true,
             &ControlInstruction::Proceed => true,
-            &ControlInstruction::UnifyCall => true,
-            &ControlInstruction::UnifyExecute => true,            
+            &ControlInstruction::IsCall(_) => true,
+            &ControlInstruction::IsExecute(_) => true,            
             _ => false
         }
     }

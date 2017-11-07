@@ -7,6 +7,7 @@ use prolog::iterators::*;
 use prolog::targets::*;
 
 use std::collections::HashMap;
+use std::mem::swap;
 use std::vec::Vec;
 
 pub struct CodeGenerator<'a, TermMarker> {
@@ -218,9 +219,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             },
             QueryTermRef::Catch(_) =>
                 compiled_query.push(Line::Control(ControlInstruction::CatchCall)),
-            QueryTermRef::IsAtomic(_) =>
-                compiled_query.push(proceed!()),
-            QueryTermRef::IsVar(_) =>
+            QueryTermRef::IsAtomic(_) | QueryTermRef::IsVar(_) =>
                 compiled_query.push(proceed!()),
             QueryTermRef::Term(&Term::Constant(_, Constant::Atom(ref atom))) => {
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);
@@ -236,41 +235,29 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         }
     }
 
-    fn lco(code: &mut Code, toc: QueryTermRef<'a>) -> usize
+    fn lco(code: &mut Code) -> usize
     {
-        let last_arity = toc.arity();
         let mut dealloc_index = code.len() - 1;
 
-        match toc {
-            QueryTermRef::Term(&Term::Clause(_, ref name, _))
-          | QueryTermRef::Term(&Term::Constant(_, Constant::Atom(ref name))) =>
-                if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
-                    *ctrl = ControlInstruction::Execute(name.clone(), last_arity);
-                },
-            QueryTermRef::CallN(terms) =>
-                if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
-                    *ctrl = ControlInstruction::ExecuteN(terms.len());
-                },
-            QueryTermRef::Catch(_) =>
-                if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
-                    *ctrl = ControlInstruction::CatchExecute;
-                },
-            QueryTermRef::Cut => {},
-            QueryTermRef::Throw(_) =>
-                if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
-                    *ctrl = ControlInstruction::ThrowExecute;
-                },
-            QueryTermRef::Is(_) =>
-                if let &mut Line::Control(ref mut ctrl) = code.last_mut().unwrap() {
-                    *ctrl = ControlInstruction::UnifyExecute;
-                },
-            QueryTermRef::IsAtomic(_) | QueryTermRef::IsVar(_) => {
-                dealloc_index = code.len();
-                code.push(proceed!());
-            },
-            _ => dealloc_index = code.len()
-        };
-
+        if let Some(&mut Line::Control(ref mut ctrl)) = code.last_mut() {
+            let mut instr = ControlInstruction::Proceed;
+            swap(ctrl, &mut instr);
+            
+            match instr {
+                ControlInstruction::Call(name, arity, _) =>
+                    *ctrl = ControlInstruction::Execute(name, arity),
+                ControlInstruction::CallN(arity) =>
+                    *ctrl = ControlInstruction::ExecuteN(arity),
+                ControlInstruction::IsCall(r) =>
+                    *ctrl = ControlInstruction::IsExecute(r),
+                ControlInstruction::CatchCall =>
+                    *ctrl = ControlInstruction::CatchExecute,
+                ControlInstruction::ThrowCall =>
+                    *ctrl = ControlInstruction::ThrowExecute,
+                _ => dealloc_index += 1 // = code.len()
+            }
+        }
+        
         dealloc_index
     }
 
@@ -310,31 +297,39 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                             let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings());
                              evaluator.eval(terms[1].as_ref())?
                         };
-                        
+
                         code.append(&mut arith_code);
 
                         match terms[0].as_ref() {
-                            &Term::Var(ref vr, ref name) => {
-                                let mut target = Vec::new();
+                            &Term::Var(ref vr, ref name) =>
+                                match self.marker.bindings().get(name) {
+                                    Some(&VarData::Temp(_, t, _)) if t != 0 =>
+                                        code.push(is_call!(temp_v!(t))),
+                                    Some(&VarData::Perm(p)) if p != 0 =>
+                                        code.push(is_call!(perm_v!(p))),
+                                    _ => {
+                                        let mut target = Vec::new();
 
-                                self.marker.advance(term_loc, *term);
-                                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
+                                        // reset self.marker.arg_c to 1.
+                                        self.marker.advance(term_loc, *term);
+                                        self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
-                                code.push(Line::Query(target));
-                                code.push(unify_call!());
-                            },
+                                        code.push(Line::Query(target));
+                                        code.push(is_call!(vr.get().norm()));
+                                    }
+                                },
                             &Term::Constant(_, Constant::Float(fl)) => {
                                 code.push(query![put_constant!(Level::Shallow,
                                                                Constant::Float(fl),
                                                                temp_v!(1))]);
-                                code.push(unify_call!());
+                                code.push(is_call!(temp_v!(1)));
                             },
                             &Term::Constant(_, Constant::Integer(ref bi)) => {
                                 let bi = bi.clone();
                                 code.push(query![put_constant!(Level::Shallow,
                                                                Constant::Integer(bi),
                                                                temp_v!(1))]);
-                                code.push(unify_call!());
+                                code.push(is_call!(temp_v!(1)));
                             },
                             _ => {
                                 return Err(ParserError::from(ArithmeticError::InvalidTerm));
@@ -357,9 +352,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                         code.push(is_atomic!(RegType::Perm(p))),
                                     _ => {
                                         let mut target = Vec::new();
-                                        
+
                                         // reset self.marker.arg_c to 1.
-                                        self.marker.advance(term_loc, *term); 
+                                        self.marker.advance(term_loc, *term);
                                         self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
                                         code.push(Line::Query(target));
@@ -383,9 +378,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                         code.push(is_var!(RegType::Perm(p))),
                                     _ => {
                                         let mut target = Vec::new();
-                                        
+
                                         // reset self.marker.arg_c to 1.
-                                        self.marker.advance(term_loc, *term); 
+                                        self.marker.advance(term_loc, *term);
                                         self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
                                         code.push(Line::Query(target));
@@ -419,19 +414,26 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             let perm_vars = conjunct_info.perm_vars();
 
             body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
-            
+
             if conjunct_info.has_deep_cut {
                 body.push(Line::Cut(CutInstruction::GetLevel));
             }
         }
     }
 
-    fn compile_cleanup(body: &mut Code, conjunct_info: &ConjunctInfo, toc: QueryTermRef<'a>)
+    fn compile_cleanup(code: &mut Code, conjunct_info: &ConjunctInfo, toc: QueryTermRef<'a>)
     {
-        let dealloc_index = Self::lco(body, toc);
+        //TODO: temporary workaround for inlined builtins.
+        match toc {
+            QueryTermRef::IsAtomic(_) | QueryTermRef::IsVar(_) =>
+                code.push(proceed!()),
+            _ => {}
+        }
+        
+        let dealloc_index = Self::lco(code);
 
         if conjunct_info.allocates() {
-            body.insert(dealloc_index, Line::Control(ControlInstruction::Deallocate));
+            code.insert(dealloc_index, Line::Control(ControlInstruction::Deallocate));
         }
     }
 

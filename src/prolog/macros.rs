@@ -22,6 +22,12 @@ macro_rules! query {
     )
 }
 
+macro_rules! arith {
+    ($x:expr) => (
+        Line::Arithmetic($x)
+    )
+}
+
 macro_rules! string {
     ($str:expr) => {
         vec![HeapCellValue::Con(Constant::String(String::from($str)))]
@@ -102,6 +108,12 @@ macro_rules! put_value {
 macro_rules! put_unsafe_value {
     ($r:expr, $arg:expr) => (
         QueryInstruction::PutUnsafeValue($r, $arg)
+    )
+}
+
+macro_rules! add {
+    ($r1:expr, $r2:expr, $t:expr) => (
+        ArithmeticInstruction::Add($r1, $r2, $t)
     )
 }
 
@@ -209,9 +221,9 @@ macro_rules! unify {
     )
 }
 
-macro_rules! unify_call {
-    () => (
-        Line::Control(ControlInstruction::UnifyCall)
+macro_rules! is_call {
+    ($r:expr) => (
+        Line::Control(ControlInstruction::IsCall($r))
     )
 }
 
