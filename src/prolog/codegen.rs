@@ -349,15 +349,23 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                             &Term::Constant(_, _) => {
                                 code.push(succeed!());
                             },
-                            &Term::Var(ref vr, ref name) => {
-                                let mut target = Vec::new();
+                            &Term::Var(ref vr, ref name) =>
+                                match self.marker.bindings().get(name) {
+                                    Some(&VarData::Temp(_, t, _)) if t != 0 =>
+                                        code.push(is_atomic!(RegType::Temp(t))),
+                                    Some(&VarData::Perm(p)) if p != 0 =>
+                                        code.push(is_atomic!(RegType::Perm(p))),
+                                    _ => {
+                                        let mut target = Vec::new();
+                                        
+                                        // reset self.marker.arg_c to 1.
+                                        self.marker.advance(term_loc, *term); 
+                                        self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
-                                self.marker.advance(term_loc, *term); // reset self.marker.arg_c to 1.
-                                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
-
-                                code.push(Line::Query(target));
-                                code.push(is_atomic!(vr.get().norm()));
-                            }
+                                        code.push(Line::Query(target));
+                                        code.push(is_atomic!(vr.get().norm()));
+                                    }
+                                },
                         },
                     &QueryTermRef::IsVar(inner_term) =>
                         match inner_term {
@@ -367,15 +375,23 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                             &Term::AnonVar => {
                                 code.push(succeed!());
                             },
-                            &Term::Var(ref vr, ref name) => {
-                                let mut target = Vec::new();
+                            &Term::Var(ref vr, ref name) =>
+                                match self.marker.bindings().get(name) {
+                                    Some(&VarData::Temp(_, t, _)) if t != 0 =>
+                                        code.push(is_var!(RegType::Temp(t))),
+                                    Some(&VarData::Perm(p)) if p != 0 =>
+                                        code.push(is_var!(RegType::Perm(p))),
+                                    _ => {
+                                        let mut target = Vec::new();
+                                        
+                                        // reset self.marker.arg_c to 1.
+                                        self.marker.advance(term_loc, *term); 
+                                        self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
-                                self.marker.advance(term_loc, *term); // reset self.marker.arg_c to 1.
-                                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
-
-                                code.push(Line::Query(target));
-                                code.push(is_var!(vr.get().norm()));
-                            }
+                                        code.push(Line::Query(target));
+                                        code.push(is_var!(vr.get().norm()));
+                                    }
+                                }
                         },
                     _ if chunk_num == 0 => {
                         self.marker.advance(GenContext::Head, *term);
@@ -403,7 +419,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             let perm_vars = conjunct_info.perm_vars();
 
             body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
-
+            
             if conjunct_info.has_deep_cut {
                 body.push(Line::Cut(CutInstruction::GetLevel));
             }
