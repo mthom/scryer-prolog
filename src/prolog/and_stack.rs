@@ -3,6 +3,7 @@ use prolog::ast::*;
 use std::ops::{Index, IndexMut};
 use std::vec::Vec;
 
+#[derive(Clone)]
 pub struct Frame {
     pub global_index: usize,
     pub b0: usize,
@@ -12,13 +13,13 @@ pub struct Frame {
 }
 
 impl Frame {
-    fn new(global_index: usize, sz: usize, e: usize, cp: CodePtr, n: usize) -> Self {
+    fn new(global_index: usize, fr: usize, e: usize, cp: CodePtr, n: usize) -> Self {
         Frame {
-            global_index: global_index,
+            global_index,
             b0: 0,
             e: e,
             cp: cp,
-            perms: (1 .. n+1).map(|i| Addr::StackCell(sz, i)).collect()
+            perms: (1 .. n+1).map(|i| Addr::StackCell(fr, i)).collect()
         }
     }
 }
@@ -46,6 +47,10 @@ impl AndStack {
 
     pub fn clear(&mut self) {
         self.0.clear()
+    }
+
+    pub fn pop(&mut self) {
+        self.0.pop();
     }
 }
 

@@ -1511,9 +1511,10 @@ impl MachineState {
         match instr {
             &ControlInstruction::Allocate(num_cells) => {
                 let num_frames = self.num_frames();
-                self.and_stack.push(num_frames + 1, self.e, self.cp, num_cells);
 
+                self.and_stack.push(num_frames + 1, self.e, self.cp, num_cells);
                 self.e = self.and_stack.len() - 1;
+                
                 self.p += 1;
             },
             &ControlInstruction::Call(ref name, arity, _) =>
@@ -1538,7 +1539,7 @@ impl MachineState {
 
                 self.cp = self.and_stack[e].cp;
                 self.e  = self.and_stack[e].e;
-
+                
                 self.p += 1;
             },
             &ControlInstruction::Execute(ref name, arity) =>

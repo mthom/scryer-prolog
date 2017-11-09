@@ -9,7 +9,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::io::Error as IOError;
 use std::num::{ParseFloatError};
-use std::ops::{Add, AddAssign, Sub, Mul, Div, Neg};
+use std::ops::{Add, AddAssign, Sub, Mul, Neg};
 use std::str::Utf8Error;
 use std::vec::Vec;
 
