@@ -1510,11 +1510,34 @@ impl MachineState {
     {
         match instr {
             &ControlInstruction::Allocate(num_cells) => {
-                let num_frames = self.num_frames();
+                if let Some(ref or_fr) = self.or_stack.top() {
+                    let and_gi = if self.and_stack.len() > self.e {
+                        self.and_stack[self.e].global_index
+                    } else {
+                        0
+                    };
+                                       
+                    if and_gi <= or_fr.global_index {
+                        self.e = or_fr.e;
+                    }                    
+                }
 
-                self.and_stack.push(num_frames + 1, self.e, self.cp, num_cells);
-                self.e = self.and_stack.len() - 1;
-                
+                if self.e + 1 < self.and_stack.len() {
+                    let index = self.e + 1;
+                    
+                    self.and_stack[index].e  = self.e;
+                    self.and_stack[index].cp = self.cp;
+
+                    self.and_stack.resize(index, num_cells);
+
+                    self.e = index;
+                } else {
+                    let num_frames = self.num_frames();
+
+                    self.and_stack.push(num_frames + 1, self.e, self.cp, num_cells);
+                    self.e = self.and_stack.len() - 1;
+                };
+
                 self.p += 1;
             },
             &ControlInstruction::Call(ref name, arity, _) =>
@@ -1539,7 +1562,7 @@ impl MachineState {
 
                 self.cp = self.and_stack[e].cp;
                 self.e  = self.and_stack[e].e;
-                
+
                 self.p += 1;
             },
             &ControlInstruction::Execute(ref name, arity) =>
