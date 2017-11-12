@@ -239,44 +239,52 @@ impl Machine {
 
     pub fn add_fact<'a>(&mut self, fact: &Term, mut code: Code) -> EvalSession<'a>
     {
-        if let Some(name) = fact.name() {
-            let p = self.code.len();
+        match fact {
+            &Term::Clause(_, ref name, _) | &Term::Constant(_, Constant::Atom(ref name)) => {
+                let p = self.code.len();
+                let arity = fact.arity();
 
-            let name  = name.clone();
-            let arity = fact.arity();
-
-            self.code.append(&mut code);
-            self.add_user_code(name, arity, p)
-        } else {
-            EvalSession::NamelessEntry
+                self.code.append(&mut code);
+                self.add_user_code(name.clone(), arity, p)
+            },
+            _ => EvalSession::NamelessEntry
         }
     }
 
     pub fn add_rule<'a>(&mut self, rule: &Rule, mut code: Code) -> EvalSession<'a>
     {
-        if let Some(name) = rule.head.0.name() {
-            let p = self.code.len();
+        match &rule.head.0 {
+            &QueryTerm::Term(Term::Clause(_, ref name, _))
+          | &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref name))) => {
+                let p = self.code.len();
 
-            let name  = name.clone();
-            let arity = rule.head.0.arity();
+                let name  = name.clone();
+                let arity = rule.head.0.arity();
 
-            self.code.append(&mut code);
-            self.add_user_code(name, arity, p)
-        } else {
-            EvalSession::NamelessEntry
+                self.code.append(&mut code);
+                self.add_user_code(name, arity, p)
+            },
+            _ => EvalSession::NamelessEntry
         }
     }
 
     pub fn add_predicate<'a>(&mut self, clauses: &Vec<PredicateClause>, mut code: Code)
-        -> EvalSession<'a>
+                             -> EvalSession<'a>
     {
         let p = self.code.len();
 
-        let arity = clauses.first().unwrap().arity();
-        let name  = clauses.first().unwrap().name().clone();
+        if let Some(ref clause) = clauses.first() {
+            if let Some(name) = clause.name() {
+                let arity = clause.arity();
 
-        self.code.append(&mut code);
-        self.add_user_code(name, arity, p)
+                self.code.append(&mut code);
+                self.add_user_code(name.clone(), arity, p)
+            } else {
+                EvalSession::NamelessEntry
+            }
+        } else {
+            EvalSession::ImpermissibleEntry(String::from("predicate must have clauses."))
+        }
     }
 
     fn cached_query_size(&self) -> usize {
@@ -1516,15 +1524,15 @@ impl MachineState {
                     } else {
                         0
                     };
-                                       
+
                     if and_gi <= or_fr.global_index {
                         self.e = or_fr.e;
-                    }                    
+                    }
                 }
 
                 if self.e + 1 < self.and_stack.len() {
                     let index = self.e + 1;
-                    
+
                     self.and_stack[index].e  = self.e;
                     self.and_stack[index].cp = self.cp;
 

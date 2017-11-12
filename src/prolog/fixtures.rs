@@ -60,7 +60,7 @@ impl TempVarData {
 
     fn populate_conflict_set(&mut self) {
         if self.last_term_arity > 0 {
-            let arity = self.last_term_arity;            
+            let arity = self.last_term_arity;
             let mut conflict_set : BTreeSet<usize> = (1..arity).collect();
 
             for &(_, reg) in self.use_set.iter() {
@@ -171,10 +171,7 @@ impl<'a> VariableFixtures<'a>
         var_count
     }
 
-    pub fn mark_vars_in_chunk<Iter>(&mut self,
-                                    iter: Iter,
-                                    last_term_arity: usize,                                    
-                                    term_loc: GenContext)
+    pub fn mark_vars_in_chunk<Iter>(&mut self, iter: Iter, lt_arity: usize, term_loc: GenContext)
         where Iter: Iterator<Item=TermRef<'a>>
     {
         let chunk_num = term_loc.chunk_num();
@@ -183,8 +180,7 @@ impl<'a> VariableFixtures<'a>
         for term_ref in iter {
             if let TermRef::Var(lvl, cell, var) = term_ref {
                 let mut status = self.0.remove(var)
-                    .unwrap_or((VarStatus::Temp(chunk_num, TempVarData::new(last_term_arity)),
-                                Vec::new()));
+                    .unwrap_or((VarStatus::Temp(chunk_num, TempVarData::new(lt_arity)), Vec::new()));
 
                 status.1.push(cell);
 
@@ -217,7 +213,7 @@ impl<'a> VariableFixtures<'a>
     pub fn size(&self) -> usize {
         self.0.len()
     }
-    
+
     pub fn set_perm_vals(&self, has_deep_cuts: bool)
     {
         let mut values_vec : Vec<_> = self.values()
@@ -268,7 +264,7 @@ impl<'a> VariableFixtures<'a>
         }
     }
 
-    fn record_unsafe_vars(&self, unsafe_vars: &mut HashMap<RegType, bool>) {        
+    fn record_unsafe_vars(&self, unsafe_vars: &mut HashMap<RegType, bool>) {
         for &(_, ref cb) in self.values() {
             match cb.first() {
                 Some(index) => {
@@ -278,9 +274,9 @@ impl<'a> VariableFixtures<'a>
             };
         }
     }
-    
+
     fn mark_head_vars_as_safe(&self, head: &Term, unsafe_vars: &mut HashMap<RegType, bool>)
-    {                
+    {
         for term_ref in head.breadth_first_iter() {
             match term_ref {
                 TermRef::Var(_, cell, _) => {
@@ -297,12 +293,12 @@ impl<'a> VariableFixtures<'a>
         self.record_unsafe_vars(&mut unsafe_vars);
         self.mark_unsafe_vars(&mut unsafe_vars, query);
     }
-    
+
     pub fn mark_unsafe_vars_in_rule(&self, head: &Term, query: &mut CompiledQuery)
     {
         let mut unsafe_vars = HashMap::new();
 
-        self.record_unsafe_vars(&mut unsafe_vars);        
+        self.record_unsafe_vars(&mut unsafe_vars);
         self.mark_head_vars_as_safe(head, &mut unsafe_vars);
         self.mark_unsafe_vars(&mut unsafe_vars, query);
     }

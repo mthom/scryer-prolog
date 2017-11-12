@@ -39,24 +39,34 @@ pub enum PredicateClause {
 }
 
 impl PredicateClause {
-    pub fn name(&self) -> &Atom {
-        match self {
-            &PredicateClause::Fact(ref t) => t.name().unwrap(),
-            &PredicateClause::Rule(ref rule) => rule.head.0.name().unwrap()
-        }
-    }
-
     pub fn first_arg(&self) -> Option<&Term> {
         match self {
-            &PredicateClause::Fact(ref t) => t.first_arg(),
-            &PredicateClause::Rule(ref rule) => rule.head.0.first_arg()
+            &PredicateClause::Fact(ref term) => term.first_arg(),
+            &PredicateClause::Rule(ref rule) =>
+                if let &QueryTerm::Term(ref term) = &rule.head.0 {
+                    term.first_arg()
+                } else {
+                    None
+                }
         }
     }
 
     pub fn arity(&self) -> usize {
         match self {
-            &PredicateClause::Fact(ref t) => t.arity(),
+            &PredicateClause::Fact(ref term) => term.arity(),
             &PredicateClause::Rule(ref rule) => rule.head.0.arity()
+        }
+    }
+
+    pub fn name(&self) -> Option<&Atom> {
+        match self {
+            &PredicateClause::Fact(ref term) => term.name(),
+            &PredicateClause::Rule(ref rule) =>
+                if let &QueryTerm::Term(ref term) = &rule.head.0 {
+                    term.name()
+                } else {
+                    None
+                }
         }
     }
 }
@@ -217,6 +227,7 @@ pub enum ParserError
     IncompleteReduction,
     InconsistentDeclaration,
     InconsistentPredicate,
+    InvalidRuleHead,
     ParseBigInt,
     ParseFloat(ParseFloatError),
     // TokenTooLong,
@@ -310,30 +321,22 @@ pub enum QueryTerm {
 }
 
 impl QueryTerm {
-    pub fn to_ref(&self) -> QueryTermRef {
+    pub fn arity(&self) -> usize {
         match self {
-            &QueryTerm::CallN(ref terms) =>
-                QueryTermRef::CallN(terms),
-            &QueryTerm::Catch(ref terms) =>
-                QueryTermRef::Catch(terms),
-            &QueryTerm::Cut =>
-                QueryTermRef::Cut,
-            &QueryTerm::Is(ref terms) =>
-                QueryTermRef::Is(terms),
-            &QueryTerm::IsAtomic(ref terms) =>
-                QueryTermRef::IsAtomic(terms.first().unwrap()),
-            &QueryTerm::IsVar(ref terms) =>
-                QueryTermRef::IsVar(terms.first().unwrap()),
-            &QueryTerm::Term(ref term) =>
-                QueryTermRef::Term(term),
-            &QueryTerm::Throw(ref t) =>
-                QueryTermRef::Throw(t)
+            &QueryTerm::Catch(_) => 3,
+            &QueryTerm::Throw(_) => 1,
+            &QueryTerm::Is(_) => 2,
+            &QueryTerm::IsAtomic(_) => 1,
+            &QueryTerm::IsVar(_) => 1,
+            &QueryTerm::CallN(ref terms) => terms.len(),
+            &QueryTerm::Cut => 0,
+            &QueryTerm::Term(ref term) => term.arity(),
         }
     }
 }
 
 pub struct Rule {
-    pub head: (Term, QueryTerm),
+    pub head: (QueryTerm, QueryTerm),
     pub clauses: Vec<QueryTerm>
 }
 
@@ -374,33 +377,6 @@ impl<'a> TermRef<'a> {
           | TermRef::Var(lvl, _, _) => lvl,
             TermRef::Clause(ClauseType::Deep(lvl, _, _), _) => lvl,
             _ => Level::Shallow
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum QueryTermRef<'a> {
-    CallN(&'a Vec<Box<Term>>),
-    Catch(&'a Vec<Box<Term>>),
-    Cut,
-    Is(&'a Vec<Box<Term>>),
-    IsAtomic(&'a Term),
-    IsVar(&'a Term),
-    Term(&'a Term),
-    Throw(&'a Vec<Box<Term>>)
-}
-
-impl<'a> QueryTermRef<'a> {
-    pub fn arity(self) -> usize {
-        match self {
-            QueryTermRef::Catch(_) => 3,
-            QueryTermRef::Throw(_) => 1,
-            QueryTermRef::Is(_) => 2,
-            QueryTermRef::IsAtomic(_) => 1,
-            QueryTermRef::IsVar(_) => 1,
-            QueryTermRef::CallN(terms) => terms.len(),
-            QueryTermRef::Cut => 0,
-            QueryTermRef::Term(term) => term.arity(),
         }
     }
 }
@@ -823,14 +799,6 @@ impl Term {
             &Term::Clause(_, _, ref terms) =>
                 terms.first().map(|bt| bt.as_ref()),
             _ => None
-        }
-    }
-
-    pub fn is_clause(&self) -> bool {
-        if let &Term::Clause(_, _, _) = self {
-            true
-        } else {
-            false
         }
     }
 

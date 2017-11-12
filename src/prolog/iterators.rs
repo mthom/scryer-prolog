@@ -41,33 +41,35 @@ impl<'a> QueryIterator<'a> {
         QueryIterator { state_stack: vec![state] }
     }
 
-    fn new(term: QueryTermRef<'a>) -> Self {
+    fn new(term: &'a QueryTerm) -> Self {
         match term {
-            QueryTermRef::CallN(terms) => {
+            &QueryTerm::CallN(ref terms) => {
                 let state = IteratorState::Clause(1, ClauseType::CallN, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            QueryTermRef::Catch(terms) => {
+            &QueryTerm::Catch(ref terms) => {
                 let state = IteratorState::Clause(0, ClauseType::Catch, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            QueryTermRef::Is(terms) => {
+            &QueryTerm::Is(ref terms) => {
                 let state = IteratorState::Clause(0, ClauseType::Is, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            QueryTermRef::IsAtomic(term) | QueryTermRef::IsVar(term) | QueryTermRef::Term(term) =>
+            &QueryTerm::IsAtomic(ref terms) | &QueryTerm::IsVar(ref terms) =>
+                Self::from_term(terms[0].as_ref()),
+            &QueryTerm::Term(ref term) =>
                 Self::from_term(term),
-            QueryTermRef::Throw(term) => {
+            &QueryTerm::Throw(ref term) => {
                 let state = IteratorState::Clause(0, ClauseType::Throw, term);
                 QueryIterator { state_stack: vec![state] }
             },
-            QueryTermRef::Cut => QueryIterator { state_stack: vec![] }
+            &QueryTerm::Cut => QueryIterator { state_stack: vec![] }
         }
     }
 }
 
-impl<'a> QueryTermRef<'a> {
-    pub fn post_order_iter(self) -> QueryIterator<'a> {
+impl QueryTerm {
+    pub fn post_order_iter<'a>(&'a self) -> QueryIterator<'a> {
         QueryIterator::new(self)
     }
 }
@@ -183,7 +185,7 @@ impl<'a> Iterator for FactIterator<'a> {
 
 impl Term {
     pub fn post_order_iter(&self) -> QueryIterator {
-        QueryIterator::new(QueryTermRef::Term(self))
+        QueryIterator::from_term(self)
     }
 
     pub fn breadth_first_iter(&self) -> FactIterator {
@@ -194,7 +196,7 @@ impl Term {
 pub struct ChunkedIterator<'a>
 {
     term_loc: GenContext,
-    iter: Box<Iterator<Item=QueryTermRef<'a>> + 'a>,
+    iter: Box<Iterator<Item=&'a QueryTerm> + 'a>,
     deep_cut_encountered: bool
 }
 
@@ -202,20 +204,18 @@ impl<'a> ChunkedIterator<'a>
 {
     pub fn from_term_sequence(terms: &'a [QueryTerm]) -> Self
     {
-        let iter = terms.iter().map(|c| c.to_ref());
-
         ChunkedIterator {
             term_loc: GenContext::Last(0),
-            iter: Box::new(iter),
+            iter: Box::new(terms.iter()),
             deep_cut_encountered: false
         }
     }
 
     pub fn from_rule_body(p1: &'a QueryTerm, clauses: &'a Vec<QueryTerm>) -> Self
     {
-        let inner_iter = Box::new(once(p1.to_ref()));
-        let iter = inner_iter.chain(clauses.iter().map(|c| c.to_ref()));
-
+        let inner_iter = Box::new(once(p1));
+        let iter = inner_iter.chain(clauses.iter());
+        
         ChunkedIterator {
             term_loc: GenContext::Last(0),
             iter: Box::new(iter),
@@ -227,15 +227,15 @@ impl<'a> ChunkedIterator<'a>
     {
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
 
-        let iter = once(QueryTermRef::Term(p0));
-        let inner_iter = Box::new(once(p1.to_ref()));
-        let iter = iter.chain(inner_iter.chain(clauses.iter().map(|c| c.to_ref())));
+        let iter = once(p0);
+        let inner_iter = Box::new(once(p1));
+        let iter = iter.chain(inner_iter.chain(clauses.iter()));
 
         ChunkedIterator {
             term_loc: GenContext::Head,
             iter: Box::new(iter),
-            deep_cut_encountered: false
-        }
+            deep_cut_encountered: false,
+        }        
     }
 
     pub fn encountered_deep_cut(&self) -> bool {
@@ -250,48 +250,44 @@ impl<'a> ChunkedIterator<'a>
         self.term_loc.chunk_num()
     }
 
-    fn take_chunk(&mut self, term: QueryTermRef<'a>, mut result: Vec<QueryTermRef<'a>>)
-                  -> (usize, usize, Vec<QueryTermRef<'a>>)
+    fn take_chunk(&mut self, term: &'a QueryTerm) -> (usize, usize, Vec<&'a QueryTerm>)
     {
         let mut arity  = 0;
         let mut item   = Some(term);
-
+        let mut result = Vec::new();
+        
         while let Some(term) = item {
             match term {
-                //TODO: This can refer to the term at the head of a
-                // goal, not technically a QueryTerm (ie. a term in a
-                // query).  Think of a better name.
-                QueryTermRef::Term(inner_term) => {
+                &QueryTerm::Term(ref inner_term) => 
                     if let GenContext::Head = self.term_loc {
                         result.push(term);
                         self.term_loc = GenContext::Last(0);
                     } else {
                         result.push(term);
-
+                        
                         if inner_term.is_callable() {
                             arity = inner_term.arity();
                             break;
                         }
-                    }
-                },
-                QueryTermRef::CallN(child_terms) => {
+                    },                
+                &QueryTerm::CallN(ref child_terms) => {
                     result.push(term);
                     arity = child_terms.len() + 1;
                     break;
                 },
-                QueryTermRef::Catch(child_terms) | QueryTermRef::Throw(child_terms) => {
+                &QueryTerm::Catch(ref child_terms) | &QueryTerm::Throw(ref child_terms) => {
                     result.push(term);
                     arity = child_terms.len();
                     break;
                 },
-                QueryTermRef::Is(_) => {
+                &QueryTerm::Is(_) => {
                     result.push(term);
                     arity = 2;
                     break;
                 },
-                QueryTermRef::IsAtomic(_) | QueryTermRef::IsVar(_) =>
+                &QueryTerm::IsAtomic(_) | &QueryTerm::IsVar(_) =>
                     result.push(term),
-                QueryTermRef::Cut => {
+                &QueryTerm::Cut => {
                     result.push(term);
 
                     if self.term_loc.chunk_num() > 0 {
@@ -316,9 +312,9 @@ impl<'a> ChunkedIterator<'a>
 impl<'a> Iterator for ChunkedIterator<'a>
 {
     // the chunk number, last term arity, and vector of references.
-    type Item = (usize, usize, Vec<QueryTermRef<'a>>);
+    type Item = (usize, usize, Vec<&'a QueryTerm>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|term| self.take_chunk(term, Vec::new()))
+        self.iter.next().map(|term| self.take_chunk(term))
     }
 }
