@@ -194,7 +194,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 self.update_var_count(term_or_cut_ref.post_order_iter());
                 vs.mark_vars_in_chunk(term_or_cut_ref.post_order_iter(),
                                       last_term_arity,
-                                      chunk_num,
                                       term_loc);
             }
         }
@@ -242,7 +241,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         if let Some(&mut Line::Control(ref mut ctrl)) = code.last_mut() {
             let mut instr = ControlInstruction::Proceed;
             swap(ctrl, &mut instr);
-            
+
             match instr {
                 ControlInstruction::Call(name, arity, _) =>
                     *ctrl = ControlInstruction::Execute(name, arity),
@@ -257,7 +256,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 _ => dealloc_index += 1 // = code.len()
             }
         }
-        
+
         dealloc_index
     }
 
@@ -429,7 +428,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 code.push(proceed!()),
             _ => {}
         }
-        
+
         let dealloc_index = Self::lco(code);
 
         if conjunct_info.allocates() {
@@ -501,9 +500,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
     pub fn compile_fact<'b: 'a>(&mut self, term: &'b Term) -> Code
     {
-        let iter = ChunkedIterator::from_fact(term);
+        self.update_var_count(term.post_order_iter());
 
-        self.collect_var_data(iter);
+        let mut vs = VariableFixtures::new();
+        vs.mark_vars_in_chunk(term.post_order_iter(), term.arity(), GenContext::Head);
+
+        vs.populate_restricting_sets();
+
+        self.marker.drain_var_data(vs);
         self.marker.advance(GenContext::Head, term.arity());
 
         let mut code = Vec::new();

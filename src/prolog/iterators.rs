@@ -200,18 +200,6 @@ pub struct ChunkedIterator<'a>
 
 impl<'a> ChunkedIterator<'a>
 {
-    pub fn from_fact(term: &'a Term) -> Self
-    {
-        let inner_iter: Box<Iterator<Item=QueryTermRef<'a>>> =
-            Box::new(once(QueryTermRef::Term(term)));
-
-        ChunkedIterator {
-            term_loc: GenContext::Head,
-            iter: inner_iter,
-            deep_cut_encountered: false,
-        }
-    }
-
     pub fn from_term_sequence(terms: &'a [QueryTerm]) -> Self
     {
         let iter = terms.iter().map(|c| c.to_ref());
