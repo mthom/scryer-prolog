@@ -311,7 +311,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                         let mut target = Vec::new();
 
                                         // reset self.marker.arg_c to 1.
-                                        self.marker.advance(term_loc, *term);
+                                        self.marker.advance(term_loc, term.arity());
                                         self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
                                         code.push(Line::Query(target));
@@ -354,7 +354,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                         let mut target = Vec::new();
 
                                         // reset self.marker.arg_c to 1.
-                                        self.marker.advance(term_loc, *term);
+                                        self.marker.advance(term_loc, term.arity());
                                         self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
                                         code.push(Line::Query(target));
@@ -380,7 +380,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                         let mut target = Vec::new();
 
                                         // reset self.marker.arg_c to 1.
-                                        self.marker.advance(term_loc, *term);
+                                        self.marker.advance(term_loc, term.arity());
                                         self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
                                         code.push(Line::Query(target));
@@ -389,7 +389,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                 }
                         },
                     _ if chunk_num == 0 => {
-                        self.marker.advance(GenContext::Head, *term);
+                        self.marker.advance(GenContext::Head, term.arity());
 
                         let iter = term.post_order_iter();
                         code.push(Line::Query(self.compile_target(iter, term_loc, is_exposed)));
@@ -445,7 +445,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
         let mut code = Vec::new();
 
-        self.marker.advance(GenContext::Head, QueryTermRef::Term(p0));
+        self.marker.advance(GenContext::Head, p0.arity());
         self.compile_seq_prelude(&conjunct_info, &mut code);
 
         if p0.is_clause() {
@@ -504,7 +504,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         let iter = ChunkedIterator::from_fact(term);
 
         self.collect_var_data(iter);
-        self.marker.advance(GenContext::Head, QueryTermRef::Term(term));
+        self.marker.advance(GenContext::Head, term.arity());
 
         let mut code = Vec::new();
 
@@ -527,7 +527,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                           index: usize,
                           is_exposed: bool)
     {
-        self.marker.advance(term_loc, term);
+        self.marker.advance(term_loc, term.arity());
 
         let iter = term.post_order_iter();
         let compiled_query = Line::Query(self.compile_target(iter, term_loc, is_exposed));
