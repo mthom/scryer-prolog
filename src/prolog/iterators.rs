@@ -1,6 +1,5 @@
 use prolog::ast::*;
 
-use std::cell::Cell;
 use std::collections::VecDeque;
 use std::iter::*;
 use std::vec::Vec;
@@ -10,18 +9,8 @@ pub struct QueryIterator<'a> {
 }
 
 impl<'a> QueryIterator<'a> {
-    fn push_clause(&mut self, child_num: usize, ct: ClauseType<'a>, child_terms: &'a Vec<Box<Term>>)
-    {
-        self.state_stack.push(IteratorState::Clause(child_num, ct, child_terms));
-    }
-
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
         self.state_stack.push(IteratorState::to_state(lvl, term));
-    }
-
-    fn push_final_cons(&mut self, lvl: Level, cell: &'a Cell<RegType>, head: &'a Term, tail: &'a Term)
-    {
-        self.state_stack.push(IteratorState::FinalCons(lvl, cell, head, tail));
     }
 
     fn from_term(term: &'a Term) -> Self {
@@ -76,7 +65,7 @@ impl QueryTerm {
 
 impl<'a> Iterator for QueryIterator<'a> {
     type Item = TermRef<'a>;
-
+    
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(iter_state) = self.state_stack.pop() {
             match iter_state {
@@ -93,12 +82,12 @@ impl<'a> Iterator for QueryIterator<'a> {
                                 return None
                         };
                     } else {
-                        self.push_clause(child_num + 1, ct, child_terms);
+                        self.state_stack.push(IteratorState::Clause(child_num + 1, ct, child_terms));
                         self.push_subterm(ct.level_of_subterms(), child_terms[child_num].as_ref());
                     }
                 },
                 IteratorState::InitialCons(lvl, cell, head, tail) => {
-                    self.push_final_cons(lvl, cell, head, tail);
+                    self.state_stack.push(IteratorState::FinalCons(lvl, cell, head, tail));
                     self.push_subterm(Level::Deep, tail);
                     self.push_subterm(Level::Deep, head);
                 },
@@ -111,7 +100,7 @@ impl<'a> Iterator for QueryIterator<'a> {
             };
         }
 
-        None
+        None        
     }
 }
 

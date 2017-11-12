@@ -3,7 +3,6 @@ use prolog::fixtures::*;
 use prolog::num::{BigInt, Zero};
 use prolog::ordered_float::{OrderedFloat};
 
-use std::cell::Cell;
 use std::cmp::{min, max};
 use std::vec::Vec;
 
@@ -12,18 +11,8 @@ pub struct ArithExprIterator<'a> {
 }
 
 impl<'a> ArithExprIterator<'a> {
-    fn push_clause(&mut self, child_num: usize, ct: ClauseType<'a>, child_terms: &'a Vec<Box<Term>>)
-    {
-        self.state_stack.push(IteratorState::Clause(child_num, ct, child_terms));
-    }
-
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
         self.state_stack.push(IteratorState::to_state(lvl, term));
-    }
-
-    fn push_final_cons(&mut self, lvl: Level, cell: &'a Cell<RegType>, head: &'a Term, tail: &'a Term)
-    {
-        self.state_stack.push(IteratorState::FinalCons(lvl, cell, head, tail));
     }
 
     fn new(term: &'a Term) -> Result<Self, ArithmeticError> {
@@ -62,12 +51,12 @@ impl<'a> Iterator for ArithExprIterator<'a> {
                     if child_num == child_terms.len() {
                         return Some(TermRef::Clause(ct, child_terms));
                     } else {
-                        self.push_clause(child_num + 1, ct, child_terms);
+                        self.state_stack.push(IteratorState::Clause(child_num + 1, ct, child_terms));
                         self.push_subterm(ct.level_of_subterms(), child_terms[child_num].as_ref());
                     }
                 },
                 IteratorState::InitialCons(lvl, cell, head, tail) => {
-                    self.push_final_cons(lvl, cell, head, tail);
+                    self.state_stack.push(IteratorState::FinalCons(lvl, cell, head, tail));
                     self.push_subterm(Level::Deep, tail);
                     self.push_subterm(Level::Deep, head);
                 },
