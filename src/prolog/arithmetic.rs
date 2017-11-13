@@ -84,8 +84,8 @@ impl<'a> ArithmeticEvaluator<'a> {
         ArithmeticEvaluator { bindings, interm: Vec::new(), interm_c: 1 }
     }
 
-    fn get_un_instr(name: &Atom, a1: ArithmeticTerm, t: usize)
-                    -> Result<ArithmeticInstruction, ArithmeticError>
+    fn get_unary_instr(name: &Atom, a1: ArithmeticTerm, t: usize)
+                       -> Result<ArithmeticInstruction, ArithmeticError>
     {
         match name.as_str() {
             "-" => Ok(ArithmeticInstruction::Neg(a1, t)),
@@ -93,8 +93,8 @@ impl<'a> ArithmeticEvaluator<'a> {
         }
     }
 
-    fn gen_bin_instr(name: &Atom, a1: ArithmeticTerm, a2: ArithmeticTerm, t: usize)
-                     -> Result<ArithmeticInstruction, ArithmeticError>
+    fn gen_binary_instr(name: &Atom, a1: ArithmeticTerm, a2: ArithmeticTerm, t: usize)
+                        -> Result<ArithmeticInstruction, ArithmeticError>
     {
         match name.as_str() {
             "+"   => Ok(ArithmeticInstruction::Add(a1, a2, t)),
@@ -129,7 +129,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                     a1.interm_or(0)
                 };
 
-                Self::get_un_instr(name, a1, ninterm)
+                Self::get_unary_instr(name, a1, ninterm)
             },
             2 => {
                 let a2 = self.interm.pop().unwrap();
@@ -153,7 +153,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                     min_interm
                 };
 
-                Self::gen_bin_instr(name, a1, a2, ninterm)
+                Self::gen_binary_instr(name, a1, a2, ninterm)
             },
             _ => Err(ArithmeticError::InvalidOp)
         }
@@ -221,7 +221,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                 _ => {}
             };
         }
-        
+
         Ok(code)
     }
 }

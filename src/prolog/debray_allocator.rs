@@ -348,7 +348,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
         self.bindings
     }
     
-    fn advance(&mut self, _: GenContext, arity: usize) {
+    fn reset_arg(&mut self, arity: usize) {
         self.arg_c   = 1;
         self.temp_lb = arity + 1;
     }

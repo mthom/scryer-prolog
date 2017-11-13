@@ -6,6 +6,7 @@ use prolog::indexing::*;
 use prolog::iterators::*;
 use prolog::targets::*;
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::mem::swap;
 use std::vec::Vec;
@@ -79,6 +80,29 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         *self.var_count.get(var).unwrap()
     }
 
+    fn mark_non_callable(&mut self,
+                         name: &'a Atom,
+                         arity: usize,
+                         term_loc: GenContext,
+                         vr: &'a Cell<VarReg>,
+                         code: &mut Code)
+                         -> RegType
+    {
+        match self.marker.bindings().get(name) {
+            Some(&VarData::Temp(_, t, _)) if t != 0 => RegType::Temp(t),
+            Some(&VarData::Perm(p)) if p != 0 => RegType::Perm(p),
+            _ => {
+                let mut target = Vec::new();
+                                
+                self.marker.reset_arg(arity);
+                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
+                
+                code.push(Line::Query(target));
+                vr.get().norm()
+            }   
+        }
+    }
+    
     fn add_or_increment_void_instr<Target>(target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
@@ -297,23 +321,15 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.append(&mut arith_code);
 
                         match terms[0].as_ref() {
-                            &Term::Var(ref vr, ref name) =>
-                                match self.marker.bindings().get(name) {
-                                    Some(&VarData::Temp(_, t, _)) if t != 0 =>
-                                        code.push(is_call!(temp_v!(t))),
-                                    Some(&VarData::Perm(p)) if p != 0 =>
-                                        code.push(is_call!(perm_v!(p))),
-                                    _ => {
-                                        let mut target = Vec::new();
-
-                                        // reset self.marker.arg_c to 1.
-                                        self.marker.advance(term_loc, term.arity());
-                                        self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
-
-                                        code.push(Line::Query(target));
-                                        code.push(is_call!(vr.get().norm()));
-                                    }
-                                },
+                            &Term::Var(ref vr, ref name) => {
+                                let r = self.mark_non_callable(name,
+                                                               term.arity(),
+                                                               term_loc,
+                                                               vr,
+                                                               code);
+                                
+                                code.push(is_call!(r));
+                            },
                             &Term::Constant(_, Constant::Float(fl)) => {
                                 code.push(query![put_constant!(Level::Shallow,
                                                                Constant::Float(fl),
@@ -340,23 +356,15 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                             &Term::Constant(_, _) => {
                                 code.push(succeed!());
                             },
-                            &Term::Var(ref vr, ref name) =>
-                                match self.marker.bindings().get(name) {
-                                    Some(&VarData::Temp(_, t, _)) if t != 0 =>
-                                        code.push(is_atomic!(RegType::Temp(t))),
-                                    Some(&VarData::Perm(p)) if p != 0 =>
-                                        code.push(is_atomic!(RegType::Perm(p))),
-                                    _ => {
-                                        let mut target = Vec::new();
+                            &Term::Var(ref vr, ref name) => {
+                                let r = self.mark_non_callable(name,
+                                                               term.arity(),
+                                                               term_loc,
+                                                               vr,
+                                                               code);
 
-                                        // reset self.marker.arg_c to 1.
-                                        self.marker.advance(term_loc, term.arity());
-                                        self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
-
-                                        code.push(Line::Query(target));
-                                        code.push(is_atomic!(vr.get().norm()));
-                                    }
-                                },
+                                code.push(is_atomic!(r));
+                            }
                         },
                     &QueryTerm::IsVar(ref inner_term) =>
                         match inner_term[0].as_ref() {
@@ -366,26 +374,18 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                             &Term::AnonVar => {
                                 code.push(succeed!());
                             },
-                            &Term::Var(ref vr, ref name) =>
-                                match self.marker.bindings().get(name) {
-                                    Some(&VarData::Temp(_, t, _)) if t != 0 =>
-                                        code.push(is_var!(RegType::Temp(t))),
-                                    Some(&VarData::Perm(p)) if p != 0 =>
-                                        code.push(is_var!(RegType::Perm(p))),
-                                    _ => {
-                                        let mut target = Vec::new();
+                            &Term::Var(ref vr, ref name) => {
+                                let r = self.mark_non_callable(name,
+                                                               term.arity(),
+                                                               term_loc,
+                                                               vr,
+                                                               code);
 
-                                        // reset self.marker.arg_c to 1.
-                                        self.marker.advance(term_loc, term.arity());
-                                        self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
-
-                                        code.push(Line::Query(target));
-                                        code.push(is_var!(vr.get().norm()));
-                                    }
-                                }
+                                code.push(is_var!(r));
+                            }
                         },
                     _ if chunk_num == 0 => {
-                        self.marker.advance(GenContext::Head, term.arity());
+                        self.marker.reset_arg(term.arity());
 
                         let iter = term.post_order_iter();
                         code.push(Line::Query(self.compile_target(iter, term_loc, is_exposed)));
@@ -441,7 +441,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
         let mut code = Vec::new();
 
-        self.marker.advance(GenContext::Head, p0.arity());
+        self.marker.reset_arg(p0.arity());
         self.compile_seq_prelude(&conjunct_info, &mut code);
 
         if let &QueryTerm::Term(ref term) = p0 {            
@@ -509,7 +509,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         vs.populate_restricting_sets();
 
         self.marker.drain_var_data(vs);
-        self.marker.advance(GenContext::Head, term.arity());
+        self.marker.reset_arg(term.arity());
 
         let mut code = Vec::new();
 
@@ -532,7 +532,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                           index: usize,
                           is_exposed: bool)
     {
-        self.marker.advance(term_loc, term.arity());
+        self.marker.reset_arg(term.arity());
 
         let iter = term.post_order_iter();
         let compiled_query = Line::Query(self.compile_target(iter, term_loc, is_exposed));

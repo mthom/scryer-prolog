@@ -17,8 +17,8 @@ pub trait Allocator<'a>
     
     fn reset(&mut self);
     fn reset_contents(&mut self) {}
-
-    fn advance(&mut self, GenContext, usize);
+    fn reset_arg(&mut self, usize);
+    
     fn advance_arg(&mut self);
 
     fn bindings(&self) -> &AllocVarDict<'a>;
