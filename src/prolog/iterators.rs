@@ -40,11 +40,12 @@ impl<'a> QueryIterator<'a> {
                 let state = IteratorState::Clause(0, ClauseType::Catch, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            &QueryTerm::Is(ref terms) => {
+            &QueryTerm::Inlined(InlinedQueryTerm::Is(ref terms)) => {
                 let state = IteratorState::Clause(0, ClauseType::Is, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            &QueryTerm::IsAtomic(ref terms) | &QueryTerm::IsVar(ref terms) =>
+            &QueryTerm::Inlined(InlinedQueryTerm::IsAtomic(ref terms))
+          | &QueryTerm::Inlined(InlinedQueryTerm::IsVar(ref terms)) =>
                 Self::from_term(terms[0].as_ref()),
             &QueryTerm::Term(ref term) =>
                 Self::from_term(term),
@@ -269,12 +270,13 @@ impl<'a> ChunkedIterator<'a>
                     arity = child_terms.len();
                     break;
                 },
-                &QueryTerm::Is(_) => {
+                &QueryTerm::Inlined(InlinedQueryTerm::Is(_)) => {
                     result.push(term);
                     arity = 2;
                     break;
                 },
-                &QueryTerm::IsAtomic(_) | &QueryTerm::IsVar(_) =>
+                &QueryTerm::Inlined(InlinedQueryTerm::IsAtomic(_))
+              | &QueryTerm::Inlined(InlinedQueryTerm::IsVar(_)) =>
                     result.push(term),
                 &QueryTerm::Cut => {
                     result.push(term);

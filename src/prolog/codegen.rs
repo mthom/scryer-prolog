@@ -93,16 +93,16 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             Some(&VarData::Perm(p)) if p != 0 => RegType::Perm(p),
             _ => {
                 let mut target = Vec::new();
-                                
+
                 self.marker.reset_arg(arity);
                 self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
-                
+
                 code.push(Line::Query(target));
                 vr.get().norm()
-            }   
+            }
         }
     }
-    
+
     fn add_or_increment_void_instr<Target>(target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
@@ -231,27 +231,36 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         ConjunctInfo::new(vs, num_of_chunks, has_deep_cut)
     }
 
-    fn add_conditional_call(compiled_query: &mut Code, qt: &QueryTerm, pvs: usize)
+    fn add_conditional_call_inlined(term: &InlinedQueryTerm, code: &mut Code)
+    {
+        match term {
+            &InlinedQueryTerm::IsAtomic(_) | &InlinedQueryTerm::IsVar(_) =>
+                code.push(proceed!()),
+            _ => {}
+        };
+    }
+    
+    fn add_conditional_call(code: &mut Code, qt: &QueryTerm, pvs: usize)
     {
         match qt {
             &QueryTerm::CallN(ref terms) => {
                 let call = ControlInstruction::CallN(terms.len());
-                compiled_query.push(Line::Control(call));
+                code.push(Line::Control(call));
             },
             &QueryTerm::Catch(_) =>
-                compiled_query.push(Line::Control(ControlInstruction::CatchCall)),
-            &QueryTerm::IsAtomic(_) | &QueryTerm::IsVar(_) =>
-                compiled_query.push(proceed!()),
+                code.push(Line::Control(ControlInstruction::CatchCall)),
+            &QueryTerm::Inlined(ref term) =>
+                Self::add_conditional_call_inlined(term, code),
             &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref atom))) => {
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);
-                compiled_query.push(Line::Control(call));
+                code.push(Line::Control(call));
             },
             &QueryTerm::Term(Term::Clause(_, ref atom, ref terms)) => {
                 let call = ControlInstruction::Call(atom.clone(), terms.len(), pvs);
-                compiled_query.push(Line::Control(call));
+                code.push(Line::Control(call));
             },
             &QueryTerm::Throw(_) =>
-                compiled_query.push(Line::Control(ControlInstruction::ThrowCall)),
+                code.push(Line::Control(ControlInstruction::ThrowCall)),
             _ => {}
         }
     }
@@ -282,6 +291,87 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         dealloc_index
     }
 
+    fn compile_inlined(&mut self, term: &'a InlinedQueryTerm, term_loc: GenContext, code: &mut Code)
+                       -> Result<(), ParserError>
+    {
+        match term {
+            &InlinedQueryTerm::Is(ref terms) => {
+                let mut arith_code = {
+                    let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings());
+                    evaluator.eval(terms[1].as_ref())?
+                };
+
+                code.append(&mut arith_code);
+
+                match terms[0].as_ref() {
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name,
+                                                       2,
+                                                       term_loc,
+                                                       vr,
+                                                       code);
+
+                        code.push(is_call!(r));
+                    },
+                    &Term::Constant(_, Constant::Float(fl)) => {
+                        code.push(query![put_constant!(Level::Shallow,
+                                                       Constant::Float(fl),
+                                                       temp_v!(1))]);
+                        code.push(is_call!(temp_v!(1)));
+                    },
+                    &Term::Constant(_, Constant::Integer(ref bi)) => {
+                        let bi = bi.clone();
+                        code.push(query![put_constant!(Level::Shallow,
+                                                       Constant::Integer(bi),
+                                                       temp_v!(1))]);
+                        code.push(is_call!(temp_v!(1)));
+                    },
+                    _ => {
+                        return Err(ParserError::from(ArithmeticError::InvalidTerm));
+                    }
+                }
+            },
+            &InlinedQueryTerm::IsAtomic(ref inner_term) =>
+                match inner_term[0].as_ref() {
+                    &Term::AnonVar | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
+                        code.push(fail!());
+                    },
+                    &Term::Constant(_, _) => {
+                        code.push(succeed!());
+                    },
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name,
+                                                       1,
+                                                       term_loc,
+                                                       vr,
+                                                       code);
+
+                        code.push(is_atomic!(r));
+                    }
+                },
+            &InlinedQueryTerm::IsVar(ref inner_term) =>
+                match inner_term[0].as_ref() {
+                    &Term::Constant(_, _) | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
+                        code.push(fail!());
+                    },
+                    &Term::AnonVar => {
+                        code.push(succeed!());
+                    },
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name,
+                                                       1,
+                                                       term_loc,
+                                                       vr,
+                                                       code);
+
+                        code.push(is_var!(r));
+                    }
+                }
+        }
+
+        Ok(())
+    }
+
     fn compile_seq(&mut self,
                    iter: ChunkedIterator<'a>,
                    conjunct_info: &ConjunctInfo<'a>,
@@ -300,90 +390,20 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
                 match *term {
                     &QueryTerm::Cut => {
-                        let term = if i + 1 < terms.len() {
+                        let is_terminal = if i + 1 < terms.len() {
                             Terminal::Non
                         } else {
                             Terminal::Terminal
                         };
 
                         code.push(if chunk_num == 0 {
-                            Line::Cut(CutInstruction::NeckCut(term))
+                            Line::Cut(CutInstruction::NeckCut(is_terminal))
                         } else {
-                            Line::Cut(CutInstruction::Cut(term))
+                            Line::Cut(CutInstruction::Cut(is_terminal))
                         });
                     },
-                    &QueryTerm::Is(ref terms) => {
-                        let mut arith_code = {
-                            let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings());
-                             evaluator.eval(terms[1].as_ref())?
-                        };
-
-                        code.append(&mut arith_code);
-
-                        match terms[0].as_ref() {
-                            &Term::Var(ref vr, ref name) => {
-                                let r = self.mark_non_callable(name,
-                                                               term.arity(),
-                                                               term_loc,
-                                                               vr,
-                                                               code);
-                                
-                                code.push(is_call!(r));
-                            },
-                            &Term::Constant(_, Constant::Float(fl)) => {
-                                code.push(query![put_constant!(Level::Shallow,
-                                                               Constant::Float(fl),
-                                                               temp_v!(1))]);
-                                code.push(is_call!(temp_v!(1)));
-                            },
-                            &Term::Constant(_, Constant::Integer(ref bi)) => {
-                                let bi = bi.clone();
-                                code.push(query![put_constant!(Level::Shallow,
-                                                               Constant::Integer(bi),
-                                                               temp_v!(1))]);
-                                code.push(is_call!(temp_v!(1)));
-                            },
-                            _ => {
-                                return Err(ParserError::from(ArithmeticError::InvalidTerm));
-                            }
-                        }
-                    },
-                    &QueryTerm::IsAtomic(ref inner_term) =>
-                        match inner_term[0].as_ref() {
-                            &Term::AnonVar | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
-                                code.push(fail!());
-                            },
-                            &Term::Constant(_, _) => {
-                                code.push(succeed!());
-                            },
-                            &Term::Var(ref vr, ref name) => {
-                                let r = self.mark_non_callable(name,
-                                                               term.arity(),
-                                                               term_loc,
-                                                               vr,
-                                                               code);
-
-                                code.push(is_atomic!(r));
-                            }
-                        },
-                    &QueryTerm::IsVar(ref inner_term) =>
-                        match inner_term[0].as_ref() {
-                            &Term::Constant(_, _) | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
-                                code.push(fail!());
-                            },
-                            &Term::AnonVar => {
-                                code.push(succeed!());
-                            },
-                            &Term::Var(ref vr, ref name) => {
-                                let r = self.mark_non_callable(name,
-                                                               term.arity(),
-                                                               term_loc,
-                                                               vr,
-                                                               code);
-
-                                code.push(is_var!(r));
-                            }
-                        },
+                    &QueryTerm::Inlined(ref term) =>
+                        try!(self.compile_inlined(term, term_loc, code)),
                     _ if chunk_num == 0 => {
                         self.marker.reset_arg(term.arity());
 
@@ -419,12 +439,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
     fn compile_cleanup(code: &mut Code, conjunct_info: &ConjunctInfo, toc: &'a QueryTerm)
     {
-        //TODO: temporary workaround for inlined builtins.
         match toc {
-            &QueryTerm::IsAtomic(_) | &QueryTerm::IsVar(_) =>
-                code.push(proceed!()),
+            &QueryTerm::Inlined(ref term) =>
+                Self::add_conditional_call_inlined(term, code),
             _ => {}
-        }
+        };
 
         let dealloc_index = Self::lco(code);
 
@@ -444,12 +463,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         self.marker.reset_arg(p0.arity());
         self.compile_seq_prelude(&conjunct_info, &mut code);
 
-        if let &QueryTerm::Term(ref term) = p0 {            
+        if let &QueryTerm::Term(ref term) = p0 {
             if let &Term::Clause(_, _, _) = term {
                 let iter = FactInstruction::iter(term);
                 code.push(Line::Fact(self.compile_target(iter, GenContext::Head, false)));
             }
-       
+
             let iter = ChunkedIterator::from_rule_body(p1, clauses);
             try!(self.compile_seq(iter, &conjunct_info, &mut code, false));
 
@@ -469,7 +488,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             Ok(code)
         } else {
             Err(ParserError::InvalidRuleHead)
-        }        
+        }
     }
 
     fn mark_unsafe_fact_vars(&self, fact: &mut CompiledFact)
@@ -568,7 +587,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         if let Some(query_term) = query.last() {
             Self::compile_cleanup(&mut code, &conjunct_info, query_term);
         }
-        
+
         Ok(code)
     }
 
