@@ -235,8 +235,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     {
         match term {
             &InlinedQueryTerm::IsAtomic(_) | &InlinedQueryTerm::IsVar(_) =>
-                code.push(proceed!()),
-            _ => {}
+                code.push(proceed!())            
         };
     }
     
@@ -290,65 +289,23 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
         dealloc_index
     }
-
+    
     fn compile_inlined(&mut self, term: &'a InlinedQueryTerm, term_loc: GenContext, code: &mut Code)
-                       -> Result<(), ParserError>
     {
         match term {
-            &InlinedQueryTerm::Is(ref terms) => {
-                let mut arith_code = {
-                    let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings());
-                    evaluator.eval(terms[1].as_ref())?
-                };
-
-                code.append(&mut arith_code);
-
-                match terms[0].as_ref() {
-                    &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name,
-                                                       2,
-                                                       term_loc,
-                                                       vr,
-                                                       code);
-
-                        code.push(is_call!(r));
-                    },
-                    &Term::Constant(_, Constant::Float(fl)) => {
-                        code.push(query![put_constant!(Level::Shallow,
-                                                       Constant::Float(fl),
-                                                       temp_v!(1))]);
-                        code.push(is_call!(temp_v!(1)));
-                    },
-                    &Term::Constant(_, Constant::Integer(ref bi)) => {
-                        let bi = bi.clone();
-                        code.push(query![put_constant!(Level::Shallow,
-                                                       Constant::Integer(bi),
-                                                       temp_v!(1))]);
-                        code.push(is_call!(temp_v!(1)));
-                    },
-                    _ => {
-                        return Err(ParserError::from(ArithmeticError::InvalidTerm));
-                    }
-                }
-            },
             &InlinedQueryTerm::IsAtomic(ref inner_term) =>
-                match inner_term[0].as_ref() {
-                    &Term::AnonVar | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
-                        code.push(fail!());
-                    },
-                    &Term::Constant(_, _) => {
-                        code.push(succeed!());
-                    },
-                    &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name,
-                                                       1,
-                                                       term_loc,
-                                                       vr,
-                                                       code);
-
-                        code.push(is_atomic!(r));
-                    }
+            match inner_term[0].as_ref() {
+                &Term::AnonVar | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
+                    code.push(fail!());
                 },
+                &Term::Constant(_, _) => {
+                    code.push(succeed!());
+                },
+                &Term::Var(ref vr, ref name) => {
+                    let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                    code.push(is_atomic!(r));
+                }
+            },            
             &InlinedQueryTerm::IsVar(ref inner_term) =>
                 match inner_term[0].as_ref() {
                     &Term::Constant(_, _) | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
@@ -358,26 +315,19 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name,
-                                                       1,
-                                                       term_loc,
-                                                       vr,
-                                                       code);
-
+                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
                         code.push(is_var!(r));
                     }
                 }
         }
-
-        Ok(())
     }
-
+    
     fn compile_seq(&mut self,
                    iter: ChunkedIterator<'a>,
                    conjunct_info: &ConjunctInfo<'a>,
                    code: &mut Code,
                    is_exposed: bool)
-        -> Result<(), ParserError>
+                   -> Result<(), ParserError>
     {
         for (chunk_num, _, terms) in iter {
             for (i, term) in terms.iter().enumerate()
@@ -403,7 +353,43 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         });
                     },
                     &QueryTerm::Inlined(ref term) =>
-                        try!(self.compile_inlined(term, term_loc, code)),
+                        self.compile_inlined(term, term_loc, code),
+                    &QueryTerm::Is(ref terms) => {
+                        let mut arith_code = {
+                            let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings());
+                            evaluator.eval(terms[1].as_ref())?
+                        };
+
+                        code.append(&mut arith_code);
+
+                        match terms[0].as_ref() {
+                            &Term::Var(ref vr, ref name) => {
+                                let r = self.mark_non_callable(name,
+                                                               2,
+                                                               term_loc,
+                                                               vr,
+                                                               code);
+
+                                code.push(is_call!(r));
+                            },
+                            &Term::Constant(_, Constant::Float(fl)) => {
+                                code.push(query![put_constant!(Level::Shallow,
+                                                               Constant::Float(fl),
+                                                               temp_v!(1))]);
+                                code.push(is_call!(temp_v!(1)));
+                            },
+                            &Term::Constant(_, Constant::Integer(ref bi)) => {
+                                let bi = bi.clone();
+                                code.push(query![put_constant!(Level::Shallow,
+                                                               Constant::Integer(bi),
+                                                               temp_v!(1))]);
+                                code.push(is_call!(temp_v!(1)));
+                            },
+                            _ => {
+                                return Err(ParserError::from(ArithmeticError::InvalidTerm));
+                            }
+                        }
+                    },
                     _ if chunk_num == 0 => {
                         self.marker.reset_arg(term.arity());
 
@@ -423,7 +409,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
         Ok(())
     }
-
     fn compile_seq_prelude(&mut self, conjunct_info: &ConjunctInfo, body: &mut Code)
     {
         if conjunct_info.allocates() {

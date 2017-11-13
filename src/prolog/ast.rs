@@ -310,7 +310,6 @@ pub enum Term {
 }
 
 pub enum InlinedQueryTerm {    
-    Is(Vec<Box<Term>>),
     IsAtomic(Vec<Box<Term>>),
     IsVar(Vec<Box<Term>>)
 }    
@@ -318,8 +317,8 @@ pub enum InlinedQueryTerm {
 impl InlinedQueryTerm {
     pub fn arity(&self) -> usize {
         match self {
-            &InlinedQueryTerm::Is(_) => 2,
-            _ => 1
+            &InlinedQueryTerm::IsAtomic(_) => 1,
+            &InlinedQueryTerm::IsVar(_) => 1
         }
     }
 }
@@ -328,6 +327,7 @@ pub enum QueryTerm {
     CallN(Vec<Box<Term>>),
     Catch(Vec<Box<Term>>),
     Cut,
+    Is(Vec<Box<Term>>),
     Inlined(InlinedQueryTerm),
     Term(Term),
     Throw(Vec<Box<Term>>)
@@ -339,6 +339,7 @@ impl QueryTerm {
             &QueryTerm::Catch(_) => 3,
             &QueryTerm::Throw(_) => 1,
             &QueryTerm::Inlined(ref term) => term.arity(),
+            &QueryTerm::Is(_) => 2,
             &QueryTerm::CallN(ref terms) => terms.len(),
             &QueryTerm::Cut => 0,
             &QueryTerm::Term(ref term) => term.arity(),
