@@ -95,8 +95,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 let mut target = Vec::new();
 
                 self.marker.reset_arg(arity);
-                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
-
+                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);                
                 code.push(Line::Query(target));
                 vr.get().norm()
             }
@@ -271,7 +270,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         if let Some(&mut Line::Control(ref mut ctrl)) = code.last_mut() {
             let mut instr = ControlInstruction::Proceed;
             swap(ctrl, &mut instr);
-
+            
             match instr {
                 ControlInstruction::Call(name, arity, _) =>
                     *ctrl = ControlInstruction::Execute(name, arity),
@@ -283,6 +282,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     *ctrl = ControlInstruction::CatchExecute,
                 ControlInstruction::ThrowCall =>
                     *ctrl = ControlInstruction::ThrowExecute,
+                ControlInstruction::Proceed => {},
                 _ => dealloc_index += 1 // = code.len()
             }
         }
@@ -409,6 +409,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
         Ok(())
     }
+    
     fn compile_seq_prelude(&mut self, conjunct_info: &ConjunctInfo, body: &mut Code)
     {
         if conjunct_info.allocates() {
