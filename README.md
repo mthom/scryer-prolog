@@ -19,7 +19,7 @@ Extend rusty-wam to include the following, among other features:
 * ISO Prolog compliant throw/catch (_done_).
 * Built-in and user-defined operators of all fixities, with custom
   associativity and precedence (_done_). 
-* Bignum and floating point arithmetic (_in progress_).
+* Bignum, rational number and floating point arithmetic (_in progress_).
 * Built-in control operators (`,`, `;`, `->`, etc.).
 * Built-in predicates for list processing and top-level declarative
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
@@ -47,7 +47,7 @@ ideally, very fast) [Shen](http://shenlanguage.org) implementation.
 The following predicates are built-in to rusty-wam.
 
 * Arithmetic support:
-    * is/2 works for (+)/2, (-)/{1,2}, (*)/2, (//)/2, (div)/2.
+    * is/2 works for (+)/2, (-)/{1,2}, (*)/2, (//)/2, (div)/2, (/)/2, (rdiv)/2.
 * atomic/1
 * call/N (1 <= N <= 63)
 * catch/3

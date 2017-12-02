@@ -1,5 +1,6 @@
 use prolog::num::bigint::BigInt;
-use prolog::num::ToPrimitive;
+use prolog::num::{Float, ToPrimitive, Zero};
+use prolog::num::rational::Ratio;
 
 use prolog::ordered_float::*;
 
@@ -9,7 +10,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::io::Error as IOError;
 use std::num::{ParseFloatError};
-use std::ops::{Add, AddAssign, Sub, Mul, Neg};
+use std::ops::{Add, AddAssign, Div, Sub, Mul, Neg};
 use std::str::Utf8Error;
 use std::vec::Vec;
 
@@ -268,6 +269,7 @@ pub enum Constant {
     Atom(Atom),
     Float(OrderedFloat<f64>),
     Integer(BigInt),
+    Rational(Ratio<BigInt>),
     String(String),
     Usize(usize),
     EmptyList
@@ -284,6 +286,8 @@ impl fmt::Display for Constant {
                 write!(f, "{}", fl),
             &Constant::Integer(ref i) =>
                 write!(f, "{}", i),
+            &Constant::Rational(ref r) =>
+                write!(f, "{}", r),
             &Constant::String(ref s) =>
                 write!(f, "{}", s),
             &Constant::Usize(integer) =>
@@ -295,6 +299,7 @@ impl fmt::Display for Constant {
 impl From<Number> for Constant {
     fn from(n: Number) -> Self {
         match n {
+            Number::Rational(r) => Constant::Rational(r),
             Number::Integer(n) => Constant::Integer(n),
             Number::Float(f) => Constant::Float(f)
         }
@@ -309,10 +314,10 @@ pub enum Term {
     Var(Cell<VarReg>, Var)
 }
 
-pub enum InlinedQueryTerm {    
+pub enum InlinedQueryTerm {
     IsAtomic(Vec<Box<Term>>),
     IsVar(Vec<Box<Term>>)
-}    
+}
 
 impl InlinedQueryTerm {
     pub fn arity(&self) -> usize {
@@ -434,24 +439,98 @@ impl IndexedChoiceInstruction {
 #[derive(Clone)]
 pub enum Number {
     Float(OrderedFloat<f64>),
-    Integer(BigInt)
+    Integer(BigInt),
+    Rational(Ratio<BigInt>)
+}
+
+impl Number {
+    pub fn is_zero(&self) -> bool {
+        match self {
+            &Number::Float(fl)       => fl.into_inner().is_zero(),
+            &Number::Integer(ref bi) => bi.is_zero(),
+            &Number::Rational(ref r) => r.is_zero()
+        }
+    }
+}
+
+enum NumberPair {
+    Float(OrderedFloat<f64>, OrderedFloat<f64>),
+    Integer(BigInt, BigInt),
+    Rational(Ratio<BigInt>, Ratio<BigInt>)
+}
+
+impl NumberPair {
+    fn flip(self) -> NumberPair {
+        match self {
+            NumberPair::Float(f1, f2)    => NumberPair::Float(f2, f1),
+            NumberPair::Integer(n1, n2)  => NumberPair::Integer(n2, n1),
+            NumberPair::Rational(r1, r2) => NumberPair::Rational(r2, r1)
+        }
+    }
+
+    fn integer_float_pair(n1: BigInt, n2: OrderedFloat<f64>) -> NumberPair {
+        match n1.to_f64() {
+            Some(f1) => NumberPair::Float(OrderedFloat(f1), n2),
+            None => if let Some(r) = Ratio::from_float(n2.into_inner()) {
+                NumberPair::Rational(Ratio::from_integer(n1), r)
+            } else if n2.into_inner().is_sign_positive() {
+                NumberPair::Float(OrderedFloat(f64::infinity()),
+                                  OrderedFloat(f64::infinity()))
+            } else {
+                NumberPair::Float(OrderedFloat(f64::neg_infinity()),
+                                  OrderedFloat(f64::neg_infinity()))
+            }
+        }
+    }
+
+    fn float_rational_pair(n1: OrderedFloat<f64>, n2: Ratio<BigInt>) -> NumberPair {
+        if let Some(r) = Ratio::from_float(n1.into_inner()) {
+            NumberPair::Rational(r, n2)
+        } else if n1.into_inner().is_sign_positive() {
+            NumberPair::Float(OrderedFloat(f64::infinity()),
+                              OrderedFloat(f64::infinity()))
+        } else {
+            NumberPair::Float(OrderedFloat(f64::neg_infinity()),
+                              OrderedFloat(f64::neg_infinity()))
+        }
+    }
+
+    fn from(n1: Number, n2: Number) -> NumberPair
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                NumberPair::Integer(n1, n2),
+            (Number::Float(n1), Number::Float(n2)) =>
+                NumberPair::Float(n1, n2),
+            (Number::Rational(n1), Number::Rational(n2)) =>
+                NumberPair::Rational(n1, n2),            
+            (Number::Integer(n1), Number::Float(n2)) =>
+                Self::integer_float_pair(n1, n2),
+            (Number::Float(n1), Number::Integer(n2)) =>
+                Self::integer_float_pair(n2, n1).flip(),
+            (Number::Float(n1), Number::Rational(n2)) =>
+                Self::float_rational_pair(n1, n2),
+            (Number::Rational(n1), Number::Float(n2)) =>
+                Self::float_rational_pair(n2, n1).flip(),
+            (Number::Rational(n1), Number::Integer(n2)) =>
+                NumberPair::Rational(n1, Ratio::from_integer(n2)),
+            (Number::Integer(n1), Number::Rational(n2)) =>
+                NumberPair::Rational(Ratio::from_integer(n1), n2)
+        }
+    }
 }
 
 impl Add<Number> for Number {
     type Output = Number;
 
     fn add(self, rhs: Number) -> Self::Output {
-        match (self, rhs) {
-            (Number::Integer(n1), Number::Integer(n2)) =>
+        match NumberPair::from(self, rhs) {
+            NumberPair::Float(f1, f2) =>
+                Number::Float(OrderedFloat(f1.into_inner() + f2.into_inner())),
+            NumberPair::Integer(n1, n2) =>
                 Number::Integer(n1 + n2),
-            (Number::Float(n1), Number::Float(n2)) =>
-                Number::Float(OrderedFloat(n1.into_inner() + n2.into_inner())),
-            (Number::Integer(n1), Number::Float(n2))
-          | (Number::Float(n2), Number::Integer(n1)) =>
-                match n1.to_f64() {
-                    Some(n1) => Number::Float(OrderedFloat(n1 + n2.into_inner())),
-                    None     => Number::Integer(n1)
-                }
+            NumberPair::Rational(r1, r2) =>
+                Number::Rational(r1 + r2)
         }
     }
 }
@@ -460,17 +539,13 @@ impl Sub<Number> for Number {
     type Output = Number;
 
     fn sub(self, rhs: Number) -> Self::Output {
-        match (self, rhs) {
-            (Number::Integer(n1), Number::Integer(n2)) =>
+        match NumberPair::from(self, rhs) {
+            NumberPair::Float(f1, f2) =>
+                Number::Float(OrderedFloat(f1.into_inner() - f2.into_inner())),
+            NumberPair::Integer(n1, n2) =>
                 Number::Integer(n1 - n2),
-            (Number::Float(n1), Number::Float(n2)) =>
-                Number::Float(OrderedFloat(n1.into_inner() - n2.into_inner())),
-            (Number::Integer(n1), Number::Float(n2))
-          | (Number::Float(n2), Number::Integer(n1)) =>
-                match n1.to_f64() {
-                    Some(n1) => Number::Float(OrderedFloat(n1 - n2.into_inner())),
-                    None     => Number::Integer(n1)
-                }
+            NumberPair::Rational(r1, r2) =>
+                Number::Rational(r1 - r2)
         }
     }
 }
@@ -479,41 +554,46 @@ impl Mul<Number> for Number {
     type Output = Number;
 
     fn mul(self, rhs: Number) -> Self::Output {
-        match (self, rhs) {
-            (Number::Integer(n1), Number::Integer(n2)) =>
+        match NumberPair::from(self, rhs) {
+            NumberPair::Float(f1, f2) =>
+                Number::Float(OrderedFloat(f1.into_inner() * f2.into_inner())),
+            NumberPair::Integer(n1, n2) =>
                 Number::Integer(n1 * n2),
-            (Number::Float(n1), Number::Float(n2)) =>
-                Number::Float(OrderedFloat(n1.into_inner() * n2.into_inner())),
-            (Number::Integer(n1), Number::Float(n2))
-          | (Number::Float(n2), Number::Integer(n1)) =>
-                match n1.to_f64() {
-                    Some(n1) => Number::Float(OrderedFloat(n1 * n2.into_inner())),
-                    None     => Number::Integer(n1)
-                }
-        }
+            NumberPair::Rational(r1, r2) =>
+                Number::Rational(r1 * r2)
+        }        
     }
 }
-
-/*TODO: reserved for proper division.
+    
 impl Div<Number> for Number {
     type Output = Number;
 
     fn div(self, rhs: Number) -> Self::Output {
-        match (self, rhs) {
-            (Number::Integer(n1), Number::Integer(n2)) =>
-                Number::Integer(n1 / n2),
-            (Number::Float(n1), Number::Float(n2)) =>
-                Number::Float(OrderedFloat(n1.into_inner() / n2.into_inner())),
-            (Number::Integer(n1), Number::Float(n2))
-          | (Number::Float(n2), Number::Integer(n1)) =>
+        match NumberPair::from(self, rhs) {
+            NumberPair::Float(f1, f2) =>
+                Number::Float(OrderedFloat(f1.into_inner() / f2.into_inner())),
+            NumberPair::Integer(n1, n2) =>
                 match n1.to_f64() {
-                    Some(n1) => Number::Float(OrderedFloat(n1 / n2.into_inner())),
-                    None     => Number::Integer(n1)
-                }
+                    Some(f1) => if let Some(f2) = n2.to_f64() {
+                        Number::Float(OrderedFloat(f1 / f2))
+                    } else {
+                        let r1 = Ratio::from_integer(n1);
+                        let r2 = Ratio::from_integer(n2);
+
+                        Number::Rational(r1 / r2)
+                    },
+                    None => {
+                        let r1 = Ratio::from_integer(n1);
+                        let r2 = Ratio::from_integer(n2);
+
+                        Number::Rational(r1 / r2)
+                    },
+                },
+            NumberPair::Rational(r1, r2) =>
+                Number::Rational(r1 / r2)
         }
     }
 }
-*/
 
 impl Neg for Number {
     type Output = Number;
@@ -521,7 +601,8 @@ impl Neg for Number {
     fn neg(self) -> Self::Output {
         match self {
             Number::Integer(n) => Number::Integer(-n),
-            Number::Float(f) => Number::Float(OrderedFloat(-1.0 * f.into_inner()))
+            Number::Float(f) => Number::Float(OrderedFloat(-1.0 * f.into_inner())),
+            Number::Rational(r) => Number::Rational(- r)
         }
     }
 }
@@ -549,6 +630,8 @@ pub enum ArithmeticInstruction {
     Sub(ArithmeticTerm, ArithmeticTerm, usize),
     Mul(ArithmeticTerm, ArithmeticTerm, usize),
     IDiv(ArithmeticTerm, ArithmeticTerm, usize),
+    RDiv(ArithmeticTerm, ArithmeticTerm, usize),
+    Div(ArithmeticTerm, ArithmeticTerm, usize),
     Neg(ArithmeticTerm, usize)
 }
 
@@ -584,7 +667,7 @@ pub enum ControlInstruction {
     IsExecute(RegType),
     Proceed,
     ThrowCall,
-    ThrowExecute,    
+    ThrowExecute,
 }
 
 impl ControlInstruction {
@@ -601,7 +684,7 @@ impl ControlInstruction {
             &ControlInstruction::Goto(_, _) => true,
             &ControlInstruction::Proceed => true,
             &ControlInstruction::IsCall(_) => true,
-            &ControlInstruction::IsExecute(_) => true,            
+            &ControlInstruction::IsExecute(_) => true,
             _ => false
         }
     }

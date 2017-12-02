@@ -1,6 +1,6 @@
 [package]
 name = "rusty-wam"
-version = "0.7.2"
+version = "0.7.3"
 authors = ["Mark Thom"]
 
 [dependencies]

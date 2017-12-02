@@ -212,8 +212,12 @@ impl fmt::Display for ArithmeticInstruction {
                 write!(f, "sub {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Mul(ref a1, ref a2, ref t) =>
                 write!(f, "mul {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::Div(ref a1, ref a2, ref t) =>
+                write!(f, "div {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::IDiv(ref a1, ref a2, ref t) =>
                 write!(f, "idiv {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::RDiv(ref a1, ref a2, ref t) =>
+                write!(f, "rdiv {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Neg(ref a, ref t) =>
                 write!(f, "neg {}, @{}", a, t)
         }

@@ -28,12 +28,6 @@ macro_rules! arith {
     )
 }
 
-macro_rules! string {
-    ($str:expr) => {
-        vec![HeapCellValue::Con(Constant::String(String::from($str)))]
-    }
-}
-
 macro_rules! functor {
     ($name:expr, $len:expr, [$($args:expr),*]) => {{
         if $len > 0 {

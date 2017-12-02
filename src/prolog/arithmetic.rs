@@ -97,12 +97,14 @@ impl<'a> ArithmeticEvaluator<'a> {
                         -> Result<ArithmeticInstruction, ArithmeticError>
     {
         match name.as_str() {
-            "+"   => Ok(ArithmeticInstruction::Add(a1, a2, t)),
-            "-"   => Ok(ArithmeticInstruction::Sub(a1, a2, t)),
-            "//"  => Ok(ArithmeticInstruction::IDiv(a1, a2, t)),
-            "div" => Ok(ArithmeticInstruction::IDiv(a1, a2, t)),
-            "*"   => Ok(ArithmeticInstruction::Mul(a1, a2, t)),
-             _    => Err(ArithmeticError::InvalidOp)
+            "+"    => Ok(ArithmeticInstruction::Add(a1, a2, t)),
+            "-"    => Ok(ArithmeticInstruction::Sub(a1, a2, t)),
+            "/"    => Ok(ArithmeticInstruction::Div(a1, a2, t)),
+            "//"   => Ok(ArithmeticInstruction::IDiv(a1, a2, t)),
+            "div"  => Ok(ArithmeticInstruction::IDiv(a1, a2, t)),
+            "rdiv" => Ok(ArithmeticInstruction::RDiv(a1, a2, t)),
+            "*"    => Ok(ArithmeticInstruction::Mul(a1, a2, t)),
+             _     => Err(ArithmeticError::InvalidOp)
         }
     }
 

@@ -6,6 +6,7 @@ use prolog::heapview::*;
 use prolog::and_stack::*;
 use prolog::num::Zero;
 use prolog::num::bigint::BigInt;
+use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
 use prolog::ordered_float::OrderedFloat;
 use prolog::fixtures::*;
@@ -610,7 +611,7 @@ macro_rules! try_or_fail {
         match $e {
             Ok(val)  => val,
             Err(msg) => {
-                $s.throw_exception(string!(msg));
+                $s.throw_exception(msg);
                 return;
             }
         }
@@ -841,7 +842,23 @@ impl MachineState {
         };
     }
 
-    fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, &'static str> {
+    fn get_rational(&self, at: &ArithmeticTerm) -> Result<Ratio<BigInt>, Vec<HeapCellValue>> {
+        let n = self.get_number(at)?;
+
+        match n {
+            Number::Rational(r) => Ok(r),
+            Number::Float(fl) =>
+                if let Some(r) = Ratio::from_float(fl.into_inner()) {
+                    Ok(r)
+                } else {
+                    Err(functor!("instantiation_error", 1, [atom!("(is)/2")]))
+                },
+            Number::Integer(bi) =>
+                Ok(Ratio::from_integer(bi))
+        }
+    }
+    
+    fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, Vec<HeapCellValue>> {
         match at {
             &ArithmeticTerm::Reg(r) => {
                 let addr = self[r].clone();
@@ -852,8 +869,10 @@ impl MachineState {
                         Ok(Number::Integer(bi)),
                     Addr::Con(Constant::Float(fl)) =>
                         Ok(Number::Float(fl)),
+                    Addr::Con(Constant::Rational(r)) =>
+                        Ok(Number::Rational(r)),
                     _ =>
-                        Err("is/2: variable not instantiated to number.")
+                        Err(functor!("instantiation_error", 1, [atom!("(is)/2")]))
                 }
             },
             &ArithmeticTerm::Interm(i)   => Ok(self.interms[i-1].clone()),
@@ -885,6 +904,20 @@ impl MachineState {
                 self.interms[t - 1] = n1 * n2;
                 self.p += 1;
             },
+            &ArithmeticInstruction::RDiv(ref a1, ref a2, t) => {
+                let r1 = try_or_fail!(self, self.get_rational(a1));
+                let r2 = try_or_fail!(self, self.get_rational(a2));
+
+                if r2 == Ratio::zero() {
+                    self.throw_exception(functor!("evaluation_error",
+                                                  1,
+                                                  [atom!("zero_divisor")]));
+                    return;
+                }
+
+                self.interms[t - 1] = Number::Rational(r1 / r2);
+                self.p += 1;
+            },
             &ArithmeticInstruction::IDiv(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
@@ -913,6 +946,20 @@ impl MachineState {
                 let n1 = try_or_fail!(self, self.get_number(a1));
 
                 self.interms[t - 1] = - n1;
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Div(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                if n2.is_zero() {
+                    self.throw_exception(functor!("evaluation_error",
+                                                  1,
+                                                  [atom!("zero_divisor")]));
+                    return;
+                }
+                                         
+                self.interms[t - 1] = n1 / n2;
                 self.p += 1;
             }
         };

@@ -757,17 +757,32 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- 7 is 3 * 2."), false);
         assert_eq!(submit(&mut wam, "?- 7 is 3.5 * 2."), false);
         assert_eq!(submit(&mut wam, "?- 7.0 is 3.5 * 2."), true);
+        assert_eq!(submit(&mut wam, "?- 7.0 is 14 / 2."), true);
+        assert_eq!(submit(&mut wam, "?- 4.666 is 14.0 / 3."), false);
+        assert_eq!(submit(&mut wam, "?- 4.0 is 8.0 / 2."), true);
 
         submit(&mut wam, "f(X) :- X is 5 // 0.");
 
         assert_eq!(submit(&mut wam, "?- catch(f(X), evaluation_error(E), true), E = zero_divisor."),
                    true);
+        
+        submit(&mut wam, "f(X) :- X is (5 rdiv 1) / 0.");
 
+        assert_eq!(submit(&mut wam, "?- catch(f(X), evaluation_error(E), true), E = zero_divisor."),
+                   true);
+        
+        submit(&mut wam, "f(X) :- X is 5.0 / 0.");
+
+        assert_eq!(submit(&mut wam, "?- catch(f(X), evaluation_error(E), true), E = zero_divisor."),
+                   true);
+        
         assert_eq!(submit(&mut wam, "?- X is ((3 + 4) // 2) + 2 - 1 // 1, Y is 2+2, Z is X+Y."),
                    true);
 
         assert_eq!(submit(&mut wam, "?- X is ((3 + 4) // 2) + 2 - 1 // 1, Y is 2+2, Z = 8, Y is 4."),
                    true);
+
+        assert_eq!(submit(&mut wam, "?- X is (3 rdiv 4) / 2, Y is 3 rdiv 8, X = Y."), true);
     }
 }
 
