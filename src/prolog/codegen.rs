@@ -386,7 +386,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                 code.push(is_call!(temp_v!(1)));
                             },
                             _ => {
-                                return Err(ParserError::from(ArithmeticError::InvalidTerm));
+                                code.push(fail!());
                             }
                         }
                     },
