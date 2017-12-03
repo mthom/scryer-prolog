@@ -484,14 +484,18 @@ impl NumberPair {
     }
 
     fn float_rational_pair(n1: OrderedFloat<f64>, n2: Ratio<BigInt>) -> NumberPair {
-        if let Some(r) = Ratio::from_float(n1.into_inner()) {
-            NumberPair::Rational(r, n2)
-        } else if n1.into_inner().is_sign_positive() {
-            NumberPair::Float(OrderedFloat(f64::infinity()),
-                              OrderedFloat(f64::infinity()))
-        } else {
-            NumberPair::Float(OrderedFloat(f64::neg_infinity()),
-                              OrderedFloat(f64::neg_infinity()))
+        match (n2.numer().to_f64(), n2.denom().to_f64()) {
+            (Some(num), Some(denom)) =>
+                NumberPair::Float(n1, OrderedFloat(num / denom)),
+            _ => if let Some(r) = Ratio::from_float(n1.into_inner()) {
+                NumberPair::Rational(r, n2)
+            } else if n1.into_inner().is_sign_positive() {
+                NumberPair::Float(OrderedFloat(f64::infinity()),
+                                  OrderedFloat(f64::infinity()))
+            } else {
+                NumberPair::Float(OrderedFloat(f64::neg_infinity()),
+                                  OrderedFloat(f64::neg_infinity()))
+            }
         }
     }
 
