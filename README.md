@@ -48,7 +48,7 @@ The following predicates are built-in to rusty-wam.
 
 * Arithmetic support:
     * is/2 works for `(+)/2`, `(-)/{1,2}`, `(*)/2`, `(//)/2`, `(div)/2`, `(/)/2`, `(rdiv)/2`,
-      `(xor)/2`, `(rem)/2`, `(mod)/2`, `(/\\)/2`, `(\\/)/2`, `(>>)/2`, `(<<)/2`.
+      `(xor)/2`, `(rem)/2`, `(mod)/2`, `(/\)/2`, `(\/)/2`, `(>>)/2`, `(<<)/2`.
 * `atomic/1`
 * `call/N` (1 <= N <= 63)
 * `catch/3`
