@@ -127,12 +127,19 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     op_dir.insert((String::from("is"), Fixity::In), (XFX, 700));
     op_dir.insert((String::from("+"), Fixity::In), (YFX, 500));
     op_dir.insert((String::from("-"), Fixity::In), (YFX, 500));
+    op_dir.insert((String::from("/\\"), Fixity::In), (YFX, 500));
+    op_dir.insert((String::from("\\/"), Fixity::In), (YFX, 500));
+    op_dir.insert((String::from("xor"), Fixity::In), (YFX, 500));
     op_dir.insert((String::from("//"), Fixity::In), (YFX, 400));
     op_dir.insert((String::from("/"), Fixity::In), (YFX, 400));
     op_dir.insert((String::from("div"), Fixity::In), (YFX, 400));
     op_dir.insert((String::from("*"), Fixity::In), (YFX, 400));
     op_dir.insert((String::from("-"), Fixity::Pre), (FY, 200));
     op_dir.insert((String::from("rdiv"), Fixity::In), (YFX, 400));
+    op_dir.insert((String::from("<<"), Fixity::In), (YFX, 400));
+    op_dir.insert((String::from(">>"), Fixity::In), (YFX, 400));
+    op_dir.insert((String::from("mod"), Fixity::In), (YFX, 400));
+    op_dir.insert((String::from("rem"), Fixity::In), (YFX, 400));
     
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)

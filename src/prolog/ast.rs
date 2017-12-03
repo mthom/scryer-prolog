@@ -630,8 +630,16 @@ pub enum ArithmeticInstruction {
     Sub(ArithmeticTerm, ArithmeticTerm, usize),
     Mul(ArithmeticTerm, ArithmeticTerm, usize),
     IDiv(ArithmeticTerm, ArithmeticTerm, usize),
+    FIDiv(ArithmeticTerm, ArithmeticTerm, usize),
     RDiv(ArithmeticTerm, ArithmeticTerm, usize),
     Div(ArithmeticTerm, ArithmeticTerm, usize),
+    Shl(ArithmeticTerm, ArithmeticTerm, usize),
+    Shr(ArithmeticTerm, ArithmeticTerm, usize),
+    Xor(ArithmeticTerm, ArithmeticTerm, usize),
+    And(ArithmeticTerm, ArithmeticTerm, usize),
+    Or(ArithmeticTerm, ArithmeticTerm, usize),
+    Mod(ArithmeticTerm, ArithmeticTerm, usize),
+    Rem(ArithmeticTerm, ArithmeticTerm, usize),
     Neg(ArithmeticTerm, usize)
 }
 

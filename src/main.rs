@@ -783,6 +783,13 @@ mod tests {
                    true);
 
         assert_eq!(submit(&mut wam, "?- X is (3 rdiv 4) / 2, Y is 3 rdiv 8, X = Y."), true);
+
+        assert_eq!(submit(&mut wam, "?- X is 10 xor -4, X is -10."), true);
+        assert_eq!(submit(&mut wam, "?- X is 4 xor -7, X is -3."), true);
+        assert_eq!(submit(&mut wam, "?- X is 10 xor 5 + 55, X = 70."), true);
+        
+        assert_eq!(submit(&mut wam, "?- X is 10 rem -3, X = 1."), true);
+        assert_eq!(submit(&mut wam, "?- X is 10 mod -3, X is -2."), true);
     }
 }
 

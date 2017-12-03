@@ -216,8 +216,24 @@ impl fmt::Display for ArithmeticInstruction {
                 write!(f, "div {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::IDiv(ref a1, ref a2, ref t) =>
                 write!(f, "idiv {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::FIDiv(ref a1, ref a2, ref t) =>
+                write!(f, "floored_idiv {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::RDiv(ref a1, ref a2, ref t) =>
                 write!(f, "rdiv {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::Shl(ref a1, ref a2, ref t) =>
+                write!(f, "shl {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::Shr(ref a1, ref a2, ref t) =>
+                write!(f, "shr {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::Xor(ref a1, ref a2, ref t) =>
+                write!(f, "xor {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::And(ref a1, ref a2, ref t) =>
+                write!(f, "and {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::Or(ref a1, ref a2, ref t) =>
+                write!(f, "or {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::Mod(ref a1, ref a2, ref t) =>
+                write!(f, "mod {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::Rem(ref a1, ref a2, ref t) =>
+                write!(f, "rem {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Neg(ref a, ref t) =>
                 write!(f, "neg {}, @{}", a, t)
         }

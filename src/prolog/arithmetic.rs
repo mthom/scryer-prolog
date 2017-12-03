@@ -101,9 +101,16 @@ impl<'a> ArithmeticEvaluator<'a> {
             "-"    => Ok(ArithmeticInstruction::Sub(a1, a2, t)),
             "/"    => Ok(ArithmeticInstruction::Div(a1, a2, t)),
             "//"   => Ok(ArithmeticInstruction::IDiv(a1, a2, t)),
-            "div"  => Ok(ArithmeticInstruction::IDiv(a1, a2, t)),
+            "div"  => Ok(ArithmeticInstruction::FIDiv(a1, a2, t)),
             "rdiv" => Ok(ArithmeticInstruction::RDiv(a1, a2, t)),
             "*"    => Ok(ArithmeticInstruction::Mul(a1, a2, t)),
+            ">>"   => Ok(ArithmeticInstruction::Shr(a1, a2, t)),
+            "<<"   => Ok(ArithmeticInstruction::Shl(a1, a2, t)),
+            "/\\"  => Ok(ArithmeticInstruction::And(a1, a2, t)),
+            "\\/"  => Ok(ArithmeticInstruction::Or(a1, a2, t)),
+            "xor"  => Ok(ArithmeticInstruction::Xor(a1, a2, t)),
+            "mod"  => Ok(ArithmeticInstruction::Mod(a1, a2, t)),
+            "rem"  => Ok(ArithmeticInstruction::Rem(a1, a2, t)),
              _     => Err(ArithmeticError::InvalidOp)
         }
     }

@@ -4,8 +4,8 @@ use prolog::codegen::*;
 use prolog::copier::*;
 use prolog::heapview::*;
 use prolog::and_stack::*;
-use prolog::num::Zero;
-use prolog::num::bigint::BigInt;
+use prolog::num::{Integer, ToPrimitive, Zero};
+use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
 use prolog::ordered_float::OrderedFloat;
@@ -881,6 +881,20 @@ impl MachineState {
         }
     }
 
+    fn signed_bitwise_op<Op>(&mut self, n1: BigInt, n2: BigInt, t: usize, f: Op)
+        where Op: FnOnce(BigUint, BigUint) -> BigUint
+    {
+        let n1_b = n1.to_signed_bytes_le();
+        let n2_b = n2.to_signed_bytes_le();
+
+        let u_n1 = BigUint::from_bytes_le(&n1_b);
+        let u_n2 = BigUint::from_bytes_le(&n2_b);
+
+        let result = BigInt::from_signed_bytes_le(&f(u_n1, u_n2).to_bytes_le());
+        
+        self.interms[t - 1] = Number::Integer(result);
+    }
+    
     fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
         match instr {
             &ArithmeticInstruction::Add(ref a1, ref a2, t) => {
@@ -917,6 +931,30 @@ impl MachineState {
 
                 self.interms[t - 1] = Number::Rational(r1 / r2);
                 self.p += 1;
+            },
+            &ArithmeticInstruction::FIDiv(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                match (n1, n2) {
+                    (Number::Integer(n1), Number::Integer(n2)) => {
+                        if n2 == BigInt::zero() {
+                            self.throw_exception(functor!("evaluation_error",
+                                                          1,
+                                                          [atom!("zero_divisor")]));
+                            return;
+                        }
+
+                        self.interms[t - 1] = Number::Integer(n1.div_floor(&n2));
+                        self.p += 1;
+                    },
+                    _ => {
+                        self.throw_exception(functor!("evaluation_error",
+                                                      1,
+                                                      [atom!("expected_integer_args")]));
+                        return;
+                    }
+                }
             },
             &ArithmeticInstruction::IDiv(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
@@ -960,6 +998,147 @@ impl MachineState {
                 }
                                          
                 self.interms[t - 1] = n1 / n2;
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Shr(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                match (n1, n2) {
+                    (Number::Integer(n1), Number::Integer(n2)) =>
+                        match n2.to_usize() {
+                            Some(n2) => self.interms[t - 1] = Number::Integer(n1 >> n2),
+                            _ => self.interms[t - 1] = Number::Integer(n1 >> usize::max_value())
+                        },
+                    _ => {
+                        self.throw_exception(functor!("evaluation_error",
+                                                      1,
+                                                      [atom!("expected_integer_args")]));
+                        return;
+                    }
+                }
+
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Shl(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                match (n1, n2) {
+                    (Number::Integer(n1), Number::Integer(n2)) =>
+                        match n2.to_usize() {
+                            Some(n2) => self.interms[t - 1] = Number::Integer(n1 << n2),
+                            _ => self.interms[t - 1] = Number::Integer(n1 << usize::max_value())
+                        },
+                    _ => {
+                        self.throw_exception(functor!("evaluation_error",
+                                                      1,
+                                                      [atom!("expected_integer_args")]));
+                        return;
+                    }
+                }
+
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Xor(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                match (n1, n2) {
+                    (Number::Integer(n1), Number::Integer(n2)) => 
+                        self.signed_bitwise_op(n1, n2, t, |u_n1, u_n2| u_n1 ^ u_n2),
+                    _ => {
+                        self.throw_exception(functor!("evaluation_error",
+                                                      1,
+                                                      [atom!("expected_integer_args")]));
+                        return;
+                    }
+                };
+
+                self.p += 1;
+            },
+            &ArithmeticInstruction::And(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                match (n1, n2) {
+                    (Number::Integer(n1), Number::Integer(n2)) =>
+                        self.signed_bitwise_op(n1, n2, t, |u_n1, u_n2| u_n1 & u_n2),
+                    _ => {
+                        self.throw_exception(functor!("evaluation_error",
+                                                      1,
+                                                      [atom!("expected_integer_args")]));
+                        return;
+                    }
+                };
+
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Or(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                match (n1, n2) {
+                    (Number::Integer(n1), Number::Integer(n2)) =>
+                        self.signed_bitwise_op(n1, n2, t, |u_n1, u_n2| u_n1 | u_n2),
+                    _ => {
+                        self.throw_exception(functor!("evaluation_error",
+                                                      1,
+                                                      [atom!("expected_integer_args")]));
+                        return;
+                    }
+                };
+
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Mod(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                match (n1, n2) {
+                    (Number::Integer(n1), Number::Integer(n2)) => {
+                        if n2 == BigInt::zero() {
+                            self.throw_exception(functor!("evaluation_error",
+                                                          1,
+                                                          [atom!("zero_divisor")]));
+                            return;
+                        }
+
+                        self.interms[t - 1] = Number::Integer(n1.mod_floor(&n2));
+                    },
+                    _ => {
+                        self.throw_exception(functor!("evaluation_error",
+                                                      1,
+                                                      [atom!("expected_integer_args")]));
+                        return;
+                    }
+                }
+
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Rem(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                match (n1, n2) {
+                    (Number::Integer(n1), Number::Integer(n2)) => {
+                        if n2 == BigInt::zero() {
+                            self.throw_exception(functor!("evaluation_error",
+                                                          1,
+                                                          [atom!("zero_divisor")]));
+                            return;
+                        }
+
+                        self.interms[t - 1] = Number::Integer(n1 % n2);
+                    },
+                    _ => {
+                        self.throw_exception(functor!("evaluation_error",
+                                                      1,
+                                                      [atom!("expected_integer_args")]));
+                        return;
+                    }
+                }
+
                 self.p += 1;
             }
         };
