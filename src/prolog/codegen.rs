@@ -276,6 +276,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     *ctrl = ControlInstruction::Execute(name, arity),
                 ControlInstruction::CallN(arity) =>
                     *ctrl = ControlInstruction::ExecuteN(arity),
+                ControlInstruction::CompareNumberCall(cmp) =>
+                    *ctrl = ControlInstruction::CompareNumberExecute(cmp),
                 ControlInstruction::IsCall(r) =>
                     *ctrl = ControlInstruction::IsExecute(r),
                 ControlInstruction::CatchCall =>
@@ -322,6 +324,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         }
     }
     
+    fn call_arith_eval(&self, term: &'a Term, target_int: usize) -> Result<Code, ArithmeticError> {
+        let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings(), target_int);
+        evaluator.eval(term)
+    }
+    
     fn compile_seq(&mut self,
                    iter: ChunkedIterator<'a>,
                    conjunct_info: &ConjunctInfo<'a>,
@@ -355,11 +362,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     &QueryTerm::Inlined(ref term) =>
                         self.compile_inlined(term, term_loc, code),
                     &QueryTerm::Is(ref terms) => {
-                        let mut arith_code = {
-                            let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings());
-                            evaluator.eval(terms[1].as_ref())?
-                        };
-
+                        let mut arith_code = self.call_arith_eval(terms[1].as_ref(), 1)?;
                         code.append(&mut arith_code);
 
                         match terms[0].as_ref() {
@@ -389,6 +392,15 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                 code.push(fail!());
                             }
                         }
+                    },
+                    &QueryTerm::CompareNumber(cmp, ref terms) => {
+                        let mut larith_code = self.call_arith_eval(terms[0].as_ref(), 1)?;
+                        let mut rarith_code = self.call_arith_eval(terms[1].as_ref(), 2)?;
+
+                        code.append(&mut larith_code);
+                        code.append(&mut rarith_code);
+
+                        code.push(compare_number_call!(cmp));
                     },
                     _ if chunk_num == 0 => {
                         self.marker.reset_arg(term.arity());

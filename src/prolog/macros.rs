@@ -16,15 +16,15 @@ macro_rules! deallocate {
     )
 }
 
-macro_rules! query {
-    [$($x:expr),+] => (
-        Line::Query(vec![$($x),+])
+macro_rules! move_at {
+    ($at:expr, $r:expr) => (
+        Line::Query(vec![QueryInstruction::MoveArithmeticTerm($at, $r)])
     )
 }
 
-macro_rules! arith {
-    ($x:expr) => (
-        Line::Arithmetic($x)
+macro_rules! query {
+    [$($x:expr),+] => (
+        Line::Query(vec![$($x),+])
     )
 }
 
@@ -47,6 +47,12 @@ macro_rules! atom {
 macro_rules! fact {
     [$($x:expr),+] => (
         Line::Fact(vec![$($x),+])
+    )
+}
+
+macro_rules! compare_number_call {
+    ($cmp: expr) => (
+        Line::Control(ControlInstruction::CompareNumberCall($cmp))
     )
 }
 
@@ -102,12 +108,6 @@ macro_rules! put_value {
 macro_rules! put_unsafe_value {
     ($r:expr, $arg:expr) => (
         QueryInstruction::PutUnsafeValue($r, $arg)
-    )
-}
-
-macro_rules! add {
-    ($r1:expr, $r2:expr, $t:expr) => (
-        ArithmeticInstruction::Add($r1, $r2, $t)
     )
 }
 

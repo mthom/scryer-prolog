@@ -1379,6 +1379,10 @@ impl MachineState {
 
     fn execute_query_instr(&mut self, instr: &QueryInstruction) {
         match instr {
+            &QueryInstruction::MoveArithmeticTerm(ref at, t) => {
+                let n = try_or_fail!(self, self.get_number(at));
+                self.interms[t - 1] = n;
+            },
             &QueryInstruction::GetVariable(norm, arg) =>
                 self[norm] = self.registers[arg].clone(),
             &QueryInstruction::PutConstant(_, ref constant, reg) =>
@@ -1740,6 +1744,21 @@ impl MachineState {
         };
     }
 
+    fn handle_n_compare(&mut self, cmp: CompareNumberQT) {
+        let n1 = self.interms[0].clone();
+        let n2 = self.interms[1].clone();
+        
+        self.fail = match cmp {
+            CompareNumberQT::GreaterThan if !(n1.gt(n2)) => true,
+            CompareNumberQT::GreaterThanOrEqual if !(n1.gte(n2)) => true,
+            CompareNumberQT::LessThan if !(n1.lt(n2)) => true,
+            CompareNumberQT::LessThanOrEqual if !(n1.lte(n2)) => true,
+            CompareNumberQT::NotEqual if !(n1.ne(n2)) => true,
+            CompareNumberQT::Equal if !(n1.eq(n2)) => true,
+            _ => false
+        };
+    }
+    
     fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
     {
         match instr {
@@ -1818,6 +1837,14 @@ impl MachineState {
             },
             &ControlInstruction::ThrowExecute => {
                 self.goto_throw();
+            },
+            &ControlInstruction::CompareNumberCall(cmp) => {
+                self.handle_n_compare(cmp);
+                self.p += 1;
+            },
+            &ControlInstruction::CompareNumberExecute(cmp) => {
+                self.handle_n_compare(cmp);
+                self.p = self.cp;
             },
             &ControlInstruction::IsCall(r) => {
                 let a1 = self[r].clone();

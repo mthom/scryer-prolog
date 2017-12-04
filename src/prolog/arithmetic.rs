@@ -1,7 +1,5 @@
 use prolog::ast::*;
 use prolog::fixtures::*;
-use prolog::num::{BigInt, Zero};
-use prolog::ordered_float::{OrderedFloat};
 
 use std::cmp::{min, max};
 use std::vec::Vec;
@@ -75,13 +73,14 @@ impl<'a> Iterator for ArithExprIterator<'a> {
 
 pub struct ArithmeticEvaluator<'a> {
     bindings: &'a AllocVarDict<'a>,
+    target_int: usize,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize
 }
 
 impl<'a> ArithmeticEvaluator<'a> {
-    pub fn new(bindings: &'a AllocVarDict<'a>) -> Self {
-        ArithmeticEvaluator { bindings, interm: Vec::new(), interm_c: 1 }
+    pub fn new(bindings: &'a AllocVarDict<'a>, target_int: usize) -> Self {
+        ArithmeticEvaluator { bindings, target_int, interm: Vec::new(), interm_c: target_int }
     }
 
     fn get_unary_instr(name: &Atom, a1: ArithmeticTerm, t: usize)
@@ -213,20 +212,14 @@ impl<'a> ArithmeticEvaluator<'a> {
             }
         }
 
+
         if let Some(arith_term) = self.interm.pop() {
+            let t = self.target_int;
+            
             match arith_term {
-                n @ ArithmeticTerm::Integer(_) => {
-                    let zero = ArithmeticTerm::Integer(BigInt::zero());
-                    code.push(arith![add!(zero, n, 1)]);
-                },
-                n @ ArithmeticTerm::Float(_) => {
-                    let zero = ArithmeticTerm::Float(OrderedFloat(0f64));
-                    code.push(arith![add!(zero, n, 1)]);
-                },
-                r @ ArithmeticTerm::Reg(_) => {
-                    let zero = ArithmeticTerm::Integer(BigInt::zero());
-                    code.push(arith![add!(zero, r, 1)]);
-                },
+                n @ ArithmeticTerm::Integer(_) => code.push(move_at!(n, t)),                
+                n @ ArithmeticTerm::Float(_)   => code.push(move_at!(n, t)),
+                r @ ArithmeticTerm::Reg(_)     => code.push(move_at!(r, t)),
                 _ => {}
             };
         }

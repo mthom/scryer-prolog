@@ -46,6 +46,8 @@ impl fmt::Display for FactInstruction {
 impl fmt::Display for QueryInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &QueryInstruction::MoveArithmeticTerm(ref at, ref r) =>
+                write!(f, "move_arithmetic_term {}, {}", at, r),
             &QueryInstruction::GetVariable(ref x, ref a) =>
                 write!(f, "query:get_variable {}, A{}", x, a),
             &QueryInstruction::PutConstant(Level::Shallow, ref constant, ref r) =>
@@ -80,6 +82,19 @@ impl fmt::Display for QueryInstruction {
     }
 }
 
+impl fmt::Display for CompareNumberQT {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &CompareNumberQT::GreaterThan => write!(f, ">"),
+            &CompareNumberQT::GreaterThanOrEqual => write!(f, ">="),
+            &CompareNumberQT::LessThan => write!(f, "<"),
+            &CompareNumberQT::LessThanOrEqual => write!(f, "<="),
+            &CompareNumberQT::NotEqual => write!(f, "=\\="),
+            &CompareNumberQT::Equal => write!(f, "=:="),            
+        }
+    }
+}
+
 impl fmt::Display for ControlInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -93,6 +108,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "call_catch"),
             &ControlInstruction::CatchExecute =>
                 write!(f, "execute_catch"),
+            &ControlInstruction::CompareNumberCall(cmp) =>
+                write!(f, "n_compare_call {}", cmp),
+            &ControlInstruction::CompareNumberExecute(cmp) =>
+                write!(f, "n_compare_execute {}", cmp),
             &ControlInstruction::ExecuteN(arity) =>
                 write!(f, "execute_N {}", arity),
             &ControlInstruction::Deallocate =>

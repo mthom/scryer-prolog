@@ -328,9 +328,20 @@ impl InlinedQueryTerm {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum CompareNumberQT {
+    GreaterThan,
+    LessThan,
+    GreaterThanOrEqual,
+    LessThanOrEqual,
+    NotEqual,
+    Equal
+}
+
 pub enum QueryTerm {
     CallN(Vec<Box<Term>>),
     Catch(Vec<Box<Term>>),
+    CompareNumber(CompareNumberQT, Vec<Box<Term>>),
     Cut,
     Is(Vec<Box<Term>>),
     Inlined(InlinedQueryTerm),
@@ -342,6 +353,7 @@ impl QueryTerm {
     pub fn arity(&self) -> usize {
         match self {
             &QueryTerm::Catch(_) => 3,
+            &QueryTerm::CompareNumber(_, _) => 2,
             &QueryTerm::Throw(_) => 1,
             &QueryTerm::Inlined(ref term) => term.arity(),
             &QueryTerm::Is(_) => 2,
@@ -451,6 +463,54 @@ impl Number {
             &Number::Rational(ref r) => r.is_zero()
         }
     }
+
+    pub fn gt(self, n2: Number) -> bool {
+        match NumberPair::from(self, n2) {
+            NumberPair::Integer(n1, n2) => n1 > n2,
+            NumberPair::Float(n1, n2) => n1 > n2,
+            NumberPair::Rational(n1, n2) => n1 > n2
+        }
+    }
+    
+    pub fn gte(self, n2: Number) -> bool {
+        match NumberPair::from(self, n2) {
+            NumberPair::Integer(n1, n2) => n1 >= n2,
+            NumberPair::Float(n1, n2) => n1 >= n2,
+            NumberPair::Rational(n1, n2) => n1 >= n2
+        }
+    }
+
+    pub fn lt(self, n2: Number) -> bool {
+        match NumberPair::from(self, n2) {
+            NumberPair::Integer(n1, n2) => n1 < n2,
+            NumberPair::Float(n1, n2) => n1 < n2,
+            NumberPair::Rational(n1, n2) => n1 < n2
+        }
+    }
+
+    pub fn lte(self, n2: Number) -> bool {
+        match NumberPair::from(self, n2) {
+            NumberPair::Integer(n1, n2) => n1 <= n2,
+            NumberPair::Float(n1, n2) => n1 <= n2,
+            NumberPair::Rational(n1, n2) => n1 <= n2
+        }
+    }
+
+    pub fn ne(self, n2: Number) -> bool {
+        match NumberPair::from(self, n2) {
+            NumberPair::Integer(n1, n2) => n1 != n2,
+            NumberPair::Float(n1, n2) => n1 != n2,
+            NumberPair::Rational(n1, n2) => n1 != n2
+        }
+    }
+
+    pub fn eq(self, n2: Number) -> bool {
+        match NumberPair::from(self, n2) {
+            NumberPair::Integer(n1, n2) => n1 == n2,
+            NumberPair::Float(n1, n2) => n1 == n2,
+            NumberPair::Rational(n1, n2) => n1 == n2
+        }
+    }    
 }
 
 enum NumberPair {
@@ -675,6 +735,8 @@ pub enum ControlInstruction {
     Execute(Atom, usize),
     ExecuteN(usize),
     Goto(usize, usize), // p, arity.
+    CompareNumberCall(CompareNumberQT),
+    CompareNumberExecute(CompareNumberQT),    
     IsCall(RegType),
     IsExecute(RegType),
     Proceed,
@@ -728,6 +790,7 @@ pub enum FactInstruction {
 }
 
 pub enum QueryInstruction {
+    MoveArithmeticTerm(ArithmeticTerm, usize),
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
     PutList(Level, RegType),
