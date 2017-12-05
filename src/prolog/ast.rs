@@ -315,6 +315,7 @@ pub enum Term {
 }
 
 pub enum InlinedQueryTerm {
+    CompareNumber(CompareNumberQT, Vec<Box<Term>>),
     IsAtomic(Vec<Box<Term>>),
     IsVar(Vec<Box<Term>>)
 }
@@ -322,8 +323,9 @@ pub enum InlinedQueryTerm {
 impl InlinedQueryTerm {
     pub fn arity(&self) -> usize {
         match self {
+            &InlinedQueryTerm::CompareNumber(_, _) => 2,
             &InlinedQueryTerm::IsAtomic(_) => 1,
-            &InlinedQueryTerm::IsVar(_) => 1
+            &InlinedQueryTerm::IsVar(_) => 1                
         }
     }
 }
@@ -341,7 +343,6 @@ pub enum CompareNumberQT {
 pub enum QueryTerm {
     CallN(Vec<Box<Term>>),
     Catch(Vec<Box<Term>>),
-    CompareNumber(CompareNumberQT, Vec<Box<Term>>),
     Cut,
     Is(Vec<Box<Term>>),
     Inlined(InlinedQueryTerm),
@@ -353,7 +354,6 @@ impl QueryTerm {
     pub fn arity(&self) -> usize {
         match self {
             &QueryTerm::Catch(_) => 3,
-            &QueryTerm::CompareNumber(_, _) => 2,
             &QueryTerm::Throw(_) => 1,
             &QueryTerm::Inlined(ref term) => term.arity(),
             &QueryTerm::Is(_) => 2,
@@ -709,6 +709,7 @@ pub enum ArithmeticInstruction {
 
 pub enum BuiltInInstruction {
     CleanUpBlock,
+    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
     DuplicateTerm,
     EraseBall,
     Fail,
@@ -735,10 +736,8 @@ pub enum ControlInstruction {
     Execute(Atom, usize),
     ExecuteN(usize),
     Goto(usize, usize), // p, arity.
-    CompareNumberCall(CompareNumberQT),
-    CompareNumberExecute(CompareNumberQT),    
-    IsCall(RegType),
-    IsExecute(RegType),
+    IsCall(RegType, ArithmeticTerm),
+    IsExecute(RegType, ArithmeticTerm),
     Proceed,
     ThrowCall,
     ThrowExecute,
@@ -757,8 +756,8 @@ impl ControlInstruction {
             &ControlInstruction::ThrowExecute => true,
             &ControlInstruction::Goto(_, _) => true,
             &ControlInstruction::Proceed => true,
-            &ControlInstruction::IsCall(_) => true,
-            &ControlInstruction::IsExecute(_) => true,
+            &ControlInstruction::IsCall(_, _) => true,
+            &ControlInstruction::IsExecute(_, _) => true,
             _ => false
         }
     }
@@ -790,7 +789,6 @@ pub enum FactInstruction {
 }
 
 pub enum QueryInstruction {
-    MoveArithmeticTerm(ArithmeticTerm, usize),
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
     PutList(Level, RegType),

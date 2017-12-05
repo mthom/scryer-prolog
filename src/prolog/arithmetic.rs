@@ -8,6 +8,8 @@ pub struct ArithExprIterator<'a> {
     state_stack: Vec<IteratorState<'a>>
 }
 
+pub type ArithCont = (Code, Option<ArithmeticTerm>);
+
 impl<'a> ArithExprIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
         self.state_stack.push(IteratorState::to_state(lvl, term));
@@ -73,14 +75,13 @@ impl<'a> Iterator for ArithExprIterator<'a> {
 
 pub struct ArithmeticEvaluator<'a> {
     bindings: &'a AllocVarDict<'a>,
-    target_int: usize,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize
 }
 
 impl<'a> ArithmeticEvaluator<'a> {
     pub fn new(bindings: &'a AllocVarDict<'a>, target_int: usize) -> Self {
-        ArithmeticEvaluator { bindings, target_int, interm: Vec::new(), interm_c: target_int }
+        ArithmeticEvaluator { bindings, interm: Vec::new(), interm_c: target_int }
     }
 
     fn get_unary_instr(name: &Atom, a1: ArithmeticTerm, t: usize)
@@ -180,7 +181,7 @@ impl<'a> ArithmeticEvaluator<'a> {
         Ok(())
     }
 
-    pub fn eval(&mut self, term: &Term) -> Result<Code, ArithmeticError> {
+    pub fn eval(&mut self, term: &Term) -> Result<ArithCont, ArithmeticError> {
         let mut code = Vec::new();
 
         for term_ref in term.arith_expr_iter()? {
@@ -212,18 +213,6 @@ impl<'a> ArithmeticEvaluator<'a> {
             }
         }
 
-
-        if let Some(arith_term) = self.interm.pop() {
-            let t = self.target_int;
-            
-            match arith_term {
-                n @ ArithmeticTerm::Integer(_) => code.push(move_at!(n, t)),                
-                n @ ArithmeticTerm::Float(_)   => code.push(move_at!(n, t)),
-                r @ ArithmeticTerm::Reg(_)     => code.push(move_at!(r, t)),
-                _ => {}
-            };
-        }
-
-        Ok(code)
+        Ok((code, self.interm.pop()))
     }
 }

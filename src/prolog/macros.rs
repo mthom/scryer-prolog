@@ -16,9 +16,21 @@ macro_rules! deallocate {
     )
 }
 
-macro_rules! move_at {
-    ($at:expr, $r:expr) => (
-        Line::Query(vec![QueryInstruction::MoveArithmeticTerm($at, $r)])
+macro_rules! compare_number {
+    ($cmp: expr, $terms: expr) => (
+        QueryTerm::Inlined(InlinedQueryTerm::CompareNumber($cmp, $terms))
+    )
+}
+
+macro_rules! compare_number_instr {
+    ($cmp: expr, $at_1: expr, $at_2: expr) => (
+        Line::BuiltIn(BuiltInInstruction::CompareNumber($cmp, $at_1, $at_2))
+    )
+}
+
+macro_rules! interm {
+    ($n: expr) => (
+        ArithmeticTerm::Interm($n)
     )
 }
 
@@ -47,12 +59,6 @@ macro_rules! atom {
 macro_rules! fact {
     [$($x:expr),+] => (
         Line::Fact(vec![$($x),+])
-    )
-}
-
-macro_rules! compare_number_call {
-    ($cmp: expr) => (
-        Line::Control(ControlInstruction::CompareNumberCall($cmp))
     )
 }
 
@@ -216,8 +222,8 @@ macro_rules! unify {
 }
 
 macro_rules! is_call {
-    ($r:expr) => (
-        Line::Control(ControlInstruction::IsCall($r))
+    ($r:expr, $at:expr) => (
+        Line::Control(ControlInstruction::IsCall($r, $at))
     )
 }
 

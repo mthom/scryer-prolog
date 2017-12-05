@@ -46,8 +46,6 @@ impl fmt::Display for FactInstruction {
 impl fmt::Display for QueryInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &QueryInstruction::MoveArithmeticTerm(ref at, ref r) =>
-                write!(f, "move_arithmetic_term {}, {}", at, r),
             &QueryInstruction::GetVariable(ref x, ref a) =>
                 write!(f, "query:get_variable {}, A{}", x, a),
             &QueryInstruction::PutConstant(Level::Shallow, ref constant, ref r) =>
@@ -107,11 +105,7 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::CatchCall =>
                 write!(f, "call_catch"),
             &ControlInstruction::CatchExecute =>
-                write!(f, "execute_catch"),
-            &ControlInstruction::CompareNumberCall(cmp) =>
-                write!(f, "n_compare_call {}", cmp),
-            &ControlInstruction::CompareNumberExecute(cmp) =>
-                write!(f, "n_compare_execute {}", cmp),
+                write!(f, "execute_catch"),            
             &ControlInstruction::ExecuteN(arity) =>
                 write!(f, "execute_N {}", arity),
             &ControlInstruction::Deallocate =>
@@ -126,10 +120,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "call_throw"),
             &ControlInstruction::ThrowExecute =>
                 write!(f, "execute_throw"),
-            &ControlInstruction::IsCall(r) =>
-                write!(f, "is_call {}", r),
-            &ControlInstruction::IsExecute(r) =>
-                write!(f, "is_execute {}", r),
+            &ControlInstruction::IsCall(r, ref at) =>
+                write!(f, "is_call {}, {}", r, at),
+            &ControlInstruction::IsExecute(r, ref at) =>
+                write!(f, "is_execute {}, {}", r, at),
         }
     }
 }
@@ -153,6 +147,8 @@ impl fmt::Display for BuiltInInstruction {
         match self {
             &BuiltInInstruction::CleanUpBlock =>
                 write!(f, "clean_up_block"),
+            &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
+                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
             &BuiltInInstruction::DuplicateTerm =>
                 write!(f, "duplicate_term X1"),
             &BuiltInInstruction::EraseBall =>
