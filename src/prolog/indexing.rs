@@ -66,8 +66,7 @@ impl CodeOffsets {
         };
     }
 
-    fn second_level_index<Index>(indices: HashMap<Index, ThirdLevelIndex>,
-                                 prelude: &mut CodeDeque)
+    fn second_level_index<Index>(indices: HashMap<Index, ThirdLevelIndex>, prelude: &mut CodeDeque)
                                  -> HashMap<Index, IntIndex>
         where Index: Eq + Hash
     {
@@ -117,8 +116,7 @@ impl CodeOffsets {
         flattened_index
     }
 
-    fn switch_on_constant(con_ind: HashMap<Constant, ThirdLevelIndex>,
-                          prelude: &mut CodeDeque)
+    fn switch_on_constant(con_ind: HashMap<Constant, ThirdLevelIndex>, prelude: &mut CodeDeque)
                           -> IntIndex
     {
         let con_ind = Self::second_level_index(con_ind, prelude);
@@ -150,8 +148,7 @@ impl CodeOffsets {
         }
     }
 
-    fn switch_on_structure(str_ind: HashMap<(Atom, usize), ThirdLevelIndex>,
-                           prelude: &mut CodeDeque)
+    fn switch_on_structure(str_ind: HashMap<(Atom, usize), ThirdLevelIndex>, prelude: &mut CodeDeque)
                            -> IntIndex
     {
         let str_ind = Self::second_level_index(str_ind, prelude);
@@ -203,6 +200,7 @@ impl CodeOffsets {
         }
     }
 
+    
     pub fn add_indices(self, code: &mut Code, mut code_body: Code)
     {
         if self.no_indices() {

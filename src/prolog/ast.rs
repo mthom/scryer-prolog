@@ -10,7 +10,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::io::Error as IOError;
 use std::num::{ParseFloatError};
-use std::ops::{Add, AddAssign, Div, Sub, Mul, Neg};
+use std::ops::{Add, AddAssign, Div, Index, IndexMut, Sub, Mul, Neg};
 use std::str::Utf8Error;
 use std::vec::Vec;
 
@@ -957,7 +957,65 @@ impl AddAssign<usize> for CodePtr {
     }
 }
 
-pub type Heap = Vec<HeapCellValue>;
+pub struct Heap {
+    heap: Vec<HeapCellValue>,
+    pub h: usize
+}
+
+impl Heap {
+    pub fn new() -> Self {
+        Heap { heap: vec![], h : 0 }
+    }
+
+    pub fn with_capacity(cap: usize) -> Self {
+        Heap { heap: vec![HeapCellValue::Str(0); cap], h: 0 }
+    }
+    
+    pub fn push(&mut self, val: HeapCellValue) {
+        let h = self.h;
+        
+        if h < self.heap.len() {
+            self.heap[h] = val;
+        } else {
+            self.heap.push(val);
+        }
+
+        self.h += 1;
+    }
+
+    pub fn truncate(&mut self, h: usize) {
+        self.h = h;
+    }
+
+    pub fn len(&self) -> usize {
+        self.heap.len()
+    }
+
+    pub fn append(&mut self, vals: Vec<HeapCellValue>) {
+        for val in vals.into_iter() {
+            self.push(val);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.heap.clear();
+        self.h = 0;
+    }
+}
+
+impl Index<usize> for Heap {
+    type Output = HeapCellValue;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.heap[index]
+    }
+}
+
+impl IndexMut<usize> for Heap {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.heap[index]
+    }
+}
 
 pub type Registers = Vec<Addr>;
 

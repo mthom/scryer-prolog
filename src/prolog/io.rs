@@ -368,12 +368,14 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
                 Err(e)   => return EvalSession::ParserError(e)
             };
 
+            print_code(&compiled_pred);
             wam.add_predicate(clauses, compiled_pred)
         },
         &TopLevel::Fact(ref fact) => {
             let mut cg = CodeGenerator::<DebrayAllocator>::new();
 
             let compiled_fact = cg.compile_fact(fact);
+            print_code(&compiled_fact);
             wam.add_fact(fact, compiled_fact)
         },
         &TopLevel::Rule(ref rule) => {
@@ -384,6 +386,7 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
                 Err(e) => return EvalSession::ParserError(e)                
             };
 
+            print_code(&compiled_rule);
             wam.add_rule(rule, compiled_rule)
         },
         &TopLevel::Query(ref query) => {
@@ -394,6 +397,7 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
                 Err(e) => return EvalSession::ParserError(e)
             };
 
+            print_code(&compiled_query);
             wam.submit_query(compiled_query, cg.take_vars())
         }
     }

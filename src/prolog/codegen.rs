@@ -95,7 +95,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 let mut target = Vec::new();
 
                 self.marker.reset_arg(arity);
-                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);                
+                self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
                 code.push(Line::Query(target));
                 vr.get().norm()
             }
@@ -233,15 +233,15 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     fn add_conditional_call_inlined(_: &InlinedQueryTerm, code: &mut Code)
     {
         code.push(proceed!());
-        
+
         /*
         match term {
             &InlinedQueryTerm::IsAtomic(_) | &InlinedQueryTerm::IsVar(_) =>
-                code.push(proceed!())            
+                code.push(proceed!())
         };
          */
     }
-    
+
     fn add_conditional_call(code: &mut Code, qt: &QueryTerm, pvs: usize)
     {
         match qt {
@@ -274,7 +274,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         if let Some(&mut Line::Control(ref mut ctrl)) = code.last_mut() {
             let mut instr = ControlInstruction::Proceed;
             swap(ctrl, &mut instr);
-            
+
             match instr {
                 ControlInstruction::Call(name, arity, _) =>
                     *ctrl = ControlInstruction::Execute(name, arity),
@@ -293,7 +293,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
         dealloc_index
     }
-    
+
     fn compile_inlined(&mut self, term: &'a InlinedQueryTerm, term_loc: GenContext, code: &mut Code)
                        -> Result<(), ParserError>
     {
@@ -304,10 +304,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
                 code.append(&mut lcode);
                 code.append(&mut rcode);
-                
+
                 code.push(compare_number_instr!(cmp,
                                                 at_1.unwrap_or(interm!(1)),
-                                                at_2.unwrap_or(interm!(2))));            
+                                                at_2.unwrap_or(interm!(2))));
             },
             &InlinedQueryTerm::IsAtomic(ref inner_term) =>
                 match inner_term[0].as_ref() {
@@ -321,7 +321,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         let r = self.mark_non_callable(name, 1, term_loc, vr, code);
                         code.push(is_atomic!(r));
                     }
-                },            
+                },
             &InlinedQueryTerm::IsVar(ref inner_term) =>
                 match inner_term[0].as_ref() {
                     &Term::Constant(_, _) | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
@@ -339,13 +339,13 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
         Ok(())
     }
-    
+
     fn call_arith_eval(&self, term: &'a Term, target_int: usize) -> Result<ArithCont, ArithmeticError>
     {
         let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings(), target_int);
         evaluator.eval(term)
     }
-    
+
     fn compile_seq(&mut self,
                    iter: ChunkedIterator<'a>,
                    conjunct_info: &ConjunctInfo<'a>,
@@ -377,7 +377,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         });
                     },
                     &QueryTerm::Inlined(ref term) =>
-                        self.compile_inlined(term, term_loc, code)?,                    
+                        self.compile_inlined(term, term_loc, code)?,
                     &QueryTerm::Is(ref terms) => {
                         let (mut acode, at) = try!(self.call_arith_eval(terms[1].as_ref(), 1));
                         code.append(&mut acode);
@@ -409,7 +409,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                 code.push(fail!());
                             }
                         }
-                    },                    
+                    },
                     _ if chunk_num == 0 => {
                         self.marker.reset_arg(term.arity());
 
@@ -429,7 +429,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
         Ok(())
     }
-    
+
     fn compile_seq_prelude(&mut self, conjunct_info: &ConjunctInfo, body: &mut Code)
     {
         if conjunct_info.allocates() {
