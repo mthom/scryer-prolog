@@ -78,10 +78,12 @@ impl OrStack {
         self.0.last()
     }
 
-    pub fn pop(&mut self) {
-        self.0.pop();
+    // truncate expects a 1-indexed new_b, ie.
+    // the value b of MachineState.
+    pub fn truncate(&mut self, new_b: usize) {
+        self.0.truncate(new_b);
     }
-
+    
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }

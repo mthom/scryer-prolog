@@ -114,16 +114,16 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "execute {}/{}", name, arity),
             &ControlInstruction::Goto(p, arity) =>
                 write!(f, "goto {}/{}", p, arity),
+            &ControlInstruction::IsCall(r, ref at) =>
+                write!(f, "is_call {}, {}", r, at),
+            &ControlInstruction::IsExecute(r, ref at) =>
+                write!(f, "is_execute {}, {}", r, at),
             &ControlInstruction::Proceed =>
                 write!(f, "proceed"),
             &ControlInstruction::ThrowCall =>
                 write!(f, "call_throw"),
             &ControlInstruction::ThrowExecute =>
                 write!(f, "execute_throw"),
-            &ControlInstruction::IsCall(r, ref at) =>
-                write!(f, "is_call {}, {}", r, at),
-            &ControlInstruction::IsExecute(r, ref at) =>
-                write!(f, "is_execute {}, {}", r, at),
         }
     }
 }
@@ -166,7 +166,7 @@ impl fmt::Display for BuiltInInstruction {
             &BuiltInInstruction::IsAtomic(r) =>
                 write!(f, "is_atomic {}", r),
             &BuiltInInstruction::IsVar(r) =>
-                write!(f, "is_var {}", r),
+                write!(f, "is_var {}", r),            
             &BuiltInInstruction::ResetBlock =>
                 write!(f, "reset_block"),
             &BuiltInInstruction::SetBall =>

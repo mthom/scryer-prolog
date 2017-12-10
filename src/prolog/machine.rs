@@ -11,6 +11,7 @@ use prolog::or_stack::*;
 use prolog::ordered_float::OrderedFloat;
 use prolog::fixtures::*;
 
+use std::cmp::max;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 use std::vec::Vec;
@@ -325,6 +326,7 @@ impl Machine {
 
                     self.ms.execute_fact_instr(&fact_instr);
                 }
+                
                 self.ms.p += 1;
             },
             &Line::Indexing(ref indexing_instr) =>
@@ -339,6 +341,7 @@ impl Machine {
 
                     self.ms.execute_query_instr(&query_instr);
                 }
+                
                 self.ms.p += 1;
             }
         }
@@ -398,10 +401,11 @@ impl Machine {
             match var_data {
                 &VarData::Perm(_) => {
                     let e = self.ms.e;
+
                     let r = var_data.as_reg_type().reg_num();
                     let addr = self.ms.and_stack[e][r].clone();
 
-                    heap_locs.insert(var, addr);
+                    heap_locs.insert(var, addr);                
                 },
                 &VarData::Temp(cn, _, _) if cn == chunk_num => {
                     let r = var_data.as_reg_type();
@@ -641,10 +645,11 @@ impl MachineState {
         }
     }
 
-    fn num_frames(&self) -> usize {
-        self.and_stack.len() + self.or_stack.len()
+    fn next_global_index(&self) -> usize {
+        max(if self.and_stack.len() > 0 { self.and_stack[self.e].global_index } else { 0 },
+            if self.b > 0 { self.or_stack[self.b - 1].global_index } else { 0 }) + 1
     }
-    
+
     fn store(&self, a: Addr) -> Addr {
         match a {
             Addr::HeapCell(r)       => self.heap[r].as_addr(r),
@@ -855,12 +860,12 @@ impl MachineState {
                 Ok(Ratio::from_integer(bi))
         }
     }
-    
+
     fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, Vec<HeapCellValue>> {
         match at {
             &ArithmeticTerm::Reg(r) => {
                 let addr = self[r].clone();
-                let item = self.deref(addr);
+                let item = self.store(self.deref(addr));
 
                 match item {
                     Addr::Con(Constant::Integer(bi)) =>
@@ -889,10 +894,10 @@ impl MachineState {
         let u_n2 = BigUint::from_bytes_le(&n2_b);
 
         let result = BigInt::from_signed_bytes_le(&f(u_n1, u_n2).to_bytes_le());
-        
+
         self.interms[t - 1] = Number::Integer(result);
     }
-    
+
     fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
         match instr {
             &ArithmeticInstruction::Add(ref a1, ref a2, t) => {
@@ -994,7 +999,7 @@ impl MachineState {
                                                   [atom!("zero_divisor")]));
                     return;
                 }
-                                         
+
                 self.interms[t - 1] = n1 / n2;
                 self.p += 1;
             },
@@ -1043,7 +1048,7 @@ impl MachineState {
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
                 match (n1, n2) {
-                    (Number::Integer(n1), Number::Integer(n2)) => 
+                    (Number::Integer(n1), Number::Integer(n2)) =>
                         self.signed_bitwise_op(n1, n2, t, |u_n1, u_n2| u_n1 ^ u_n2),
                     _ => {
                         self.throw_exception(functor!("evaluation_error",
@@ -1193,7 +1198,7 @@ impl MachineState {
                     },
                     Addr::HeapCell(_) | Addr::StackCell(_, _) => {
                         let h = self.heap.h;
-                        
+
                         self.heap.push(HeapCellValue::Str(h + 1));
                         self.heap.push(HeapCellValue::NamedStr(arity, name.clone()));
 
@@ -1254,7 +1259,7 @@ impl MachineState {
                         if let Addr::HeapCell(hc) = addr {
                             if hc < h {
                                 let val = self.heap[hc].clone();
-                                
+
                                 self.heap.push(val);
                                 self.s += 1;
 
@@ -1374,7 +1379,7 @@ impl MachineState {
                 self[reg] = Addr::Lis(self.heap.h),
             &QueryInstruction::PutStructure(_, ref name, arity, reg) => {
                 let h = self.heap.h;
-                
+
                 self.heap.push(HeapCellValue::NamedStr(arity, name.clone()));
                 self[reg] = Addr::Str(h);
             },
@@ -1507,7 +1512,7 @@ impl MachineState {
         let h = self.heap.h;
 
         self.registers[1] = Addr::HeapCell(h);
-        
+
         self.heap.append(hcv);
         self.goto_throw();
     }
@@ -1561,7 +1566,7 @@ impl MachineState {
 
     fn copy_and_align_ball_to_heap(&mut self) {
         let diff = self.ball.0 - self.heap.h;
-        
+
         for heap_value in self.ball.1.iter().cloned() {
             self.heap.push(match heap_value {
                 HeapCellValue::Con(c) => HeapCellValue::Con(c),
@@ -1580,7 +1585,7 @@ impl MachineState {
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) => {
                 let n1 = try_or_fail!(self, self.get_number(at_1));
                 let n2 = try_or_fail!(self, self.get_number(at_2));
-        
+
                 self.fail = match cmp {
                     CompareNumberQT::GreaterThan if !(n1.gt(n2)) => true,
                     CompareNumberQT::GreaterThanOrEqual if !(n1.gte(n2)) => true,
@@ -1616,7 +1621,7 @@ impl MachineState {
 
                 self.write_constant_to_var(addr, &c);
                 self.p += 1;
-            },
+            },            
             &BuiltInInstruction::EraseBall => {
                 self.ball.0 = 0;
                 self.ball.1.truncate(0);
@@ -1663,6 +1668,7 @@ impl MachineState {
 
                         if nb > 0 && self.or_stack[b].b == nb {
                             self.b = self.or_stack[nb - 1].b;
+                            self.or_stack.truncate(self.b);
                         }
 
                         self.p += 1;
@@ -1691,6 +1697,8 @@ impl MachineState {
             },
             &BuiltInInstruction::UnwindStack => {
                 self.b = self.block;
+                self.or_stack.truncate(self.b);
+
                 self.fail = true;
             },
             &BuiltInInstruction::IsAtomic(r) => {
@@ -1727,40 +1735,38 @@ impl MachineState {
             }
         };
     }
-    
+
     fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
     {
         match instr {
             &ControlInstruction::Allocate(num_cells) => {
-                if let Some(ref or_fr) = self.or_stack.top() {
-                    let and_gi = if self.and_stack.len() > self.e {
-                        self.and_stack[self.e].global_index
-                    } else {
-                        0
-                    };
-
-                    if and_gi <= or_fr.global_index {
-                        self.e = or_fr.e;
-                    }
-                }
-
-                if self.e + 1 < self.and_stack.len() {
-                    let index = self.e + 1;
-
-                    self.and_stack[index].e  = self.e;
-                    self.and_stack[index].cp = self.cp;
-
-                    self.and_stack.resize(index, num_cells);
-
-                    self.e = index;
-                } else {
-                    let num_frames = self.num_frames();
-
-                    self.and_stack.push(num_frames + 1, self.e, self.cp, num_cells);
-                    self.e = self.and_stack.len() - 1;
-                };
+                let gi = self.next_global_index();
 
                 self.p += 1;
+                
+                if self.e + 1 < self.and_stack.len() {
+                    let and_gi = self.and_stack[self.e].global_index;
+                    let or_gi = self.or_stack.top()
+                        .map(|or_fr| or_fr.global_index)
+                        .unwrap_or(0);
+
+                    if and_gi > or_gi {
+                        let index = self.e + 1;
+
+                        self.and_stack[index].e  = self.e;
+                        self.and_stack[index].cp = self.cp;
+                        self.and_stack[index].global_index = gi;
+                        
+                        self.and_stack.resize(index, num_cells);
+
+                        self.e = index;
+                        
+                        return;
+                    }
+                }
+                
+                self.and_stack.push(gi, self.e, self.cp, num_cells);
+                self.e = self.and_stack.len() - 1;
             },
             &ControlInstruction::Call(ref name, arity, _) =>
                 self.try_call_predicate(code_dir, name.clone(), arity),
@@ -1781,10 +1787,10 @@ impl MachineState {
                 },
             &ControlInstruction::Deallocate => {
                 let e = self.e;
-
+                
                 self.cp = self.and_stack[e].cp;
-                self.e  = self.and_stack[e].e;
-
+                self.e  = self.and_stack[e].e;                
+                
                 self.p += 1;
             },
             &ControlInstruction::Execute(ref name, arity) =>
@@ -1798,15 +1804,6 @@ impl MachineState {
                 self.b0 = self.b;
                 self.p  = CodePtr::DirEntry(p);
             },
-            &ControlInstruction::Proceed =>
-                self.p = self.cp,
-            &ControlInstruction::ThrowCall => {
-                self.cp = self.p + 1;
-                self.goto_throw();
-            },
-            &ControlInstruction::ThrowExecute => {
-                self.goto_throw();
-            },            
             &ControlInstruction::IsCall(r, ref at) => {
                 let a1 = self[r].clone();
                 let a2 = try_or_fail!(self, self.get_number(at));
@@ -1818,9 +1815,18 @@ impl MachineState {
                 let a1 = self[r].clone();
                 let a2 = try_or_fail!(self, self.get_number(at));
 
-                self.unify(a1, Addr::Con(Constant::from(a2)));
+                self.unify(a1, Addr::Con(Constant::from(a2)));                
                 self.p = self.cp;
-            }
+            },
+            &ControlInstruction::Proceed =>
+                self.p = self.cp,
+            &ControlInstruction::ThrowCall => {
+                self.cp = self.p + 1;
+                self.goto_throw();
+            },
+            &ControlInstruction::ThrowExecute => {
+                self.goto_throw();
+            },
         };
     }
 
@@ -1829,9 +1835,9 @@ impl MachineState {
         match instr {
             &IndexedChoiceInstruction::Try(l) => {
                 let n = self.num_of_args;
-                let num_frames = self.num_frames();
-
-                self.or_stack.push(num_frames + 1,
+                let gi = self.next_global_index();
+                
+                self.or_stack.push(gi,
                                    self.e,
                                    self.cp,
                                    self.b,
@@ -1899,7 +1905,7 @@ impl MachineState {
                 self.heap.truncate(self.or_stack[b].h);
                 self.b = self.or_stack[b].b;
 
-                self.or_stack.pop();
+                self.or_stack.truncate(self.b);
 
                 self.hb = self.heap.h;
                 self.p += l;
@@ -1912,9 +1918,9 @@ impl MachineState {
         match instr {
             &ChoiceInstruction::TryMeElse(offset) => {
                 let n = self.num_of_args;
-                let num_frames = self.num_frames();
-
-                self.or_stack.push(num_frames + 1,
+                let gi = self.next_global_index();
+                
+                self.or_stack.push(gi,
                                    self.e,
                                    self.cp,
                                    self.b,
@@ -1983,7 +1989,7 @@ impl MachineState {
 
                 self.b = self.or_stack[b].b;
 
-                self.or_stack.pop();
+                self.or_stack.truncate(self.b);
 
                 self.hb = self.heap.h;
                 self.p += 1;
@@ -2012,7 +2018,7 @@ impl MachineState {
             &CutInstruction::GetLevel => {
                 let b0 = self.b0;
                 let e  = self.e;
-                
+
                 self.and_stack[e].b0 = b0;
                 self.p += 1;
             },

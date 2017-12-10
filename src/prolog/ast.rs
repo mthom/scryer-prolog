@@ -317,7 +317,7 @@ pub enum Term {
 pub enum InlinedQueryTerm {
     CompareNumber(CompareNumberQT, Vec<Box<Term>>),
     IsAtomic(Vec<Box<Term>>),
-    IsVar(Vec<Box<Term>>)
+    IsVar(Vec<Box<Term>>),
 }
 
 impl InlinedQueryTerm {
@@ -325,7 +325,7 @@ impl InlinedQueryTerm {
         match self {
             &InlinedQueryTerm::CompareNumber(_, _) => 2,
             &InlinedQueryTerm::IsAtomic(_) => 1,
-            &InlinedQueryTerm::IsVar(_) => 1                
+            &InlinedQueryTerm::IsVar(_) => 1,
         }
     }
 }
@@ -344,8 +344,8 @@ pub enum QueryTerm {
     CallN(Vec<Box<Term>>),
     Catch(Vec<Box<Term>>),
     Cut,
-    Is(Vec<Box<Term>>),
     Inlined(InlinedQueryTerm),
+    Is(Vec<Box<Term>>),
     Term(Term),
     Throw(Vec<Box<Term>>)
 }
@@ -756,8 +756,6 @@ impl ControlInstruction {
             &ControlInstruction::ThrowExecute => true,
             &ControlInstruction::Goto(_, _) => true,
             &ControlInstruction::Proceed => true,
-            &ControlInstruction::IsCall(_, _) => true,
-            &ControlInstruction::IsExecute(_, _) => true,
             _ => false
         }
     }
@@ -963,10 +961,6 @@ pub struct Heap {
 }
 
 impl Heap {
-    pub fn new() -> Self {
-        Heap { heap: vec![], h : 0 }
-    }
-
     pub fn with_capacity(cap: usize) -> Self {
         Heap { heap: vec![HeapCellValue::Str(0); cap], h: 0 }
     }

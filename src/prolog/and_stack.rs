@@ -48,7 +48,7 @@ impl AndStack {
     pub fn clear(&mut self) {
         self.0.clear()
     }
-
+    
     pub fn resize(&mut self, fr: usize, n: usize) {                        
         let len = self[fr].perms.len();               
         

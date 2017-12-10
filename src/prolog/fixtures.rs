@@ -279,7 +279,7 @@ impl<'a> VariableFixtures<'a>
     {
         for term_ref in head.breadth_first_iter() {
             match term_ref {
-                TermRef::Var(_, cell, _) => {
+                TermRef::Var(Level::Shallow, cell, _) => {
                     unsafe_vars.remove(&cell.get().norm());
                 },
                 _ => {}

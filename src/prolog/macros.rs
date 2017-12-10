@@ -135,14 +135,6 @@ macro_rules! is_var {
     )
 }
 
-/*
-macro_rules! retry_me_else {
-    ($o:expr) => (
-        Line::Choice(ChoiceInstruction::RetryMeElse($o))
-    )
-}
- */
-
 macro_rules! trust_me {
     () => (
         Line::Choice(ChoiceInstruction::TrustMe)

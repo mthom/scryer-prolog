@@ -101,7 +101,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             }
         }
     }
-
+    
     fn add_or_increment_void_instr<Target>(target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
@@ -279,13 +279,13 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 ControlInstruction::Call(name, arity, _) =>
                     *ctrl = ControlInstruction::Execute(name, arity),
                 ControlInstruction::CallN(arity) =>
-                    *ctrl = ControlInstruction::ExecuteN(arity),
-                ControlInstruction::IsCall(r, at) =>
-                    *ctrl = ControlInstruction::IsExecute(r, at),
+                    *ctrl = ControlInstruction::ExecuteN(arity),               
                 ControlInstruction::CatchCall =>
                     *ctrl = ControlInstruction::CatchExecute,
                 ControlInstruction::ThrowCall =>
                     *ctrl = ControlInstruction::ThrowExecute,
+                ControlInstruction::IsCall(r, at) =>
+                    *ctrl = ControlInstruction::IsExecute(r, at),
                 ControlInstruction::Proceed => {},
                 _ => dealloc_index += 1 // = code.len()
             }
@@ -334,7 +334,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         let r = self.mark_non_callable(name, 1, term_loc, vr, code);
                         code.push(is_var!(r));
                     }
-                }
+                }        
         }
 
         Ok(())
@@ -376,12 +376,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                             Line::Cut(CutInstruction::Cut(is_terminal))
                         });
                     },
-                    &QueryTerm::Inlined(ref term) =>
-                        self.compile_inlined(term, term_loc, code)?,
                     &QueryTerm::Is(ref terms) => {
-                        let (mut acode, at) = try!(self.call_arith_eval(terms[1].as_ref(), 1));
+                        let (mut acode, at) = self.call_arith_eval(terms[1].as_ref(), 1)?;
                         code.append(&mut acode);
-
+                        
                         match terms[0].as_ref() {
                             &Term::Var(ref vr, ref name) => {
                                 let r = self.mark_non_callable(name,
@@ -389,7 +387,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                                                term_loc,
                                                                vr,
                                                                code);
-
+                                
                                 code.push(is_call!(r, at.unwrap_or(interm!(1))));
                             },
                             &Term::Constant(_, Constant::Float(fl)) => {
@@ -405,11 +403,20 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                                                temp_v!(1))]);
                                 code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
                             },
+                            &Term::Constant(_, Constant::Rational(ref r)) => {
+                                let r = r.clone();
+                                code.push(query![put_constant!(Level::Shallow,
+                                                               Constant::Rational(r),
+                                                               temp_v!(1))]);
+                                code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
+                            },
                             _ => {
                                 code.push(fail!());
                             }
                         }
                     },
+                    &QueryTerm::Inlined(ref term) =>
+                        self.compile_inlined(term, term_loc, code)?,
                     _ if chunk_num == 0 => {
                         self.marker.reset_arg(term.arity());
 

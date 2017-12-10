@@ -34,7 +34,7 @@ mod tests {
         submit(&mut wam, "p(Z, Z).");
         submit(&mut wam, "clouds(are, nice).");
 
-        // submit returns true on failure, false on success.
+        // submit returns false on failure, true on success.
         assert_eq!(submit(&mut wam, "?- p(Z, Z)."), true);
         assert_eq!(submit(&mut wam, "?- p(Z, z)."), true);
         assert_eq!(submit(&mut wam, "?- p(Z, w)."), true);
