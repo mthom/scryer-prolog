@@ -756,6 +756,8 @@ impl ControlInstruction {
             &ControlInstruction::ThrowExecute => true,
             &ControlInstruction::Goto(_, _) => true,
             &ControlInstruction::Proceed => true,
+            &ControlInstruction::IsCall(_, _) => true,
+            &ControlInstruction::IsExecute(_, _) => true,
             _ => false
         }
     }
