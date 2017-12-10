@@ -968,19 +968,13 @@ impl Heap {
     }
     
     pub fn push(&mut self, val: HeapCellValue) {
-        let h = self.h;
-        
-        if h < self.heap.len() {
-            self.heap[h] = val;
-        } else {
-            self.heap.push(val);
-        }
-
+        self.heap.push(val);
         self.h += 1;
     }
 
     pub fn truncate(&mut self, h: usize) {
         self.h = h;
+        self.heap.truncate(h);
     }
 
     pub fn len(&self) -> usize {
@@ -988,9 +982,10 @@ impl Heap {
     }
 
     pub fn append(&mut self, vals: Vec<HeapCellValue>) {
-        for val in vals.into_iter() {
-            self.push(val);
-        }
+        let n = vals.len();
+        
+        self.heap.extend(vals.into_iter());
+        self.h += n;
     }
 
     pub fn clear(&mut self) {

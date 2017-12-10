@@ -42,6 +42,23 @@ IR to get JIT-compiled and -executed Prolog programs.
 It's my hope to use rusty-wam as the logic engine of a low level (and
 ideally, very fast) [Shen](http://shenlanguage.org) implementation.
 
+## Nice to have features
+
+There are no current plans to implement any of these, but they might be
+nice to have in the future. They'd make a good project for anyone wanting
+to contribute code to rusty-wam.
+
+1. Add the global analysis techniques of Peter van Roy's thesis, "Can
+Logic Programming Execute as Fast as Imperative Programming?"
+
+2. Add support for unum representation and arithmetic, as described in Gustafson's
+book "The End of Error."
+
+3. Add support for shift/reset delimited continuations, see "Delimited Continuations
+for Prolog."
+
+4. Add an incremental compacting garbage collector the heap.
+
 ## Built-in predicates
 
 The following predicates are built-in to rusty-wam.
