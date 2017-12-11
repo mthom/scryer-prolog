@@ -964,7 +964,7 @@ pub struct Heap {
 
 impl Heap {
     pub fn with_capacity(cap: usize) -> Self {
-        Heap { heap: vec![HeapCellValue::Str(0); cap], h: 0 }
+        Heap { heap: Vec::with_capacity(cap), h: 0 }
     }
     
     pub fn push(&mut self, val: HeapCellValue) {
