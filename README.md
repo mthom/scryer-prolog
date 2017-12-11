@@ -51,13 +51,15 @@ to contribute code to rusty-wam.
 1. Add the global analysis techniques of Peter van Roy's thesis, "Can
 Logic Programming Execute as Fast as Imperative Programming?"
 
-2. Add support for unum representation and arithmetic, as described in Gustafson's
+2. Add unum representation and arithmetic, as described in Gustafson's
 book "The End of Error."
 
 3. Add support for shift/reset delimited continuations, see "Delimited Continuations
 for Prolog."
 
 4. Add an incremental compacting garbage collector the heap.
+
+5. Add a concurrent atom table.
 
 ## Built-in predicates
 
