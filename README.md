@@ -136,7 +136,7 @@ member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
 }:
 prolog> ?- member(X, [a, b, c]).      
-true
+true .
 X = a ;
 X = b ;
 X = c ;
