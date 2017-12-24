@@ -183,10 +183,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "reset_block"),
             &BuiltInInstruction::SetBall =>
                 write!(f, "set_ball"),
-            &BuiltInInstruction::SetNeckCutPoint(terminal) =>
-                write!(f, "set_neck_cp {}", terminal),
-            &BuiltInInstruction::SetNonNeckCutPoint(terminal) =>
-                write!(f, "set_non_neck_cp {}", terminal),
+            &BuiltInInstruction::SetCutPoint =>
+                write!(f, "set_cp"),
             &BuiltInInstruction::Succeed =>
                 write!(f, "true"),
             &BuiltInInstruction::UnwindStack =>
@@ -399,7 +397,7 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
                 Ok(rule) => rule,
                 Err(e) => return EvalSession::ParserError(e)                
             };
-
+            
             wam.add_rule(rule, compiled_rule)
         },
         &TopLevel::Query(ref query) => {

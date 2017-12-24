@@ -729,8 +729,7 @@ pub enum BuiltInInstruction {
     IsVar(RegType),
     ResetBlock,
     SetBall,
-    SetNeckCutPoint(Terminal),
-    SetNonNeckCutPoint(Terminal),
+    SetCutPoint,
     Succeed,
     Unify,
     UnwindStack

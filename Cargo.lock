@@ -1,6 +1,6 @@
 [root]
 name = "rusty-wam"
-version = "0.7.3"
+version = "0.7.4"
 dependencies = [
  "lazy_static 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",

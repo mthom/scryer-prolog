@@ -165,12 +165,6 @@ macro_rules! proceed {
     )
 }
 
-macro_rules! terminal {
-    () => (
-        Terminal::Terminal
-    )
-}
-
 macro_rules! non_terminal {
     () => (
         Terminal::Non
@@ -180,6 +174,12 @@ macro_rules! non_terminal {
 macro_rules! cut {
     ($term:expr) => (
         Line::Cut(CutInstruction::Cut($term))
+    )
+}
+
+macro_rules! neck_cut {
+    ($term:expr) => (
+        Line::Cut(CutInstruction::NeckCut($term))
     )
 }
 
@@ -303,15 +303,9 @@ macro_rules! get_cp {
     )
 }
 
-macro_rules! set_neck_cp {
-    ($term:expr) => (
-        Line::BuiltIn(BuiltInInstruction::SetNeckCutPoint($term))
-    )
-}
-
-macro_rules! set_non_neck_cp {
-    ($term:expr) => (
-        Line::BuiltIn(BuiltInInstruction::SetNonNeckCutPoint($term))
+macro_rules! set_cp {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::SetCutPoint)
     )
 }
 

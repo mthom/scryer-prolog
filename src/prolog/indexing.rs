@@ -116,6 +116,15 @@ impl CodeOffsets {
         flattened_index
     }
 
+    fn adjust_internal_index(index: IntIndex) -> IntIndex
+    {
+        match index {
+            IntIndex::Internal(o) => IntIndex::Internal(o + 1),
+            IntIndex::External(o) => IntIndex::External(o),
+            _ => IntIndex::Fail
+        }
+    }
+    
     fn switch_on_constant(con_ind: HashMap<Constant, ThirdLevelIndex>, prelude: &mut CodeDeque)
                           -> IntIndex
     {
@@ -130,21 +139,8 @@ impl CodeOffsets {
             IntIndex::Internal(1)
         } else {
             con_ind.values().next()
-                   .map(|i| *i)
+                   .map(|index| Self::adjust_internal_index(*index))
                    .unwrap_or(IntIndex::Fail)
-        }
-    }
-
-    fn switch_on_list(mut lists: ThirdLevelIndex, prelude: &mut CodeDeque) -> IntIndex
-    {
-        if lists.len() > 1 {
-            Self::cap_choice_seq_with_trust(&mut lists);
-            prelude.extend(lists.into_iter().map(|i| Line::from(i)));
-            IntIndex::Internal(0)
-        } else {
-            lists.first()
-                 .map(|i| IntIndex::External(i.offset()))
-                 .unwrap_or(IntIndex::Fail)
         }
     }
 
@@ -162,11 +158,23 @@ impl CodeOffsets {
             IntIndex::Internal(1)
         } else {
             str_ind.values().next()
-                   .map(|i| *i)
+                   .map(|index| Self::adjust_internal_index(*index))
                    .unwrap_or(IntIndex::Fail)
         }
     }
 
+    fn switch_on_list(mut lists: ThirdLevelIndex, prelude: &mut CodeDeque) -> IntIndex
+    {
+        if lists.len() > 1 {
+            Self::cap_choice_seq_with_trust(&mut lists);
+            prelude.extend(lists.into_iter().map(|i| Line::from(i)));
+            IntIndex::Internal(0)
+        } else {
+            lists.first()
+                 .map(|i| IntIndex::External(i.offset()))
+                 .unwrap_or(IntIndex::Fail)
+        }
+    }
 
     fn switch_on_str_offset_from(str_loc: IntIndex, prelude_len: usize, con_loc: IntIndex)
                                  -> usize
@@ -186,7 +194,7 @@ impl CodeOffsets {
         match con_loc {
             IntIndex::External(offset) => offset + prelude_len + 1,
             IntIndex::Fail => 0,
-            IntIndex::Internal(offset) => offset,
+            IntIndex::Internal(offset) => offset, 
         }
     }
 
