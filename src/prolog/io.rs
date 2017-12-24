@@ -141,6 +141,16 @@ impl fmt::Display for IndexedChoiceInstruction {
     }
 }
 
+impl fmt::Display for Terminal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Terminal::Terminal =>
+                write!(f, "terminal"),
+            &Terminal::Non =>
+                write!(f, "non_terminal")
+        }
+    }
+}
 
 impl fmt::Display for BuiltInInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -159,6 +169,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "get_ball X1"),
             &BuiltInInstruction::GetCurrentBlock =>
                 write!(f, "get_current_block X1"),
+            &BuiltInInstruction::GetCutPoint =>
+                write!(f, "get_cp"),
             &BuiltInInstruction::InstallNewBlock =>
                 write!(f, "install_new_block"),
             &BuiltInInstruction::InternalCallN =>
@@ -171,6 +183,10 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "reset_block"),
             &BuiltInInstruction::SetBall =>
                 write!(f, "set_ball"),
+            &BuiltInInstruction::SetNeckCutPoint(terminal) =>
+                write!(f, "set_neck_cp {}", terminal),
+            &BuiltInInstruction::SetNonNeckCutPoint(terminal) =>
+                write!(f, "set_non_neck_cp {}", terminal),
             &BuiltInInstruction::Succeed =>
                 write!(f, "true"),
             &BuiltInInstruction::UnwindStack =>

@@ -123,6 +123,12 @@ macro_rules! try_me_else {
     )
 }
 
+macro_rules! retry_me_else {
+    ($o:expr) => (
+        Line::Choice(ChoiceInstruction::RetryMeElse($o))
+    )
+}
+
 macro_rules! is_atomic {
     ($reg:expr) => (
         Line::BuiltIn(BuiltInInstruction::IsAtomic($reg))
@@ -156,6 +162,12 @@ macro_rules! execute_n {
 macro_rules! proceed {
     () => (
         Line::Control(ControlInstruction::Proceed)
+    )
+}
+
+macro_rules! terminal {
+    () => (
+        Terminal::Terminal
     )
 }
 
@@ -258,5 +270,65 @@ macro_rules! duplicate_term {
 macro_rules! get_level {
     () => (
         Line::Cut(CutInstruction::GetLevel)
+    )
+}
+
+macro_rules! switch_on_term {
+    ($v:expr, $c:expr, $l:expr, $s:expr) => (
+        Line::Indexing(IndexingInstruction::SwitchOnTerm($v, $c, $l, $s))
+    )
+}
+
+macro_rules! indexed_try {
+    ($i:expr) => (
+        Line::IndexedChoice(IndexedChoiceInstruction::Try($i))
+    )
+}
+
+macro_rules! retry {
+    ($i:expr) => (
+        Line::IndexedChoice(IndexedChoiceInstruction::Retry($i))
+    )
+}
+
+macro_rules! trust {
+    ($i:expr) => (
+        Line::IndexedChoice(IndexedChoiceInstruction::Trust($i))
+    )
+}
+
+macro_rules! get_cp {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::GetCutPoint)
+    )
+}
+
+macro_rules! set_neck_cp {
+    ($term:expr) => (
+        Line::BuiltIn(BuiltInInstruction::SetNeckCutPoint($term))
+    )
+}
+
+macro_rules! set_non_neck_cp {
+    ($term:expr) => (
+        Line::BuiltIn(BuiltInInstruction::SetNonNeckCutPoint($term))
+    )
+}
+
+macro_rules! get_constant {
+    ($c:expr, $r:expr) => (
+        FactInstruction::GetConstant(Level::Shallow, $c, $r)
+    )
+}
+
+macro_rules! get_structure {
+    ($atom:expr, $arity:expr, $r:expr) => (
+        FactInstruction::GetStructure(Level::Shallow, $atom, $arity, $r)
+    )
+}
+
+macro_rules! unify_variable {
+    ($r:expr) => (
+        FactInstruction::UnifyVariable($r)
     )
 }

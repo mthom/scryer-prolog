@@ -104,7 +104,90 @@ fn get_builtins() -> Code {
          proceed!(),
          fact![get_value!(temp_v!(1), 2)], // =/2, 73.
          proceed!(),
-         proceed!() // true/0, 75.
+         proceed!(), // true/0, 75.
+         try_me_else!(2), // ';'/2, 76.
+         execute_n!(1),
+         trust_me!(),
+         query![put_value!(temp_v!(2), 1)],
+         execute_n!(1),
+         allocate!(3), // ','/2, 81.
+         fact![get_var_in_fact!(perm_v!(2), 1),
+               get_var_in_fact!(perm_v!(1), 2)],
+         query![put_var!(perm_v!(3), 1)],         
+         get_cp!(),
+         query![put_value!(perm_v!(2), 1),
+                put_value!(perm_v!(1), 2),
+                put_unsafe_value!(3, 3)],
+         deallocate!(),
+         goto!(88, 3),
+         try_me_else!(25), // ','/3, 88.
+         switch_on_term!(4, 0, 0, 0),
+         indexed_try!(4),
+         retry!(11),
+         trust!(14),
+         try_me_else!(8),
+         allocate!(3),
+         fact![get_constant!(Constant::from("!"), temp_v!(1)),
+               get_structure!(String::from(","), 2, temp_v!(2)),
+               unify_variable!(perm_v!(2)),
+               unify_variable!(perm_v!(1)),
+               get_var_in_fact!(perm_v!(3), 3)],
+         query![put_value!(perm_v!(3), 1)],
+         set_non_neck_cp!(non_terminal!()),
+         query![put_unsafe_value!(2, 1),
+                put_unsafe_value!(1, 2),
+                put_value!(perm_v!(3), 3)],
+         deallocate!(),
+         goto!(88, 3),
+         retry_me_else!(4),
+         fact![get_constant!(Constant::from("!"), temp_v!(1)),
+               get_constant!(Constant::from("!"), temp_v!(2))],
+         query![put_value!(temp_v!(3), 1)],
+         set_neck_cp!(terminal!()),
+         trust_me!(),
+         allocate!(1),
+         fact![get_constant!(Constant::from("!"), temp_v!(1)),
+               get_var_in_fact!(perm_v!(1), 2)],
+         query![put_value!(temp_v!(3), 1)],
+         set_non_neck_cp!(non_terminal!()),
+         query![put_value!(perm_v!(1), 1)],
+         deallocate!(),
+         execute_n!(1),
+         retry_me_else!(7),
+         allocate!(1),
+         fact![get_constant!(Constant::from("!"), temp_v!(2)),
+               get_var_in_fact!(perm_v!(1), 3)],
+         call_n!(1),
+         query![put_value!(perm_v!(1), 1)],
+         deallocate!(),
+         set_non_neck_cp!(terminal!()),
+         retry_me_else!(7),
+         allocate!(3),
+         fact![get_structure!(String::from(","), 2, temp_v!(2)),
+               unify_variable!(perm_v!(2)),
+               unify_variable!(perm_v!(1)),
+               get_var_in_fact!(perm_v!(3), 3)],         
+         call_n!(1),
+         query![put_unsafe_value!(2, 1),
+                put_unsafe_value!(1, 2),
+                put_value!(perm_v!(3), 3)],
+         deallocate!(),
+         goto!(88, 3),
+         trust_me!(),
+         allocate!(1),
+         fact![get_var_in_fact!(perm_v!(1), 2)],
+         call_n!(1),
+         query![put_value!(perm_v!(1), 1)],
+         deallocate!(),
+         execute_n!(1),
+         allocate!(2), // (->)/2, 134.
+         get_level!(),
+         fact![get_var_in_fact!(perm_v!(2), 2)],
+         call_n!(1),
+         cut!(non_terminal!()),
+         query![put_value!(perm_v!(2), 1)],
+         deallocate!(),
+         execute_n!(1)
     ]
 }
 
@@ -148,6 +231,10 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     op_dir.insert((String::from("=:="), Fixity::In), (XFX, 700));
     op_dir.insert((String::from(">="), Fixity::In), (XFX, 700));
     op_dir.insert((String::from("=<"), Fixity::In), (XFX, 700));
+
+    // control operators.
+    op_dir.insert((String::from(";"), Fixity::In), (XFY, 1100));
+    op_dir.insert((String::from("->"), Fixity::In), (XFY, 1050));
     
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
@@ -163,7 +250,11 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     code_dir.insert((String::from("catch"), 3), (PredicateKeyType::BuiltIn, 5));
     code_dir.insert((String::from("throw"), 1), (PredicateKeyType::BuiltIn, 59));
     code_dir.insert((String::from("="), 2), (PredicateKeyType::BuiltIn, 73));
-    code_dir.insert((String::from("true"), 0), (PredicateKeyType::BuiltIn, 75));
+    code_dir.insert((String::from("true"), 0), (PredicateKeyType::BuiltIn, 75));    
 
+    code_dir.insert((String::from(";"), 2), (PredicateKeyType::BuiltIn, 76));
+    code_dir.insert((String::from(","), 2), (PredicateKeyType::BuiltIn, 81));    
+    code_dir.insert((String::from("->"), 2), (PredicateKeyType::BuiltIn, 134));
+    
     (builtin_code, code_dir, op_dir)
 }

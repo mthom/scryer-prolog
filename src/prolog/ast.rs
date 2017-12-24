@@ -275,6 +275,12 @@ pub enum Constant {
     EmptyList
 }
 
+impl<'a> From<&'a str> for Constant {
+    fn from(input: &str) -> Constant {
+        Constant::Atom(String::from(input))
+    }
+}
+
 impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -416,6 +422,7 @@ pub enum ChoiceInstruction {
     TryMeElse(usize)
 }
 
+#[derive(Clone, Copy)]
 pub enum Terminal {
     Terminal, Non
 }
@@ -715,12 +722,15 @@ pub enum BuiltInInstruction {
     Fail,
     GetBall,
     GetCurrentBlock,
+    GetCutPoint,
     InstallNewBlock,
     InternalCallN,
     IsAtomic(RegType),
     IsVar(RegType),
     ResetBlock,
     SetBall,
+    SetNeckCutPoint(Terminal),
+    SetNonNeckCutPoint(Terminal),
     Succeed,
     Unify,
     UnwindStack

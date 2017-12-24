@@ -65,8 +65,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         self.marker.take_bindings()
     }
 
-    fn update_var_count<Iter>(&mut self, iter: Iter)
-        where Iter: Iterator<Item=TermRef<'a>>
+    fn update_var_count<Iter: Iterator<Item=TermRef<'a>>>(&mut self, iter: Iter)
     {
         for term in iter {
             if let TermRef::Var(_, _, var) = term {
@@ -96,7 +95,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
                 self.marker.reset_arg(arity);
                 self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
-                code.push(Line::Query(target));
+
+                if !target.is_empty() {
+                    code.push(Line::Query(target));
+                }
+                
                 vr.get().norm()
             }
         }
@@ -233,13 +236,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     fn add_conditional_call_inlined(_: &InlinedQueryTerm, code: &mut Code)
     {
         code.push(proceed!());
-
-        /*
-        match term {
-            &InlinedQueryTerm::IsAtomic(_) | &InlinedQueryTerm::IsVar(_) =>
-                code.push(proceed!())
-        };
-         */
     }
 
     fn add_conditional_call(code: &mut Code, qt: &QueryTerm, pvs: usize)
@@ -340,7 +336,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         Ok(())
     }
 
-    fn call_arith_eval(&self, term: &'a Term, target_int: usize) -> Result<ArithCont, ArithmeticError>
+    fn call_arith_eval(&self, term: &'a Term, target_int: usize)
+                       -> Result<ArithCont, ArithmeticError>
     {
         let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings(), target_int);
         evaluator.eval(term)
@@ -421,7 +418,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         self.marker.reset_arg(term.arity());
 
                         let iter = term.post_order_iter();
-                        code.push(Line::Query(self.compile_target(iter, term_loc, is_exposed)));
+                        let query = self.compile_target(iter, term_loc, is_exposed);
+
+                        if !query.is_empty() {
+                            code.push(Line::Query(query));
+                        }
+                        
                         Self::add_conditional_call(code, term, conjunct_info.perm_vars());
                     },
                     _ => {
@@ -479,7 +481,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         if let &QueryTerm::Term(ref term) = p0 {
             if let &Term::Clause(_, _, _) = term {
                 let iter = FactInstruction::iter(term);
-                code.push(Line::Fact(self.compile_target(iter, GenContext::Head, false)));
+                let fact = self.compile_target(iter, GenContext::Head, false);
+
+                if !fact.is_empty() {
+                    code.push(Line::Fact(fact));
+                }
             }
 
             let iter = ChunkedIterator::from_rule_body(p1, clauses);
@@ -550,7 +556,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             let mut compiled_fact = self.compile_target(iter, GenContext::Head, false);
 
             self.mark_unsafe_fact_vars(&mut compiled_fact);
-            code.push(Line::Fact(compiled_fact));
+
+            if !compiled_fact.is_empty() {
+                code.push(Line::Fact(compiled_fact));
+            }
         }
 
         code.push(proceed!());
@@ -567,9 +576,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         self.marker.reset_arg(term.arity());
 
         let iter = term.post_order_iter();
-        let compiled_query = Line::Query(self.compile_target(iter, term_loc, is_exposed));
+        let compiled_query = self.compile_target(iter, term_loc, is_exposed);
 
-        code.push(compiled_query);
+        if !compiled_query.is_empty() {
+            code.push(Line::Query(compiled_query));
+        }
 
         Self::add_conditional_call(code, term, index);
     }

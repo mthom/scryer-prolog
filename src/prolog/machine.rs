@@ -1621,7 +1621,14 @@ impl MachineState {
 
                 self.write_constant_to_var(addr, &c);
                 self.p += 1;
-            },            
+            },
+            &BuiltInInstruction::GetCutPoint => {
+                let c = Constant::Usize(self.b);
+                let addr = self[temp_v!(1)].clone();
+
+                self.write_constant_to_var(addr, &c);
+                self.p += 1;
+            },
             &BuiltInInstruction::EraseBall => {
                 self.ball.0 = 0;
                 self.ball.1.truncate(0);
@@ -1658,6 +1665,28 @@ impl MachineState {
                 }
 
                 self.p += 1;
+            },
+            &BuiltInInstruction::SetNeckCutPoint(terminal) => {
+                let nb = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                match nb {
+                    Addr::Con(Constant::Usize(nb)) => {
+                        self.b = nb;
+                        self.neck_cut(terminal);
+                    },
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::SetNonNeckCutPoint(terminal) => {
+                let nb = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                match nb {
+                    Addr::Con(Constant::Usize(nb)) => {
+                        self.b = nb;
+                        self.non_neck_cut(terminal);
+                    },
+                    _ => self.fail = true
+                };
             },
             &BuiltInInstruction::CleanUpBlock => {
                 let nb = self.store(self.deref(self[temp_v!(1)].clone()));
@@ -1997,24 +2026,45 @@ impl MachineState {
         }
     }
 
+    fn non_neck_cut(&mut self, term: Terminal)
+    {
+        let b = self.b;
+        let e = self.e;
+        let b0 = self.and_stack[e].b0; // STACK[E+2+1]
+
+        if b > b0 {
+            self.b = b0;
+            self.tidy_trail();
+        }
+
+        if let Terminal::Terminal = term {
+            self.p = self.cp;
+        } else {
+            self.p += 1;
+        }
+    }
+
+    fn neck_cut(&mut self, term: Terminal)
+    {
+        let b = self.b;
+        let b0 = self.b0;
+
+        if b > b0 {
+            self.b = b0;
+            self.tidy_trail();
+        }
+
+        if let Terminal::Terminal = term {
+            self.p = self.cp;
+        } else {
+            self.p += 1;
+        }        
+    }
+    
     fn execute_cut_instr(&mut self, instr: &CutInstruction) {
         match instr {
-            &CutInstruction::Cut(ref term) => {
-                let b = self.b;
-                let e = self.e;
-                let b0 = self.and_stack[e].b0; // STACK[E+2+1]
-
-                if b > b0 {
-                    self.b = b0;
-                    self.tidy_trail();
-                }
-
-                if let &Terminal::Terminal = term {
-                    self.p = self.cp;
-                } else {
-                    self.p += 1;
-                }
-            },
+            &CutInstruction::Cut(term) =>
+                self.non_neck_cut(term),                
             &CutInstruction::GetLevel => {
                 let b0 = self.b0;
                 let e  = self.e;
@@ -2022,21 +2072,8 @@ impl MachineState {
                 self.and_stack[e].b0 = b0;
                 self.p += 1;
             },
-            &CutInstruction::NeckCut(ref term) => {
-                let b = self.b;
-                let b0 = self.b0;
-
-                if b > b0 {
-                    self.b = b0;
-                    self.tidy_trail();
-                }
-
-                if let &Terminal::Terminal = term {
-                    self.p = self.cp;
-                } else {
-                    self.p += 1;
-                }
-            }
+            &CutInstruction::NeckCut(term) =>
+                self.neck_cut(term)
         }
     }
 
