@@ -2,14 +2,14 @@
 
 ## Phase 1
 
-An implementation of the Warren Abstract Machine in Rust, done
+Produce an implementation of the Warren Abstract Machine in Rust, done
 according to the progression of languages in [Warren's Abstract
 Machine: A Tutorial
 Reconstruction](http://wambook.sourceforge.net/wambook.pdf).
 
-Phase 1 has been completed, in that rusty-wam implements in some form
+Phase 1 has been completed in that rusty-wam implements in some form
 all of the WAM book, including lists, cuts, Debray allocation, first
-argument indexing, and conjunctive queries.
+argument indexing, last call optimization and conjunctive queries.
 
 ## Phase 2
 
@@ -48,25 +48,32 @@ There are no current plans to implement any of these, but they might be
 nice to have in the future. They'd make a good project for anyone wanting
 to contribute code to rusty-wam.
 
-1. Add the global analysis techniques of Peter van Roy's thesis, "Can
-Logic Programming Execute as Fast as Imperative Programming?"
+1. Implement the global analysis techniques described in Peter van
+Roy's thesis, "Can Logic Programming Execute as Fast as Imperative
+Programming?"
 
-2. Add unum representation and arithmetic, as described in Gustafson's
-book "The End of Error."
+2. Add unum representation and arithmetic, using either an existing
+unum implementation or an ad hoc one. Unums are described in
+Gustafson's book "The End of Error."
 
-3. Add support for shift/reset delimited continuations, see "Delimited Continuations
-for Prolog."
+3. Add support for shift/reset delimited continuations, see "Delimited
+Continuations for Prolog."
 
-4. Add an incremental compacting garbage collector the heap.
+4. Add an incremental compacting garbage collector for the heap.
 
-5. Add a concurrent atom table.
+5. Add concurrent tables to manage shared references to atoms and
+strings.
+
+6. Add optional SLG resolution for fast memoization of predicates.
+
+7. Add some form of JIT predicate indexing.
 
 ## Built-in predicates
 
 The following predicates are built-in to rusty-wam.
 
 * Arithmetic support:
-    * is/2 works for `(+)/2`, `(-)/{1,2}`, `(*)/2`, `(//)/2`, `(div)/2`, `(/)/2`, `(rdiv)/2`,
+    * `is/2` works for `(+)/2`, `(-)/{1,2}`, `(*)/2`, `(//)/2`, `(div)/2`, `(/)/2`, `(rdiv)/2`,
       `(xor)/2`, `(rem)/2`, `(mod)/2`, `(/\)/2`, `(\/)/2`, `(>>)/2`, `(<<)/2`.
     * Comparison operators: `>`, `<`, `=<`, `>=`, `=:=`, `=\=`.
 * `atomic/1`
@@ -129,7 +136,7 @@ member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
 }:
 prolog> ?- member(X, [a, b, c]).      
-true
+true .
 X = a ;
 X = b ;
 X = c ;
