@@ -1660,8 +1660,6 @@ impl MachineState {
 
                 match addr {
                     Addr::Con(Constant::Usize(nb)) => {
-                        self.b0 = nb;
-
                         if self.b > nb {
                             self.b = nb;
                             self.tidy_trail();
