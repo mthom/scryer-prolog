@@ -422,15 +422,10 @@ pub enum ChoiceInstruction {
     TryMeElse(usize)
 }
 
-#[derive(Clone, Copy)]
-pub enum Terminal {
-    Terminal, Non
-}
-
 pub enum CutInstruction {
-    Cut(Terminal),
+    Cut,
     GetLevel,
-    NeckCut(Terminal)
+    NeckCut
 }
 
 pub enum IndexedChoiceInstruction {
@@ -722,14 +717,15 @@ pub enum BuiltInInstruction {
     Fail,
     GetBall,
     GetCurrentBlock,
-    GetCutPoint,
+    GetCutPoint(RegType),
     InstallNewBlock,
     InternalCallN,
     IsAtomic(RegType),
     IsVar(RegType),
     ResetBlock,
     SetBall,
-    SetCutPoint,
+    SetNeckCutPoint(RegType),
+    SetNonNeckCutPoint(RegType),
     Succeed,
     Unify,
     UnwindStack

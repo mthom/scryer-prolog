@@ -165,21 +165,15 @@ macro_rules! proceed {
     )
 }
 
-macro_rules! non_terminal {
-    () => (
-        Terminal::Non
-    )
-}
-
 macro_rules! cut {
-    ($term:expr) => (
-        Line::Cut(CutInstruction::Cut($term))
+    () => (
+        Line::Cut(CutInstruction::Cut)
     )
 }
 
 macro_rules! neck_cut {
-    ($term:expr) => (
-        Line::Cut(CutInstruction::NeckCut($term))
+    () => (
+        Line::Cut(CutInstruction::NeckCut)
     )
 }
 
@@ -297,18 +291,6 @@ macro_rules! trust {
     )
 }
 
-macro_rules! get_cp {
-    () => (
-        Line::BuiltIn(BuiltInInstruction::GetCutPoint)
-    )
-}
-
-macro_rules! set_cp {
-    () => (
-        Line::BuiltIn(BuiltInInstruction::SetCutPoint)
-    )
-}
-
 macro_rules! get_constant {
     ($c:expr, $r:expr) => (
         FactInstruction::GetConstant(Level::Shallow, $c, $r)
@@ -326,3 +308,23 @@ macro_rules! unify_variable {
         FactInstruction::UnifyVariable($r)
     )
 }
+
+macro_rules! set_neck_cut {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::SetNeckCutPoint($r))
+    )
+}
+
+macro_rules! set_non_neck_cut {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::SetNonNeckCutPoint($r))
+    )
+}
+
+macro_rules! get_cp {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::GetCutPoint($r))
+    )
+}
+
+

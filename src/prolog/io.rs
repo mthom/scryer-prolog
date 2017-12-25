@@ -141,17 +141,6 @@ impl fmt::Display for IndexedChoiceInstruction {
     }
 }
 
-impl fmt::Display for Terminal {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Terminal::Terminal =>
-                write!(f, "terminal"),
-            &Terminal::Non =>
-                write!(f, "non_terminal")
-        }
-    }
-}
-
 impl fmt::Display for BuiltInInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -169,8 +158,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "get_ball X1"),
             &BuiltInInstruction::GetCurrentBlock =>
                 write!(f, "get_current_block X1"),
-            &BuiltInInstruction::GetCutPoint =>
-                write!(f, "get_cp"),
+            &BuiltInInstruction::GetCutPoint(r) =>
+                write!(f, "get_cp {}", r),
             &BuiltInInstruction::InstallNewBlock =>
                 write!(f, "install_new_block"),
             &BuiltInInstruction::InternalCallN =>
@@ -183,8 +172,10 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "reset_block"),
             &BuiltInInstruction::SetBall =>
                 write!(f, "set_ball"),
-            &BuiltInInstruction::SetCutPoint =>
-                write!(f, "set_cp"),
+            &BuiltInInstruction::SetNeckCutPoint(r) =>
+                write!(f, "set_neck_cp {}", r),
+            &BuiltInInstruction::SetNonNeckCutPoint(r) =>
+                write!(f, "set_non_neck_cp {}", r),
             &BuiltInInstruction::Succeed =>
                 write!(f, "true"),
             &BuiltInInstruction::UnwindStack =>
@@ -272,9 +263,9 @@ impl fmt::Display for ArithmeticInstruction {
 impl fmt::Display for CutInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &CutInstruction::Cut(_) =>
+            &CutInstruction::Cut =>
                 write!(f, "cut"),
-            &CutInstruction::NeckCut(_) =>
+            &CutInstruction::NeckCut =>
                 write!(f, "neck_cut"),
             &CutInstruction::GetLevel =>
                 write!(f, "get_level")
@@ -382,6 +373,7 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
                 Err(e)   => return EvalSession::ParserError(e)
             };
 
+            print_code(&compiled_pred);
             wam.add_predicate(clauses, compiled_pred)
         },
         &TopLevel::Fact(ref fact) => {

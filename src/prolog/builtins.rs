@@ -65,7 +65,7 @@ fn get_builtins() -> Code {
          get_level!(),
          fact![get_var_in_fact!(perm_v!(2), 3)],
          unify!(),
-         cut!(non_terminal!()),
+         cut!(),
          erase_ball!(),
          query![put_value!(perm_v!(2), 1)],
          deallocate!(),
@@ -95,7 +95,7 @@ fn get_builtins() -> Code {
          allocate!(1),
          get_level!(),
          call_n!(1),
-         cut!(non_terminal!()),
+         cut!(),
          deallocate!(),
          goto!(61, 0),
          trust_me!(),
@@ -110,83 +110,62 @@ fn get_builtins() -> Code {
          trust_me!(),
          query![put_value!(temp_v!(2), 1)],
          execute_n!(1),
-         allocate!(3), // ','/2, 81.
-         fact![get_var_in_fact!(perm_v!(2), 1),
-               get_var_in_fact!(perm_v!(1), 2)],
-         query![put_var!(perm_v!(3), 1)],         
-         get_cp!(),
-         query![put_value!(perm_v!(2), 1),
-                put_value!(perm_v!(1), 2),
-                put_unsafe_value!(3, 3)],
-         deallocate!(),
-         goto!(88, 3),
-         try_me_else!(25), // ','/3, 88.
+         get_cp!(temp_v!(3)), // ','/2, 81
+         goto!(83, 3),
+         try_me_else!(18), // ','/3, 83.
          switch_on_term!(4, 1, 0, 0),
          indexed_try!(4),
-         retry!(11),
-         trust!(14),
-         try_me_else!(8),
-         allocate!(3),
+         retry!(7),
+         trust!(10),
+         try_me_else!(4),
          fact![get_constant!(Constant::from("!"), temp_v!(1)),
                get_structure!(String::from(","), 2, temp_v!(2)),
-               unify_variable!(perm_v!(2)),
-               unify_variable!(perm_v!(1)),
-               get_var_in_fact!(perm_v!(3), 3)],
-         query![put_value!(perm_v!(3), 1)],
-         set_cp!(),
-         query![put_unsafe_value!(2, 1),
-                put_unsafe_value!(1, 2),
-                put_value!(perm_v!(3), 3)],
-         deallocate!(),
-         goto!(88, 3),
+               unify_variable!(temp_v!(1)),
+               unify_variable!(temp_v!(2))],
+         set_neck_cut!(temp_v!(3)),
+         goto!(83, 3),
          retry_me_else!(4),
          fact![get_constant!(Constant::from("!"), temp_v!(1)),
                get_constant!(Constant::from("!"), temp_v!(2))],
-         query![put_value!(temp_v!(3), 1)],
-         set_cp!(),
+         set_neck_cut!(temp_v!(3)),
+         proceed!(),
          trust_me!(),
-         allocate!(1),
-         fact![get_constant!(Constant::from("!"), temp_v!(1)),
-               get_var_in_fact!(perm_v!(1), 2)],
-         query![put_value!(temp_v!(3), 1)],
-         set_cp!(),
-         query![put_value!(perm_v!(1), 1)],
-         deallocate!(),
+         fact![get_constant!(Constant::from("!"), temp_v!(1))],
+         set_neck_cut!(temp_v!(3)),
+         query![put_value!(temp_v!(2), 1)],
          execute_n!(1),
          retry_me_else!(8),
-         allocate!(1),
-         fact![get_constant!(Constant::from("!"), temp_v!(2)),
-               get_var_in_fact!(perm_v!(1), 3)],
-         neck_cut!(non_terminal!()),
-         call_n!(1),
-         query![put_value!(perm_v!(1), 1)],
-         deallocate!(),
-         set_cp!(),
-         retry_me_else!(8), // 121.
-         allocate!(3),
+         allocate!(2),
          fact![get_structure!(String::from(","), 2, temp_v!(2)),
                unify_variable!(perm_v!(2)),
-               unify_variable!(perm_v!(1)),
-               get_var_in_fact!(perm_v!(3), 3)],
-         neck_cut!(non_terminal!()),
+               unify_variable!(perm_v!(1))],
+         neck_cut!(),
          call_n!(1),
          query![put_unsafe_value!(2, 1),
-                put_unsafe_value!(1, 2),
-                put_value!(perm_v!(3), 3)],
+                put_unsafe_value!(1, 2)],
          deallocate!(),
-         goto!(88, 3),
+         goto!(83, 3),
+         retry_me_else!(9),
+         allocate!(1),
+         get_level!(),
+         fact![get_constant!(Constant::from("!"), temp_v!(2))],
+         neck_cut!(),
+         call_n!(1),
+         set_non_neck_cut!(temp_v!(3)),
+         deallocate!(),
+         proceed!(),
          trust_me!(),
          allocate!(1),
-         fact![get_var_in_fact!(perm_v!(1), 2)],         
+         fact![get_var_in_fact!(perm_v!(1), 2)],
          call_n!(1),
          query![put_value!(perm_v!(1), 1)],
          deallocate!(),
          execute_n!(1),
-         allocate!(2), // (->)/2, 136.
+         allocate!(2), // (->)/2, 124.
          get_level!(),
          fact![get_var_in_fact!(perm_v!(2), 2)],
          call_n!(1),
-         cut!(non_terminal!()),
+         cut!(),
          query![put_value!(perm_v!(2), 1)],
          deallocate!(),
          execute_n!(1)
@@ -237,7 +216,7 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     // control operators.
     op_dir.insert((String::from(";"), Fixity::In), (XFY, 1100));
     op_dir.insert((String::from("->"), Fixity::In), (XFY, 1050));
-    
+
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
@@ -252,11 +231,11 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     code_dir.insert((String::from("catch"), 3), (PredicateKeyType::BuiltIn, 5));
     code_dir.insert((String::from("throw"), 1), (PredicateKeyType::BuiltIn, 59));
     code_dir.insert((String::from("="), 2), (PredicateKeyType::BuiltIn, 73));
-    code_dir.insert((String::from("true"), 0), (PredicateKeyType::BuiltIn, 75));    
+    code_dir.insert((String::from("true"), 0), (PredicateKeyType::BuiltIn, 75));
 
     code_dir.insert((String::from(";"), 2), (PredicateKeyType::BuiltIn, 76));
-    code_dir.insert((String::from(","), 2), (PredicateKeyType::BuiltIn, 81));    
-    code_dir.insert((String::from("->"), 2), (PredicateKeyType::BuiltIn, 136));
-    
+    code_dir.insert((String::from(","), 2), (PredicateKeyType::BuiltIn, 81));
+    code_dir.insert((String::from("->"), 2), (PredicateKeyType::BuiltIn, 124));
+
     (builtin_code, code_dir, op_dir)
 }

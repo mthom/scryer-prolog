@@ -99,12 +99,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 if !target.is_empty() {
                     code.push(Line::Query(target));
                 }
-                
+
                 vr.get().norm()
             }
         }
     }
-    
+
     fn add_or_increment_void_instr<Target>(target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
@@ -233,11 +233,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         ConjunctInfo::new(vs, num_of_chunks, has_deep_cut)
     }
 
-    fn add_conditional_call_inlined(_: &InlinedQueryTerm, code: &mut Code)
-    {
-        code.push(proceed!());
-    }
-
     fn add_conditional_call(code: &mut Code, qt: &QueryTerm, pvs: usize)
     {
         match qt {
@@ -247,8 +242,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             },
             &QueryTerm::Catch(_) =>
                 code.push(Line::Control(ControlInstruction::CatchCall)),
-            &QueryTerm::Inlined(ref term) =>
-                Self::add_conditional_call_inlined(term, code),
+            &QueryTerm::Inlined(_) =>
+                code.push(proceed!()),
             &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref atom))) => {
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);
                 code.push(Line::Control(call));
@@ -267,25 +262,30 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     {
         let mut dealloc_index = code.len() - 1;
 
-        if let Some(&mut Line::Control(ref mut ctrl)) = code.last_mut() {
-            let mut instr = ControlInstruction::Proceed;
-            swap(ctrl, &mut instr);
+        match code.last_mut() {
+            Some(&mut Line::Control(ref mut ctrl)) => {
+                let mut instr = ControlInstruction::Proceed;
+                swap(ctrl, &mut instr);
 
-            match instr {
-                ControlInstruction::Call(name, arity, _) =>
-                    *ctrl = ControlInstruction::Execute(name, arity),
-                ControlInstruction::CallN(arity) =>
-                    *ctrl = ControlInstruction::ExecuteN(arity),               
-                ControlInstruction::CatchCall =>
-                    *ctrl = ControlInstruction::CatchExecute,
-                ControlInstruction::ThrowCall =>
-                    *ctrl = ControlInstruction::ThrowExecute,
-                ControlInstruction::IsCall(r, at) =>
-                    *ctrl = ControlInstruction::IsExecute(r, at),
-                ControlInstruction::Proceed => {},
-                _ => dealloc_index += 1 // = code.len()
-            }
-        }
+                match instr {
+                    ControlInstruction::Call(name, arity, _) =>
+                        *ctrl = ControlInstruction::Execute(name, arity),
+                    ControlInstruction::CallN(arity) =>
+                        *ctrl = ControlInstruction::ExecuteN(arity),
+                    ControlInstruction::CatchCall =>
+                        *ctrl = ControlInstruction::CatchExecute,
+                    ControlInstruction::ThrowCall =>
+                        *ctrl = ControlInstruction::ThrowExecute,
+                    ControlInstruction::IsCall(r, at) =>
+                        *ctrl = ControlInstruction::IsExecute(r, at),
+                    ControlInstruction::Proceed => {},
+                    _ => dealloc_index += 1 // = code.len()
+                }
+            },
+            Some(&mut Line::Cut(CutInstruction::Cut)) =>
+                dealloc_index += 1,
+            _ => {}
+        };
 
         dealloc_index
     }
@@ -330,7 +330,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         let r = self.mark_non_callable(name, 1, term_loc, vr, code);
                         code.push(is_var!(r));
                     }
-                }        
+                }
         }
 
         Ok(())
@@ -361,22 +361,16 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
                 match *term {
                     &QueryTerm::Cut => {
-                        let is_terminal = if i + 1 < terms.len() {
-                            Terminal::Non
-                        } else {
-                            Terminal::Terminal
-                        };
-
                         code.push(if chunk_num == 0 {
-                            Line::Cut(CutInstruction::NeckCut(is_terminal))
+                            Line::Cut(CutInstruction::NeckCut)
                         } else {
-                            Line::Cut(CutInstruction::Cut(is_terminal))
+                            Line::Cut(CutInstruction::Cut)
                         });
                     },
                     &QueryTerm::Is(ref terms) => {
                         let (mut acode, at) = self.call_arith_eval(terms[1].as_ref(), 1)?;
                         code.append(&mut acode);
-                        
+
                         match terms[0].as_ref() {
                             &Term::Var(ref vr, ref name) => {
                                 let r = self.mark_non_callable(name,
@@ -384,7 +378,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                                                term_loc,
                                                                vr,
                                                                code);
-                                
+
                                 code.push(is_call!(r, at.unwrap_or(interm!(1))));
                             },
                             &Term::Constant(_, Constant::Float(fl)) => {
@@ -423,7 +417,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         if !query.is_empty() {
                             code.push(Line::Query(query));
                         }
-                        
+
                         Self::add_conditional_call(code, term, conjunct_info.perm_vars());
                     },
                     _ => {
@@ -455,8 +449,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     fn compile_cleanup(code: &mut Code, conjunct_info: &ConjunctInfo, toc: &'a QueryTerm)
     {
         match toc {
-            &QueryTerm::Inlined(ref term) =>
-                Self::add_conditional_call_inlined(term, code),
+            &QueryTerm::Inlined(_) | &QueryTerm::Cut =>
+                code.push(proceed!()),
             _ => {}
         };
 
