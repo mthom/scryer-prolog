@@ -349,29 +349,19 @@ impl Machine {
 
     fn backtrack(&mut self)
     {
-        let b0 = self.ms
-            .or_stack
-            .top()
-            .map(|fr| fr.b0)
-            .unwrap_or(0);
-
-        let p = if self.ms.b > 0 {
+        if self.ms.b > 0 {
             let b = self.ms.b - 1;
-            self.ms.or_stack[b].bp
+            
+            self.ms.b0 = self.ms.or_stack[b].b0;
+            self.ms.p  = self.ms.or_stack[b].bp;
+
+            if let CodePtr::TopLevel(_, p) = self.ms.p {
+                self.ms.fail = p == 0;
+            } else {
+                self.ms.fail = false;
+            }
         } else {
-            self.ms.p = CodePtr::TopLevel(0, 0);
-            return;
-        };
-
-        self.ms.p = p;
-
-        if let CodePtr::TopLevel(_, p) = p {
-            self.ms.fail = p == 0;
-            self.ms.b0 = b0;
-
-            return;
-        } else {
-            self.ms.fail = false;
+            self.ms.p = CodePtr::TopLevel(0, 0);            
         }
     }
 
@@ -1665,24 +1655,19 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &BuiltInInstruction::SetNeckCutPoint(r) => {
+            &BuiltInInstruction::SetCutPoint(r) => {
                 let addr = self.store(self.deref(self[r].clone()));
 
                 match addr {
                     Addr::Con(Constant::Usize(nb)) => {
-                        self.b = nb;
-                        self.neck_cut();
-                    },
-                    _ => self.fail = true
-                };
-            },
-            &BuiltInInstruction::SetNonNeckCutPoint(r) => {
-                let addr = self.store(self.deref(self[r].clone()));
+                        self.b0 = nb;
 
-                match addr {
-                    Addr::Con(Constant::Usize(nb)) => {
-                        self.b = nb;
-                        self.non_neck_cut();
+                        if self.b > nb {
+                            self.b = nb;
+                            self.tidy_trail();
+                        }
+
+                        self.p += 1;
                     },
                     _ => self.fail = true
                 };
@@ -2025,37 +2010,19 @@ impl MachineState {
         }
     }
 
-    fn neck_cut(&mut self)
-    {
-        let b = self.b;
-        let b0 = self.b0;
-
-        if b > b0 {
-            self.b = b0;
-            self.tidy_trail();
-        }
-
-        self.p += 1;                
-    }
-
-    fn non_neck_cut(&mut self)
-    {
-        let b = self.b;
-        let e = self.e;
-        let b0 = self.and_stack[e].b0; // STACK[E+2+1]
-
-        if b > b0 {
-            self.b = b0;
-            self.tidy_trail();
-        }
-
-        self.p += 1;        
-    }
-    
     fn execute_cut_instr(&mut self, instr: &CutInstruction) {
         match instr {
-            &CutInstruction::Cut =>
-                self.non_neck_cut(),                
+            &CutInstruction::NeckCut => {
+                let b = self.b;
+                let b0 = self.b0;
+
+                if b > b0 {
+                    self.b = b0;
+                    self.tidy_trail();
+                }
+
+                self.p += 1;                
+            },
             &CutInstruction::GetLevel => {
                 let b0 = self.b0;
                 let e  = self.e;
@@ -2063,8 +2030,18 @@ impl MachineState {
                 self.and_stack[e].b0 = b0;
                 self.p += 1;
             },
-            &CutInstruction::NeckCut =>
-                self.neck_cut()
+            &CutInstruction::Cut => {
+                let b = self.b;
+                let e = self.e;
+                let b0 = self.and_stack[e].b0; // STACK[E+2+1]
+
+                if b > b0 {
+                    self.b = b0;
+                    self.tidy_trail();
+                }
+
+                self.p += 1;   
+            }
         }
     }
 

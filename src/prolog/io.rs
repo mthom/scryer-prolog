@@ -172,10 +172,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "reset_block"),
             &BuiltInInstruction::SetBall =>
                 write!(f, "set_ball"),
-            &BuiltInInstruction::SetNeckCutPoint(r) =>
-                write!(f, "set_neck_cp {}", r),
-            &BuiltInInstruction::SetNonNeckCutPoint(r) =>
-                write!(f, "set_non_neck_cp {}", r),
+            &BuiltInInstruction::SetCutPoint(r) =>
+                write!(f, "set_cp {}", r),
             &BuiltInInstruction::Succeed =>
                 write!(f, "true"),
             &BuiltInInstruction::UnwindStack =>

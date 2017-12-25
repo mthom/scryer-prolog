@@ -309,15 +309,9 @@ macro_rules! unify_variable {
     )
 }
 
-macro_rules! set_neck_cut {
+macro_rules! set_cp {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::SetNeckCutPoint($r))
-    )
-}
-
-macro_rules! set_non_neck_cut {
-    ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::SetNonNeckCutPoint($r))
+        Line::BuiltIn(BuiltInInstruction::SetCutPoint($r))
     )
 }
 

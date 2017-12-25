@@ -122,36 +122,40 @@ fn get_builtins() -> Code {
                get_structure!(String::from(","), 2, temp_v!(2)),
                unify_variable!(temp_v!(1)),
                unify_variable!(temp_v!(2))],
-         set_neck_cut!(temp_v!(3)),
+         set_cp!(temp_v!(3)),
          goto!(83, 3),
          retry_me_else!(4),
          fact![get_constant!(Constant::from("!"), temp_v!(1)),
                get_constant!(Constant::from("!"), temp_v!(2))],
-         set_neck_cut!(temp_v!(3)),
+         set_cp!(temp_v!(3)),
          proceed!(),
          trust_me!(),
          fact![get_constant!(Constant::from("!"), temp_v!(1))],
-         set_neck_cut!(temp_v!(3)),
+         set_cp!(temp_v!(3)),
          query![put_value!(temp_v!(2), 1)],
          execute_n!(1),
          retry_me_else!(8),
-         allocate!(2),
+         allocate!(3),
          fact![get_structure!(String::from(","), 2, temp_v!(2)),
                unify_variable!(perm_v!(2)),
-               unify_variable!(perm_v!(1))],
+               unify_variable!(perm_v!(1)),
+               get_var_in_fact!(perm_v!(3), 3)],
          neck_cut!(),
          call_n!(1),
          query![put_unsafe_value!(2, 1),
-                put_unsafe_value!(1, 2)],
+                put_unsafe_value!(1, 2),
+                put_value!(perm_v!(3), 3)],
          deallocate!(),
          goto!(83, 3),
-         retry_me_else!(9),
+         retry_me_else!(10),
          allocate!(1),
          get_level!(),
-         fact![get_constant!(Constant::from("!"), temp_v!(2))],
+         fact![get_constant!(Constant::from("!"), temp_v!(2)),
+               get_var_in_fact!(perm_v!(1), 3)],
          neck_cut!(),
          call_n!(1),
-         set_non_neck_cut!(temp_v!(3)),
+         query![put_value!(perm_v!(1), 1)],
+         set_cp!(temp_v!(1)),
          deallocate!(),
          proceed!(),
          trust_me!(),
@@ -161,7 +165,7 @@ fn get_builtins() -> Code {
          query![put_value!(perm_v!(1), 1)],
          deallocate!(),
          execute_n!(1),
-         allocate!(2), // (->)/2, 125.
+         allocate!(2), // (->)/2, 126.
          get_level!(),
          fact![get_var_in_fact!(perm_v!(2), 2)],
          call_n!(1),
@@ -235,7 +239,7 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
 
     code_dir.insert((String::from(";"), 2), (PredicateKeyType::BuiltIn, 76));
     code_dir.insert((String::from(","), 2), (PredicateKeyType::BuiltIn, 81));
-    code_dir.insert((String::from("->"), 2), (PredicateKeyType::BuiltIn, 125));
+    code_dir.insert((String::from("->"), 2), (PredicateKeyType::BuiltIn, 126));
 
     (builtin_code, code_dir, op_dir)
 }
