@@ -373,7 +373,6 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
                 Err(e)   => return EvalSession::ParserError(e)
             };
 
-            print_code(&compiled_pred);
             wam.add_predicate(clauses, compiled_pred)
         },
         &TopLevel::Fact(ref fact) => {
