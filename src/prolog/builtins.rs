@@ -161,7 +161,7 @@ fn get_builtins() -> Code {
          query![put_value!(perm_v!(1), 1)],
          deallocate!(),
          execute_n!(1),
-         allocate!(2), // (->)/2, 124.
+         allocate!(2), // (->)/2, 125.
          get_level!(),
          fact![get_var_in_fact!(perm_v!(2), 2)],
          call_n!(1),
@@ -235,7 +235,7 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
 
     code_dir.insert((String::from(";"), 2), (PredicateKeyType::BuiltIn, 76));
     code_dir.insert((String::from(","), 2), (PredicateKeyType::BuiltIn, 81));
-    code_dir.insert((String::from("->"), 2), (PredicateKeyType::BuiltIn, 124));
+    code_dir.insert((String::from("->"), 2), (PredicateKeyType::BuiltIn, 125));
 
     (builtin_code, code_dir, op_dir)
 }
