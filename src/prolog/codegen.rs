@@ -236,12 +236,18 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     fn add_conditional_call(code: &mut Code, qt: &QueryTerm, pvs: usize)
     {
         match qt {
+            &QueryTerm::Arg(_) => {
+                let call = ControlInstruction::ArgCall;
+                code.push(Line::Control(call));
+            },
             &QueryTerm::CallN(ref terms) => {
                 let call = ControlInstruction::CallN(terms.len());
                 code.push(Line::Control(call));
             },
             &QueryTerm::Catch(_) =>
                 code.push(Line::Control(ControlInstruction::CatchCall)),
+            &QueryTerm::Functor(_) =>
+                code.push(Line::Control(ControlInstruction::FunctorCall)),            
             &QueryTerm::Inlined(_) =>
                 code.push(proceed!()),
             &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref atom))) => {
@@ -268,10 +274,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 swap(ctrl, &mut instr);
 
                 match instr {
+                    ControlInstruction::ArgCall =>
+                        *ctrl = ControlInstruction::ArgExecute,
                     ControlInstruction::Call(name, arity, _) =>
                         *ctrl = ControlInstruction::Execute(name, arity),
                     ControlInstruction::CallN(arity) =>
                         *ctrl = ControlInstruction::ExecuteN(arity),
+                    ControlInstruction::FunctorCall =>
+                        *ctrl = ControlInstruction::FunctorExecute,
                     ControlInstruction::CatchCall =>
                         *ctrl = ControlInstruction::CatchExecute,
                     ControlInstruction::ThrowCall =>
@@ -304,7 +314,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 code.push(compare_number_instr!(cmp,
                                                 at_1.unwrap_or(interm!(1)),
                                                 at_2.unwrap_or(interm!(2))));
-            },
+            },            
             &InlinedQueryTerm::IsAtomic(ref inner_term) =>
                 match inner_term[0].as_ref() {
                     &Term::AnonVar | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
@@ -318,6 +328,19 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(is_atomic!(r));
                     }
                 },
+            &InlinedQueryTerm::IsInteger(ref inner_term) =>
+                match inner_term[0].as_ref() {                    
+                    &Term::Constant(_, Constant::Integer(_)) => {
+                        code.push(succeed!());
+                    },
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        code.push(is_integer!(r));
+                    },
+                    _ => {
+                        code.push(fail!());
+                    },
+                },
             &InlinedQueryTerm::IsVar(ref inner_term) =>
                 match inner_term[0].as_ref() {
                     &Term::Constant(_, _) | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
@@ -330,7 +353,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         let r = self.mark_non_callable(name, 1, term_loc, vr, code);
                         code.push(is_var!(r));
                     }
-                }
+                }        
         }
 
         Ok(())

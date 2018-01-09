@@ -98,6 +98,10 @@ impl fmt::Display for ControlInstruction {
         match self {
             &ControlInstruction::Allocate(num_cells) =>
                 write!(f, "allocate {}", num_cells),
+            &ControlInstruction::ArgCall =>
+                write!(f, "arg_call"),
+            &ControlInstruction::ArgExecute =>
+                write!(f, "arg_execute"),
             &ControlInstruction::Call(ref name, arity, pvs) =>
                 write!(f, "call {}/{}, {}", name, arity, pvs),
             &ControlInstruction::CallN(arity) =>
@@ -108,6 +112,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "execute_catch"),            
             &ControlInstruction::ExecuteN(arity) =>
                 write!(f, "execute_N {}", arity),
+            &ControlInstruction::FunctorCall =>
+                write!(f, "functor_call"),
+            &ControlInstruction::FunctorExecute =>
+                write!(f, "functor_execute"),
             &ControlInstruction::Deallocate =>
                 write!(f, "deallocate"),
             &ControlInstruction::Execute(ref name, arity) =>
@@ -154,6 +162,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "erase_ball"),
             &BuiltInInstruction::Fail =>
                 write!(f, "false"),
+            &BuiltInInstruction::GetArg =>
+                write!(f, "get_arg X1, X2, X3"),
             &BuiltInInstruction::GetBall =>
                 write!(f, "get_ball X1"),
             &BuiltInInstruction::GetCurrentBlock =>
@@ -166,6 +176,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "internal_call_N"),
             &BuiltInInstruction::IsAtomic(r) =>
                 write!(f, "is_atomic {}", r),
+            &BuiltInInstruction::IsInteger(r) =>
+                write!(f, "is_integer {}", r),
             &BuiltInInstruction::IsVar(r) =>
                 write!(f, "is_var {}", r),            
             &BuiltInInstruction::ResetBlock =>
@@ -386,7 +398,7 @@ pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'
                 Ok(rule) => rule,
                 Err(e) => return EvalSession::ParserError(e)                
             };
-            
+
             wam.add_rule(rule, compiled_rule)
         },
         &TopLevel::Query(ref query) => {

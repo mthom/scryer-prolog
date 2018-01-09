@@ -76,13 +76,14 @@ The following predicates are built-in to rusty-wam.
     * `is/2` works for `(+)/2`, `(-)/{1,2}`, `(*)/2`, `(//)/2`, `(div)/2`, `(/)/2`, `(rdiv)/2`,
       `(xor)/2`, `(rem)/2`, `(mod)/2`, `(/\)/2`, `(\/)/2`, `(>>)/2`, `(<<)/2`.
     * Comparison operators: `>`, `<`, `=<`, `>=`, `=:=`, `=\=`.
+* `(\+)/1`
+* `(=)/2`    
 * `atomic/1`
 * `call/N` (1 <= N <= 63)
 * `catch/3`
 * `duplicate_term/2`
 * `false/0`
-* `(\+)/1`
-* `(=)/2`
+* `integer/1`
 * `throw/1`
 * `true/0`
 * `var/1`

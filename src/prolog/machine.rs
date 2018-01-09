@@ -1498,7 +1498,8 @@ impl MachineState {
         self.p  = CodePtr::DirEntry(59);
     }
 
-    fn throw_exception(&mut self, hcv: Vec<HeapCellValue>) {
+    fn throw_exception
+        (&mut self, hcv: Vec<HeapCellValue>) {
         let h = self.heap.h;
 
         self.registers[1] = Addr::HeapCell(h);
@@ -1569,6 +1570,35 @@ impl MachineState {
         }
     }
 
+    fn try_get_arg(&mut self) -> Result<(), Vec<HeapCellValue>>
+    {
+        let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
+        
+        if let Addr::Con(Constant::Integer(i)) = a1 {
+            let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
+
+            if let Addr::Str(o) = a2 {
+                match self.heap[o].clone() {
+                    HeapCellValue::NamedStr(arity, _) =>
+                        match i.to_usize() {
+                            Some(i) if 1 <= i && i <= arity => {
+                                let a3  = self[temp_v!(3)].clone();
+                                let h_a = Addr::HeapCell(o + i);
+                                
+                                self.unify(a3, h_a);
+                            },
+                            _ => self.fail = true
+                        },
+                    _ => self.fail = true
+                };                         
+            } else {
+                return Err(functor!("type_error", 1, [atom!("compound_expected")]));
+            }
+        }
+
+        Ok(())
+    }
+    
     fn execute_built_in_instr(&mut self, code_dir: &CodeDir, instr: &BuiltInInstruction)
     {
         match instr {
@@ -1605,6 +1635,12 @@ impl MachineState {
 
                 self.p += 1;
             },
+            &BuiltInInstruction::GetArg => 
+                try_or_fail!(self, {
+                    let val = self.try_get_arg();
+                    self.p = self.cp;
+                    val
+                }),
             &BuiltInInstruction::GetCurrentBlock => {
                 let c = Constant::Usize(self.block);
                 let addr = self[temp_v!(1)].clone();
@@ -1720,6 +1756,14 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &BuiltInInstruction::IsInteger(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Con(Constant::Integer(_)) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
             &BuiltInInstruction::IsVar(r) => {
                 let d = self.store(self.deref(self[r].clone()));
 
@@ -1747,6 +1791,70 @@ impl MachineState {
         };
     }
 
+    fn try_functor(&mut self) -> Result<(), Vec<HeapCellValue>> {
+        let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
+
+        match a1.clone() {
+            Addr::Str(o) =>
+                match self.heap[o].clone() {
+                    HeapCellValue::NamedStr(arity, name) => {                    
+                        let name  = Addr::Con(Constant::Atom(name)); // A2
+                        let arity = Addr::Con(Constant::Integer(BigInt::from(arity))); // A3
+
+                        let a2 = self[temp_v!(2)].clone();
+                        self.unify(a2, name);
+                        
+                        if !self.fail {
+                            let a3 = self[temp_v!(3)].clone();
+                            self.unify(a3, arity);
+                        }
+                    },
+                    _ => self.fail = true
+                },
+            Addr::HeapCell(_) | Addr::StackCell(_, _) => {
+                let name  = self.store(self.deref(self[temp_v!(2)].clone()));
+                let arity = self.store(self.deref(self[temp_v!(3)].clone()));
+
+                if let Addr::Con(Constant::Atom(name)) = name {
+                    if let Addr::Con(Constant::Integer(arity)) = arity {
+                        let f_a = Addr::Str(self.heap.h);
+                        let arity = match arity.to_usize() {
+                            Some(arity) => arity,
+                            None => {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        };
+                        
+                        self.heap.push(HeapCellValue::NamedStr(arity, name));
+
+                        for _ in 0 .. arity {
+                            let h = self.heap.h;
+                            self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                        }
+                                                
+                        self.unify(a1, f_a);                                                
+                    } else {
+                        return Err(functor!("instantiation_error", 0, []));
+                    }
+                } else {
+                    return Err(functor!("instantiation_error", 0, []));
+                }                
+            },
+            _ => {
+                let a2 = self[temp_v!(2)].clone();
+                self.unify(a1, a2);
+                
+                if !self.fail {
+                    let a3 = self[temp_v!(3)].clone();
+                    self.unify(a3, Addr::Con(Constant::Integer(BigInt::from(0))));
+                }
+            }
+        };
+
+        Ok(())
+    }
+    
     fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
     {
         match instr {
@@ -1779,6 +1887,17 @@ impl MachineState {
                 self.and_stack.push(gi, self.e, self.cp, num_cells);
                 self.e = self.and_stack.len() - 1;
             },
+            &ControlInstruction::ArgCall => {
+                self.cp = self.p + 1;
+                self.num_of_args = 3;
+                self.b0 = self.b;
+                self.p  = CodePtr::DirEntry(150);
+            },
+            &ControlInstruction::ArgExecute => {
+                self.num_of_args = 3;
+                self.b0 = self.b;
+                self.p  = CodePtr::DirEntry(150);
+            },
             &ControlInstruction::Call(ref name, arity, _) =>
                 self.try_call_predicate(code_dir, name.clone(), arity),
             &ControlInstruction::CatchCall => {
@@ -1810,6 +1929,18 @@ impl MachineState {
                 if let Some((name, arity)) = self.setup_call_n(arity) {
                     self.try_execute_predicate(code_dir, name, arity);
                 },
+            &ControlInstruction::FunctorCall =>
+                try_or_fail!(self, {
+                    let val = self.try_functor();
+                    self.p += 1;
+                    val
+                }),
+            &ControlInstruction::FunctorExecute =>
+                try_or_fail!(self, {
+                    let val = self.try_functor();
+                    self.p = self.cp;
+                    val
+                }),
             &ControlInstruction::Goto(p, arity) => {
                 self.num_of_args = arity;
                 self.b0 = self.b;

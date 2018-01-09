@@ -324,6 +324,7 @@ pub enum InlinedQueryTerm {
     CompareNumber(CompareNumberQT, Vec<Box<Term>>),
     IsAtomic(Vec<Box<Term>>),
     IsVar(Vec<Box<Term>>),
+    IsInteger(Vec<Box<Term>>)
 }
 
 impl InlinedQueryTerm {
@@ -331,6 +332,7 @@ impl InlinedQueryTerm {
         match self {
             &InlinedQueryTerm::CompareNumber(_, _) => 2,
             &InlinedQueryTerm::IsAtomic(_) => 1,
+            &InlinedQueryTerm::IsInteger(_) => 1,
             &InlinedQueryTerm::IsVar(_) => 1,
         }
     }
@@ -347,9 +349,11 @@ pub enum CompareNumberQT {
 }
 
 pub enum QueryTerm {
+    Arg(Vec<Box<Term>>),
     CallN(Vec<Box<Term>>),
     Catch(Vec<Box<Term>>),
     Cut,
+    Functor(Vec<Box<Term>>),
     Inlined(InlinedQueryTerm),
     Is(Vec<Box<Term>>),
     Term(Term),
@@ -359,8 +363,10 @@ pub enum QueryTerm {
 impl QueryTerm {
     pub fn arity(&self) -> usize {
         match self {
+            &QueryTerm::Arg(_) => 3,
             &QueryTerm::Catch(_) => 3,
             &QueryTerm::Throw(_) => 1,
+            &QueryTerm::Functor(_) => 3,
             &QueryTerm::Inlined(ref term) => term.arity(),
             &QueryTerm::Is(_) => 2,
             &QueryTerm::CallN(ref terms) => terms.len(),
@@ -715,12 +721,14 @@ pub enum BuiltInInstruction {
     DuplicateTerm,
     EraseBall,
     Fail,
+    GetArg,
     GetBall,
     GetCurrentBlock,
     GetCutPoint(RegType),
     InstallNewBlock,
     InternalCallN,
     IsAtomic(RegType),
+    IsInteger(RegType),
     IsVar(RegType),
     ResetBlock,
     SetBall,
@@ -732,6 +740,8 @@ pub enum BuiltInInstruction {
 
 pub enum ControlInstruction {
     Allocate(usize), // num_frames.
+    ArgCall,
+    ArgExecute,
     Call(Atom, usize, usize), // name, arity, perm_vars after threshold.
     CallN(usize), // arity.
     CatchCall,
@@ -739,6 +749,8 @@ pub enum ControlInstruction {
     Deallocate,
     Execute(Atom, usize),
     ExecuteN(usize),
+    FunctorCall,
+    FunctorExecute,
     Goto(usize, usize), // p, arity.
     IsCall(RegType, ArithmeticTerm),
     IsExecute(RegType, ArithmeticTerm),
@@ -750,12 +762,16 @@ pub enum ControlInstruction {
 impl ControlInstruction {
     pub fn is_jump_instr(&self) -> bool {
         match self {
+            &ControlInstruction::ArgCall => true,
+            &ControlInstruction::ArgExecute => true,
             &ControlInstruction::Call(_, _, _)  => true,
             &ControlInstruction::CatchCall => true,
             &ControlInstruction::CatchExecute => true,
             &ControlInstruction::Execute(_, _)  => true,
             &ControlInstruction::CallN(_) => true,
             &ControlInstruction::ExecuteN(_) => true,
+            &ControlInstruction::FunctorCall => true,
+            &ControlInstruction::FunctorExecute => true,
             &ControlInstruction::ThrowCall => true,
             &ControlInstruction::ThrowExecute => true,
             &ControlInstruction::Goto(_, _) => true,

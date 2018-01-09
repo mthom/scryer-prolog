@@ -1,4 +1,5 @@
 use prolog::ast::*;
+use prolog::num::bigint::{BigInt};
 
 use std::collections::HashMap;
 
@@ -105,14 +106,8 @@ fn get_builtins() -> Code {
          fact![get_value!(temp_v!(1), 2)], // =/2, 73.
          proceed!(),
          proceed!(), // true/0, 75.
-         try_me_else!(2), // ';'/2, 76.
-         execute_n!(1),
-         trust_me!(),
-         query![put_value!(temp_v!(2), 1)],
-         execute_n!(1),
-         get_cp!(temp_v!(3)), // ','/2, 81
-         goto!(83, 3),
-         try_me_else!(18), // ','/3, 83.
+         get_cp!(temp_v!(3)), // ','/2, 76
+         try_me_else!(18), // ','/3, 77.
          switch_on_term!(4, 1, 0, 0),
          indexed_try!(4),
          retry!(7),
@@ -165,14 +160,116 @@ fn get_builtins() -> Code {
          query![put_value!(perm_v!(1), 1)],
          deallocate!(),
          execute_n!(1),
-         allocate!(2), // (->)/2, 126.
-         get_level!(),
-         fact![get_var_in_fact!(perm_v!(2), 2)],
+         get_cp!(temp_v!(3)), // ';'/2, 120.
+         try_me_else!(12),
+         switch_on_term!(4, 0, 0, 1),
+         indexed_try!(3),
+         trust!(5),
+         try_me_else!(3),
+         fact![get_structure!(String::from("->"), 2, temp_v!(1)),
+               unify_variable!(temp_v!(1)),
+               unify_variable!(temp_v!(2))],
+         goto!(139, 3),
+         trust_me!(),
+         fact![get_structure!(String::from("->"), 2, temp_v!(1)),
+               unify_void!(2)],
+         query![put_value!(temp_v!(2), 1)],
+         neck_cut!(),
+         execute_n!(1),
+         retry_me_else!(2),
+         execute_n!(1),
+         trust_me!(),
+         query![put_value!(temp_v!(2), 1)],
+         execute_n!(1),
+         get_cp!(temp_v!(3)), // '->'/2, 138.
+         allocate!(2), // '->'/3, 139.
+         fact![get_var_in_fact!(perm_v!(1), 2),
+               get_var_in_fact!(perm_v!(2), 3)], // cut point.
          call_n!(1),
-         cut!(),
-         query![put_value!(perm_v!(2), 1)],
+         set_cp!(perm_v!(2)),
+         query![put_unsafe_value!(1, 1)],
          deallocate!(),
-         execute_n!(1)
+         execute_n!(1),
+         functor_execute!(), // functor/3, 146.
+         is_integer!(temp_v!(1)), // integer/1, 147.
+         proceed!(),
+         get_arg!(), // get_arg/3, 149.
+         try_me_else!(10), // arg/3, 150.
+         allocate!(4),
+         fact![get_var_in_fact!(perm_v!(1), 1),
+               get_var_in_fact!(perm_v!(2), 2),
+               get_var_in_fact!(perm_v!(4), 3)],
+         is_var!(perm_v!(1)),
+         neck_cut!(),
+         query![put_value!(perm_v!(2), 1),
+                put_var!(temp_v!(4), 2),
+                put_var!(perm_v!(3), 3)],
+         functor_call!(),
+         query![put_value!(perm_v!(1), 1),
+                put_constant!(Level::Shallow, integer!(1), temp_v!(2)),
+                put_unsafe_value!(3, 3),
+                put_value!(perm_v!(2), 4),
+                put_value!(perm_v!(4), 5)],
+         deallocate!(),
+         goto!(173, 5), // goto arg_/3.
+         retry_me_else!(10),
+         allocate!(3),
+         fact![get_var_in_fact!(perm_v!(1), 1),
+               get_var_in_fact!(perm_v!(2), 2),
+               get_var_in_fact!(perm_v!(3), 3)],
+         is_integer!(perm_v!(1)),
+         neck_cut!(),
+         query![put_value!(perm_v!(2), 1),
+                put_var!(temp_v!(4), 2),
+                put_var!(temp_v!(3), 3)],
+         functor_call!(),
+         query![put_value!(perm_v!(1), 1),
+                put_value!(perm_v!(2), 2),
+                put_value!(perm_v!(3), 3)],
+         deallocate!(),
+         goto!(149, 3), // goto get_arg/3.
+         trust_me!(),
+         query![get_var_in_query!(temp_v!(4), 1),
+                put_structure!(Level::Shallow,
+                               String::from("type_error"),
+                               1,
+                               temp_v!(1)),
+                set_constant!(Constant::Atom(String::from("integer_expected")))],
+         goto!(59, 1), // goto throw/1.
+         try_me_else!(5), // arg_/3, 173.
+         fact![get_value!(temp_v!(1), 2),
+               get_value!(temp_v!(1), 3)],
+         neck_cut!(),
+         query![put_value!(temp_v!(4), 2),
+                put_value!(temp_v!(5), 3)],
+         goto!(149, 3), // goto get_arg/3.
+         retry_me_else!(4),
+         fact![get_value!(temp_v!(1), 2)],
+         query![put_value!(temp_v!(4), 2),
+                get_var_in_query!(temp_v!(6), 3),
+                put_value!(temp_v!(5), 3)],
+         goto!(149, 3), // goto get_arg/3
+         trust_me!(),
+         allocate!(5),
+         fact![get_var_in_fact!(perm_v!(2), 1),
+               get_var_in_fact!(perm_v!(4), 3),
+               get_var_in_fact!(perm_v!(3), 4),
+               get_var_in_fact!(perm_v!(5), 5)],
+         compare_number_instr!(CompareNumberQT::LessThan,
+                               ArithmeticTerm::Reg(temp_v!(2)),
+                               ArithmeticTerm::Reg(perm_v!(4))),
+         add!(ArithmeticTerm::Reg(temp_v!(2)),
+              ArithmeticTerm::Integer(BigInt::from(1)),
+              1),
+         query![put_var!(perm_v!(1), 1)],
+         is_call!(perm_v!(1), interm!(1)),
+         query![put_value!(perm_v!(2), 1),
+                put_unsafe_value!(1, 2),
+                put_value!(perm_v!(4), 3),
+                put_value!(perm_v!(3), 4),
+                put_value!(perm_v!(5), 5)],
+         deallocate!(),
+         goto!(173, 3) // goto arg_/3.
     ]
 }
 
@@ -237,9 +334,13 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     code_dir.insert((String::from("="), 2), (PredicateKeyType::BuiltIn, 73));
     code_dir.insert((String::from("true"), 0), (PredicateKeyType::BuiltIn, 75));
 
-    code_dir.insert((String::from(";"), 2), (PredicateKeyType::BuiltIn, 76));
-    code_dir.insert((String::from(","), 2), (PredicateKeyType::BuiltIn, 81));
-    code_dir.insert((String::from("->"), 2), (PredicateKeyType::BuiltIn, 126));
+    code_dir.insert((String::from(","), 2), (PredicateKeyType::BuiltIn, 76));
+    code_dir.insert((String::from(";"), 2), (PredicateKeyType::BuiltIn, 120));
+    code_dir.insert((String::from("->"), 2), (PredicateKeyType::BuiltIn, 138));
+
+    code_dir.insert((String::from("functor"), 3), (PredicateKeyType::BuiltIn, 146));
+    code_dir.insert((String::from("arg"), 3), (PredicateKeyType::BuiltIn, 150));
+    code_dir.insert((String::from("integer"), 1), (PredicateKeyType::BuiltIn, 147));
 
     (builtin_code, code_dir, op_dir)
 }

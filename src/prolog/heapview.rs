@@ -51,8 +51,26 @@ pub struct HeapCellViewer<'a> {
     state_stack: Vec<CellRef<'a>>
 }
 
-impl<'a> HeapCellViewer<'a> {
-    fn cell_ref_from_addr(&self, mut focus: &'a Addr) -> CellRef<'a> {
+impl<'a> HeapCellViewer<'a>
+{
+    pub fn new(heap: &'a Heap, and_stack: &'a AndStack, addr: &'a Addr) -> Self
+    {
+        let mut viewer = HeapCellViewer {
+            heap: heap,
+            and_stack: and_stack,
+            state_stack: vec![]
+        };
+
+        let cell_ref = viewer.deref_cell(addr);
+        let view = viewer.follow(cell_ref);
+
+        viewer.state_stack.push(CellRef::View(view));
+
+        viewer
+    }
+
+    fn deref_cell(&self, mut focus: &'a Addr) -> CellRef<'a>
+    {
         loop {
             match focus {
                 &Addr::Con(ref c) =>
@@ -73,22 +91,6 @@ impl<'a> HeapCellViewer<'a> {
                 }
             }
         }
-    }
-
-    pub fn new(heap: &'a Heap, and_stack: &'a AndStack, addr: &'a Addr) -> Self
-    {
-        let mut viewer = HeapCellViewer {
-            heap: heap,
-            and_stack: and_stack,
-            state_stack: vec![]
-        };
-
-        let cell_ref = viewer.cell_ref_from_addr(addr);
-        let view = viewer.follow(cell_ref);
-
-        viewer.state_stack.push(CellRef::View(view));
-
-        viewer
     }
 
     pub fn remove_token(&mut self, loc: usize) {
@@ -143,21 +145,19 @@ impl<'a> HeapCellViewer<'a> {
 
                     return CellView::Str(arity, name);
                 },
-                &HeapCellValue::Ref(Ref::HeapCell(hc)) => {
+                &HeapCellValue::Ref(Ref::HeapCell(hc)) =>
                     if focus == hc {
                         return CellView::HeapVar(hc);
                     } else {
                         focus = hc;
-                    }
-                },
-                &HeapCellValue::Ref(Ref::StackCell(fr, sc)) => {
-                    match self.cell_ref_from_addr(&self.and_stack[fr][sc]) {
+                    },                
+                &HeapCellValue::Ref(Ref::StackCell(fr, sc)) =>
+                    match self.deref_cell(&self.and_stack[fr][sc]) {
                         CellRef::Lis(hc)         => return self.handle_list(hc),
                         CellRef::View(cell_view) => return cell_view,
                         CellRef::Redirect(hc)    => focus = hc,
                         CellRef::TToken(token)   => return CellView::TToken(token)
-                    };
-                },
+                    },                
                 &HeapCellValue::Str(cell_num) =>
                     focus = cell_num,
             }
@@ -178,7 +178,6 @@ impl<'a> HeapCellViewer<'a> {
         }
     }
 }
-
 
 impl<'a> Iterator for HeapCellViewer<'a> {
     type Item = CellView<'a>;

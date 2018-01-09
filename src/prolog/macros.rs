@@ -1,3 +1,4 @@
+
 macro_rules! internal_call_n {
     () => (
         Line::BuiltIn(BuiltInInstruction::InternalCallN)
@@ -99,9 +100,21 @@ macro_rules! put_var {
     )
 }
 
+macro_rules! put_structure {
+    ($lvl:expr, $name:expr, $arity:expr, $r:expr) => (
+        QueryInstruction::PutStructure($lvl, $name, $arity, $r)
+    )
+}
+
 macro_rules! put_constant {
     ($lvl:expr, $cons:expr, $r:expr) => (
         QueryInstruction::PutConstant($lvl, $cons, $r)
+    )
+}
+
+macro_rules! set_constant {
+    ($cons:expr) => (
+        QueryInstruction::SetConstant($cons)
     )
 }
 
@@ -132,6 +145,12 @@ macro_rules! retry_me_else {
 macro_rules! is_atomic {
     ($reg:expr) => (
         Line::BuiltIn(BuiltInInstruction::IsAtomic($reg))
+    )
+}
+
+macro_rules! is_integer {
+    ($reg:expr) => (
+        Line::BuiltIn(BuiltInInstruction::IsInteger($reg))
     )
 }
 
@@ -303,9 +322,27 @@ macro_rules! get_structure {
     )
 }
 
+macro_rules! functor_call {
+    () => (
+        Line::Control(ControlInstruction::FunctorCall)
+    )
+}
+
+macro_rules! functor_execute {
+    () => (
+        Line::Control(ControlInstruction::FunctorExecute)
+    )
+}
+
 macro_rules! unify_variable {
     ($r:expr) => (
         FactInstruction::UnifyVariable($r)
+    )
+}
+
+macro_rules! unify_void {
+    ($n:expr) => (
+        FactInstruction::UnifyVoid($n)
     )
 }
 
@@ -321,4 +358,20 @@ macro_rules! get_cp {
     )
 }
 
+macro_rules! integer {
+    ($i:expr) => (
+        Constant::Integer(BigInt::from($i))
+    )
+}
 
+macro_rules! add {
+    ($at_1:expr, $at_2:expr, $o:expr) => (
+        Line::Arithmetic(ArithmeticInstruction::Add($at_1, $at_2, $o))
+    )
+}
+
+macro_rules! get_arg {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::GetArg)
+    )
+}
