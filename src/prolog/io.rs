@@ -227,8 +227,7 @@ impl fmt::Display for ArithmeticTerm {
         match self {
             &ArithmeticTerm::Reg(r) => write!(f, "{}", r),
             &ArithmeticTerm::Interm(i) => write!(f, "@{}", i),
-            &ArithmeticTerm::Float(fl) => write!(f, "{}", fl),
-            &ArithmeticTerm::Integer(ref bi) => write!(f, "{}", bi)
+            &ArithmeticTerm::Number(ref n) => write!(f, "{}", n),
         }
     }
 }

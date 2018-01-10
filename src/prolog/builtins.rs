@@ -2,8 +2,9 @@ use prolog::ast::*;
 use prolog::num::bigint::{BigInt};
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
-pub type PredicateKey = (Atom, usize); // name, arity, type.
+pub type PredicateKey = (Rc<Atom>, usize); // name, arity, type.
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PredicateKeyType {
@@ -11,7 +12,7 @@ pub enum PredicateKeyType {
     User
 }
 
-pub type OpDirKey = (Atom, Fixity);
+pub type OpDirKey = (Rc<Atom>, Fixity);
 // name and fixity -> operator type and precedence.
 pub type OpDir = HashMap<OpDirKey, (Specifier, usize)>;
 
@@ -234,7 +235,7 @@ fn get_builtins() -> Code {
                                String::from("type_error"),
                                1,
                                temp_v!(1)),
-                set_constant!(Constant::Atom(String::from("integer_expected")))],
+                set_constant!(Constant::Atom(rc_atom!("integer_expected")))],
          goto!(59, 1), // goto throw/1.
          try_me_else!(5), // arg_/3, 173.
          fact![get_value!(temp_v!(1), 2),
@@ -259,7 +260,7 @@ fn get_builtins() -> Code {
                                ArithmeticTerm::Reg(temp_v!(2)),
                                ArithmeticTerm::Reg(perm_v!(4))),
          add!(ArithmeticTerm::Reg(temp_v!(2)),
-              ArithmeticTerm::Integer(BigInt::from(1)),
+              ArithmeticTerm::Number(rc_integer!(1)),
               1),
          query![put_var!(perm_v!(1), 1)],
          is_call!(perm_v!(1), interm!(1)),
@@ -280,67 +281,67 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
 
     let builtin_code = get_builtins();
 
-    op_dir.insert((String::from(":-"), Fixity::In),   (XFX, 1200));
-    op_dir.insert((String::from(":-"), Fixity::Pre),  (FX, 1200));
-    op_dir.insert((String::from("?-"), Fixity::Pre),  (FX, 1200));
+    op_dir.insert((rc_atom!(":-"), Fixity::In),   (XFX, 1200));
+    op_dir.insert((rc_atom!(":-"), Fixity::Pre),  (FX, 1200));
+    op_dir.insert((rc_atom!("?-"), Fixity::Pre),  (FX, 1200));
 
     // control operators.
-    op_dir.insert((String::from("\\+"), Fixity::Pre), (FY, 900));
-    op_dir.insert((String::from("="), Fixity::In), (XFX, 700));
+    op_dir.insert((rc_atom!("\\+"), Fixity::Pre), (FY, 900));
+    op_dir.insert((rc_atom!("="), Fixity::In), (XFX, 700));
 
     // arithmetic operators.
-    op_dir.insert((String::from("is"), Fixity::In), (XFX, 700));
-    op_dir.insert((String::from("+"), Fixity::In), (YFX, 500));
-    op_dir.insert((String::from("-"), Fixity::In), (YFX, 500));
-    op_dir.insert((String::from("/\\"), Fixity::In), (YFX, 500));
-    op_dir.insert((String::from("\\/"), Fixity::In), (YFX, 500));
-    op_dir.insert((String::from("xor"), Fixity::In), (YFX, 500));
-    op_dir.insert((String::from("//"), Fixity::In), (YFX, 400));
-    op_dir.insert((String::from("/"), Fixity::In), (YFX, 400));
-    op_dir.insert((String::from("div"), Fixity::In), (YFX, 400));
-    op_dir.insert((String::from("*"), Fixity::In), (YFX, 400));
-    op_dir.insert((String::from("-"), Fixity::Pre), (FY, 200));
-    op_dir.insert((String::from("rdiv"), Fixity::In), (YFX, 400));
-    op_dir.insert((String::from("<<"), Fixity::In), (YFX, 400));
-    op_dir.insert((String::from(">>"), Fixity::In), (YFX, 400));
-    op_dir.insert((String::from("mod"), Fixity::In), (YFX, 400));
-    op_dir.insert((String::from("rem"), Fixity::In), (YFX, 400));
+    op_dir.insert((rc_atom!("is"), Fixity::In), (XFX, 700));
+    op_dir.insert((rc_atom!("+"), Fixity::In), (YFX, 500));
+    op_dir.insert((rc_atom!("-"), Fixity::In), (YFX, 500));
+    op_dir.insert((rc_atom!("/\\"), Fixity::In), (YFX, 500));
+    op_dir.insert((rc_atom!("\\/"), Fixity::In), (YFX, 500));
+    op_dir.insert((rc_atom!("xor"), Fixity::In), (YFX, 500));
+    op_dir.insert((rc_atom!("//"), Fixity::In), (YFX, 400));
+    op_dir.insert((rc_atom!("/"), Fixity::In), (YFX, 400));
+    op_dir.insert((rc_atom!("div"), Fixity::In), (YFX, 400));
+    op_dir.insert((rc_atom!("*"), Fixity::In), (YFX, 400));
+    op_dir.insert((rc_atom!("-"), Fixity::Pre), (FY, 200));
+    op_dir.insert((rc_atom!("rdiv"), Fixity::In), (YFX, 400));
+    op_dir.insert((rc_atom!("<<"), Fixity::In), (YFX, 400));
+    op_dir.insert((rc_atom!(">>"), Fixity::In), (YFX, 400));
+    op_dir.insert((rc_atom!("mod"), Fixity::In), (YFX, 400));
+    op_dir.insert((rc_atom!("rem"), Fixity::In), (YFX, 400));
 
     // arithmetic comparison operators.
-    op_dir.insert((String::from(">"), Fixity::In), (XFX, 700));
-    op_dir.insert((String::from("<"), Fixity::In), (XFX, 700));
-    op_dir.insert((String::from("=\\="), Fixity::In), (XFX, 700));
-    op_dir.insert((String::from("=:="), Fixity::In), (XFX, 700));
-    op_dir.insert((String::from(">="), Fixity::In), (XFX, 700));
-    op_dir.insert((String::from("=<"), Fixity::In), (XFX, 700));
+    op_dir.insert((rc_atom!(">"), Fixity::In), (XFX, 700));
+    op_dir.insert((rc_atom!("<"), Fixity::In), (XFX, 700));
+    op_dir.insert((rc_atom!("=\\="), Fixity::In), (XFX, 700));
+    op_dir.insert((rc_atom!("=:="), Fixity::In), (XFX, 700));
+    op_dir.insert((rc_atom!(">="), Fixity::In), (XFX, 700));
+    op_dir.insert((rc_atom!("=<"), Fixity::In), (XFX, 700));
 
     // control operators.
-    op_dir.insert((String::from(";"), Fixity::In), (XFY, 1100));
-    op_dir.insert((String::from("->"), Fixity::In), (XFY, 1050));
+    op_dir.insert((rc_atom!(";"), Fixity::In), (XFY, 1100));
+    op_dir.insert((rc_atom!("->"), Fixity::In), (XFY, 1050));
 
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
-        code_dir.insert((String::from("call"), arity), (PredicateKeyType::BuiltIn, 0));
+        code_dir.insert((rc_atom!("call"), arity), (PredicateKeyType::BuiltIn, 0));
     }
 
-    code_dir.insert((String::from("atomic"), 1), (PredicateKeyType::BuiltIn, 1));
-    code_dir.insert((String::from("var"), 1), (PredicateKeyType::BuiltIn, 3));
-    code_dir.insert((String::from("false"), 0), (PredicateKeyType::BuiltIn, 61));
-    code_dir.insert((String::from("\\+"), 1), (PredicateKeyType::BuiltIn, 62));
-    code_dir.insert((String::from("duplicate_term"), 2), (PredicateKeyType::BuiltIn, 71));
-    code_dir.insert((String::from("catch"), 3), (PredicateKeyType::BuiltIn, 5));
-    code_dir.insert((String::from("throw"), 1), (PredicateKeyType::BuiltIn, 59));
-    code_dir.insert((String::from("="), 2), (PredicateKeyType::BuiltIn, 73));
-    code_dir.insert((String::from("true"), 0), (PredicateKeyType::BuiltIn, 75));
+    code_dir.insert((rc_atom!("atomic"), 1), (PredicateKeyType::BuiltIn, 1));
+    code_dir.insert((rc_atom!("var"), 1), (PredicateKeyType::BuiltIn, 3));
+    code_dir.insert((rc_atom!("false"), 0), (PredicateKeyType::BuiltIn, 61));
+    code_dir.insert((rc_atom!("\\+"), 1), (PredicateKeyType::BuiltIn, 62));
+    code_dir.insert((rc_atom!("duplicate_term"), 2), (PredicateKeyType::BuiltIn, 71));
+    code_dir.insert((rc_atom!("catch"), 3), (PredicateKeyType::BuiltIn, 5));
+    code_dir.insert((rc_atom!("throw"), 1), (PredicateKeyType::BuiltIn, 59));
+    code_dir.insert((rc_atom!("="), 2), (PredicateKeyType::BuiltIn, 73));
+    code_dir.insert((rc_atom!("true"), 0), (PredicateKeyType::BuiltIn, 75));
 
-    code_dir.insert((String::from(","), 2), (PredicateKeyType::BuiltIn, 76));
-    code_dir.insert((String::from(";"), 2), (PredicateKeyType::BuiltIn, 120));
-    code_dir.insert((String::from("->"), 2), (PredicateKeyType::BuiltIn, 138));
+    code_dir.insert((rc_atom!(","), 2), (PredicateKeyType::BuiltIn, 76));
+    code_dir.insert((rc_atom!(";"), 2), (PredicateKeyType::BuiltIn, 120));
+    code_dir.insert((rc_atom!("->"), 2), (PredicateKeyType::BuiltIn, 138));
 
-    code_dir.insert((String::from("functor"), 3), (PredicateKeyType::BuiltIn, 146));
-    code_dir.insert((String::from("arg"), 3), (PredicateKeyType::BuiltIn, 150));
-    code_dir.insert((String::from("integer"), 1), (PredicateKeyType::BuiltIn, 147));
+    code_dir.insert((rc_atom!("functor"), 3), (PredicateKeyType::BuiltIn, 146));
+    code_dir.insert((rc_atom!("arg"), 3), (PredicateKeyType::BuiltIn, 150));
+    code_dir.insert((rc_atom!("integer"), 1), (PredicateKeyType::BuiltIn, 147));
 
     (builtin_code, code_dir, op_dir)
 }

@@ -11,6 +11,7 @@ use std::fmt;
 use std::io::Error as IOError;
 use std::num::{ParseFloatError};
 use std::ops::{Add, AddAssign, Div, Index, IndexMut, Sub, Mul, Neg};
+use std::rc::Rc;
 use std::str::Utf8Error;
 use std::vec::Vec;
 
@@ -59,7 +60,7 @@ impl PredicateClause {
         }
     }
 
-    pub fn name(&self) -> Option<&Atom> {
+    pub fn name(&self) -> Option<Rc<Atom>> {
         match self {
             &PredicateClause::Fact(ref term) => term.name(),
             &PredicateClause::Rule(ref rule) =>
@@ -73,7 +74,7 @@ impl PredicateClause {
 }
 
 pub enum Declaration {
-    Op(usize, Specifier, Atom)
+    Op(usize, Specifier, Rc<Atom>)
 }
 
 pub enum TopLevel {
@@ -266,18 +267,16 @@ pub enum Fixity {
 
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum Constant {
-    Atom(Atom),
-    Float(OrderedFloat<f64>),
-    Integer(BigInt),
-    Rational(Ratio<BigInt>),
-    String(String),
+    Atom(Rc<Atom>),
+    Number(Number),    
+    String(Rc<String>),
     Usize(usize),
     EmptyList
 }
 
 impl<'a> From<&'a str> for Constant {
     fn from(input: &str) -> Constant {
-        Constant::Atom(String::from(input))
+        Constant::Atom(Rc::new(String::from(input)))
     }
 }
 
@@ -288,12 +287,8 @@ impl fmt::Display for Constant {
                 write!(f, "{}", atom),
             &Constant::EmptyList =>
                 write!(f, "[]"),
-            &Constant::Float(fl) =>
-                write!(f, "{}", fl),
-            &Constant::Integer(ref i) =>
-                write!(f, "{}", i),
-            &Constant::Rational(ref r) =>
-                write!(f, "{}", r),
+            &Constant::Number(ref n) =>
+                write!(f, "{}", n),            
             &Constant::String(ref s) =>
                 write!(f, "{}", s),
             &Constant::Usize(integer) =>
@@ -302,22 +297,12 @@ impl fmt::Display for Constant {
     }
 }
 
-impl From<Number> for Constant {
-    fn from(n: Number) -> Self {
-        match n {
-            Number::Rational(r) => Constant::Rational(r),
-            Number::Integer(n) => Constant::Integer(n),
-            Number::Float(f) => Constant::Float(f)
-        }
-    }
-}
-
 pub enum Term {
     AnonVar,
-    Clause(Cell<RegType>, Atom, Vec<Box<Term>>),
+    Clause(Cell<RegType>, Rc<Atom>, Vec<Box<Term>>),
     Cons(Cell<RegType>, Box<Term>, Box<Term>),
     Constant(Cell<RegType>, Constant),
-    Var(Cell<VarReg>, Var)
+    Var(Cell<VarReg>, Rc<Var>)
 }
 
 pub enum InlinedQueryTerm {
@@ -385,7 +370,7 @@ pub struct Rule {
 pub enum ClauseType<'a> {
     CallN,
     Catch,
-    Deep(Level, &'a Cell<RegType>, &'a Atom),
+    Deep(Level, &'a Cell<RegType>, &'a Rc<Atom>),
     Is,
     Root,
     Throw,
@@ -456,11 +441,27 @@ impl IndexedChoiceInstruction {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Number {
     Float(OrderedFloat<f64>),
-    Integer(BigInt),
-    Rational(Ratio<BigInt>)
+    Integer(Rc<BigInt>),
+    Rational(Rc<Ratio<BigInt>>)
+}
+
+impl fmt::Display for Number {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Number::Float(fl) => write!(f, "{}", fl),
+            &Number::Integer(ref bi) => write!(f, "{}", bi),
+            &Number::Rational(ref r) => write!(f, "{}", r)            
+        }
+    }
+}
+
+impl Default for Number {
+    fn default() -> Self {
+        Number::Float(OrderedFloat(0f64))
+    }
 }
 
 impl Number {
@@ -523,8 +524,8 @@ impl Number {
 
 enum NumberPair {
     Float(OrderedFloat<f64>, OrderedFloat<f64>),
-    Integer(BigInt, BigInt),
-    Rational(Ratio<BigInt>, Ratio<BigInt>)
+    Integer(Rc<BigInt>, Rc<BigInt>),
+    Rational(Rc<Ratio<BigInt>>, Rc<Ratio<BigInt>>)
 }
 
 impl NumberPair {
@@ -536,11 +537,12 @@ impl NumberPair {
         }
     }
 
-    fn integer_float_pair(n1: BigInt, n2: OrderedFloat<f64>) -> NumberPair {
+    fn integer_float_pair(n1: Rc<BigInt>, n2: OrderedFloat<f64>) -> NumberPair {
         match n1.to_f64() {
             Some(f1) => NumberPair::Float(OrderedFloat(f1), n2),
             None => if let Some(r) = Ratio::from_float(n2.into_inner()) {
-                NumberPair::Rational(Ratio::from_integer(n1), r)
+                NumberPair::Rational(Rc::new(Ratio::from_integer((*n1).clone())),
+                                     Rc::new(r))
             } else if n2.into_inner().is_sign_positive() {
                 NumberPair::Float(OrderedFloat(f64::infinity()),
                                   OrderedFloat(f64::infinity()))
@@ -551,12 +553,12 @@ impl NumberPair {
         }
     }
 
-    fn float_rational_pair(n1: OrderedFloat<f64>, n2: Ratio<BigInt>) -> NumberPair {
+    fn float_rational_pair(n1: OrderedFloat<f64>, n2: Rc<Ratio<BigInt>>) -> NumberPair {
         match (n2.numer().to_f64(), n2.denom().to_f64()) {
             (Some(num), Some(denom)) =>
                 NumberPair::Float(n1, OrderedFloat(num / denom)),
             _ => if let Some(r) = Ratio::from_float(n1.into_inner()) {
-                NumberPair::Rational(r, n2)
+                NumberPair::Rational(Rc::new(r), n2)
             } else if n1.into_inner().is_sign_positive() {
                 NumberPair::Float(OrderedFloat(f64::infinity()),
                                   OrderedFloat(f64::infinity()))
@@ -585,9 +587,9 @@ impl NumberPair {
             (Number::Rational(n1), Number::Float(n2)) =>
                 Self::float_rational_pair(n2, n1).flip(),
             (Number::Rational(n1), Number::Integer(n2)) =>
-                NumberPair::Rational(n1, Ratio::from_integer(n2)),
+                NumberPair::Rational(n1, Rc::new(Ratio::from_integer((*n2).clone()))),
             (Number::Integer(n1), Number::Rational(n2)) =>
-                NumberPair::Rational(Ratio::from_integer(n1), n2)
+                NumberPair::Rational(Rc::new(Ratio::from_integer((*n1).clone())), n2)
         }
     }
 }
@@ -600,9 +602,9 @@ impl Add<Number> for Number {
             NumberPair::Float(f1, f2) =>
                 Number::Float(OrderedFloat(f1.into_inner() + f2.into_inner())),
             NumberPair::Integer(n1, n2) =>
-                Number::Integer(n1 + n2),
+                Number::Integer(Rc::new(&*n1 + &*n2)),
             NumberPair::Rational(r1, r2) =>
-                Number::Rational(r1 + r2)
+                Number::Rational(Rc::new(&*r1 + &*r2))
         }
     }
 }
@@ -615,9 +617,9 @@ impl Sub<Number> for Number {
             NumberPair::Float(f1, f2) =>
                 Number::Float(OrderedFloat(f1.into_inner() - f2.into_inner())),
             NumberPair::Integer(n1, n2) =>
-                Number::Integer(n1 - n2),
+                Number::Integer(Rc::new(&*n1 - &*n2)),
             NumberPair::Rational(r1, r2) =>
-                Number::Rational(r1 - r2)
+                Number::Rational(Rc::new(&*r1 - &*r2))
         }
     }
 }
@@ -630,9 +632,9 @@ impl Mul<Number> for Number {
             NumberPair::Float(f1, f2) =>
                 Number::Float(OrderedFloat(f1.into_inner() * f2.into_inner())),
             NumberPair::Integer(n1, n2) =>
-                Number::Integer(n1 * n2),
+                Number::Integer(Rc::new(&*n1 * &*n2)),
             NumberPair::Rational(r1, r2) =>
-                Number::Rational(r1 * r2)
+                Number::Rational(Rc::new(&*r1 * &*r2))
         }        
     }
 }
@@ -649,20 +651,20 @@ impl Div<Number> for Number {
                     Some(f1) => if let Some(f2) = n2.to_f64() {
                         Number::Float(OrderedFloat(f1 / f2))
                     } else {
-                        let r1 = Ratio::from_integer(n1);
-                        let r2 = Ratio::from_integer(n2);
+                        let r1 = Ratio::from_integer((*n1).clone());
+                        let r2 = Ratio::from_integer((*n2).clone());
 
-                        Number::Rational(r1 / r2)
+                        Number::Rational(Rc::new(r1 / r2))
                     },
                     None => {
-                        let r1 = Ratio::from_integer(n1);
-                        let r2 = Ratio::from_integer(n2);
+                        let r1 = Ratio::from_integer((*n1).clone());
+                        let r2 = Ratio::from_integer((*n2).clone());
 
-                        Number::Rational(r1 / r2)
+                        Number::Rational(Rc::new(r1 / r2))
                     },
                 },
             NumberPair::Rational(r1, r2) =>
-                Number::Rational(r1 / r2)
+                Number::Rational(Rc::new(&*r1 / &*r2))
         }
     }
 }
@@ -672,9 +674,9 @@ impl Neg for Number {
 
     fn neg(self) -> Self::Output {
         match self {
-            Number::Integer(n) => Number::Integer(-n),
+            Number::Integer(n) => Number::Integer(Rc::new(-&*n)),
             Number::Float(f) => Number::Float(OrderedFloat(-1.0 * f.into_inner())),
-            Number::Rational(r) => Number::Rational(- r)
+            Number::Rational(r) => Number::Rational(Rc::new(- &*r))
         }
     }
 }
@@ -683,8 +685,7 @@ impl Neg for Number {
 pub enum ArithmeticTerm {
     Reg(RegType),
     Interm(usize),
-    Float(OrderedFloat<f64>),
-    Integer(BigInt)
+    Number(Number)
 }
 
 impl ArithmeticTerm {
@@ -742,12 +743,12 @@ pub enum ControlInstruction {
     Allocate(usize), // num_frames.
     ArgCall,
     ArgExecute,
-    Call(Atom, usize, usize), // name, arity, perm_vars after threshold.
+    Call(Rc<Atom>, usize, usize), // name, arity, perm_vars after threshold.
     CallN(usize), // arity.
     CatchCall,
     CatchExecute,
     Deallocate,
-    Execute(Atom, usize),
+    Execute(Rc<Atom>, usize),
     ExecuteN(usize),
     FunctorCall,
     FunctorExecute,
@@ -786,7 +787,7 @@ impl ControlInstruction {
 pub enum IndexingInstruction {
     SwitchOnTerm(usize, usize, usize, usize),
     SwitchOnConstant(usize, HashMap<Constant, usize>),
-    SwitchOnStructure(usize, HashMap<(Atom, usize), usize>)
+    SwitchOnStructure(usize, HashMap<(Rc<Atom>, usize), usize>)
 }
 
 impl From<IndexingInstruction> for Line {
@@ -798,7 +799,7 @@ impl From<IndexingInstruction> for Line {
 pub enum FactInstruction {
     GetConstant(Level, Constant, RegType),
     GetList(Level, RegType),
-    GetStructure(Level, Atom, usize, RegType),
+    GetStructure(Level, Rc<Atom>, usize, RegType),
     GetValue(RegType, usize),
     GetVariable(RegType, usize),
     UnifyConstant(Constant),
@@ -812,7 +813,7 @@ pub enum QueryInstruction {
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
     PutList(Level, RegType),
-    PutStructure(Level, Atom, usize, RegType),
+    PutStructure(Level, Rc<Atom>, usize, RegType),
     PutUnsafeValue(usize, usize),
     PutValue(RegType, usize),
     PutVariable(RegType, usize),
@@ -861,7 +862,7 @@ impl Addr {
             _ => false
         }
     }
-
+    
     pub fn as_ref(&self) -> Option<Ref> {
         match self {
             &Addr::HeapCell(hc) => Some(Ref::HeapCell(hc)),
@@ -897,7 +898,7 @@ pub enum Ref {
 pub enum HeapCellValue {
     Con(Constant),
     Lis(usize),
-    NamedStr(usize, Atom),
+    NamedStr(usize, Rc<Atom>),
     Ref(Ref),
     Str(usize)
 }
@@ -1047,10 +1048,10 @@ impl Term {
         }
     }
 
-    pub fn name(&self) -> Option<&Atom> {
+    pub fn name(&self) -> Option<Rc<Atom>> {
         match self {
             &Term::Constant(_, Constant::Atom(ref atom))
-          | &Term::Clause(_, ref atom, _) => Some(atom),
+          | &Term::Clause(_, ref atom, _) => Some(atom.clone()),
             _ => None
         }
     }

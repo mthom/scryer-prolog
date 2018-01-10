@@ -1,6 +1,8 @@
 use prolog::ast::*;
 use prolog::iterators::*;
 
+use std::rc::Rc;
+
 pub trait CompilationTarget<'a> {
     type Iterator : Iterator<Item=TermRef<'a>>;
 
@@ -8,7 +10,7 @@ pub trait CompilationTarget<'a> {
 
     fn to_constant(Level, Constant, RegType) -> Self;
     fn to_list(Level, RegType) -> Self;
-    fn to_structure(Level, Atom, usize, RegType) -> Self;
+    fn to_structure(Level, Rc<Atom>, usize, RegType) -> Self;
 
     fn to_void(usize) -> Self;
     fn is_void_instr(&self) -> bool;
@@ -39,7 +41,7 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         FactInstruction::GetConstant(lvl, constant, reg)
     }
 
-    fn to_structure(lvl: Level, atom: Atom, arity: usize, reg: RegType) -> Self {
+    fn to_structure(lvl: Level, atom: Rc<Atom>, arity: usize, reg: RegType) -> Self {
         FactInstruction::GetStructure(lvl, atom, arity, reg)
     }
 
@@ -101,7 +103,7 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         term.post_order_iter()
     }
 
-    fn to_structure(lvl: Level, atom: Atom, arity: usize, reg: RegType) -> Self {
+    fn to_structure(lvl: Level, atom: Rc<Atom>, arity: usize, reg: RegType) -> Self {
         QueryInstruction::PutStructure(lvl, atom, arity, reg)
     }
 

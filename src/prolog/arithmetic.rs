@@ -2,6 +2,7 @@ use prolog::ast::*;
 use prolog::fixtures::*;
 
 use std::cmp::{min, max};
+use std::rc::Rc;
 use std::vec::Vec;
 
 pub struct ArithExprIterator<'a> {
@@ -170,10 +171,8 @@ impl<'a> ArithmeticEvaluator<'a> {
 
     fn push_constant(&mut self, c: &Constant) -> Result<(), ArithmeticError> {
         match c {
-            &Constant::Float(fl) =>
-                self.interm.push(ArithmeticTerm::Float(fl)),
-            &Constant::Integer(ref bi) =>
-                self.interm.push(ArithmeticTerm::Integer(bi.clone())),
+            &Constant::Number(ref n) =>
+                self.interm.push(ArithmeticTerm::Number(n.clone())),
             _ =>
                 return Err(ArithmeticError::InvalidAtom),
         }
@@ -202,11 +201,11 @@ impl<'a> ArithmeticEvaluator<'a> {
                     self.interm.push(ArithmeticTerm::Reg(r));
                 },
                 TermRef::Clause(ClauseType::Deep(_, _, name), terms) => {
-                    code.push(Line::Arithmetic(self.instr_from_clause(name, terms)?));
+                    code.push(Line::Arithmetic(self.instr_from_clause(&*name, terms)?));
                 },
                 TermRef::Clause(ClauseType::Root, terms) => {
                     let name = term.name().unwrap();
-                    code.push(Line::Arithmetic(self.instr_from_clause(name, terms)?));
+                    code.push(Line::Arithmetic(self.instr_from_clause(&*name, terms)?));
                 },
                 _ =>
                     return Err(ArithmeticError::InvalidTerm)

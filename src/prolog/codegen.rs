@@ -9,6 +9,7 @@ use prolog::targets::*;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::mem::swap;
+use std::rc::Rc;
 use std::vec::Vec;
 
 pub struct CodeGenerator<'a, TermMarker> {
@@ -330,7 +331,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 },
             &InlinedQueryTerm::IsInteger(ref inner_term) =>
                 match inner_term[0].as_ref() {                    
-                    &Term::Constant(_, Constant::Integer(_)) => {
+                    &Term::Constant(_, Constant::Number(Number::Integer(_))) => {
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
@@ -404,23 +405,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
                                 code.push(is_call!(r, at.unwrap_or(interm!(1))));
                             },
-                            &Term::Constant(_, Constant::Float(fl)) => {
+                            &Term::Constant(_, ref c @ Constant::Number(_)) => {
                                 code.push(query![put_constant!(Level::Shallow,
-                                                               Constant::Float(fl),
-                                                               temp_v!(1))]);
-                                code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
-                            },
-                            &Term::Constant(_, Constant::Integer(ref bi)) => {
-                                let bi = bi.clone();
-                                code.push(query![put_constant!(Level::Shallow,
-                                                               Constant::Integer(bi),
-                                                               temp_v!(1))]);
-                                code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
-                            },
-                            &Term::Constant(_, Constant::Rational(ref r)) => {
-                                let r = r.clone();
-                                code.push(query![put_constant!(Level::Shallow,
-                                                               Constant::Rational(r),
+                                                               c.clone(),
                                                                temp_v!(1))]);
                                 code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
                             },

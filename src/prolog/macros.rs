@@ -44,7 +44,7 @@ macro_rules! query {
 macro_rules! functor {
     ($name:expr, $len:expr, [$($args:expr),*]) => {{
         if $len > 0 {
-            vec![ HeapCellValue::NamedStr($len, String::from($name)), $($args),* ]
+            vec![ HeapCellValue::NamedStr($len, Rc::new(String::from($name))), $($args),* ]
         } else {
             vec![ atom!($name) ]
         }
@@ -53,7 +53,7 @@ macro_rules! functor {
 
 macro_rules! atom {
     ($name:expr) => (
-        HeapCellValue::Con(Constant::Atom(String::from($name)))
+        HeapCellValue::Con(Constant::Atom(Rc::new(String::from($name))))
     )
 }
 
@@ -102,7 +102,7 @@ macro_rules! put_var {
 
 macro_rules! put_structure {
     ($lvl:expr, $name:expr, $arity:expr, $r:expr) => (
-        QueryInstruction::PutStructure($lvl, $name, $arity, $r)
+        QueryInstruction::PutStructure($lvl, Rc::new($name), $arity, $r)
     )
 }
 
@@ -318,7 +318,7 @@ macro_rules! get_constant {
 
 macro_rules! get_structure {
     ($atom:expr, $arity:expr, $r:expr) => (
-        FactInstruction::GetStructure(Level::Shallow, $atom, $arity, $r)
+        FactInstruction::GetStructure(Level::Shallow, Rc::new($atom), $arity, $r)
     )
 }
 
@@ -360,7 +360,7 @@ macro_rules! get_cp {
 
 macro_rules! integer {
     ($i:expr) => (
-        Constant::Integer(BigInt::from($i))
+        Constant::Number(Number::Integer(Rc::new(BigInt::from($i))))
     )
 }
 
@@ -373,5 +373,17 @@ macro_rules! add {
 macro_rules! get_arg {
     () => (
         Line::BuiltIn(BuiltInInstruction::GetArg)
+    )
+}
+
+macro_rules! rc_integer {
+    ($e:expr) => (
+        Number::Integer(Rc::new(BigInt::from($e)))
+    )
+}
+
+macro_rules! rc_atom {
+    ($e:expr) => (
+        Rc::new(String::from($e))
     )
 }

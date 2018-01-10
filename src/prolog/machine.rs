@@ -8,12 +8,12 @@ use prolog::num::{Integer, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
-use prolog::ordered_float::OrderedFloat;
 use prolog::fixtures::*;
 
 use std::cmp::max;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
+use std::rc::Rc;
 use std::vec::Vec;
 
 #[derive(Clone, Copy)]
@@ -226,7 +226,7 @@ impl Machine {
         self.ms.fail
     }
 
-    fn add_user_code<'a>(&mut self, name: Atom, arity: usize, offset: usize) -> EvalSession<'a>
+    fn add_user_code<'a>(&mut self, name: Rc<Atom>, arity: usize, offset: usize) -> EvalSession<'a>
     {
         match self.code_dir.get(&(name.clone(), arity)) {
             Some(&(PredicateKeyType::BuiltIn, _)) =>
@@ -257,13 +257,11 @@ impl Machine {
         match &rule.head.0 {
             &QueryTerm::Term(Term::Clause(_, ref name, _))
           | &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref name))) => {
-                let p = self.code.len();
-
-                let name  = name.clone();
+                let p = self.code.len();                
                 let arity = rule.head.0.arity();
 
                 self.code.append(&mut code);
-                self.add_user_code(name, arity, p)
+                self.add_user_code(name.clone(), arity, p)
             },
             _ => EvalSession::NamelessEntry
         }
@@ -446,7 +444,8 @@ impl Machine {
         }
     }
 
-    pub fn submit_decl<'a>(&mut self, decl: &Declaration) -> EvalSession<'a> {
+    pub fn submit_decl<'a>(&mut self, decl: &Declaration) -> EvalSession<'a>
+    {                
         match decl {
             &Declaration::Op(prec, spec, ref name) => {
                 if is_infix!(spec) {
@@ -631,7 +630,7 @@ impl MachineState {
                        hb: 0,
                        block: 0,
                        ball: (0, Vec::new()),
-                       interms: vec![Number::Float(OrderedFloat(0f64)); 256],
+                       interms: vec![Number::default(); 256],
         }
     }
 
@@ -814,7 +813,7 @@ impl MachineState {
         }
     }
 
-    fn write_constant_to_var(&mut self, addr: Addr, c: &Constant) {
+    fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
         let addr = self.deref(addr);
 
         match self.store(addr) {
@@ -827,28 +826,12 @@ impl MachineState {
                 self.trail(Ref::StackCell(fr, sc));
             },
             Addr::Con(c1) => {
-                if c1 != *c {
+                if c1 != c {
                     self.fail = true;
                 }
             },
             _ => self.fail = true
         };
-    }
-
-    fn get_rational(&self, at: &ArithmeticTerm) -> Result<Ratio<BigInt>, Vec<HeapCellValue>> {
-        let n = self.get_number(at)?;
-
-        match n {
-            Number::Rational(r) => Ok(r),
-            Number::Float(fl) =>
-                if let Some(r) = Ratio::from_float(fl.into_inner()) {
-                    Ok(r)
-                } else {
-                    Err(functor!("instantiation_error", 1, [atom!("(is)/2")]))
-                },
-            Number::Integer(bi) =>
-                Ok(Ratio::from_integer(bi))
-        }
     }
 
     fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, Vec<HeapCellValue>> {
@@ -858,24 +841,33 @@ impl MachineState {
                 let item = self.store(self.deref(addr));
 
                 match item {
-                    Addr::Con(Constant::Integer(bi)) =>
-                        Ok(Number::Integer(bi)),
-                    Addr::Con(Constant::Float(fl)) =>
-                        Ok(Number::Float(fl)),
-                    Addr::Con(Constant::Rational(r)) =>
-                        Ok(Number::Rational(r)),
-                    _ =>
-                        Err(functor!("instantiation_error", 1, [atom!("(is)/2")]))
+                    Addr::Con(Constant::Number(n)) => Ok(n),
+                    _ => Err(functor!("instantiation_error", 1, [atom!("(is)/2")]))
                 }
             },
-            &ArithmeticTerm::Interm(i)   => Ok(self.interms[i-1].clone()),
-            &ArithmeticTerm::Float(fl)   => Ok(Number::Float(fl)),
-            &ArithmeticTerm::Integer(ref bi) => Ok(Number::Integer(bi.clone()))
+            &ArithmeticTerm::Interm(i)     => Ok(self.interms[i-1].clone()),
+            &ArithmeticTerm::Number(ref n) => Ok(n.clone()),
         }
     }
 
-    fn signed_bitwise_op<Op>(&mut self, n1: BigInt, n2: BigInt, t: usize, f: Op)
-        where Op: FnOnce(BigUint, BigUint) -> BigUint
+    fn get_rational(&self, at: &ArithmeticTerm) -> Result<Rc<Ratio<BigInt>>, Vec<HeapCellValue>> {
+        let n = self.get_number(at)?;
+
+        match n {
+            Number::Rational(r) => Ok(r),
+            Number::Float(fl) =>
+                if let Some(r) = Ratio::from_float(fl.into_inner()) {
+                    Ok(Rc::new(r))
+                } else {
+                    Err(functor!("instantiation_error", 1, [atom!("(is)/2")]))
+                },
+            Number::Integer(bi) =>
+                Ok(Rc::new(Ratio::from_integer((*bi).clone())))
+        }
+    }
+
+    fn signed_bitwise_op<Op>(&mut self, n1: &BigInt, n2: &BigInt, t: usize, f: Op)
+        where Op: FnOnce(&BigUint, &BigUint) -> BigUint
     {
         let n1_b = n1.to_signed_bytes_le();
         let n2_b = n2.to_signed_bytes_le();
@@ -883,9 +875,9 @@ impl MachineState {
         let u_n1 = BigUint::from_bytes_le(&n1_b);
         let u_n2 = BigUint::from_bytes_le(&n2_b);
 
-        let result = BigInt::from_signed_bytes_le(&f(u_n1, u_n2).to_bytes_le());
+        let result = BigInt::from_signed_bytes_le(&f(&u_n1, &u_n2).to_bytes_le());
 
-        self.interms[t - 1] = Number::Integer(result);
+        self.interms[t - 1] = Number::Integer(Rc::new(result));
     }
 
     fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
@@ -915,14 +907,14 @@ impl MachineState {
                 let r1 = try_or_fail!(self, self.get_rational(a1));
                 let r2 = try_or_fail!(self, self.get_rational(a2));
 
-                if r2 == Ratio::zero() {
+                if *r2 == Ratio::zero() {
                     self.throw_exception(functor!("evaluation_error",
                                                   1,
                                                   [atom!("zero_divisor")]));
                     return;
                 }
 
-                self.interms[t - 1] = Number::Rational(r1 / r2);
+                self.interms[t - 1] = Number::Rational(Rc::new(&*r1 / &*r2));
                 self.p += 1;
             },
             &ArithmeticInstruction::FIDiv(ref a1, ref a2, t) => {
@@ -931,14 +923,14 @@ impl MachineState {
 
                 match (n1, n2) {
                     (Number::Integer(n1), Number::Integer(n2)) => {
-                        if n2 == BigInt::zero() {
+                        if *n2 == BigInt::zero() {
                             self.throw_exception(functor!("evaluation_error",
                                                           1,
                                                           [atom!("zero_divisor")]));
                             return;
                         }
 
-                        self.interms[t - 1] = Number::Integer(n1.div_floor(&n2));
+                        self.interms[t - 1] = Number::Integer(Rc::new(n1.div_floor(&n2)));
                         self.p += 1;
                     },
                     _ => {
@@ -955,14 +947,14 @@ impl MachineState {
 
                 match (n1, n2) {
                     (Number::Integer(n1), Number::Integer(n2)) => {
-                        if n2 == BigInt::zero() {
+                        if *n2 == BigInt::zero() {
                             self.throw_exception(functor!("evaluation_error",
                                                           1,
                                                           [atom!("zero_divisor")]));
                             return;
                         }
 
-                        self.interms[t - 1] = Number::Integer(n1 / n2);
+                        self.interms[t - 1] = Number::Integer(Rc::new(&*n1 / &*n2));
                         self.p += 1;
                     },
                     _ => {
@@ -1000,8 +992,8 @@ impl MachineState {
                 match (n1, n2) {
                     (Number::Integer(n1), Number::Integer(n2)) =>
                         match n2.to_usize() {
-                            Some(n2) => self.interms[t - 1] = Number::Integer(n1 >> n2),
-                            _ => self.interms[t - 1] = Number::Integer(n1 >> usize::max_value())
+                            Some(n2) => self.interms[t - 1] = Number::Integer(Rc::new(&*n1 >> n2)),
+                            _ => self.interms[t - 1] = Number::Integer(Rc::new(&*n1 >> usize::max_value()))
                         },
                     _ => {
                         self.throw_exception(functor!("evaluation_error",
@@ -1020,8 +1012,8 @@ impl MachineState {
                 match (n1, n2) {
                     (Number::Integer(n1), Number::Integer(n2)) =>
                         match n2.to_usize() {
-                            Some(n2) => self.interms[t - 1] = Number::Integer(n1 << n2),
-                            _ => self.interms[t - 1] = Number::Integer(n1 << usize::max_value())
+                            Some(n2) => self.interms[t - 1] = Number::Integer(Rc::new(&*n1 << n2)),
+                            _ => self.interms[t - 1] = Number::Integer(Rc::new(&*n1 << usize::max_value()))
                         },
                     _ => {
                         self.throw_exception(functor!("evaluation_error",
@@ -1039,7 +1031,7 @@ impl MachineState {
 
                 match (n1, n2) {
                     (Number::Integer(n1), Number::Integer(n2)) =>
-                        self.signed_bitwise_op(n1, n2, t, |u_n1, u_n2| u_n1 ^ u_n2),
+                        self.signed_bitwise_op(&*n1, &*n2, t, |u_n1, u_n2| u_n1 ^ u_n2),
                     _ => {
                         self.throw_exception(functor!("evaluation_error",
                                                       1,
@@ -1056,7 +1048,7 @@ impl MachineState {
 
                 match (n1, n2) {
                     (Number::Integer(n1), Number::Integer(n2)) =>
-                        self.signed_bitwise_op(n1, n2, t, |u_n1, u_n2| u_n1 & u_n2),
+                        self.signed_bitwise_op(&*n1, &*n2, t, |u_n1, u_n2| u_n1 & u_n2),
                     _ => {
                         self.throw_exception(functor!("evaluation_error",
                                                       1,
@@ -1073,7 +1065,7 @@ impl MachineState {
 
                 match (n1, n2) {
                     (Number::Integer(n1), Number::Integer(n2)) =>
-                        self.signed_bitwise_op(n1, n2, t, |u_n1, u_n2| u_n1 | u_n2),
+                        self.signed_bitwise_op(&*n1, &*n2, t, |u_n1, u_n2| u_n1 | u_n2),
                     _ => {
                         self.throw_exception(functor!("evaluation_error",
                                                       1,
@@ -1090,14 +1082,14 @@ impl MachineState {
 
                 match (n1, n2) {
                     (Number::Integer(n1), Number::Integer(n2)) => {
-                        if n2 == BigInt::zero() {
+                        if *n2 == BigInt::zero() {
                             self.throw_exception(functor!("evaluation_error",
                                                           1,
                                                           [atom!("zero_divisor")]));
                             return;
                         }
 
-                        self.interms[t - 1] = Number::Integer(n1.mod_floor(&n2));
+                        self.interms[t - 1] = Number::Integer(Rc::new(n1.mod_floor(&n2)));
                     },
                     _ => {
                         self.throw_exception(functor!("evaluation_error",
@@ -1115,14 +1107,14 @@ impl MachineState {
 
                 match (n1, n2) {
                     (Number::Integer(n1), Number::Integer(n2)) => {
-                        if n2 == BigInt::zero() {
+                        if *n2 == BigInt::zero() {
                             self.throw_exception(functor!("evaluation_error",
                                                           1,
                                                           [atom!("zero_divisor")]));
                             return;
                         }
 
-                        self.interms[t - 1] = Number::Integer(n1 % n2);
+                        self.interms[t - 1] = Number::Integer(Rc::new(&*n1 % &*n2));
                     },
                     _ => {
                         self.throw_exception(functor!("evaluation_error",
@@ -1141,7 +1133,7 @@ impl MachineState {
         match instr {
             &FactInstruction::GetConstant(_, ref c, reg) => {
                 let addr = self[reg].clone();
-                self.write_constant_to_var(addr, c);
+                self.write_constant_to_var(addr, c.clone());
             },
             &FactInstruction::GetList(_, reg) => {
                 let addr = self.deref(self[reg].clone());
@@ -1211,7 +1203,7 @@ impl MachineState {
                 match self.mode {
                     MachineMode::Read  => {
                         let addr = Addr::HeapCell(self.s);
-                        self.write_constant_to_var(addr, c);
+                        self.write_constant_to_var(addr, c.clone());
                     },
                     MachineMode::Write => {
                         self.heap.push(HeapCellValue::Con(c.clone()));
@@ -1443,7 +1435,7 @@ impl MachineState {
         }
     }
 
-    fn try_call_predicate(&mut self, code_dir: &CodeDir, name: Atom, arity: usize)
+    fn try_call_predicate(&mut self, code_dir: &CodeDir, name: Rc<Atom>, arity: usize)
     {
         let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| index.1);
 
@@ -1458,7 +1450,7 @@ impl MachineState {
         };
     }
 
-    fn try_execute_predicate(&mut self, code_dir: &CodeDir, name: Atom, arity: usize)
+    fn try_execute_predicate(&mut self, code_dir: &CodeDir, name: Rc<Atom>, arity: usize)
     {
         let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| index.1);
 
@@ -1574,7 +1566,7 @@ impl MachineState {
     {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
         
-        if let Addr::Con(Constant::Integer(i)) = a1 {
+        if let Addr::Con(Constant::Number(Number::Integer(i))) = a1 {
             let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
 
             if let Addr::Str(o) = a2 {
@@ -1645,7 +1637,7 @@ impl MachineState {
                 let c = Constant::Usize(self.block);
                 let addr = self[temp_v!(1)].clone();
 
-                self.write_constant_to_var(addr, &c);
+                self.write_constant_to_var(addr, c);
                 self.p += 1;
             },
             &BuiltInInstruction::EraseBall => {
@@ -1728,7 +1720,7 @@ impl MachineState {
                 let c = Constant::Usize(self.block);
                 let addr = self[temp_v!(1)].clone();
 
-                self.write_constant_to_var(addr, &c);
+                self.write_constant_to_var(addr, c);
                 self.p += 1;
             },
             &BuiltInInstruction::ResetBlock => {
@@ -1760,7 +1752,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r].clone()));
 
                 match d {
-                    Addr::Con(Constant::Integer(_)) => self.p += 1,
+                    Addr::Con(Constant::Number(Number::Integer(_))) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1799,7 +1791,7 @@ impl MachineState {
                 match self.heap[o].clone() {
                     HeapCellValue::NamedStr(arity, name) => {                    
                         let name  = Addr::Con(Constant::Atom(name)); // A2
-                        let arity = Addr::Con(Constant::Integer(BigInt::from(arity))); // A3
+                        let arity = Addr::Con(Constant::Number(rc_integer!(arity)));
 
                         let a2 = self[temp_v!(2)].clone();
                         self.unify(a2, name);
@@ -1816,7 +1808,7 @@ impl MachineState {
                 let arity = self.store(self.deref(self[temp_v!(3)].clone()));
 
                 if let Addr::Con(Constant::Atom(name)) = name {
-                    if let Addr::Con(Constant::Integer(arity)) = arity {
+                    if let Addr::Con(Constant::Number(Number::Integer(arity))) = arity {
                         let f_a = Addr::Str(self.heap.h);
                         let arity = match arity.to_usize() {
                             Some(arity) => arity,
@@ -1847,7 +1839,7 @@ impl MachineState {
                 
                 if !self.fail {
                     let a3 = self[temp_v!(3)].clone();
-                    self.unify(a3, Addr::Con(Constant::Integer(BigInt::from(0))));
+                    self.unify(a3, Addr::Con(Constant::Number(rc_integer!(0))));
                 }
             }
         };
@@ -1950,14 +1942,14 @@ impl MachineState {
                 let a1 = self[r].clone();
                 let a2 = try_or_fail!(self, self.get_number(at));
 
-                self.unify(a1, Addr::Con(Constant::from(a2)));
+                self.unify(a1, Addr::Con(Constant::Number(a2)));
                 self.p += 1;
             },
             &ControlInstruction::IsExecute(r, ref at) => {
                 let a1 = self[r].clone();
                 let a2 = try_or_fail!(self, self.get_number(at));
 
-                self.unify(a1, Addr::Con(Constant::from(a2)));                
+                self.unify(a1, Addr::Con(Constant::Number(a2)));                
                 self.p = self.cp;
             },
             &ControlInstruction::Proceed =>
