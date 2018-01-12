@@ -128,10 +128,6 @@ impl<'a> HeapCellViewer<'a>
     fn from_heap(&mut self, mut focus: usize) -> CellView<'a> {
         loop {
             match &self.heap[focus] {
-                &HeapCellValue::Con(ref c) =>
-                    return CellView::Con(c),
-                &HeapCellValue::Lis(a) =>
-                    return self.handle_list(a),                
                 &HeapCellValue::NamedStr(arity, ref name) => {
                     self.state_stack.push(CellRef::TToken(TToken::RRBracket));
 
@@ -145,21 +141,29 @@ impl<'a> HeapCellViewer<'a>
 
                     return CellView::Str(arity, name);
                 },
-                &HeapCellValue::Ref(Ref::HeapCell(hc)) =>
-                    if focus == hc {
-                        return CellView::HeapVar(hc);
-                    } else {
-                        focus = hc;
-                    },                
-                &HeapCellValue::Ref(Ref::StackCell(fr, sc)) =>
-                    match self.deref_cell(&self.and_stack[fr][sc]) {
-                        CellRef::Lis(hc)         => return self.handle_list(hc),
-                        CellRef::View(cell_view) => return cell_view,
-                        CellRef::Redirect(hc)    => focus = hc,
-                        CellRef::TToken(token)   => return CellView::TToken(token)
-                    },                
-                &HeapCellValue::Str(cell_num) =>
-                    focus = cell_num,
+                &HeapCellValue::Addr(ref a) =>
+                    match a {
+                        &Addr::Con(ref c) =>
+                            return CellView::Con(c),
+                        &Addr::Lis(a) =>
+                            return self.handle_list(a),                                
+                        &Addr::HeapCell(hc) =>
+                            if focus == hc {
+                                return CellView::HeapVar(hc);
+                            } else {
+                                focus = hc;
+                            },                
+                        &Addr::StackCell(fr, sc) =>
+                            match self.deref_cell(&self.and_stack[fr][sc]) {
+                                CellRef::Lis(hc)         => return self.handle_list(hc),
+                                CellRef::View(cell_view) => return cell_view,
+                                CellRef::Redirect(hc)    => focus = hc,
+                                CellRef::TToken(token)   => return CellView::TToken(token)
+                            },                
+                        &Addr::Str(cell_num) =>
+                            focus = cell_num,
+                    },
+                
             }
         }
     }

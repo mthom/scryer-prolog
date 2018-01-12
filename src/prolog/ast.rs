@@ -862,8 +862,18 @@ impl Addr {
             _ => false
         }
     }
-    
+   
     pub fn as_ref(&self) -> Option<Ref> {
+        match self {
+            &Addr::HeapCell(hc) => Some(Ref::HeapCell(hc)),
+            &Addr::StackCell(fr, sc) => Some(Ref::StackCell(fr, sc)),
+            &Addr::Lis(hc) => Some(Ref::HeapCell(hc)),
+            &Addr::Str(hc) => Some(Ref::HeapCell(hc)),
+            _ => None
+        }
+    }
+    
+    pub fn as_var(&self) -> Option<Ref> {
         match self {
             &Addr::HeapCell(hc) => Some(Ref::HeapCell(hc)),
             &Addr::StackCell(fr, sc) => Some(Ref::StackCell(fr, sc)),
@@ -896,37 +906,14 @@ pub enum Ref {
 
 #[derive(Clone, PartialEq)]
 pub enum HeapCellValue {
-    Con(Constant),
-    Lis(usize),
-    NamedStr(usize, Rc<Atom>),
-    Ref(Ref),
-    Str(usize)
-}
-
-impl From<Addr> for HeapCellValue {
-    fn from(addr: Addr) -> HeapCellValue {
-        match addr {
-            Addr::Con(constant) =>
-                HeapCellValue::Con(constant),
-            Addr::HeapCell(hc) =>
-                HeapCellValue::Ref(Ref::HeapCell(hc)),
-            Addr::Lis(a) =>
-                HeapCellValue::Lis(a),
-            Addr::StackCell(fr, sc) =>
-                HeapCellValue::Ref(Ref::StackCell(fr, sc)),
-            Addr::Str(hc) =>
-                HeapCellValue::Str(hc)
-        }
-    }
+    Addr(Addr),
+    NamedStr(usize, Rc<Atom>), // arity, name.
 }
 
 impl HeapCellValue {
     pub fn as_addr(&self, focus: usize) -> Addr {
         match self {
-            &HeapCellValue::Con(ref c) => Addr::Con(c.clone()),
-            &HeapCellValue::Lis(a) => Addr::Lis(a),
-            &HeapCellValue::Ref(r) => Addr::from(r),
-            &HeapCellValue::Str(s) => Addr::Str(s),
+            &HeapCellValue::Addr(ref a)    => a.clone(),
             &HeapCellValue::NamedStr(_, _) => Addr::Str(focus)
         }
     }
@@ -1064,7 +1051,7 @@ impl Term {
     }
 }
 
-pub enum IteratorState<'a> {
+pub enum TermIterState<'a> {
     AnonVar(Level),
     Clause(usize, ClauseType<'a>, &'a Vec<Box<Term>>),
     Constant(Level, &'a Cell<RegType>, &'a Constant),
@@ -1073,19 +1060,19 @@ pub enum IteratorState<'a> {
     Var(Level, &'a Cell<VarReg>, &'a Var)
 }
 
-impl<'a> IteratorState<'a> {
-    pub fn to_state(lvl: Level, term: &'a Term) -> IteratorState<'a> {
+impl<'a> TermIterState<'a> {
+    pub fn to_state(lvl: Level, term: &'a Term) -> TermIterState<'a> {
         match term {
             &Term::AnonVar =>
-                IteratorState::AnonVar(lvl),
+                TermIterState::AnonVar(lvl),
             &Term::Clause(ref cell, ref atom, ref child_terms) =>
-                IteratorState::Clause(0, ClauseType::Deep(lvl, cell, atom), child_terms),
+                TermIterState::Clause(0, ClauseType::Deep(lvl, cell, atom), child_terms),
             &Term::Cons(ref cell, ref head, ref tail) =>
-                IteratorState::InitialCons(lvl, cell, head.as_ref(), tail.as_ref()),
+                TermIterState::InitialCons(lvl, cell, head.as_ref(), tail.as_ref()),
             &Term::Constant(ref cell, ref constant) =>
-                IteratorState::Constant(lvl, cell, constant),
+                TermIterState::Constant(lvl, cell, constant),
             &Term::Var(ref cell, ref var) =>
-                IteratorState::Var(lvl, cell, var)
+                TermIterState::Var(lvl, cell, var)
         }
     }
 }

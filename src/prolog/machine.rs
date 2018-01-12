@@ -535,7 +535,7 @@ impl Machine {
                     result += cell_num.to_string().as_str();
                 },
                 CellView::StackVar(_, cell_num) => {
-                        result += "s_";
+                    result += "s_";
                     result += cell_num.to_string().as_str();
                 },
                 CellView::Str(_, ref name) =>
@@ -669,7 +669,7 @@ impl MachineState {
             Ref::StackCell(fr, sc) =>
                 self.and_stack[fr][sc] = t2,
             Ref::HeapCell(hc) =>
-                self.heap[hc] = HeapCellValue::from(t2)
+                self.heap[hc] = HeapCellValue::Addr(t2)
         };
 
         self.trail(r1);
@@ -764,7 +764,7 @@ impl MachineState {
         for i in a1 .. a2 {
             match self.trail[i] {
                 Ref::HeapCell(r) =>
-                    self.heap[r] = HeapCellValue::Ref(Ref::HeapCell(r)),
+                    self.heap[r] = HeapCellValue::Addr(Addr::HeapCell(r)),
                 Ref::StackCell(fr, sc) =>
                     self.and_stack[fr][sc] = Addr::StackCell(fr, sc)
             }
@@ -818,7 +818,7 @@ impl MachineState {
 
         match self.store(addr) {
             Addr::HeapCell(hc) => {
-                self.heap[hc] = HeapCellValue::Con(c.clone());
+                self.heap[hc] = HeapCellValue::Addr(Addr::Con(c.clone()));
                 self.trail(Ref::HeapCell(hc));
             },
             Addr::StackCell(fr, sc) => {
@@ -1142,7 +1142,7 @@ impl MachineState {
                     Addr::HeapCell(hc) => {
                         let h = self.heap.h;
 
-                        self.heap.push(HeapCellValue::Lis(h+1));
+                        self.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
                         self.bind(Ref::HeapCell(hc), Addr::HeapCell(h));
 
                         self.mode = MachineMode::Write;
@@ -1150,7 +1150,7 @@ impl MachineState {
                     Addr::StackCell(fr, sc) => {
                         let h = self.heap.h;
 
-                        self.heap.push(HeapCellValue::Lis(h+1));
+                        self.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
                         self.bind(Ref::StackCell(fr, sc), Addr::HeapCell(h));
 
                         self.mode = MachineMode::Write;
@@ -1181,10 +1181,10 @@ impl MachineState {
                     Addr::HeapCell(_) | Addr::StackCell(_, _) => {
                         let h = self.heap.h;
 
-                        self.heap.push(HeapCellValue::Str(h + 1));
+                        self.heap.push(HeapCellValue::Addr(Addr::Str(h + 1)));
                         self.heap.push(HeapCellValue::NamedStr(arity, name.clone()));
 
-                        self.bind(addr.as_ref().unwrap(), Addr::HeapCell(h));
+                        self.bind(addr.as_var().unwrap(), Addr::HeapCell(h));
 
                         self.mode = MachineMode::Write;
                     },
@@ -1206,7 +1206,7 @@ impl MachineState {
                         self.write_constant_to_var(addr, c.clone());
                     },
                     MachineMode::Write => {
-                        self.heap.push(HeapCellValue::Con(c.clone()));
+                        self.heap.push(HeapCellValue::Addr(Addr::Con(c.clone())));
                     }
                 };
 
@@ -1219,7 +1219,7 @@ impl MachineState {
                     MachineMode::Write => {
                         let h = self.heap.h;
 
-                        self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                        self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
                         self[reg] = Addr::HeapCell(h);
                     }
                 };
@@ -1249,7 +1249,7 @@ impl MachineState {
                             }
                         }
 
-                        self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                        self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
                         self.bind(Ref::HeapCell(h), addr);
                     }
                 };
@@ -1266,7 +1266,7 @@ impl MachineState {
                     },
                     MachineMode::Write => {
                         let heap_val = self.store(self[reg].clone());
-                        self.heap.push(HeapCellValue::from(heap_val));
+                        self.heap.push(HeapCellValue::Addr(heap_val));
                     }
                 };
 
@@ -1280,7 +1280,7 @@ impl MachineState {
                         let h = self.heap.h;
 
                         for i in h .. h + n {
-                            self.heap.push(HeapCellValue::Ref(Ref::HeapCell(i)));
+                            self.heap.push(HeapCellValue::Addr(Addr::HeapCell(i)));
                         }
                     }
                 };
@@ -1374,7 +1374,7 @@ impl MachineState {
                 } else {
                     let h = self.heap.h;
 
-                    self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                    self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
                     self.bind(Ref::HeapCell(h), addr);
 
                     self.registers[arg] = self.heap[h].as_addr(h);
@@ -1392,15 +1392,15 @@ impl MachineState {
                     },
                     RegType::Temp(_) => {
                         let h = self.heap.h;
-                        self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                        self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
 
                         self[norm] = Addr::HeapCell(h);
                         self.registers[arg] = Addr::HeapCell(h);
                     }
                 };
             },
-            &QueryInstruction::SetConstant(ref constant) => {
-                self.heap.push(HeapCellValue::Con(constant.clone()));
+            &QueryInstruction::SetConstant(ref c) => {
+                self.heap.push(HeapCellValue::Addr(Addr::Con(c.clone())));
             },
             &QueryInstruction::SetLocalValue(reg) => {
                 let addr = self.deref(self[reg].clone());
@@ -1408,28 +1408,28 @@ impl MachineState {
 
                 if let Addr::HeapCell(hc) = addr {
                     if hc < h {
-                        self.heap.push(HeapCellValue::from(addr));
+                        self.heap.push(HeapCellValue::Addr(addr));
                         return;
                     }
                 }
 
-                self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
                 self.bind(Ref::HeapCell(h), addr);
             },
             &QueryInstruction::SetVariable(reg) => {
                 let h = self.heap.h;
-                self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
                 self[reg] = Addr::HeapCell(h);
             },
             &QueryInstruction::SetValue(reg) => {
                 let heap_val = self[reg].clone();
-                self.heap.push(HeapCellValue::from(heap_val));
+                self.heap.push(HeapCellValue::Addr(heap_val));
             },
             &QueryInstruction::SetVoid(n) => {
                 let h = self.heap.h;
 
                 for i in h .. h + n {
-                    self.heap.push(HeapCellValue::Ref(Ref::HeapCell(i)));
+                    self.heap.push(HeapCellValue::Addr(Addr::HeapCell(i)));
                 }
             }
         }
@@ -1539,7 +1539,7 @@ impl MachineState {
                 self.throw_exception(functor!("type_error",
                                               2,
                                               [atom!("callable"),
-                                               HeapCellValue::from(addr)]));
+                                               HeapCellValue::Addr(addr)]));
                 return None;
             }
         };
@@ -1552,11 +1552,11 @@ impl MachineState {
 
         for heap_value in self.ball.1.iter().cloned() {
             self.heap.push(match heap_value {
-                HeapCellValue::Con(c) => HeapCellValue::Con(c),
-                HeapCellValue::Lis(a) => HeapCellValue::Lis(a - diff),
-                HeapCellValue::Ref(Ref::HeapCell(hc)) =>
-                    HeapCellValue::Ref(Ref::HeapCell(hc - diff)),
-                HeapCellValue::Str(s) => HeapCellValue::Str(s - diff),
+                HeapCellValue::Addr(Addr::Con(c)) => HeapCellValue::Addr(Addr::Con(c)),
+                HeapCellValue::Addr(Addr::Lis(a)) => HeapCellValue::Addr(Addr::Lis(a - diff)),
+                HeapCellValue::Addr(Addr::HeapCell(hc)) =>
+                    HeapCellValue::Addr(Addr::HeapCell(hc - diff)),
+                HeapCellValue::Addr(Addr::Str(s)) => HeapCellValue::Addr(Addr::Str(s - diff)),
                 _ => heap_value
             });
         }
@@ -1658,7 +1658,7 @@ impl MachineState {
 
                 let ball = self.heap[h].as_addr(h);
 
-                match addr.as_ref() {
+                match addr.as_var() {
                     Some(r) => {
                         self.bind(r, ball);
                         self.p += 1;
@@ -1822,7 +1822,7 @@ impl MachineState {
 
                         for _ in 0 .. arity {
                             let h = self.heap.h;
-                            self.heap.push(HeapCellValue::Ref(Ref::HeapCell(h)));
+                            self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
                         }
                                                 
                         self.unify(a1, f_a);                                                

@@ -53,7 +53,7 @@ macro_rules! functor {
 
 macro_rules! atom {
     ($name:expr) => (
-        HeapCellValue::Con(Constant::Atom(Rc::new(String::from($name))))
+        HeapCellValue::Addr(Addr::Con(Constant::Atom(Rc::new(String::from($name)))))
     )
 }
 

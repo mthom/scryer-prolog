@@ -5,14 +5,14 @@ use std::cmp::{min, max};
 use std::vec::Vec;
 
 pub struct ArithExprIterator<'a> {
-    state_stack: Vec<IteratorState<'a>>
+    state_stack: Vec<TermIterState<'a>>
 }
 
 pub type ArithCont = (Code, Option<ArithmeticTerm>);
 
 impl<'a> ArithExprIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
-        self.state_stack.push(IteratorState::to_state(lvl, term));
+        self.state_stack.push(TermIterState::to_state(lvl, term));
     }
 
     fn new(term: &'a Term) -> Result<Self, ArithmeticError> {
@@ -20,13 +20,13 @@ impl<'a> ArithExprIterator<'a> {
             &Term::AnonVar =>
                 return Err(ArithmeticError::InvalidTerm),
             &Term::Clause(_, _, ref terms) =>
-                IteratorState::Clause(0, ClauseType::Root, terms),
+                TermIterState::Clause(0, ClauseType::Root, terms),
             &Term::Constant(ref cell, ref cons) =>
-                IteratorState::Constant(Level::Shallow, cell, cons),
+                TermIterState::Constant(Level::Shallow, cell, cons),
             &Term::Cons(_, _, _) =>
                 return Err(ArithmeticError::InvalidTerm),
             &Term::Var(ref cell, ref var) =>
-                IteratorState::Var(Level::Shallow, cell, var)
+                TermIterState::Var(Level::Shallow, cell, var)
         };
 
         Ok(ArithExprIterator { state_stack: vec![state] })
@@ -45,26 +45,26 @@ impl<'a> Iterator for ArithExprIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(iter_state) = self.state_stack.pop() {
             match iter_state {
-                IteratorState::AnonVar(lvl) =>
+                TermIterState::AnonVar(lvl) =>
                     return Some(TermRef::AnonVar(lvl)),
-                IteratorState::Clause(child_num, ct, child_terms) => {
+                TermIterState::Clause(child_num, ct, child_terms) => {
                     if child_num == child_terms.len() {
                         return Some(TermRef::Clause(ct, child_terms));
                     } else {
-                        self.state_stack.push(IteratorState::Clause(child_num + 1, ct, child_terms));
+                        self.state_stack.push(TermIterState::Clause(child_num + 1, ct, child_terms));
                         self.push_subterm(ct.level_of_subterms(), child_terms[child_num].as_ref());
                     }
                 },
-                IteratorState::InitialCons(lvl, cell, head, tail) => {
-                    self.state_stack.push(IteratorState::FinalCons(lvl, cell, head, tail));
+                TermIterState::InitialCons(lvl, cell, head, tail) => {
+                    self.state_stack.push(TermIterState::FinalCons(lvl, cell, head, tail));
                     self.push_subterm(Level::Deep, tail);
                     self.push_subterm(Level::Deep, head);
                 },
-                IteratorState::FinalCons(lvl, cell, head, tail) =>
+                TermIterState::FinalCons(lvl, cell, head, tail) =>
                     return Some(TermRef::Cons(lvl, cell, head, tail)),
-                IteratorState::Constant(lvl, cell, constant) =>
+                TermIterState::Constant(lvl, cell, constant) =>
                     return Some(TermRef::Constant(lvl, cell, constant)),
-                IteratorState::Var(lvl, cell, var) =>
+                TermIterState::Var(lvl, cell, var) =>
                     return Some(TermRef::Var(lvl, cell, var))
             };
         }

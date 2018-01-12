@@ -5,12 +5,12 @@ use std::iter::*;
 use std::vec::Vec;
 
 pub struct QueryIterator<'a> {
-    state_stack: Vec<IteratorState<'a>>
+    state_stack: Vec<TermIterState<'a>>
 }
 
 impl<'a> QueryIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
-        self.state_stack.push(IteratorState::to_state(lvl, term));
+        self.state_stack.push(TermIterState::to_state(lvl, term));
     }
 
     fn from_term(term: &'a Term) -> Self {
@@ -18,13 +18,13 @@ impl<'a> QueryIterator<'a> {
             &Term::AnonVar =>
                 return QueryIterator { state_stack: vec![] },
             &Term::Clause(_, _, ref terms) =>
-                IteratorState::Clause(0, ClauseType::Root, terms),
+                TermIterState::Clause(0, ClauseType::Root, terms),
             &Term::Cons(_, _, _) =>
                 return QueryIterator { state_stack: vec![] },
             &Term::Constant(_, _) =>
                 return QueryIterator { state_stack: vec![] },
             &Term::Var(ref cell, ref var) =>
-                IteratorState::Var(Level::Shallow, cell, var)
+                TermIterState::Var(Level::Shallow, cell, var)
         };
 
         QueryIterator { state_stack: vec![state] }
@@ -33,21 +33,21 @@ impl<'a> QueryIterator<'a> {
     fn new(term: &'a QueryTerm) -> Self {
         match term {
             &QueryTerm::CallN(ref terms) => {
-                let state = IteratorState::Clause(1, ClauseType::CallN, terms);
+                let state = TermIterState::Clause(1, ClauseType::CallN, terms);
                 QueryIterator { state_stack: vec![state] }
             },
             &QueryTerm::Catch(ref terms) => {
-                let state = IteratorState::Clause(0, ClauseType::Catch, terms);
+                let state = TermIterState::Clause(0, ClauseType::Catch, terms);
                 QueryIterator { state_stack: vec![state] }
             },
             &QueryTerm::Arg(ref terms)
           | &QueryTerm::Functor(ref terms) => {
-                let state = IteratorState::Clause(0, ClauseType::Root, terms);
+                let state = TermIterState::Clause(0, ClauseType::Root, terms);
                 QueryIterator { state_stack: vec![state] }
             },
             &QueryTerm::Inlined(InlinedQueryTerm::CompareNumber(_, ref terms))
           | &QueryTerm::Is(ref terms) => {
-                    let state = IteratorState::Clause(0, ClauseType::Is, terms);
+                    let state = TermIterState::Clause(0, ClauseType::Is, terms);
                     QueryIterator { state_stack: vec![state] }
                 },
             &QueryTerm::Inlined(InlinedQueryTerm::IsAtomic(ref terms))
@@ -57,7 +57,7 @@ impl<'a> QueryIterator<'a> {
             &QueryTerm::Term(ref term) =>
                 Self::from_term(term),
             &QueryTerm::Throw(ref term) => {
-                let state = IteratorState::Clause(0, ClauseType::Throw, term);
+                let state = TermIterState::Clause(0, ClauseType::Throw, term);
                 QueryIterator { state_stack: vec![state] }
             },
             &QueryTerm::Cut => QueryIterator { state_stack: vec![] }
@@ -77,9 +77,9 @@ impl<'a> Iterator for QueryIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(iter_state) = self.state_stack.pop() {
             match iter_state {
-                IteratorState::AnonVar(lvl) =>
+                TermIterState::AnonVar(lvl) =>
                     return Some(TermRef::AnonVar(lvl)),
-                IteratorState::Clause(child_num, ct, child_terms) => {
+                TermIterState::Clause(child_num, ct, child_terms) => {
                     if child_num == child_terms.len() {
                         match ct {
                             ClauseType::CallN =>
@@ -90,20 +90,20 @@ impl<'a> Iterator for QueryIterator<'a> {
                                 return None
                         };
                     } else {
-                        self.state_stack.push(IteratorState::Clause(child_num + 1, ct, child_terms));
+                        self.state_stack.push(TermIterState::Clause(child_num + 1, ct, child_terms));
                         self.push_subterm(ct.level_of_subterms(), child_terms[child_num].as_ref());
                     }
                 },
-                IteratorState::InitialCons(lvl, cell, head, tail) => {
-                    self.state_stack.push(IteratorState::FinalCons(lvl, cell, head, tail));
+                TermIterState::InitialCons(lvl, cell, head, tail) => {
+                    self.state_stack.push(TermIterState::FinalCons(lvl, cell, head, tail));
                     self.push_subterm(Level::Deep, tail);
                     self.push_subterm(Level::Deep, head);
                 },
-                IteratorState::FinalCons(lvl, cell, head, tail) =>
+                TermIterState::FinalCons(lvl, cell, head, tail) =>
                     return Some(TermRef::Cons(lvl, cell, head, tail)),
-                IteratorState::Constant(lvl, cell, constant) =>
+                TermIterState::Constant(lvl, cell, constant) =>
                     return Some(TermRef::Constant(lvl, cell, constant)),
-                IteratorState::Var(lvl, cell, var) =>
+                TermIterState::Var(lvl, cell, var) =>
                     return Some(TermRef::Var(lvl, cell, var))
             };
         }
@@ -113,29 +113,29 @@ impl<'a> Iterator for QueryIterator<'a> {
 }
 
 pub struct FactIterator<'a> {
-    state_queue: VecDeque<IteratorState<'a>>,
+    state_queue: VecDeque<TermIterState<'a>>,
 }
 
 impl<'a> FactIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
-        self.state_queue.push_back(IteratorState::to_state(lvl, term));
+        self.state_queue.push_back(TermIterState::to_state(lvl, term));
     }
 
     fn new(term: &'a Term) -> FactIterator<'a> {
         let states = match term {
             &Term::AnonVar =>
-                vec![IteratorState::AnonVar(Level::Shallow)],
+                vec![TermIterState::AnonVar(Level::Shallow)],
             &Term::Clause(_, _, ref terms) =>
-                vec![IteratorState::Clause(0, ClauseType::Root, terms)],
+                vec![TermIterState::Clause(0, ClauseType::Root, terms)],
             &Term::Cons(ref cell, ref head, ref tail) =>
-                vec![IteratorState::InitialCons(Level::Shallow,
+                vec![TermIterState::InitialCons(Level::Shallow,
                                                 cell,
                                                 head.as_ref(),
                                                 tail.as_ref())],
             &Term::Constant(ref cell, ref constant) =>
-                vec![IteratorState::Constant(Level::Shallow, cell, constant)],
+                vec![TermIterState::Constant(Level::Shallow, cell, constant)],
             &Term::Var(ref cell, ref var) =>
-                vec![IteratorState::Var(Level::Shallow, cell, var)]
+                vec![TermIterState::Var(Level::Shallow, cell, var)]
         };
 
         FactIterator { state_queue: VecDeque::from(states) }
@@ -148,9 +148,9 @@ impl<'a> Iterator for FactIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(state) = self.state_queue.pop_front() {
             match state {
-                IteratorState::AnonVar(lvl) =>
+                TermIterState::AnonVar(lvl) =>
                     return Some(TermRef::AnonVar(lvl)),
-                IteratorState::Clause(_, ct, child_terms) => {
+                TermIterState::Clause(_, ct, child_terms) => {
                     for child_term in child_terms {
                         self.push_subterm(ct.level_of_subterms(), child_term);
                     }
@@ -162,15 +162,15 @@ impl<'a> Iterator for FactIterator<'a> {
                             continue
                     };
                 },
-                IteratorState::InitialCons(lvl, cell, head, tail) => {
+                TermIterState::InitialCons(lvl, cell, head, tail) => {
                     self.push_subterm(Level::Deep, head);
                     self.push_subterm(Level::Deep, tail);
 
                     return Some(TermRef::Cons(lvl, cell, head, tail));
                 },
-                IteratorState::Constant(lvl, cell, constant) =>
+                TermIterState::Constant(lvl, cell, constant) =>
                     return Some(TermRef::Constant(lvl, cell, constant)),
-                IteratorState::Var(lvl, cell, var) =>
+                TermIterState::Var(lvl, cell, var) =>
                     return Some(TermRef::Var(lvl, cell, var)),
                 _ => {}
             }

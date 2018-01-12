@@ -17,81 +17,87 @@ pub trait CopierTarget
     // after it's been copied to L2.
     fn duplicate_term(&mut self, a: Addr) where Self: IndexMut<usize, Output=HeapCellValue>
     {
-        let mut forward_trail: Vec<(Ref, HeapCellValue)>= Vec::new();
+        let mut trail: Vec<(Ref, HeapCellValue)>= Vec::new();
         let mut scan = self.source();
         let old_h = self.threshold();
 
-        self.push(HeapCellValue::from(a));
+        self.push(HeapCellValue::Addr(a));
 
         while scan < self.threshold() {
             match self[scan].clone() {
-                HeapCellValue::Con(_) | HeapCellValue::NamedStr(_, _) =>
+                HeapCellValue::NamedStr(_, _) =>
                     scan += 1,
-                HeapCellValue::Lis(a) => {
-                    self[scan] = HeapCellValue::Lis(self.threshold());
+                HeapCellValue::Addr(a) =>
+                    match a.clone() {
+                        Addr::Lis(a) => {
+                            self[scan] = HeapCellValue::Addr(Addr::Lis(self.threshold()));
 
-                    let hcv = self[a].clone();
-                    self.push(hcv);
+                            let hcv = self[a].clone();
+                            self.push(hcv);
 
-                    let hcv = self[a+1].clone();
-                    self.push(hcv);
+                            let hcv = self[a+1].clone();
+                            self.push(hcv);
 
-                    scan += 1;
-                },
-                HeapCellValue::Ref(r) => {
-                    let ra = Addr::from(r);
-                    let rd = self.store(self.deref(ra.clone()));
-
-                    match rd {
-                        Addr::HeapCell(hc) if hc >= old_h => {
-                            self[scan] = HeapCellValue::Ref(Ref::HeapCell(hc));
                             scan += 1;
                         },
-                        _ if ra == rd => {
-                            self[scan] = HeapCellValue::Ref(Ref::HeapCell(scan));
+                        Addr::HeapCell(_) | Addr::StackCell(_, _) => {
+                            let ra = a;
+                            let rd = self.store(self.deref(ra.clone()));
 
-                            match r {
-                                Ref::HeapCell(hc) =>
-                                    self[hc] = HeapCellValue::Ref(Ref::HeapCell(scan)),
-                                Ref::StackCell(fr, sc) =>
-                                    self.stack()[fr][sc] = Addr::HeapCell(scan)
+                            match rd.clone() {
+                                Addr::HeapCell(hc) if hc >= old_h => {
+                                    self[scan] = HeapCellValue::Addr(rd);
+                                    scan += 1;
+                                },
+                                _ if ra == rd => {
+                                    self[scan] = HeapCellValue::Addr(Addr::HeapCell(scan));
+
+                                    if let Addr::HeapCell(hc) = ra.clone() {
+                                        self[hc] = HeapCellValue::Addr(Addr::HeapCell(scan));
+                                        trail.push((Ref::HeapCell(hc),
+                                                    HeapCellValue::Addr(Addr::HeapCell(hc))));
+                                    } else if let Addr::StackCell(fr, sc) = ra {
+                                        self.stack()[fr][sc] = Addr::HeapCell(scan);
+                                        trail.push((Ref::StackCell(fr, sc),
+                                                    HeapCellValue::Addr(Addr::StackCell(fr, sc))));
+                                    }
+
+                                    scan += 1;
+                                },
+                                _ => self[scan] = HeapCellValue::Addr(rd)
                             };
+                        },
+                        Addr::Str(s) => {
+                            match self[s].clone() {
+                                HeapCellValue::NamedStr(arity, name) => {
+                                    let threshold = self.threshold();
 
-                            forward_trail.push((r, HeapCellValue::Ref(r)));
+                                    self[scan] = HeapCellValue::Addr(Addr::Str(threshold));
+                                    self[s] = HeapCellValue::Addr(Addr::Str(threshold));
+
+                                    trail.push((Ref::HeapCell(s),
+                                                        HeapCellValue::NamedStr(arity, name.clone())));
+
+                                    self.push(HeapCellValue::NamedStr(arity, name));
+
+                                    for i in 0 .. arity {
+                                        let hcv = self[s + 1 + i].clone();
+                                        self.push(hcv);
+                                    }
+                                },
+                                HeapCellValue::Addr(Addr::Str(o)) =>
+                                    self[scan] = HeapCellValue::Addr(Addr::Str(o)),
+                                _ => {}
+                            }
+
                             scan += 1;
                         },
-                        _ => self[scan] = HeapCellValue::from(rd)
+                        Addr::Con(_) => scan += 1
                     }
-                },
-                HeapCellValue::Str(s) => {
-                    match self[s].clone() {
-                        HeapCellValue::NamedStr(arity, name) => {
-                            let threshold = self.threshold();
-
-                            self[scan] = HeapCellValue::Str(threshold);
-                            self[s] = HeapCellValue::Str(threshold);
-
-                            forward_trail.push((Ref::HeapCell(s),
-                                                HeapCellValue::NamedStr(arity, name.clone())));
-
-                            self.push(HeapCellValue::NamedStr(arity, name));
-
-                            for i in 0 .. arity {
-                                let hcv = self[s + 1 + i].clone();
-                                self.push(hcv);
-                            }
-                        },
-                        HeapCellValue::Str(o) =>
-                            self[scan] = HeapCellValue::Str(o),
-                        _ => {}
-                    };
-
-                    scan += 1;
-                }
-            };
+            }
         }
 
-        for (r, hcv) in forward_trail {
+        for (r, hcv) in trail {
             match r {
                 Ref::HeapCell(hc) => self[hc] = hcv,
                 Ref::StackCell(fr, sc) => self.stack()[fr][sc] = hcv.as_addr(0)
