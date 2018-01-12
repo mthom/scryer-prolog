@@ -1,48 +1,15 @@
+use prolog::and_stack::*;
 use prolog::ast::*;
 use prolog::builtins::*;
-use prolog::codegen::*;
 use prolog::copier::*;
-use prolog::heapview::*;
-use prolog::and_stack::*;
 use prolog::num::{Integer, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
-use prolog::fixtures::*;
 
 use std::cmp::max;
-use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
-use std::vec::Vec;
-
-#[derive(Clone, Copy)]
-enum MachineMode {
-    Read,
-    Write
-}
-
-struct MachineState {
-    s: usize,
-    p: CodePtr,
-    b: usize,
-    b0: usize,
-    e: usize,
-    num_of_args: usize,
-    cp: CodePtr,
-    fail: bool,
-    heap: Heap,
-    mode: MachineMode,
-    and_stack: AndStack,
-    or_stack: OrStack,
-    registers: Registers,
-    trail: Vec<Ref>,
-    tr: usize,
-    hb: usize,
-    block: usize, // an offset into the OR stack.
-    ball: (usize, Vec<HeapCellValue>), // heap boundary, and a term copy
-    interms: Vec<Number> // intermediate numbers.
-}
 
 struct DuplicateTerm<'a> {
     state: &'a mut MachineState
@@ -159,14 +126,6 @@ impl<'a> CopierTarget for DuplicateBallTerm<'a> {
     }
 }
 
-pub struct Machine {
-    ms: MachineState,
-    code: Code,
-    code_dir: CodeDir,
-    op_dir: OpDir,
-    cached_query: Option<Code>
-}
-
 impl Index<RegType> for MachineState {
     type Output = Addr;
 
@@ -193,411 +152,6 @@ impl IndexMut<RegType> for MachineState {
     }
 }
 
-impl Index<CodePtr> for Machine {
-    type Output = Line;
-
-    fn index(&self, ptr: CodePtr) -> &Self::Output {
-        match ptr {
-            CodePtr::TopLevel(_, p) => {
-                match &self.cached_query {
-                    &Some(ref cq) => &cq[p],
-                    &None => panic!("Out-of-bounds top level index.")
-                }
-            },
-            CodePtr::DirEntry(p) => &self.code[p]
-        }
-    }
-}
-
-impl Machine {
-    pub fn new() -> Self {
-        let (code, code_dir, op_dir) = build_code_dir();
-
-        Machine {
-            ms: MachineState::new(),
-            code: code,
-            code_dir: code_dir,
-            op_dir: op_dir,
-            cached_query: None
-        }
-    }
-
-    pub fn failed(&self) -> bool {
-        self.ms.fail
-    }
-
-    fn add_user_code<'a>(&mut self, name: Rc<Atom>, arity: usize, offset: usize) -> EvalSession<'a>
-    {
-        match self.code_dir.get(&(name.clone(), arity)) {
-            Some(&(PredicateKeyType::BuiltIn, _)) =>
-                return EvalSession::ImpermissibleEntry(format!("{}/{}", name, arity)),
-            _ => {}
-        };
-
-        self.code_dir.insert((name, arity), (PredicateKeyType::User, offset));
-        EvalSession::EntrySuccess
-    }
-
-    pub fn add_fact<'a>(&mut self, fact: &Term, mut code: Code) -> EvalSession<'a>
-    {
-        match fact {
-            &Term::Clause(_, ref name, _) | &Term::Constant(_, Constant::Atom(ref name)) => {
-                let p = self.code.len();
-                let arity = fact.arity();
-
-                self.code.append(&mut code);
-                self.add_user_code(name.clone(), arity, p)
-            },
-            _ => EvalSession::NamelessEntry
-        }
-    }
-
-    pub fn add_rule<'a>(&mut self, rule: &Rule, mut code: Code) -> EvalSession<'a>
-    {
-        match &rule.head.0 {
-            &QueryTerm::Term(Term::Clause(_, ref name, _))
-          | &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref name))) => {
-                let p = self.code.len();                
-                let arity = rule.head.0.arity();
-
-                self.code.append(&mut code);
-                self.add_user_code(name.clone(), arity, p)
-            },
-            _ => EvalSession::NamelessEntry
-        }
-    }
-
-    pub fn add_predicate<'a>(&mut self, clauses: &Vec<PredicateClause>, mut code: Code)
-                             -> EvalSession<'a>
-    {
-        let p = self.code.len();
-
-        if let Some(ref clause) = clauses.first() {
-            if let Some(name) = clause.name() {
-                let arity = clause.arity();
-
-                self.code.append(&mut code);
-                self.add_user_code(name.clone(), arity, p)
-            } else {
-                EvalSession::NamelessEntry
-            }
-        } else {
-            EvalSession::ImpermissibleEntry(String::from("predicate must have clauses."))
-        }
-    }
-
-    fn cached_query_size(&self) -> usize {
-        match &self.cached_query {
-            &Some(ref query) => query.len(),
-            _ => 0
-        }
-    }
-
-    fn execute_instr(&mut self)
-    {
-        let instr = match self.ms.p {
-            CodePtr::TopLevel(_, p) => {
-                match &self.cached_query {
-                    &Some(ref cq) => &cq[p],
-                    &None => return
-                }
-            },
-            CodePtr::DirEntry(p) => &self.code[p]
-        };
-
-        match instr {
-            &Line::Arithmetic(ref arith_instr) =>
-                self.ms.execute_arith_instr(arith_instr),
-            &Line::BuiltIn(ref built_in_instr) =>
-                self.ms.execute_built_in_instr(&self.code_dir, built_in_instr),
-            &Line::Choice(ref choice_instr) =>
-                self.ms.execute_choice_instr(choice_instr),
-            &Line::Cut(ref cut_instr) =>
-                self.ms.execute_cut_instr(cut_instr),
-            &Line::Control(ref control_instr) =>
-                self.ms.execute_ctrl_instr(&self.code_dir, control_instr),
-            &Line::Fact(ref fact) => {
-                for fact_instr in fact {
-                    if self.failed() {
-                        break;
-                    }
-
-                    self.ms.execute_fact_instr(&fact_instr);
-                }
-                
-                self.ms.p += 1;
-            },
-            &Line::Indexing(ref indexing_instr) =>
-                self.ms.execute_indexing_instr(&indexing_instr),
-            &Line::IndexedChoice(ref choice_instr) =>
-                self.ms.execute_indexed_choice_instr(choice_instr),
-            &Line::Query(ref query) => {
-                for query_instr in query {
-                    if self.failed() {
-                        break;
-                    }
-
-                    self.ms.execute_query_instr(&query_instr);
-                }
-                
-                self.ms.p += 1;
-            }
-        }
-    }
-
-    fn backtrack(&mut self)
-    {
-        if self.ms.b > 0 {
-            let b = self.ms.b - 1;
-            
-            self.ms.b0 = self.ms.or_stack[b].b0;
-            self.ms.p  = self.ms.or_stack[b].bp;
-
-            if let CodePtr::TopLevel(_, p) = self.ms.p {
-                self.ms.fail = p == 0;
-            } else {
-                self.ms.fail = false;
-            }
-        } else {
-            self.ms.p = CodePtr::TopLevel(0, 0);            
-        }
-    }
-
-    fn query_stepper<'a>(&mut self)
-    {
-        loop
-        {
-            self.execute_instr();
-
-            if self.failed() {
-                self.backtrack();
-            }
-
-            match self.ms.p {
-                CodePtr::DirEntry(p) if p < self.code.len() => {},
-                _ => break
-            };
-        }
-    }
-
-    fn record_var_places<'a>(&self,
-                             chunk_num: usize,
-                             alloc_locs: &AllocVarDict<'a>,
-                             heap_locs: &mut HeapVarDict<'a>)
-    {
-        for (var, var_data) in alloc_locs {
-            match var_data {
-                &VarData::Perm(_) => {
-                    let e = self.ms.e;
-
-                    let r = var_data.as_reg_type().reg_num();
-                    let addr = self.ms.and_stack[e][r].clone();
-
-                    heap_locs.insert(var, addr);                
-                },
-                &VarData::Temp(cn, _, _) if cn == chunk_num => {
-                    let r = var_data.as_reg_type();
-                    let addr = self.ms[r].clone();
-
-                    heap_locs.insert(var, addr);
-                },
-                _ => {}
-            }
-        }
-    }
-
-    fn run_query<'a>(&mut self, alloc_locs: &AllocVarDict<'a>, heap_locs: &mut HeapVarDict<'a>)
-    {
-        let end_ptr = CodePtr::TopLevel(0, self.cached_query_size());
-
-        while self.ms.p < end_ptr {
-            if let CodePtr::TopLevel(mut cn, p) = self.ms.p {
-                match &self[CodePtr::TopLevel(cn, p)] {
-                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
-                        self.record_var_places(cn, alloc_locs, heap_locs);
-                        cn += 1;
-                    },
-                    _ => {}
-                }
-
-                self.ms.p = CodePtr::TopLevel(cn, p);
-            }
-
-            self.query_stepper();
-
-            match self.ms.p {
-                CodePtr::TopLevel(_, p) if p > 0 => {},
-                _ => break
-            };
-        }
-    }
-
-    fn fail<'a>(&mut self) -> EvalSession<'a>
-    {
-        if self.ms.ball.1.len() > 0 {
-            let h = self.ms.heap.h;
-            self.ms.copy_and_align_ball_to_heap();
-
-            EvalSession::QueryFailureWithException(self.print_term(&Addr::HeapCell(h)))
-        } else {
-            EvalSession::QueryFailure
-        }
-    }
-
-    pub fn submit_decl<'a>(&mut self, decl: &Declaration) -> EvalSession<'a>
-    {                
-        match decl {
-            &Declaration::Op(prec, spec, ref name) => {
-                if is_infix!(spec) {
-                    match self.op_dir.get(&(name.clone(), Fixity::Post)) {
-                        Some(_) => return EvalSession::OpIsInfixAndPostFix,
-                        _ => {}
-                    };
-                }
-
-                if is_postfix!(spec) {
-                    match self.op_dir.get(&(name.clone(), Fixity::In)) {
-                        Some(_) => return EvalSession::OpIsInfixAndPostFix,
-                        _ => {}
-                    };
-                }
-
-                if prec > 0 {
-                    match spec {
-                        XFY | XFX | YFX => self.op_dir.insert((name.clone(), Fixity::In),
-                                                              (spec, prec)),
-                        XF | YF => self.op_dir.insert((name.clone(), Fixity::Post), (spec, prec)),
-                        FX | FY => self.op_dir.insert((name.clone(), Fixity::Pre), (spec,prec)),
-                        _ => None
-                    };
-                } else {
-                    self.op_dir.remove(&(name.clone(), Fixity::Pre));
-                    self.op_dir.remove(&(name.clone(), Fixity::In));
-                    self.op_dir.remove(&(name.clone(), Fixity::Post));
-                }
-
-                EvalSession::EntrySuccess
-            }
-        }
-    }
-
-    pub fn submit_query<'a>(&mut self, code: Code, alloc_locs: AllocVarDict<'a>) -> EvalSession<'a>
-    {
-        let mut heap_locs = HashMap::new();
-
-        self.cached_query = Some(code);
-        self.run_query(&alloc_locs, &mut heap_locs);
-
-        if self.failed() {
-            self.fail()
-        } else {
-            EvalSession::InitialQuerySuccess(alloc_locs, heap_locs)
-        }
-    }
-
-    pub fn continue_query<'a>(&mut self, alloc_locs: &AllocVarDict<'a>, heap_locs: &mut HeapVarDict<'a>)
-                              -> EvalSession<'a>
-    {
-        if !self.or_stack_is_empty() {
-            let b = self.ms.b - 1;
-            self.ms.p = self.ms.or_stack[b].bp;
-
-            if let CodePtr::TopLevel(_, 0) = self.ms.p {
-                return EvalSession::QueryFailure;
-            }
-
-            self.run_query(alloc_locs, heap_locs);
-
-            if self.failed() {
-                self.fail()
-            } else {
-                EvalSession::SubsequentQuerySuccess
-            }
-        } else {
-            EvalSession::QueryFailure
-        }
-    }
-
-    fn print_term(&self, addr: &Addr) -> String
-    {
-        let mut viewer = HeapCellViewer::new(&self.ms.heap,
-                                             &self.ms.and_stack,
-                                             addr);
-
-        let mut result = String::new();
-
-        while let Some(view) = viewer.next() {
-            match view {
-                CellView::Con(ref r) =>
-                    result += format!("{}", r).as_str(),
-                CellView::HeapVar(cell_num) => {
-                    result += "_";
-                    result += cell_num.to_string().as_str();
-                },
-                CellView::StackVar(_, cell_num) => {
-                    result += "s_";
-                    result += cell_num.to_string().as_str();
-                },
-                CellView::Str(_, ref name) =>
-                    result += name.as_str(),
-                CellView::TToken(TToken::Bar) => {
-                    match viewer.peek() {
-                        Some(CellView::Con(&Constant::EmptyList)) => {
-                            viewer.next();
-                        },
-                        Some(CellView::TToken(TToken::LSBracket(loc))) => {
-                            result += ", ";
-
-                            viewer.next();
-                            viewer.remove_token(loc);
-                        },
-                        _ => result += " | "
-                    };
-                },
-                CellView::TToken(token) =>
-                    result += token.as_str()
-            };
-        }
-
-        result
-    }
-
-    pub fn heap_view(&self, var_dir: &HeapVarDict) -> String {
-        let mut result = String::new();
-
-        for (var, addr) in var_dir {
-            if result != "" {
-                result += "\n\r";
-            }
-
-            result += var.as_str();
-            result += " = ";
-
-            result += self.print_term(addr).as_str();
-        }
-
-        result
-    }
-
-    pub fn or_stack_is_empty(&self) -> bool {
-        self.ms.b == 0
-    }
-
-    pub fn clear(&mut self) {
-        self.reset();
-        self.code.clear();
-        self.code_dir.clear();
-    }
-
-    pub fn reset(&mut self) {
-        self.ms.reset();
-    }
-
-    pub fn op_dir(&self) -> &OpDir {
-        &self.op_dir
-    }
-}
-
 macro_rules! try_or_fail {
     ($s:ident, $e:expr) => {{
         match $e {
@@ -610,8 +164,36 @@ macro_rules! try_or_fail {
     }}
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum MachineMode {
+    Read,
+    Write
+}
+
+pub struct MachineState {
+    pub(super) s: usize,
+    pub(super) p: CodePtr,
+    pub(super) b: usize,
+    pub(super) b0: usize,
+    pub(super) e: usize,
+    pub(super) num_of_args: usize,
+    pub(super) cp: CodePtr,
+    pub(super) fail: bool,
+    pub(super) heap: Heap,
+    pub(super) mode: MachineMode,
+    pub(super) and_stack: AndStack,
+    pub(super) or_stack: OrStack,
+    pub(super) registers: Registers,
+    pub(super) trail: Vec<Ref>,
+    pub(super) tr: usize,
+    pub(super) hb: usize,
+    pub(super) block: usize, // an offset into the OR stack.
+    pub(super) ball: (usize, Vec<HeapCellValue>), // heap boundary, and a term copy
+    pub(super) interms: Vec<Number> // intermediate numbers.
+}
+
 impl MachineState {
-    fn new() -> MachineState {
+    pub(super) fn new() -> MachineState {
         MachineState { s: 0,
                        p: CodePtr::default(),
                        b: 0,
@@ -639,7 +221,7 @@ impl MachineState {
             if self.b > 0 { self.or_stack[self.b - 1].global_index } else { 0 }) + 1
     }
 
-    fn store(&self, a: Addr) -> Addr {
+    pub fn store(&self, a: Addr) -> Addr {
         match a {
             Addr::HeapCell(r)       => self.heap[r].as_addr(r),
             Addr::StackCell(fr, sc) => self.and_stack[fr][sc].clone(),
@@ -647,7 +229,7 @@ impl MachineState {
         }
     }
 
-    fn deref(&self, a: Addr) -> Addr {
+    pub fn deref(&self, a: Addr) -> Addr {
         let mut a = a;
 
         loop {
@@ -880,7 +462,7 @@ impl MachineState {
         self.interms[t - 1] = Number::Integer(Rc::new(result));
     }
 
-    fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
+    pub(super) fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
         match instr {
             &ArithmeticInstruction::Add(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
@@ -1129,7 +711,7 @@ impl MachineState {
         };
     }
 
-    fn execute_fact_instr(&mut self, instr: &FactInstruction) {
+    pub(super) fn execute_fact_instr(&mut self, instr: &FactInstruction) {
         match instr {
             &FactInstruction::GetConstant(_, ref c, reg) => {
                 let addr = self[reg].clone();
@@ -1288,7 +870,7 @@ impl MachineState {
         };
     }
 
-    fn execute_indexing_instr(&mut self, instr: &IndexingInstruction) {
+    pub(super) fn execute_indexing_instr(&mut self, instr: &IndexingInstruction) {
         match instr {
             &IndexingInstruction::SwitchOnTerm(v, c, l, s) => {
                 let a1 = self.registers[1].clone();
@@ -1351,7 +933,7 @@ impl MachineState {
         };
     }
 
-    fn execute_query_instr(&mut self, instr: &QueryInstruction) {
+    pub(super) fn execute_query_instr(&mut self, instr: &QueryInstruction) {
         match instr {
             &QueryInstruction::GetVariable(norm, arg) =>
                 self[norm] = self.registers[arg].clone(),
@@ -1492,13 +1074,13 @@ impl MachineState {
 
     fn throw_exception
         (&mut self, hcv: Vec<HeapCellValue>) {
-        let h = self.heap.h;
+            let h = self.heap.h;
 
-        self.registers[1] = Addr::HeapCell(h);
+            self.registers[1] = Addr::HeapCell(h);
 
-        self.heap.append(hcv);
-        self.goto_throw();
-    }
+            self.heap.append(hcv);
+            self.goto_throw();
+        }
 
     fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
     {
@@ -1547,7 +1129,7 @@ impl MachineState {
         Some((name, arity + narity - 1))
     }
 
-    fn copy_and_align_ball_to_heap(&mut self) {
+    pub(super) fn copy_and_align_ball_to_heap(&mut self) {
         let diff = self.ball.0 - self.heap.h;
 
         for heap_value in self.ball.1.iter().cloned() {
@@ -1591,7 +1173,7 @@ impl MachineState {
         Ok(())
     }
     
-    fn execute_built_in_instr(&mut self, code_dir: &CodeDir, instr: &BuiltInInstruction)
+    pub(super) fn execute_built_in_instr(&mut self, code_dir: &CodeDir, instr: &BuiltInInstruction)
     {
         match instr {
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) => {
@@ -1824,7 +1406,7 @@ impl MachineState {
                             let h = self.heap.h;
                             self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
                         }
-                                                
+                        
                         self.unify(a1, f_a);                                                
                     } else {
                         return Err(functor!("instantiation_error", 0, []));
@@ -1847,7 +1429,7 @@ impl MachineState {
         Ok(())
     }
     
-    fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
+    pub(super) fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
     {
         match instr {
             &ControlInstruction::Allocate(num_cells) => {
@@ -1964,7 +1546,7 @@ impl MachineState {
         };
     }
 
-    fn execute_indexed_choice_instr(&mut self, instr: &IndexedChoiceInstruction)
+    pub(super) fn execute_indexed_choice_instr(&mut self, instr: &IndexedChoiceInstruction)
     {
         match instr {
             &IndexedChoiceInstruction::Try(l) => {
@@ -2047,7 +1629,7 @@ impl MachineState {
         };
     }
 
-    fn execute_choice_instr(&mut self, instr: &ChoiceInstruction)
+    pub(super) fn execute_choice_instr(&mut self, instr: &ChoiceInstruction)
     {
         match instr {
             &ChoiceInstruction::TryMeElse(offset) => {
@@ -2131,7 +1713,7 @@ impl MachineState {
         }
     }
 
-    fn execute_cut_instr(&mut self, instr: &CutInstruction) {
+    pub(super) fn execute_cut_instr(&mut self, instr: &CutInstruction) {
         match instr {
             &CutInstruction::NeckCut => {
                 let b = self.b;
@@ -2166,7 +1748,7 @@ impl MachineState {
         }
     }
 
-    fn reset(&mut self) {
+    pub(super) fn reset(&mut self) {
         self.hb = 0;
         self.e = 0;
         self.b = 0;
