@@ -9,7 +9,6 @@ use prolog::targets::*;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::mem::swap;
-use std::rc::Rc;
 use std::vec::Vec;
 
 pub struct CodeGenerator<'a, TermMarker> {

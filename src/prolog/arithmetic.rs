@@ -2,7 +2,6 @@ use prolog::ast::*;
 use prolog::fixtures::*;
 
 use std::cmp::{min, max};
-use std::rc::Rc;
 use std::vec::Vec;
 
 pub struct ArithExprIterator<'a> {
