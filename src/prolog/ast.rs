@@ -862,17 +862,7 @@ impl Addr {
             _ => false
         }
     }
-   
-    pub fn as_ref(&self) -> Option<Ref> {
-        match self {
-            &Addr::HeapCell(hc) => Some(Ref::HeapCell(hc)),
-            &Addr::StackCell(fr, sc) => Some(Ref::StackCell(fr, sc)),
-            &Addr::Lis(hc) => Some(Ref::HeapCell(hc)),
-            &Addr::Str(hc) => Some(Ref::HeapCell(hc)),
-            _ => None
-        }
-    }
-    
+       
     pub fn as_var(&self) -> Option<Ref> {
         match self {
             &Addr::HeapCell(hc) => Some(Ref::HeapCell(hc)),
@@ -892,7 +882,7 @@ impl Addr {
 impl From<Ref> for Addr {
     fn from(r: Ref) -> Self {
         match r {
-            Ref::HeapCell(hc) => Addr::HeapCell(hc),
+            Ref::HeapCell(hc)      => Addr::HeapCell(hc),
             Ref::StackCell(fr, sc) => Addr::StackCell(fr, sc)
         }
     }

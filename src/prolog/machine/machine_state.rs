@@ -179,9 +179,9 @@ pub struct MachineState {
     pub(super) num_of_args: usize,
     pub(super) cp: CodePtr,
     pub(super) fail: bool,
-    pub(super) heap: Heap,
+    pub(crate) heap: Heap,
     pub(super) mode: MachineMode,
-    pub(super) and_stack: AndStack,
+    pub(crate) and_stack: AndStack,
     pub(super) or_stack: OrStack,
     pub(super) registers: Registers,
     pub(super) trail: Vec<Ref>,
@@ -221,7 +221,7 @@ impl MachineState {
             if self.b > 0 { self.or_stack[self.b - 1].global_index } else { 0 }) + 1
     }
 
-    pub fn store(&self, a: Addr) -> Addr {
+    pub(super) fn store(&self, a: Addr) -> Addr {
         match a {
             Addr::HeapCell(r)       => self.heap[r].as_addr(r),
             Addr::StackCell(fr, sc) => self.and_stack[fr][sc].clone(),
@@ -229,9 +229,7 @@ impl MachineState {
         }
     }
 
-    pub fn deref(&self, a: Addr) -> Addr {
-        let mut a = a;
-
+    pub(crate) fn deref(&self, mut a: Addr) -> Addr {        
         loop {
             let value = self.store(a.clone());
 
@@ -1134,11 +1132,14 @@ impl MachineState {
 
         for heap_value in self.ball.1.iter().cloned() {
             self.heap.push(match heap_value {
-                HeapCellValue::Addr(Addr::Con(c)) => HeapCellValue::Addr(Addr::Con(c)),
-                HeapCellValue::Addr(Addr::Lis(a)) => HeapCellValue::Addr(Addr::Lis(a - diff)),
+                HeapCellValue::Addr(Addr::Con(c)) =>
+                    HeapCellValue::Addr(Addr::Con(c)),
+                HeapCellValue::Addr(Addr::Lis(a)) =>
+                    HeapCellValue::Addr(Addr::Lis(a - diff)),
                 HeapCellValue::Addr(Addr::HeapCell(hc)) =>
                     HeapCellValue::Addr(Addr::HeapCell(hc - diff)),
-                HeapCellValue::Addr(Addr::Str(s)) => HeapCellValue::Addr(Addr::Str(s - diff)),
+                HeapCellValue::Addr(Addr::Str(s)) =>
+                    HeapCellValue::Addr(Addr::Str(s - diff)),
                 _ => heap_value
             });
         }

@@ -4,7 +4,7 @@ use prolog::codegen::*;
 use prolog::heapview::*;
 use prolog::fixtures::*;
 
-mod machine_state;
+pub(crate) mod machine_state;
 
 use std::collections::HashMap;
 use std::ops::Index;
