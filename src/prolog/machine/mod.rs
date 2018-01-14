@@ -84,7 +84,7 @@ impl Machine {
         match &rule.head.0 {
             &QueryTerm::Term(Term::Clause(_, ref name, _))
           | &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref name))) => {
-                let p = self.code.len();                
+                let p = self.code.len();
                 let arity = rule.head.0.arity();
 
                 self.code.append(&mut code);
@@ -151,7 +151,7 @@ impl Machine {
 
                     self.ms.execute_fact_instr(&fact_instr);
                 }
-                
+
                 self.ms.p += 1;
             },
             &Line::Indexing(ref indexing_instr) =>
@@ -166,7 +166,7 @@ impl Machine {
 
                     self.ms.execute_query_instr(&query_instr);
                 }
-                
+
                 self.ms.p += 1;
             }
         }
@@ -176,7 +176,7 @@ impl Machine {
     {
         if self.ms.b > 0 {
             let b = self.ms.b - 1;
-            
+
             self.ms.b0 = self.ms.or_stack[b].b0;
             self.ms.p  = self.ms.or_stack[b].bp;
 
@@ -186,7 +186,7 @@ impl Machine {
                 self.ms.fail = false;
             }
         } else {
-            self.ms.p = CodePtr::TopLevel(0, 0);            
+            self.ms.p = CodePtr::TopLevel(0, 0);
         }
     }
 
@@ -220,7 +220,7 @@ impl Machine {
                     let r = var_data.as_reg_type().reg_num();
                     let addr = self.ms.and_stack[e][r].clone();
 
-                    heap_locs.insert(var, addr);                
+                    heap_locs.insert(var, addr);
                 },
                 &VarData::Temp(cn, _, _) if cn == chunk_num => {
                     let r = var_data.as_reg_type();
@@ -272,7 +272,7 @@ impl Machine {
     }
 
     pub fn submit_decl<'a>(&mut self, decl: &Declaration) -> EvalSession<'a>
-    {                
+    {
         match decl {
             &Declaration::Op(prec, spec, ref name) => {
                 if is_infix!(spec) {
@@ -349,12 +349,12 @@ impl Machine {
     {
         let disp = DisplayFormatter {};
         let iter = HeapCellIterator::new(&self.ms, r);
-        
+
         let mut printer = HeapCellPrinter::new(iter, disp);
-        
+
         printer.print()
     }
-    
+
     // NEW ---
     fn print_term(&self, addr: &Addr) -> String
     {
@@ -364,55 +364,10 @@ impl Machine {
             &Addr::Lis(h) | &Addr::HeapCell(h) | &Addr::Str(h) =>
                 self.print_var(Ref::HeapCell(h)),
             &Addr::StackCell(fr, sc) =>
-                self.print_var(Ref::StackCell(fr, sc))            
+                self.print_var(Ref::StackCell(fr, sc))
         }
     }
-    
-/*
-    fn print_term(&self, addr: &Addr) -> String
-    {
-        let mut viewer = HeapCellViewer::new(&self.ms.heap,
-                                             &self.ms.and_stack,
-                                             addr);
 
-        let mut result = String::new();
-
-        while let Some(view) = viewer.next() {
-            match view {
-                CellView::Con(ref r) =>
-                    result += format!("{}", r).as_str(),
-                CellView::HeapVar(cell_num) => {
-                    result += "_";
-                    result += cell_num.to_string().as_str();
-                },
-                CellView::StackVar(_, cell_num) => {
-                    result += "s_";
-                    result += cell_num.to_string().as_str();
-                },
-                CellView::Str(_, ref name) =>
-                    result += name.as_str(),
-                CellView::TToken(TToken::Bar) => {
-                    match viewer.peek() {
-                        Some(CellView::Con(&Constant::EmptyList)) => {
-                            viewer.next();
-                        },
-                        Some(CellView::TToken(TToken::LSBracket(loc))) => {
-                            result += ", ";
-
-                            viewer.next();
-                            viewer.remove_token(loc);
-                        },
-                        _ => result += " | "
-                    };
-                },
-                CellView::TToken(token) =>
-                    result += token.as_str()
-            };
-        }
-
-        result
-    }
-*/
     pub fn heap_view(&self, var_dir: &HeapVarDict) -> String {
         let mut result = String::new();
 
@@ -448,4 +403,3 @@ impl Machine {
         &self.op_dir
     }
 }
-
