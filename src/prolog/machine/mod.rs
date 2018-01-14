@@ -1,7 +1,8 @@
 use prolog::ast::*;
 use prolog::builtins::*;
 use prolog::codegen::*;
-use prolog::heapview::*;
+use prolog::heap_iter::*;
+use prolog::heap_print::*;
 use prolog::fixtures::*;
 
 pub(crate) mod machine_state;
@@ -321,7 +322,7 @@ impl Machine {
         }
     }
 
-    pub fn continue_query<'a>(&mut self, alloc_locs: &AllocVarDict<'a>, heap_locs: &mut HeapVarDict<'a>)
+    pub fn continue_query<'a>(&mut self, alloc_l: &AllocVarDict<'a>, heap_l: &mut HeapVarDict<'a>)
                               -> EvalSession<'a>
     {
         if !self.or_stack_is_empty() {
@@ -332,7 +333,7 @@ impl Machine {
                 return EvalSession::QueryFailure;
             }
 
-            self.run_query(alloc_locs, heap_locs);
+            self.run_query(alloc_l, heap_l);
 
             if self.failed() {
                 self.fail()
@@ -344,6 +345,30 @@ impl Machine {
         }
     }
 
+    fn print_var(&self, r: Ref) -> String
+    {
+        let disp = DisplayFormatter {};
+        let iter = HeapCellIterator::new(&self.ms, r);
+        
+        let mut printer = HeapCellPrinter::new(iter, disp);
+        
+        printer.print()
+    }
+    
+    // NEW ---
+    fn print_term(&self, addr: &Addr) -> String
+    {
+        match addr {
+            &Addr::Con(ref c) =>
+                format!("{}", c),
+            &Addr::Lis(h) | &Addr::HeapCell(h) | &Addr::Str(h) =>
+                self.print_var(Ref::HeapCell(h)),
+            &Addr::StackCell(fr, sc) =>
+                self.print_var(Ref::StackCell(fr, sc))            
+        }
+    }
+    
+/*
     fn print_term(&self, addr: &Addr) -> String
     {
         let mut viewer = HeapCellViewer::new(&self.ms.heap,
@@ -387,7 +412,7 @@ impl Machine {
 
         result
     }
-
+*/
     pub fn heap_view(&self, var_dir: &HeapVarDict) -> String {
         let mut result = String::new();
 

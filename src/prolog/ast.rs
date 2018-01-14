@@ -15,11 +15,11 @@ use std::rc::Rc;
 use std::str::Utf8Error;
 use std::vec::Vec;
 
+pub const LEXER_BUF_SIZE: usize = 4096;
+
 pub type Atom = String;
 
 pub type Var = String;
-
-pub const LEXER_BUF_SIZE: usize = 4096;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GenContext {

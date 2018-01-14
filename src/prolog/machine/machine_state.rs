@@ -221,7 +221,7 @@ impl MachineState {
             if self.b > 0 { self.or_stack[self.b - 1].global_index } else { 0 }) + 1
     }
 
-    pub(super) fn store(&self, a: Addr) -> Addr {
+    pub(crate) fn store(&self, a: Addr) -> Addr {
         match a {
             Addr::HeapCell(r)       => self.heap[r].as_addr(r),
             Addr::StackCell(fr, sc) => self.and_stack[fr][sc].clone(),
