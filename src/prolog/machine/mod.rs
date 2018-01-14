@@ -355,7 +355,6 @@ impl Machine {
         printer.print()
     }
 
-    // NEW ---
     fn print_term(&self, addr: &Addr) -> String
     {
         match addr {
