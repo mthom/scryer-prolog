@@ -48,8 +48,7 @@ impl<'a> CopierTarget for DuplicateTerm<'a> {
     }
 
     fn push(&mut self, hcv: HeapCellValue) {
-        self.state.heap.push(hcv);
-        self.state.heap.h += 1;
+        self.state.heap.push(hcv);        
     }
 
     fn store(&self, a: Addr) -> Addr {
@@ -1216,24 +1215,7 @@ impl MachineState {
                 };
 
                 self.p += 1;
-            },
-            &BuiltInInstruction::DuplicateTerm => {
-                let old_h = self.heap.h;
-
-                let a1 = self[temp_v!(1)].clone();
-                let a2 = self[temp_v!(2)].clone();
-
-                // drop the mutable references contained in gadget
-                // once the term has been duplicated.
-                {
-                    let mut gadget = DuplicateTerm::new(self);
-                    gadget.duplicate_term(a1);
-                }
-
-                self.unify(Addr::HeapCell(old_h), a2);
-
-                self.p += 1;
-            },
+            },            
             &BuiltInInstruction::GetArg => 
                 try_or_fail!(self, {
                     let val = self.try_get_arg();
@@ -1453,6 +1435,22 @@ impl MachineState {
 
         Ok(())
     }
+
+    fn duplicate_term(&mut self) {
+        let old_h = self.heap.h;
+
+        let a1 = self[temp_v!(1)].clone();
+        let a2 = self[temp_v!(2)].clone();
+
+        // drop the mutable references contained in gadget
+        // once the term has been duplicated.
+        {
+            let mut gadget = DuplicateTerm::new(self);
+            gadget.duplicate_term(a1);
+        }
+
+        self.unify(Addr::HeapCell(old_h), a2);        
+    }
     
     pub(super) fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
     {
@@ -1532,6 +1530,14 @@ impl MachineState {
                 let result = self.print_term(&self[temp_v!(1)], DisplayFormatter {});
                 println!("{}", result);
                 
+                self.p = self.cp;
+            },
+            &ControlInstruction::DuplicateTermCall => {
+                self.duplicate_term();
+                self.p += 1;
+            },
+            &ControlInstruction::DuplicateTermExecute => {
+                self.duplicate_term();
                 self.p = self.cp;
             },
             &ControlInstruction::Execute(ref name, arity) =>

@@ -276,7 +276,7 @@ macro_rules! succeed {
 
 macro_rules! duplicate_term {
     () => (
-        Line::BuiltIn(BuiltInInstruction::DuplicateTerm)
+        Line::Control(ControlInstruction::DuplicateTermCall)
     )
 }
 
@@ -391,5 +391,11 @@ macro_rules! rc_atom {
 macro_rules! infix {
     () => (
         Fixity::In
+    )
+}
+
+macro_rules! display {
+    () => (
+        Line::Control(ControlInstruction::DisplayCall)
     )
 }

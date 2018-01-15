@@ -356,7 +356,7 @@ impl Machine {
 
             result += var.as_str();
             result += " = ";
-
+            
             result += self.ms.print_term(addr, TermFormatter {}).as_str();
         }
 

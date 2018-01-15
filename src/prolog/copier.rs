@@ -25,7 +25,7 @@ pub trait CopierTarget
 
         while scan < self.threshold() {
             match self[scan].clone() {
-                HeapCellValue::NamedStr(_, _, _) =>
+                HeapCellValue::NamedStr(..) =>
                     scan += 1,
                 HeapCellValue::Addr(a) =>
                     match a.clone() {
@@ -88,7 +88,7 @@ pub trait CopierTarget
                                 HeapCellValue::Addr(Addr::Str(o)) =>
                                     self[scan] = HeapCellValue::Addr(Addr::Str(o)),
                                 _ => {}
-                            }
+                            };
 
                             scan += 1;
                         },

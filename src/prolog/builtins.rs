@@ -271,7 +271,9 @@ fn get_builtins() -> Code {
                 put_value!(perm_v!(3), 4),
                 put_value!(perm_v!(5), 5)],
          deallocate!(),
-         goto!(173, 3) // goto arg_/3.
+         goto!(173, 3), // goto arg_/3.
+         display!(), // display/1, 192.
+         proceed!()
     ]
 }
 
@@ -343,6 +345,8 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     code_dir.insert((rc_atom!("functor"), 3), (PredicateKeyType::BuiltIn, 146));
     code_dir.insert((rc_atom!("arg"), 3), (PredicateKeyType::BuiltIn, 150));
     code_dir.insert((rc_atom!("integer"), 1), (PredicateKeyType::BuiltIn, 147));
+
+    code_dir.insert((rc_atom!("display"), 1), (PredicateKeyType::BuiltIn, 192));
 
     (builtin_code, code_dir, op_dir)
 }

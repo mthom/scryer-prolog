@@ -114,6 +114,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "call_display"),
             &ControlInstruction::DisplayExecute =>
                 write!(f, "execute_display"),
+            &ControlInstruction::DuplicateTermCall =>
+                write!(f, "call_duplicate_term"),
+            &ControlInstruction::DuplicateTermExecute =>
+                write!(f, "execute_duplicate_term"),
             &ControlInstruction::ExecuteN(arity) =>
                 write!(f, "execute_N {}", arity),
             &ControlInstruction::FunctorCall =>
@@ -160,8 +164,6 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "clean_up_block"),
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
                 write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
-            &BuiltInInstruction::DuplicateTerm =>
-                write!(f, "duplicate_term X1"),
             &BuiltInInstruction::EraseBall =>
                 write!(f, "erase_ball"),
             &BuiltInInstruction::Fail =>
