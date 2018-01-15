@@ -17,9 +17,9 @@ impl<'a> QueryIterator<'a> {
         let state = match term {
             &Term::AnonVar =>
                 return QueryIterator { state_stack: vec![] },
-            &Term::Clause(_, _, ref terms) =>
+            &Term::Clause(.., ref terms, _) =>
                 TermIterState::Clause(0, ClauseType::Root, terms),
-            &Term::Cons(_, _, _) =>
+            &Term::Cons(..) =>
                 return QueryIterator { state_stack: vec![] },
             &Term::Constant(_, _) =>
                 return QueryIterator { state_stack: vec![] },
@@ -84,7 +84,7 @@ impl<'a> Iterator for QueryIterator<'a> {
                         match ct {
                             ClauseType::CallN =>
                                 self.push_subterm(Level::Shallow, child_terms[0].as_ref()),
-                            ClauseType::Deep(_, _, _) =>
+                            ClauseType::Deep(..) =>
                                 return Some(TermRef::Clause(ct, child_terms)),
                             _ =>
                                 return None
@@ -125,7 +125,7 @@ impl<'a> FactIterator<'a> {
         let states = match term {
             &Term::AnonVar =>
                 vec![TermIterState::AnonVar(Level::Shallow)],
-            &Term::Clause(_, _, ref terms) =>
+            &Term::Clause(.., ref terms, _) =>
                 vec![TermIterState::Clause(0, ClauseType::Root, terms)],
             &Term::Cons(ref cell, ref head, ref tail) =>
                 vec![TermIterState::InitialCons(Level::Shallow,
@@ -156,7 +156,7 @@ impl<'a> Iterator for FactIterator<'a> {
                     }
 
                     match ct {
-                        ClauseType::Deep(_, _, _) =>
+                        ClauseType::Deep(..) =>
                             return Some(TermRef::Clause(ct, child_terms)),
                         _ =>
                             continue

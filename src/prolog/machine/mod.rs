@@ -68,7 +68,7 @@ impl Machine {
     pub fn add_fact<'a>(&mut self, fact: &Term, mut code: Code) -> EvalSession<'a>
     {
         match fact {
-            &Term::Clause(_, ref name, _) | &Term::Constant(_, Constant::Atom(ref name)) => {
+            &Term::Clause(_, ref name, ..) | &Term::Constant(_, Constant::Atom(ref name)) => {
                 let p = self.code.len();
                 let arity = fact.arity();
 
@@ -82,7 +82,7 @@ impl Machine {
     pub fn add_rule<'a>(&mut self, rule: &Rule, mut code: Code) -> EvalSession<'a>
     {
         match &rule.head.0 {
-            &QueryTerm::Term(Term::Clause(_, ref name, _))
+            &QueryTerm::Term(Term::Clause(_, ref name, ..))
           | &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref name))) => {
                 let p = self.code.len();
                 let arity = rule.head.0.arity();
@@ -347,7 +347,7 @@ impl Machine {
 
     fn print_var(&self, r: Ref) -> String
     {
-        let disp = TermFormatter::new(&self.op_dir);
+        let disp = TermFormatter {};
         let iter = HeapCellIterator::new(&self.ms, r);
 
         let mut printer = HeapCellPrinter::new(iter, disp);

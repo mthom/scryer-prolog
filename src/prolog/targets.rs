@@ -10,7 +10,7 @@ pub trait CompilationTarget<'a> {
 
     fn to_constant(Level, Constant, RegType) -> Self;
     fn to_list(Level, RegType) -> Self;
-    fn to_structure(Level, Rc<Atom>, usize, RegType) -> Self;
+    fn to_structure(Level, Rc<Atom>, usize, RegType, Option<Fixity>) -> Self;
 
     fn to_void(usize) -> Self;
     fn is_void_instr(&self) -> bool;
@@ -41,8 +41,10 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         FactInstruction::GetConstant(lvl, constant, reg)
     }
 
-    fn to_structure(lvl: Level, atom: Rc<Atom>, arity: usize, reg: RegType) -> Self {
-        FactInstruction::GetStructure(lvl, atom, arity, reg)
+    fn to_structure(lvl: Level, atom: Rc<Atom>, arity: usize, reg: RegType, fixity: Option<Fixity>)
+                    -> Self
+    {
+        FactInstruction::GetStructure(lvl, atom, arity, reg, fixity)
     }
 
     fn to_list(lvl: Level, reg: RegType) -> Self {
@@ -103,8 +105,10 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         term.post_order_iter()
     }
 
-    fn to_structure(lvl: Level, atom: Rc<Atom>, arity: usize, reg: RegType) -> Self {
-        QueryInstruction::PutStructure(lvl, atom, arity, reg)
+    fn to_structure(lvl: Level, atom: Rc<Atom>, arity: usize, reg: RegType, fixity: Option<Fixity>)
+                    -> Self
+    {
+        QueryInstruction::PutStructure(lvl, atom, arity, reg, fixity)
     }
 
     fn to_constant(lvl: Level, constant: Constant, reg: RegType) -> Self {

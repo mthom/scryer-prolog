@@ -45,14 +45,14 @@ impl CodeOffsets {
     pub fn index_term(&mut self, first_arg: &Term, index: usize)
     {
         match first_arg {
-            &Term::Clause(_, ref name, ref terms) => {
+            &Term::Clause(_, ref name, ref terms, _) => {
                 let code = self.structures.entry((name.clone(), terms.len()))
                                .or_insert(Vec::new());
 
                 let is_initial_index = code.is_empty();
                 code.push(Self::add_index(is_initial_index, index));
             },
-            &Term::Cons(_, _, _) => {
+            &Term::Cons(..) => {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
             },

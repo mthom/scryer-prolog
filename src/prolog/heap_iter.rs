@@ -34,7 +34,7 @@ impl<'a> HeapCellIterator<'a> {
     fn follow_heap(&mut self, h: usize) -> Addr
     {
         match &self.machine_st.heap[h] {
-            &HeapCellValue::NamedStr(arity, _) => {
+            &HeapCellValue::NamedStr(arity, _, _) => {
                 for idx in (1 .. arity + 1).rev() {
                     self.state_stack.push(Ref::HeapCell(h + idx));
                 }

@@ -298,7 +298,7 @@ impl fmt::Display for Constant {
 
 pub enum Term {
     AnonVar,
-    Clause(Cell<RegType>, Rc<Atom>, Vec<Box<Term>>),
+    Clause(Cell<RegType>, Rc<Atom>, Vec<Box<Term>>, Option<Fixity>),
     Cons(Cell<RegType>, Box<Term>, Box<Term>),
     Constant(Cell<RegType>, Constant),
     Var(Cell<VarReg>, Rc<Var>)
@@ -369,7 +369,7 @@ pub struct Rule {
 pub enum ClauseType<'a> {
     CallN,
     Catch,
-    Deep(Level, &'a Cell<RegType>, &'a Rc<Atom>),
+    Deep(Level, &'a Cell<RegType>, &'a Rc<Atom>, Option<Fixity>),
     Is,
     Root,
     Throw,
@@ -378,7 +378,7 @@ pub enum ClauseType<'a> {
 impl<'a> ClauseType<'a> {
     pub fn level_of_subterms(self) -> Level {
         match self {
-            ClauseType::Deep(_, _, _) => Level::Deep,
+            ClauseType::Deep(..) => Level::Deep,
             _ => Level::Shallow
         }
     }
@@ -397,10 +397,10 @@ impl<'a> TermRef<'a> {
     pub fn level(self) -> Level {
         match self {
             TermRef::AnonVar(lvl)
-          | TermRef::Cons(lvl, _, _, _)
-          | TermRef::Constant(lvl, _, _)
-          | TermRef::Var(lvl, _, _) => lvl,
-            TermRef::Clause(ClauseType::Deep(lvl, _, _), _) => lvl,
+          | TermRef::Cons(lvl, ..)
+          | TermRef::Constant(lvl, ..)
+          | TermRef::Var(lvl, ..) => lvl,
+            TermRef::Clause(ClauseType::Deep(lvl, ..), ..) => lvl,
             _ => Level::Shallow
         }
     }
@@ -798,7 +798,7 @@ impl From<IndexingInstruction> for Line {
 pub enum FactInstruction {
     GetConstant(Level, Constant, RegType),
     GetList(Level, RegType),
-    GetStructure(Level, Rc<Atom>, usize, RegType),
+    GetStructure(Level, Rc<Atom>, usize, RegType, Option<Fixity>),
     GetValue(RegType, usize),
     GetVariable(RegType, usize),
     UnifyConstant(Constant),
@@ -812,7 +812,7 @@ pub enum QueryInstruction {
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
     PutList(Level, RegType),
-    PutStructure(Level, Rc<Atom>, usize, RegType),
+    PutStructure(Level, Rc<Atom>, usize, RegType, Option<Fixity>),
     PutUnsafeValue(usize, usize),
     PutValue(RegType, usize),
     PutVariable(RegType, usize),
@@ -896,14 +896,14 @@ pub enum Ref {
 #[derive(Clone, PartialEq)]
 pub enum HeapCellValue {
     Addr(Addr),
-    NamedStr(usize, Rc<Atom>), // arity, name.
+    NamedStr(usize, Rc<Atom>, Option<Fixity>), // arity, name.
 }
 
 impl HeapCellValue {
     pub fn as_addr(&self, focus: usize) -> Addr {
         match self {
             &HeapCellValue::Addr(ref a)    => a.clone(),
-            &HeapCellValue::NamedStr(_, _) => Addr::Str(focus)
+            &HeapCellValue::NamedStr(_, _, _) => Addr::Str(focus)
         }
     }
 }
@@ -1010,7 +1010,7 @@ pub type Registers = Vec<Addr>;
 impl Term {
     pub fn first_arg(&self) -> Option<&Term> {
         match self {
-            &Term::Clause(_, _, ref terms) =>
+            &Term::Clause(_, _, ref terms, _) =>
                 terms.first().map(|bt| bt.as_ref()),
             _ => None
         }
@@ -1018,7 +1018,7 @@ impl Term {
 
     pub fn is_callable(&self) -> bool {
         match self {
-            &Term::Clause(_, _, _) | &Term::Constant(_, Constant::Atom(_)) =>
+            &Term::Clause(..) | &Term::Constant(_, Constant::Atom(_)) =>
                 true,
             _ => false
         }
@@ -1027,14 +1027,14 @@ impl Term {
     pub fn name(&self) -> Option<Rc<Atom>> {
         match self {
             &Term::Constant(_, Constant::Atom(ref atom))
-          | &Term::Clause(_, ref atom, _) => Some(atom.clone()),
+          | &Term::Clause(_, ref atom, ..) => Some(atom.clone()),
             _ => None
         }
     }
 
     pub fn arity(&self) -> usize {
         match self {
-            &Term::Clause(_, _, ref child_terms) => child_terms.len(),
+            &Term::Clause(_, _, ref child_terms, ..) => child_terms.len(),
             _ => 0
         }
     }
@@ -1054,8 +1054,8 @@ impl<'a> TermIterState<'a> {
         match term {
             &Term::AnonVar =>
                 TermIterState::AnonVar(lvl),
-            &Term::Clause(ref cell, ref atom, ref child_terms) =>
-                TermIterState::Clause(0, ClauseType::Deep(lvl, cell, atom), child_terms),
+            &Term::Clause(ref cell, ref atom, ref child_terms, fixity) =>
+                TermIterState::Clause(0, ClauseType::Deep(lvl, cell, atom, fixity), child_terms),
             &Term::Cons(ref cell, ref head, ref tail) =>
                 TermIterState::InitialCons(lvl, cell, head.as_ref(), tail.as_ref()),
             &Term::Constant(ref cell, ref constant) =>

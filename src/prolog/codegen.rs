@@ -130,7 +130,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 self.marker.mark_anon_var(Level::Deep, target),
             &Term::AnonVar =>
                 Self::add_or_increment_void_instr(target),
-            &Term::Cons(ref cell, _, _) | &Term::Clause(ref cell, _, _) => {
+            &Term::Cons(ref cell, _, _) | &Term::Clause(ref cell, _, _, _) => {
                 self.marker.mark_non_var(Level::Deep, term_loc, cell, target);
                 target.push(Target::clause_arg_to_instr(cell.get()));
             },
@@ -154,9 +154,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         where Target: CompilationTarget<'a>
     {
         match ct {
-            ClauseType::Deep(lvl, cell, atom) => {
+            ClauseType::Deep(lvl, cell, atom, fixity) => {
                 self.marker.mark_non_var(lvl, term_loc, cell, target);
-                target.push(Target::to_structure(lvl, atom.clone(), terms.len(), cell.get()));
+                target.push(Target::to_structure(lvl, atom.clone(), terms.len(),
+                                                 cell.get(), fixity));
 
                 for subterm in terms {
                     self.subterm_to_instr(subterm.as_ref(), term_loc, is_exposed, target);
@@ -254,7 +255,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);
                 code.push(Line::Control(call));
             },
-            &QueryTerm::Term(Term::Clause(_, ref atom, ref terms)) => {
+            &QueryTerm::Term(Term::Clause(_, ref atom, ref terms, _)) => {
                 let call = ControlInstruction::Call(atom.clone(), terms.len(), pvs);
                 code.push(Line::Control(call));
             },
@@ -317,10 +318,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             },            
             &InlinedQueryTerm::IsAtomic(ref inner_term) =>
                 match inner_term[0].as_ref() {
-                    &Term::AnonVar | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
+                    &Term::AnonVar | &Term::Clause(..) | &Term::Cons(..) => {
                         code.push(fail!());
                     },
-                    &Term::Constant(_, _) => {
+                    &Term::Constant(..) => {
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
@@ -343,7 +344,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 },
             &InlinedQueryTerm::IsVar(ref inner_term) =>
                 match inner_term[0].as_ref() {
-                    &Term::Constant(_, _) | &Term::Clause(_, _, _) | &Term::Cons(_, _, _) => {
+                    &Term::Constant(..) | &Term::Clause(..) | &Term::Cons(..) => {
                         code.push(fail!());
                     },
                     &Term::AnonVar => {
@@ -482,7 +483,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         self.compile_seq_prelude(&conjunct_info, &mut code);
 
         if let &QueryTerm::Term(ref term) = p0 {
-            if let &Term::Clause(_, _, _) = term {
+            if let &Term::Clause(..) = term {
                 let iter = FactInstruction::iter(term);
                 let fact = self.compile_target(iter, GenContext::Head, false);
 
@@ -554,7 +555,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
         let mut code = Vec::new();
 
-        if let &Term::Clause(_, _, _) = term {
+        if let &Term::Clause(..) = term {
             let iter = FactInstruction::iter(term);
             let mut compiled_fact = self.compile_target(iter, GenContext::Head, false);
 

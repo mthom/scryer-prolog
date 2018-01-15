@@ -25,7 +25,7 @@ pub trait CopierTarget
 
         while scan < self.threshold() {
             match self[scan].clone() {
-                HeapCellValue::NamedStr(_, _) =>
+                HeapCellValue::NamedStr(_, _, _) =>
                     scan += 1,
                 HeapCellValue::Addr(a) =>
                     match a.clone() {
@@ -69,16 +69,16 @@ pub trait CopierTarget
                         },
                         Addr::Str(s) => {
                             match self[s].clone() {
-                                HeapCellValue::NamedStr(arity, name) => {
+                                HeapCellValue::NamedStr(arity, name, fixity) => {
                                     let threshold = self.threshold();
 
                                     self[scan] = HeapCellValue::Addr(Addr::Str(threshold));
                                     self[s] = HeapCellValue::Addr(Addr::Str(threshold));
 
                                     trail.push((Ref::HeapCell(s),
-                                                        HeapCellValue::NamedStr(arity, name.clone())));
+                                                HeapCellValue::NamedStr(arity, name.clone(), fixity)));
 
-                                    self.push(HeapCellValue::NamedStr(arity, name));
+                                    self.push(HeapCellValue::NamedStr(arity, name, fixity));
 
                                     for i in 0 .. arity {
                                         let hcv = self[s + 1 + i].clone();

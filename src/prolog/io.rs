@@ -21,9 +21,9 @@ impl fmt::Display for FactInstruction {
                 write!(f, "get_list A{}", r.reg_num()),
             &FactInstruction::GetList(Level::Deep, ref r) =>
                 write!(f, "get_list {}", r),
-            &FactInstruction::GetStructure(Level::Deep, ref name, ref arity, ref r) =>
+            &FactInstruction::GetStructure(Level::Deep, ref name, ref arity, ref r, _) =>
                 write!(f, "get_structure {}/{}, {}", name, arity, r),
-            &FactInstruction::GetStructure(Level::Shallow, ref name, ref arity, ref r) =>
+            &FactInstruction::GetStructure(Level::Shallow, ref name, ref arity, ref r, _) =>
                 write!(f, "get_structure {}/{}, A{}", name, arity, r.reg_num()),
             &FactInstruction::GetValue(ref x, ref a) =>
                 write!(f, "get_value {}, A{}", x, a),
@@ -56,9 +56,9 @@ impl fmt::Display for QueryInstruction {
                 write!(f, "put_list A{}", r.reg_num()),
             &QueryInstruction::PutList(Level::Deep, ref r) =>
                 write!(f, "put_list {}", r),
-            &QueryInstruction::PutStructure(Level::Deep, ref name, ref arity, ref r) =>
+            &QueryInstruction::PutStructure(Level::Deep, ref name, ref arity, ref r, _) =>
                 write!(f, "put_structure {}/{}, {}", name, arity, r),
-            &QueryInstruction::PutStructure(Level::Shallow, ref name, ref arity, ref r) =>
+            &QueryInstruction::PutStructure(Level::Shallow, ref name, ref arity, ref r, _) =>
                 write!(f, "put_structure {}/{}, A{}", name, arity, r.reg_num()),
             &QueryInstruction::PutUnsafeValue(y, a) =>
                 write!(f, "put_unsafe_value Y{}, A{}", y, a),

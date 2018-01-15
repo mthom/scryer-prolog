@@ -19,7 +19,7 @@ impl<'a> ArithExprIterator<'a> {
         let state = match term {
             &Term::AnonVar =>
                 return Err(ArithmeticError::InvalidTerm),
-            &Term::Clause(_, _, ref terms) =>
+            &Term::Clause(_, _, ref terms, _) =>
                 TermIterState::Clause(0, ClauseType::Root, terms),
             &Term::Constant(ref cell, ref cons) =>
                 TermIterState::Constant(Level::Shallow, cell, cons),
@@ -199,7 +199,7 @@ impl<'a> ArithmeticEvaluator<'a> {
 
                     self.interm.push(ArithmeticTerm::Reg(r));
                 },
-                TermRef::Clause(ClauseType::Deep(_, _, name), terms) => {
+                TermRef::Clause(ClauseType::Deep(_, _, name, _), terms) => {
                     code.push(Line::Arithmetic(self.instr_from_clause(&*name, terms)?));
                 },
                 TermRef::Clause(ClauseType::Root, terms) => {

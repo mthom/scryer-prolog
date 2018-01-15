@@ -290,8 +290,8 @@ impl MachineState {
                         let r1 = &self.heap[a1];
                         let r2 = &self.heap[a2];
 
-                        if let &HeapCellValue::NamedStr(n1, ref f1) = r1 {
-                            if let &HeapCellValue::NamedStr(n2, ref f2) = r2 {
+                        if let &HeapCellValue::NamedStr(n1, ref f1, _) = r1 {
+                            if let &HeapCellValue::NamedStr(n2, ref f2, _) = r2 {
                                 if n1 == n2 && *f1 == *f2 {
                                     for i in 1 .. n1 + 1 {
                                         pdl.push(Addr::HeapCell(a1 + i));
@@ -742,14 +742,14 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &FactInstruction::GetStructure(_, ref name, arity, reg) => {
+            &FactInstruction::GetStructure(_, ref name, arity, reg, fixity) => {
                 let addr = self.deref(self[reg].clone());
 
                 match self.store(addr.clone()) {
                     Addr::Str(a) => {
                         let result = &self.heap[a];
 
-                        if let &HeapCellValue::NamedStr(narity, ref str) = result {
+                        if let &HeapCellValue::NamedStr(narity, ref str, _) = result {
                             if narity == arity && *name == *str {
                                 self.s = a + 1;
                                 self.mode = MachineMode::Read;
@@ -762,7 +762,7 @@ impl MachineState {
                         let h = self.heap.h;
 
                         self.heap.push(HeapCellValue::Addr(Addr::Str(h + 1)));
-                        self.heap.push(HeapCellValue::NamedStr(arity, name.clone()));
+                        self.heap.push(HeapCellValue::NamedStr(arity, name.clone(), fixity));
 
                         self.bind(addr.as_var().unwrap(), Addr::HeapCell(h));
 
@@ -911,7 +911,7 @@ impl MachineState {
 
                 let offset = match addr {
                     Addr::Str(s) => {
-                        if let &HeapCellValue::NamedStr(arity, ref name) = &self.heap[s] {
+                        if let &HeapCellValue::NamedStr(arity, ref name, _) = &self.heap[s] {
                             match hm.get(&(name.clone(), arity)) {
                                 Some(offset) => *offset,
                                 _ => 0
@@ -939,10 +939,10 @@ impl MachineState {
                 self[reg] = Addr::Con(constant.clone()),
             &QueryInstruction::PutList(_, reg) =>
                 self[reg] = Addr::Lis(self.heap.h),
-            &QueryInstruction::PutStructure(_, ref name, arity, reg) => {
+            &QueryInstruction::PutStructure(_, ref name, arity, reg, fixity) => {
                 let h = self.heap.h;
 
-                self.heap.push(HeapCellValue::NamedStr(arity, name.clone()));
+                self.heap.push(HeapCellValue::NamedStr(arity, name.clone(), fixity));
                 self[reg] = Addr::Str(h);
             },
             &QueryInstruction::PutUnsafeValue(n, arg) => {
@@ -1088,7 +1088,7 @@ impl MachineState {
             Addr::Str(a) => {
                 let result = self.heap[a].clone();
 
-                if let HeapCellValue::NamedStr(narity, name) = result {
+                if let HeapCellValue::NamedStr(narity, name, _) = result {
                     if narity + arity > 63 {
                         self.throw_exception(functor!("representation_error",
                                                       1,
@@ -1154,7 +1154,7 @@ impl MachineState {
 
             if let Addr::Str(o) = a2 {
                 match self.heap[o].clone() {
-                    HeapCellValue::NamedStr(arity, _) =>
+                    HeapCellValue::NamedStr(arity, _, _) =>
                         match i.to_usize() {
                             Some(i) if 1 <= i && i <= arity => {
                                 let a3  = self[temp_v!(3)].clone();
@@ -1372,7 +1372,7 @@ impl MachineState {
         match a1.clone() {
             Addr::Str(o) =>
                 match self.heap[o].clone() {
-                    HeapCellValue::NamedStr(arity, name) => {                    
+                    HeapCellValue::NamedStr(arity, name, _) => {                    
                         let name  = Addr::Con(Constant::Atom(name)); // A2
                         let arity = Addr::Con(Constant::Number(rc_integer!(arity)));
 
@@ -1401,7 +1401,7 @@ impl MachineState {
                             }
                         };
                         
-                        self.heap.push(HeapCellValue::NamedStr(arity, name));
+                        self.heap.push(HeapCellValue::NamedStr(arity, name, None));
 
                         for _ in 0 .. arity {
                             let h = self.heap.h;
