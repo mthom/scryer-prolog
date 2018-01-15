@@ -44,10 +44,19 @@ pub trait HeapCellValueFormatter {
 pub struct DisplayFormatter {}
 
 impl HeapCellValueFormatter for DisplayFormatter {
-    fn format_clause(&self, arity: usize, name: Rc<Atom>, _: Option<Fixity>,
+    fn format_clause(&self, arity: usize, name: Rc<Atom>, fixity: Option<Fixity>,
                      state_stack: &mut Vec<TokenOrRedirect>)
     {
-        self.format_struct(arity, name, state_stack);
+        if fixity.is_some() {
+            let mut new_name = String::from("'");
+            new_name += name.as_ref();
+            new_name += "'";
+            
+            let name = Rc::new(new_name);
+            self.format_struct(arity, name, state_stack);
+        } else {
+            self.format_struct(arity, name, state_stack);
+        }
     }
 }
 

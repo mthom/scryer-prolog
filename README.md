@@ -84,6 +84,7 @@ The following predicates are built-in to rusty-wam.
 * `atomic/1`
 * `call/N` (1 <= N <= 63)
 * `catch/3`
+* `display/1`
 * `duplicate_term/2`
 * `false/0`
 * `functor/3`

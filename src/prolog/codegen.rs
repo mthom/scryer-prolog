@@ -247,6 +247,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             },
             &QueryTerm::Catch(_) =>
                 code.push(Line::Control(ControlInstruction::CatchCall)),
+            &QueryTerm::Display(_) =>
+                code.push(Line::Control(ControlInstruction::DisplayCall)),
             &QueryTerm::Functor(_) =>
                 code.push(Line::Control(ControlInstruction::FunctorCall)),            
             &QueryTerm::Inlined(_) =>
@@ -281,6 +283,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         *ctrl = ControlInstruction::Execute(name, arity),
                     ControlInstruction::CallN(arity) =>
                         *ctrl = ControlInstruction::ExecuteN(arity),
+                    ControlInstruction::DisplayCall =>
+                        *ctrl = ControlInstruction::DisplayExecute,
                     ControlInstruction::FunctorCall =>
                         *ctrl = ControlInstruction::FunctorExecute,
                     ControlInstruction::CatchCall =>

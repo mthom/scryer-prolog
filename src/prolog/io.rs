@@ -109,13 +109,17 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::CatchCall =>
                 write!(f, "call_catch"),
             &ControlInstruction::CatchExecute =>
-                write!(f, "execute_catch"),            
+                write!(f, "execute_catch"),
+            &ControlInstruction::DisplayCall =>
+                write!(f, "call_display"),
+            &ControlInstruction::DisplayExecute =>
+                write!(f, "execute_display"),
             &ControlInstruction::ExecuteN(arity) =>
                 write!(f, "execute_N {}", arity),
             &ControlInstruction::FunctorCall =>
-                write!(f, "functor_call"),
+                write!(f, "call_functor"),
             &ControlInstruction::FunctorExecute =>
-                write!(f, "functor_execute"),
+                write!(f, "execute_functor"),
             &ControlInstruction::Deallocate =>
                 write!(f, "deallocate"),
             &ControlInstruction::Execute(ref name, arity) =>

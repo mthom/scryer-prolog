@@ -40,6 +40,10 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(0, ClauseType::Catch, terms);
                 QueryIterator { state_stack: vec![state] }
             },
+            &QueryTerm::Display(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::Root, terms);
+                QueryIterator { state_stack: vec![state] }
+            },
             &QueryTerm::Arg(ref terms)
           | &QueryTerm::Functor(ref terms) => {
                 let state = TermIterState::Clause(0, ClauseType::Root, terms);
@@ -275,6 +279,11 @@ impl<'a> ChunkedIterator<'a>
                 &QueryTerm::Catch(ref child_terms) | &QueryTerm::Throw(ref child_terms) => {
                     result.push(term);
                     arity = child_terms.len();
+                    break;
+                },
+                &QueryTerm::Display(_) => {
+                    result.push(term);
+                    arity = 1;
                     break;
                 },
                 &QueryTerm::Arg(_)

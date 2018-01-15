@@ -1,7 +1,6 @@
 use prolog::ast::*;
 use prolog::builtins::*;
 use prolog::codegen::*;
-use prolog::heap_iter::*;
 use prolog::heap_print::*;
 use prolog::fixtures::*;
 
@@ -265,7 +264,9 @@ impl Machine {
             let h = self.ms.heap.h;
             self.ms.copy_and_align_ball_to_heap();
 
-            EvalSession::QueryFailureWithException(self.print_term(&Addr::HeapCell(h)))
+            let msg = self.ms.print_term(&Addr::HeapCell(h), TermFormatter {});
+            
+            EvalSession::QueryFailureWithException(msg)
         } else {
             EvalSession::QueryFailure
         }
@@ -345,28 +346,6 @@ impl Machine {
         }
     }
 
-    fn print_var(&self, r: Ref) -> String
-    {
-        let disp = TermFormatter {};
-        let iter = HeapCellIterator::new(&self.ms, r);
-
-        let mut printer = HeapCellPrinter::new(iter, disp);
-
-        printer.print()
-    }
-
-    fn print_term(&self, addr: &Addr) -> String
-    {
-        match addr {
-            &Addr::Con(ref c) =>
-                format!("{}", c),
-            &Addr::Lis(h) | &Addr::HeapCell(h) | &Addr::Str(h) =>
-                self.print_var(Ref::HeapCell(h)),
-            &Addr::StackCell(fr, sc) =>
-                self.print_var(Ref::StackCell(fr, sc))
-        }
-    }
-
     pub fn heap_view(&self, var_dir: &HeapVarDict) -> String {
         let mut result = String::new();
 
@@ -378,7 +357,7 @@ impl Machine {
             result += var.as_str();
             result += " = ";
 
-            result += self.print_term(addr).as_str();
+            result += self.ms.print_term(addr, TermFormatter {}).as_str();
         }
 
         result

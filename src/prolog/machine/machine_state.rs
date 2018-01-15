@@ -2,6 +2,8 @@ use prolog::and_stack::*;
 use prolog::ast::*;
 use prolog::builtins::*;
 use prolog::copier::*;
+use prolog::heap_iter::*;
+use prolog::heap_print::*;
 use prolog::num::{Integer, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
@@ -254,7 +256,29 @@ impl MachineState {
 
         self.trail(r1);
     }
+    
+    fn print_var<Fmt>(&self, r: Ref, fmt: Fmt) -> String
+        where Fmt: HeapCellValueFormatter
+    {
+        let iter = HeapCellIterator::new(&self, r);
+        let mut printer = HeapCellPrinter::new(iter, fmt);
 
+        printer.print()
+    }
+
+    pub(super) fn print_term<Fmt>(&self, addr: &Addr, fmt: Fmt) -> String
+        where Fmt: HeapCellValueFormatter
+    {
+        match addr {
+            &Addr::Con(ref c) =>
+                format!("{}", c),
+            &Addr::Lis(h) | &Addr::HeapCell(h) | &Addr::Str(h) =>
+                self.print_var(Ref::HeapCell(h), fmt),
+            &Addr::StackCell(fr, sc) =>
+                self.print_var(Ref::StackCell(fr, sc), fmt)
+        }
+    }
+    
     fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
 
@@ -1497,6 +1521,18 @@ impl MachineState {
                 self.e  = self.and_stack[e].e;                
                 
                 self.p += 1;
+            },
+            &ControlInstruction::DisplayCall => {
+                let result = self.print_term(&self[temp_v!(1)], DisplayFormatter {});
+                println!("{}", result);
+                
+                self.p += 1;
+            },
+            &ControlInstruction::DisplayExecute => {
+                let result = self.print_term(&self[temp_v!(1)], DisplayFormatter {});
+                println!("{}", result);
+                
+                self.p = self.cp;
             },
             &ControlInstruction::Execute(ref name, arity) =>
                 self.try_execute_predicate(code_dir, name.clone(), arity),
