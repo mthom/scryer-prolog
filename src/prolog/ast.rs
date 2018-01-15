@@ -1,7 +1,6 @@
 use prolog::num::bigint::BigInt;
 use prolog::num::{Float, ToPrimitive, Zero};
 use prolog::num::rational::Ratio;
-
 use prolog::ordered_float::*;
 
 use std::cell::Cell;

@@ -145,15 +145,15 @@ mod tests {
 
         submit(&mut wam, "p(X, a). p(X, Y) :- q(Y), p(X, X).");
 
-        assert_eq!(submit(&mut wam, "?- p(X, Y)."), true);
-        assert_eq!(submit(&mut wam, "?- p(X, b)."), false);
+        assert_eq!(submit(&mut wam, "?- p(X, Y)."), true);  // infinite.
+        assert_eq!(submit(&mut wam, "?- p(X, b)."), false); // infinite.
 
         submit(&mut wam, "p(a, z). p(X, Y) :- q(Y), p(X, Y).");
 
-        assert_eq!(submit(&mut wam, "?- p(X, Y)."), true);
-        assert_eq!(submit(&mut wam, "?- p(X, z)."), true);
+        assert_eq!(submit(&mut wam, "?- p(X, Y)."), true); // infinite.
+        assert_eq!(submit(&mut wam, "?- p(X, z)."), true); // infinite.
         assert_eq!(submit(&mut wam, "?- p(a, z)."), true);
-        assert_eq!(submit(&mut wam, "?- p(a, X)."), true);
+        assert_eq!(submit(&mut wam, "?- p(a, X)."), true); // infinite.
         assert_eq!(submit(&mut wam, "?- p(b, a)."), false);
 
         submit(&mut wam, "p(X, Y, Z) :- q(X), r(Y), s(Z).

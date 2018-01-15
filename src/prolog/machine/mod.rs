@@ -347,7 +347,7 @@ impl Machine {
 
     fn print_var(&self, r: Ref) -> String
     {
-        let disp = DisplayFormatter {};
+        let disp = TermFormatter::new(&self.op_dir);
         let iter = HeapCellIterator::new(&self.ms, r);
 
         let mut printer = HeapCellPrinter::new(iter, disp);

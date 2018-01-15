@@ -1,4 +1,5 @@
 use prolog::ast::*;
+use prolog::builtins::*;
 use prolog::heap_iter::*;
 
 use std::cell::Cell;
@@ -13,12 +14,14 @@ pub enum TokenOrRedirect {
     Comma,
     OpenList(Rc<Cell<bool>>),
     CloseList(Rc<Cell<bool>>),
-    HeadTailSeparator
+    HeadTailSeparator,
+    Space
 }
 
 pub trait HeapCellValueFormatter {
-    // this function belongs to the display predicate formatter.
-    fn format_clause(&self, arity: usize, name: Rc<Atom>, state_stack: &mut Vec<TokenOrRedirect>)
+    // this function belongs to the display predicate formatter, which it uses
+    // to format all clauses.
+    fn format_struct(&self, arity: usize, name: Rc<Atom>, state_stack: &mut Vec<TokenOrRedirect>)
     {
         state_stack.push(TokenOrRedirect::Close);
 
@@ -32,12 +35,66 @@ pub trait HeapCellValueFormatter {
 
         state_stack.push(TokenOrRedirect::Atom(name));
     }
+
+    // this can be overloaded to handle special cases, falling back on the default of
+    // format_struct when convenient.
+    fn format_clause(&self, arity: usize, name: Rc<Atom>, state_stack: &mut Vec<TokenOrRedirect>);
 }
 
 // the 'classic' display corresponding to the display predicate.
 pub struct DisplayFormatter {}
 
-impl HeapCellValueFormatter for DisplayFormatter {}
+impl HeapCellValueFormatter for DisplayFormatter {
+    fn format_clause(&self, arity: usize, name: Rc<Atom>, state_stack: &mut Vec<TokenOrRedirect>)
+    {
+        self.format_struct(arity, name, state_stack);
+    }
+}
+
+pub struct TermFormatter<'a> {
+    op_dir: &'a OpDir
+}
+
+impl<'a> TermFormatter<'a> {
+    pub fn new(op_dir: &'a OpDir) -> Self {
+        TermFormatter { op_dir }
+    }        
+}
+
+impl<'a> HeapCellValueFormatter for TermFormatter<'a> {
+    fn format_clause(&self, arity: usize, name: Rc<Atom>, state_stack: &mut Vec<TokenOrRedirect>) {
+        if arity == 1 {
+            match self.op_dir.get(&(name.clone(), Fixity::Post)) {
+                Some(_) => {
+                    state_stack.push(TokenOrRedirect::Atom(name));
+                    state_stack.push(TokenOrRedirect::Space);
+                    state_stack.push(TokenOrRedirect::Redirect);
+                },
+                None => match self.op_dir.get(&(name.clone(), Fixity::Pre)) {
+                    Some(_) => {
+                        state_stack.push(TokenOrRedirect::Redirect);
+                        state_stack.push(TokenOrRedirect::Space);
+                        state_stack.push(TokenOrRedirect::Atom(name));
+                    },
+                    None => self.format_struct(arity, name, state_stack)
+                }
+            }
+        } else if arity == 2 {
+            match self.op_dir.get(&(name.clone(), Fixity::In)) {
+                Some(_) => {
+                    state_stack.push(TokenOrRedirect::Redirect);
+                    state_stack.push(TokenOrRedirect::Space);
+                    state_stack.push(TokenOrRedirect::Atom(name));
+                    state_stack.push(TokenOrRedirect::Space);
+                    state_stack.push(TokenOrRedirect::Redirect);
+                },
+                None => self.format_struct(arity, name, state_stack)
+            };
+        } else {
+            self.format_struct(arity, name, state_stack);
+        }
+    }
+}
 
 pub struct HeapCellPrinter<'a, Formatter> {
     formatter:   Formatter,
@@ -98,6 +155,8 @@ impl<'a, Formatter: HeapCellValueFormatter> HeapCellPrinter<'a, Formatter>
         loop {
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
+                    TokenOrRedirect::Space =>
+                        result += " ",
                     TokenOrRedirect::Atom(atom) =>
                         result += atom.as_str(),
                     TokenOrRedirect::Redirect => {
