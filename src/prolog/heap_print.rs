@@ -56,13 +56,12 @@ pub struct PrinterOutputter {
     contents: String
 }
 
+impl HeapCellValueOutputter for PrinterOutputter {    
+    type Output = String;
 
-impl HeapCellValueOutputter for PrinterOutputter {
     fn new() -> Self {
         PrinterOutputter { contents: String::new() }
     }
-
-    type Output = String;
 
     fn append(&mut self, contents: &str) {
         self.contents += contents;
