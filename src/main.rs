@@ -1,32 +1,16 @@
 #[macro_use] extern crate lazy_static;
 extern crate termion;
+
 mod prolog;
+#[macro_use] mod test_utils;
 
 use prolog::io::*;
 use prolog::machine::*;
 use prolog::parser::toplevel::*;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use prolog::codegen::*;
-
-    fn submit(wam: &mut Machine, buffer: &str) -> bool {
-        wam.reset();
-
-        match parse_code(buffer.trim(), wam.op_dir()) {
-            Ok(tl) =>
-                match eval(wam, &tl) {
-                    EvalSession::InitialQuerySuccess(_, _) |
-                    EvalSession::EntrySuccess |
-                    EvalSession::SubsequentQuerySuccess =>
-                        true,
-                    _ => false
-                },
-            Err(e) => panic!("parse error: {:?}", e)
-        }
-    }
-
+mod tests;    
+    /*
     #[test]
     fn test_queries_on_facts() {
         let mut wam = Machine::new();
@@ -146,7 +130,7 @@ mod tests {
         submit(&mut wam, "p(X, a). p(X, Y) :- q(Y), p(X, X).");
 
         assert_eq!(submit(&mut wam, "?- p(X, Y)."), true);  // infinite.
-        assert_eq!(submit(&mut wam, "?- p(X, b)."), false); // infinite.
+        assert_eq!(submit(&mut wam, "?- p(X, b)."), false); .
 
         submit(&mut wam, "p(a, z). p(X, Y) :- q(Y), p(X, Y).");
 
@@ -791,7 +775,7 @@ mod tests {
         assert_eq!(submit(&mut wam, "?- X is 10 rem -3, X = 1."), true);
         assert_eq!(submit(&mut wam, "?- X is 10 mod -3, X is -2."), true);
     }
-}
+} */
 
 fn process_buffer(wam: &mut Machine, buffer: &str)
 {

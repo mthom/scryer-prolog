@@ -349,11 +349,9 @@ impl Machine {
         }
     }
 
-    pub fn heap_view<Outputter>(&self, var_dir: &HeapVarDict) -> Outputter::Output
+    pub fn heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter) -> Outputter
         where Outputter: HeapCellValueOutputter
     {
-        let mut output = Outputter::new();
-        
         for (var, addr) in var_dir {
             output.begin_new_var();
             
@@ -363,7 +361,7 @@ impl Machine {
             output = self.ms.print_term(addr, TermFormatter {}, output);
         }
 
-        output.result()
+        output
     }
 
     pub fn or_stack_is_empty(&self) -> bool {

@@ -441,9 +441,11 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
 
             loop {
                 let mut result = EvalSession::QueryFailure;
-                let bindings = wam.heap_view::<PrinterOutputter>(&heap_locs);
+                let mut output = PrinterOutputter::new();
+                
+                let bindings = wam.heap_view(&heap_locs, output).result();
 
-                let stdin  = stdin();
+                let stdin = stdin();
                 let mut stdout = stdout().into_raw_mode().unwrap();
 
                 write!(stdout, "{}", bindings).unwrap();
