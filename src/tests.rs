@@ -350,3 +350,60 @@ fn test_queries_on_cuts() {
 
     assert_prolog_success!(&mut wam, "?- a(X).", ["X = c"]);
 }
+
+#[test]
+fn test_queries_on_lists()
+{
+    let mut wam = Machine::new();
+
+    submit(&mut wam, "p([Z, W]).");
+
+    assert_prolog_success!(&mut wam, "?- p([Z, Z]).", ["Z = _0"]);
+    assert_prolog_failure!(&mut wam, "?- p([Z, W, Y]).");
+    assert_prolog_success!(&mut wam, "?- p([Z | W]).", ["Z = _0", "W = [_3]"]);
+    assert_prolog_success!(&mut wam, "?- p([Z | [Z]]).", ["Z = _0"]);
+    assert_prolog_success!(&mut wam, "?- p([Z | [W]]).", ["Z = _2", "W = _0"]);
+    assert_prolog_failure!(&mut wam, "?- p([Z | []]).");
+
+    submit(&mut wam, "p([Z, Z]).");
+
+    assert_prolog_success!(&mut wam, "?- p([Z, Z]).", ["Z = _0"]);
+    assert_prolog_failure!(&mut wam, "?- p([Z, W, Y]).");
+    assert_prolog_success!(&mut wam, "?- p([Z | W]).", ["Z = _0", "W = [_0]"]);
+    assert_prolog_success!(&mut wam, "?- p([Z | [Z]]).", ["Z = _0"]);
+    assert_prolog_success!(&mut wam, "?- p([Z | [W]]).", ["Z = _2", "W = _2"]);
+    assert_prolog_failure!(&mut wam, "?- p([Z | []]).");
+
+    submit(&mut wam, "p([Z]).");
+
+    assert_prolog_failure!(&mut wam, "?- p([Z, Z]).");
+    assert_prolog_failure!(&mut wam, "?- p([Z, W, Y]).");
+    assert_prolog_success!(&mut wam, "?- p([Z | W]).", ["W = []", "Z = _0"]);
+    assert_prolog_failure!(&mut wam, "?- p([Z | [Z]]).");
+    assert_prolog_failure!(&mut wam, "?- p([Z | [W]]).");
+    assert_prolog_success!(&mut wam, "?- p([Z | []]).", ["Z = _0"]);
+
+    submit(&mut wam, "member(X, [X|_]).
+                      member(X, [_|Xs]) :- member(X, Xs).");
+
+    assert_prolog_failure!(&mut wam, "?- member(a, [c, [X, Y]]).");
+    assert_prolog_failure!(&mut wam, "?- member(c, [a, [X, Y]]).");
+    assert_prolog_success!(&mut wam, "?- member(a, [a, [X, Y]]).", ["X = _2", "Y = _0"]);
+    
+    assert_prolog_success!(&mut wam, "?- member(a, [X, Y, Z]).", ["Y = _2", "X = a",  "Z = _0",
+                                                                  "Y = a",  "X = _4", "Z = _0",
+                                                                  "Y = _2",  "X = _4", "Z = a"]);
+
+    assert_prolog_success!(&mut wam, "?- member([X, X], [a, [X, Y]]).", ["X = _0", "Y = _0"]);
+    assert_prolog_success!(&mut wam, "?- member([X, X], [a, [b, c], [b, b], [Z, x], [d, f]]).",
+                           ["Z = _14", "X = b",
+                            "Z = x",   "X = x"]);
+    assert_prolog_failure!(&mut wam, "?- member([X, X], [a, [b, c], [b, d], [foo, x], [d, f]]).");
+    assert_prolog_success!(&mut wam, "?- member([X, Y], [a, [b, c], [b, b], [Z, x], [d, f]]).",
+                           ["X = b", "Y = c", "Z = _14",
+                            "X = b", "Y = b", "Z = _14",
+                            "X = _14", "Y = x", "Z = _14",
+                            "X = d", "Y = f", "Z = _14"]);
+    assert_prolog_failure!(&mut wam, "?- member([X, Y, Y], [a, [b, c], [b, b], [Z, x], [d, f]]).");
+    assert_prolog_failure!(&mut wam, "?- member([X, Y, Z], [a, [b, c], [b, b], [Z, x], [d, f]]).");
+}
