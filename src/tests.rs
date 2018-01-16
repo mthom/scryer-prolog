@@ -266,5 +266,87 @@ fn test_queries_on_predicates() {
 
     assert_prolog_success!(&mut wam, "?- p(X).", ["X = f(a)",
                                                   "X = f(b)",
-                                                  "X = f(c)"]);
+                                                  "X = f(c)"]);    
+}
+
+#[test]
+fn test_queries_on_cuts() {
+    let mut wam = Machine::new();
+
+    // test shallow cuts.
+    submit(&mut wam, "memberchk(X, [X|_]) :- !.
+                      memberchk(X, [_|Xs]) :- memberchk(X, Xs).");
+
+    assert_prolog_success!(&mut wam, "?- memberchk(X, [a,b,c]).", ["X = a"]);
+    assert_prolog_success!(&mut wam, "?- memberchk([X,X], [a,b,c,[d,e],[d,d]]).", ["X = d"]);
+    assert_prolog_success!(&mut wam, "?- memberchk([X,X], [a,b,c,[D,d],[e,e]]).", ["X = d", "D = d"]);
+    assert_prolog_failure!(&mut wam, "?- memberchk([X,X], [a,b,c,[e,d],[f,e]]).");
+    assert_prolog_failure!(&mut wam, "?- memberchk([X,X,Y], [a,b,c,[e,d],[f,e]]).");
+    assert_prolog_success!(&mut wam, "?- memberchk([X,X,Y], [a,b,c,[e,e,d],[f,e]]).", ["X = e",
+                                                                                       "Y = d"]);
+
+    // test deep cuts.
+    submit(&mut wam, "commit :- a, !.");
+
+    assert_prolog_failure!(&mut wam, "?- commit.");
+
+    submit(&mut wam, "a.");
+
+    assert_prolog_success!(&mut wam, "?- commit.");
+
+    submit(&mut wam, "commit(X) :- a(X), !.");
+
+    assert_prolog_failure!(&mut wam, "?- commit(X).");
+
+    submit(&mut wam, "a(x).");
+
+    assert_prolog_success!(&mut wam, "?- commit(X).", ["X = x"]);
+
+    submit(&mut wam, "a :- b, !, c. a :- d.");
+
+    assert_prolog_failure!(&mut wam, "?- a.");
+
+    submit(&mut wam, "b.");
+
+    assert_prolog_failure!(&mut wam, "?- a.");
+
+    submit(&mut wam, "d.");
+
+    // we've committed to the first clause since the query on b
+    // succeeds, so we expect failure here.
+    assert_prolog_failure!(&mut wam, "?- a.");
+
+    submit(&mut wam, "c.");
+
+    assert_prolog_success!(&mut wam, "?- a.");
+
+    submit(&mut wam, "a(X) :- b, !, c(X). a(X) :- d(X).");
+
+    assert_prolog_failure!(&mut wam, "?- a(X).");
+
+    submit(&mut wam, "c(c).");
+    submit(&mut wam, "d(d).");
+
+    assert_prolog_success!(&mut wam, "?- a(X).", ["X = c"]);
+
+    submit(&mut wam, "b.");
+
+    assert_prolog_success!(&mut wam, "?- a(X).", ["X = c"]);
+
+    wam.clear();
+
+    assert_prolog_failure!(&mut wam, "?- c(X).");
+
+    submit(&mut wam, "a(X) :- b, c(X), !. a(X) :- d(X).");
+    submit(&mut wam, "b.");
+
+    assert_prolog_failure!(&mut wam, "?- a(X).");
+
+    submit(&mut wam, "d(d).");
+
+    assert_prolog_success!(&mut wam, "?- a(X).", ["X = d"]);
+
+    submit(&mut wam, "c(c).");
+
+    assert_prolog_success!(&mut wam, "?- a(X).", ["X = c"]);
 }
