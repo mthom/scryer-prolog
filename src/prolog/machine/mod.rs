@@ -264,7 +264,10 @@ impl Machine {
             let h = self.ms.heap.h;
             self.ms.copy_and_align_ball_to_heap();
 
-            let msg = self.ms.print_term(&Addr::HeapCell(h), TermFormatter {});
+            let msg = self.ms.print_term(&Addr::HeapCell(h),
+                                         TermFormatter {},
+                                         PrinterOutputter::new())
+                          .result();
             
             EvalSession::QueryFailureWithException(msg)
         } else {
@@ -346,21 +349,21 @@ impl Machine {
         }
     }
 
-    pub fn heap_view(&self, var_dir: &HeapVarDict) -> String {
-        let mut result = String::new();
-
+    pub fn heap_view<Outputter>(&self, var_dir: &HeapVarDict) -> Outputter::Output
+        where Outputter: HeapCellValueOutputter
+    {
+        let mut output = Outputter::new();
+        
         for (var, addr) in var_dir {
-            if result != "" {
-                result += "\n\r";
-            }
-
-            result += var.as_str();
-            result += " = ";
+            output.begin_new_var();
             
-            result += self.ms.print_term(addr, TermFormatter {}).as_str();
+            output.append(var.as_str());
+            output.append(" = ");
+            
+            output = self.ms.print_term(addr, TermFormatter {}, output);
         }
 
-        result
+        output.result()
     }
 
     pub fn or_stack_is_empty(&self) -> bool {

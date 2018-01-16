@@ -40,6 +40,57 @@ pub trait HeapCellValueFormatter {
     fn format_clause(&self, usize, Rc<Atom>, Option<Fixity>, &mut Vec<TokenOrRedirect>);
 }
 
+pub trait HeapCellValueOutputter {
+    type Output;
+
+    fn new() -> Self;
+    fn append(&mut self, &str);
+    fn begin_new_var(&mut self);
+    fn result(self) -> Self::Output;
+    fn ends_with(&self, &str) -> bool;
+    fn len(&self) -> usize;
+    fn truncate(&mut self, usize);
+}
+
+pub struct PrinterOutputter {
+    contents: String
+}
+
+
+impl HeapCellValueOutputter for PrinterOutputter {
+    fn new() -> Self {
+        PrinterOutputter { contents: String::new() }
+    }
+
+    type Output = String;
+
+    fn append(&mut self, contents: &str) {
+        self.contents += contents;
+    }
+
+    fn begin_new_var(&mut self) {
+        if self.contents.len() != 0 {
+            self.contents += ", ";
+        }
+    }
+
+    fn result(self) -> Self::Output {
+        self.contents
+    }
+
+    fn ends_with(&self, s: &str) -> bool {
+        self.contents.ends_with(s)
+    }
+
+    fn len(&self) -> usize {
+        self.contents.len()
+    }
+
+    fn truncate(&mut self, len: usize) {
+        self.contents.truncate(len);
+    }
+}
+
 // the 'classic' display corresponding to the display predicate.
 pub struct DisplayFormatter {}
 
@@ -51,7 +102,7 @@ impl HeapCellValueFormatter for DisplayFormatter {
             let mut new_name = String::from("'");
             new_name += name.as_ref();
             new_name += "'";
-            
+
             let name = Rc::new(new_name);
             self.format_struct(arity, name, state_stack);
         } else {
@@ -92,28 +143,30 @@ impl HeapCellValueFormatter for TermFormatter {
     }
 }
 
-pub struct HeapCellPrinter<'a, Formatter> {
+pub struct HeapCellPrinter<'a, Formatter, Outputter> {
     formatter:   Formatter,
+    outputter:   Outputter,
     iter:        HeapCellIterator<'a>,
     state_stack: Vec<TokenOrRedirect>
 }
 
-impl<'a, Formatter: HeapCellValueFormatter> HeapCellPrinter<'a, Formatter>
+impl<'a, Formatter: HeapCellValueFormatter, Outputter: HeapCellValueOutputter>
+    HeapCellPrinter<'a, Formatter, Outputter>
 {
-    pub fn new(iter: HeapCellIterator<'a>, formatter: Formatter) -> Self {
-        HeapCellPrinter { formatter, iter, state_stack: vec![] }
+    pub fn new(iter: HeapCellIterator<'a>, formatter: Formatter, outputter: Outputter) -> Self {
+        HeapCellPrinter { formatter, outputter, iter, state_stack: vec![] }
     }
 
-    fn handle_heap_term(&mut self, heap_val: HeapCellValue, result: &mut String) {
+    fn handle_heap_term(&mut self, heap_val: HeapCellValue) {
         match heap_val {
             HeapCellValue::NamedStr(arity, name, fixity) =>
                 self.formatter.format_clause(arity, name, fixity, &mut self.state_stack),
             HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
-                if !Self::at_cdr(result, "") {
-                    *result += "[]";
+                if !self.at_cdr("") {
+                    self.outputter.append("[]");
                 },
             HeapCellValue::Addr(Addr::Con(c)) =>
-                *result += format!("{}", c).as_str(),
+                self.outputter.append(format!("{}", c).as_str()),
             HeapCellValue::Addr(Addr::Lis(_)) => {
                 let cell = Rc::new(Cell::new(true));
 
@@ -126,65 +179,64 @@ impl<'a, Formatter: HeapCellValueFormatter> HeapCellPrinter<'a, Formatter>
                 self.state_stack.push(TokenOrRedirect::OpenList(cell));
             },
             HeapCellValue::Addr(Addr::HeapCell(h)) =>
-                *result += format!("_{}", h).as_str(),
+                self.outputter.append(format!("_{}", h).as_str()),
             HeapCellValue::Addr(Addr::StackCell(fr, sc)) =>
-                *result += format!("s_{}_{}", fr, sc).as_str(),
+                self.outputter.append(format!("s_{}_{}", fr, sc).as_str()),
             HeapCellValue::Addr(Addr::Str(_)) => {}
         }
     }
 
-    fn at_cdr(result: &mut String, tr: &str) -> bool {
-        let len = result.len();
+    fn at_cdr(&mut self, tr: &str) -> bool {
+        let len = self.outputter.len();
 
-        if result.ends_with(" | ") {
-            result.truncate(len - 3);
-            *result += tr;
+        if self.outputter.ends_with(" | ") {
+            self.outputter.truncate(len - 3);
+            self.outputter.append(tr);
+
             true
         } else {
             false
         }
     }
 
-    pub fn print(&mut self) -> String {
-        let mut result = String::new();
-
+    pub fn print(mut self) -> Outputter {
         loop {
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
                     TokenOrRedirect::Space =>
-                        result += " ",
+                        self.outputter.append(" "),
                     TokenOrRedirect::Atom(atom) =>
-                        result += atom.as_str(),
+                        self.outputter.append(atom.as_str()),
                     TokenOrRedirect::Redirect => {
                         let heap_val = self.iter.next().unwrap();
-                        self.handle_heap_term(heap_val, &mut result);
+                        self.handle_heap_term(heap_val);
                     },
                     TokenOrRedirect::Close =>
-                        result += ")",
+                        self.outputter.append(")"),
                     TokenOrRedirect::Open =>
-                        result += "(",
+                        self.outputter.append("("),
                     TokenOrRedirect::OpenList(delimit) =>
-                        if !Self::at_cdr(&mut result, ", ") {
-                            result += "[";
+                        if !self.at_cdr(", ") {
+                            self.outputter.append("[");
                         } else {
                             delimit.set(false);
                         },
                     TokenOrRedirect::CloseList(delimit) =>
                         if delimit.get() == true {
-                            result += "]";
+                            self.outputter.append("]");
                         },
                     TokenOrRedirect::HeadTailSeparator =>
-                        result += " | ",
+                        self.outputter.append(" | "),
                     TokenOrRedirect::Comma =>
-                        result += ", "
+                        self.outputter.append(", ")
                 }
             } else if let Some(heap_val) = self.iter.next() {
-                self.handle_heap_term(heap_val, &mut result);
+                self.handle_heap_term(heap_val);
             } else {
                 break;
             }
         }
 
-        result
+        self.outputter
     }
 }

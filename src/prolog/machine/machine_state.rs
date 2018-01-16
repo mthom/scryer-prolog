@@ -256,25 +256,28 @@ impl MachineState {
         self.trail(r1);
     }
     
-    fn print_var<Fmt>(&self, r: Ref, fmt: Fmt) -> String
-        where Fmt: HeapCellValueFormatter
-    {
-        let iter = HeapCellIterator::new(&self, r);
-        let mut printer = HeapCellPrinter::new(iter, fmt);
+    fn print_var<Fmt, Outputter>(&self, r: Ref, fmt: Fmt, output: Outputter) -> Outputter
+        where Fmt: HeapCellValueFormatter, Outputter: HeapCellValueOutputter
+    {        
+        let iter    = HeapCellIterator::new(&self, r);        
+        let printer = HeapCellPrinter::new(iter, fmt, output);
 
         printer.print()
     }
 
-    pub(super) fn print_term<Fmt>(&self, addr: &Addr, fmt: Fmt) -> String
-        where Fmt: HeapCellValueFormatter
+    pub(super) fn print_term<Fmt, Outputter>(&self, addr: &Addr, fmt: Fmt, mut output: Outputter)
+                                             -> Outputter
+        where Fmt: HeapCellValueFormatter, Outputter: HeapCellValueOutputter
     {
         match addr {
-            &Addr::Con(ref c) =>
-                format!("{}", c),
+            &Addr::Con(ref c) => {
+                output.append(format!("{}", c).as_str());
+                output
+            },
             &Addr::Lis(h) | &Addr::HeapCell(h) | &Addr::Str(h) =>
-                self.print_var(Ref::HeapCell(h), fmt),
+                self.print_var(Ref::HeapCell(h), fmt, output),
             &Addr::StackCell(fr, sc) =>
-                self.print_var(Ref::StackCell(fr, sc), fmt)
+                self.print_var(Ref::StackCell(fr, sc), fmt, output)
         }
     }
     
@@ -1520,15 +1523,21 @@ impl MachineState {
                 
                 self.p += 1;
             },
-            &ControlInstruction::DisplayCall => {
-                let result = self.print_term(&self[temp_v!(1)], DisplayFormatter {});
-                println!("{}", result);
+            &ControlInstruction::DisplayCall => {                
+                let output = self.print_term(&self[temp_v!(1)],
+                                             DisplayFormatter {},
+                                             PrinterOutputter::new());
+                
+                println!("{}", output.result());
                 
                 self.p += 1;
             },
-            &ControlInstruction::DisplayExecute => {
-                let result = self.print_term(&self[temp_v!(1)], DisplayFormatter {});
-                println!("{}", result);
+            &ControlInstruction::DisplayExecute => {                
+                let output = self.print_term(&self[temp_v!(1)],
+                                             DisplayFormatter {},
+                                             PrinterOutputter::new());
+                
+                println!("{}", output.result());
                 
                 self.p = self.cp;
             },
