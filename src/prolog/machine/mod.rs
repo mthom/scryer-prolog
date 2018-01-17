@@ -3,10 +3,13 @@ use prolog::builtins::*;
 use prolog::codegen::*;
 use prolog::heap_print::*;
 use prolog::fixtures::*;
+use prolog::tabled_rc::*;
 
 pub(crate) mod machine_state;
 
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::mem::swap;
 use std::ops::Index;
 use std::rc::Rc;
 use std::vec::Vec;
@@ -37,13 +40,14 @@ impl Index<CodePtr> for Machine {
 
 impl Machine {
     pub fn new() -> Self {
-        let (code, code_dir, op_dir) = build_code_dir();
+        let atom_tbl = Rc::new(RefCell::new(HashSet::new()));        
+        let (code, code_dir, op_dir) = build_code_dir(atom_tbl.clone());
 
         Machine {
-            ms: machine_state::MachineState::new(),
-            code: code,
-            code_dir: code_dir,
-            op_dir: op_dir,
+            ms: machine_state::MachineState::new(atom_tbl),
+            code,
+            code_dir,
+            op_dir,
             cached_query: None
         }
     }
@@ -52,7 +56,13 @@ impl Machine {
         self.ms.fail
     }
 
-    fn add_user_code<'a>(&mut self, name: Rc<Atom>, arity: usize, offset: usize) -> EvalSession<'a>
+    pub fn atom_tbl(&self) -> TabledData<Atom> {
+        self.ms.atom_tbl.clone()
+    }
+
+    fn add_user_code<'a>(&mut self, name: TabledRc<Atom>,
+                         arity: usize, offset: usize)
+                         -> EvalSession<'a>
     {
         match self.code_dir.get(&(name.clone(), arity)) {
             Some(&(PredicateKeyType::BuiltIn, _)) =>
@@ -369,9 +379,8 @@ impl Machine {
     }
 
     pub fn clear(&mut self) {
-        self.reset();
-        self.code.clear();
-        self.code_dir.clear();
+        let mut machine = Machine::new();
+        swap(self, &mut machine);
     }
 
     pub fn reset(&mut self) {

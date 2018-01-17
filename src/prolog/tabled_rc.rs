@@ -2,15 +2,15 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::rc::Rc;
 
-pub type TabledData<T> = HashSet<Rc<T>>;
+pub type TabledData<T> = Rc<RefCell<HashSet<Rc<T>>>>;
     
 #[derive(Clone, PartialEq, Eq)]
 pub struct TabledRc<T: Hash + Eq> {
     atom: Rc<T>,
-    table: Rc<RefCell<TabledData<T>>>
+    table: TabledData<T>
 }
 
 impl<T: Hash + Eq> Hash for TabledRc<T> {
@@ -21,16 +21,26 @@ impl<T: Hash + Eq> Hash for TabledRc<T> {
 }
 
 impl<T: Hash + Eq> TabledRc<T> {
-    pub fn new(atom: T, table: Rc<RefCell<TabledData<T>>>) -> Self {        
-        TabledRc { atom: Rc::new(atom), table }
+    pub fn new(atom: T, table: TabledData<T>) -> Self {
+        let atom = match table.borrow_mut().take(&atom) {
+            Some(atom) => atom.clone(),
+            None => Rc::new(atom)
+        };
+
+        table.borrow_mut().insert(atom.clone());
+
+        TabledRc { atom, table }
+    }
+
+    pub fn table(&self) -> TabledData<T> {
+        self.table.clone()
     }
 }
 
 impl<T: Hash + Eq> Drop for TabledRc<T> {
     fn drop(&mut self) {
         if Rc::strong_count(&self.atom) == 2 {
-            let mut table = self.table.borrow_mut();
-            table.deref_mut().remove(&self.atom);
+            self.table.borrow_mut().remove(&self.atom);
         }
     }
 }

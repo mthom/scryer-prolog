@@ -13,7 +13,7 @@ mod tests;
 
 fn process_buffer(wam: &mut Machine, buffer: &str)
 {
-    match parse_code(buffer, wam.op_dir()) {
+    match parse_code(buffer, wam.atom_tbl(), wam.op_dir()) {
         Ok(tl) => {
             let result = eval(wam, &tl);
             print(wam, result);

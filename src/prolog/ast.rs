@@ -2,6 +2,7 @@ use prolog::num::bigint::BigInt;
 use prolog::num::{Float, ToPrimitive, Zero};
 use prolog::num::rational::Ratio;
 use prolog::ordered_float::*;
+use prolog::tabled_rc::*;
 
 use std::cell::Cell;
 use std::cmp::Ordering;
@@ -59,7 +60,7 @@ impl PredicateClause {
         }
     }
 
-    pub fn name(&self) -> Option<Rc<Atom>> {
+    pub fn name(&self) -> Option<TabledRc<Atom>> {
         match self {
             &PredicateClause::Fact(ref term) => term.name(),
             &PredicateClause::Rule(ref rule) =>
@@ -73,7 +74,7 @@ impl PredicateClause {
 }
 
 pub enum Declaration {
-    Op(usize, Specifier, Rc<Atom>)
+    Op(usize, Specifier, TabledRc<Atom>)
 }
 
 pub enum TopLevel {
@@ -266,17 +267,11 @@ pub enum Fixity {
 
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum Constant {
-    Atom(Rc<Atom>),
+    Atom(TabledRc<Atom>),
     Number(Number),    
     String(Rc<String>),
     Usize(usize),
     EmptyList
-}
-
-impl<'a> From<&'a str> for Constant {
-    fn from(input: &str) -> Constant {
-        Constant::Atom(Rc::new(String::from(input)))
-    }
 }
 
 impl fmt::Display for Constant {
@@ -298,7 +293,7 @@ impl fmt::Display for Constant {
 
 pub enum Term {
     AnonVar,
-    Clause(Cell<RegType>, Rc<Atom>, Vec<Box<Term>>, Option<Fixity>),
+    Clause(Cell<RegType>, TabledRc<Atom>, Vec<Box<Term>>, Option<Fixity>),
     Cons(Cell<RegType>, Box<Term>, Box<Term>),
     Constant(Cell<RegType>, Constant),
     Var(Cell<VarReg>, Rc<Var>)
@@ -373,7 +368,7 @@ pub struct Rule {
 pub enum ClauseType<'a> {
     CallN,
     Catch,
-    Deep(Level, &'a Cell<RegType>, &'a Rc<Atom>, Option<Fixity>),
+    Deep(Level, &'a Cell<RegType>, &'a TabledRc<Atom>, Option<Fixity>),
     Is,
     Root,
     Throw,
@@ -745,7 +740,7 @@ pub enum ControlInstruction {
     Allocate(usize), // num_frames.
     ArgCall,
     ArgExecute,
-    Call(Rc<Atom>, usize, usize), // name, arity, perm_vars after threshold.
+    Call(TabledRc<Atom>, usize, usize), // name, arity, perm_vars after threshold.
     CallN(usize), // arity.
     CatchCall,
     CatchExecute,
@@ -754,7 +749,7 @@ pub enum ControlInstruction {
     DisplayExecute,
     DuplicateTermCall,
     DuplicateTermExecute,
-    Execute(Rc<Atom>, usize),
+    Execute(TabledRc<Atom>, usize),
     ExecuteN(usize),
     FunctorCall,
     FunctorExecute,
@@ -797,7 +792,7 @@ impl ControlInstruction {
 pub enum IndexingInstruction {
     SwitchOnTerm(usize, usize, usize, usize),
     SwitchOnConstant(usize, HashMap<Constant, usize>),
-    SwitchOnStructure(usize, HashMap<(Rc<Atom>, usize), usize>)
+    SwitchOnStructure(usize, HashMap<(TabledRc<Atom>, usize), usize>)
 }
 
 impl From<IndexingInstruction> for Line {
@@ -809,7 +804,7 @@ impl From<IndexingInstruction> for Line {
 pub enum FactInstruction {
     GetConstant(Level, Constant, RegType),
     GetList(Level, RegType),
-    GetStructure(Level, Rc<Atom>, usize, RegType, Option<Fixity>),
+    GetStructure(Level, TabledRc<Atom>, usize, RegType, Option<Fixity>),
     GetValue(RegType, usize),
     GetVariable(RegType, usize),
     UnifyConstant(Constant),
@@ -823,7 +818,7 @@ pub enum QueryInstruction {
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
     PutList(Level, RegType),
-    PutStructure(Level, Rc<Atom>, usize, RegType, Option<Fixity>),
+    PutStructure(Level, TabledRc<Atom>, usize, RegType, Option<Fixity>),
     PutUnsafeValue(usize, usize),
     PutValue(RegType, usize),
     PutVariable(RegType, usize),
@@ -907,7 +902,7 @@ pub enum Ref {
 #[derive(Clone, PartialEq)]
 pub enum HeapCellValue {
     Addr(Addr),
-    NamedStr(usize, Rc<Atom>, Option<Fixity>), // arity, name.
+    NamedStr(usize, TabledRc<Atom>, Option<Fixity>), // arity, name, fixity if it has one.
 }
 
 impl HeapCellValue {
@@ -1035,7 +1030,7 @@ impl Term {
         }
     }
 
-    pub fn name(&self) -> Option<Rc<Atom>> {
+    pub fn name(&self) -> Option<TabledRc<Atom>> {
         match self {
             &Term::Constant(_, Constant::Atom(ref atom))
           | &Term::Clause(_, ref atom, ..) => Some(atom.clone()),

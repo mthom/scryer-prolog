@@ -1,12 +1,13 @@
 use prolog::ast::*;
 use prolog::heap_iter::*;
+use prolog::tabled_rc::*;
 
 use std::cell::Cell;
 use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum TokenOrRedirect {
-    Atom(Rc<Atom>),
+    Atom(TabledRc<Atom>),
     Redirect,
     Open,
     Close,
@@ -20,7 +21,7 @@ pub enum TokenOrRedirect {
 pub trait HeapCellValueFormatter {
     // this function belongs to the display predicate formatter, which it uses
     // to format all clauses.
-    fn format_struct(&self, arity: usize, name: Rc<Atom>, state_stack: &mut Vec<TokenOrRedirect>)
+    fn format_struct(&self, arity: usize, name: TabledRc<Atom>, state_stack: &mut Vec<TokenOrRedirect>)
     {
         state_stack.push(TokenOrRedirect::Close);
 
@@ -37,7 +38,7 @@ pub trait HeapCellValueFormatter {
 
     // this can be overloaded to handle special cases, falling back on the default of
     // format_struct when convenient.
-    fn format_clause(&self, usize, Rc<Atom>, Option<Fixity>, &mut Vec<TokenOrRedirect>);
+    fn format_clause(&self, usize, TabledRc<Atom>, Option<Fixity>, &mut Vec<TokenOrRedirect>);
 }
 
 pub trait HeapCellValueOutputter {
@@ -94,7 +95,7 @@ impl HeapCellValueOutputter for PrinterOutputter {
 pub struct DisplayFormatter {}
 
 impl HeapCellValueFormatter for DisplayFormatter {
-    fn format_clause(&self, arity: usize, name: Rc<Atom>, fixity: Option<Fixity>,
+    fn format_clause(&self, arity: usize, name: TabledRc<Atom>, fixity: Option<Fixity>,
                      state_stack: &mut Vec<TokenOrRedirect>)
     {
         if fixity.is_some() {
@@ -102,7 +103,7 @@ impl HeapCellValueFormatter for DisplayFormatter {
             new_name += name.as_ref();
             new_name += "'";
 
-            let name = Rc::new(new_name);
+            let name = TabledRc::new(new_name, name.table());
             self.format_struct(arity, name, state_stack);
         } else {
             self.format_struct(arity, name, state_stack);
@@ -113,7 +114,7 @@ impl HeapCellValueFormatter for DisplayFormatter {
 pub struct TermFormatter {}
 
 impl HeapCellValueFormatter for TermFormatter {
-    fn format_clause(&self, arity: usize, name: Rc<Atom>, fixity: Option<Fixity>,
+    fn format_clause(&self, arity: usize, name: TabledRc<Atom>, fixity: Option<Fixity>,
                      state_stack: &mut Vec<TokenOrRedirect>)
     {
         if let Some(fixity) = fixity {

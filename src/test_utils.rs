@@ -74,7 +74,7 @@ pub fn collect_test_output_with_limit<'a>(wam: &mut Machine, alloc_locs: AllocVa
                                           mut heap_locs: HeapVarDict<'a>, limit: usize)
                                           -> HashSet<String>
 {
-    let mut output = TestOutputter::new();    
+    let mut output = TestOutputter::new();
     output = wam.heap_view(&heap_locs, output);
 
     let mut count  = 1;
@@ -82,9 +82,9 @@ pub fn collect_test_output_with_limit<'a>(wam: &mut Machine, alloc_locs: AllocVa
     if count == limit {
         return output.result();
     }
-    
+
     while let EvalSession::SubsequentQuerySuccess = wam.continue_query(&alloc_locs, &mut heap_locs)
-    {        
+    {
         output = wam.heap_view(&heap_locs, output);
 
         count += 1;
@@ -97,11 +97,12 @@ pub fn collect_test_output_with_limit<'a>(wam: &mut Machine, alloc_locs: AllocVa
     output.result()
 }
 
+#[allow(dead_code)]
 pub fn submit(wam: &mut Machine, buffer: &str) -> bool
 {
     wam.reset();
 
-    match parse_code(buffer.trim(), wam.op_dir()) {
+    match parse_code(buffer.trim(), wam.atom_tbl(), wam.op_dir()) {
         Ok(tl) =>
             match eval(wam, &tl) {
                 EvalSession::InitialQuerySuccess(_, _) |
@@ -114,11 +115,12 @@ pub fn submit(wam: &mut Machine, buffer: &str) -> bool
     }
 }
 
+#[allow(dead_code)]
 pub fn submit_query(wam: &mut Machine, buffer: &str, result: HashSet<String>) -> bool
 {
     wam.reset();
 
-    match parse_code(buffer.trim(), wam.op_dir()) {
+    match parse_code(buffer.trim(), wam.atom_tbl(), wam.op_dir()) {
         Ok(tl) =>
             match eval(wam, &tl) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
@@ -130,13 +132,14 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: HashSet<String>) ->
     }
 }
 
+#[allow(dead_code)]
 pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
                          result: HashSet<String>, limit: usize)
                          -> bool
 {
     wam.reset();
 
-    match parse_code(buffer.trim(), wam.op_dir()) {
+    match parse_code(buffer.trim(), wam.atom_tbl(), wam.op_dir()) {
         Ok(tl) =>
             match eval(wam, &tl) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
@@ -149,24 +152,28 @@ pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
     }
 }
 
+#[allow(unused_macros)]
 macro_rules! expand_strs {
     ($arr:expr) => (
         $arr.into_iter().map(|s| String::from(*s)).collect()
     )
 }
 
+#[allow(unused_macros)]
 macro_rules! assert_prolog_success_with_limit {
     ($wam:expr, $buf:expr, $res:expr, $limit:expr) => (
         assert!(submit_query_with_limit($wam, $buf, expand_strs!($res), $limit))
     )
 }
 
+#[allow(unused_macros)]
 macro_rules! assert_prolog_failure {
     ($wam: expr, $buf: expr) => (
         assert_eq!(submit($wam, $buf), false)
     )
 }
 
+#[allow(unused_macros)]
 macro_rules! assert_prolog_success {
     ($wam:expr, $query:expr, $res:expr) => (
         assert!(submit_query($wam, $query, expand_strs!($res)))

@@ -22,3 +22,4 @@ pub mod machine;
 pub mod or_stack;
 pub mod parser;
 pub mod targets;
+pub mod tabled_rc;

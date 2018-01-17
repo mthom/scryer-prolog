@@ -54,7 +54,7 @@ impl<'a> QueryIterator<'a> {
           | &QueryTerm::Is(ref terms) => {
                     let state = TermIterState::Clause(0, ClauseType::Is, terms);
                     QueryIterator { state_stack: vec![state] }
-                },
+            },            
             &QueryTerm::Inlined(InlinedQueryTerm::IsAtomic(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsInteger(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsVar(ref terms)) =>

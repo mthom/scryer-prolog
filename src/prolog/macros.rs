@@ -1,3 +1,14 @@
+macro_rules! tabled_rc {
+    ($e:expr, $tbl:expr) => (
+        TabledRc::new(String::from($e), $tbl.clone())
+    )
+}
+
+macro_rules! atom {
+    ($e:expr, $tbl:expr) => (
+        Constant::Atom(tabled_rc!($e, $tbl))
+    )
+}
 
 macro_rules! internal_call_n {
     () => (
@@ -41,20 +52,23 @@ macro_rules! query {
     )
 }
 
-macro_rules! functor {
-    ($name:expr, $len:expr, [$($args:expr),*]) => {{
-        if $len > 0 {
-            vec![ HeapCellValue::NamedStr($len, Rc::new(String::from($name)), None), $($args),* ]
-        } else {
-            vec![ atom!($name) ]
-        }
-    }}
+macro_rules! heap_atom {
+    ($name:expr, $tbl:expr) => (
+        HeapCellValue::Addr(Addr::Con(atom!($name, $tbl)))
+    )
 }
 
-macro_rules! atom {
-    ($name:expr) => (
-        HeapCellValue::Addr(Addr::Con(Constant::Atom(Rc::new(String::from($name)))))
-    )
+macro_rules! functor {
+    ($tbl:expr, $name:expr, $len:expr, [$($args:expr),*]) => {{
+        if $len > 0 {
+            vec![ HeapCellValue::NamedStr($len,
+                                          tabled_rc!($name, $tbl),
+                                          None),
+                  $($args),* ]
+        } else {
+            vec![ heap_atom!($name, $tbl) ]
+        }
+    }}
 }
 
 macro_rules! fact {
@@ -101,8 +115,8 @@ macro_rules! put_var {
 }
 
 macro_rules! put_structure {
-    ($lvl:expr, $name:expr, $arity:expr, $r:expr, $fix:expr) => (
-        QueryInstruction::PutStructure($lvl, Rc::new($name), $arity, $r, $fix)
+    ($tbl:expr, $lvl:expr, $name:expr, $arity:expr, $r:expr, $fix:expr) => (
+        QueryInstruction::PutStructure($lvl, tabled_rc!($name, $tbl), $arity, $r, $fix)
     )
 }
 
@@ -317,8 +331,12 @@ macro_rules! get_constant {
 }
 
 macro_rules! get_structure {
-    ($atom:expr, $arity:expr, $r:expr, $fix:expr) => (
-        FactInstruction::GetStructure(Level::Shallow, Rc::new($atom), $arity, $r, $fix)
+    ($tbl:expr, $atom:expr, $arity:expr, $r:expr, $fix:expr) => (
+        FactInstruction::GetStructure(Level::Shallow,
+                                      tabled_rc!($atom, $tbl),
+                                      $arity,
+                                      $r,
+                                      $fix)
     )
 }
 

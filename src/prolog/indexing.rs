@@ -1,8 +1,8 @@
 use prolog::ast::*;
+use prolog::tabled_rc::*;
 
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
-use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 enum IntIndex {
@@ -12,7 +12,7 @@ enum IntIndex {
 pub struct CodeOffsets {
     pub constants:  HashMap<Constant, ThirdLevelIndex>,
     pub lists: ThirdLevelIndex,
-    pub structures: HashMap<(Rc<Atom>, usize), ThirdLevelIndex>
+    pub structures: HashMap<(TabledRc<Atom>, usize), ThirdLevelIndex>
 }
 
 impl CodeOffsets {
@@ -145,7 +145,7 @@ impl CodeOffsets {
         }
     }
 
-    fn switch_on_structure(str_ind: HashMap<(Rc<Atom>, usize), ThirdLevelIndex>,
+    fn switch_on_structure(str_ind: HashMap<(TabledRc<Atom>, usize), ThirdLevelIndex>,
                            prelude: &mut CodeDeque)
                            -> IntIndex
     {
