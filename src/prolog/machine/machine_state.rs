@@ -553,8 +553,7 @@ impl MachineState {
                             return;
                         }
 
-                        self.interms[t - 1] = Number::Integer(Rc::new(n1.div_floor(&n2)));
-                        self.p += 1;
+                        self.interms[t - 1] = Number::Integer(Rc::new(n1.div_floor(&n2)));                        
                     },
                     _ => {
                         let atom_tbl = self.atom_tbl.clone();
@@ -565,6 +564,8 @@ impl MachineState {
                         return;
                     }
                 }
+
+                self.p += 1;
             },
             &ArithmeticInstruction::IDiv(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
