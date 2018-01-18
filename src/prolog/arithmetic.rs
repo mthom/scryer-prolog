@@ -1,17 +1,18 @@
 use prolog::ast::*;
 use prolog::fixtures::*;
+use prolog::tabled_rc::*;
 
 use std::cell::Cell;
 use std::cmp::{min, max};
 use std::vec::Vec;
 
-pub struct ArithExprIterator<'a> {
+pub struct ArithInstructionIterator<'a> {
     state_stack: Vec<TermIterState<'a>>
 }
 
 pub type ArithCont = (Code, Option<ArithmeticTerm>);
 
-impl<'a> ArithExprIterator<'a> {
+impl<'a> ArithInstructionIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
         self.state_stack.push(TermIterState::to_state(lvl, term));
     }
@@ -30,13 +31,7 @@ impl<'a> ArithExprIterator<'a> {
                 TermIterState::Var(Level::Shallow, cell, var)
         };
 
-        Ok(ArithExprIterator { state_stack: vec![state] })
-    }
-}
-
-impl Term {
-    pub fn arith_expr_iter<'a>(&'a self) -> Result<ArithExprIterator<'a>, ArithmeticError> {
-        ArithExprIterator::new(self)
+        Ok(ArithInstructionIterator { state_stack: vec![state] })
     }
 }
 
@@ -46,7 +41,7 @@ pub enum ArithTermRef<'a> {
     Var(&'a Cell<VarReg>, &'a Var)
 }
 
-impl<'a> Iterator for ArithExprIterator<'a> {
+impl<'a> Iterator for ArithInstructionIterator<'a> {
     type Item = Result<ArithTermRef<'a>, ArithmeticError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -78,14 +73,37 @@ impl<'a> Iterator for ArithExprIterator<'a> {
 pub struct ArithmeticEvaluator<'a> {
     bindings: &'a AllocVarDict<'a>,
     interm: Vec<ArithmeticTerm>,
-    interm_c: usize
+    interm_c: usize    
 }
 
-impl<'a> ArithmeticEvaluator<'a> {
+pub trait ArithmeticTermIter<'a> {        
+    type Iter : Iterator<Item=Result<ArithTermRef<'a>, ArithmeticError>>;
+    
+    fn iter(&self) -> Result<Self::Iter, ArithmeticError>;
+    fn root_name(&self) -> Result<TabledRc<Atom>, ArithmeticError>;
+}
+
+impl<'a> ArithmeticTermIter<'a> for &'a Term {    
+    type Iter = ArithInstructionIterator<'a>;    
+
+    fn iter(&self) -> Result<Self::Iter, ArithmeticError> {
+        ArithInstructionIterator::new(self)
+    }
+
+    fn root_name(&self) -> Result<TabledRc<Atom>, ArithmeticError> {
+        match self {
+            &&Term::Clause(_, ref name, _, _) => Ok(name.clone()),
+            _ => Err(ArithmeticError::InvalidTerm)
+        }
+    }
+}
+
+impl<'a> ArithmeticEvaluator<'a>
+{
     pub fn new(bindings: &'a AllocVarDict<'a>, target_int: usize) -> Self {
         ArithmeticEvaluator { bindings, interm: Vec::new(), interm_c: target_int }
     }
-
+    
     fn get_unary_instr(name: &Atom, a1: ArithmeticTerm, t: usize)
                        -> Result<ArithmeticInstruction, ArithmeticError>
     {
@@ -95,7 +113,7 @@ impl<'a> ArithmeticEvaluator<'a> {
         }
     }
 
-    fn gen_binary_instr(name: &Atom, a1: ArithmeticTerm, a2: ArithmeticTerm, t: usize)
+    fn get_binary_instr(name: &Atom, a1: ArithmeticTerm, a2: ArithmeticTerm, t: usize)
                         -> Result<ArithmeticInstruction, ArithmeticError>
     {
         match name.as_str() {
@@ -116,7 +134,7 @@ impl<'a> ArithmeticEvaluator<'a> {
              _     => Err(ArithmeticError::InvalidOp)
         }
     }
-
+    
     fn incr_interm(&mut self) -> usize {
         let temp = self.interm_c;
 
@@ -164,7 +182,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                     min_interm
                 };
 
-                Self::gen_binary_instr(name, a1, a2, ninterm)
+                Self::get_binary_instr(name, a1, a2, ninterm)
             },
             _ => Err(ArithmeticError::InvalidOp)
         }
@@ -181,10 +199,13 @@ impl<'a> ArithmeticEvaluator<'a> {
         Ok(())
     }
 
-    pub fn eval(&mut self, term: &Term) -> Result<ArithCont, ArithmeticError> {
-        let mut code = Vec::new();
-
-        for term_ref in term.arith_expr_iter()? {
+    pub fn eval<Iter>(&mut self, src: Iter) -> Result<ArithCont, ArithmeticError>
+        where Iter: ArithmeticTermIter<'a>
+    {
+        let mut code = vec![];
+        
+        for term_ref in src.iter()?
+        {
             match term_ref? {
                 ArithTermRef::Constant(c) => self.push_constant(c)?,
                 ArithTermRef::Var(cell, name) => {
@@ -204,7 +225,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                     code.push(Line::Arithmetic(self.instr_from_clause(&*name, terms)?));
                 },
                 ArithTermRef::Op(ClauseType::Root, terms) => {
-                    let name = term.name().unwrap();
+                    let name = src.root_name()?;
                     code.push(Line::Arithmetic(self.instr_from_clause(&*name, terms)?));
                 },
                 _ =>
