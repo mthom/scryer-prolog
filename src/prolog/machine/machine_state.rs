@@ -1139,15 +1139,14 @@ impl MachineState {
         self.p  = CodePtr::DirEntry(59);
     }
 
-    fn throw_exception
-        (&mut self, hcv: Vec<HeapCellValue>) {
-            let h = self.heap.h;
-
-            self.registers[1] = Addr::HeapCell(h);
-
-            self.heap.append(hcv);
-            self.goto_throw();
-        }
+    fn throw_exception(&mut self, hcv: Vec<HeapCellValue>) {
+        let h = self.heap.h;
+        
+        self.registers[1] = Addr::HeapCell(h);
+        
+        self.heap.append(hcv);
+        self.goto_throw();
+    }
 
     fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
     {

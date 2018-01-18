@@ -164,7 +164,7 @@ fn test_queries_on_predicates() {
     submit(&mut wam, "p(X) :- q(X). p(X) :- r(X).");
     submit(&mut wam, "q(X) :- a.");
     submit(&mut wam, "r(X) :- s(X, t). r(X) :- t(X, u).");
-    
+
     submit(&mut wam, "s(x, t).");
     submit(&mut wam, "t(y, u).");
 
@@ -260,13 +260,13 @@ fn test_queries_on_predicates() {
     assert_prolog_success!(&mut wam, "?- p(X).", ["X = f(a)",
                                                   "X = f(b)",
                                                   "X = f(c)"]);
-    
+
     submit(&mut wam, "p(X) :- f(f(Y)), g(Y, f(Y)), i(X, f(Y)).");
     submit(&mut wam, "g(Y, f(Y)) :- g(f(Y)).");
 
     assert_prolog_success!(&mut wam, "?- p(X).", ["X = f(a)",
                                                   "X = f(b)",
-                                                  "X = f(c)"]);    
+                                                  "X = f(c)"]);
 }
 
 #[test]
@@ -389,7 +389,7 @@ fn test_queries_on_lists()
     assert_prolog_failure!(&mut wam, "?- member(a, [c, [X, Y]]).");
     assert_prolog_failure!(&mut wam, "?- member(c, [a, [X, Y]]).");
     assert_prolog_success!(&mut wam, "?- member(a, [a, [X, Y]]).", ["X = _2", "Y = _0"]);
-    
+
     assert_prolog_success!(&mut wam, "?- member(a, [X, Y, Z]).", ["Y = _2", "X = a",  "Z = _0",
                                                                   "Y = a",  "X = _4", "Z = _0",
                                                                   "Y = _2",  "X = _4", "Z = a"]);
@@ -466,7 +466,7 @@ fn test_queries_on_indexed_predicates()
     assert_prolog_success!(&mut wam, "?- p(f(a)).");
     assert_prolog_success!(&mut wam, "?- p(g(b, X)).", ["X = c"]);
     assert_prolog_success!(&mut wam, "?- p(g(Y, X)).", ["X = c", "Y = b"]);
-    assert_prolog_success!(&mut wam, "?- p(g(Y, c)).", ["Y = b"]);    
+    assert_prolog_success!(&mut wam, "?- p(g(Y, c)).", ["Y = b"]);
     assert_prolog_success!(&mut wam, "?- p(g(b)).");
     assert_prolog_success!(&mut wam, "?- p([]).");
     assert_prolog_success!(&mut wam, "?- p([c, d, e]).");
@@ -502,18 +502,18 @@ fn test_queries_on_indexed_predicates()
     assert_eq!(submit(&mut wam, "?- p(b)."), true);
     assert_eq!(submit(&mut wam, "?- p(c)."), true);
     assert_eq!(submit(&mut wam, "?- p(true(a))."), true);
-    
+
     assert_prolog_success!(&mut wam, "?- p(g(b, X)).", ["X = c",
                                                         "X = _2"]);
     assert_prolog_success!(&mut wam, "?- p(g(Y, X)).", ["X = c", "Y = b",
                                                         "X = _2", "Y = _1"]);
     assert_prolog_success!(&mut wam, "?- p(g(Y, c)).", ["Y = b",
                                                         "Y = _1"]);
-    
+
     assert_eq!(submit(&mut wam, "?- p(g(b))."), true);
     assert_eq!(submit(&mut wam, "?- p([])."), true);
     assert_eq!(submit(&mut wam, "?- p([c, d, e])."), true);
-    
+
     assert_prolog_success!(&mut wam, "?- p([c, d | X]).", ["X = _1",
                                                            "X = [e]"]);
     assert_prolog_success!(&mut wam, "?- p([c|X]).", ["X = [d, e]",
@@ -523,7 +523,7 @@ fn test_queries_on_indexed_predicates()
                                                       "X = _1", "Y = _0"]);
     assert_prolog_success!(&mut wam, "?- p([Y|[d|Xs]]).", ["Xs = [e]", "Y = c",
                                                            "Xs = _1", "Y = _2"]);
-    
+
     assert_prolog_success!(&mut wam, "?- p(blah).");
 
     submit(&mut wam, "ind_call(or(X, Y)) :- ind_call(X).
@@ -599,7 +599,7 @@ fn test_queries_on_conjuctive_queries() {
                            ["X = b",
                             "X = c"]);
     assert_prolog_success!(&mut wam, "?- member(X, [a,c]), member(X, [b,c]).",
-                           ["X = c"]);    
+                           ["X = c"]);
     assert_prolog_success!(&mut wam, "?- member(X, [a,b,c,d]), !, member(X, [a,d]).",
                            ["X = a"]);
     assert_prolog_failure!(&mut wam, "?- member(X, [a,b,c,d]), !, member(X, [e]).");
@@ -701,7 +701,7 @@ fn test_queries_on_call_n()
                             "X = c", "Y = c", "Z = a",
                             "X = c", "Y = c", "Z = b",
                             "X = c", "Y = c", "Z = c"]);
-                            
+
     assert_prolog_success!(&mut wam, "?- maplist(f, [a,Y,Z]).",
                            ["Z = a", "Y = a",
                             "Z = a", "Y = b",
@@ -712,7 +712,7 @@ fn test_queries_on_call_n()
                             "Z = c", "Y = a",
                             "Z = c", "Y = b",
                             "Z = c", "Y = c"]);
-                            
+
     assert_prolog_success!(&mut wam, "?- maplist(f, [X,a,b]).",
                            ["X = a",
                             "X = b",
@@ -760,21 +760,21 @@ fn test_queries_on_call_n()
     submit(&mut wam, "r(f(X)) :- p(X). r(g(Y)) :- p(Y).");
 
     assert_prolog_success!(&mut wam, "?- f(r, X, Y).",
-                           ["X = f(x)", "Y = f(x)", 
-                            "X = f(x)", "Y = f(y)", 
-                            "X = f(x)", "Y = g(x)", 
-                            "X = f(x)", "Y = g(y)", 
-                            "X = f(y)", "Y = f(x)", 
-                            "X = f(y)", "Y = f(y)", 
-                            "X = f(y)", "Y = g(x)", 
-                            "X = f(y)", "Y = g(y)", 
-                            "X = g(x)", "Y = f(x)", 
-                            "X = g(x)", "Y = f(y)", 
-                            "X = g(x)", "Y = g(x)", 
-                            "X = g(x)", "Y = g(y)", 
-                            "X = g(y)", "Y = f(x)",                            
-                            "X = g(y)", "Y = f(y)",                            
-                            "X = g(y)", "Y = g(x)",                             
+                           ["X = f(x)", "Y = f(x)",
+                            "X = f(x)", "Y = f(y)",
+                            "X = f(x)", "Y = g(x)",
+                            "X = f(x)", "Y = g(y)",
+                            "X = f(y)", "Y = f(x)",
+                            "X = f(y)", "Y = f(y)",
+                            "X = f(y)", "Y = g(x)",
+                            "X = f(y)", "Y = g(y)",
+                            "X = g(x)", "Y = f(x)",
+                            "X = g(x)", "Y = f(y)",
+                            "X = g(x)", "Y = g(x)",
+                            "X = g(x)", "Y = g(y)",
+                            "X = g(y)", "Y = f(x)",
+                            "X = g(y)", "Y = f(y)",
+                            "X = g(y)", "Y = g(x)",
                             "X = g(y)", "Y = g(y)"]);
     assert_prolog_success!(&mut wam, "?- f(r, X, X).",
                            ["X = f(x)",
@@ -1006,7 +1006,7 @@ fn test_queries_on_exceptions()
                             "X = y", "E = _2",
                             "X = z", "E = _2",
                             "X = _1", "E = handle_top(an_error_1)",
-                            "X = _1", "E = handle_top(an_error_2)"]);    
+                            "X = _1", "E = handle_top(an_error_2)"]);
 
     submit(&mut wam, "handle(x). handle(y). handle(z). handle(v) :- throw(X).");
 
@@ -1052,17 +1052,17 @@ fn test_queries_on_arithmetic()
 
     assert_prolog_success!(&mut wam, "?- catch(f(X), evaluation_error(E), true), E = zero_divisor.",
                            ["E = zero_divisor", "X = _1"]);
-    
+
     submit(&mut wam, "f(X) :- X is (5 rdiv 1) / 0.");
 
     assert_prolog_success!(&mut wam, "?- catch(f(X), evaluation_error(E), true), E = zero_divisor.",
                            ["E = zero_divisor", "X = _1"]);
-    
+
     submit(&mut wam, "f(X) :- X is 5.0 / 0.");
 
     assert_prolog_success!(&mut wam, "?- catch(f(X), evaluation_error(E), true), E = zero_divisor.",
                            ["E = zero_divisor", "X = _1"]);
-    
+
     assert_prolog_success!(&mut wam, "?- X is ((3 + 4) // 2) + 2 - 1 // 1, Y is 2+2, Z is X+Y.",
                            ["Y = 4", "X = 4", "Z = 8"]);
 
@@ -1075,7 +1075,7 @@ fn test_queries_on_arithmetic()
     assert_prolog_success!(&mut wam, "?- X is 10 xor -4, X is -10.", ["X = -10"]);
     assert_prolog_success!(&mut wam, "?- X is 4 xor -7, X is -3.", ["X = -3"]);
     assert_prolog_success!(&mut wam, "?- X is 10 xor 5 + 55, X = 70.", ["X = 70"]);
-    
+
     assert_prolog_success!(&mut wam, "?- X is 10 rem -3, X = 1.", ["X = 1"]);
     assert_prolog_success!(&mut wam, "?- X is 10 mod -3, X is -2.", ["X = -2"]);
 }

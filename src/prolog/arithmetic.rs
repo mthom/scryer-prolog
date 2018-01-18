@@ -1,6 +1,7 @@
 use prolog::ast::*;
 use prolog::fixtures::*;
 
+use std::cell::Cell;
 use std::cmp::{min, max};
 use std::vec::Vec;
 
@@ -39,33 +40,34 @@ impl Term {
     }
 }
 
+pub enum ArithTermRef<'a> {
+    Constant(&'a Constant),
+    Op(ClauseType<'a>, &'a Vec<Box<Term>>),
+    Var(&'a Cell<VarReg>, &'a Var)
+}
+
 impl<'a> Iterator for ArithExprIterator<'a> {
-    type Item = TermRef<'a>;
+    type Item = Result<ArithTermRef<'a>, ArithmeticError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(iter_state) = self.state_stack.pop() {
             match iter_state {
-                TermIterState::AnonVar(lvl) =>
-                    return Some(TermRef::AnonVar(lvl)),
+                TermIterState::AnonVar(_) =>
+                    return Some(Err(ArithmeticError::UninstantiatedVar)),
                 TermIterState::Clause(child_num, ct, child_terms) => {
                     if child_num == child_terms.len() {
-                        return Some(TermRef::Clause(ct, child_terms));
+                        return Some(Ok(ArithTermRef::Op(ct, child_terms)));
                     } else {
                         self.state_stack.push(TermIterState::Clause(child_num + 1, ct, child_terms));
                         self.push_subterm(ct.level_of_subterms(), child_terms[child_num].as_ref());
                     }
                 },
-                TermIterState::InitialCons(lvl, cell, head, tail) => {
-                    self.state_stack.push(TermIterState::FinalCons(lvl, cell, head, tail));
-                    self.push_subterm(Level::Deep, tail);
-                    self.push_subterm(Level::Deep, head);
-                },
-                TermIterState::FinalCons(lvl, cell, head, tail) =>
-                    return Some(TermRef::Cons(lvl, cell, head, tail)),
-                TermIterState::Constant(lvl, cell, constant) =>
-                    return Some(TermRef::Constant(lvl, cell, constant)),
-                TermIterState::Var(lvl, cell, var) =>
-                    return Some(TermRef::Var(lvl, cell, var))
+                TermIterState::Constant(_, _, c) =>
+                    return Some(Ok(ArithTermRef::Constant(c))),
+                TermIterState::Var(_, cell, var) =>
+                    return Some(Ok(ArithTermRef::Var(cell, var))),
+                _ =>
+                    return Some(Err(ArithmeticError::InvalidTerm))
             };
         }
 
@@ -183,26 +185,25 @@ impl<'a> ArithmeticEvaluator<'a> {
         let mut code = Vec::new();
 
         for term_ref in term.arith_expr_iter()? {
-            match term_ref {
-                TermRef::Constant(_, _, c) =>
-                    try!(self.push_constant(c)),
-                TermRef::Var(_, vr, name) => {
-                    let r = if vr.get().norm().reg_num() == 0 {
+            match term_ref? {
+                ArithTermRef::Constant(c) => self.push_constant(c)?,
+                ArithTermRef::Var(cell, name) => {
+                    let r = if cell.get().norm().reg_num() == 0 {
                         match self.bindings.get(name) {
                             Some(&VarData::Temp(_, t, _)) if t != 0 => RegType::Temp(t),
                             Some(&VarData::Perm(p)) if p != 0 => RegType::Perm(p),
                             _ => return Err(ArithmeticError::UninstantiatedVar)
                         }
                     } else {
-                        vr.get().norm()
+                        cell.get().norm()
                     };
 
                     self.interm.push(ArithmeticTerm::Reg(r));
                 },
-                TermRef::Clause(ClauseType::Deep(_, _, name, _), terms) => {
+                ArithTermRef::Op(ClauseType::Deep(_, _, name, _), terms) => {
                     code.push(Line::Arithmetic(self.instr_from_clause(&*name, terms)?));
                 },
-                TermRef::Clause(ClauseType::Root, terms) => {
+                ArithTermRef::Op(ClauseType::Root, terms) => {
                     let name = term.name().unwrap();
                     code.push(Line::Arithmetic(self.instr_from_clause(&*name, terms)?));
                 },
