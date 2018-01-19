@@ -366,15 +366,34 @@ pub struct Rule {
 
 #[derive(Clone, Copy)]
 pub enum ClauseType<'a> {
+    Arg,
     CallN,
     Catch,
     Deep(Level, &'a Cell<RegType>, &'a TabledRc<Atom>, Option<Fixity>),
+    Display,
+    DuplicateTerm,
+    Functor,
     Is,
-    Root,
+    Root(&'a TabledRc<Atom>),
     Throw,
 }
 
 impl<'a> ClauseType<'a> {
+    pub fn name(&self) -> &'a str {
+        match self {
+            &ClauseType::Arg => "arg",
+            &ClauseType::CallN => "call",
+            &ClauseType::Catch => "catch",
+            &ClauseType::Deep(_, _, name, _) => name.as_str(),
+            &ClauseType::Display => "display",
+            &ClauseType::DuplicateTerm => "duplicate_term",
+            &ClauseType::Functor => "functor",
+            &ClauseType::Is => "is",
+            &ClauseType::Root(name) => name.as_str(),
+            &ClauseType::Throw => "throw"
+        }
+    }
+    
     pub fn level_of_subterms(self) -> Level {
         match self {
             ClauseType::Deep(..) => Level::Deep,

@@ -17,8 +17,8 @@ impl<'a> QueryIterator<'a> {
         let state = match term {
             &Term::AnonVar =>
                 return QueryIterator { state_stack: vec![] },
-            &Term::Clause(.., ref terms, _) =>
-                TermIterState::Clause(0, ClauseType::Root, terms),
+            &Term::Clause(_, ref name, ref terms, _) =>
+                TermIterState::Clause(0, ClauseType::Root(name), terms),
             &Term::Cons(..) =>
                 return QueryIterator { state_stack: vec![] },
             &Term::Constant(_, _) =>
@@ -40,21 +40,27 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(0, ClauseType::Catch, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            &QueryTerm::Display(ref terms)
-          | &QueryTerm::DuplicateTerm(ref terms) => {
-                let state = TermIterState::Clause(0, ClauseType::Root, terms);
+            &QueryTerm::Display(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::Display, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            &QueryTerm::Arg(ref terms)
-          | &QueryTerm::Functor(ref terms) => {
-                let state = TermIterState::Clause(0, ClauseType::Root, terms);
+            &QueryTerm::DuplicateTerm(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::DuplicateTerm, terms);
+                QueryIterator { state_stack: vec![state] }
+            },
+            &QueryTerm::Arg(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::Arg, terms);
+                QueryIterator { state_stack: vec![state] }
+            },
+            &QueryTerm::Functor(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::Functor, terms);
                 QueryIterator { state_stack: vec![state] }
             },
             &QueryTerm::Inlined(InlinedQueryTerm::CompareNumber(_, ref terms))
           | &QueryTerm::Is(ref terms) => {
                     let state = TermIterState::Clause(0, ClauseType::Is, terms);
                     QueryIterator { state_stack: vec![state] }
-            },            
+            },
             &QueryTerm::Inlined(InlinedQueryTerm::IsAtomic(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsInteger(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsVar(ref terms)) =>
@@ -78,7 +84,7 @@ impl QueryTerm {
 
 impl<'a> Iterator for QueryIterator<'a> {
     type Item = TermRef<'a>;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(iter_state) = self.state_stack.pop() {
             match iter_state {
@@ -113,7 +119,7 @@ impl<'a> Iterator for QueryIterator<'a> {
             };
         }
 
-        None        
+        None
     }
 }
 
@@ -130,8 +136,8 @@ impl<'a> FactIterator<'a> {
         let states = match term {
             &Term::AnonVar =>
                 vec![TermIterState::AnonVar(Level::Shallow)],
-            &Term::Clause(.., ref terms, _) =>
-                vec![TermIterState::Clause(0, ClauseType::Root, terms)],
+            &Term::Clause(.., ref name, ref terms, _) =>
+                vec![TermIterState::Clause(0, ClauseType::Root(name), terms)],
             &Term::Cons(ref cell, ref head, ref tail) =>
                 vec![TermIterState::InitialCons(Level::Shallow,
                                                 cell,
@@ -217,7 +223,7 @@ impl<'a> ChunkedIterator<'a>
     {
         let inner_iter = Box::new(once(p1));
         let iter = inner_iter.chain(clauses.iter());
-        
+
         ChunkedIterator {
             term_loc: GenContext::Last(0),
             iter: Box::new(iter),
@@ -237,7 +243,7 @@ impl<'a> ChunkedIterator<'a>
             term_loc: GenContext::Head,
             iter: Box::new(iter),
             deep_cut_encountered: false,
-        }        
+        }
     }
 
     pub fn encountered_deep_cut(&self) -> bool {
@@ -257,21 +263,21 @@ impl<'a> ChunkedIterator<'a>
         let mut arity  = 0;
         let mut item   = Some(term);
         let mut result = Vec::new();
-        
+
         while let Some(term) = item {
             match term {
-                &QueryTerm::Term(ref inner_term) => 
+                &QueryTerm::Term(ref inner_term) =>
                     if let GenContext::Head = self.term_loc {
                         result.push(term);
                         self.term_loc = GenContext::Last(0);
                     } else {
                         result.push(term);
-                        
+
                         if inner_term.is_callable() {
                             arity = inner_term.arity();
                             break;
                         }
-                    },                
+                    },
                 &QueryTerm::CallN(ref child_terms) => {
                     result.push(term);
                     arity = child_terms.len() + 1;
