@@ -146,14 +146,16 @@ impl HeapCellValueFormatter for TermFormatter {
 pub struct HeapCellPrinter<'a, Formatter, Outputter> {
     formatter:   Formatter,
     outputter:   Outputter,
-    iter:        HeapCellIterator<'a>,
+    iter:        HeapCellPreOrderIterator<'a>,
     state_stack: Vec<TokenOrRedirect>
 }
 
 impl<'a, Formatter: HeapCellValueFormatter, Outputter: HeapCellValueOutputter>
     HeapCellPrinter<'a, Formatter, Outputter>
 {
-    pub fn new(iter: HeapCellIterator<'a>, formatter: Formatter, outputter: Outputter) -> Self {
+    pub fn new(iter: HeapCellPreOrderIterator<'a>, formatter: Formatter, outputter: Outputter)
+               -> Self
+    {
         HeapCellPrinter { formatter, outputter, iter, state_stack: vec![] }
     }
 

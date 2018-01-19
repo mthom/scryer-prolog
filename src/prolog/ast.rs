@@ -539,7 +539,7 @@ impl Number {
     }    
 }
 
-enum NumberPair {
+pub enum NumberPair {
     Float(OrderedFloat<f64>, OrderedFloat<f64>),
     Integer(Rc<BigInt>, Rc<BigInt>),
     Rational(Rc<Ratio<BigInt>>, Rc<Ratio<BigInt>>)
@@ -586,7 +586,7 @@ impl NumberPair {
         }
     }
 
-    fn from(n1: Number, n2: Number) -> NumberPair
+    pub fn from(n1: Number, n2: Number) -> NumberPair
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
@@ -746,6 +746,7 @@ pub enum BuiltInInstruction {
     InternalCallN,
     IsAtomic(RegType),
     IsInteger(RegType),
+    IsOnHeap,
     IsVar(RegType),
     ResetBlock,
     SetBall,

@@ -49,7 +49,7 @@ impl<'a> CopierTarget for DuplicateTerm<'a> {
     }
 
     fn push(&mut self, hcv: HeapCellValue) {
-        self.state.heap.push(hcv);        
+        self.state.heap.push(hcv);
     }
 
     fn store(&self, a: Addr) -> Addr {
@@ -233,7 +233,7 @@ impl MachineState {
         }
     }
 
-    pub(crate) fn deref(&self, mut a: Addr) -> Addr {        
+    pub(crate) fn deref(&self, mut a: Addr) -> Addr {
         loop {
             let value = self.store(a.clone());
 
@@ -258,11 +258,11 @@ impl MachineState {
 
         self.trail(r1);
     }
-    
+
     fn print_var<Fmt, Outputter>(&self, r: Ref, fmt: Fmt, output: Outputter) -> Outputter
         where Fmt: HeapCellValueFormatter, Outputter: HeapCellValueOutputter
-    {        
-        let iter    = HeapCellIterator::new(&self, r);        
+    {
+        let iter    = HeapCellPreOrderIterator::new(&self, r);
         let printer = HeapCellPrinter::new(iter, fmt, output);
 
         printer.print()
@@ -283,7 +283,7 @@ impl MachineState {
                 self.print_var(Ref::StackCell(fr, sc), fmt, output)
         }
     }
-    
+
     fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
 
@@ -443,8 +443,8 @@ impl MachineState {
         };
     }
 
-    fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, Vec<HeapCellValue>> {        
-        
+    fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, Vec<HeapCellValue>> {
+
         match at {
             &ArithmeticTerm::Reg(r) => {
                 let addr = self[r].clone();
@@ -485,7 +485,7 @@ impl MachineState {
         }
     }
 
-    fn signed_bitwise_op<Op>(&mut self, n1: &BigInt, n2: &BigInt, t: usize, f: Op)
+    fn signed_bitwise_op<Op>(&self, n1: &BigInt, n2: &BigInt, f: Op) -> Rc<BigInt>
         where Op: FnOnce(&BigUint, &BigUint) -> BigUint
     {
         let n1_b = n1.to_signed_bytes_le();
@@ -494,9 +494,218 @@ impl MachineState {
         let u_n1 = BigUint::from_bytes_le(&n1_b);
         let u_n2 = BigUint::from_bytes_le(&n2_b);
 
-        let result = BigInt::from_signed_bytes_le(&f(&u_n1, &u_n2).to_bytes_le());
+        Rc::new(BigInt::from_signed_bytes_le(&f(&u_n1, &u_n2).to_bytes_le()))
+    }
 
-        self.interms[t - 1] = Number::Integer(Rc::new(result));
+    fn arith_eval_by_metacall(&self) -> Result<Number, Vec<HeapCellValue>>
+    {        
+        let instantiation_err = functor!(self.atom_tbl.clone(), "instantiation_error", 1,
+                                         [heap_atom!("(is)/2", self.atom_tbl.clone())]);
+
+        let a = self[temp_v!(2)].clone();
+            
+        if let &Addr::Con(Constant::Number(ref n)) = &a {
+            return Ok(n.clone());
+        }
+
+        let r = match a {
+            Addr::Str(h) | Addr::HeapCell(h) => Ok(Ref::HeapCell(h)),
+            Addr::StackCell(fr, sc) => Ok(Ref::StackCell(fr, sc)),
+            _ => Err(instantiation_err.clone())
+        }?;        
+
+        let mut interms: Vec<Number> = Vec::with_capacity(64);
+        
+        for heap_val in self.post_order_iter(r) {
+            match heap_val {
+                HeapCellValue::NamedStr(2, name, Some(Fixity::In)) => {
+                    let a2 = interms.pop().unwrap();
+                    let a1 = interms.pop().unwrap();
+                    
+                    match name.as_str() {
+                        "+" => interms.push(a1 + a2),
+                        "-" => interms.push(a1 - a2),
+                        "*" => interms.push(a1 * a2),
+                        "rdiv" =>
+                            match NumberPair::from(a1, a2) {
+                                NumberPair::Rational(r1, r2) =>
+                                    interms.push(Number::Rational(self.rdiv(r1, r2)?)),
+                                _ =>
+                                    return Err(instantiation_err)
+                            },
+                        "//"  => interms.push(Number::Integer(self.idiv(a1, a2)?)),
+                        "div" => interms.push(Number::Integer(self.fidiv(a1, a2)?)),
+                        ">>"  => interms.push(Number::Integer(self.shr(a1, a2)?)),
+                        "<<"  => interms.push(Number::Integer(self.shl(a1, a2)?)),
+                        "/\\" => interms.push(Number::Integer(self.and(a1, a2)?)),
+                        "\\/" => interms.push(Number::Integer(self.or(a1, a2)?)),
+                        "xor" => interms.push(Number::Integer(self.xor(a1, a2)?)),
+                        "mod" => interms.push(Number::Integer(self.modulus(a1, a2)?)),
+                        "rem" => interms.push(Number::Integer(self.remainder(a1, a2)?)),
+                        _     => return Err(instantiation_err)
+                    }
+                },
+                HeapCellValue::NamedStr(1, name, Some(Fixity::Pre)) => {              
+                    let a1 = interms.pop().unwrap();
+
+                    match name.as_str() {
+                        "-" => interms.push(- a1),
+                         _  => return Err(instantiation_err)
+                    }
+                },
+                HeapCellValue::Addr(Addr::Con(Constant::Number(n))) =>
+                    interms.push(n),
+                _ =>
+                    return Err(instantiation_err)
+            }
+        };
+
+        Ok(interms.pop().unwrap())
+    }
+
+    fn rdiv(&self, r1: Rc<Ratio<BigInt>>, r2: Rc<Ratio<BigInt>>)
+            -> Result<Rc<Ratio<BigInt>>, Vec<HeapCellValue>>
+    {
+        if *r2 == Ratio::zero() {
+            Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                         [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+        } else {
+            Ok(Rc::new(&*r1 / &*r2))
+        }
+    }
+
+    fn fidiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                if *n2 == BigInt::zero() {
+                    Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                                 [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+                } else {
+                    Ok(Rc::new(n1.div_floor(&n2)))
+                },
+            _ => Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                              [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+        }
+    }
+
+    fn idiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                if *n2 == BigInt::zero() {
+                    Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                                 [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+                } else {
+                    Ok(Rc::new(&*n1 / &*n2))
+                },
+            _ =>
+                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+        }
+    }
+
+    fn div(&self, n1: Number, n2: Number) -> Result<Number, Vec<HeapCellValue>>
+    {
+        if n2.is_zero() {
+            Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                         [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+        } else {
+            Ok(n1 / n2)
+        }
+    }
+
+    fn shr(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                match n2.to_usize() {
+                    Some(n2) => Ok(Rc::new(&*n1 >> n2)),
+                    _        => Ok(Rc::new(&*n1 >> usize::max_value()))
+                },
+            _ =>
+                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+        }
+    }
+
+    fn shl(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                match n2.to_usize() {
+                    Some(n2) => Ok(Rc::new(&*n1 << n2)),
+                    _        => Ok(Rc::new(&*n1 << usize::max_value()))
+                },
+            _ =>
+                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+        }
+    }
+
+    fn xor(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 ^ u_n2)),
+            _ =>
+                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+        }
+    }
+
+    fn and(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
+            _ =>
+                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+        }
+    }
+
+    fn modulus(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                if *n2 == BigInt::zero() {
+                    Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                                 [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+                } else {
+                    Ok(Rc::new(n1.mod_floor(&n2)))
+                },
+            _ =>
+                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+        }
+    }
+
+    fn remainder(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                if *n2 == BigInt::zero() {
+                    Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                                 [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+                } else {
+                    Ok(Rc::new(&*n1 % &*n2))
+                },
+            _ =>
+                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+        }
+    }
+    
+    fn or(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
+            _ =>
+                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
+                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+        }
     }
 
     pub(super) fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
@@ -526,74 +735,22 @@ impl MachineState {
                 let r1 = try_or_fail!(self, self.get_rational(a1));
                 let r2 = try_or_fail!(self, self.get_rational(a2));
 
-                if *r2 == Ratio::zero() {
-                    let atom_tbl = self.atom_tbl.clone();
-                    self.throw_exception(functor!(atom_tbl,
-                                                  "evaluation_error",
-                                                  1,
-                                                  [heap_atom!("zero_divisor", atom_tbl)]));
-                    return;
-                }
-
-                self.interms[t - 1] = Number::Rational(Rc::new(&*r1 / &*r2));
+                self.interms[t - 1] = Number::Rational(try_or_fail!(self, self.rdiv(r1, r2)));
                 self.p += 1;
             },
             &ArithmeticInstruction::FIDiv(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                match (n1, n2) {
-                    (Number::Integer(n1), Number::Integer(n2)) => {
-                        if *n2 == BigInt::zero() {
-                            let atom_tbl = self.atom_tbl.clone();
-                            self.throw_exception(functor!(atom_tbl,
-                                                          "evaluation_error",
-                                                          1,
-                                                          [heap_atom!("zero_divisor", atom_tbl)]));
-                            return;
-                        }
-
-                        self.interms[t - 1] = Number::Integer(Rc::new(n1.div_floor(&n2)));                        
-                    },
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "evaluation_error",
-                                                      1,
-                                                      [heap_atom!("expected_integer_args", atom_tbl)]));
-                        return;
-                    }
-                }
-
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.fidiv(n1, n2)));
                 self.p += 1;
             },
             &ArithmeticInstruction::IDiv(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                match (n1, n2) {
-                    (Number::Integer(n1), Number::Integer(n2)) => {
-                        if *n2 == BigInt::zero() {
-                            let atom_tbl = self.atom_tbl.clone();
-                            self.throw_exception(functor!(atom_tbl,
-                                                          "evaluation_error",
-                                                          1,
-                                                          [heap_atom!("zero_divisor", atom_tbl)]));
-                            return;
-                        }
-
-                        self.interms[t - 1] = Number::Integer(Rc::new(&*n1 / &*n2));
-                        self.p += 1;
-                    },
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "evaluation_error",
-                                                      1,
-                                                      [heap_atom!("expected_integer_args", atom_tbl)]));
-                        return;
-                    }
-                }
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.idiv(n1, n2)));
+                self.p += 1;
             },
             &ArithmeticInstruction::Neg(ref a1, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
@@ -605,175 +762,56 @@ impl MachineState {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                if n2.is_zero() {
-                    let atom_tbl = self.atom_tbl.clone();
-                    self.throw_exception(functor!(atom_tbl,
-                                                  "evaluation_error",
-                                                  1,
-                                                  [heap_atom!("zero_divisor", atom_tbl)]));
-                    return;
-                }
-
-                self.interms[t - 1] = n1 / n2;
+                self.interms[t - 1] = try_or_fail!(self, self.div(n1, n2));
                 self.p += 1;
             },
             &ArithmeticInstruction::Shr(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                match (n1, n2) {
-                    (Number::Integer(n1), Number::Integer(n2)) =>
-                        match n2.to_usize() {
-                            Some(n2) => self.interms[t - 1] = Number::Integer(Rc::new(&*n1 >> n2)),
-                            _ => self.interms[t - 1] = Number::Integer(Rc::new(&*n1 >> usize::max_value()))
-                        },
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "evaluation_error",
-                                                      1,
-                                                      [heap_atom!("expected_integer_args", atom_tbl)]));
-                        return;
-                    }
-                }
-
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.shr(n1, n2)));
                 self.p += 1;
             },
             &ArithmeticInstruction::Shl(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                match (n1, n2) {
-                    (Number::Integer(n1), Number::Integer(n2)) =>
-                        match n2.to_usize() {
-                            Some(n2) => self.interms[t - 1] = Number::Integer(Rc::new(&*n1 << n2)),
-                            _ => self.interms[t - 1] = Number::Integer(Rc::new(&*n1 << usize::max_value()))
-                        },
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "evaluation_error",
-                                                      1,
-                                                      [heap_atom!("expected_integer_args", atom_tbl)]));
-                        return;
-                    }
-                }
-
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.shl(n1, n2)));
                 self.p += 1;
             },
             &ArithmeticInstruction::Xor(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                match (n1, n2) {
-                    (Number::Integer(n1), Number::Integer(n2)) =>
-                        self.signed_bitwise_op(&*n1, &*n2, t, |u_n1, u_n2| u_n1 ^ u_n2),
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "evaluation_error",
-                                                      1,
-                                                      [heap_atom!("expected_integer_args", atom_tbl)]));
-                        return;
-                    }
-                };
-
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.xor(n1, n2)));
                 self.p += 1;
             },
             &ArithmeticInstruction::And(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                match (n1, n2) {
-                    (Number::Integer(n1), Number::Integer(n2)) =>
-                        self.signed_bitwise_op(&*n1, &*n2, t, |u_n1, u_n2| u_n1 & u_n2),
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "evaluation_error",
-                                                      1,
-                                                      [heap_atom!("expected_integer_args", atom_tbl)]));
-                        return;
-                    }
-                };
-
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.and(n1, n2)));
                 self.p += 1;
             },
             &ArithmeticInstruction::Or(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                match (n1, n2) {
-                    (Number::Integer(n1), Number::Integer(n2)) =>
-                        self.signed_bitwise_op(&*n1, &*n2, t, |u_n1, u_n2| u_n1 | u_n2),
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "evaluation_error",
-                                                      1,
-                                                      [heap_atom!("expected_integer_args", atom_tbl)]));
-                        return;
-                    }
-                };
-
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.or(n1, n2)));
                 self.p += 1;
             },
             &ArithmeticInstruction::Mod(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                match (n1, n2) {
-                    (Number::Integer(n1), Number::Integer(n2)) => {
-                        if *n2 == BigInt::zero() {
-                            let atom_tbl = self.atom_tbl.clone();
-                            self.throw_exception(functor!(atom_tbl,
-                                                          "evaluation_error",
-                                                          1,
-                                                          [heap_atom!("zero_divisor", atom_tbl)]));
-                            return;
-                        }
-
-                        self.interms[t - 1] = Number::Integer(Rc::new(n1.mod_floor(&n2)));
-                    },
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "evaluation_error",
-                                                      1,
-                                                      [heap_atom!("expected_integer_args", atom_tbl)]));
-                        return;
-                    }
-                }
-
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.modulus(n1, n2)));
                 self.p += 1;
             },
             &ArithmeticInstruction::Rem(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                match (n1, n2) {
-                    (Number::Integer(n1), Number::Integer(n2)) => {
-                        if *n2 == BigInt::zero() {
-                            let atom_tbl = self.atom_tbl.clone();
-                            self.throw_exception(functor!(atom_tbl,
-                                                          "evaluation_error",
-                                                          1,
-                                                          [heap_atom!("zero_divisor", atom_tbl)]));
-                            return;
-                        }
-
-                        self.interms[t - 1] = Number::Integer(Rc::new(&*n1 % &*n2));
-                    },
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "evaluation_error",
-                                                      1,
-                                                      [heap_atom!("expected_integer_args", atom_tbl)]));
-                        return;
-                    }
-                }
-
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.remainder(n1, n2)));
                 self.p += 1;
             }
         };
@@ -1142,9 +1180,9 @@ impl MachineState {
 
     fn throw_exception(&mut self, hcv: Vec<HeapCellValue>) {
         let h = self.heap.h;
-        
+
         self.registers[1] = Addr::HeapCell(h);
-        
+
         self.heap.append(hcv);
         self.goto_throw();
     }
@@ -1222,7 +1260,7 @@ impl MachineState {
     fn try_get_arg(&mut self) -> Result<(), Vec<HeapCellValue>>
     {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
-        
+
         if let Addr::Con(Constant::Number(Number::Integer(i))) = a1 {
             let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
 
@@ -1233,13 +1271,13 @@ impl MachineState {
                             Some(i) if 1 <= i && i <= arity => {
                                 let a3  = self[temp_v!(3)].clone();
                                 let h_a = Addr::HeapCell(o + i);
-                                
+
                                 self.unify(a3, h_a);
                             },
                             _ => self.fail = true
                         },
                     _ => self.fail = true
-                };                         
+                };
             } else {
                 return Err(functor!(self.atom_tbl,
                                     "type_error",
@@ -1250,7 +1288,7 @@ impl MachineState {
 
         Ok(())
     }
-    
+
     pub(super) fn execute_built_in_instr(&mut self, code_dir: &CodeDir, instr: &BuiltInInstruction)
     {
         match instr {
@@ -1269,8 +1307,8 @@ impl MachineState {
                 };
 
                 self.p += 1;
-            },            
-            &BuiltInInstruction::GetArg => 
+            },
+            &BuiltInInstruction::GetArg =>
                 try_or_fail!(self, {
                     let val = self.try_get_arg();
                     self.p = self.cp;
@@ -1312,7 +1350,14 @@ impl MachineState {
             &BuiltInInstruction::GetCutPoint(r) => {
                 let c = Constant::Usize(self.b);
                 self[r] = Addr::Con(c);
-                
+
+                self.p += 1;
+            },
+            &BuiltInInstruction::IsOnHeap => {
+                let a1 = self[temp_v!(1)].clone();
+                let result = try_or_fail!(self, self.arith_eval_by_metacall());
+
+                self.unify(a1, Addr::Con(Constant::Number(result)));
                 self.p += 1;
             },
             &BuiltInInstruction::SetBall => {
@@ -1432,13 +1477,13 @@ impl MachineState {
         match a1.clone() {
             Addr::Str(o) =>
                 match self.heap[o].clone() {
-                    HeapCellValue::NamedStr(arity, name, _) => {                    
+                    HeapCellValue::NamedStr(arity, name, _) => {
                         let name  = Addr::Con(Constant::Atom(name)); // A2
                         let arity = Addr::Con(Constant::Number(rc_integer!(arity)));
 
                         let a2 = self[temp_v!(2)].clone();
                         self.unify(a2, name);
-                        
+
                         if !self.fail {
                             let a3 = self[temp_v!(3)].clone();
                             self.unify(a3, arity);
@@ -1460,26 +1505,26 @@ impl MachineState {
                                 return Ok(());
                             }
                         };
-                        
+
                         self.heap.push(HeapCellValue::NamedStr(arity, name, None));
 
                         for _ in 0 .. arity {
                             let h = self.heap.h;
                             self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
                         }
-                        
-                        self.unify(a1, f_a);                                                
+
+                        self.unify(a1, f_a);
                     } else {
                         return Err(functor!(self.atom_tbl, "instantiation_error", 0, []));
                     }
                 } else {
                     return Err(functor!(self.atom_tbl, "instantiation_error", 0, []));
-                }                
+                }
             },
             _ => {
                 let a2 = self[temp_v!(2)].clone();
                 self.unify(a1, a2);
-                
+
                 if !self.fail {
                     let a3 = self[temp_v!(3)].clone();
                     self.unify(a3, Addr::Con(Constant::Number(rc_integer!(0))));
@@ -1503,9 +1548,9 @@ impl MachineState {
             gadget.duplicate_term(a1);
         }
 
-        self.unify(Addr::HeapCell(old_h), a2);        
+        self.unify(Addr::HeapCell(old_h), a2);
     }
-    
+
     pub(super) fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
     {
         match instr {
@@ -1513,7 +1558,7 @@ impl MachineState {
                 let gi = self.next_global_index();
 
                 self.p += 1;
-                
+
                 if self.e + 1 < self.and_stack.len() {
                     let and_gi = self.and_stack[self.e].global_index;
                     let or_gi = self.or_stack.top()
@@ -1526,15 +1571,15 @@ impl MachineState {
                         self.and_stack[index].e  = self.e;
                         self.and_stack[index].cp = self.cp;
                         self.and_stack[index].global_index = gi;
-                        
+
                         self.and_stack.resize(index, num_cells);
 
                         self.e = index;
-                        
+
                         return;
                     }
                 }
-                
+
                 self.and_stack.push(gi, self.e, self.cp, num_cells);
                 self.e = self.and_stack.len() - 1;
             },
@@ -1568,28 +1613,28 @@ impl MachineState {
                 },
             &ControlInstruction::Deallocate => {
                 let e = self.e;
-                
+
                 self.cp = self.and_stack[e].cp;
-                self.e  = self.and_stack[e].e;                
-                
+                self.e  = self.and_stack[e].e;
+
                 self.p += 1;
             },
-            &ControlInstruction::DisplayCall => {                
+            &ControlInstruction::DisplayCall => {
                 let output = self.print_term(&self[temp_v!(1)],
                                              DisplayFormatter {},
                                              PrinterOutputter::new());
-                
+
                 println!("{}", output.result());
-                
+
                 self.p += 1;
             },
-            &ControlInstruction::DisplayExecute => {                
+            &ControlInstruction::DisplayExecute => {
                 let output = self.print_term(&self[temp_v!(1)],
                                              DisplayFormatter {},
                                              PrinterOutputter::new());
-                
+
                 println!("{}", output.result());
-                
+
                 self.p = self.cp;
             },
             &ControlInstruction::DuplicateTermCall => {
@@ -1634,7 +1679,7 @@ impl MachineState {
                 let a1 = self[r].clone();
                 let a2 = try_or_fail!(self, self.get_number(at));
 
-                self.unify(a1, Addr::Con(Constant::Number(a2)));                
+                self.unify(a1, Addr::Con(Constant::Number(a2)));
                 self.p = self.cp;
             },
             &ControlInstruction::Proceed =>
@@ -1655,7 +1700,7 @@ impl MachineState {
             &IndexedChoiceInstruction::Try(l) => {
                 let n = self.num_of_args;
                 let gi = self.next_global_index();
-                
+
                 self.or_stack.push(gi,
                                    self.e,
                                    self.cp,
@@ -1738,7 +1783,7 @@ impl MachineState {
             &ChoiceInstruction::TryMeElse(offset) => {
                 let n = self.num_of_args;
                 let gi = self.next_global_index();
-                
+
                 self.or_stack.push(gi,
                                    self.e,
                                    self.cp,
@@ -1827,7 +1872,7 @@ impl MachineState {
                     self.tidy_trail();
                 }
 
-                self.p += 1;                
+                self.p += 1;
             },
             &CutInstruction::GetLevel => {
                 let b0 = self.b0;
@@ -1846,7 +1891,7 @@ impl MachineState {
                     self.tidy_trail();
                 }
 
-                self.p += 1;   
+                self.p += 1;
             }
         }
     }

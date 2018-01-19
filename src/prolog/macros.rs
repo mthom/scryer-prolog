@@ -417,3 +417,9 @@ macro_rules! display {
         Line::Control(ControlInstruction::DisplayCall)
     )
 }
+
+macro_rules! is_on_heap {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::IsOnHeap)
+    )
+}

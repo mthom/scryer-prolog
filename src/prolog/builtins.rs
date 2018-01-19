@@ -275,6 +275,8 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          deallocate!(),
          goto!(173, 3), // goto arg_/3.
          display!(), // display/1, 192.
+         proceed!(),
+         is_on_heap!(), // is/2, 194.
          proceed!()
     ]
 }
@@ -347,8 +349,8 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("functor", atom_tbl), 3), (PredicateKeyType::BuiltIn, 146));
     code_dir.insert((tabled_rc!("arg", atom_tbl), 3), (PredicateKeyType::BuiltIn, 150));
     code_dir.insert((tabled_rc!("integer", atom_tbl), 1), (PredicateKeyType::BuiltIn, 147));
-
     code_dir.insert((tabled_rc!("display", atom_tbl), 1), (PredicateKeyType::BuiltIn, 192));
+    code_dir.insert((tabled_rc!("is", atom_tbl), 2), (PredicateKeyType::BuiltIn, 194));
 
     (builtin_code, code_dir, op_dir)
 }

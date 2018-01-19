@@ -80,13 +80,13 @@ pub struct ArithmeticEvaluator<'a> {
 pub trait ArithmeticTermIter<'a> {
     type Iter : Iterator<Item=Result<ArithTermRef<'a>, ArithmeticError>>;
 
-    fn iter(&self) -> Result<Self::Iter, ArithmeticError>;
+    fn iter(self) -> Result<Self::Iter, ArithmeticError>;
 }
 
 impl<'a> ArithmeticTermIter<'a> for &'a Term {
     type Iter = ArithInstructionIterator<'a>;
 
-    fn iter(&self) -> Result<Self::Iter, ArithmeticError> {
+    fn iter(self) -> Result<Self::Iter, ArithmeticError> {
         ArithInstructionIterator::new(self)
     }
 }
@@ -223,3 +223,4 @@ impl<'a> ArithmeticEvaluator<'a>
         Ok((code, self.interm.pop()))
     }
 }
+

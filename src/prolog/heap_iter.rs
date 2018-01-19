@@ -3,21 +3,18 @@ use prolog::machine::machine_state::MachineState;
 
 use std::vec::Vec;
 
-pub struct HeapCellIterator<'a> {
+pub struct HeapCellPreOrderIterator<'a> {
     machine_st  : &'a MachineState,
     state_stack : Vec<Ref>
 }
 
-impl<'a> HeapCellIterator<'a> {
+impl<'a> HeapCellPreOrderIterator<'a> {
     pub fn new(machine_st: &'a MachineState, r: Ref) -> Self
     {
-        let mut iter = HeapCellIterator {
+        HeapCellPreOrderIterator {
             machine_st,
-            state_stack: vec![]
-        };
-
-        iter.state_stack.push(r);
-        iter
+            state_stack: vec![r]
+        }
     }
 
     // called under the assumption that the location at r is about to
@@ -64,11 +61,11 @@ impl<'a> HeapCellIterator<'a> {
                 self.follow_heap(s); // record terms of structure.
                 Addr::HeapCell(s)
             }
-        }        
+        }
     }
 }
 
-impl<'a> Iterator for HeapCellIterator<'a> {
+impl<'a> Iterator for HeapCellPreOrderIterator<'a> {
     type Item = HeapCellValue;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -84,5 +81,55 @@ impl<'a> Iterator for HeapCellIterator<'a> {
         } else {
             None
         }
+    }
+}
+
+pub struct HeapCellPostOrderIterator<'a> {
+    pre_iter:     HeapCellPreOrderIterator<'a>,
+    parent_stack: Vec<(usize, HeapCellValue)> // number of children, parent node.
+}
+
+impl<'a> HeapCellPostOrderIterator<'a> {
+    pub fn new(pre_iter: HeapCellPreOrderIterator<'a>) -> Self {
+        HeapCellPostOrderIterator {
+            pre_iter,
+            parent_stack: vec![]
+        }
+    }
+}
+
+impl<'a> Iterator for HeapCellPostOrderIterator<'a> {
+    type Item = HeapCellValue;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some((child_count, node)) = self.parent_stack.pop() {
+                if child_count == 0 {
+                    return Some(node);
+                }
+
+                self.parent_stack.push((child_count - 1, node));
+            }
+
+            if let Some(item) = self.pre_iter.next() {
+                match item {
+                    HeapCellValue::NamedStr(arity, name, fix) =>
+                        self.parent_stack.push((arity, HeapCellValue::NamedStr(arity, name, fix))),
+                    HeapCellValue::Addr(Addr::Lis(a)) =>
+                        self.parent_stack.push((2, HeapCellValue::Addr(Addr::Lis(a)))),
+                    child_node => {
+                        return Some(child_node);
+                    }
+                }
+            } else {
+                return None;
+            }
+        }
+    }
+}
+
+impl MachineState {
+    pub fn post_order_iter<'a>(&'a self, r: Ref) -> HeapCellPostOrderIterator<'a> {
+        HeapCellPostOrderIterator::new(HeapCellPreOrderIterator::new(self, r))
     }
 }

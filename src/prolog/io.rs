@@ -185,6 +185,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "is_atomic {}", r),
             &BuiltInInstruction::IsInteger(r) =>
                 write!(f, "is_integer {}", r),
+            &BuiltInInstruction::IsOnHeap =>
+                write!(f, "call_is A1, A2"),  
             &BuiltInInstruction::IsVar(r) =>
                 write!(f, "is_var {}", r),            
             &BuiltInInstruction::ResetBlock =>
