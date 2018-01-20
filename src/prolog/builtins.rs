@@ -276,7 +276,19 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          goto!(173, 3), // goto arg_/3.
          display!(), // display/1, 192.
          proceed!(),
-         is_on_heap!(), // is/2, 194.
+         dynamic_is!(), // is/2, 194.
+         proceed!(),
+         dynamic_num_test!(cmp_gt!()), // >/2, 196.
+         proceed!(),
+         dynamic_num_test!(cmp_lt!()), // </2, 198.
+         proceed!(),
+         dynamic_num_test!(cmp_gte!()), // >=/2, 200.
+         proceed!(),
+         dynamic_num_test!(cmp_lte!()), // <=/2, 202.
+         proceed!(),
+         dynamic_num_test!(cmp_ne!()), // =\=, 204.
+         proceed!(),
+         dynamic_num_test!(cmp_eq!()), // =:=, 206.
          proceed!()
     ]
 }
@@ -350,7 +362,14 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("arg", atom_tbl), 3), (PredicateKeyType::BuiltIn, 150));
     code_dir.insert((tabled_rc!("integer", atom_tbl), 1), (PredicateKeyType::BuiltIn, 147));
     code_dir.insert((tabled_rc!("display", atom_tbl), 1), (PredicateKeyType::BuiltIn, 192));
+    
     code_dir.insert((tabled_rc!("is", atom_tbl), 2), (PredicateKeyType::BuiltIn, 194));
+    code_dir.insert((tabled_rc!(">", atom_tbl), 2), (PredicateKeyType::BuiltIn, 196));
+    code_dir.insert((tabled_rc!("<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 198));
+    code_dir.insert((tabled_rc!(">=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 200));
+    code_dir.insert((tabled_rc!("<=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 202));
+    code_dir.insert((tabled_rc!("=\\=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 204));
+    code_dir.insert((tabled_rc!("=:=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 206));
 
     (builtin_code, code_dir, op_dir)
 }

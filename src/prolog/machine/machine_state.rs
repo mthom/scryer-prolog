@@ -497,12 +497,12 @@ impl MachineState {
         Rc::new(BigInt::from_signed_bytes_le(&f(&u_n1, &u_n2).to_bytes_le()))
     }
 
-    fn arith_eval_by_metacall(&self) -> Result<Number, Vec<HeapCellValue>>
+    fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, Vec<HeapCellValue>>
     {        
         let instantiation_err = functor!(self.atom_tbl.clone(), "instantiation_error", 1,
                                          [heap_atom!("(is)/2", self.atom_tbl.clone())]);
 
-        let a = self[temp_v!(2)].clone();
+        let a = self[r].clone();
             
         if let &Addr::Con(Constant::Number(ref n)) = &a {
             return Ok(n.clone());
@@ -1289,6 +1289,20 @@ impl MachineState {
         Ok(())
     }
 
+    fn compare_numbers(&mut self, cmp: CompareNumberQT, n1: Number, n2: Number) {
+        self.fail = match cmp {
+            CompareNumberQT::GreaterThan if !(n1.gt(n2)) => true,
+            CompareNumberQT::GreaterThanOrEqual if !(n1.gte(n2)) => true,
+            CompareNumberQT::LessThan if !(n1.lt(n2)) => true,
+            CompareNumberQT::LessThanOrEqual if !(n1.lte(n2)) => true,
+            CompareNumberQT::NotEqual if !(n1.ne(n2)) => true,
+            CompareNumberQT::Equal if !(n1.eq(n2)) => true,
+            _ => false
+        };
+
+        self.p += 1;
+    }
+    
     pub(super) fn execute_built_in_instr(&mut self, code_dir: &CodeDir, instr: &BuiltInInstruction)
     {
         match instr {
@@ -1296,16 +1310,19 @@ impl MachineState {
                 let n1 = try_or_fail!(self, self.get_number(at_1));
                 let n2 = try_or_fail!(self, self.get_number(at_2));
 
-                self.fail = match cmp {
-                    CompareNumberQT::GreaterThan if !(n1.gt(n2)) => true,
-                    CompareNumberQT::GreaterThanOrEqual if !(n1.gte(n2)) => true,
-                    CompareNumberQT::LessThan if !(n1.lt(n2)) => true,
-                    CompareNumberQT::LessThanOrEqual if !(n1.lte(n2)) => true,
-                    CompareNumberQT::NotEqual if !(n1.ne(n2)) => true,
-                    CompareNumberQT::Equal if !(n1.eq(n2)) => true,
-                    _ => false
-                };
+                self.compare_numbers(cmp, n1, n2);
+            },
+            &BuiltInInstruction::DynamicCompareNumber(cmp) => {
+                let n1 = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(1)));
+                let n2 = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(2)));
 
+                self.compare_numbers(cmp, n1, n2);
+            },
+            &BuiltInInstruction::DynamicIs => {
+                let a = self[temp_v!(1)].clone();
+                let result = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(2)));
+
+                self.unify(a, Addr::Con(Constant::Number(result)));
                 self.p += 1;
             },
             &BuiltInInstruction::GetArg =>
@@ -1352,14 +1369,7 @@ impl MachineState {
                 self[r] = Addr::Con(c);
 
                 self.p += 1;
-            },
-            &BuiltInInstruction::IsOnHeap => {
-                let a1 = self[temp_v!(1)].clone();
-                let result = try_or_fail!(self, self.arith_eval_by_metacall());
-
-                self.unify(a1, Addr::Con(Constant::Number(result)));
-                self.p += 1;
-            },
+            },            
             &BuiltInInstruction::SetBall => {
                 let addr = self[temp_v!(1)].clone();
                 self.ball.0 = self.heap.h;

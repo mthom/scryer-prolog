@@ -418,8 +418,50 @@ macro_rules! display {
     )
 }
 
-macro_rules! is_on_heap {
+macro_rules! dynamic_is {
     () => (
-        Line::BuiltIn(BuiltInInstruction::IsOnHeap)
+        Line::BuiltIn(BuiltInInstruction::DynamicIs)
+    )
+}
+
+macro_rules! dynamic_num_test {
+    ($cmp:expr) => (
+        Line::BuiltIn(BuiltInInstruction::DynamicCompareNumber($cmp))
+    )
+}
+
+macro_rules! cmp_gt {
+    () => (
+        CompareNumberQT::GreaterThan
+    )
+}
+
+macro_rules! cmp_lt {
+    () => (
+        CompareNumberQT::LessThan
+    )
+}
+
+macro_rules! cmp_gte {
+    () => (
+        CompareNumberQT::GreaterThanOrEqual
+    )
+}
+
+macro_rules! cmp_lte {
+    () => (
+        CompareNumberQT::LessThanOrEqual
+    )
+}
+
+macro_rules! cmp_ne {
+    () => (
+        CompareNumberQT::NotEqual
+    )
+}
+
+macro_rules! cmp_eq {
+    () => (
+        CompareNumberQT::Equal
     )
 }

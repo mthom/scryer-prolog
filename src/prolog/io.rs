@@ -165,6 +165,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "clean_up_block"),
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
                 write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
+            &BuiltInInstruction::DynamicCompareNumber(cmp) =>
+                write!(f, "dynamic_number_test {}", cmp),
             &BuiltInInstruction::EraseBall =>
                 write!(f, "erase_ball"),
             &BuiltInInstruction::Fail =>
@@ -185,8 +187,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "is_atomic {}", r),
             &BuiltInInstruction::IsInteger(r) =>
                 write!(f, "is_integer {}", r),
-            &BuiltInInstruction::IsOnHeap =>
-                write!(f, "call_is A1, A2"),  
+            &BuiltInInstruction::DynamicIs =>
+                write!(f, "call_is"),  
             &BuiltInInstruction::IsVar(r) =>
                 write!(f, "is_var {}", r),            
             &BuiltInInstruction::ResetBlock =>
