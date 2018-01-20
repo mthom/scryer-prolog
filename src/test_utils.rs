@@ -6,65 +6,76 @@ use prolog::machine::*;
 use prolog::parser::toplevel::*;
 
 use std::collections::HashSet;
+use std::mem::swap;
 
 pub struct TestOutputter {
-    contents: Vec<String>
+    results: Vec<HashSet<String>>,
+    contents: HashSet<String>,
+    focus: String
+}
+
+impl TestOutputter {
+    fn cache(&mut self) {
+        self.begin_new_var();
+
+        let mut contents = HashSet::new();
+        swap(&mut contents, &mut self.contents);
+        
+        self.results.push(contents);
+    }
 }
 
 impl HeapCellValueOutputter for TestOutputter {
-    type Output = HashSet<String>;
+    type Output = Vec<HashSet<String>>;
 
     fn new() -> Self {
-        TestOutputter { contents: vec![] }
+        TestOutputter { results: vec![],
+                        contents: HashSet::new(),
+                        focus: String::new() }
     }
 
-    fn append(&mut self, contents: &str) {
-        if let Some(ref mut result) = self.contents.last_mut() {
-            **result += contents;
+    fn append(&mut self, focus: &str) {        
+        self.focus += focus;        
+    }
+
+    fn begin_new_var(&mut self) {        
+        if !self.focus.is_empty() {
+            let mut focus = String::new();
+            swap(&mut focus, &mut self.focus);
+            
+            self.contents.insert(focus);
         }
-    }
-
-    fn begin_new_var(&mut self) {
-        self.contents.push(String::new());
     }
 
     fn result(self) -> Self::Output {
-        self.contents.into_iter().collect()
+        self.results
     }
 
     fn ends_with(&self, s: &str) -> bool {
-        if let Some(ref result) = self.contents.last() {
-            result.ends_with(s)
-        } else {
-            false
-        }
+        self.focus.ends_with(s)
     }
 
     fn len(&self) -> usize {
-        if let Some(ref result) = self.contents.last() {
-            result.len()
-        } else {
-            0
-        }
+        self.focus.len()
     }
 
     fn truncate(&mut self, len: usize) {
-        if let Some(ref mut result) = self.contents.last_mut() {
-            result.truncate(len);
-        }
+        self.focus.truncate(len);
     }
 }
 
 pub fn collect_test_output<'a>(wam: &mut Machine, alloc_locs: AllocVarDict<'a>,
                                mut heap_locs: HeapVarDict<'a>)
-                               -> HashSet<String>
+                               -> Vec<HashSet<String>>
 {
     let mut output = TestOutputter::new();
     output = wam.heap_view(&heap_locs, output);
-
+    output.cache();
+    
     while let EvalSession::SubsequentQuerySuccess = wam.continue_query(&alloc_locs, &mut heap_locs)
     {
         output = wam.heap_view(&heap_locs, output);
+        output.cache();
     }
 
     output.result()
@@ -72,11 +83,12 @@ pub fn collect_test_output<'a>(wam: &mut Machine, alloc_locs: AllocVarDict<'a>,
 
 pub fn collect_test_output_with_limit<'a>(wam: &mut Machine, alloc_locs: AllocVarDict<'a>,
                                           mut heap_locs: HeapVarDict<'a>, limit: usize)
-                                          -> HashSet<String>
+                                          -> Vec<HashSet<String>>
 {
     let mut output = TestOutputter::new();
     output = wam.heap_view(&heap_locs, output);
-
+    output.cache();
+    
     let mut count  = 1;
 
     if count == limit {
@@ -86,7 +98,8 @@ pub fn collect_test_output_with_limit<'a>(wam: &mut Machine, alloc_locs: AllocVa
     while let EvalSession::SubsequentQuerySuccess = wam.continue_query(&alloc_locs, &mut heap_locs)
     {
         output = wam.heap_view(&heap_locs, output);
-
+        output.cache();
+        
         count += 1;
 
         if count == limit {
@@ -116,7 +129,7 @@ pub fn submit(wam: &mut Machine, buffer: &str) -> bool
 }
 
 #[allow(dead_code)]
-pub fn submit_query(wam: &mut Machine, buffer: &str, result: HashSet<String>) -> bool
+pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>>) -> bool
 {
     wam.reset();
 
@@ -134,8 +147,8 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: HashSet<String>) ->
 
 #[allow(dead_code)]
 pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
-                         result: HashSet<String>, limit: usize)
-                         -> bool
+                               result: Vec<HashSet<String>>, limit: usize)
+                               -> bool
 {
     wam.reset();
 
@@ -161,8 +174,8 @@ macro_rules! expand_strs {
 
 #[allow(unused_macros)]
 macro_rules! assert_prolog_success_with_limit {
-    ($wam:expr, $buf:expr, $res:expr, $limit:expr) => (
-        assert!(submit_query_with_limit($wam, $buf, expand_strs!($res), $limit))
+    ($wam:expr, $buf:expr, [$($res:expr),*], $limit:expr) => (
+        assert!(submit_query_with_limit($wam, $buf, vec![$(expand_strs!($res)),*], $limit))
     )
 }
 
@@ -175,8 +188,8 @@ macro_rules! assert_prolog_failure {
 
 #[allow(unused_macros)]
 macro_rules! assert_prolog_success {
-    ($wam:expr, $query:expr, $res:expr) => (
-        assert!(submit_query($wam, $query, expand_strs!($res)))
+    ($wam:expr, $query:expr, [$($res:expr),*]) => (
+        assert!(submit_query($wam, $query, vec![$(expand_strs!($res)),*]))
     );
     ($wam:expr, $buf:expr) => (
         assert_eq!(submit($wam, $buf), true)

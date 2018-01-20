@@ -92,7 +92,7 @@ impl<'a> VariableFixtures<'a>
         // 1. move the use sets of each variable to a local HashMap, use_set
         // (iterate mutably, swap mutable refs).
         // 2. drain use_set. For each use set of U, add into the
-        // no-use sets of appropriate variables T /= U.
+        // no-use sets of appropriate variables T =/= U.
         // 3. Move the use sets back to their original locations in the fixture.
         // Compute the conflict set of u.
 

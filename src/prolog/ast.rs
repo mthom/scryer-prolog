@@ -300,7 +300,7 @@ pub enum Term {
 }
 
 pub enum InlinedQueryTerm {
-    CompareNumber(CompareNumberQT, Vec<Box<Term>>),
+    CompareNumber(CompareNumberQT, Vec<Box<Term>>),    
     IsAtomic(Vec<Box<Term>>),
     IsVar(Vec<Box<Term>>),
     IsInteger(Vec<Box<Term>>)
@@ -309,7 +309,7 @@ pub enum InlinedQueryTerm {
 impl InlinedQueryTerm {
     pub fn arity(&self) -> usize {
         match self {
-            &InlinedQueryTerm::CompareNumber(_, _) => 2,
+            &InlinedQueryTerm::CompareNumber(_, _) => 2,            
             &InlinedQueryTerm::IsAtomic(_) => 1,
             &InlinedQueryTerm::IsInteger(_) => 1,
             &InlinedQueryTerm::IsVar(_) => 1,
@@ -346,8 +346,8 @@ impl QueryTerm {
         match self {
             &QueryTerm::Arg(_) => 3,
             &QueryTerm::Catch(_) => 3,
-            &QueryTerm::Throw(_) => 1,            
             &QueryTerm::Display(_) => 1,
+            &QueryTerm::Throw(_) => 1,            
             &QueryTerm::DuplicateTerm(_) => 2,
             &QueryTerm::Functor(_) => 3,
             &QueryTerm::Inlined(ref term) => term.arity(),
@@ -384,8 +384,8 @@ impl<'a> ClauseType<'a> {
             &ClauseType::Arg => "arg",
             &ClauseType::CallN => "call",
             &ClauseType::Catch => "catch",
-            &ClauseType::Deep(_, _, name, _) => name.as_str(),
             &ClauseType::Display => "display",
+            &ClauseType::Deep(_, _, name, _) => name.as_str(),            
             &ClauseType::DuplicateTerm => "duplicate_term",
             &ClauseType::Functor => "functor",
             &ClauseType::Is => "is",
@@ -735,7 +735,7 @@ pub enum ArithmeticInstruction {
 
 pub enum BuiltInInstruction {
     CleanUpBlock,
-    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
+    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),    
     EraseBall,
     Fail,
     GetArg,
@@ -765,9 +765,9 @@ pub enum ControlInstruction {
     CallN(usize), // arity.
     CatchCall,
     CatchExecute,
-    Deallocate,
     DisplayCall,
     DisplayExecute,
+    Deallocate,
     DuplicateTermCall,
     DuplicateTermExecute,
     Execute(TabledRc<Atom>, usize),

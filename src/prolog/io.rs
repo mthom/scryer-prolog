@@ -112,9 +112,9 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::CatchExecute =>
                 write!(f, "execute_catch"),
             &ControlInstruction::DisplayCall =>
-                write!(f, "call_display"),
+                write!(f, "display_call"),
             &ControlInstruction::DisplayExecute =>
-                write!(f, "execute_display"),
+                write!(f, "display_execute"),
             &ControlInstruction::DuplicateTermCall =>
                 write!(f, "call_duplicate_term"),
             &ControlInstruction::DuplicateTermExecute =>
@@ -164,7 +164,7 @@ impl fmt::Display for BuiltInInstruction {
             &BuiltInInstruction::CleanUpBlock =>
                 write!(f, "clean_up_block"),
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
-                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
+                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),            
             &BuiltInInstruction::DynamicCompareNumber(cmp) =>
                 write!(f, "dynamic_number_test {}", cmp),
             &BuiltInInstruction::EraseBall =>

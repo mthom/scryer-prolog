@@ -39,11 +39,7 @@ impl<'a> QueryIterator<'a> {
             &QueryTerm::Catch(ref terms) => {
                 let state = TermIterState::Clause(0, ClauseType::Catch, terms);
                 QueryIterator { state_stack: vec![state] }
-            },
-            &QueryTerm::Display(ref terms) => {
-                let state = TermIterState::Clause(0, ClauseType::Display, terms);
-                QueryIterator { state_stack: vec![state] }
-            },
+            },            
             &QueryTerm::DuplicateTerm(ref terms) => {
                 let state = TermIterState::Clause(0, ClauseType::DuplicateTerm, terms);
                 QueryIterator { state_stack: vec![state] }
@@ -56,11 +52,15 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(0, ClauseType::Functor, terms);
                 QueryIterator { state_stack: vec![state] }
             },
+            &QueryTerm::Display(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::Display, terms);
+                QueryIterator { state_stack: vec![state] }
+            },
             &QueryTerm::Inlined(InlinedQueryTerm::CompareNumber(_, ref terms))
           | &QueryTerm::Is(ref terms) => {
                     let state = TermIterState::Clause(0, ClauseType::Is, terms);
                     QueryIterator { state_stack: vec![state] }
-            },
+            },            
             &QueryTerm::Inlined(InlinedQueryTerm::IsAtomic(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsInteger(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsVar(ref terms)) =>

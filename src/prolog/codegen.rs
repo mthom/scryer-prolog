@@ -578,12 +578,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         code
     }
 
-    fn compile_query_line(&mut self,
-                          term: &'a QueryTerm,
-                          term_loc: GenContext,
-                          code: &mut Code,
-                          index: usize,
-                          is_exposed: bool)
+    fn compile_query_line(&mut self, term: &'a QueryTerm, term_loc: GenContext,
+                          code: &mut Code, index: usize, is_exposed: bool)
     {
         self.marker.reset_arg(term.arity());
 
