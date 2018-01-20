@@ -939,7 +939,7 @@ fn test_queries_on_exceptions()
                             "X = z"]);
     assert_prolog_success!(&mut wam, "?- catch(f(a), _, handle(X)).",
                            ["X = _4"]);
-    assert_eq!(submit(&mut wam, "?- catch(f(b), _, handle(X))."), false);
+    assert_prolog_failure!(&mut wam, "?- catch(f(b), _, handle(X)).");
 
     submit(&mut wam, "g(x). g(X) :- throw(x).");
 
@@ -951,9 +951,9 @@ fn test_queries_on_exceptions()
     assert_prolog_success!(&mut wam, "?- catch(f(X), x, handle(z)).",
                            ["X = a",
                             "X = x"]);
-    assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(x))."), true);
-    assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(y))."), true);
-    assert_eq!(submit(&mut wam, "?- catch(f(z), x, handle(z))."), false);
+    assert_prolog_success!(&mut wam, "?- catch(f(z), x, handle(x)).");
+    assert_prolog_success!(&mut wam, "?- catch(f(z), x, handle(y)).");
+    assert_prolog_failure!(&mut wam, "?- catch(f(z), x, handle(z)).");
 
     submit(&mut wam, "f(X) :- throw(stuff).");
     submit(&mut wam, "handle(stuff). handle(other_stuff).");
@@ -965,7 +965,7 @@ fn test_queries_on_exceptions()
                            ["X = _1", "E = stuff"]);
     assert_prolog_success!(&mut wam, "?- catch(f(X), E, handle(other_stuff)).",
                            ["X = _1", "E = stuff"]);
-    assert_eq!(submit(&mut wam, "?- catch(f(X), E, handle(not_stuff))."), false);
+    assert_prolog_failure!(&mut wam, "?- catch(f(X), E, handle(not_stuff)).");
 
     submit(&mut wam, "f(success). f(X) :- catch(g(X), E, handle(E)).");
     submit(&mut wam, "g(g_success). g(g_success_2). g(X) :- throw(X).");
@@ -978,10 +978,10 @@ fn test_queries_on_exceptions()
                             "X = _1", "E = _2",
                             "X = _1", "E = _2",
                             "X = _1", "E = _2"]);
-    assert_eq!(submit(&mut wam, "?- catch(f(fail), _, _)."), false);
-    assert_eq!(submit(&mut wam, "?- catch(f(x), _, _)."), true);
-    assert_eq!(submit(&mut wam, "?- catch(f(y), _, _)."), true);
-    assert_eq!(submit(&mut wam, "?- catch(f(z), _, _)."), true);
+    assert_prolog_failure!(&mut wam, "?- catch(f(fail), _, _).");
+    assert_prolog_success!(&mut wam, "?- catch(f(x), _, _).");
+    assert_prolog_success!(&mut wam, "?- catch(f(y), _, _).");
+    assert_prolog_success!(&mut wam, "?- catch(f(z), _, _).");
 
     submit(&mut wam, "f(success). f(E) :- catch(g(E), E, handle(E)).");
     submit(&mut wam, "g(g_success). g(g_success_2). g(X) :- throw(X).");
@@ -1027,26 +1027,26 @@ fn test_queries_on_arithmetic()
     let mut wam = Machine::new();
 
     assert_prolog_success!(&mut wam, "?- X is 1, X is X.", ["X = 1"]);
-    assert_eq!(submit(&mut wam, "?- X is 1, X is X + 1."), false);
+    assert_prolog_failure!(&mut wam, "?- X is 1, X is X + 1.");
     assert_prolog_success!(&mut wam, "?- X is 1, X is X + 0.", ["X = 1"]);
     assert_prolog_success!(&mut wam, "?- X is 1, X is X * 1.", ["X = 1"]);
-    assert_eq!(submit(&mut wam, "?- X is 1, X is X * 2."), false);
+    assert_prolog_failure!(&mut wam, "?- X is 1, X is X * 2.");
 
-    assert_eq!(submit(&mut wam, "?- X is 1 + a."), false);
-    assert_eq!(submit(&mut wam, "?- X is 1 + Y."), false);
+    assert_prolog_failure!(&mut wam, "?- X is 1 + a.");
+    assert_prolog_failure!(&mut wam, "?- X is 1 + Y.");
     assert_prolog_success!(&mut wam, "?- Y is 2 + 2 - 2, X is 1 + Y, X = 3.",
                            ["X = 3", "Y = 2"]);
-    assert_eq!(submit(&mut wam, "?- Y is 2 + 2 - 2, X is 1 + Y, X = 2."), false);
+    assert_prolog_failure!(&mut wam, "?- Y is 2 + 2 - 2, X is 1 + Y, X = 2.");
 
-    assert_eq!(submit(&mut wam, "?- 6 is 6."), true);
-    assert_eq!(submit(&mut wam, "?- 6 is 3 + 3."), true);
-    assert_eq!(submit(&mut wam, "?- 6 is 3 * 2."), true);
-    assert_eq!(submit(&mut wam, "?- 7 is 3 * 2."), false);
-    assert_eq!(submit(&mut wam, "?- 7 is 3.5 * 2."), false);
-    assert_eq!(submit(&mut wam, "?- 7.0 is 3.5 * 2."), true);
-    assert_eq!(submit(&mut wam, "?- 7.0 is 14 / 2."), true);
-    assert_eq!(submit(&mut wam, "?- 4.666 is 14.0 / 3."), false);
-    assert_eq!(submit(&mut wam, "?- 4.0 is 8.0 / 2."), true);
+    assert_prolog_success!(&mut wam, "?- 6 is 6.");
+    assert_prolog_success!(&mut wam, "?- 6 is 3 + 3.");
+    assert_prolog_success!(&mut wam, "?- 6 is 3 * 2.");
+    assert_prolog_failure!(&mut wam, "?- 7 is 3 * 2.");
+    assert_prolog_failure!(&mut wam, "?- 7 is 3.5 * 2.");
+    assert_prolog_success!(&mut wam, "?- 7.0 is 3.5 * 2.");
+    assert_prolog_success!(&mut wam, "?- 7.0 is 14 / 2.");
+    assert_prolog_failure!(&mut wam, "?- 4.666 is 14.0 / 3.");
+    assert_prolog_success!(&mut wam, "?- 4.0 is 8.0 / 2.");
 
     submit(&mut wam, "f(X) :- X is 5 // 0.");
 
@@ -1078,4 +1078,29 @@ fn test_queries_on_arithmetic()
 
     assert_prolog_success!(&mut wam, "?- X is 10 rem -3, X = 1.", ["X = 1"]);
     assert_prolog_success!(&mut wam, "?- X is 10 mod -3, X is -2.", ["X = -2"]);
+
+    assert_prolog_success!(&mut wam, "?- call(is, X, 3 + 4).", ["X = 7"]);
+
+    assert_prolog_success!(&mut wam, "?- Y is 3 + 3, call(is, X, Y + 4).", ["Y = 6", "X = 10"]);
+    assert_prolog_success!(&mut wam, "?- call(is, X, 3 + 4.5).", ["X = 7.5"]);
+    assert_prolog_success!(&mut wam, "?- X is 2 rdiv 3, call(is, Y, X*X).", ["X = 2/3", "Y = 4/9"]);
+
+    assert_prolog_failure!(&mut wam, "?- call(>, 3, 3 + 3).");
+    assert_prolog_failure!(&mut wam, "?- X is 3 + 3, call(>, 3, X).");
+
+    assert_prolog_success!(&mut wam, "?- X is 3 + 3, call(<, 3, X).", ["X = 6"]);
+    assert_prolog_success!(&mut wam, "?- X is 3 + 3, X =:= 3 + 3.", ["X = 6"]);
+
+    assert_prolog_success!(&mut wam, "?- catch(call(is, X, 3 // 0), E, true).",
+                           ["X = _5", "E = evaluation_error(zero_divisor)"]);
+    
+    assert_prolog_success!(&mut wam, "?- catch(call(is, X, 3 // 3), _, true).", ["X = 1"]);
+
+    submit(&mut wam, "f(X, Sum) :- ( integer(X) -> Sum is X + X * X + 3 ; 
+                                     var(X) -> Sum = 1, X = 1 ).");
+
+    assert_prolog_success!(&mut wam, "?- f(X, Sum).", ["X = 1", "Sum = 1"]);
+    assert_prolog_success!(&mut wam, "?- f(5, Sum).", ["Sum = 33"]);
+    assert_prolog_success!(&mut wam, "?- f(5, 33).");
+    assert_prolog_failure!(&mut wam, "?- f(5, 32).");
 }
