@@ -71,7 +71,14 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(0, ClauseType::Throw, term);
                 QueryIterator { state_stack: vec![state] }
             },
-            &QueryTerm::Cut => QueryIterator { state_stack: vec![] }
+            &QueryTerm::Cut => QueryIterator { state_stack: vec![] },
+            &QueryTerm::Jump((ref vars, _)) => {
+                let state_stack = vars.iter().rev().map(|t| {
+                    TermIterState::to_state(Level::Shallow, t)
+                }).collect();
+
+                QueryIterator { state_stack }
+            }
         }
     }
 }
@@ -266,6 +273,11 @@ impl<'a> ChunkedIterator<'a>
 
         while let Some(term) = item {
             match term {
+                &QueryTerm::Jump((ref vars, _)) => {
+                    result.push(term);
+                    arity = vars.len();
+                    break;
+                },
                 &QueryTerm::Term(ref inner_term) =>
                     if let GenContext::Head = self.term_loc {
                         result.push(term);

@@ -36,7 +36,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_value!(perm_v!(1), 3),
                 put_unsafe_value!(4, 4)],
          deallocate!(),
-         goto!(12, 4), // goto catch/4.
+         goto_execute!(12, 4), // goto catch/4.
          try_me_else!(10), // catch/4, 12.
          allocate!(3),
          fact![get_var_in_fact!(perm_v!(3), 1),
@@ -48,7 +48,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          query![put_value!(perm_v!(2), 1),
                 put_unsafe_value!(1, 2)],
          deallocate!(),
-         goto!(44, 2), //21: goto end_block/2.
+         goto_execute!(44, 2), //21: goto end_block/2.
          trust_me!(),
          allocate!(3),
          fact![get_var_in_fact!(perm_v!(2), 2),
@@ -62,7 +62,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_value!(perm_v!(2), 2),
                 put_value!(perm_v!(1), 3)],
          deallocate!(),
-         goto!(32, 2), // goto handle_ball/2.
+         goto_execute!(32, 2), // goto handle_ball/2.
          try_me_else!(10), // handle_ball/2, 32.
          allocate!(2),
          get_level!(),
@@ -90,7 +90,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_value!(temp_v!(2), 1)],
          reset_block!(),
          deallocate!(),
-         goto!(61, 0),
+         goto_execute!(61, 0),
          set_ball!(), // throw/1, 59.
          unwind_stack!(),
          fail!(), // false/0, 61.
@@ -100,7 +100,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          call_n!(1),
          cut!(),
          deallocate!(),
-         goto!(61, 0),
+         goto_execute!(61, 0),
          trust_me!(),
          proceed!(),
          duplicate_term!(), // duplicate_term/2, 71.
@@ -120,7 +120,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                unify_variable!(temp_v!(1)),
                unify_variable!(temp_v!(2))],
          set_cp!(temp_v!(3)),
-         goto!(83, 3),
+         goto_execute!(83, 3),
          retry_me_else!(4),
          fact![get_constant!(atom!("!", atom_tbl), temp_v!(1)),
                get_constant!(atom!("!", atom_tbl), temp_v!(2))],
@@ -143,7 +143,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_unsafe_value!(1, 2),
                 put_value!(perm_v!(3), 3)],
          deallocate!(),
-         goto!(83, 3),
+         goto_execute!(83, 3),
          retry_me_else!(10),
          allocate!(1),
          get_level!(),
@@ -171,7 +171,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          fact![get_structure!(atom_tbl, "->", 2, temp_v!(1), Some(infix!())),
                unify_variable!(temp_v!(1)),
                unify_variable!(temp_v!(2))],
-         goto!(139, 3),
+         goto_execute!(139, 3),
          trust_me!(),
          fact![get_structure!(atom_tbl, "->", 2, temp_v!(1), Some(infix!())),
                unify_void!(2)],
@@ -213,7 +213,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_value!(perm_v!(2), 4),
                 put_value!(perm_v!(4), 5)],
          deallocate!(),
-         goto!(173, 5), // goto arg_/3.
+         goto_execute!(173, 5), // goto arg_/3.
          retry_me_else!(10),
          allocate!(3),
          fact![get_var_in_fact!(perm_v!(1), 1),
@@ -229,7 +229,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_value!(perm_v!(2), 2),
                 put_value!(perm_v!(3), 3)],
          deallocate!(),
-         goto!(149, 3), // goto get_arg/3.
+         goto_execute!(149, 3), // goto get_arg/3.
          trust_me!(),
          query![get_var_in_query!(temp_v!(4), 1),
                 put_structure!(atom_tbl,
@@ -239,20 +239,20 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                                temp_v!(1),
                                None),
                 set_constant!(atom!("integer_expected", atom_tbl))],
-         goto!(59, 1), // goto throw/1.
+         goto_execute!(59, 1), // goto throw/1.
          try_me_else!(5), // arg_/3, 173.
          fact![get_value!(temp_v!(1), 2),
                get_value!(temp_v!(1), 3)],
          neck_cut!(),
          query![put_value!(temp_v!(4), 2),
                 put_value!(temp_v!(5), 3)],
-         goto!(149, 3), // goto get_arg/3.
+         goto_execute!(149, 3), // goto get_arg/3.
          retry_me_else!(4),
          fact![get_value!(temp_v!(1), 2)],
          query![put_value!(temp_v!(4), 2),
                 get_var_in_query!(temp_v!(6), 3),
                 put_value!(temp_v!(5), 3)],
-         goto!(149, 3), // goto get_arg/3
+         goto_execute!(149, 3), // goto get_arg/3
          trust_me!(),
          allocate!(5),
          fact![get_var_in_fact!(perm_v!(2), 1),
@@ -273,7 +273,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_value!(perm_v!(3), 4),
                 put_value!(perm_v!(5), 5)],
          deallocate!(),
-         goto!(173, 3), // goto arg_/3.
+         goto_execute!(173, 3), // goto arg_/3.
          display!(), // display/1, 192.
          proceed!(),
          dynamic_is!(), // is/2, 194.

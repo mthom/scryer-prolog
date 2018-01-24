@@ -12,7 +12,6 @@ use std::collections::{HashMap, HashSet};
 use std::mem::swap;
 use std::ops::Index;
 use std::rc::Rc;
-use std::vec::Vec;
 
 pub struct Machine {
     ms: machine_state::MachineState,
@@ -60,9 +59,8 @@ impl Machine {
         self.ms.atom_tbl.clone()
     }
 
-    fn add_user_code<'a>(&mut self, name: TabledRc<Atom>,
-                         arity: usize, offset: usize)
-                         -> EvalSession<'a>
+    pub fn add_user_code<'a>(&mut self, name: TabledRc<Atom>, arity: usize, mut code: Code)
+                             -> EvalSession<'a>
     {
         match self.code_dir.get(&(name.clone(), arity)) {
             Some(&(PredicateKeyType::BuiltIn, _)) =>
@@ -70,56 +68,12 @@ impl Machine {
             _ => {}
         };
 
+        let offset = self.code.len();
+
+        self.code.append(&mut code);
         self.code_dir.insert((name, arity), (PredicateKeyType::User, offset));
+        
         EvalSession::EntrySuccess
-    }
-
-    pub fn add_fact<'a>(&mut self, fact: &Term, mut code: Code) -> EvalSession<'a>
-    {
-        match fact {
-            &Term::Clause(_, ref name, ..) | &Term::Constant(_, Constant::Atom(ref name)) => {
-                let p = self.code.len();
-                let arity = fact.arity();
-
-                self.code.append(&mut code);
-                self.add_user_code(name.clone(), arity, p)
-            },
-            _ => EvalSession::NamelessEntry
-        }
-    }
-
-    pub fn add_rule<'a>(&mut self, rule: &Rule, mut code: Code) -> EvalSession<'a>
-    {
-        match &rule.head.0 {
-            &QueryTerm::Term(Term::Clause(_, ref name, ..))
-          | &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref name))) => {
-                let p = self.code.len();
-                let arity = rule.head.0.arity();
-
-                self.code.append(&mut code);
-                self.add_user_code(name.clone(), arity, p)
-            },
-            _ => EvalSession::NamelessEntry
-        }
-    }
-
-    pub fn add_predicate<'a>(&mut self, clauses: &Vec<PredicateClause>, mut code: Code)
-                             -> EvalSession<'a>
-    {
-        let p = self.code.len();
-
-        if let Some(ref clause) = clauses.first() {
-            if let Some(name) = clause.name() {
-                let arity = clause.arity();
-
-                self.code.append(&mut code);
-                self.add_user_code(name.clone(), arity, p)
-            } else {
-                EvalSession::NamelessEntry
-            }
-        } else {
-            EvalSession::ImpermissibleEntry(String::from("predicate must have clauses."))
-        }
     }
 
     fn cached_query_size(&self) -> usize {
@@ -255,7 +209,7 @@ impl Machine {
                     },
                     _ => {}
                 }
-
+                
                 self.ms.p = CodePtr::TopLevel(cn, p);
             }
 

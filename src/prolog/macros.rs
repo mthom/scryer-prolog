@@ -28,12 +28,6 @@ macro_rules! deallocate {
     )
 }
 
-macro_rules! compare_number {
-    ($cmp: expr, $terms: expr) => (
-        QueryTerm::Inlined(InlinedQueryTerm::CompareNumber($cmp, $terms))
-    )
-}
-
 macro_rules! compare_number_instr {
     ($cmp: expr, $at_1: expr, $at_2: expr) => (
         Line::BuiltIn(BuiltInInstruction::CompareNumber($cmp, $at_1, $at_2))
@@ -222,9 +216,9 @@ macro_rules! install_new_block {
     )
 }
 
-macro_rules! goto {
+macro_rules! goto_execute {
     ($line:expr, $arity:expr) => (
-        Line::Control(ControlInstruction::Goto($line, $arity))
+        Line::Control(ControlInstruction::GotoExecute($line, $arity))
     )
 }
 
@@ -463,5 +457,11 @@ macro_rules! cmp_ne {
 macro_rules! cmp_eq {
     () => (
         CompareNumberQT::Equal
+    )
+}
+
+macro_rules! jmp_call {
+    ($arity:expr, $offset:expr) => (
+        Line::Control(ControlInstruction::JmpByCall($arity, $offset))
     )
 }

@@ -6,16 +6,15 @@ mod prolog;
 
 use prolog::io::*;
 use prolog::machine::*;
-use prolog::parser::toplevel::*;
 
 #[cfg(test)]
 mod tests;
 
 fn process_buffer(wam: &mut Machine, buffer: &str)
 {
-    match parse_code(buffer, wam.atom_tbl(), wam.op_dir()) {
+    match parse_code(wam, buffer) {
         Ok(tl) => {
-            let result = eval(wam, &tl);
+            let result = compile(wam, &tl);
             print(wam, result);
         },
         Err(s) => println!("{:?}", s)

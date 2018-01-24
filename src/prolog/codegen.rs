@@ -28,6 +28,12 @@ pub enum EvalSession<'a> {
     SubsequentQuerySuccess,
 }
 
+impl<'a> From<ParserError> for EvalSession<'a> {
+    fn from(err: ParserError) -> Self {
+        EvalSession::ParserError(err)
+    }
+}
+
 pub struct ConjunctInfo<'a> {
     pub perm_vs: VariableFixtures<'a>,
     pub num_of_chunks: usize,
@@ -79,12 +85,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         *self.var_count.get(var).unwrap()
     }
 
-    fn mark_non_callable(&mut self,
-                         name: &'a Atom,
-                         arity: usize,
-                         term_loc: GenContext,
-                         vr: &'a Cell<VarReg>,
-                         code: &mut Code)
+    fn mark_non_callable(&mut self, name: &'a Atom, arity: usize, term_loc: GenContext,
+                         vr: &'a Cell<VarReg>, code: &mut Code)
                          -> RegType
     {
         match self.marker.bindings().get(name) {
@@ -145,11 +147,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         };
     }
 
-    fn compile_clause<Target>(&mut self,
-                              ct: ClauseType<'a>,
-                              term_loc: GenContext,
-                              is_exposed: bool,
-                              terms: &'a Vec<Box<Term>>,
+    fn compile_clause<Target>(&mut self, ct: ClauseType<'a>, term_loc: GenContext,
+                              is_exposed: bool, terms: &'a Vec<Box<Term>>,
                               target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
@@ -252,9 +251,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             &QueryTerm::DuplicateTerm(_) =>
                 code.push(Line::Control(ControlInstruction::DuplicateTermCall)),
             &QueryTerm::Functor(_) =>
-                code.push(Line::Control(ControlInstruction::FunctorCall)),            
+                code.push(Line::Control(ControlInstruction::FunctorCall)),
             &QueryTerm::Inlined(_) =>
                 code.push(proceed!()),
+            &QueryTerm::Jump((ref vars, ref offset)) => {
+                code.push(jmp_call!(vars.len(), offset.clone()));
+            },
             &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref atom))) => {
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);
                 code.push(Line::Control(call));
@@ -291,6 +293,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         *ctrl = ControlInstruction::DuplicateTermExecute,
                     ControlInstruction::FunctorCall =>
                         *ctrl = ControlInstruction::FunctorExecute,
+                    ControlInstruction::JmpByCall(arity, offset) =>
+                        *ctrl = ControlInstruction::JmpByExecute(arity, offset),
                     ControlInstruction::CatchCall =>
                         *ctrl = ControlInstruction::CatchExecute,
                     ControlInstruction::ThrowCall =>
@@ -323,7 +327,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 code.push(compare_number_instr!(cmp,
                                                 at_1.unwrap_or(interm!(1)),
                                                 at_2.unwrap_or(interm!(2))));
-            },            
+            },
             &InlinedQueryTerm::IsAtomic(ref inner_term) =>
                 match inner_term[0].as_ref() {
                     &Term::AnonVar | &Term::Clause(..) | &Term::Cons(..) => {
@@ -338,7 +342,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     }
                 },
             &InlinedQueryTerm::IsInteger(ref inner_term) =>
-                match inner_term[0].as_ref() {                    
+                match inner_term[0].as_ref() {
                     &Term::Constant(_, Constant::Number(Number::Integer(_))) => {
                         code.push(succeed!());
                     },
@@ -362,7 +366,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         let r = self.mark_non_callable(name, 1, term_loc, vr, code);
                         code.push(is_var!(r));
                     }
-                }        
+                }
         }
 
         Ok(())
@@ -375,11 +379,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         evaluator.eval(term)
     }
 
-    fn compile_seq(&mut self,
-                   iter: ChunkedIterator<'a>,
-                   conjunct_info: &ConjunctInfo<'a>,
-                   code: &mut Code,
-                   is_exposed: bool)
+    fn compile_seq(&mut self, iter: ChunkedIterator<'a>, conjunct_info: &ConjunctInfo<'a>,
+                   code: &mut Code, is_exposed: bool)
                    -> Result<(), ParserError>
     {
         for (chunk_num, _, terms) in iter {
@@ -405,12 +406,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
                         match terms[0].as_ref() {
                             &Term::Var(ref vr, ref name) => {
-                                let r = self.mark_non_callable(name,
-                                                               2,
-                                                               term_loc,
-                                                               vr,
-                                                               code);
-
+                                let r = self.mark_non_callable(name, 2, term_loc, vr, code);
                                 code.push(is_call!(r, at.unwrap_or(interm!(1))));
                             },
                             &Term::Constant(_, ref c @ Constant::Number(_)) => {
@@ -466,17 +462,23 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
     fn compile_cleanup(code: &mut Code, conjunct_info: &ConjunctInfo, toc: &'a QueryTerm)
     {
+        // add a proceed to bookend any trailing inlines or cuts.
         match toc {
             &QueryTerm::Inlined(_) | &QueryTerm::Cut =>
                 code.push(proceed!()),
             _ => {}
         };
 
+        // perform lco.
         let dealloc_index = Self::lco(code);
 
         if conjunct_info.allocates() {
             code.insert(dealloc_index, Line::Control(ControlInstruction::Deallocate));
         }
+
+        // mark the first uninitialized jmp command (if there is one)
+        // by code.len() - index.
+        //TODO
     }
 
     pub fn compile_rule<'b: 'a>(&mut self, rule: &'b Rule) -> Result<Code, ParserError>

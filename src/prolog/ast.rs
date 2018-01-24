@@ -85,6 +85,42 @@ pub enum TopLevel {
     Rule(Rule)
 }
 
+impl TopLevel {
+    pub fn name(&self) -> Option<TabledRc<Atom>> {
+        match self {
+            &TopLevel::Declaration(_) => None,
+            &TopLevel::Fact(ref term) => term.name(),
+            &TopLevel::Predicate(ref clauses) =>
+                if let Some(ref term) = clauses.first() {
+                    term.name()
+                } else {
+                    None
+                },
+            &TopLevel::Query(_) => None,
+            &TopLevel::Rule(Rule { head: (QueryTerm::Term(ref term), _), .. }) =>
+                match term {
+                    &Term::Clause(_, ref name, ..)
+                  | &Term::Constant(_, Constant::Atom(ref name)) =>
+                        Some(name.clone()),
+                    _ =>
+                        None
+                },
+            _ => None
+        }
+    }
+
+    pub fn arity(&self) -> usize {
+        match self {
+            &TopLevel::Declaration(_) => 0,
+            &TopLevel::Fact(ref term) => term.arity(),
+            &TopLevel::Predicate(ref clauses) =>
+                clauses.first().map(|t| t.arity()).unwrap_or(0),
+            &TopLevel::Query(_) => 0,
+            &TopLevel::Rule(Rule { head: (ref qt, _), ..}) => qt.arity(),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub enum Level {
     Deep, Shallow
@@ -220,10 +256,11 @@ tokens exceeding 4096 chars in length. */
 pub enum ParserError
 {
     Arithmetic(ArithmeticError),
-    CommaArityMismatch,
+    BuiltInArityMismatch(&'static str),
     UnexpectedEOF,
     FailedMatch(String),
     IO(IOError),
+    ExpectedRel,
     InadmissibleFact,
     InadmissibleQueryTerm,
     IncompleteReduction,
@@ -291,6 +328,7 @@ impl fmt::Display for Constant {
     }
 }
 
+#[derive(Clone)]
 pub enum Term {
     AnonVar,
     Clause(Cell<RegType>, TabledRc<Atom>, Vec<Box<Term>>, Option<Fixity>),
@@ -303,7 +341,7 @@ pub enum InlinedQueryTerm {
     CompareNumber(CompareNumberQT, Vec<Box<Term>>),    
     IsAtomic(Vec<Box<Term>>),
     IsVar(Vec<Box<Term>>),
-    IsInteger(Vec<Box<Term>>)
+    IsInteger(Vec<Box<Term>>)    
 }
 
 impl InlinedQueryTerm {
@@ -312,7 +350,7 @@ impl InlinedQueryTerm {
             &InlinedQueryTerm::CompareNumber(_, _) => 2,            
             &InlinedQueryTerm::IsAtomic(_) => 1,
             &InlinedQueryTerm::IsInteger(_) => 1,
-            &InlinedQueryTerm::IsVar(_) => 1,
+            &InlinedQueryTerm::IsVar(_) => 1,            
         }
     }
 }
@@ -327,6 +365,10 @@ pub enum CompareNumberQT {
     Equal
 }
 
+// vars of predicate, toplevel offset.  Vec<Term> is always a vector
+// of vars (we get their adjoining cells this way).
+pub type JumpStub = (Vec<Term>, Rc<Cell<usize>>);
+
 pub enum QueryTerm {
     Arg(Vec<Box<Term>>),
     CallN(Vec<Box<Term>>),
@@ -337,6 +379,7 @@ pub enum QueryTerm {
     Functor(Vec<Box<Term>>),
     Inlined(InlinedQueryTerm),
     Is(Vec<Box<Term>>),
+    Jump(JumpStub),
     Term(Term),
     Throw(Vec<Box<Term>>)
 }
@@ -352,6 +395,7 @@ impl QueryTerm {
             &QueryTerm::Functor(_) => 3,
             &QueryTerm::Inlined(ref term) => term.arity(),
             &QueryTerm::Is(_) => 2,
+            &QueryTerm::Jump((ref vars, _)) => vars.len(),
             &QueryTerm::CallN(ref terms) => terms.len(),
             &QueryTerm::Cut => 0,
             &QueryTerm::Term(ref term) => term.arity(),
@@ -387,7 +431,7 @@ impl<'a> ClauseType<'a> {
             &ClauseType::Display => "display",
             &ClauseType::Deep(_, _, name, _) => name.as_str(),            
             &ClauseType::DuplicateTerm => "duplicate_term",
-            &ClauseType::Functor => "functor",
+            &ClauseType::Functor => "functor",            
             &ClauseType::Is => "is",
             &ClauseType::Root(name) => name.as_str(),
             &ClauseType::Throw => "throw"
@@ -774,7 +818,10 @@ pub enum ControlInstruction {
     ExecuteN(usize),
     FunctorCall,
     FunctorExecute,
-    Goto(usize, usize), // p, arity.
+    JmpByCall(usize, Rc<Cell<usize>>),    // arity, global_offset.
+    JmpByExecute(usize, Rc<Cell<usize>>), 
+    // GotoCall(usize, usize),    // p, arity.
+    GotoExecute(usize, usize), // p, arity.
     IsCall(RegType, ArithmeticTerm),
     IsExecute(RegType, ArithmeticTerm),
     Proceed,
@@ -801,10 +848,12 @@ impl ControlInstruction {
             &ControlInstruction::FunctorExecute => true,
             &ControlInstruction::ThrowCall => true,
             &ControlInstruction::ThrowExecute => true,
-            &ControlInstruction::Goto(_, _) => true,
+            &ControlInstruction::GotoExecute(..) => true,
             &ControlInstruction::Proceed => true,
-            &ControlInstruction::IsCall(_, _) => true,
-            &ControlInstruction::IsExecute(_, _) => true,
+            &ControlInstruction::IsCall(..) => true,
+            &ControlInstruction::IsExecute(..) => true,
+            &ControlInstruction::JmpByCall(..) => true,
+            &ControlInstruction::JmpByExecute(..) => true,
             _ => false
         }
     }

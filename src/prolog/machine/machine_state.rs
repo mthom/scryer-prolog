@@ -1672,8 +1672,8 @@ impl MachineState {
                     let val = self.try_functor();
                     self.p = self.cp;
                     val
-                }),
-            &ControlInstruction::Goto(p, arity) => {
+                }),            
+            &ControlInstruction::GotoExecute(p, arity) => {
                 self.num_of_args = arity;
                 self.b0 = self.b;
                 self.p  = CodePtr::DirEntry(p);
@@ -1691,6 +1691,17 @@ impl MachineState {
 
                 self.unify(a1, Addr::Con(Constant::Number(a2)));
                 self.p = self.cp;
+            },
+            &ControlInstruction::JmpByCall(arity, ref offset) => {
+                self.cp = self.p + 1;
+                self.num_of_args = arity;
+                self.b0 = self.b;
+                self.p += offset.get();
+            },
+            &ControlInstruction::JmpByExecute(arity, ref offset) => {                
+                self.num_of_args = arity;
+                self.b0 = self.b;
+                self.p += offset.get();
             },
             &ControlInstruction::Proceed =>
                 self.p = self.cp,

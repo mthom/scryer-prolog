@@ -1,8 +1,10 @@
 use prolog::ast::*;
 use prolog::codegen::*;
 use prolog::debray_allocator::*;
+use prolog::fixtures::*;
 use prolog::heap_print::*;
 use prolog::machine::*;
+use prolog::parser::toplevel::*;
 
 use termion::raw::IntoRawMode;
 use termion::input::TermRead;
@@ -89,7 +91,7 @@ impl fmt::Display for CompareNumberQT {
             &CompareNumberQT::LessThan => write!(f, "<"),
             &CompareNumberQT::LessThanOrEqual => write!(f, "<="),
             &CompareNumberQT::NotEqual => write!(f, "=\\="),
-            &CompareNumberQT::Equal => write!(f, "=:="),            
+            &CompareNumberQT::Equal => write!(f, "=:="),
         }
     }
 }
@@ -129,12 +131,16 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "deallocate"),
             &ControlInstruction::Execute(ref name, arity) =>
                 write!(f, "execute {}/{}", name, arity),
-            &ControlInstruction::Goto(p, arity) =>
-                write!(f, "goto {}/{}", p, arity),
+            &ControlInstruction::GotoExecute(p, arity) =>
+                write!(f, "goto_execute {}/{}", p, arity),
             &ControlInstruction::IsCall(r, ref at) =>
                 write!(f, "is_call {}, {}", r, at),
             &ControlInstruction::IsExecute(r, ref at) =>
                 write!(f, "is_execute {}, {}", r, at),
+            &ControlInstruction::JmpByCall(arity, ref offset) =>
+                write!(f, "jmp_by_call {}/{}", offset.get(), arity),
+            &ControlInstruction::JmpByExecute(arity, ref offset) =>
+                write!(f, "jmp_by_execute {}/{}", offset.get(), arity),
             &ControlInstruction::Proceed =>
                 write!(f, "proceed"),
             &ControlInstruction::ThrowCall =>
@@ -164,7 +170,7 @@ impl fmt::Display for BuiltInInstruction {
             &BuiltInInstruction::CleanUpBlock =>
                 write!(f, "clean_up_block"),
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
-                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),            
+                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
             &BuiltInInstruction::DynamicCompareNumber(cmp) =>
                 write!(f, "dynamic_number_test {}", cmp),
             &BuiltInInstruction::EraseBall =>
@@ -188,9 +194,9 @@ impl fmt::Display for BuiltInInstruction {
             &BuiltInInstruction::IsInteger(r) =>
                 write!(f, "is_integer {}", r),
             &BuiltInInstruction::DynamicIs =>
-                write!(f, "call_is"),  
+                write!(f, "call_is"),
             &BuiltInInstruction::IsVar(r) =>
-                write!(f, "is_var {}", r),            
+                write!(f, "is_var {}", r),
             &BuiltInInstruction::ResetBlock =>
                 write!(f, "reset_block"),
             &BuiltInInstruction::SetBall =>
@@ -354,6 +360,12 @@ pub fn print_code(code: &Code) {
     }
 }
 
+pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, ParserError>
+{
+    let mut worker = TopLevelWorker::new(wam.atom_tbl(), wam.op_dir());
+    worker.parse_code(buffer)
+}
+
 pub fn read() -> String {
     let _ = stdout().flush();
 
@@ -380,46 +392,90 @@ pub fn read() -> String {
     result
 }
 
-pub fn eval<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel) -> EvalSession<'b>
+// throw errors if declaration or query found.
+fn compile_relation(tl: &TopLevel) -> Result<Code, ParserError>
+{
+    let mut cg = CodeGenerator::<DebrayAllocator>::new();
+
+    match tl {
+        &TopLevel::Declaration(_) | &TopLevel::Query(_) =>
+            Err(ParserError::ExpectedRel),
+        &TopLevel::Predicate(ref clauses) =>
+            cg.compile_predicate(clauses),
+        &TopLevel::Fact(ref fact) =>
+            Ok(cg.compile_fact(fact)),
+        &TopLevel::Rule(ref rule) =>
+            cg.compile_rule(rule)
+    }
+}
+
+// set first jmp_by_call or jmp_by_index instruction to code.len() - idx,
+// where idx is the place it occurs. It only does this to the *first* uninitialized
+// jmp index it encounters, then returns.
+fn set_first_index(code: &Code)
+{
+    for (idx, line) in code.iter().enumerate() {
+        match line {
+            &Line::Control(ControlInstruction::JmpByExecute(_, ref offset))
+          | &Line::Control(ControlInstruction::JmpByCall(_, ref offset)) if offset.get() == 0 => {
+              offset.set(code.len() - idx);
+              break;
+            },
+            _ => {}
+        };
+    }
+}
+
+fn compile_appendix(code: &mut Code, queue: &Vec<TopLevel>) -> Result<(), ParserError>
+{
+    for tl in queue.iter() {
+        set_first_index(code);
+        code.append(&mut compile_relation(tl)?);
+    }
+
+    Ok(())
+}
+
+fn compile_query<'a>(terms: &'a Vec<QueryTerm>, queue: &'a Vec<TopLevel>)
+                     -> Result<(Code, AllocVarDict<'a>), ParserError>
+{
+    let mut cg = CodeGenerator::<DebrayAllocator>::new();
+    let mut code = try!(cg.compile_query(terms));    
+    
+    compile_appendix(&mut code, queue)?;
+
+    Ok((code, cg.take_vars()))
+}
+
+pub fn compile<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevelPacket) -> EvalSession<'b>
 {
     match tl {
-        &TopLevel::Declaration(ref decl) =>
+        &TopLevelPacket::Query(ref terms, ref queue) =>
+            match compile_query(terms, queue) {
+                Ok((code, vars)) => wam.submit_query(code, vars),
+                Err(e) => EvalSession::from(e)
+            },
+        &TopLevelPacket::Decl(TopLevel::Declaration(ref decl), _) =>
             wam.submit_decl(decl),
-        &TopLevel::Predicate(ref clauses) => {
-            let mut cg = CodeGenerator::<DebrayAllocator>::new();
-
-            let compiled_pred = match cg.compile_predicate(clauses) {
-                Ok(pred) => pred,
-                Err(e)   => return EvalSession::ParserError(e)
-            };
-
-            wam.add_predicate(clauses, compiled_pred)
-        },
-        &TopLevel::Fact(ref fact) => {
-            let mut cg = CodeGenerator::<DebrayAllocator>::new();
-
-            let compiled_fact = cg.compile_fact(fact);
-            wam.add_fact(fact, compiled_fact)
-        },
-        &TopLevel::Rule(ref rule) => {
-            let mut cg = CodeGenerator::<DebrayAllocator>::new();
-
-            let compiled_rule = match cg.compile_rule(rule) {
-                Ok(rule) => rule,
-                Err(e) => return EvalSession::ParserError(e)                
-            };
-
-            wam.add_rule(rule, compiled_rule)
-        },
-        &TopLevel::Query(ref query) => {
-            let mut cg = CodeGenerator::<DebrayAllocator>::new();
-
-            let compiled_query = match cg.compile_query(query) {
-                Ok(query) => query,
+        &TopLevelPacket::Decl(ref tl, ref queue) => {
+            let mut code = match compile_relation(tl) {
+                Ok(code) => code,
                 Err(e) => return EvalSession::ParserError(e)
             };
 
-            wam.submit_query(compiled_query, cg.take_vars())
+            if let Err(e) = compile_appendix(&mut code, queue) {
+                return EvalSession::from(e);
+            };
+
+            if !code.is_empty() {
+                if let Some(name) = tl.name() {
+                    wam.add_user_code(name, tl.arity(), code)
+                } else {
+                    EvalSession::NamelessEntry
+                }
+            } else {
+                EvalSession::ImpermissibleEntry(String::from("no code generated."))
+            }
         }
     }
 }
@@ -446,7 +502,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
             loop {
                 let mut result = EvalSession::QueryFailure;
                 let mut output = PrinterOutputter::new();
-                
+
                 let bindings = wam.heap_view(&heap_locs, output).result();
 
                 let stdin = stdin();

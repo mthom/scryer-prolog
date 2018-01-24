@@ -3,7 +3,6 @@ use prolog::fixtures::*;
 use prolog::heap_print::*;
 use prolog::io::*;
 use prolog::machine::*;
-use prolog::parser::toplevel::*;
 
 use std::collections::HashSet;
 use std::mem::swap;
@@ -69,6 +68,7 @@ pub fn collect_test_output<'a>(wam: &mut Machine, alloc_locs: AllocVarDict<'a>,
                                -> Vec<HashSet<String>>
 {
     let mut output = TestOutputter::new();
+    
     output = wam.heap_view(&heap_locs, output);
     output.cache();
     
@@ -86,6 +86,7 @@ pub fn collect_test_output_with_limit<'a>(wam: &mut Machine, alloc_locs: AllocVa
                                           -> Vec<HashSet<String>>
 {
     let mut output = TestOutputter::new();
+    
     output = wam.heap_view(&heap_locs, output);
     output.cache();
     
@@ -114,10 +115,10 @@ pub fn collect_test_output_with_limit<'a>(wam: &mut Machine, alloc_locs: AllocVa
 pub fn submit(wam: &mut Machine, buffer: &str) -> bool
 {
     wam.reset();
-
-    match parse_code(buffer.trim(), wam.atom_tbl(), wam.op_dir()) {
+        
+    match parse_code(wam, buffer) {
         Ok(tl) =>
-            match eval(wam, &tl) {
+            match compile(wam, &tl) {
                 EvalSession::InitialQuerySuccess(_, _) |
                 EvalSession::EntrySuccess |
                 EvalSession::SubsequentQuerySuccess =>
@@ -133,9 +134,9 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>
 {
     wam.reset();
 
-    match parse_code(buffer.trim(), wam.atom_tbl(), wam.op_dir()) {
+    match parse_code(wam, buffer) {
         Ok(tl) =>
-            match eval(wam, &tl) {
+            match compile(wam, &tl) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
                     result == collect_test_output(wam, alloc_locs, heap_locs),
                 EvalSession::EntrySuccess => true,
@@ -152,9 +153,9 @@ pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
 {
     wam.reset();
 
-    match parse_code(buffer.trim(), wam.atom_tbl(), wam.op_dir()) {
+    match parse_code(wam, buffer) {
         Ok(tl) =>
-            match eval(wam, &tl) {
+            match compile(wam, &tl) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
                     result == collect_test_output_with_limit(wam, alloc_locs,
                                                              heap_locs, limit),
