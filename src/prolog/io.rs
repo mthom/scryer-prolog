@@ -137,10 +137,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "is_call {}, {}", r, at),
             &ControlInstruction::IsExecute(r, ref at) =>
                 write!(f, "is_execute {}, {}", r, at),
-            &ControlInstruction::JmpByCall(arity, ref offset) =>
-                write!(f, "jmp_by_call {}/{}", offset.get(), arity),
-            &ControlInstruction::JmpByExecute(arity, ref offset) =>
-                write!(f, "jmp_by_execute {}/{}", offset.get(), arity),
+            &ControlInstruction::JmpByCall(arity, offset) =>
+                write!(f, "jmp_by_call {}/{}", offset, arity),
+            &ControlInstruction::JmpByExecute(arity, offset) =>
+                write!(f, "jmp_by_execute {}/{}", offset, arity),
             &ControlInstruction::Proceed =>
                 write!(f, "proceed"),
             &ControlInstruction::ThrowCall =>
@@ -412,13 +412,15 @@ fn compile_relation(tl: &TopLevel) -> Result<Code, ParserError>
 // set first jmp_by_call or jmp_by_index instruction to code.len() - idx,
 // where idx is the place it occurs. It only does this to the *first* uninitialized
 // jmp index it encounters, then returns.
-fn set_first_index(code: &Code)
+fn set_first_index(code: &mut Code)
 {
-    for (idx, line) in code.iter().enumerate() {
+    let code_len = code.len();
+    
+    for (idx, line) in code.iter_mut().enumerate() {
         match line {
-            &Line::Control(ControlInstruction::JmpByExecute(_, ref offset))
-          | &Line::Control(ControlInstruction::JmpByCall(_, ref offset)) if offset.get() == 0 => {
-              offset.set(code.len() - idx);
+            &mut Line::Control(ControlInstruction::JmpByExecute(_, ref mut offset))
+          | &mut Line::Control(ControlInstruction::JmpByCall(_, ref mut offset)) if *offset == 0 => {
+              *offset = code_len - idx;
               break;
             },
             _ => {}

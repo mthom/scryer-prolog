@@ -72,7 +72,7 @@ impl<'a> QueryIterator<'a> {
                 QueryIterator { state_stack: vec![state] }
             },
             &QueryTerm::Cut => QueryIterator { state_stack: vec![] },
-            &QueryTerm::Jump((ref vars, _)) => {
+            &QueryTerm::Jump(ref vars) => {
                 let state_stack = vars.iter().rev().map(|t| {
                     TermIterState::to_state(Level::Shallow, t)
                 }).collect();
@@ -273,7 +273,7 @@ impl<'a> ChunkedIterator<'a>
 
         while let Some(term) = item {
             match term {
-                &QueryTerm::Jump((ref vars, _)) => {
+                &QueryTerm::Jump(ref vars) => {
                     result.push(term);
                     arity = vars.len();
                     break;

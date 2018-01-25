@@ -254,8 +254,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 code.push(Line::Control(ControlInstruction::FunctorCall)),
             &QueryTerm::Inlined(_) =>
                 code.push(proceed!()),
-            &QueryTerm::Jump((ref vars, ref offset)) => {
-                code.push(jmp_call!(vars.len(), offset.clone()));
+            &QueryTerm::Jump(ref vars) => {
+                code.push(jmp_call!(vars.len(), 0));
             },
             &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref atom))) => {
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);

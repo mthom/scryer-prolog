@@ -367,7 +367,7 @@ pub enum CompareNumberQT {
 
 // vars of predicate, toplevel offset.  Vec<Term> is always a vector
 // of vars (we get their adjoining cells this way).
-pub type JumpStub = (Vec<Term>, Rc<Cell<usize>>);
+pub type JumpStub = Vec<Term>;
 
 pub enum QueryTerm {
     Arg(Vec<Box<Term>>),
@@ -395,7 +395,7 @@ impl QueryTerm {
             &QueryTerm::Functor(_) => 3,
             &QueryTerm::Inlined(ref term) => term.arity(),
             &QueryTerm::Is(_) => 2,
-            &QueryTerm::Jump((ref vars, _)) => vars.len(),
+            &QueryTerm::Jump(ref vars) => vars.len(),
             &QueryTerm::CallN(ref terms) => terms.len(),
             &QueryTerm::Cut => 0,
             &QueryTerm::Term(ref term) => term.arity(),
@@ -818,8 +818,8 @@ pub enum ControlInstruction {
     ExecuteN(usize),
     FunctorCall,
     FunctorExecute,
-    JmpByCall(usize, Rc<Cell<usize>>),    // arity, global_offset.
-    JmpByExecute(usize, Rc<Cell<usize>>), 
+    JmpByCall(usize, usize),    // arity, global_offset.
+    JmpByExecute(usize, usize), 
     // GotoCall(usize, usize),    // p, arity.
     GotoExecute(usize, usize), // p, arity.
     IsCall(RegType, ArithmeticTerm),

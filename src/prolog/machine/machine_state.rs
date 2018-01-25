@@ -1692,16 +1692,16 @@ impl MachineState {
                 self.unify(a1, Addr::Con(Constant::Number(a2)));
                 self.p = self.cp;
             },
-            &ControlInstruction::JmpByCall(arity, ref offset) => {
+            &ControlInstruction::JmpByCall(arity, offset) => {
                 self.cp = self.p + 1;
                 self.num_of_args = arity;
                 self.b0 = self.b;
-                self.p += offset.get();
+                self.p += offset;
             },
-            &ControlInstruction::JmpByExecute(arity, ref offset) => {                
+            &ControlInstruction::JmpByExecute(arity, offset) => {                
                 self.num_of_args = arity;
                 self.b0 = self.b;
-                self.p += offset.get();
+                self.p += offset;
             },
             &ControlInstruction::Proceed =>
                 self.p = self.cp,
