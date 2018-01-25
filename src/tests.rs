@@ -1109,3 +1109,60 @@ fn test_queries_on_arithmetic()
     assert_prolog_success!(&mut wam, "?- f(5, 33).");
     assert_prolog_failure!(&mut wam, "?- f(5, 32).");
 }
+
+#[test]
+fn test_queries_on_conditionals()
+{
+    let mut wam = Machine::new();
+    
+    submit(&mut wam, "test(A) :- (   A =:= 2 ->
+                                     display(\"A is 2\")
+                                 ;   A =:= 3 ->
+                                     display(\"A is 3\")
+                                 ;   A = \"not 2 or 3\"
+                                 ).");
+
+    assert_prolog_success!(&mut wam, "?- catch(test(A), instantiation_error(_), true).");
+    assert_prolog_success!(&mut wam, "?- A = 2, test(A).", [["A = 2"]]);
+    assert_prolog_success!(&mut wam, "?- A = 3, test(A), B = 3, test(B).", [["A = 3", "B = 3"]]);
+
+    submit(&mut wam, "f(a). f(b).");
+    submit(&mut wam, "g(1). g(2). g(3).");
+
+    submit(&mut wam, "typed_dispatch(X) :- ( var(X) -> f(X)
+                                           ; integer(X) -> g(X)
+                                           ; atomic(X)).");
+
+    assert_prolog_success!(&mut wam, "?- typed_dispatch(X).", [["X = a"], ["X = b"]]);
+    assert_prolog_success!(&mut wam, "?- typed_dispatch(a).");
+    assert_prolog_success!(&mut wam, "?- typed_dispatch(b).");
+    assert_prolog_success!(&mut wam, "?- typed_dispatch(c).");
+    assert_prolog_success!(&mut wam, "?- typed_dispatch(1).");
+    assert_prolog_success!(&mut wam, "?- typed_dispatch(2).");
+    assert_prolog_success!(&mut wam, "?- typed_dispatch(3).");
+    assert_prolog_failure!(&mut wam, "?- typed_dispatch(4).");
+    assert_prolog_failure!(&mut wam, "?- typed_dispatch(5).");
+    assert_prolog_failure!(&mut wam, "?- typed_dispatch(compound(term)).");
+
+    submit(&mut wam, "f(a). f(b). f(compound(term)).");
+    submit(&mut wam, "g(X, Y) :- f(X), (atomic(X) -> X = a ; X = a ; X = compound(Y)).");
+
+    assert_prolog_success!(&mut wam, "?- g(X, Y).",
+                           [["Y = _1", "X = a"],
+                            ["Y = term", "X = compound(term)"]]);
+
+    assert_prolog_success!(&mut wam, "?- g(X, X).", [["X = a"]]);
+    assert_prolog_success!(&mut wam, "?- g(compound(X), X).", [["X = term"]]);
+    assert_prolog_success!(&mut wam, "?- g(X, term).", [["X = a"], ["X = compound(term)"]]);
+    assert_prolog_success!(&mut wam, "?- g(a, _).");
+    assert_prolog_success!(&mut wam, "?- g(X, _), X = a.", [["X = a"]]);
+
+    submit(&mut wam, "g(X) :- var(X) -> (var(X) -> X is 3 + 3 ; X = not_6).");
+
+    assert_prolog_success!(&mut wam, "?- g(X).", [["X = 6"]]);
+    assert_prolog_failure!(&mut wam, "?- g(1).");
+    assert_prolog_failure!(&mut wam, "?- g(6).");
+    assert_prolog_failure!(&mut wam, "?- g(not_6).");
+
+    assert_prolog_success!(&mut wam, "?- f(X), (g(Y), !).", [["X = a", "Y = 6"]]);
+}
