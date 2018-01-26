@@ -1220,10 +1220,16 @@ fn test_queries_on_builtins()
 
     assert_prolog_success!(&mut wam, "?- functor(F, f, 0).", [["F = f"]]);
 
+    assert_prolog_success!(&mut wam, "?- functor(Func, f, 3).", [["Func = f(_2, _3, _4)"]]);
+    assert_prolog_success!(&mut wam, "?- functor(Func, f, 4).", [["Func = f(_2, _3, _4, _5)"]]);
+
     assert_prolog_success!(&mut wam, "?- catch(functor(F, \"sdf\", 3), E, true).",
                            [["E = instantiation_error", "F = _1"]]);
     assert_prolog_success!(&mut wam, "?- catch(functor(Func, F, 3), E, true).",
                            [["E = instantiation_error", "Func = _1", "F = _2"]]);
+    assert_prolog_success!(&mut wam, "?- catch(functor(Func, f, N), E, true).",
+                           [["E = instantiation_error", "Func = _1", "N = _3"]]);
+    assert_prolog_failure!(&mut wam, "?- catch(functor(Func, f, N), E, false).");
 
     assert_prolog_success!(&mut wam, "?- X is 3, call(integer, X).");
     assert_prolog_failure!(&mut wam, "?- X is 3 + 3.5, call(integer, X).");
