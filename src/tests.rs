@@ -749,7 +749,7 @@ fn test_queries_on_call_n()
     assert_prolog_success!(&mut wam, "?- f(p, x, Y).", [["Y = x"],
                                                         ["Y = y"]]);
     assert_prolog_success!(&mut wam, "?- f(p, X, y).", [["X = x"],
-                                                        ["X = y"]]);    
+                                                        ["X = y"]]);
     assert_prolog_success!(&mut wam, "?- f(p, x, y).");
     assert_prolog_failure!(&mut wam, "?- f(p, X, z).");
     assert_prolog_failure!(&mut wam, "?- f(p, z, Y).");
@@ -869,7 +869,7 @@ fn test_queries_on_call_n()
                             ["X = two"]]);
     assert_prolog_success!(&mut wam, "?- call_mult(p(X), one).",
                            [["X = one"]]);
-    
+
     assert_prolog_failure!(&mut wam, "?- call_mult(p(two), one).");
     assert_prolog_success!(&mut wam, "?- call_mult(p(two), two).");
 
@@ -1098,10 +1098,10 @@ fn test_queries_on_arithmetic()
 
     assert_prolog_success!(&mut wam, "?- catch(call(is, X, 3 // 0), E, true).",
                            [["X = _5", "E = evaluation_error(zero_divisor)"]]);
-    
+
     assert_prolog_success!(&mut wam, "?- catch(call(is, X, 3 // 3), _, true).", [["X = 1"]]);
 
-    submit(&mut wam, "f(X, Sum) :- ( integer(X) -> Sum is X + X * X + 3 ; 
+    submit(&mut wam, "f(X, Sum) :- ( integer(X) -> Sum is X + X * X + 3 ;
                                      var(X) -> Sum = 1, X = 1 ).");
 
     assert_prolog_success!(&mut wam, "?- f(X, Sum).", [["X = 1", "Sum = 1"]]);
@@ -1114,7 +1114,7 @@ fn test_queries_on_arithmetic()
 fn test_queries_on_conditionals()
 {
     let mut wam = Machine::new();
-    
+
     submit(&mut wam, "test(A) :- (   A =:= 2 ->
                                      display(\"A is 2\")
                                  ;   A =:= 3 ->
@@ -1165,4 +1165,68 @@ fn test_queries_on_conditionals()
     assert_prolog_failure!(&mut wam, "?- g(not_6).");
 
     assert_prolog_success!(&mut wam, "?- f(X), (g(Y), !).", [["X = a", "Y = 6"]]);
+}
+
+#[test]
+fn test_queries_on_builtins()
+{
+    let mut wam = Machine::new();
+
+    assert_prolog_failure!(&mut wam, "?- atomic(X).");
+
+    assert_prolog_success!(&mut wam, "?- var(X), X = 3, atomic(X).", [["X = 3"]]);
+    assert_prolog_failure!(&mut wam, "?- var(X), X = 3, var(X).");
+
+    assert_prolog_success!(&mut wam, "?- arg(N, f(a,b,c,d), Arg).",
+                           [["N = 1", "Arg = a"],
+                            ["N = 2", "Arg = b"],
+                            ["N = 3", "Arg = c"],
+                            ["N = 4", "Arg = d"]]);
+
+    assert_prolog_success!(&mut wam, "?- arg(1, f(a,b,c,d), Arg).", [["Arg = a"]]);
+    assert_prolog_success!(&mut wam, "?- arg(2, f(a,b,c,d), Arg).", [["Arg = b"]]);
+    assert_prolog_success!(&mut wam, "?- arg(3, f(a,b,c,d), Arg).", [["Arg = c"]]);
+    assert_prolog_success!(&mut wam, "?- arg(4, f(a,b,c,d), Arg).", [["Arg = d"]]);
+
+    assert_prolog_success!(&mut wam, "?- catch(arg(N, f, Arg), type_error(E), true).",
+                           [["E = compound_expected", "Arg = _3", "N = _1"]]);
+    assert_prolog_success!(&mut wam, "?- catch(arg(N, _, Arg), E, true).",
+                           [["E = instantiation_error", "Arg = _3", "N = _1"]]);
+
+    assert_prolog_success!(&mut wam, "?- arg(N, f(X, Y, Z), arg_val).",
+                           [["X = arg_val", "Y = _3", "N = 1", "Z = _4"],
+                            ["X = _2", "Y = arg_val", "N = 2", "Z = _4"],
+                            ["X = _2", "Y = _3", "N = 3", "Z = arg_val"]]);
+
+    assert_prolog_success!(&mut wam, "?- arg(N, f(arg, not_arg, arg, X), arg).",
+                           [["X = _5", "N = 1"],
+                            ["X = _5", "N = 3"],
+                            ["X = arg", "N = 4"]]);
+
+    assert_prolog_failure!(&mut wam, "?- arg(N, f(arg, arg, arg), not_arg).");
+    assert_prolog_failure!(&mut wam, "?- arg(1, f(arg, not_arg, not_arg), not_arg).");
+    assert_prolog_success!(&mut wam, "?- arg(2, f(arg, not_arg, not_arg), not_arg).");
+    assert_prolog_success!(&mut wam, "?- arg(3, f(arg, not_arg, not_arg), not_arg).");
+
+    assert_prolog_success!(&mut wam, "?- functor(f(a,b,c), F, Arity).",
+                           [["F = f", "Arity = 3"]]);
+
+    assert_prolog_success!(&mut wam, "?- functor(f(a,b,c), F, N).",
+                           [["F = f", "N = 3"]]);
+    assert_prolog_failure!(&mut wam, "?- functor(f(a,b,c), g, N).");
+    assert_prolog_success!(&mut wam, "?- functor(f(a,b,c), F, 3).", [["F = f"]]);
+    assert_prolog_failure!(&mut wam, "?- functor(f(a,b,c), F, 4).");
+    assert_prolog_failure!(&mut wam, "?- functor(f(a,b,c), g, 3).");
+
+    assert_prolog_success!(&mut wam, "?- functor(F, f, 0).", [["F = f"]]);
+
+    assert_prolog_success!(&mut wam, "?- catch(functor(F, \"sdf\", 3), E, true).",
+                           [["E = instantiation_error", "F = _1"]]);
+    assert_prolog_success!(&mut wam, "?- catch(functor(Func, F, 3), E, true).",
+                           [["E = instantiation_error", "Func = _1", "F = _2"]]);
+
+    assert_prolog_success!(&mut wam, "?- X is 3, call(integer, X).");
+    assert_prolog_failure!(&mut wam, "?- X is 3 + 3.5, call(integer, X).");
+    assert_prolog_success!(&mut wam, "?- X is 3 + 3.5, \\+ call(integer, X).");
+    assert_prolog_success!(&mut wam, "?- X is 3 + 3.5, \\+ integer(X).");
 }

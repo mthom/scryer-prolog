@@ -1516,7 +1516,12 @@ impl MachineState {
                             }
                         };
 
-                        self.heap.push(HeapCellValue::NamedStr(arity, name, None));
+                        if arity > 0 {
+                            self.heap.push(HeapCellValue::NamedStr(arity, name, None));
+                        } else {
+                            let c = Constant::Atom(name.clone());
+                            self.heap.push(HeapCellValue::Addr(Addr::Con(c)));
+                        }
 
                         for _ in 0 .. arity {
                             let h = self.heap.h;
