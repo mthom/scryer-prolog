@@ -1168,9 +1168,11 @@ fn test_queries_on_conditionals()
 
     submit(&mut wam, "test(X, [X]) :- (atomic(X) -> true ; throw(type_error(atomic_expected, X))).
                       test(_, _).");
-    //TODO: this test should fail, not succeed! fix it.
+    
     assert_prolog_success!(&mut wam, "?- catch(test(a, [a]), type_error(E), true).",
                            [["E = _6"], ["E = _6"]]);
+
+    //TODO: write tests for calling ;, ->, confirm behavior is correct.
 }
 
 #[test]
