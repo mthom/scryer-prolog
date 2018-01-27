@@ -289,7 +289,154 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          dynamic_num_test!(cmp_ne!()), // =\=, 204.
          proceed!(),
          dynamic_num_test!(cmp_eq!()), // =:=, 206.
-         proceed!()
+         proceed!(),
+         try_me_else!(5), // =.., 208.
+         fact![get_var_in_fact!(temp_v!(3), 1),
+               get_list!(Level::Shallow, temp_v!(2)),
+               unify_value!(temp_v!(3)),
+               unify_constant!(Constant::EmptyList)],
+         is_atomic!(temp_v!(3)),
+         neck_cut!(),
+         proceed!(),
+         retry_me_else!(11),
+         allocate!(4),
+         get_level!(),
+         fact![get_var_in_fact!(perm_v!(3), 1),
+               get_list!(Level::Shallow, temp_v!(2)),
+               unify_variable!(temp_v!(2)),
+               unify_variable!(perm_v!(4))],
+         is_var!(perm_v!(4)),
+         query![put_value!(perm_v!(3), 1),
+                put_var!(perm_v!(2), 3)],
+         functor_call!(),
+         cut!(),
+         query![put_unsafe_value!(4, 1),
+                put_value!(perm_v!(3), 2),
+                put_constant!(Level::Shallow, integer!(1), temp_v!(3)),
+                put_unsafe_value!(2, 4)],
+         deallocate!(),
+         goto_execute!(236, 4), // goto get_args/4.
+         trust_me!(),
+         allocate!(5),
+         get_level!(),
+         fact![get_var_in_fact!(perm_v!(3), 1),
+               get_list!(Level::Shallow, temp_v!(2)),
+               unify_variable!(perm_v!(5)),
+               unify_variable!(perm_v!(4))],
+         query![put_value!(perm_v!(4), 1),
+                put_var!(perm_v!(2), 2)],
+         goto_call!(261, 2), // goto length/2.
+         query![put_value!(perm_v!(3), 1),
+                put_value!(perm_v!(5), 2),
+                put_value!(perm_v!(2), 3)],
+         functor_call!(),
+         cut!(),
+         query![put_unsafe_value!(4, 1),
+                put_value!(perm_v!(3), 2),
+                put_constant!(Level::Shallow, integer!(1), temp_v!(3)),
+                put_unsafe_value!(2, 4)],
+         deallocate!(),
+         goto_execute!(236, 4), // goto get_args/4, 236.
+         try_me_else!(5), // get_args/4, 236.
+         fact![get_var_in_fact!(temp_v!(5), 1),
+               get_constant!(integer!(0), temp_v!(4))],
+         neck_cut!(),
+         query![put_value!(temp_v!(5), 1),
+                put_constant!(Level::Shallow, Constant::EmptyList, temp_v!(2))],
+         goto_execute!(73, 2), // goto =/2.
+         trust_me!(),
+         switch_on_term!(3, 0, 1, 0),
+         indexed_try!(3),
+         trust!(7),
+         try_me_else!(5),
+         fact![get_list!(Level::Shallow, temp_v!(1)),
+               unify_variable!(temp_v!(5)),
+               unify_constant!(Constant::EmptyList),
+               get_var_in_fact!(temp_v!(6), 2),
+               get_var_in_fact!(temp_v!(1), 3),
+               get_value!(temp_v!(1), 4)],
+         neck_cut!(),
+         query![put_value!(temp_v!(6), 2),
+                put_value!(temp_v!(5), 3)],
+         arg_execute!(),
+         trust_me!(),
+         allocate!(5),
+         fact![get_list!(Level::Shallow, temp_v!(1)),
+               unify_variable!(temp_v!(5)),
+               unify_variable!(perm_v!(4)),
+               get_var_in_fact!(perm_v!(3), 2),
+               get_var_in_fact!(perm_v!(5), 3),
+               get_var_in_fact!(perm_v!(1), 4)],
+         query![put_value!(perm_v!(5), 1),
+                put_value!(perm_v!(3), 2),
+                put_value!(temp_v!(5), 3)],
+         arg_call!(),                     
+         add!(ArithmeticTerm::Reg(perm_v!(5)),
+              ArithmeticTerm::Number(rc_integer!(1)),
+              1),
+         query![put_var!(perm_v!(2), 1)],
+         is_call!(perm_v!(2), ArithmeticTerm::Interm(1)),
+         query![put_unsafe_value!(4, 1),
+                put_value!(perm_v!(3), 2),
+                put_unsafe_value!(2, 3),
+                put_value!(perm_v!(1), 4)],
+         deallocate!(),
+         goto_execute!(236, 4), // goto get_args/4, 236.
+         try_me_else!(6), // length/2, 261.
+         fact![get_var_in_fact!(temp_v!(4), 1),
+               get_var_in_fact!(temp_v!(3), 2)],
+         is_var!(temp_v!(3)),
+         neck_cut!(),
+         query![put_value!(temp_v!(4), 1),
+                put_constant!(Level::Shallow, integer!(0), temp_v!(2))],
+         goto_execute!(281, 3), // goto length/3, 281.         
+         retry_me_else!(10),
+         allocate!(1),
+         get_level!(),
+         fact![get_var_in_fact!(temp_v!(4), 1),
+               get_var_in_fact!(temp_v!(3), 2)],
+         is_integer!(temp_v!(3)),         
+         query![put_value!(temp_v!(4), 1),
+                put_constant!(Level::Shallow, integer!(0), temp_v!(2))],
+         goto_call!(281, 3), // goto length/3, 281.
+         cut!(),
+         deallocate!(),
+         proceed!(),
+         trust_me!(),
+         fact![get_var_in_fact!(temp_v!(3), 1),
+               get_var_in_fact!(temp_v!(4), 2)],
+         query![put_structure!(atom_tbl,
+                               Level::Shallow,
+                               String::from("type_error"),
+                               2,
+                               temp_v!(1),
+                               None),
+                set_constant!(atom!("integer_expected", atom_tbl)),
+                set_value!(temp_v!(4))],
+         goto_execute!(59, 1), // goto throw/1, 59. 
+         switch_on_term!(1,2,5,0), // length/3, 281.
+         try_me_else!(3), 
+         fact![get_constant!(Constant::EmptyList, temp_v!(1)),
+               get_var_in_fact!(temp_v!(4), 2),
+               get_value!(temp_v!(4), 3)],
+         proceed!(),
+         trust_me!(),
+         allocate!(3),
+         fact![get_list!(Level::Shallow, temp_v!(1)),
+               unify_void!(1),
+               unify_variable!(perm_v!(1)),
+               get_var_in_fact!(temp_v!(4), 2),
+               get_var_in_fact!(perm_v!(3), 3)],
+         add!(ArithmeticTerm::Reg(temp_v!(4)),
+              ArithmeticTerm::Number(rc_integer!(1)),
+              1),
+         query![put_var!(perm_v!(2), 1)],
+         is_call!(perm_v!(2), ArithmeticTerm::Interm(1)),
+         query![put_unsafe_value!(1, 1),
+                put_unsafe_value!(2, 2),
+                put_value!(perm_v!(3), 3)],
+         deallocate!(),
+         goto_execute!(281, 3) // goto length/3, 281.
     ]
 }
 
@@ -338,6 +485,8 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     op_dir.insert((tabled_rc!(";", atom_tbl), Fixity::In), (XFY, 1100));
     op_dir.insert((tabled_rc!("->", atom_tbl), Fixity::In), (XFY, 1050));
 
+    op_dir.insert((tabled_rc!("=..", atom_tbl), Fixity::In), (XFX, 700));
+    
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
@@ -362,7 +511,7 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("arg", atom_tbl), 3), (PredicateKeyType::BuiltIn, 150));
     code_dir.insert((tabled_rc!("integer", atom_tbl), 1), (PredicateKeyType::BuiltIn, 147));
     code_dir.insert((tabled_rc!("display", atom_tbl), 1), (PredicateKeyType::BuiltIn, 192));
-    
+
     code_dir.insert((tabled_rc!("is", atom_tbl), 2), (PredicateKeyType::BuiltIn, 194));
     code_dir.insert((tabled_rc!(">", atom_tbl), 2), (PredicateKeyType::BuiltIn, 196));
     code_dir.insert((tabled_rc!("<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 198));
@@ -370,6 +519,9 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("<=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 202));
     code_dir.insert((tabled_rc!("=\\=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 204));
     code_dir.insert((tabled_rc!("=:=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 206));
+    code_dir.insert((tabled_rc!("=..", atom_tbl), 2), (PredicateKeyType::BuiltIn, 208));
 
+    code_dir.insert((tabled_rc!("length", atom_tbl), 2), (PredicateKeyType::BuiltIn, 261));
+    
     (builtin_code, code_dir, op_dir)
 }

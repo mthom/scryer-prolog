@@ -131,6 +131,8 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "deallocate"),
             &ControlInstruction::Execute(ref name, arity) =>
                 write!(f, "execute {}/{}", name, arity),
+            &ControlInstruction::GotoCall(p, arity) =>
+                write!(f, "goto_call {}/{}", p, arity),
             &ControlInstruction::GotoExecute(p, arity) =>
                 write!(f, "goto_execute {}/{}", p, arity),
             &ControlInstruction::IsCall(r, ref at) =>
@@ -469,6 +471,8 @@ pub fn compile<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevelPacket) -> Eval
                 return EvalSession::from(e);
             };
 
+            print_code(&code);
+            
             if !code.is_empty() {
                 if let Some(name) = tl.name() {
                     wam.add_user_code(name, tl.arity(), code)

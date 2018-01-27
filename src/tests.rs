@@ -1253,4 +1253,39 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- X is 3 + 3.5, call(integer, X).");
     assert_prolog_success!(&mut wam, "?- X is 3 + 3.5, \\+ call(integer, X).");
     assert_prolog_success!(&mut wam, "?- X is 3 + 3.5, \\+ integer(X).");
+
+    assert_prolog_success!(&mut wam, "?- Func =.. [atom].", [["Func = atom"]]);
+    assert_prolog_success!(&mut wam, "?- Func =.. [\"sdf\"].", [["Func = \"sdf\""]]);
+    assert_prolog_success!(&mut wam, "?- Func =.. [1].", [["Func = 1"]]);
+    assert_prolog_success!(&mut wam, "?- catch(Func =.. [1,2], instantiation_error, true).");
+    assert_prolog_success!(&mut wam, "?- f(1,2,3) =.. List.", [["List = [f, 1, 2, 3]"]]);
+    assert_prolog_success!(&mut wam, "?- f(1,2,3) =.. [f,1,2,3].");
+    assert_prolog_failure!(&mut wam, "?- f(1,2,3) =.. [f,1].");
+    assert_prolog_failure!(&mut wam, "?- f(1,2,3) =.. [g,1,2,3].");
+
+    assert_prolog_success_with_limit!(&mut wam, "?- length(Xs, N).",
+                                      [["N = 0", "Xs = []"],
+                                       ["N = 1", "Xs = [_3]"],
+                                       ["N = 2", "Xs = [_3, _6]"],
+                                       ["N = 3", "Xs = [_3, _6, _9]"],
+                                       ["N = 4", "Xs = [_3, _6, _9, _12]"],
+                                       ["N = 5", "Xs = [_3, _6, _9, _12, _15]"]],
+                                      6);
+
+    assert_prolog_success!(&mut wam, "?- length(Xs, 3).", [["Xs = [_2, _5, _8]"]]);
+    assert_prolog_success!(&mut wam, "?- length([a,b,c], N).", [["N = 3"]]);
+    assert_prolog_success!(&mut wam, "?- length([], N).", [["N = 0"]]);
+    assert_prolog_success!(&mut wam, "?- length(Xs, 0).", [["Xs = []"]]);
+    assert_prolog_success!(&mut wam, "?- length([a,b,[a,b,c]], 3).");
+    assert_prolog_failure!(&mut wam, "?- length([a,b,[a,b,c]], 2).");
+    assert_prolog_success!(&mut wam, "?- catch(length(a, []), type_error(_, E), true).",
+                           [["E = []"]]);
+
+    assert_prolog_success!(&mut wam, "?- duplicate_term([1,2,3], [X,Y,Z]).",
+                           [["Z = 3", "Y = 2", "X = 1"]]);
+    assert_prolog_success!(&mut wam, "?- duplicate_term(f(X, [a], Z), f(X, Y, Z)).",
+                           [["X = _3", "Y = [a]", "Z = _5"]]);
+    assert_prolog_failure!(&mut wam, "?- duplicate_term(g(X), f(X)).");
+    assert_prolog_success!(&mut wam, "?- duplicate_term(f(X), f(X)).",
+                           [["X = _1"]]);
 }

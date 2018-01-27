@@ -96,6 +96,12 @@ macro_rules! get_value {
     )
 }
 
+macro_rules! set_value {
+    ($r:expr) => (
+        QueryInstruction::SetValue($r)
+    )
+}
+
 macro_rules! get_var_in_fact {
     ($r:expr, $arg:expr) => (
         FactInstruction::GetVariable($r, $arg)
@@ -213,6 +219,12 @@ macro_rules! get_current_block {
 macro_rules! install_new_block {
     () => (
         Line::BuiltIn(BuiltInInstruction::InstallNewBlock)
+    )
+}
+
+macro_rules! goto_call {
+    ($line:expr, $arity:expr) => (
+        Line::Control(ControlInstruction::GotoCall($line, $arity))
     )
 }
 
@@ -346,6 +358,24 @@ macro_rules! functor_execute {
     )
 }
 
+macro_rules! arg_execute {
+    () => (
+        Line::Control(ControlInstruction::ArgExecute)
+    )
+}
+
+macro_rules! arg_call {
+    () => (
+        Line::Control(ControlInstruction::ArgCall)
+    )
+}
+
+macro_rules! unify_value {
+    ($r:expr) => (
+        FactInstruction::UnifyValue($r)
+    )
+}
+
 macro_rules! unify_variable {
     ($r:expr) => (
         FactInstruction::UnifyVariable($r)
@@ -463,5 +493,17 @@ macro_rules! cmp_eq {
 macro_rules! jmp_call {
     ($arity:expr, $offset:expr) => (
         Line::Control(ControlInstruction::JmpByCall($arity, $offset))
+    )
+}
+
+macro_rules! get_list {
+    ($lvl:expr, $r:expr) => (
+        FactInstruction::GetList($lvl, $r)
+    )
+}
+
+macro_rules! unify_constant {
+    ($c:expr) => (
+        FactInstruction::UnifyConstant($c)
     )
 }

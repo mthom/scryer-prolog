@@ -1677,7 +1677,13 @@ impl MachineState {
                     let val = self.try_functor();
                     self.p = self.cp;
                     val
-                }),            
+                }),
+            &ControlInstruction::GotoCall(p, arity) => {
+                self.cp = self.p + 1;
+                self.num_of_args = arity;
+                self.b0 = self.b;
+                self.p  = CodePtr::DirEntry(p);
+            },
             &ControlInstruction::GotoExecute(p, arity) => {
                 self.num_of_args = arity;
                 self.b0 = self.b;

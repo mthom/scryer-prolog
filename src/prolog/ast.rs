@@ -820,7 +820,7 @@ pub enum ControlInstruction {
     FunctorExecute,
     JmpByCall(usize, usize),    // arity, global_offset.
     JmpByExecute(usize, usize), 
-    // GotoCall(usize, usize),    // p, arity.
+    GotoCall(usize, usize),    // p, arity.
     GotoExecute(usize, usize), // p, arity.
     IsCall(RegType, ArithmeticTerm),
     IsExecute(RegType, ArithmeticTerm),
@@ -848,6 +848,7 @@ impl ControlInstruction {
             &ControlInstruction::FunctorExecute => true,
             &ControlInstruction::ThrowCall => true,
             &ControlInstruction::ThrowExecute => true,
+            &ControlInstruction::GotoCall(..) => true,            
             &ControlInstruction::GotoExecute(..) => true,
             &ControlInstruction::Proceed => true,
             &ControlInstruction::IsCall(..) => true,

@@ -78,6 +78,7 @@ The following predicates are built-in to rusty-wam.
     * Comparison operators: `>`, `<`, `=<`, `>=`, `=:=`, `=\=`.
 * `(\+)/1`
 * `(=)/2`
+* `(=..)/2`
 * `(->)/2`
 * `(;)/2`
 * `arg/3`
@@ -89,6 +90,7 @@ The following predicates are built-in to rusty-wam.
 * `false/0`
 * `functor/3`
 * `integer/1`
+* `length/2`
 * `throw/1`
 * `true/0`
 * `var/1`
