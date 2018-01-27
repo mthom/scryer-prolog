@@ -483,12 +483,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         let conjunct_info = self.collect_var_data(iter);
 
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
-        let mut code = Vec::new();
-
-        self.marker.reset_arg(p0.arity());
-        self.compile_seq_prelude(&conjunct_info, &mut code);
+        let mut code = Vec::new();        
 
         if let &QueryTerm::Term(ref term) = p0 {
+            self.marker.reset_arg_at_head(term);
+            self.compile_seq_prelude(&conjunct_info, &mut code);
+            
             if let &Term::Clause(..) = term {
                 let iter = FactInstruction::iter(term);
                 let fact = self.compile_target(iter, GenContext::Head, false);
@@ -557,7 +557,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         vs.populate_restricting_sets();
 
         self.marker.drain_var_data(vs);
-        self.marker.reset_arg(term.arity());
+        self.marker.reset_arg_at_head(term);
 
         let mut code = Vec::new();
 

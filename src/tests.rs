@@ -1172,7 +1172,9 @@ fn test_queries_on_conditionals()
     assert_prolog_success!(&mut wam, "?- catch(test(a, [a]), type_error(E), true).",
                            [["E = _6"], ["E = _6"]]);
 
-    //TODO: write tests for calling ;, ->, confirm behavior is correct.
+    //TODO: write tests for calling ;, ->, to confirm behavior is correct.
+    assert_prolog_success!(&mut wam, "?- f(X), call(->, atomic(X), true).",
+                           [["X = a"], ["X = b"]]);
 }
 
 #[test]

@@ -138,10 +138,7 @@ impl<'a> DebrayAllocator<'a> {
         };
     }
 
-    fn alloc_reg_to_var<Target>(&mut self,
-                                var: &'a Var,
-                                lvl: Level,
-                                term_loc: GenContext,
+    fn alloc_reg_to_var<Target>(&mut self, var: &'a Var, lvl: Level, term_loc: GenContext,
                                 target: &mut Vec<Target>)
                                 -> usize
         where Target: CompilationTarget<'a>
@@ -250,12 +247,8 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
         }
     }
 
-    fn mark_var<Target>(&mut self,
-                        var: &'a Var,
-                        lvl: Level,
-                        cell: &'a Cell<VarReg>,
-                        term_loc: GenContext,
-                        target: &mut Vec<Target>)
+    fn mark_var<Target>(&mut self, var: &'a Var, lvl: Level, cell: &'a Cell<VarReg>,
+                        term_loc: GenContext, target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
         let (r, is_new_var) = match self.get(var) {
@@ -351,5 +344,20 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
     fn reset_arg(&mut self, arity: usize) {
         self.arg_c   = 1;
         self.temp_lb = arity + 1;
+    }
+
+    fn reset_arg_at_head(&mut self, term: &Term) {
+        self.arg_c = 1;
+        self.temp_lb = term.arity() + 1;
+
+        match term {
+            &Term::Clause(_, _, ref subterms, _) =>
+                for (idx, tr) in subterms.iter().enumerate() {
+                    if let &Term::Var(_, _) = tr.as_ref() {
+                        self.in_use.insert(idx + 1);
+                    }
+                },
+            _ => {}
+        };
     }
 }

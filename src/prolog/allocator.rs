@@ -18,6 +18,7 @@ pub trait Allocator<'a>
     fn reset(&mut self);
     fn reset_contents(&mut self) {}
     fn reset_arg(&mut self, usize);
+    fn reset_arg_at_head(&mut self, &Term);
     
     fn advance_arg(&mut self);
 
