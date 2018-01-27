@@ -358,18 +358,6 @@ macro_rules! functor_execute {
     )
 }
 
-macro_rules! arg_execute {
-    () => (
-        Line::Control(ControlInstruction::ArgExecute)
-    )
-}
-
-macro_rules! arg_call {
-    () => (
-        Line::Control(ControlInstruction::ArgCall)
-    )
-}
-
 macro_rules! unify_value {
     ($r:expr) => (
         FactInstruction::UnifyValue($r)
@@ -412,9 +400,15 @@ macro_rules! add {
     )
 }
 
-macro_rules! get_arg {
+macro_rules! get_arg_call {
     () => (
-        Line::BuiltIn(BuiltInInstruction::GetArg)
+        Line::BuiltIn(BuiltInInstruction::GetArgCall)
+    )
+}
+
+macro_rules! get_arg_execute {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::GetArgExecute)
     )
 }
 

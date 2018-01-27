@@ -195,7 +195,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          functor_execute!(), // functor/3, 146.
          is_integer!(temp_v!(1)), // integer/1, 147.
          proceed!(),
-         get_arg!(), // get_arg/3, 149.
+         get_arg_execute!(), // get_arg/3, 149.
          try_me_else!(10), // arg/3, 150.
          allocate!(4),
          fact![get_var_in_fact!(perm_v!(1), 1),
@@ -358,7 +358,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          neck_cut!(),
          query![put_value!(temp_v!(6), 2),
                 put_value!(temp_v!(5), 3)],
-         arg_execute!(),
+         get_arg_execute!(),
          trust_me!(),
          allocate!(5),
          fact![get_list!(Level::Shallow, temp_v!(1)),
@@ -370,7 +370,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          query![put_value!(perm_v!(5), 1),
                 put_value!(perm_v!(3), 2),
                 put_value!(temp_v!(5), 3)],
-         arg_call!(),                     
+         get_arg_call!(),                     
          add!(ArithmeticTerm::Reg(perm_v!(5)),
               ArithmeticTerm::Number(rc_integer!(1)),
               1),

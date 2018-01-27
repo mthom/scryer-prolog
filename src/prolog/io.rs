@@ -124,9 +124,9 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::ExecuteN(arity) =>
                 write!(f, "execute_N {}", arity),
             &ControlInstruction::FunctorCall =>
-                write!(f, "call_functor"),
+                write!(f, "functor_call"),
             &ControlInstruction::FunctorExecute =>
-                write!(f, "execute_functor"),
+                write!(f, "functor_execute"),
             &ControlInstruction::Deallocate =>
                 write!(f, "deallocate"),
             &ControlInstruction::Execute(ref name, arity) =>
@@ -179,8 +179,10 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "erase_ball"),
             &BuiltInInstruction::Fail =>
                 write!(f, "false"),
-            &BuiltInInstruction::GetArg =>
-                write!(f, "get_arg X1, X2, X3"),
+            &BuiltInInstruction::GetArgCall =>
+                write!(f, "get_arg_call X1, X2, X3"),
+            &BuiltInInstruction::GetArgExecute =>
+                write!(f, "get_arg_execute X1, X2, X3"),
             &BuiltInInstruction::GetBall =>
                 write!(f, "get_ball X1"),
             &BuiltInInstruction::GetCurrentBlock =>
@@ -471,8 +473,6 @@ pub fn compile<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevelPacket) -> Eval
                 return EvalSession::from(e);
             };
 
-            print_code(&code);
-            
             if !code.is_empty() {
                 if let Some(name) = tl.name() {
                     wam.add_user_code(name, tl.arity(), code)

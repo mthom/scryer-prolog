@@ -1325,7 +1325,13 @@ impl MachineState {
                 self.unify(a, Addr::Con(Constant::Number(result)));
                 self.p += 1;
             },
-            &BuiltInInstruction::GetArg =>
+            &BuiltInInstruction::GetArgCall =>
+                try_or_fail!(self, {                    
+                    let val = self.try_get_arg();
+                    self.p += 1;
+                    val
+                }),
+            &BuiltInInstruction::GetArgExecute =>
                 try_or_fail!(self, {
                     let val = self.try_get_arg();
                     self.p = self.cp;
