@@ -20,7 +20,7 @@ Extend rusty-wam to include the following, among other features:
 * Built-in and user-defined operators of all fixities, with custom
   associativity and precedence (_done_). 
 * Bignum, rational number and floating point arithmetic (_done_).
-* Built-in control operators (`,`, `;`, `->`, etc.) (_done_).
+* Built-in control operators (`,`, `;`, `->`, etc.) (_in progress_).
 * Built-in predicates for list processing and top-level declarative
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
   etc.)

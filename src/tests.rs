@@ -1165,6 +1165,12 @@ fn test_queries_on_conditionals()
     assert_prolog_failure!(&mut wam, "?- g(not_6).");
 
     assert_prolog_success!(&mut wam, "?- f(X), (g(Y), !).", [["X = a", "Y = 6"]]);
+
+    submit(&mut wam, "test(X, [X]) :- (atomic(X) -> true ; throw(type_error(atomic_expected, X))).
+                      test(_, _).");
+    //TODO: this test should fail, not succeed! fix it.
+    assert_prolog_success!(&mut wam, "?- catch(test(a, [a]), type_error(E), true).",
+                           [["E = _6"], ["E = _6"]]);
 }
 
 #[test]
@@ -1173,6 +1179,14 @@ fn test_queries_on_builtins()
     let mut wam = Machine::new();
 
     assert_prolog_failure!(&mut wam, "?- atomic(X).");
+    assert_prolog_success!(&mut wam, "?- atomic(a).");
+    assert_prolog_success!(&mut wam, "?- atomic(\"string\").");
+    assert_prolog_success!(&mut wam, "?- atomic([]).");
+    assert_prolog_success!(&mut wam, "?- atomic(1).");
+    assert_prolog_success!(&mut wam, "?- atomic(0).");
+    assert_prolog_success!(&mut wam, "?- atomic(0.0).");
+    assert_prolog_failure!(&mut wam, "?- atomic([a,b,c]).");
+    assert_prolog_failure!(&mut wam, "?- atomic(atop(the_trees)).");
 
     assert_prolog_success!(&mut wam, "?- var(X), X = 3, atomic(X).", [["X = 3"]]);
     assert_prolog_failure!(&mut wam, "?- var(X), X = 3, var(X).");
