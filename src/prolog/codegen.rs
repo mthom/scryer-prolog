@@ -372,8 +372,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         Ok(())
     }
 
-    fn call_arith_eval(&self, term: &'a Term, target_int: usize)
-                       -> Result<ArithCont, ArithmeticError>
+    fn call_arith_eval(&self, term: &'a Term, target_int: usize) -> Result<ArithCont, ArithmeticError>
     {
         let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings(), target_int);
         evaluator.eval(term)
@@ -383,7 +382,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                    code: &mut Code, is_exposed: bool)
                    -> Result<(), ParserError>
     {
-        for (chunk_num, _, terms) in iter {
+        for (chunk_num, _, terms) in iter
+        {
             for (i, term) in terms.iter().enumerate()
             {
                 let term_loc = if i + 1 < terms.len() {
@@ -475,10 +475,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         if conjunct_info.allocates() {
             code.insert(dealloc_index, Line::Control(ControlInstruction::Deallocate));
         }
-
-        // mark the first uninitialized jmp command (if there is one)
-        // by code.len() - index.
-        //TODO
     }
 
     pub fn compile_rule<'b: 'a>(&mut self, rule: &'b Rule) -> Result<Code, ParserError>
