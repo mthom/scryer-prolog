@@ -5,26 +5,15 @@ use std::vec::Vec;
 
 pub struct HeapCellPreOrderIterator<'a> {
     machine_st  : &'a MachineState,
-    state_stack : Vec<Ref>
+    state_stack : Vec<Addr>
 }
 
 impl<'a> HeapCellPreOrderIterator<'a> {
-    pub fn new(machine_st: &'a MachineState, r: Ref) -> Self
+    pub fn new(machine_st: &'a MachineState, a: Addr) -> Self
     {
         HeapCellPreOrderIterator {
             machine_st,
-            state_stack: vec![r]
-        }
-    }
-
-    // called under the assumption that the location at r is about to
-    // be visited, and so any follow up states need to be added to
-    // state_stack. returns the dereferenced Addr from Ref.
-    fn follow(&mut self, r: Ref) -> Addr
-    {
-        match r {
-            Ref::HeapCell(hc)      => self.follow_heap(hc),
-            Ref::StackCell(fr, sc) => self.follow_addr(Addr::StackCell(fr, sc))
+            state_stack: vec![a]
         }
     }
 
@@ -33,34 +22,35 @@ impl<'a> HeapCellPreOrderIterator<'a> {
         match &self.machine_st.heap[h] {
             &HeapCellValue::NamedStr(arity, _, _) => {
                 for idx in (1 .. arity + 1).rev() {
-                    self.state_stack.push(Ref::HeapCell(h + idx));
+                    self.state_stack.push(Addr::HeapCell(h + idx));
                 }
 
                 Addr::HeapCell(h)
             },
             &HeapCellValue::Addr(ref a) =>
-                self.follow_addr(a.clone())
+                self.follow(a.clone())
         }
     }
-
-    fn follow_addr(&mut self, addr: Addr) -> Addr
+    
+    // called under the assumption that the location at r is about to
+    // be visited, and so any follow up states need to be added to
+    // state_stack. returns the dereferenced Addr from Ref.
+    fn follow(&mut self, addr: Addr) -> Addr
     {
         let da = self.machine_st.store(self.machine_st.deref(addr));
 
         match &da {
             &Addr::Con(_) => da,
             &Addr::Lis(a) => {
-                self.state_stack.push(Ref::HeapCell(a + 1));
-                self.state_stack.push(Ref::HeapCell(a));
+                self.state_stack.push(Addr::HeapCell(a + 1));
+                self.state_stack.push(Addr::HeapCell(a));
 
                 da
             },
             &Addr::HeapCell(_) | &Addr::StackCell(_, _) =>
                 da,
-            &Addr::Str(s) => {
-                self.follow_heap(s); // record terms of structure.
-                Addr::HeapCell(s)
-            }
+            &Addr::Str(s) =>
+                self.follow_heap(s) // record terms of structure.
         }
     }
 }
@@ -69,8 +59,8 @@ impl<'a> Iterator for HeapCellPreOrderIterator<'a> {
     type Item = HeapCellValue;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(r) = self.state_stack.pop() {
-            match self.follow(r) {
+        if let Some(a) = self.state_stack.pop() {
+            match self.follow(a) {
                 Addr::HeapCell(h) => Some(self.machine_st.heap[h].clone()),
                 Addr::StackCell(fr, sc) => {
                     let heap_val = HeapCellValue::Addr(self.machine_st.and_stack[fr][sc].clone());
@@ -129,7 +119,7 @@ impl<'a> Iterator for HeapCellPostOrderIterator<'a> {
 }
 
 impl MachineState {
-    pub fn post_order_iter<'a>(&'a self, r: Ref) -> HeapCellPostOrderIterator<'a> {
-        HeapCellPostOrderIterator::new(HeapCellPreOrderIterator::new(self, r))
+    pub fn post_order_iter<'a>(&'a self, a: Addr) -> HeapCellPostOrderIterator<'a> {
+        HeapCellPostOrderIterator::new(HeapCellPreOrderIterator::new(self, a))
     }
 }

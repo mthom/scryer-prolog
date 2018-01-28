@@ -228,7 +228,7 @@ impl Machine {
             let h = self.ms.heap.h;
             self.ms.copy_and_align_ball_to_heap();
 
-            let msg = self.ms.print_term(&Addr::HeapCell(h),
+            let msg = self.ms.print_term(Addr::HeapCell(h),
                                          TermFormatter {},
                                          PrinterOutputter::new())
                           .result();
@@ -322,7 +322,7 @@ impl Machine {
             output.append(var.as_str());
             output.append(" = ");
             
-            output = self.ms.print_term(addr, TermFormatter {}, output);
+            output = self.ms.print_term(addr.clone(), TermFormatter {}, output);
         }
 
         output

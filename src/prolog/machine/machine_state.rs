@@ -259,29 +259,13 @@ impl MachineState {
         self.trail(r1);
     }
 
-    fn print_var<Fmt, Outputter>(&self, r: Ref, fmt: Fmt, output: Outputter) -> Outputter
+    pub(super) fn print_term<Fmt, Outputter>(&self, a: Addr, fmt: Fmt, output: Outputter) -> Outputter
         where Fmt: HeapCellValueFormatter, Outputter: HeapCellValueOutputter
     {
-        let iter    = HeapCellPreOrderIterator::new(&self, r);
+        let iter    = HeapCellPreOrderIterator::new(&self, a);
         let printer = HeapCellPrinter::new(iter, fmt, output);
 
         printer.print()
-    }
-
-    pub(super) fn print_term<Fmt, Outputter>(&self, addr: &Addr, fmt: Fmt, mut output: Outputter)
-                                             -> Outputter
-        where Fmt: HeapCellValueFormatter, Outputter: HeapCellValueOutputter
-    {
-        match addr {
-            &Addr::Con(ref c) => {
-                output.append(format!("{}", c).as_str());
-                output
-            },
-            &Addr::Lis(h) | &Addr::HeapCell(h) | &Addr::Str(h) =>
-                self.print_var(Ref::HeapCell(h), fmt, output),
-            &Addr::StackCell(fr, sc) =>
-                self.print_var(Ref::StackCell(fr, sc), fmt, output)
-        }
     }
 
     fn unify(&mut self, a1: Addr, a2: Addr) {
@@ -508,15 +492,9 @@ impl MachineState {
             return Ok(n.clone());
         }
 
-        let r = match a {
-            Addr::Str(h) | Addr::HeapCell(h) => Ok(Ref::HeapCell(h)),
-            Addr::StackCell(fr, sc) => Ok(Ref::StackCell(fr, sc)),
-            _ => Err(instantiation_err.clone())
-        }?;        
-
         let mut interms: Vec<Number> = Vec::with_capacity(64);
         
-        for heap_val in self.post_order_iter(r) {
+        for heap_val in self.post_order_iter(a) {
             match heap_val {
                 HeapCellValue::NamedStr(2, name, Some(Fixity::In)) => {
                     let a2 = interms.pop().unwrap();
@@ -1641,7 +1619,7 @@ impl MachineState {
                 self.p += 1;
             },
             &ControlInstruction::DisplayCall => {
-                let output = self.print_term(&self[temp_v!(1)],
+                let output = self.print_term(self[temp_v!(1)].clone(),
                                              DisplayFormatter {},
                                              PrinterOutputter::new());
 
@@ -1650,7 +1628,7 @@ impl MachineState {
                 self.p += 1;
             },
             &ControlInstruction::DisplayExecute => {
-                let output = self.print_term(&self[temp_v!(1)],
+                let output = self.print_term(self[temp_v!(1)].clone(),
                                              DisplayFormatter {},
                                              PrinterOutputter::new());
 

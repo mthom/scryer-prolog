@@ -588,7 +588,7 @@ fn test_queries_on_conjuctive_queries() {
     submit(&mut wam, "p(a, [f(g(X))]).");
     submit(&mut wam, "q(Y, c).");
 
-    assert_prolog_success!(&mut wam, "?- p(X, Y), q(Y, Z).", [["Y = f(g(_9))", "X = a", "Z = c"]]);
+    assert_prolog_success!(&mut wam, "?- p(X, Y), q(Y, Z).", [["Y = [f(g(_9))]", "X = a", "Z = c"]]);
     assert_prolog_failure!(&mut wam, "?- p(X, Y), q(Y, X).");
 
     submit(&mut wam, "member(X, [X|_]).
@@ -620,51 +620,51 @@ fn test_queries_on_conjuctive_queries() {
     submit(&mut wam, "q(Y, c).");
 
     assert_prolog_success!(&mut wam, "?- p(X, Y), q(Y, Z).",
-                           [["X = a",  "Z = c", "Y = f(g(_9))"],
+                           [["X = a",  "Z = c", "Y = [f(g(_9))]"],
                             ["X = _0", "Z = c", "Y = c"]]);
     assert_prolog_success!(&mut wam, "?- p(X, Y), !, q(Y, Z).",
-                           [["Z = c", "Y = f(g(_9))", "X = a"]]);
+                           [["Z = c", "Y = [f(g(_9))]", "X = a"]]);
 
     submit(&mut wam, "q([f(g(x))], Z). q([f(g(y))], Y). q([f(g(z))], a).");
 
     assert_prolog_success!(&mut wam, "?- p(X, Y), q(Y, Z).",
-                           [["Z = _10", "X = a", "Y = f(g(x))"],
-                            ["Z = _10", "X = a", "Y = f(g(y))"],
-                            ["Z = a", "X = a", "Y = f(g(z))"]]);
+                           [["Z = _10", "X = a", "Y = [f(g(x))]"],
+                            ["Z = _10", "X = a", "Y = [f(g(y))]"],
+                            ["Z = a", "X = a", "Y = [f(g(z))]"]]);
     assert_prolog_success!(&mut wam, "?- p(X, Y), !, q(Y, Z).",
-                           [["X = a", "Y = f(g(x))", "Z = _10"],
-                            ["X = a", "Y = f(g(y))", "Z = _10"],
-                            ["X = a", "Y = f(g(z))", "Z = a"]]);
+                           [["X = a", "Y = [f(g(x))]", "Z = _10"],
+                            ["X = a", "Y = [f(g(y))]", "Z = _10"],
+                            ["X = a", "Y = [f(g(z))]", "Z = a"]]);
     assert_prolog_success!(&mut wam, "?- p(X, Y), !, q(Y, X).",
-                           [["X = a", "Y = f(g(x))"],
-                            ["X = a", "Y = f(g(y))"],
-                            ["X = a", "Y = f(g(z))"]]);
+                           [["X = a", "Y = [f(g(x))]"],
+                            ["X = a", "Y = [f(g(y))]"],
+                            ["X = a", "Y = [f(g(z))]"]]);
 
     submit(&mut wam, "p(X, [f(g(x))]). p(X, [f(g(y))]). p(X, [f(g(z))]).");
 
     assert_prolog_failure!(&mut wam, "?- q(f(X), Y), p(X, Y).");
     assert_prolog_success!(&mut wam, "?- q(X, Y), p(X, Y).",
-                           [["Y = [f(g(x))]", "X = f(g(x))"],
-                            ["Y = [f(g(y))]", "X = f(g(x))"],
-                            ["Y = [f(g(z))]", "X = f(g(x))"],
-                            ["Y = [f(g(x))]", "X = f(g(y))"],
-                            ["Y = [f(g(y))]", "X = f(g(y))"],
-                            ["Y = [f(g(z))]", "X = f(g(y))"]]);
+                           [["Y = [f(g(x))]", "X = [f(g(x))]"],
+                            ["Y = [f(g(y))]", "X = [f(g(x))]"],
+                            ["Y = [f(g(z))]", "X = [f(g(x))]"],
+                            ["Y = [f(g(x))]", "X = [f(g(y))]"],
+                            ["Y = [f(g(y))]", "X = [f(g(y))]"],
+                            ["Y = [f(g(z))]", "X = [f(g(y))]"]]);
     assert_prolog_success!(&mut wam, "?- p(X, Y), q(X, Y).",
-                           [["Y = f(g(x))", "X = [f(g(x))]"],
-                            ["Y = f(g(x))", "X = [f(g(y))]"],
-                            ["Y = f(g(y))", "X = [f(g(x))]"],
-                            ["Y = f(g(y))", "X = [f(g(y))]"],
-                            ["Y = f(g(z))", "X = [f(g(x))]"],
-                            ["Y = f(g(z))", "X = [f(g(y))]"]]);
+                           [["Y = [f(g(x))]", "X = [f(g(x))]"],
+                            ["Y = [f(g(x))]", "X = [f(g(y))]"],
+                            ["Y = [f(g(y))]", "X = [f(g(x))]"],
+                            ["Y = [f(g(y))]", "X = [f(g(y))]"],
+                            ["Y = [f(g(z))]", "X = [f(g(x))]"],
+                            ["Y = [f(g(z))]", "X = [f(g(y))]"]]);
     assert_prolog_success!(&mut wam, "?- p(X, Y), q(Y, X).",
-                           [["Y = f(g(x))", "X = s_0_2"],
-                            ["Y = f(g(y))", "X = s_0_2"],
-                            ["Y = f(g(z))", "X = a"]]);
+                           [["Y = [f(g(x))]", "X = s_0_2"],
+                            ["Y = [f(g(y))]", "X = s_0_2"],
+                            ["Y = [f(g(z))]", "X = a"]]);
     assert_prolog_success!(&mut wam, "?- q(X, Y), p(Y, X).",
-                           [["Y = s_0_1", "X = f(g(x))"],
-                            ["Y = s_0_1", "X = f(g(y))"],
-                            ["Y = a"    , "X = f(g(z))"]]);
+                           [["Y = s_0_1", "X = [f(g(x))]"],
+                            ["Y = s_0_1", "X = [f(g(y))]"],
+                            ["Y = a"    , "X = [f(g(z))]"]]);
 }
 
 #[test]
