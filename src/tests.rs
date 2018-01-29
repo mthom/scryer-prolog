@@ -1262,6 +1262,8 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- f(1,2,3) =.. [f,1,2,3].");
     assert_prolog_failure!(&mut wam, "?- f(1,2,3) =.. [f,1].");
     assert_prolog_failure!(&mut wam, "?- f(1,2,3) =.. [g,1,2,3].");
+    assert_prolog_success!(&mut wam, "?- f(1,2,3) =.. [f,X,Y,Z].",
+                           [["X = 1", "Y = 2", "Z = 3"]]);
 
     assert_prolog_success_with_limit!(&mut wam, "?- length(Xs, N).",
                                       [["N = 0", "Xs = []"],

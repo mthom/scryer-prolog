@@ -7,11 +7,20 @@ use std::rc::Rc;
 
 pub type TabledData<T> = Rc<RefCell<HashSet<Rc<T>>>>;
     
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct TabledRc<T: Hash + Eq> {
     atom: Rc<T>,
     table: TabledData<T>
 }
+
+impl<T: Hash + Eq> PartialEq for TabledRc<T> {
+    fn eq(&self, other: &TabledRc<T>) -> bool
+    {
+        self.atom == other.atom
+    }
+}
+
+impl<T: Hash + Eq> Eq for TabledRc<T> {}
 
 impl<T: Hash + Eq> Hash for TabledRc<T> {
     fn hash<H: Hasher>(&self, state: &mut H)

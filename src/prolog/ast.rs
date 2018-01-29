@@ -35,6 +35,8 @@ impl GenContext {
     }
 }
 
+pub type Predicate = Vec<PredicateClause>;
+
 pub enum PredicateClause {
     Fact(Term),
     Rule(Rule)
@@ -80,7 +82,7 @@ pub enum Declaration {
 pub enum TopLevel {
     Declaration(Declaration),
     Fact(Term),
-    Predicate(Vec<PredicateClause>),
+    Predicate(Predicate),
     Query(Vec<QueryTerm>),
     Rule(Rule)
 }
@@ -264,8 +266,8 @@ pub enum ParserError
     InadmissibleFact,
     InadmissibleQueryTerm,
     IncompleteReduction,
-    InconsistentDeclaration,
-    InconsistentPredicate,
+    InconsistentEntry, // was InconsistentDeclaration.
+//    InconsistentPredicate, //TODO: admit this is not needed.
     InvalidRuleHead,
     ParseBigInt,
     ParseFloat(ParseFloatError),
