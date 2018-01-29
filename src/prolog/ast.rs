@@ -267,7 +267,6 @@ pub enum ParserError
     InadmissibleQueryTerm,
     IncompleteReduction,
     InconsistentEntry, // was InconsistentDeclaration.
-//    InconsistentPredicate, //TODO: admit this is not needed.
     InvalidRuleHead,
     ParseBigInt,
     ParseFloat(ParseFloatError),
