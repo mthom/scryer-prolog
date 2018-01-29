@@ -24,6 +24,7 @@ Extend rusty-wam to include the following, among other features:
 * Built-in predicates for list processing and top-level declarative
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
   etc.)
+* Add a rudimentary module system.  
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
   is straightforward with attributed variables. 
