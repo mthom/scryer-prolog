@@ -18,6 +18,7 @@ pub mod heap_print;
 pub mod indexing;
 pub mod io;
 pub mod iterators;
+pub mod lib;
 pub mod machine;
 pub mod or_stack;
 pub mod parser;

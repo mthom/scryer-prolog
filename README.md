@@ -82,8 +82,10 @@ The following predicates are built-in to rusty-wam.
 * `(=..)/2`
 * `(->)/2`
 * `(;)/2`
+* `append/3`
 * `arg/3`
 * `atomic/1`
+* `between/3`
 * `call/1..63`
 * `catch/3`
 * `display/1`
@@ -92,6 +94,12 @@ The following predicates are built-in to rusty-wam.
 * `functor/3`
 * `integer/1`
 * `length/2`
+* `maplist/1..8`
+* `member/2`
+* `memberchk/2`
+* `once/1`
+* `reverse/2`
+* `select/3`
 * `throw/1`
 * `true/0`
 * `var/1`
