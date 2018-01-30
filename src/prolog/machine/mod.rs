@@ -39,9 +39,10 @@ impl Index<CodePtr> for Machine {
 
 impl Machine {
     pub fn new() -> Self {
-        let atom_tbl = Rc::new(RefCell::new(HashSet::new()));        
+        let atom_tbl = Rc::new(RefCell::new(HashSet::new()));
         let (code, code_dir, op_dir) = build_code_dir(atom_tbl.clone());
-
+        
+        
         Machine {
             ms: machine_state::MachineState::new(atom_tbl),
             code,
@@ -64,7 +65,7 @@ impl Machine {
     {
         match self.code_dir.get(&(name.clone(), arity)) {
             Some(&(PredicateKeyType::BuiltIn, _)) =>
-                return EvalSession::ImpermissibleEntry(format!("{}/{}", name, arity)),
+                return EvalSession::from(EvalError::ImpermissibleEntry(format!("{}/{}", name, arity))),
             _ => {}
         };
 
@@ -72,7 +73,7 @@ impl Machine {
 
         self.code.append(&mut code);
         self.code_dir.insert((name, arity), (PredicateKeyType::User, offset));
-        
+
         EvalSession::EntrySuccess
     }
 
@@ -209,7 +210,7 @@ impl Machine {
                     },
                     _ => {}
                 }
-                
+
                 self.ms.p = CodePtr::TopLevel(cn, p);
             }
 
@@ -232,10 +233,10 @@ impl Machine {
                                          TermFormatter {},
                                          PrinterOutputter::new())
                           .result();
-            
-            EvalSession::QueryFailureWithException(msg)
+
+            EvalSession::from(EvalError::QueryFailureWithException(msg))
         } else {
-            EvalSession::QueryFailure
+            EvalSession::from(EvalError::QueryFailure)
         }
     }
 
@@ -245,14 +246,14 @@ impl Machine {
             &Declaration::Op(prec, spec, ref name) => {
                 if is_infix!(spec) {
                     match self.op_dir.get(&(name.clone(), Fixity::Post)) {
-                        Some(_) => return EvalSession::OpIsInfixAndPostFix,
+                        Some(_) => return EvalSession::from(EvalError::OpIsInfixAndPostFix),
                         _ => {}
                     };
                 }
 
                 if is_postfix!(spec) {
                     match self.op_dir.get(&(name.clone(), Fixity::In)) {
-                        Some(_) => return EvalSession::OpIsInfixAndPostFix,
+                        Some(_) => return EvalSession::from(EvalError::OpIsInfixAndPostFix),
                         _ => {}
                     };
                 }
@@ -298,7 +299,7 @@ impl Machine {
             self.ms.p = self.ms.or_stack[b].bp;
 
             if let CodePtr::TopLevel(_, 0) = self.ms.p {
-                return EvalSession::QueryFailure;
+                return EvalSession::from(EvalError::QueryFailure);
             }
 
             self.run_query(alloc_l, heap_l);
@@ -309,7 +310,7 @@ impl Machine {
                 EvalSession::SubsequentQuerySuccess
             }
         } else {
-            EvalSession::QueryFailure
+            EvalSession::from(EvalError::QueryFailure)
         }
     }
 
@@ -318,10 +319,10 @@ impl Machine {
     {
         for (var, addr) in var_dir {
             output.begin_new_var();
-            
+
             output.append(var.as_str());
             output.append(" = ");
-            
+
             output = self.ms.print_term(addr.clone(), TermFormatter {}, output);
         }
 

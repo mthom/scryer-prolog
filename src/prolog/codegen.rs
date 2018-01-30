@@ -16,21 +16,31 @@ pub struct CodeGenerator<'a, TermMarker> {
     var_count: HashMap<&'a Var, usize>
 }
 
-pub enum EvalSession<'a> {
+pub enum EvalError {
     OpIsInfixAndPostFix,
     NamelessEntry,
     ParserError(ParserError),
     ImpermissibleEntry(String),
-    EntrySuccess,
-    InitialQuerySuccess(AllocVarDict<'a>, HeapVarDict<'a>),
     QueryFailure,
-    QueryFailureWithException(String),
+    QueryFailureWithException(String)
+}
+
+pub enum EvalSession<'a> {    
+    EntrySuccess,
+    Error(EvalError),
+    InitialQuerySuccess(AllocVarDict<'a>, HeapVarDict<'a>),    
     SubsequentQuerySuccess,
+}
+
+impl<'a> From<EvalError> for EvalSession<'a> {
+    fn from(err: EvalError) -> Self {
+        EvalSession::Error(err)
+    }
 }
 
 impl<'a> From<ParserError> for EvalSession<'a> {
     fn from(err: ParserError) -> Self {
-        EvalSession::ParserError(err)
+        EvalSession::from(EvalError::ParserError(err))
     }
 }
 

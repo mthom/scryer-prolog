@@ -409,6 +409,8 @@ pub struct Rule {
     pub clauses: Vec<QueryTerm>
 }
 
+
+
 #[derive(Clone, Copy)]
 pub enum ClauseType<'a> {
     Arg,

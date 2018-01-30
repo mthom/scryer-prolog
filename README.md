@@ -23,7 +23,7 @@ Extend rusty-wam to include the following, among other features:
 * Built-in control operators (`,`, `;`, `->`, etc.) (_done_).
 * Built-in predicates for list processing and top-level declarative
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
-  etc.)
+  etc.) (_in progress_).
 * Add a rudimentary module system.  
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
@@ -84,7 +84,7 @@ The following predicates are built-in to rusty-wam.
 * `(;)/2`
 * `arg/3`
 * `atomic/1`
-* `call/N` (1 <= N <= 63)
+* `call/1..63`
 * `catch/3`
 * `display/1`
 * `duplicate_term/2`
@@ -171,7 +171,7 @@ Lastly, rusty-wam supports dynamic operators. Using the built-in
 arithmetic operators with the usual precedences,
 
 ```
-prolog> ?- X = -5 + 3 - (2 * 4) // 8.
+prolog> ?- display(-5 + 3 - (2 * 4) // 8).
+'-'('+'('-'(5), 3), '//'('*'(2, 4), 8))
 true.
-X = -(+(-(5), 3), //(*(2, 4), 8)).
 ```

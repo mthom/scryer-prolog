@@ -243,6 +243,20 @@ impl fmt::Display for IndexingInstruction {
     }
 }
 
+impl fmt::Display for EvalError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &EvalError::QueryFailure => write!(f, "false."),
+            &EvalError::QueryFailureWithException(ref e) => write!(f, "{}", error_string(e)),
+            &EvalError::ImpermissibleEntry(ref msg) => write!(f, "cannot overwrite builtin {}", msg),
+            &EvalError::OpIsInfixAndPostFix =>
+                write!(f, "cannot define an op to be both postfix and infix."),
+            &EvalError::NamelessEntry => write!(f, "the predicate head is not an atom or clause."),
+            &EvalError::ParserError(ref e) => write!(f, "{:?}", e)
+        }
+    }
+}
+
 impl fmt::Display for ArithmeticTerm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -370,6 +384,12 @@ pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, Par
     worker.parse_code(buffer)
 }
 
+pub fn parse_batch(wam: &mut Machine, buffer: &str) -> Result<Vec<TopLevelPacket>, ParserError>
+{
+    let mut worker = TopLevelWorker::new(wam.atom_tbl(), wam.op_dir());
+    worker.parse_batch(buffer)
+}
+
 pub fn read() -> String {
     let _ = stdout().flush();
 
@@ -419,7 +439,7 @@ fn compile_relation(tl: &TopLevel) -> Result<Code, ParserError>
 fn set_first_index(code: &mut Code)
 {
     let code_len = code.len();
-    
+
     for (idx, line) in code.iter_mut().enumerate() {
         match line {
             &mut Line::Control(ControlInstruction::JmpByExecute(_, ref mut offset))
@@ -446,27 +466,22 @@ fn compile_query<'a>(terms: &'a Vec<QueryTerm>, queue: &'a Vec<TopLevel>)
                      -> Result<(Code, AllocVarDict<'a>), ParserError>
 {
     let mut cg = CodeGenerator::<DebrayAllocator>::new();
-    let mut code = try!(cg.compile_query(terms));    
-    
+    let mut code = try!(cg.compile_query(terms));
+
     compile_appendix(&mut code, queue)?;
 
     Ok((code, cg.take_vars()))
 }
 
-pub fn compile<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevelPacket) -> EvalSession<'b>
+fn compile_decl<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel, queue: &'b Vec<TopLevel>)
+                            -> EvalSession<'b>
 {
     match tl {
-        &TopLevelPacket::Query(ref terms, ref queue) =>
-            match compile_query(terms, queue) {
-                Ok((code, vars)) => wam.submit_query(code, vars),
-                Err(e) => EvalSession::from(e)
-            },
-        &TopLevelPacket::Decl(TopLevel::Declaration(ref decl), _) =>
-            wam.submit_decl(decl),
-        &TopLevelPacket::Decl(ref tl, ref queue) => {
+        &TopLevel::Declaration(ref decl) => wam.submit_decl(decl),
+        _ => {
             let mut code = match compile_relation(tl) {
                 Ok(code) => code,
-                Err(e) => return EvalSession::ParserError(e)
+                Err(e) => return EvalSession::from(EvalError::ParserError(e))
             };
 
             if let Err(e) = compile_appendix(&mut code, queue) {
@@ -477,13 +492,46 @@ pub fn compile<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevelPacket) -> Eval
                 if let Some(name) = tl.name() {
                     wam.add_user_code(name, tl.arity(), code)
                 } else {
-                    EvalSession::NamelessEntry
+                    EvalSession::from(EvalError::NamelessEntry)
                 }
             } else {
-                EvalSession::ImpermissibleEntry(String::from("no code generated."))
+                EvalSession::from(EvalError::ImpermissibleEntry(String::from("no code generated.")))
             }
         }
     }
+}
+
+pub fn compile<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevelPacket) -> EvalSession<'b>
+{
+    match tl {
+        &TopLevelPacket::Query(ref terms, ref queue) =>
+            match compile_query(terms, queue) {
+                Ok((code, vars)) => wam.submit_query(code, vars),
+                Err(e) => EvalSession::from(e)
+            },
+        &TopLevelPacket::Decl(ref tl, ref queue) =>
+            compile_decl(wam, tl, queue)
+    }
+}
+
+pub fn compile_batch<'a, 'b: 'a>(wam: &'a mut Machine, tls: &'b Vec<TopLevelPacket>)
+                                 -> EvalSession<'b>
+{
+    for tl in tls {
+        match tl {
+            &TopLevelPacket::Query(..) =>
+                return EvalSession::from(ParserError::ExpectedRel),
+            &TopLevelPacket::Decl(ref tl, ref queue) => {
+                let result = compile_decl(wam, tl, queue);
+
+                if let &EvalSession::Error(_) = &result {
+                    return result;
+                }
+            }
+        }
+    }
+
+    EvalSession::EntrySuccess
 }
 
 fn error_string(e: &String) -> String {
@@ -506,7 +554,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
             }
 
             loop {
-                let mut result = EvalSession::QueryFailure;
+                let mut result = EvalSession::from(EvalError::QueryFailure);
                 let mut output = PrinterOutputter::new();
 
                 let bindings = wam.heap_view(&heap_locs, output).result();
@@ -535,13 +583,15 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                         }
                     }
 
-                    if let &EvalSession::QueryFailure = &result {
+                    if let &EvalSession::Error(EvalError::QueryFailure) = &result
+                    {
                         write!(stdout, "false.\n\r").unwrap();
                         stdout.flush().unwrap();
                         return;
                     }
 
-                    if let &EvalSession::QueryFailureWithException(ref e) = &result {
+                    if let &EvalSession::Error(EvalError::QueryFailureWithException(ref e)) = &result
+                    {
                         write!(stdout, "{}\n\r", error_string(e)).unwrap();
                         stdout.flush().unwrap();
                         return;
@@ -553,12 +603,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
 
             write!(stdout(), ".\n").unwrap();
         },
-        EvalSession::QueryFailure => println!("false."),
-        EvalSession::QueryFailureWithException(e) => println!("{}", error_string(&e)),
-        EvalSession::ImpermissibleEntry(msg) => println!("cannot overwrite builtin {}", msg),
-        EvalSession::OpIsInfixAndPostFix => println!("cannot define an op to be both postfix and infix."),
-        EvalSession::NamelessEntry => println!("the predicate head is not an atom or clause."),
-        EvalSession::ParserError(e) => println!("{:?}", e),
+        EvalSession::Error(e) => println!("{}", e),
         _ => {}
     };
 }
