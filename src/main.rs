@@ -27,8 +27,6 @@ fn process_buffer(wam: &mut Machine, buffer: &str)
 
 fn prolog_repl() {
     let mut wam = Machine::new();
-
-    load_init_file(&mut wam, "lists.pl");
                
     loop {
         print!("prolog> ");
