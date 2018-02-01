@@ -8,7 +8,6 @@ use prolog::targets::*;
 
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::mem::swap;
 use std::vec::Vec;
 
 pub struct CodeGenerator<'a, TermMarker> {
@@ -25,10 +24,10 @@ pub enum EvalError {
     QueryFailureWithException(String)
 }
 
-pub enum EvalSession<'a> {    
+pub enum EvalSession<'a> {
     EntrySuccess,
     Error(EvalError),
-    InitialQuerySuccess(AllocVarDict<'a>, HeapVarDict<'a>),    
+    InitialQuerySuccess(AllocVarDict<'a>, HeapVarDict<'a>),
     SubsequentQuerySuccess,
 }
 
@@ -286,11 +285,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         let mut dealloc_index = code.len() - 1;
 
         match code.last_mut() {
-            Some(&mut Line::Control(ref mut ctrl)) => {
-                let mut instr = ControlInstruction::Proceed;
-                swap(ctrl, &mut instr);
-
-                match instr {
+            Some(&mut Line::Control(ref mut ctrl)) =>
+                match ctrl.clone() {
                     ControlInstruction::ArgCall =>
                         *ctrl = ControlInstruction::ArgExecute,
                     ControlInstruction::Call(name, arity, _) =>
@@ -313,8 +309,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         *ctrl = ControlInstruction::IsExecute(r, at),
                     ControlInstruction::Proceed => {},
                     _ => dealloc_index += 1 // = code.len()
-                }
-            },
+                },
             Some(&mut Line::Cut(CutInstruction::Cut)) =>
                 dealloc_index += 1,
             _ => {}
@@ -493,12 +488,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         let conjunct_info = self.collect_var_data(iter);
 
         let &Rule { head: (ref p0, ref p1), ref clauses } = rule;
-        let mut code = Vec::new();        
+        let mut code = Vec::new();
 
         if let &QueryTerm::Term(ref term) = p0 {
             self.marker.reset_arg_at_head(term);
             self.compile_seq_prelude(&conjunct_info, &mut code);
-            
+
             if let &Term::Clause(..) = term {
                 let iter = FactInstruction::iter(term);
                 let fact = self.compile_target(iter, GenContext::Head, false);
