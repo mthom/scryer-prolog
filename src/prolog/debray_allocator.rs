@@ -346,7 +346,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
         self.temp_lb = arity + 1;
     }
 
-    fn reset_arg_at_head(&mut self, term: &Term) {
+    fn reset_arg_at_head(&mut self, term: &'a Term) {
         self.arg_c = 1;
         self.temp_lb = term.arity() + 1;
 

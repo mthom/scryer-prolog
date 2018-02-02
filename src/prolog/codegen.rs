@@ -245,6 +245,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     fn add_conditional_call(code: &mut Code, qt: &QueryTerm, pvs: usize)
     {
         match qt {
+            &QueryTerm::SetupCallCleanup(_) =>
+                code.push(goto_call!(294, 3)),            
             &QueryTerm::Arg(_) => {
                 let call = ControlInstruction::ArgCall;
                 code.push(Line::Control(call));
@@ -287,6 +289,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         match code.last_mut() {
             Some(&mut Line::Control(ref mut ctrl)) =>
                 match ctrl.clone() {
+                    ControlInstruction::GotoCall(p, arity) =>
+                        *ctrl = ControlInstruction::GotoExecute(p, arity),
                     ControlInstruction::ArgCall =>
                         *ctrl = ControlInstruction::ArgExecute,
                     ControlInstruction::Call(name, arity, _) =>
@@ -310,7 +314,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     ControlInstruction::Proceed => {},
                     _ => dealloc_index += 1 // = code.len()
                 },
-            Some(&mut Line::Cut(CutInstruction::Cut)) =>
+            Some(&mut Line::Cut(CutInstruction::Cut(_))) =>
                 dealloc_index += 1,
             _ => {}
         };
@@ -402,7 +406,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(if chunk_num == 0 {
                             Line::Cut(CutInstruction::NeckCut)
                         } else {
-                            Line::Cut(CutInstruction::Cut)
+                            Line::Cut(CutInstruction::Cut(perm_v!(1)))
                         });
                     },
                     &QueryTerm::Is(ref terms) => {
@@ -460,7 +464,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             body.push(Line::Control(ControlInstruction::Allocate(perm_vars)));
 
             if conjunct_info.has_deep_cut {
-                body.push(Line::Cut(CutInstruction::GetLevel));
+                body.push(Line::Cut(CutInstruction::GetLevel(perm_v!(1))));
             }
         }
     }
@@ -491,7 +495,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         let mut code = Vec::new();
 
         if let &QueryTerm::Term(ref term) = p0 {
-            self.marker.reset_arg_at_head(term);
+            self.marker.reset_arg(term.arity());            
             self.compile_seq_prelude(&conjunct_info, &mut code);
 
             if let &Term::Clause(..) = term {
@@ -503,6 +507,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 }
             }
 
+            self.marker.reset_arg_at_head(term);
+            
             let iter = ChunkedIterator::from_rule_body(p1, clauses);
             try!(self.compile_seq(iter, &conjunct_info, &mut code, false));
 
@@ -562,7 +568,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         vs.populate_restricting_sets();
 
         self.marker.drain_var_data(vs);
-        self.marker.reset_arg_at_head(term);
+        self.marker.reset_arg(term.arity());
 
         let mut code = Vec::new();
 

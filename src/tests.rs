@@ -1168,7 +1168,7 @@ fn test_queries_on_conditionals()
 
     submit(&mut wam, "test(X, [X]) :- (atomic(X) -> true ; throw(type_error(atomic_expected, X))).
                       test(_, _).");
-    
+
     assert_prolog_success!(&mut wam, "?- catch(test(a, [a]), type_error(E), true).",
                            [["E = _6"], ["E = _6"]]);
 
@@ -1290,4 +1290,59 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- duplicate_term(g(X), f(X)).");
     assert_prolog_success!(&mut wam, "?- duplicate_term(f(X), f(X)).",
                            [["X = _1"]]);
+}
+
+#[test]
+fn test_queries_on_setup_call_cleanup()
+{
+    let mut wam = Machine::new();
+
+    // Test examples from the ISO Prolog page for setup_call_catch.
+    assert_prolog_failure!(&mut wam, "?- setup_call_cleanup(false, _, _).");
+    assert_prolog_success!(&mut wam, "?- catch(setup_call_cleanup(true, throw(unthrown), _), instantiation_error, true).");
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(true, true, (true ; throw(x))).");
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(true, X = 1, X = 2).",
+                           [["X = 1"]]);
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(true, true, X = 2).",
+                           [["X = 2"]]);
+    assert_prolog_success!(&mut wam, "?- catch(setup_call_cleanup(true, X=true, X), E, true).",
+                           [["E = instantiation_error", "X = _1"]]);
+    assert_prolog_success!(&mut wam, "?- catch(setup_call_cleanup(X=throw(ex), true, X), E, true).",
+                           [["E = ex", "X = _3"]]);
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(true, true, false).");
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(S = 1, G = 2, C = 3).",
+                           [["S = 1", "G = 2", "C = 3"]]);
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup((S=1;S=2), G=3, C=4).",
+                           [["S = 1", "G = 3", "C = 4"]]);
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(S=1, G=2, display(S+G)).",
+                           [["S = 1", "G = 2"]]);
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(S=1, (G=2;G=3), display(S+G)).",
+                           [["S = 1", "G = 2"],
+                            ["S = 1", "G = 3"]]);
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(S=1, G=2, display(S+G>A+B)), A=3, B=4.",
+                           [["S = 1", "G = 2", "A = 3", "B = 4"]]);
+    assert_prolog_success!(&mut wam,
+                           "?- catch(setup_call_cleanup(S=1, (G=2;G=3,throw(x)), display(S+G)), E, true).",
+                           [["S = 1", "G = 2", "E = _26"], ["G = _4", "E = x", "S = _1"]]);
+    assert_prolog_success!(&mut wam,
+                           "?- setup_call_cleanup(S=1, (G=2;G=3),display(S+G>B)), B=4, !.",
+                           [["S = 1", "B = 4", "G = 2"]]);
+    assert_prolog_success!(&mut wam,
+                           "?- setup_call_cleanup(S=1,G=2,display(S+G>B)),B=3,!.",
+                           [["S = 1", "G = 2", "B = 3"]]);
+    assert_prolog_success!(&mut wam,
+                           "?- setup_call_cleanup(S=1,(G=2;false),display(S+G>B)),B=3,!.",
+                           [["S = 1", "G = 2", "B = 3"]]);
+    assert_prolog_success!(&mut wam,
+                           "?- setup_call_cleanup(S=1,(G=2;S=2),display(S+G>B)), B=3, !.",
+                           [["S = 1", "B = 3", "G = 2"]]);
+    assert_prolog_failure!(&mut wam,
+                           "?- setup_call_cleanup(S=1,(G=2;G=3), display(S+G>B)), B=4, !, throw(x).");
+    assert_prolog_success!(&mut wam,
+                           "?- setup_call_cleanup(true, (X=1;X=2), display(a)), setup_call_cleanup(true,(Y=1;Y=2),display(b)), !.",
+                           [["Y = 1", "X = 1"]]);
+    assert_prolog_success!(&mut wam, "?- catch(setup_call_cleanup(true,throw(goal),throw(cl)), Pat, true).",
+                           [["Pat = goal"]]);
+    assert_prolog_success!(&mut wam, "?- catch(( setup_call_cleanup(true,(G=1;G=2),throw(cl)), throw(cont)), Pat, true).",
+                           [["Pat = cont", "G = _1"]]);
 }

@@ -6,6 +6,8 @@ use prolog::fixtures::*;
 use prolog::tabled_rc::*;
 
 pub(crate) mod machine_state;
+#[macro_use]
+mod machine_state_impl;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};

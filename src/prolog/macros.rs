@@ -199,8 +199,8 @@ macro_rules! proceed {
 }
 
 macro_rules! cut {
-    () => (
-        Line::Cut(CutInstruction::Cut)
+    ($r:expr) => (
+        Line::Cut(CutInstruction::Cut($r))
     )
 }
 
@@ -301,8 +301,8 @@ macro_rules! duplicate_term {
 }
 
 macro_rules! get_level {
-    () => (
-        Line::Cut(CutInstruction::GetLevel)
+    ($r:expr) => (
+        Line::Cut(CutInstruction::GetLevel($r))
     )
 }
 
@@ -490,6 +490,12 @@ macro_rules! jmp_call {
     )
 }
 
+macro_rules! jmp_execute {
+    ($arity:expr, $offset:expr) => (
+        Line::Control(ControlInstruction::JmpByExecute($arity, $offset))
+    )
+}
+
 macro_rules! get_list {
     ($lvl:expr, $r:expr) => (
         FactInstruction::GetList($lvl, $r)
@@ -500,4 +506,22 @@ macro_rules! unify_constant {
     ($c:expr) => (
         FactInstruction::UnifyConstant($c)
     )
+}
+
+macro_rules! install_cleaner {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::InstallCleaner)
+    )
+}
+
+macro_rules! check_cp_execute {
+    () => (
+        Line::Control(ControlInstruction::CheckCpExecute)
+    )
+}
+
+macro_rules! get_cleaner_call {
+    () => (
+        Line::Control(ControlInstruction::GetCleanerCall)
+    )       
 }

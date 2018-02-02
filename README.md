@@ -100,6 +100,7 @@ The following predicates are built-in to rusty-wam.
 * `once/1`
 * `reverse/2`
 * `select/3`
+* `setup_call_cleanup/3`
 * `throw/1`
 * `true/0`
 * `var/1`

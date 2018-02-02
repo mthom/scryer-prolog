@@ -110,9 +110,11 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::CallN(arity) =>
                 write!(f, "call_N {}", arity),
             &ControlInstruction::CatchCall =>
-                write!(f, "call_catch"),
+                write!(f, "catch_call"),
             &ControlInstruction::CatchExecute =>
-                write!(f, "execute_catch"),
+                write!(f, "catch_execute"),
+            &ControlInstruction::CheckCpExecute =>
+                write!(f, "check_cp_execute"),
             &ControlInstruction::DisplayCall =>
                 write!(f, "display_call"),
             &ControlInstruction::DisplayExecute =>
@@ -131,6 +133,8 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "deallocate"),
             &ControlInstruction::Execute(ref name, arity) =>
                 write!(f, "execute {}/{}", name, arity),
+            &ControlInstruction::GetCleanerCall =>
+                write!(f, "get_cleaner_call"),
             &ControlInstruction::GotoCall(p, arity) =>
                 write!(f, "goto_call {}/{}", p, arity),
             &ControlInstruction::GotoExecute(p, arity) =>
@@ -189,6 +193,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "get_current_block X1"),
             &BuiltInInstruction::GetCutPoint(r) =>
                 write!(f, "get_cp {}", r),
+            &BuiltInInstruction::InstallCleaner =>
+                write!(f, "install_cleaner"),
             &BuiltInInstruction::InstallNewBlock =>
                 write!(f, "install_new_block"),
             &BuiltInInstruction::InternalCallN =>
@@ -307,12 +313,12 @@ impl fmt::Display for ArithmeticInstruction {
 impl fmt::Display for CutInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &CutInstruction::Cut =>
-                write!(f, "cut"),
+            &CutInstruction::Cut(r) =>
+                write!(f, "cut {}", r),
             &CutInstruction::NeckCut =>
                 write!(f, "neck_cut"),
-            &CutInstruction::GetLevel =>
-                write!(f, "get_level")
+            &CutInstruction::GetLevel(r) =>
+                write!(f, "get_level {}", r)
         }
     }
 }

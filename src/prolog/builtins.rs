@@ -65,10 +65,10 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          goto_execute!(32, 2), // goto handle_ball/2.
          try_me_else!(10), // handle_ball/2, 32.
          allocate!(2),
-         get_level!(),
+         get_level!(perm_v!(1)),
          fact![get_var_in_fact!(perm_v!(2), 3)],
          unify!(),
-         cut!(),
+         cut!(perm_v!(1)),
          erase_ball!(),
          query![put_value!(perm_v!(2), 1)],
          deallocate!(),
@@ -96,9 +96,9 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          fail!(), // false/0, 61.
          try_me_else!(7), // not/1, 62.
          allocate!(1),
-         get_level!(),
+         get_level!(perm_v!(1)),
          call_n!(1),
-         cut!(),
+         cut!(perm_v!(1)),
          deallocate!(),
          goto_execute!(61, 0),
          trust_me!(),
@@ -145,8 +145,8 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          deallocate!(),
          goto_execute!(83, 3),
          retry_me_else!(10),
-         allocate!(1),
-         get_level!(),
+         allocate!(2),
+         get_level!(perm_v!(2)),
          fact![get_constant!(atom!("!", atom_tbl), temp_v!(2)),
                get_var_in_fact!(perm_v!(1), 3)],
          neck_cut!(),
@@ -300,7 +300,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          proceed!(),
          retry_me_else!(11),
          allocate!(4),
-         get_level!(),
+         get_level!(perm_v!(1)),
          fact![get_var_in_fact!(perm_v!(3), 1),
                get_list!(Level::Shallow, temp_v!(2)),
                unify_variable!(temp_v!(2)),
@@ -309,7 +309,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          query![put_value!(perm_v!(3), 1),
                 put_var!(perm_v!(2), 3)],
          functor_call!(),
-         cut!(),
+         cut!(perm_v!(1)),
          query![put_unsafe_value!(4, 1),
                 put_value!(perm_v!(3), 2),
                 put_constant!(Level::Shallow, integer!(1), temp_v!(3)),
@@ -318,7 +318,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          goto_execute!(236, 4), // goto get_args/4.
          trust_me!(),
          allocate!(5),
-         get_level!(),
+         get_level!(perm_v!(1)),
          fact![get_var_in_fact!(perm_v!(3), 1),
                get_list!(Level::Shallow, temp_v!(2)),
                unify_variable!(perm_v!(5)),
@@ -330,7 +330,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_value!(perm_v!(5), 2),
                 put_value!(perm_v!(2), 3)],
          functor_call!(),
-         cut!(),
+         cut!(perm_v!(1)),
          query![put_unsafe_value!(4, 1),
                 put_value!(perm_v!(3), 2),
                 put_constant!(Level::Shallow, integer!(1), temp_v!(3)),
@@ -370,7 +370,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          query![put_value!(perm_v!(5), 1),
                 put_value!(perm_v!(3), 2),
                 put_value!(temp_v!(5), 3)],
-         get_arg_call!(),                     
+         get_arg_call!(),
          add!(ArithmeticTerm::Reg(perm_v!(5)),
               ArithmeticTerm::Number(rc_integer!(1)),
               1),
@@ -389,17 +389,17 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          neck_cut!(),
          query![put_value!(temp_v!(4), 1),
                 put_constant!(Level::Shallow, integer!(0), temp_v!(2))],
-         goto_execute!(281, 3), // goto length/3, 281.         
+         goto_execute!(281, 3), // goto length/3, 281.
          retry_me_else!(10),
          allocate!(1),
-         get_level!(),
+         get_level!(perm_v!(1)),
          fact![get_var_in_fact!(temp_v!(4), 1),
                get_var_in_fact!(temp_v!(3), 2)],
-         is_integer!(temp_v!(3)),         
+         is_integer!(temp_v!(3)),
          query![put_value!(temp_v!(4), 1),
                 put_constant!(Level::Shallow, integer!(0), temp_v!(2))],
          goto_call!(281, 3), // goto length/3, 281.
-         cut!(),
+         cut!(perm_v!(1)),
          deallocate!(),
          proceed!(),
          trust_me!(),
@@ -413,9 +413,9 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                                None),
                 set_constant!(atom!("integer_expected", atom_tbl)),
                 set_value!(temp_v!(4))],
-         goto_execute!(59, 1), // goto throw/1, 59. 
+         goto_execute!(59, 1), // goto throw/1, 59.
          switch_on_term!(1,2,5,0), // length/3, 281.
-         try_me_else!(3), 
+         try_me_else!(3),
          fact![get_constant!(Constant::EmptyList, temp_v!(1)),
                get_var_in_fact!(temp_v!(4), 2),
                get_value!(temp_v!(4), 3)],
@@ -436,7 +436,92 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_unsafe_value!(2, 2),
                 put_value!(perm_v!(3), 3)],
          deallocate!(),
-         goto_execute!(281, 3) // goto length/3, 281.
+         goto_execute!(281, 3), // goto length/3, 281.
+         allocate!(4), // setup_call_cleanup/3, 294.
+         get_level!(perm_v!(1)),
+         fact![get_var_in_fact!(perm_v!(2), 2),
+               get_var_in_fact!(perm_v!(3), 3)],
+         call_n!(1),
+         cut!(perm_v!(1)),
+         query![put_var!(perm_v!(4), 1)],
+         get_current_block!(),
+         query![put_value!(perm_v!(3), 1),
+                put_unsafe_value!(4, 2),
+                put_value!(perm_v!(2), 3)],                
+         deallocate!(),
+         jmp_execute!(3, 1),
+         try_me_else!(5), // 304.
+         is_var!(temp_v!(1)),
+         neck_cut!(),
+         query![put_constant!(Level::Shallow, atom!("instantiation_error", atom_tbl),
+                              temp_v!(1))],
+         goto_execute!(59, 1),
+         trust_me!(),
+         query![get_var_in_query!(temp_v!(4), 2),
+                put_value!(temp_v!(3), 2),
+                get_var_in_query!(temp_v!(5), 3),
+                put_value!(temp_v!(4), 3)],
+         goto_execute!(312, 3),
+         try_me_else!(13), // sgc_helper/3, 312.
+         allocate!(4),
+         fact![get_var_in_fact!(perm_v!(4), 1),
+               get_var_in_fact!(perm_v!(3), 2),
+               get_var_in_fact!(perm_v!(2), 3)],
+         get_level!(perm_v!(1)),
+         query![put_value!(perm_v!(4), 1)],
+         install_cleaner!(),
+         query![put_var!(temp_v!(2), 1)],
+         install_new_block!(),
+         query![put_value!(perm_v!(3), 1)],
+         call_n!(1),
+         query![put_value!(perm_v!(2), 1),
+                put_unsafe_value!(1, 2)],
+         deallocate!(),
+         check_cp_execute!(),
+         retry_me_else!(10),
+         allocate!(1),
+         query![put_value!(temp_v!(3), 1)],
+         reset_block!(),
+         query![put_var!(perm_v!(1), 1)],
+         get_ball!(),
+         goto_call!(337, 0), // goto run_cleaners_with_handling/0, 337.
+         query![put_value!(perm_v!(1), 1)],
+         deallocate!(),
+         goto_execute!(59, 1),
+         trust_me!(),
+         goto_execute!(349, 0), // goto run_cleaners_without_handling/0, 349.
+         try_me_else!(10), // run_cleaners_with_handling/0, 337.
+         allocate!(2),
+         get_level!(perm_v!(1)),
+         query![put_var!(perm_v!(2), 1)],
+         get_cleaner_call!(),
+         query![put_value!(perm_v!(2), 1),
+                put_var!(temp_v!(4), 2),
+                put_constant!(Level::Shallow, atom!("true", atom_tbl), temp_v!(3))],         
+         goto_call!(5, 3), // goto catch/3, 5.
+         cut!(perm_v!(1)),
+         deallocate!(),
+         goto_execute!(337, 0), // goto run_cleaners_with_handling/0, 337.
+         trust_me!(),
+         proceed!(),
+         try_me_else!(10), // run_cleaners_without_handling/1, 349.
+         allocate!(2),
+         get_level!(perm_v!(1)),
+         query![put_var!(perm_v!(2), 1)],
+         get_cleaner_call!(),
+         query![put_value!(perm_v!(2), 1)],
+         call_n!(1),
+         cut!(perm_v!(1)),
+         deallocate!(),         
+         goto_execute!(349, 0), // goto run_cleaners_without_handling/1, 349.
+         trust_me!(),
+         proceed!(),
+         allocate!(1), // sgc_on_success/2, 361.
+         fact![get_var_in_fact!(perm_v!(1), 2)],
+         reset_block!(),
+         cut!(perm_v!(1)),
+         deallocate!(),
+         proceed!()
     ]
 }
 
@@ -486,7 +571,7 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     op_dir.insert((tabled_rc!("->", atom_tbl), Fixity::In), (XFY, 1050));
 
     op_dir.insert((tabled_rc!("=..", atom_tbl), Fixity::In), (XFX, 700));
-    
+
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
@@ -522,6 +607,7 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("=..", atom_tbl), 2), (PredicateKeyType::BuiltIn, 208));
 
     code_dir.insert((tabled_rc!("length", atom_tbl), 2), (PredicateKeyType::BuiltIn, 261));
-    
+    code_dir.insert((tabled_rc!("setup_call_cleanup", atom_tbl), 3), (PredicateKeyType::BuiltIn, 294));
+
     (builtin_code, code_dir, op_dir)
 }

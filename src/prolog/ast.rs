@@ -381,6 +381,7 @@ pub enum QueryTerm {
     Inlined(InlinedQueryTerm),
     Is(Vec<Box<Term>>),
     Jump(JumpStub),
+    SetupCallCleanup(Vec<Box<Term>>),
     Term(Term),
     Throw(Vec<Box<Term>>)
 }
@@ -399,6 +400,7 @@ impl QueryTerm {
             &QueryTerm::Jump(ref vars) => vars.len(),
             &QueryTerm::CallN(ref terms) => terms.len(),
             &QueryTerm::Cut => 0,
+            &QueryTerm::SetupCallCleanup(_) => 3,
             &QueryTerm::Term(ref term) => term.arity(),
         }
     }
@@ -422,6 +424,7 @@ pub enum ClauseType<'a> {
     Functor,
     Is,
     Root(&'a TabledRc<Atom>),
+    SetupCallCleanup,
     Throw,
 }
 
@@ -437,6 +440,7 @@ impl<'a> ClauseType<'a> {
             &ClauseType::Functor => "functor",            
             &ClauseType::Is => "is",
             &ClauseType::Root(name) => name.as_str(),
+            &ClauseType::SetupCallCleanup => "setup_call_cleanup",
             &ClauseType::Throw => "throw"
         }
     }
@@ -478,8 +482,8 @@ pub enum ChoiceInstruction {
 }
 
 pub enum CutInstruction {
-    Cut,
-    GetLevel,
+    Cut(RegType),
+    GetLevel(RegType),
     NeckCut
 }
 
@@ -792,6 +796,7 @@ pub enum BuiltInInstruction {
     GetCutPoint(RegType),
     DynamicCompareNumber(CompareNumberQT),
     DynamicIs,
+    InstallCleaner,
     InstallNewBlock,
     InternalCallN,
     IsAtomic(RegType),
@@ -805,6 +810,7 @@ pub enum BuiltInInstruction {
     UnwindStack
 }
 
+#[derive(Clone)]
 pub enum ControlInstruction {
     Allocate(usize), // num_frames.
     ArgCall,
@@ -813,6 +819,7 @@ pub enum ControlInstruction {
     CallN(usize), // arity.
     CatchCall,
     CatchExecute,
+    CheckCpExecute,
     DisplayCall,
     DisplayExecute,
     Deallocate,
@@ -822,10 +829,11 @@ pub enum ControlInstruction {
     ExecuteN(usize),
     FunctorCall,
     FunctorExecute,
-    JmpByCall(usize, usize),    // arity, global_offset.
-    JmpByExecute(usize, usize), 
+    GetCleanerCall,
     GotoCall(usize, usize),    // p, arity.
     GotoExecute(usize, usize), // p, arity.
+    JmpByCall(usize, usize),    // arity, global_offset.
+    JmpByExecute(usize, usize),     
     IsCall(RegType, ArithmeticTerm),
     IsExecute(RegType, ArithmeticTerm),
     Proceed,
@@ -852,6 +860,7 @@ impl ControlInstruction {
             &ControlInstruction::FunctorExecute => true,
             &ControlInstruction::ThrowCall => true,
             &ControlInstruction::ThrowExecute => true,
+            &ControlInstruction::GetCleanerCall => true,
             &ControlInstruction::GotoCall(..) => true,            
             &ControlInstruction::GotoExecute(..) => true,
             &ControlInstruction::Proceed => true,

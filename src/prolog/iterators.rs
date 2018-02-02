@@ -39,13 +39,17 @@ impl<'a> QueryIterator<'a> {
             &QueryTerm::Catch(ref terms) => {
                 let state = TermIterState::Clause(0, ClauseType::Catch, terms);
                 QueryIterator { state_stack: vec![state] }
-            },            
+            },
             &QueryTerm::DuplicateTerm(ref terms) => {
                 let state = TermIterState::Clause(0, ClauseType::DuplicateTerm, terms);
                 QueryIterator { state_stack: vec![state] }
             },
             &QueryTerm::Arg(ref terms) => {
                 let state = TermIterState::Clause(0, ClauseType::Arg, terms);
+                QueryIterator { state_stack: vec![state] }
+            },
+            &QueryTerm::SetupCallCleanup(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::SetupCallCleanup, terms);
                 QueryIterator { state_stack: vec![state] }
             },
             &QueryTerm::Functor(ref terms) => {
@@ -60,7 +64,7 @@ impl<'a> QueryIterator<'a> {
           | &QueryTerm::Is(ref terms) => {
                     let state = TermIterState::Clause(0, ClauseType::Is, terms);
                     QueryIterator { state_stack: vec![state] }
-            },            
+            },
             &QueryTerm::Inlined(InlinedQueryTerm::IsAtomic(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsInteger(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsVar(ref terms)) =>
@@ -290,6 +294,11 @@ impl<'a> ChunkedIterator<'a>
                             break;
                         }
                     },
+                &QueryTerm::SetupCallCleanup(_) => {
+                    result.push(term);
+                    arity = 3;
+                    break;
+                },
                 &QueryTerm::CallN(ref child_terms) => {
                     result.push(term);
                     arity = child_terms.len() + 1;
