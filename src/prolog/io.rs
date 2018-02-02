@@ -494,6 +494,8 @@ fn compile_decl<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel, queue: &'b V
                 return EvalSession::from(e);
             };
 
+            print_code(&code);
+            
             if !code.is_empty() {
                 if let Some(name) = tl.name() {
                     wam.add_user_code(name, tl.arity(), code)

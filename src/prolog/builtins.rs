@@ -484,13 +484,16 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          reset_block!(),
          query![put_var!(perm_v!(1), 1)],
          get_ball!(),
-         goto_call!(337, 0), // goto run_cleaners_with_handling/0, 337.
+         goto_call!(340, 0), // goto run_cleaners_with_handling/0, 340.
          query![put_value!(perm_v!(1), 1)],
          deallocate!(),
          goto_execute!(59, 1),
          trust_me!(),
-         goto_execute!(349, 0), // goto run_cleaners_without_handling/0, 349.
-         try_me_else!(10), // run_cleaners_with_handling/0, 337.
+         allocate!(0),
+         goto_call!(352, 0), // goto run_cleaners_without_handling/0, 352.
+         fail!(),
+         deallocate!(),
+         try_me_else!(10), // run_cleaners_with_handling/0, 340.
          allocate!(2),
          get_level!(perm_v!(1)),
          query![put_var!(perm_v!(2), 1)],
@@ -501,10 +504,10 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          goto_call!(5, 3), // goto catch/3, 5.
          cut!(perm_v!(1)),
          deallocate!(),
-         goto_execute!(337, 0), // goto run_cleaners_with_handling/0, 337.
+         goto_execute!(340, 0), // goto run_cleaners_with_handling/0, 340.
          trust_me!(),
          proceed!(),
-         try_me_else!(10), // run_cleaners_without_handling/1, 349.
+         try_me_else!(10), // run_cleaners_without_handling/1, 352.
          allocate!(2),
          get_level!(perm_v!(1)),
          query![put_var!(perm_v!(2), 1)],
@@ -513,10 +516,10 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          call_n!(1),
          cut!(perm_v!(1)),
          deallocate!(),         
-         goto_execute!(349, 0), // goto run_cleaners_without_handling/1, 349.
+         goto_execute!(352, 0), // goto run_cleaners_without_handling/0, 352.
          trust_me!(),
          proceed!(),
-         allocate!(1), // sgc_on_success/2, 361.
+         allocate!(1), // sgc_on_success/2, 364.
          fact![get_var_in_fact!(perm_v!(1), 2)],
          reset_block!(),
          cut!(perm_v!(1)),

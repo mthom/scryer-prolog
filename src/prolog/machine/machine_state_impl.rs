@@ -1466,7 +1466,7 @@ impl MachineState {
                     _ => {
                         self.num_of_args = 2;
                         self.b0 = self.b;
-                        self.p = CodePtr::DirEntry(361); // goto sgc_on_success/2, 361.
+                        self.p = CodePtr::DirEntry(364); // goto sgc_on_success/2, 364.
                     }
                 };
             },
@@ -1797,7 +1797,7 @@ impl MachineState {
                     self.cp = self.p;
                     self.num_of_args = 0;
                     self.b0 = self.b;
-                    self.p  = CodePtr::DirEntry(349); // goto_call run_cleaners_without_handling/0.
+                    self.p  = CodePtr::DirEntry(352); // goto_call run_cleaners_without_handling/0.
                 }
             }
         }
