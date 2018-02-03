@@ -447,7 +447,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          get_current_block!(),
          query![put_value!(perm_v!(3), 1),
                 put_unsafe_value!(4, 2),
-                put_value!(perm_v!(2), 3)],                
+                put_value!(perm_v!(2), 3)],
          deallocate!(),
          jmp_execute!(3, 1),
          try_me_else!(5), // 304.
@@ -491,8 +491,8 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          trust_me!(),
          allocate!(0),
          goto_call!(352, 0), // goto run_cleaners_without_handling/0, 352.
-         fail!(),
          deallocate!(),
+         fail!(),
          try_me_else!(10), // run_cleaners_with_handling/0, 340.
          allocate!(2),
          get_level!(perm_v!(1)),
@@ -500,7 +500,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          get_cleaner_call!(),
          query![put_value!(perm_v!(2), 1),
                 put_var!(temp_v!(4), 2),
-                put_constant!(Level::Shallow, atom!("true", atom_tbl), temp_v!(3))],         
+                put_constant!(Level::Shallow, atom!("true", atom_tbl), temp_v!(3))],
          goto_call!(5, 3), // goto catch/3, 5.
          cut!(perm_v!(1)),
          deallocate!(),
@@ -515,7 +515,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          query![put_value!(perm_v!(2), 1)],
          call_n!(1),
          cut!(perm_v!(1)),
-         deallocate!(),         
+         deallocate!(),
          goto_execute!(352, 0), // goto run_cleaners_without_handling/0, 352.
          trust_me!(),
          proceed!(),
