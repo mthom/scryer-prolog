@@ -240,7 +240,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                                None),
                 set_constant!(atom!("integer_expected", atom_tbl))],
          goto_execute!(59, 1), // goto throw/1.
-         try_me_else!(5), // arg_/3, 173.
+         try_me_else!(5), // arg_/5, 173.
          fact![get_value!(temp_v!(1), 2),
                get_value!(temp_v!(1), 3)],
          neck_cut!(),
@@ -273,7 +273,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_value!(perm_v!(3), 4),
                 put_value!(perm_v!(5), 5)],
          deallocate!(),
-         goto_execute!(173, 3), // goto arg_/3.
+         goto_execute!(173, 5), // goto arg_/5.
          display!(), // display/1, 192.
          proceed!(),
          dynamic_is!(), // is/2, 194.
