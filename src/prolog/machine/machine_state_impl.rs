@@ -158,12 +158,11 @@ impl MachineState {
 
     fn trail(&mut self, r: Ref) {
         match r {
-            Ref::HeapCell(hc) => {
+            Ref::HeapCell(hc) => 
                 if hc < self.hb {
                     self.trail.push(r);
                     self.tr += 1;
-                }
-            },
+                },            
             Ref::StackCell(fr, _) => {
                 let fr_gi = self.and_stack[fr].global_index;
                 let b_gi  = if !self.or_stack.is_empty() {
