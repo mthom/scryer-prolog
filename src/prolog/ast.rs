@@ -341,8 +341,13 @@ pub enum Term {
 pub enum InlinedQueryTerm {
     CompareNumber(CompareNumberQT, Vec<Box<Term>>),    
     IsAtomic(Vec<Box<Term>>),
-    IsVar(Vec<Box<Term>>),
-    IsInteger(Vec<Box<Term>>)    
+    IsCompound(Vec<Box<Term>>),
+    IsInteger(Vec<Box<Term>>),
+    IsRational(Vec<Box<Term>>),
+    IsString(Vec<Box<Term>>),
+    IsFloat(Vec<Box<Term>>),
+    IsNonVar(Vec<Box<Term>>),
+    IsVar(Vec<Box<Term>>),    
 }
 
 impl InlinedQueryTerm {
@@ -350,6 +355,11 @@ impl InlinedQueryTerm {
         match self {
             &InlinedQueryTerm::CompareNumber(_, _) => 2,            
             &InlinedQueryTerm::IsAtomic(_) => 1,
+            &InlinedQueryTerm::IsCompound(_) => 1,
+            &InlinedQueryTerm::IsFloat(_) => 1,
+            &InlinedQueryTerm::IsRational(_) => 1,
+            &InlinedQueryTerm::IsString(_) => 1,
+            &InlinedQueryTerm::IsNonVar(_) => 1,
             &InlinedQueryTerm::IsInteger(_) => 1,
             &InlinedQueryTerm::IsVar(_) => 1,            
         }
@@ -800,7 +810,12 @@ pub enum BuiltInInstruction {
     InstallNewBlock,
     InternalCallN,
     IsAtomic(RegType),
-    IsInteger(RegType),    
+    IsCompound(RegType),
+    IsFloat(RegType),
+    IsInteger(RegType),
+    IsNonVar(RegType),
+    IsRational(RegType),
+    IsString(RegType),
     IsVar(RegType),
     ResetBlock,
     SetBall,

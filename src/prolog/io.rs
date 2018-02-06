@@ -201,8 +201,18 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "internal_call_N"),
             &BuiltInInstruction::IsAtomic(r) =>
                 write!(f, "is_atomic {}", r),
+            &BuiltInInstruction::IsCompound(r) =>
+                write!(f, "is_compound {}", r),
+            &BuiltInInstruction::IsFloat(r) =>
+                write!(f, "is_float {}", r),
+            &BuiltInInstruction::IsRational(r) =>
+                write!(f, "is_rational {}", r),
+            &BuiltInInstruction::IsNonVar(r) =>
+                write!(f, "is_non_var {}", r),
+            &BuiltInInstruction::IsString(r) =>
+                write!(f, "is_string {}", r),
             &BuiltInInstruction::IsInteger(r) =>
-                write!(f, "is_integer {}", r),
+                write!(f, "is_integer {}", r),            
             &BuiltInInstruction::DynamicIs =>
                 write!(f, "call_is"),
             &BuiltInInstruction::IsVar(r) =>

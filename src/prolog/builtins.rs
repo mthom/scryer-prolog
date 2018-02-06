@@ -524,7 +524,17 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          reset_block!(),
          cut!(perm_v!(1)),
          deallocate!(),
-         proceed!()
+         proceed!(),
+         is_compound!(temp_v!(1)), // compound/1, 370.
+         proceed!(),
+         is_rational!(temp_v!(1)), // rational/1, 372.
+         proceed!(),
+         is_string!(temp_v!(1)), // string/1, 374.
+         proceed!(),
+         is_float!(temp_v!(1)), // float/1, 376.
+         proceed!(),
+         is_nonvar!(temp_v!(1)), // nonvar/1, 378.
+         proceed!(),
     ]
 }
 
@@ -611,6 +621,11 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
 
     code_dir.insert((tabled_rc!("length", atom_tbl), 2), (PredicateKeyType::BuiltIn, 261));
     code_dir.insert((tabled_rc!("setup_call_cleanup", atom_tbl), 3), (PredicateKeyType::BuiltIn, 294));
-
+    code_dir.insert((tabled_rc!("compound", atom_tbl), 1), (PredicateKeyType::BuiltIn, 370));
+    code_dir.insert((tabled_rc!("rational", atom_tbl), 1), (PredicateKeyType::BuiltIn, 372));
+    code_dir.insert((tabled_rc!("string", atom_tbl), 1), (PredicateKeyType::BuiltIn, 374));
+    code_dir.insert((tabled_rc!("float", atom_tbl), 1), (PredicateKeyType::BuiltIn, 376));
+    code_dir.insert((tabled_rc!("nonvar", atom_tbl), 1), (PredicateKeyType::BuiltIn, 378));
+    
     (builtin_code, code_dir, op_dir)
 }

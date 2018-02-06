@@ -1283,6 +1283,46 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &BuiltInInstruction::IsCompound(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Str(_) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsFloat(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Con(Constant::Number(Number::Float(_))) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsRational(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Con(Constant::Number(Number::Rational(_))) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsString(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Con(Constant::String(_)) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsNonVar(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::HeapCell(_) | Addr::StackCell(..) => self.fail = true,
+                    _ => self.p += 1
+                };
+            },
             &BuiltInInstruction::IsVar(r) => {
                 let d = self.store(self.deref(self[r].clone()));
 

@@ -168,6 +168,37 @@ macro_rules! is_integer {
     )
 }
 
+macro_rules! is_compound {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::IsCompound($r))
+    )
+}
+
+macro_rules! is_float {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::IsFloat($r))
+    )
+}
+
+macro_rules! is_rational {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::IsRational($r))
+    )
+}
+
+
+macro_rules! is_nonvar {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::IsNonVar($r))
+    )
+}
+
+macro_rules! is_string {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::IsString($r))
+    )
+}
+
 macro_rules! is_var {
     ($reg:expr) => (
         Line::BuiltIn(BuiltInInstruction::IsVar($reg))

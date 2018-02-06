@@ -67,7 +67,12 @@ impl<'a> QueryIterator<'a> {
             },
             &QueryTerm::Inlined(InlinedQueryTerm::IsAtomic(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsInteger(ref terms))
-          | &QueryTerm::Inlined(InlinedQueryTerm::IsVar(ref terms)) =>
+          | &QueryTerm::Inlined(InlinedQueryTerm::IsVar(ref terms))
+          | &QueryTerm::Inlined(InlinedQueryTerm::IsNonVar(ref terms))
+          | &QueryTerm::Inlined(InlinedQueryTerm::IsFloat(ref terms))
+          | &QueryTerm::Inlined(InlinedQueryTerm::IsRational(ref terms))
+          | &QueryTerm::Inlined(InlinedQueryTerm::IsCompound(ref terms))
+          | &QueryTerm::Inlined(InlinedQueryTerm::IsString(ref terms)) =>      
                 Self::from_term(terms[0].as_ref()),
             &QueryTerm::Term(ref term) =>
                 Self::from_term(term),

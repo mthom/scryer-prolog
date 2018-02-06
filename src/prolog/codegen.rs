@@ -350,6 +350,71 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(is_atomic!(r));
                     }
                 },
+            &InlinedQueryTerm::IsCompound(ref inner_term) =>
+                match inner_term[0].as_ref() {
+                    &Term::Clause(..) => {
+                        code.push(succeed!());
+                    },
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        code.push(is_compound!(r));
+                    },
+                    _ => {
+                        code.push(fail!());
+                    }
+                },
+            &InlinedQueryTerm::IsRational(ref inner_term) =>
+                match inner_term[0].as_ref() {
+                    &Term::Constant(_, Constant::Number(Number::Rational(_))) => {
+                        code.push(succeed!());
+                    },
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        code.push(is_rational!(r));
+                    },
+                    _ => {
+                        code.push(fail!());
+                    }
+                },
+            &InlinedQueryTerm::IsFloat(ref inner_term) =>
+                match inner_term[0].as_ref() {
+                    &Term::Constant(_, Constant::Number(Number::Float(_))) => {
+                        code.push(succeed!());
+                    },
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        code.push(is_float!(r));
+                    },
+                    _ => {
+                        code.push(fail!());
+                    }
+                },
+            &InlinedQueryTerm::IsString(ref inner_term) =>
+                match inner_term[0].as_ref() {
+                    &Term::Constant(_, Constant::String(_)) => {
+                        code.push(succeed!());
+                    },
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        code.push(is_string!(r));
+                    },
+                    _ => {
+                        code.push(fail!());
+                    }
+                },
+            &InlinedQueryTerm::IsNonVar(ref inner_term) =>
+                match inner_term[0].as_ref() {
+                    &Term::AnonVar => {
+                        code.push(fail!());
+                    },                    
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        code.push(is_nonvar!(r));
+                    },
+                    _ => {
+                        code.push(succeed!());
+                    }
+                },
             &InlinedQueryTerm::IsInteger(ref inner_term) =>
                 match inner_term[0].as_ref() {
                     &Term::Constant(_, Constant::Number(Number::Integer(_))) => {
