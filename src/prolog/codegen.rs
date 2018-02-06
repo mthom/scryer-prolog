@@ -100,7 +100,23 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     {
         match self.marker.bindings().get(name) {
             Some(&VarData::Temp(_, t, _)) if t != 0 => RegType::Temp(t),
-            Some(&VarData::Perm(p)) if p != 0 => RegType::Perm(p),
+            Some(&VarData::Perm(p)) if p != 0 =>
+               /* if let GenContext::Last(chunk_num) = term_loc {
+                    let mut target = Vec::new();
+
+                    self.marker.evacuate_arg(chunk_num, &mut target);
+
+                    self.marker.reset_arg(arity);
+                    self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
+
+                    if !target.is_empty() {
+                        code.push(Line::Query(target));
+                    }
+
+                    vr.get().norm()
+                } else { */
+                    RegType::Perm(p),
+                //},
             _ => {
                 let mut target = Vec::new();
 
@@ -480,8 +496,17 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
                         match terms[0].as_ref() {
                             &Term::Var(ref vr, ref name) => {
-                                let r = self.mark_non_callable(name, 2, term_loc, vr, code);
-                                code.push(is_call!(r, at.unwrap_or(interm!(1))));
+                                let mut target = Vec::new();
+
+                                self.marker.reset_arg(2);
+                                self.marker.mark_var(name, Level::Shallow, vr,
+                                                     term_loc, &mut target);
+
+                                if !target.is_empty() {
+                                    code.push(Line::Query(target));
+                                }
+
+                                code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
                             },
                             &Term::Constant(_, ref c @ Constant::Number(_)) => {
                                 code.push(query![put_constant!(Level::Shallow,
