@@ -4,6 +4,7 @@ use prolog::copier::*;
 use prolog::or_stack::*;
 use prolog::tabled_rc::*;
 
+use downcast::Any;
 use std::ops::{Index, IndexMut};
 
 pub(super) struct DuplicateTerm<'a> {
@@ -173,5 +174,81 @@ pub struct MachineState {
     pub(super) block: usize, // an offset into the OR stack.
     pub(super) ball: (usize, Vec<HeapCellValue>), // heap boundary, and a term copy
     pub(super) interms: Vec<Number>, // intermediate numbers.
-    pub(super) sgc_cps: Vec<(Addr, usize, usize)>, // locations of cleaners/cut points, prev. block
+}
+
+pub(crate) trait CutPolicy: Any {
+    fn cut(&mut self, &mut MachineState, RegType);
+}
+
+// from the downcast crate.
+downcast!(CutPolicy);
+
+pub(crate) struct DefaultCutPolicy {}
+
+impl CutPolicy for DefaultCutPolicy {
+    fn cut(&mut self, machine_st: &mut MachineState, r: RegType) {
+        let b = machine_st.b;
+
+        if let Addr::Con(Constant::Usize(b0)) = machine_st[r].clone() {
+            if b > b0 {
+                machine_st.b = b0;
+                machine_st.tidy_trail();
+                machine_st.or_stack.truncate(machine_st.b);
+            }
+        } else {
+            machine_st.fail = true;
+            return;
+        }
+
+        machine_st.p += 1;        
+    }
+}
+
+pub(crate) struct SetupCallCleanupCutPolicy {
+    // locations of cleaners, cut points, the previous block
+    cont_pts: Vec<(Addr, usize, usize)> 
+}
+
+impl SetupCallCleanupCutPolicy {
+    pub(crate) fn new() -> Self {
+        SetupCallCleanupCutPolicy { cont_pts: vec![] }
+    }
+    
+    pub(crate) fn out_of_cont_pts(&self) -> bool {
+        self.cont_pts.is_empty()
+    }
+
+    pub(crate) fn push_cont_pt(&mut self, addr: Addr, b: usize, block: usize) {
+        self.cont_pts.push((addr, b, block));
+    }
+
+    pub(crate) fn pop_cont_pt(&mut self) -> Option<(Addr, usize, usize)> {
+        self.cont_pts.pop()
+    }
+}
+
+impl CutPolicy for SetupCallCleanupCutPolicy {
+    fn cut(&mut self, machine_st: &mut MachineState, r: RegType) {
+        let b = machine_st.b;
+
+        if let Addr::Con(Constant::Usize(b0)) = machine_st[r].clone() {
+            if b > b0 {
+                machine_st.b = b0;
+                machine_st.tidy_trail();
+                machine_st.or_stack.truncate(machine_st.b);
+            }
+        } else {
+            machine_st.fail = true;
+            return;
+        }
+
+        machine_st.p += 1;
+        
+        if !self.out_of_cont_pts() {
+            machine_st.cp = machine_st.p;
+            machine_st.num_of_args = 0;
+            machine_st.b0 = machine_st.b;
+            machine_st.p  = CodePtr::DirEntry(352); // goto_call run_cleaners_without_handling/0.
+        }
+    }
 }

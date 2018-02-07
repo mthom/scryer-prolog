@@ -28,27 +28,27 @@ macro_rules! try_or_fail {
 
 impl MachineState {
     pub(super) fn new(atom_tbl: TabledData<Atom>) -> MachineState {
-        MachineState { atom_tbl,
-                       s: 0,
-                       p: CodePtr::default(),
-                       b: 0,
-                       b0: 0,
-                       e: 0,
-                       num_of_args: 0,
-                       cp: CodePtr::default(),
-                       fail: false,
-                       heap: Heap::with_capacity(256),
-                       mode: MachineMode::Write,
-                       and_stack: AndStack::new(),
-                       or_stack: OrStack::new(),
-                       registers: vec![Addr::HeapCell(0); 64],
-                       trail: Vec::new(),
-                       tr: 0,
-                       hb: 0,
-                       block: 0,
-                       ball: (0, Vec::new()),
-                       interms: vec![Number::default(); 256],
-                       sgc_cps: vec![]
+        MachineState {
+            atom_tbl,
+            s: 0,
+            p: CodePtr::default(),
+            b: 0,
+            b0: 0,
+            e: 0,
+            num_of_args: 0,
+            cp: CodePtr::default(),
+            fail: false,
+            heap: Heap::with_capacity(256),
+            mode: MachineMode::Write,
+            and_stack: AndStack::new(),
+            or_stack: OrStack::new(),
+            registers: vec![Addr::HeapCell(0); 64],
+            trail: Vec::new(),
+            tr: 0,
+            hb: 0,
+            block: 0,
+            ball: (0, Vec::new()),
+            interms: vec![Number::default(); 256]
         }
     }
 
@@ -158,11 +158,11 @@ impl MachineState {
 
     fn trail(&mut self, r: Ref) {
         match r {
-            Ref::HeapCell(hc) => 
+            Ref::HeapCell(hc) =>
                 if hc < self.hb {
                     self.trail.push(r);
                     self.tr += 1;
-                },            
+                },
             Ref::StackCell(fr, _) => {
                 let fr_gi = self.and_stack[fr].global_index;
                 let b_gi  = if !self.or_stack.is_empty() {
@@ -195,7 +195,7 @@ impl MachineState {
         }
     }
 
-    fn tidy_trail(&mut self) {
+    pub(super) fn tidy_trail(&mut self) {
         if self.b == 0 {
             return;
         }
@@ -1123,8 +1123,10 @@ impl MachineState {
             _ => self.fail = true
         };
     }
-    
-    pub(super) fn execute_built_in_instr(&mut self, code_dir: &CodeDir, instr: &BuiltInInstruction)
+
+    pub(super) fn execute_built_in_instr(&mut self, code_dir: &CodeDir,
+                                         cut_policy: &mut Box<CutPolicy>,
+                                         instr: &BuiltInInstruction)
     {
         match instr {
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) => {
@@ -1202,7 +1204,17 @@ impl MachineState {
                 let b = self.b;
                 let block = self.block;
 
-                self.sgc_cps.push((addr, b, block));
+                if !cut_policy.is::<SetupCallCleanupCutPolicy>() {
+                    *cut_policy = Box::new(SetupCallCleanupCutPolicy::new());
+                }
+
+                match cut_policy.downcast_mut::<SetupCallCleanupCutPolicy>().ok()
+                {
+                    Some(cut_policy) => cut_policy.push_cont_pt(addr, b, block),
+                    None => panic!("install_cleaner: should have installed \\
+SetupCallCleanupCutPolicy.")
+                };
+
                 self.p += 1;
             },
             &BuiltInInstruction::SetBall => {
@@ -1435,7 +1447,8 @@ impl MachineState {
         self.unify(Addr::HeapCell(old_h), a2);
     }
 
-    pub(super) fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, instr: &ControlInstruction)
+    pub(super) fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, cut_policy: &mut Box<CutPolicy>,
+                                     instr: &ControlInstruction)
     {
         match instr {
             &ControlInstruction::Allocate(num_cells) => {
@@ -1561,23 +1574,28 @@ impl MachineState {
                     self.p = self.cp;
                     val
                 }),
-            &ControlInstruction::GetCleanerCall => {                
+            &ControlInstruction::GetCleanerCall => {
                 let dest = self[temp_v!(1)].clone();
                 
-                if let Some((cleaner_addr, b_cutoff, prev_block)) = self.sgc_cps.pop() {
-                    self.p += 1;
-                    
-                    if self.b <= b_cutoff + 1 {
-                        self.block = prev_block;
+                match cut_policy.downcast_mut::<SetupCallCleanupCutPolicy>().ok() {
+                    Some(sgc_policy) =>
+                        if let Some((addr, b_cutoff, prev_block)) = sgc_policy.pop_cont_pt()
+                        {
+                            self.p += 1;
                         
-                        if let Some(r) = dest.as_var() {
-                            self.bind(r, cleaner_addr);
-                            return;
-                        }
-                    } else {
-                        self.sgc_cps.push((cleaner_addr, b_cutoff, prev_block));                        
-                    }
-                }
+                            if self.b <= b_cutoff + 1 {
+                                self.block = prev_block;
+                                
+                                if let Some(r) = dest.as_var() {
+                                    self.bind(r, addr);
+                                    return;
+                                }
+                            } else {                                
+                                sgc_policy.push_cont_pt(addr, b_cutoff, prev_block);
+                            }
+                        },
+                    None => panic!("expected SetupCallCleanupCutPolicy trait object.")
+                };
 
                 self.fail = true;
             },
@@ -1796,7 +1814,9 @@ impl MachineState {
         }
     }
 
-    pub(super) fn execute_cut_instr(&mut self, instr: &CutInstruction) {
+    pub(super) fn execute_cut_instr(&mut self, instr: &CutInstruction,
+                                    cut_policy: &mut Box<CutPolicy>)
+    {
         match instr {
             &CutInstruction::NeckCut => {
                 let b  = self.b;
@@ -1816,29 +1836,8 @@ impl MachineState {
                 self[r] = Addr::Con(Constant::Usize(b0));
                 self.p += 1;
             },
-            &CutInstruction::Cut(r) => {
-                let b = self.b;
-
-                if let Addr::Con(Constant::Usize(b0)) = self[r].clone() {
-                    if b > b0 {
-                        self.b = b0;
-                        self.tidy_trail();
-                        self.or_stack.truncate(self.b);
-                    }
-                } else {
-                    self.fail = true;
-                    return;
-                }
-
-                self.p += 1;
-                
-                if !self.sgc_cps.is_empty() {
-                    self.cp = self.p;
-                    self.num_of_args = 0;
-                    self.b0 = self.b;
-                    self.p  = CodePtr::DirEntry(352); // goto_call run_cleaners_without_handling/0.
-                }
-            }
+            &CutInstruction::Cut(r) =>
+                cut_policy.cut(self, r),
         }
     }
 

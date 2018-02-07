@@ -9,6 +9,8 @@ pub(crate) mod machine_state;
 #[macro_use]
 mod machine_state_impl;
 
+use prolog::machine::machine_state::*;
+
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::mem::swap;
@@ -16,7 +18,8 @@ use std::ops::Index;
 use std::rc::Rc;
 
 pub struct Machine {
-    ms: machine_state::MachineState,
+    ms: MachineState,
+    cut_policy: Box<CutPolicy>,
     code: Code,
     code_dir: CodeDir,
     op_dir: OpDir,
@@ -46,7 +49,8 @@ impl Machine {
         
         
         Machine {
-            ms: machine_state::MachineState::new(atom_tbl),
+            ms: MachineState::new(atom_tbl),
+            cut_policy: Box::new(DefaultCutPolicy {}),
             code,
             code_dir,
             op_dir,
@@ -102,13 +106,13 @@ impl Machine {
             &Line::Arithmetic(ref arith_instr) =>
                 self.ms.execute_arith_instr(arith_instr),
             &Line::BuiltIn(ref built_in_instr) =>
-                self.ms.execute_built_in_instr(&self.code_dir, built_in_instr),
+                self.ms.execute_built_in_instr(&self.code_dir, &mut self.cut_policy, built_in_instr),
             &Line::Choice(ref choice_instr) =>
                 self.ms.execute_choice_instr(choice_instr),
             &Line::Cut(ref cut_instr) =>
-                self.ms.execute_cut_instr(cut_instr),
+                self.ms.execute_cut_instr(cut_instr, &mut self.cut_policy),
             &Line::Control(ref control_instr) =>
-                self.ms.execute_ctrl_instr(&self.code_dir, control_instr),
+                self.ms.execute_ctrl_instr(&self.code_dir, &mut self.cut_policy, control_instr),
             &Line::Fact(ref fact) => {
                 for fact_instr in fact {
                     if self.failed() {
@@ -117,7 +121,7 @@ impl Machine {
 
                     self.ms.execute_fact_instr(&fact_instr);
                 }
-
+ 
                 self.ms.p += 1;
             },
             &Line::Indexing(ref indexing_instr) =>
@@ -341,6 +345,7 @@ impl Machine {
     }
 
     pub fn reset(&mut self) {
+        self.cut_policy = Box::new(DefaultCutPolicy {});
         self.ms.reset();
     }
 

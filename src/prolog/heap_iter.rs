@@ -4,16 +4,15 @@ use prolog::machine::machine_state::MachineState;
 use std::vec::Vec;
 
 pub struct HeapCellPreOrderIterator<'a> {
-    machine_st  : &'a MachineState,
-    state_stack : Vec<Addr>
+    machine_st: &'a MachineState,
+    state_stack: Vec<Addr>
 }
 
 impl<'a> HeapCellPreOrderIterator<'a> {
     pub fn new(machine_st: &'a MachineState, a: Addr) -> Self
     {
         HeapCellPreOrderIterator {
-            machine_st,
-            state_stack: vec![a]
+            machine_st, state_stack: vec![a]
         }
     }
 

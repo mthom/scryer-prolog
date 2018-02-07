@@ -506,7 +506,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          deallocate!(),
          goto_execute!(340, 0), // goto run_cleaners_with_handling/0, 340.
          trust_me!(),
-         proceed!(),
+         proceed!(), // goto_execute!(380, 0), // goto restore_cut_points/0, 380.
          try_me_else!(10), // run_cleaners_without_handling/1, 352.
          allocate!(2),
          get_level!(perm_v!(1)),
@@ -518,7 +518,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          deallocate!(),
          goto_execute!(352, 0), // goto run_cleaners_without_handling/0, 352.
          trust_me!(),
-         proceed!(),
+         proceed!(), // goto_execute!(380, 0), // goto restore_cut_points/0, 380.
          allocate!(1), // sgc_on_success/2, 364.
          fact![get_var_in_fact!(perm_v!(1), 2)],
          reset_block!(),
