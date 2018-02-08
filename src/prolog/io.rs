@@ -219,6 +219,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "is_var {}", r),
             &BuiltInInstruction::ResetBlock =>
                 write!(f, "reset_block"),
+            &BuiltInInstruction::RestoreCutPolicy =>
+                write!(f, "restore_cut_point"),
             &BuiltInInstruction::SetBall =>
                 write!(f, "set_ball"),
             &BuiltInInstruction::SetCutPoint(r) =>

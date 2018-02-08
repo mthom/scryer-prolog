@@ -475,25 +475,27 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          query![put_value!(perm_v!(3), 1)],
          call_n!(1),
          query![put_value!(perm_v!(2), 1),
-                put_unsafe_value!(1, 2)],
+                put_value!(perm_v!(1), 2)],
          deallocate!(),
          check_cp_execute!(),
-         retry_me_else!(10),
-         allocate!(1),
+         retry_me_else!(12),
+         allocate!(2),
          query![put_value!(temp_v!(3), 1)],
-         reset_block!(),
+         reset_block!(),         
          query![put_var!(perm_v!(1), 1)],
          get_ball!(),
-         goto_call!(340, 0), // goto run_cleaners_with_handling/0, 340.
-         query![put_value!(perm_v!(1), 1)],
+         get_level!(perm_v!(2)),
+         set_cp!(perm_v!(2)),
+         goto_call!(342, 0), // goto run_cleaners_with_handling/0, 342.
+         query![put_unsafe_value!(1, 1)],
          deallocate!(),
-         goto_execute!(59, 1),
+         goto_execute!(59, 1), // goto throw/1, 59.        
          trust_me!(),
          allocate!(0),
-         goto_call!(352, 0), // goto run_cleaners_without_handling/0, 352.
+         goto_call!(354, 0), // goto run_cleaners_without_handling/0, 354.
          deallocate!(),
          fail!(),
-         try_me_else!(10), // run_cleaners_with_handling/0, 340.
+         try_me_else!(10), // run_cleaners_with_handling/0, 342.
          allocate!(2),
          get_level!(perm_v!(1)),
          query![put_var!(perm_v!(2), 1)],
@@ -502,39 +504,41 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
                 put_var!(temp_v!(4), 2),
                 put_constant!(Level::Shallow, atom!("true", atom_tbl), temp_v!(3))],
          goto_call!(5, 3), // goto catch/3, 5.
-         cut!(perm_v!(1)),
+         set_cp!(perm_v!(1)),
          deallocate!(),
-         goto_execute!(340, 0), // goto run_cleaners_with_handling/0, 340.
+         goto_execute!(342, 0), // goto run_cleaners_with_handling/0, 342.
          trust_me!(),
-         proceed!(), // goto_execute!(380, 0), // goto restore_cut_points/0, 380.
-         try_me_else!(10), // run_cleaners_without_handling/1, 352.
+         goto_execute!(382, 0), // goto restore_cut_points/0, 382.
+         try_me_else!(10), // run_cleaners_without_handling/1, 354.
          allocate!(2),
          get_level!(perm_v!(1)),
          query![put_var!(perm_v!(2), 1)],
          get_cleaner_call!(),
          query![put_value!(perm_v!(2), 1)],
          call_n!(1),
-         cut!(perm_v!(1)),
+         set_cp!(perm_v!(1)),
          deallocate!(),
-         goto_execute!(352, 0), // goto run_cleaners_without_handling/0, 352.
+         goto_execute!(354, 0), // goto run_cleaners_without_handling/0, 354.
          trust_me!(),
-         proceed!(), // goto_execute!(380, 0), // goto restore_cut_points/0, 380.
-         allocate!(1), // sgc_on_success/2, 364.
+         goto_execute!(382, 0), // goto restore_cut_points/0, 382.
+         allocate!(1), // sgc_on_success/2, 366.
          fact![get_var_in_fact!(perm_v!(1), 2)],
          reset_block!(),
          cut!(perm_v!(1)),
          deallocate!(),
          proceed!(),
-         is_compound!(temp_v!(1)), // compound/1, 370.
+         is_compound!(temp_v!(1)), // compound/1, 372.
          proceed!(),
-         is_rational!(temp_v!(1)), // rational/1, 372.
+         is_rational!(temp_v!(1)), // rational/1, 374.
          proceed!(),
-         is_string!(temp_v!(1)), // string/1, 374.
+         is_string!(temp_v!(1)), // string/1, 376.
          proceed!(),
-         is_float!(temp_v!(1)), // float/1, 376.
+         is_float!(temp_v!(1)), // float/1, 378.
          proceed!(),
-         is_nonvar!(temp_v!(1)), // nonvar/1, 378.
+         is_nonvar!(temp_v!(1)), // nonvar/1, 380.
          proceed!(),
+         restore_cut_policy!(), // restore_cut_policy/0, 382.
+         proceed!()
     ]
 }
 
@@ -621,11 +625,11 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
 
     code_dir.insert((tabled_rc!("length", atom_tbl), 2), (PredicateKeyType::BuiltIn, 261));
     code_dir.insert((tabled_rc!("setup_call_cleanup", atom_tbl), 3), (PredicateKeyType::BuiltIn, 294));
-    code_dir.insert((tabled_rc!("compound", atom_tbl), 1), (PredicateKeyType::BuiltIn, 370));
-    code_dir.insert((tabled_rc!("rational", atom_tbl), 1), (PredicateKeyType::BuiltIn, 372));
-    code_dir.insert((tabled_rc!("string", atom_tbl), 1), (PredicateKeyType::BuiltIn, 374));
-    code_dir.insert((tabled_rc!("float", atom_tbl), 1), (PredicateKeyType::BuiltIn, 376));
-    code_dir.insert((tabled_rc!("nonvar", atom_tbl), 1), (PredicateKeyType::BuiltIn, 378));
+    code_dir.insert((tabled_rc!("compound", atom_tbl), 1), (PredicateKeyType::BuiltIn, 372));
+    code_dir.insert((tabled_rc!("rational", atom_tbl), 1), (PredicateKeyType::BuiltIn, 374));
+    code_dir.insert((tabled_rc!("string", atom_tbl), 1), (PredicateKeyType::BuiltIn, 376));
+    code_dir.insert((tabled_rc!("float", atom_tbl), 1), (PredicateKeyType::BuiltIn, 378));
+    code_dir.insert((tabled_rc!("nonvar", atom_tbl), 1), (PredicateKeyType::BuiltIn, 380));
     
     (builtin_code, code_dir, op_dir)
 }

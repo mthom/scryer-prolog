@@ -248,7 +248,7 @@ impl CutPolicy for SetupCallCleanupCutPolicy {
             machine_st.cp = machine_st.p;
             machine_st.num_of_args = 0;
             machine_st.b0 = machine_st.b;
-            machine_st.p  = CodePtr::DirEntry(352); // goto_call run_cleaners_without_handling/0.
+            machine_st.p  = CodePtr::DirEntry(354); // goto_call run_cleaners_without_handling/0, 354.
         }
     }
 }

@@ -1204,7 +1204,7 @@ impl MachineState {
                 let b = self.b;
                 let block = self.block;
 
-                if !cut_policy.is::<SetupCallCleanupCutPolicy>() {
+                if cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>().is_err() {
                     *cut_policy = Box::new(SetupCallCleanupCutPolicy::new());
                 }
 
@@ -1214,6 +1214,20 @@ impl MachineState {
                     None => panic!("install_cleaner: should have installed \\
 SetupCallCleanupCutPolicy.")
                 };
+
+                self.p += 1;
+            },
+            &BuiltInInstruction::RestoreCutPolicy => {
+                let restore_default =
+                    if let Ok(cut_policy) = cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>() {
+                        cut_policy.out_of_cont_pts()
+                    } else {
+                        false
+                    };
+
+                if restore_default {
+                    *cut_policy = Box::new(DefaultCutPolicy {});
+                }
 
                 self.p += 1;
             },
@@ -1358,7 +1372,7 @@ SetupCallCleanupCutPolicy.")
 
                 self.unify(a1, a2);
                 self.p += 1;
-            }
+            },
         };
     }
 
@@ -1518,7 +1532,7 @@ SetupCallCleanupCutPolicy.")
                     _ => {
                         self.num_of_args = 2;
                         self.b0 = self.b;
-                        self.p = CodePtr::DirEntry(364); // goto sgc_on_success/2, 364.
+                        self.p = CodePtr::DirEntry(366); // goto sgc_on_success/2, 366.
                     }
                 };
             },
@@ -1576,21 +1590,21 @@ SetupCallCleanupCutPolicy.")
                 }),
             &ControlInstruction::GetCleanerCall => {
                 let dest = self[temp_v!(1)].clone();
-                
+
                 match cut_policy.downcast_mut::<SetupCallCleanupCutPolicy>().ok() {
                     Some(sgc_policy) =>
                         if let Some((addr, b_cutoff, prev_block)) = sgc_policy.pop_cont_pt()
                         {
                             self.p += 1;
-                        
+
                             if self.b <= b_cutoff + 1 {
                                 self.block = prev_block;
-                                
+
                                 if let Some(r) = dest.as_var() {
                                     self.bind(r, addr);
                                     return;
                                 }
-                            } else {                                
+                            } else {
                                 sgc_policy.push_cont_pt(addr, b_cutoff, prev_block);
                             }
                         },

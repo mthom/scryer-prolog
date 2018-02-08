@@ -818,6 +818,7 @@ pub enum BuiltInInstruction {
     IsString(RegType),
     IsVar(RegType),
     ResetBlock,
+    RestoreCutPolicy,
     SetBall,
     SetCutPoint(RegType),
     Succeed,
