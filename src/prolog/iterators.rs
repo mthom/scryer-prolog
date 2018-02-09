@@ -60,10 +60,13 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(0, ClauseType::Display, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            &QueryTerm::Inlined(InlinedQueryTerm::CompareNumber(_, ref terms))
-          | &QueryTerm::Is(ref terms) => {
-                    let state = TermIterState::Clause(0, ClauseType::Is, terms);
-                    QueryIterator { state_stack: vec![state] }
+            &QueryTerm::Inlined(InlinedQueryTerm::CompareNumber(qt, ref terms)) => {                
+                let state = TermIterState::Clause(0, ClauseType::CompareNumber(qt), terms);
+                QueryIterator { state_stack: vec![state] }            
+            },
+            &QueryTerm::Is(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::Is, terms);
+                QueryIterator { state_stack: vec![state] }
             },
             &QueryTerm::Inlined(InlinedQueryTerm::IsAtomic(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsInteger(ref terms))

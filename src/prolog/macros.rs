@@ -554,7 +554,7 @@ macro_rules! check_cp_execute {
 macro_rules! get_cleaner_call {
     () => (
         Line::Control(ControlInstruction::GetCleanerCall)
-    )       
+    )
 }
 
 macro_rules! restore_cut_policy {

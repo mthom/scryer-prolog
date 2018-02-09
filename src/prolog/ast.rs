@@ -155,7 +155,7 @@ impl RegType {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum VarReg {
     ArgAndNorm(RegType, usize),
     Norm(RegType)
@@ -306,7 +306,7 @@ pub enum Fixity {
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum Constant {
     Atom(TabledRc<Atom>),
-    Number(Number),    
+    Number(Number),
     String(Rc<String>),
     Usize(usize),
     EmptyList
@@ -320,7 +320,7 @@ impl fmt::Display for Constant {
             &Constant::EmptyList =>
                 write!(f, "[]"),
             &Constant::Number(ref n) =>
-                write!(f, "{}", n),            
+                write!(f, "{}", n),
             &Constant::String(ref s) =>
                 write!(f, "{}", s),
             &Constant::Usize(integer) =>
@@ -329,7 +329,7 @@ impl fmt::Display for Constant {
     }
 }
 
-#[derive(Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum Term {
     AnonVar,
     Clause(Cell<RegType>, TabledRc<Atom>, Vec<Box<Term>>, Option<Fixity>),
@@ -339,7 +339,7 @@ pub enum Term {
 }
 
 pub enum InlinedQueryTerm {
-    CompareNumber(CompareNumberQT, Vec<Box<Term>>),    
+    CompareNumber(CompareNumberQT, Vec<Box<Term>>),
     IsAtomic(Vec<Box<Term>>),
     IsCompound(Vec<Box<Term>>),
     IsInteger(Vec<Box<Term>>),
@@ -347,13 +347,13 @@ pub enum InlinedQueryTerm {
     IsString(Vec<Box<Term>>),
     IsFloat(Vec<Box<Term>>),
     IsNonVar(Vec<Box<Term>>),
-    IsVar(Vec<Box<Term>>),    
+    IsVar(Vec<Box<Term>>),
 }
 
 impl InlinedQueryTerm {
     pub fn arity(&self) -> usize {
         match self {
-            &InlinedQueryTerm::CompareNumber(_, _) => 2,            
+            &InlinedQueryTerm::CompareNumber(_, _) => 2,
             &InlinedQueryTerm::IsAtomic(_) => 1,
             &InlinedQueryTerm::IsCompound(_) => 1,
             &InlinedQueryTerm::IsFloat(_) => 1,
@@ -361,7 +361,7 @@ impl InlinedQueryTerm {
             &InlinedQueryTerm::IsString(_) => 1,
             &InlinedQueryTerm::IsNonVar(_) => 1,
             &InlinedQueryTerm::IsInteger(_) => 1,
-            &InlinedQueryTerm::IsVar(_) => 1,            
+            &InlinedQueryTerm::IsVar(_) => 1,
         }
     }
 }
@@ -376,6 +376,19 @@ pub enum CompareNumberQT {
     Equal
 }
 
+impl CompareNumberQT {
+    fn name<'a>(self) -> &'a str {
+        match self {
+            CompareNumberQT::GreaterThan => ">",
+            CompareNumberQT::LessThan => "<",
+            CompareNumberQT::GreaterThanOrEqual => ">=",
+            CompareNumberQT::LessThanOrEqual => "=<",
+            CompareNumberQT::NotEqual => "=\\=",
+            CompareNumberQT::Equal => "=:="
+        }
+    }
+}
+
 // vars of predicate, toplevel offset.  Vec<Term> is always a vector
 // of vars (we get their adjoining cells this way).
 pub type JumpStub = Vec<Term>;
@@ -383,7 +396,7 @@ pub type JumpStub = Vec<Term>;
 pub enum QueryTerm {
     Arg(Vec<Box<Term>>),
     CallN(Vec<Box<Term>>),
-    Catch(Vec<Box<Term>>),    
+    Catch(Vec<Box<Term>>),
     Cut,
     Display(Vec<Box<Term>>),
     DuplicateTerm(Vec<Box<Term>>),
@@ -402,7 +415,7 @@ impl QueryTerm {
             &QueryTerm::Arg(_) => 3,
             &QueryTerm::Catch(_) => 3,
             &QueryTerm::Display(_) => 1,
-            &QueryTerm::Throw(_) => 1,            
+            &QueryTerm::Throw(_) => 1,
             &QueryTerm::DuplicateTerm(_) => 2,
             &QueryTerm::Functor(_) => 3,
             &QueryTerm::Inlined(ref term) => term.arity(),
@@ -421,13 +434,12 @@ pub struct Rule {
     pub clauses: Vec<QueryTerm>
 }
 
-
-
 #[derive(Clone, Copy)]
 pub enum ClauseType<'a> {
     Arg,
     CallN,
     Catch,
+    CompareNumber(CompareNumberQT),
     Deep(Level, &'a Cell<RegType>, &'a TabledRc<Atom>, Option<Fixity>),
     Display,
     DuplicateTerm,
@@ -444,17 +456,18 @@ impl<'a> ClauseType<'a> {
             &ClauseType::Arg => "arg",
             &ClauseType::CallN => "call",
             &ClauseType::Catch => "catch",
+            &ClauseType::CompareNumber(qt) => qt.name(),
             &ClauseType::Display => "display",
-            &ClauseType::Deep(_, _, name, _) => name.as_str(),            
+            &ClauseType::Deep(_, _, name, _) => name.as_str(),
             &ClauseType::DuplicateTerm => "duplicate_term",
-            &ClauseType::Functor => "functor",            
+            &ClauseType::Functor => "functor",
             &ClauseType::Is => "is",
             &ClauseType::Root(name) => name.as_str(),
             &ClauseType::SetupCallCleanup => "setup_call_cleanup",
             &ClauseType::Throw => "throw"
         }
     }
-    
+
     pub fn level_of_subterms(self) -> Level {
         match self {
             ClauseType::Deep(..) => Level::Deep,
@@ -531,7 +544,7 @@ impl fmt::Display for Number {
         match self {
             &Number::Float(fl) => write!(f, "{}", fl),
             &Number::Integer(ref bi) => write!(f, "{}", bi),
-            &Number::Rational(ref r) => write!(f, "{}", r)            
+            &Number::Rational(ref r) => write!(f, "{}", r)
         }
     }
 }
@@ -558,7 +571,7 @@ impl Number {
             NumberPair::Rational(n1, n2) => n1 > n2
         }
     }
-    
+
     pub fn gte(self, n2: Number) -> bool {
         match NumberPair::from(self, n2) {
             NumberPair::Integer(n1, n2) => n1 >= n2,
@@ -597,7 +610,7 @@ impl Number {
             NumberPair::Float(n1, n2) => n1 == n2,
             NumberPair::Rational(n1, n2) => n1 == n2
         }
-    }    
+    }
 }
 
 pub enum NumberPair {
@@ -655,7 +668,7 @@ impl NumberPair {
             (Number::Float(n1), Number::Float(n2)) =>
                 NumberPair::Float(n1, n2),
             (Number::Rational(n1), Number::Rational(n2)) =>
-                NumberPair::Rational(n1, n2),            
+                NumberPair::Rational(n1, n2),
             (Number::Integer(n1), Number::Float(n2)) =>
                 Self::integer_float_pair(n1, n2),
             (Number::Float(n1), Number::Integer(n2)) =>
@@ -713,10 +726,10 @@ impl Mul<Number> for Number {
                 Number::Integer(Rc::new(&*n1 * &*n2)),
             NumberPair::Rational(r1, r2) =>
                 Number::Rational(Rc::new(&*r1 * &*r2))
-        }        
+        }
     }
 }
-    
+
 impl Div<Number> for Number {
     type Output = Number;
 
@@ -796,7 +809,7 @@ pub enum ArithmeticInstruction {
 
 pub enum BuiltInInstruction {
     CleanUpBlock,
-    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),    
+    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
     EraseBall,
     Fail,
     GetArgCall,
@@ -849,7 +862,7 @@ pub enum ControlInstruction {
     GotoCall(usize, usize),    // p, arity.
     GotoExecute(usize, usize), // p, arity.
     JmpByCall(usize, usize),    // arity, global_offset.
-    JmpByExecute(usize, usize),     
+    JmpByExecute(usize, usize),
     IsCall(RegType, ArithmeticTerm),
     IsExecute(RegType, ArithmeticTerm),
     Proceed,
@@ -877,7 +890,7 @@ impl ControlInstruction {
             &ControlInstruction::ThrowCall => true,
             &ControlInstruction::ThrowExecute => true,
             &ControlInstruction::GetCleanerCall => true,
-            &ControlInstruction::GotoCall(..) => true,            
+            &ControlInstruction::GotoCall(..) => true,
             &ControlInstruction::GotoExecute(..) => true,
             &ControlInstruction::Proceed => true,
             &ControlInstruction::IsCall(..) => true,
@@ -967,7 +980,7 @@ impl Addr {
             _ => false
         }
     }
-       
+
     pub fn as_var(&self) -> Option<Ref> {
         match self {
             &Addr::HeapCell(hc) => Some(Ref::HeapCell(hc)),
@@ -1069,7 +1082,7 @@ impl Heap {
     pub fn with_capacity(cap: usize) -> Self {
         Heap { heap: Vec::with_capacity(cap), h: 0 }
     }
-    
+
     pub fn push(&mut self, val: HeapCellValue) {
         self.heap.push(val);
         self.h += 1;
@@ -1086,7 +1099,7 @@ impl Heap {
 
     pub fn append(&mut self, vals: Vec<HeapCellValue>) {
         let n = vals.len();
-        
+
         self.heap.extend(vals.into_iter());
         self.h += n;
     }
