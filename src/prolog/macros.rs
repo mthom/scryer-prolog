@@ -562,3 +562,9 @@ macro_rules! restore_cut_policy {
         Line::BuiltIn(BuiltInInstruction::RestoreCutPolicy)
     )
 }
+
+macro_rules! ground_execute {
+    () => (
+        Line::Control(ControlInstruction::GroundExecute)
+    )
+}

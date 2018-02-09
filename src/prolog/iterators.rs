@@ -60,6 +60,10 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(0, ClauseType::Display, terms);
                 QueryIterator { state_stack: vec![state] }
             },
+            &QueryTerm::Ground(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::Ground, terms);
+                QueryIterator { state_stack: vec![state] }
+            },
             &QueryTerm::Inlined(InlinedQueryTerm::CompareNumber(qt, ref terms)) => {                
                 let state = TermIterState::Clause(0, ClauseType::CompareNumber(qt), terms);
                 QueryIterator { state_stack: vec![state] }            
@@ -317,7 +321,7 @@ impl<'a> ChunkedIterator<'a>
                     arity = child_terms.len();
                     break;
                 },
-                &QueryTerm::Display(_) => {
+                &QueryTerm::Ground(_) | &QueryTerm::Display(_) => {
                     result.push(term);
                     arity = 1;
                     break;
@@ -341,7 +345,7 @@ impl<'a> ChunkedIterator<'a>
                     if self.term_loc.chunk_num() > 0 {
                         self.deep_cut_encountered = true;
                     }
-                },
+                },                
             };
 
             item = self.iter.next();

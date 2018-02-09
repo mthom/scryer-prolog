@@ -131,6 +131,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "functor_execute"),
             &ControlInstruction::Deallocate =>
                 write!(f, "deallocate"),
+            &ControlInstruction::GroundCall =>
+                write!(f, "ground_call"),
+            &ControlInstruction::GroundExecute =>
+                write!(f, "ground_execute"),
             &ControlInstruction::Execute(ref name, arity) =>
                 write!(f, "execute {}/{}", name, arity),
             &ControlInstruction::GetCleanerCall =>
@@ -212,7 +216,7 @@ impl fmt::Display for BuiltInInstruction {
             &BuiltInInstruction::IsString(r) =>
                 write!(f, "is_string {}", r),
             &BuiltInInstruction::IsInteger(r) =>
-                write!(f, "is_integer {}", r),            
+                write!(f, "is_integer {}", r),
             &BuiltInInstruction::DynamicIs =>
                 write!(f, "call_is"),
             &BuiltInInstruction::IsVar(r) =>

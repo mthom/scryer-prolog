@@ -399,8 +399,9 @@ pub enum QueryTerm {
     Catch(Vec<Box<Term>>),
     Cut,
     Display(Vec<Box<Term>>),
-    DuplicateTerm(Vec<Box<Term>>),
+    DuplicateTerm(Vec<Box<Term>>),    
     Functor(Vec<Box<Term>>),
+    Ground(Vec<Box<Term>>),
     Inlined(InlinedQueryTerm),
     Is(Vec<Box<Term>>),
     Jump(JumpStub),
@@ -416,8 +417,9 @@ impl QueryTerm {
             &QueryTerm::Catch(_) => 3,
             &QueryTerm::Display(_) => 1,
             &QueryTerm::Throw(_) => 1,
-            &QueryTerm::DuplicateTerm(_) => 2,
+            &QueryTerm::DuplicateTerm(_) => 2,            
             &QueryTerm::Functor(_) => 3,
+            &QueryTerm::Ground(_) => 1,
             &QueryTerm::Inlined(ref term) => term.arity(),
             &QueryTerm::Is(_) => 2,
             &QueryTerm::Jump(ref vars) => vars.len(),
@@ -444,6 +446,7 @@ pub enum ClauseType<'a> {
     Display,
     DuplicateTerm,
     Functor,
+    Ground,
     Is,
     Root(&'a TabledRc<Atom>),
     SetupCallCleanup,
@@ -461,6 +464,7 @@ impl<'a> ClauseType<'a> {
             &ClauseType::Deep(_, _, name, _) => name.as_str(),
             &ClauseType::DuplicateTerm => "duplicate_term",
             &ClauseType::Functor => "functor",
+            &ClauseType::Ground  => "ground",            
             &ClauseType::Is => "is",
             &ClauseType::Root(name) => name.as_str(),
             &ClauseType::SetupCallCleanup => "setup_call_cleanup",
@@ -853,7 +857,7 @@ pub enum ControlInstruction {
     DisplayExecute,
     Deallocate,
     DuplicateTermCall,
-    DuplicateTermExecute,
+    DuplicateTermExecute,    
     Execute(TabledRc<Atom>, usize),
     ExecuteN(usize),
     FunctorCall,
@@ -861,6 +865,8 @@ pub enum ControlInstruction {
     GetCleanerCall,
     GotoCall(usize, usize),    // p, arity.
     GotoExecute(usize, usize), // p, arity.
+    GroundCall,
+    GroundExecute,
     JmpByCall(usize, usize),    // arity, global_offset.
     JmpByExecute(usize, usize),
     IsCall(RegType, ArithmeticTerm),
@@ -883,7 +889,7 @@ impl ControlInstruction {
             &ControlInstruction::DuplicateTermCall => true,
             &ControlInstruction::DuplicateTermExecute => true,
             &ControlInstruction::Execute(_, _)  => true,
-            &ControlInstruction::CallN(_) => true,
+            &ControlInstruction::CallN(_) => true,            
             &ControlInstruction::ExecuteN(_) => true,
             &ControlInstruction::FunctorCall => true,
             &ControlInstruction::FunctorExecute => true,
@@ -892,6 +898,8 @@ impl ControlInstruction {
             &ControlInstruction::GetCleanerCall => true,
             &ControlInstruction::GotoCall(..) => true,
             &ControlInstruction::GotoExecute(..) => true,
+            &ControlInstruction::GroundCall => true,
+            &ControlInstruction::GroundExecute => true,
             &ControlInstruction::Proceed => true,
             &ControlInstruction::IsCall(..) => true,
             &ControlInstruction::IsExecute(..) => true,
@@ -964,7 +972,7 @@ pub type Code = Vec<Line>;
 
 pub type CodeDeque = VecDeque<Line>;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Addr {
     Con(Constant),
     Lis(usize),

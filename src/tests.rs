@@ -1328,6 +1328,12 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- nonvar(\"sdfsa\").");
     assert_prolog_success!(&mut wam, "?- nonvar(atom).");
     assert_prolog_success!(&mut wam, "?- nonvar([1,2,3]).");
+
+    assert_prolog_success!(&mut wam, "?- A = f(A), ground(f(f(A))), ground(f(A)), ground(A).");
+    assert_prolog_failure!(&mut wam, "?- B = f(A), ground(B).");
+    assert_prolog_failure!(&mut wam, "?- B = f(A), ground(A).");
+
+    assert_prolog_success!(&mut wam, "?- ground(x), ground(f(x)), X = f(x), ground(g(f(X), [a,b])).");
 }
 
 #[test]

@@ -1461,6 +1461,56 @@ SetupCallCleanupCutPolicy.")
         self.unify(Addr::HeapCell(old_h), a2);
     }
 
+    /* TODO: needs careful consideration of cyclic terms.
+    // returns true on failure.
+    fn eq_test(&self) -> bool
+    {
+        let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
+        let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
+
+        let iter1 = self.acyclic_pre_order_iter(a1);
+        let iter2 = self.acyclic_pre_order_iter(a2);
+
+        for (v1, v2) in iter1.zip(iter2) {
+            match (v1, v2) {
+                (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
+                    if ar1 != ar2 || *n1 != *n2 {
+                        return true;
+                    },
+                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
+                    continue,
+                (HeapCellValue::Addr(a1), HeapCellValue::Addr(a2)) =>
+                    if a1 != a2 {
+                        return true;
+                    },
+                _ => {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+    */
+
+    // returns true on failure.
+    fn ground_test(&self) -> bool
+    {
+        let a = self.store(self.deref(self[temp_v!(1)].clone()));
+
+        for v in self.acyclic_pre_order_iter(a) {
+            match v {
+                HeapCellValue::Addr(Addr::HeapCell(..)) =>
+                    return true,
+                HeapCellValue::Addr(Addr::StackCell(..)) =>
+                    return true,
+                _ => {}
+            }
+        };
+
+        false
+    }
+
     pub(super) fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, cut_policy: &mut Box<CutPolicy>,
                                      instr: &ControlInstruction)
     {
@@ -1568,6 +1618,14 @@ SetupCallCleanupCutPolicy.")
             },
             &ControlInstruction::DuplicateTermExecute => {
                 self.duplicate_term();
+                self.p = self.cp;
+            },
+            &ControlInstruction::GroundCall => {
+                self.fail = self.ground_test();
+                self.p += 1;
+            },
+            &ControlInstruction::GroundExecute => {
+                self.fail = self.ground_test();
                 self.p = self.cp;
             },
             &ControlInstruction::Execute(ref name, arity) =>

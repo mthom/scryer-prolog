@@ -1,6 +1,7 @@
 use prolog::ast::*;
 use prolog::machine::machine_state::MachineState;
 
+use std::collections::HashSet;
 use std::vec::Vec;
 
 pub struct HeapCellPreOrderIterator<'a> {
@@ -30,7 +31,7 @@ impl<'a> HeapCellPreOrderIterator<'a> {
                 self.follow(a.clone())
         }
     }
-    
+
     // called under the assumption that the location at r is about to
     // be visited, and so any follow up states need to be added to
     // state_stack. returns the dereferenced Addr from Ref.
@@ -120,5 +121,62 @@ impl<'a> Iterator for HeapCellPostOrderIterator<'a> {
 impl MachineState {
     pub fn post_order_iter<'a>(&'a self, a: Addr) -> HeapCellPostOrderIterator<'a> {
         HeapCellPostOrderIterator::new(HeapCellPreOrderIterator::new(self, a))
+    }
+
+    pub fn acyclic_pre_order_iter<'a>(&'a self, a: Addr) -> HeapCellAcyclicIterator<HeapCellPreOrderIterator<'a>>
+    {
+        HeapCellAcyclicIterator::new(HeapCellPreOrderIterator::new(self, a))
+    }
+}
+
+pub trait MutStackHeapCellIterator {
+    fn stack(&mut self) -> &mut Vec<Addr>;
+}
+
+impl<'a> MutStackHeapCellIterator for HeapCellPreOrderIterator<'a> {
+    fn stack(&mut self) -> &mut Vec<Addr> {
+        &mut self.state_stack
+    }
+}
+
+pub struct HeapCellAcyclicIterator<HeapCellIter> {
+    iter: HeapCellIter,
+    seen: HashSet<Addr>
+}
+
+impl<HeapCellIter: MutStackHeapCellIterator> HeapCellAcyclicIterator<HeapCellIter>
+{
+    pub fn new(mut iter: HeapCellIter) -> Self {
+        let mut seen = HashSet::new();
+
+        if let Some(addr) = iter.stack().last() {
+            seen.insert(addr.clone());
+        }
+
+        HeapCellAcyclicIterator { iter, seen }
+    }
+}
+
+impl<HeapCellIter> Iterator for HeapCellAcyclicIterator<HeapCellIter>
+    where HeapCellIter: Iterator<Item=HeapCellValue>
+                      + MutStackHeapCellIterator
+{
+    type Item = HeapCellValue;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(hcv) = self.iter.next() {
+            if let Some(addr) = self.iter.stack().pop() {
+                if self.seen.contains(&addr) {
+                    continue;
+                } else {
+                    self.iter.stack().push(addr.clone());
+                    self.seen.insert(addr);
+                }
+            }
+
+            return Some(hcv);
+        }
+
+        None
     }
 }
