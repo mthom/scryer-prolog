@@ -146,14 +146,8 @@ pub struct HeapCellAcyclicIterator<HeapCellIter> {
 
 impl<HeapCellIter: MutStackHeapCellIterator> HeapCellAcyclicIterator<HeapCellIter>
 {
-    pub fn new(mut iter: HeapCellIter) -> Self {
-        let mut seen = HashSet::new();
-
-        if let Some(addr) = iter.stack().last() {
-            seen.insert(addr.clone());
-        }
-
-        HeapCellAcyclicIterator { iter, seen }
+    pub fn new(iter: HeapCellIter) -> Self {
+        HeapCellAcyclicIterator { iter, seen: HashSet::new() }
     }
 }
 
@@ -162,21 +156,18 @@ impl<HeapCellIter> Iterator for HeapCellAcyclicIterator<HeapCellIter>
                       + MutStackHeapCellIterator
 {
     type Item = HeapCellValue;
-    
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(hcv) = self.iter.next() {
-            if let Some(addr) = self.iter.stack().pop() {
-                if self.seen.contains(&addr) {
-                    continue;
-                } else {
-                    self.iter.stack().push(addr.clone());
-                    self.seen.insert(addr);
-                }
-            }
 
-            return Some(hcv);
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(addr) = self.iter.stack().pop() {
+            if self.seen.contains(&addr) {
+                continue;
+            } else {
+                self.iter.stack().push(addr.clone());
+                self.seen.insert(addr);
+                break;
+            }
         }
 
-        None
+        self.iter.next()
     }
 }
