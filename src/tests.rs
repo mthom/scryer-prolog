@@ -1297,6 +1297,7 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- float(atom).");
     assert_prolog_failure!(&mut wam, "?- float(structure(functor)).");
     assert_prolog_failure!(&mut wam, "?- float([1,2,3]).");
+    assert_prolog_failure!(&mut wam, "?- float([1,2,X]).");
     assert_prolog_failure!(&mut wam, "?- X is 3 rdiv 4, float(X).");
 
     assert_prolog_success!(&mut wam, "?- X is 3 rdiv 4, rational(X).");
@@ -1305,6 +1306,7 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- rational(atom).");
     assert_prolog_failure!(&mut wam, "?- rational(structure(functor)).");
     assert_prolog_failure!(&mut wam, "?- rational([1,2,3]).");
+    assert_prolog_failure!(&mut wam, "?- rational([1,2,X]).");
 
     assert_prolog_success!(&mut wam, "?- compound(functor(compound)).");
     assert_prolog_failure!(&mut wam, "?- compound(3.14159269).");
@@ -1312,6 +1314,7 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- compound(\"sdfsa\").");
     assert_prolog_failure!(&mut wam, "?- compound(atom).");
     assert_prolog_failure!(&mut wam, "?- compound([1,2,3]).");
+    assert_prolog_failure!(&mut wam, "?- compound([1,2,X]).");
 
     assert_prolog_failure!(&mut wam, "?- string(functor(string)).");
     assert_prolog_failure!(&mut wam, "?- string(3.14159269).");
@@ -1319,6 +1322,7 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- string(\"sdfsa\").");
     assert_prolog_failure!(&mut wam, "?- string(atom).");
     assert_prolog_failure!(&mut wam, "?- string([1,2,3]).");
+    assert_prolog_failure!(&mut wam, "?- string([1,2,X]).");
     
     assert_prolog_success!(&mut wam, "?- X = nonvar, nonvar(X).");
     assert_prolog_failure!(&mut wam, "?- nonvar(X).");
@@ -1328,6 +1332,7 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- nonvar(\"sdfsa\").");
     assert_prolog_success!(&mut wam, "?- nonvar(atom).");
     assert_prolog_success!(&mut wam, "?- nonvar([1,2,3]).");
+    assert_prolog_success!(&mut wam, "?- nonvar([1,2,X]).");
 
     assert_prolog_success!(&mut wam, "?- A = f(A), ground(f(f(A))), ground(f(A)), ground(A).");
     assert_prolog_failure!(&mut wam, "?- B = f(A), ground(B).");

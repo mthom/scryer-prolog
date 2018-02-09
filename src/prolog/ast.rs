@@ -900,7 +900,6 @@ impl ControlInstruction {
             &ControlInstruction::GotoExecute(..) => true,
             &ControlInstruction::GroundCall => true,
             &ControlInstruction::GroundExecute => true,
-            &ControlInstruction::Proceed => true,
             &ControlInstruction::IsCall(..) => true,
             &ControlInstruction::IsExecute(..) => true,
             &ControlInstruction::JmpByCall(..) => true,
