@@ -52,6 +52,10 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(0, ClauseType::SetupCallCleanup, terms);
                 QueryIterator { state_stack: vec![state] }
             },
+            &QueryTerm::Eq(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::Eq, terms);
+                QueryIterator { state_stack: vec![state] }
+            },
             &QueryTerm::Functor(ref terms) => {
                 let state = TermIterState::Clause(0, ClauseType::Functor, terms);
                 QueryIterator { state_stack: vec![state] }
@@ -64,9 +68,9 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(0, ClauseType::Ground, terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            &QueryTerm::Inlined(InlinedQueryTerm::CompareNumber(qt, ref terms)) => {                
+            &QueryTerm::Inlined(InlinedQueryTerm::CompareNumber(qt, ref terms)) => {
                 let state = TermIterState::Clause(0, ClauseType::CompareNumber(qt), terms);
-                QueryIterator { state_stack: vec![state] }            
+                QueryIterator { state_stack: vec![state] }
             },
             &QueryTerm::Is(ref terms) => {
                 let state = TermIterState::Clause(0, ClauseType::Is, terms);
@@ -79,8 +83,12 @@ impl<'a> QueryIterator<'a> {
           | &QueryTerm::Inlined(InlinedQueryTerm::IsFloat(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsRational(ref terms))
           | &QueryTerm::Inlined(InlinedQueryTerm::IsCompound(ref terms))
-          | &QueryTerm::Inlined(InlinedQueryTerm::IsString(ref terms)) =>      
+          | &QueryTerm::Inlined(InlinedQueryTerm::IsString(ref terms)) =>
                 Self::from_term(terms[0].as_ref()),
+            &QueryTerm::NotEq(ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::NotEq, terms);
+                QueryIterator { state_stack: vec![state] }
+            },
             &QueryTerm::Term(ref term) =>
                 Self::from_term(term),
             &QueryTerm::Throw(ref term) => {
@@ -332,7 +340,8 @@ impl<'a> ChunkedIterator<'a>
                     arity = 3;
                     break;
                 },
-                &QueryTerm::Is(_) | &QueryTerm::DuplicateTerm(_) => {
+                &QueryTerm::Eq(_) | &QueryTerm::NotEq(_)
+              | &QueryTerm::Is(_) | &QueryTerm::DuplicateTerm(_) => {
                     result.push(term);
                     arity = 2;
                     break;
@@ -345,7 +354,7 @@ impl<'a> ChunkedIterator<'a>
                     if self.term_loc.chunk_num() > 0 {
                         self.deep_cut_encountered = true;
                     }
-                },                
+                },
             };
 
             item = self.iter.next();

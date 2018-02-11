@@ -259,10 +259,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 code.push(Line::Control(ControlInstruction::CatchCall)),
             &QueryTerm::Display(_) =>
                 code.push(Line::Control(ControlInstruction::DisplayCall)),
-            &QueryTerm::DuplicateTerm(_) =>                
+            &QueryTerm::DuplicateTerm(_) =>
                 code.push(Line::Control(ControlInstruction::DuplicateTermCall)),
+            &QueryTerm::Eq(_) =>
+                code.push(Line::Control(ControlInstruction::EqCall)),
             &QueryTerm::Ground(_) =>
-                code.push(Line::Control(ControlInstruction::GroundCall)),            
+                code.push(Line::Control(ControlInstruction::GroundCall)),
             &QueryTerm::Functor(_) =>
                 code.push(Line::Control(ControlInstruction::FunctorCall)),
             &QueryTerm::Inlined(_) =>
@@ -270,6 +272,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             &QueryTerm::Jump(ref vars) => {
                 code.push(jmp_call!(vars.len(), 0));
             },
+            &QueryTerm::NotEq(_) =>
+                code.push(Line::Control(ControlInstruction::NotEqCall)),
             &QueryTerm::Term(Term::Constant(_, Constant::Atom(ref atom))) => {
                 let call = ControlInstruction::Call(atom.clone(), 0, pvs);
                 code.push(Line::Control(call));
@@ -303,12 +307,16 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         *ctrl = ControlInstruction::DisplayExecute,
                     ControlInstruction::DuplicateTermCall =>
                         *ctrl = ControlInstruction::DuplicateTermExecute,
+                    ControlInstruction::EqCall =>
+                        *ctrl = ControlInstruction::EqExecute,
                     ControlInstruction::GroundCall =>
                         *ctrl = ControlInstruction::GroundExecute,
                     ControlInstruction::FunctorCall =>
                         *ctrl = ControlInstruction::FunctorExecute,
                     ControlInstruction::JmpByCall(arity, offset) =>
                         *ctrl = ControlInstruction::JmpByExecute(arity, offset),
+                    ControlInstruction::NotEqCall =>
+                        *ctrl = ControlInstruction::NotEqExecute,
                     ControlInstruction::CatchCall =>
                         *ctrl = ControlInstruction::CatchExecute,
                     ControlInstruction::ThrowCall =>
@@ -509,21 +517,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     },
                     &QueryTerm::Inlined(ref term) =>
                         self.compile_inlined(term, term_loc, code)?,
-                    _ if chunk_num == 0 => {
-                        self.marker.reset_arg(term.arity());
-
-                        let iter  = term.post_order_iter();
-                        let query = self.compile_target(iter, term_loc, is_exposed);
-
-                        if !query.is_empty() {
-                            code.push(Line::Query(query));
-                        }
-
-                        Self::add_conditional_call(code, term, conjunct_info.perm_vars());
-                    },
                     _ => {
-                        let num_vars = conjunct_info.perm_vs.vars_above_threshold(i + 1);
-                        self.compile_query_line(term, term_loc, code, num_vars, is_exposed);
+                        let num_perm_vars = if chunk_num == 0 {
+                            conjunct_info.perm_vars()
+                        } else {
+                            conjunct_info.perm_vs.vars_above_threshold(i + 1)
+                        };
+
+                        self.compile_query_line(term, term_loc, code, num_perm_vars, is_exposed);
                     },
                 };
 
@@ -666,18 +667,18 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     }
 
     fn compile_query_line(&mut self, term: &'a QueryTerm, term_loc: GenContext,
-                          code: &mut Code, index: usize, is_exposed: bool)
+                          code: &mut Code, num_perm_vars_left: usize, is_exposed: bool)
     {
         self.marker.reset_arg(term.arity());
 
-        let iter = term.post_order_iter();
-        let compiled_query = self.compile_target(iter, term_loc, is_exposed);
+        let iter  = term.post_order_iter();
+        let query = self.compile_target(iter, term_loc, is_exposed);
 
-        if !compiled_query.is_empty() {
-            code.push(Line::Query(compiled_query));
+        if !query.is_empty() {
+            code.push(Line::Query(query));
         }
 
-        Self::add_conditional_call(code, term, index);
+        Self::add_conditional_call(code, term, num_perm_vars_left);
     }
 
     pub fn compile_query(&mut self, query: &'a Vec<QueryTerm>) -> Result<Code, ParserError>

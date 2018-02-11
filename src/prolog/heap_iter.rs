@@ -123,9 +123,17 @@ impl MachineState {
         HeapCellPostOrderIterator::new(HeapCellPreOrderIterator::new(self, a))
     }
 
-    pub fn acyclic_pre_order_iter<'a>(&'a self, a: Addr) -> HeapCellAcyclicIterator<HeapCellPreOrderIterator<'a>>
+    pub fn acyclic_pre_order_iter<'a>(&'a self, a: Addr)
+                                      -> HeapCellAcyclicIterator<HeapCellPreOrderIterator<'a>>
     {
         HeapCellAcyclicIterator::new(HeapCellPreOrderIterator::new(self, a))
+    }
+
+    pub fn zipped_acyclic_pre_order_iter<'a>(&'a self, a1: Addr, a2: Addr)
+                                             -> HeapCellZippedAcyclicIterator<HeapCellPreOrderIterator<'a>>
+    {
+        HeapCellZippedAcyclicIterator::new(HeapCellPreOrderIterator::new(self, a1),
+                                           HeapCellPreOrderIterator::new(self, a2))
     }
 }
 
@@ -169,5 +177,45 @@ impl<HeapCellIter> Iterator for HeapCellAcyclicIterator<HeapCellIter>
         }
 
         self.iter.next()
+    }
+}
+
+pub struct HeapCellZippedAcyclicIterator<HeapCellIter> {
+    i1: HeapCellIter,
+    i2: HeapCellIter,
+    seen: HashSet<(Addr, Addr)>
+}
+
+impl<HeapCellIter: MutStackHeapCellIterator> HeapCellZippedAcyclicIterator<HeapCellIter>
+{
+    pub fn new(i1: HeapCellIter, i2: HeapCellIter) -> Self {
+        HeapCellZippedAcyclicIterator { i1, i2, seen: HashSet::new() }
+    }
+}
+
+impl<HeapCellIter> Iterator for HeapCellZippedAcyclicIterator<HeapCellIter>
+    where HeapCellIter: Iterator<Item=HeapCellValue>
+                      + MutStackHeapCellIterator
+{
+    type Item = (HeapCellValue, HeapCellValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let (Some(a1), Some(a2)) = (self.i1.stack().pop(), self.i2.stack().pop()) {
+            if self.seen.contains(&(a1.clone(), a2.clone())) {
+                continue;
+            } else {
+                self.i1.stack().push(a1.clone());
+                self.i2.stack().push(a2.clone());                
+                self.seen.insert((a1, a2));
+
+                break;
+            }
+        }
+
+        if let (Some(v1), Some(v2)) = (self.i1.next(), self.i2.next()) {
+            Some((v1, v2))
+        } else {
+            None
+        }
     }
 }

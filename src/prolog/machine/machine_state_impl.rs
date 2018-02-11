@@ -1461,17 +1461,15 @@ SetupCallCleanupCutPolicy.")
         self.unify(Addr::HeapCell(old_h), a2);
     }
 
-    /* TODO: needs careful consideration of cyclic terms.
     // returns true on failure.
     fn eq_test(&self) -> bool
     {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
         let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
 
-        let iter1 = self.acyclic_pre_order_iter(a1);
-        let iter2 = self.acyclic_pre_order_iter(a2);
+        let iter = self.zipped_acyclic_pre_order_iter(a1, a2);
 
-        for (v1, v2) in iter1.zip(iter2) {
+        for (v1, v2) in iter {
             match (v1, v2) {
                 (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
                     if ar1 != ar2 || *n1 != *n2 {
@@ -1482,16 +1480,13 @@ SetupCallCleanupCutPolicy.")
                 (HeapCellValue::Addr(a1), HeapCellValue::Addr(a2)) =>
                     if a1 != a2 {
                         return true;
-                    },
-                _ => {
-                    return true;
-                }
+                    },                
+                _ => return true
             }
         }
 
         false
     }
-    */
 
     // returns true on failure.
     fn ground_test(&self) -> bool
@@ -1620,6 +1615,14 @@ SetupCallCleanupCutPolicy.")
                 self.duplicate_term();
                 self.p = self.cp;
             },
+            &ControlInstruction::EqCall => {
+                self.fail = self.eq_test();
+                self.p += 1;
+            },
+            &ControlInstruction::EqExecute => {
+                self.fail = self.eq_test();
+                self.p = self.cp;
+            },
             &ControlInstruction::GroundCall => {
                 self.fail = self.ground_test();
                 self.p += 1;
@@ -1707,6 +1710,14 @@ SetupCallCleanupCutPolicy.")
                 self.b0 = self.b;
                 self.p += offset;
             },
+            &ControlInstruction::NotEqCall => {
+                self.fail = !self.eq_test();
+                self.p += 1;
+            },
+            &ControlInstruction::NotEqExecute => {
+                self.fail = !self.eq_test();
+                self.p = self.cp;
+            },            
             &ControlInstruction::Proceed =>
                 self.p = self.cp,
             &ControlInstruction::ThrowCall => {

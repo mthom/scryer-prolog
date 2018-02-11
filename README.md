@@ -18,23 +18,23 @@ Extend rusty-wam to include the following, among other features:
 * call/N as a built-in meta-predicate (_done_).
 * ISO Prolog compliant throw/catch (_done_).
 * Built-in and user-defined operators of all fixities, with custom
-  associativity and precedence (_done_). 
+  associativity and precedence (_done_).
 * Bignum, rational number and floating point arithmetic (_done_).
 * Built-in control operators (`,`, `;`, `->`, etc.) (_done_).
 * Built-in predicates for list processing and top-level declarative
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
   etc.) (_in progress_).
-* Add a rudimentary module system.  
+* Add a rudimentary module system.
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
-  is straightforward with attributed variables. 
+  is straightforward with attributed variables.
 * An occurs check.
 * Mode declarations.
 * Extensions for clp(FD).
 * `if_` and related predicates, following the developments of the
   paper "Indexing `dif/2`".
 * Strings, blobs, and other data types.
-  
+
 ## Phase 3
 
 Use the WAM code produced by the completed code generator to target LLVM
@@ -78,6 +78,8 @@ The following predicates are built-in to rusty-wam.
       `(xor)/2`, `(rem)/2`, `(mod)/2`, `(/\)/2`, `(\/)/2`, `(>>)/2`, `(<<)/2`.
     * Comparison operators: `>`, `<`, `=<`, `>=`, `=:=`, `=\=`.
 * `(\+)/1`
+* `(==)/2`
+* `(\==)/2`
 * `(=)/2`
 * `(=..)/2`
 * `(->)/2`
@@ -159,7 +161,7 @@ prolog> :{
 member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
 }:
-prolog> ?- member(X, [a, b, c]).      
+prolog> ?- member(X, [a, b, c]).
 true .
 X = a ;
 X = b ;

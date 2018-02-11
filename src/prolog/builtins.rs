@@ -540,6 +540,8 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          restore_cut_policy!(), // restore_cut_policy/0, 382.
          proceed!(),
          ground_execute!(), // ground/1, 384.
+         eq_execute!(), // (==)/2, 385.
+         not_eq_execute!(), // (\==)/2, 386.
     ]
 }
 
@@ -590,6 +592,7 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
 
     op_dir.insert((tabled_rc!("=..", atom_tbl), Fixity::In), (XFX, 700));
     op_dir.insert((tabled_rc!("==", atom_tbl), Fixity::In), (XFX, 700));
+    op_dir.insert((tabled_rc!("\\==", atom_tbl), Fixity::In), (XFX, 700));
     
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
@@ -634,6 +637,8 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("nonvar", atom_tbl), 1), (PredicateKeyType::BuiltIn, 380));
 
     code_dir.insert((tabled_rc!("ground", atom_tbl), 1), (PredicateKeyType::BuiltIn, 384));
+    code_dir.insert((tabled_rc!("==", atom_tbl), 2), (PredicateKeyType::BuiltIn, 385));
+    code_dir.insert((tabled_rc!("\\==", atom_tbl), 2), (PredicateKeyType::BuiltIn, 386));    
     
     (builtin_code, code_dir, op_dir)
 }

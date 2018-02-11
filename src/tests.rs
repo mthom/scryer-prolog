@@ -1339,6 +1339,18 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- B = f(A), ground(A).");
 
     assert_prolog_success!(&mut wam, "?- ground(x), ground(f(x)), X = f(x), ground(g(f(X), [a,b])).");
+
+    assert_prolog_success!(&mut wam, "?- A = f(A), g(A, B) == g(f(A), B).");
+    assert_prolog_failure!(&mut wam, "?- A = f(A), g(A, B) == g(f(A), b).");
+    assert_prolog_failure!(&mut wam, "?- A == B.");
+    assert_prolog_failure!(&mut wam, "?- A == 12.1.");
+    assert_prolog_success!(&mut wam, "?- X = x, f(X, x) == f(x, X).");
+
+    assert_prolog_failure!(&mut wam, "?- A = f(A), g(A, B) \\== g(f(A), B).");
+    assert_prolog_success!(&mut wam, "?- A = f(A), g(A, B) \\== g(f(A), b).");
+    assert_prolog_success!(&mut wam, "?- A \\== B.");
+    assert_prolog_success!(&mut wam, "?- A \\== 12.1.");
+    assert_prolog_failure!(&mut wam, "?- X = x, f(X, x) \\== f(x, X).");
 }
 
 #[test]
@@ -1393,5 +1405,5 @@ fn test_queries_on_setup_call_cleanup()
     assert_prolog_success!(&mut wam, "?- catch(setup_call_cleanup(true,throw(goal),throw(cl)), Pat, true).",
                            [["Pat = goal"]]);
     assert_prolog_success!(&mut wam, "?- catch(( setup_call_cleanup(true,(G=1;G=2),throw(cl)), throw(cont)), Pat, true).",
-                           [["Pat = cont", "G = _1"]]);
+                           [["Pat = cont", "G = _1"]]);    
 }

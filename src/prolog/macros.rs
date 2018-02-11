@@ -568,3 +568,15 @@ macro_rules! ground_execute {
         Line::Control(ControlInstruction::GroundExecute)
     )
 }
+
+macro_rules! eq_execute {
+    () => (
+        Line::Control(ControlInstruction::EqExecute)
+    )
+}
+
+macro_rules! not_eq_execute {
+    () => (
+        Line::Control(ControlInstruction::NotEqExecute)
+    )
+}

@@ -123,6 +123,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "call_duplicate_term"),
             &ControlInstruction::DuplicateTermExecute =>
                 write!(f, "execute_duplicate_term"),
+            &ControlInstruction::EqCall =>
+                write!(f, "eq_call"),
+            &ControlInstruction::EqExecute =>
+                write!(f, "eq_execute"),
             &ControlInstruction::ExecuteN(arity) =>
                 write!(f, "execute_N {}", arity),
             &ControlInstruction::FunctorCall =>
@@ -151,6 +155,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "jmp_by_call {}/{}", offset, arity),
             &ControlInstruction::JmpByExecute(arity, offset) =>
                 write!(f, "jmp_by_execute {}/{}", offset, arity),
+            &ControlInstruction::NotEqCall =>
+                write!(f, "neq_call"),
+            &ControlInstruction::NotEqExecute =>
+                write!(f, "neq_execute"),
             &ControlInstruction::Proceed =>
                 write!(f, "proceed"),
             &ControlInstruction::ThrowCall =>
