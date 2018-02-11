@@ -574,7 +574,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         let mut code = Vec::new();
 
         if let &QueryTerm::Term(ref term) = p0 {
-            self.marker.reset_arg(term.arity());
+            self.marker.reset_arg_at_head(term);
             self.compile_seq_prelude(&conjunct_info, &mut code);
 
             if let &Term::Clause(..) = term {
@@ -586,7 +586,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 }
             }
 
-            self.marker.reset_arg_at_head(term);
+            // self.marker.reset_arg_at_head(term);
 
             let iter = ChunkedIterator::from_rule_body(p1, clauses);
             try!(self.compile_seq(iter, &conjunct_info, &mut code, false));

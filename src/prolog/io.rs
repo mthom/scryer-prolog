@@ -517,7 +517,7 @@ fn compile_decl<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel, queue: &'b V
             if let Err(e) = compile_appendix(&mut code, queue) {
                 return EvalSession::from(e);
             };
-
+            
             if !code.is_empty() {
                 if let Some(name) = tl.name() {
                     wam.add_user_code(name, tl.arity(), code)
