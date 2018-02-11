@@ -21,7 +21,7 @@ impl<'a> DebrayAllocator<'a> {
             _ => false
         }
     }
-    
+
     fn occurs_shallowly_in_head(&self, var: &'a Var, r: usize) -> bool
     {
         match self.bindings.get(var).unwrap() {
@@ -188,7 +188,7 @@ impl<'a> DebrayAllocator<'a> {
                      _ => false
                  }
         }
-    }    
+    }
 }
 
 impl<'a> Allocator<'a> for DebrayAllocator<'a>
@@ -202,7 +202,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
             in_use: BTreeSet::new()
         }
     }
-    
+
     fn mark_anon_var<Target>(&mut self, lvl: Level, target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
@@ -263,22 +263,20 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
             RegType::Perm(0) => {
                 let pr = cell.get().norm();
                 self.record_register(var, pr);
-                
+
                 (pr, true)
             },
-            r => (r, false)            
+            r => (r, false)
         };
 
         match lvl {
             Level::Shallow => {
                 let k = self.arg_c;
 
-                if !r.is_perm() {                    
-                    if self.is_curr_arg_distinct_from(var) {
-                        self.evacuate_arg(term_loc.chunk_num(), target);
-                    }
+                if self.is_curr_arg_distinct_from(var) {
+                    self.evacuate_arg(term_loc.chunk_num(), target);
                 }
-                
+
                 self.arg_c += 1;
 
                 cell.set(VarReg::ArgAndNorm(r, k));
@@ -304,14 +302,14 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
             Level::Deep =>
                 target.push(Target::subterm_to_value(r))
         };
-        
+
         if !r.is_perm() {
             let o = r.reg_num();
 
             self.contents.insert(o, var);
             self.record_register(var, r);
             self.in_use.insert(o);
-        }        
+        }
     }
 
     fn reset(&mut self) {
@@ -324,7 +322,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
         self.contents.clear();
         self.in_use.clear();
     }
-    
+
     fn advance_arg(&mut self) {
         self.arg_c += 1;
     }
@@ -332,7 +330,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
     fn bindings(&self) -> &AllocVarDict<'a> {
         &self.bindings
     }
-    
+
     fn bindings_mut(&mut self) -> &mut AllocVarDict<'a> {
         &mut self.bindings
     }
@@ -340,24 +338,9 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
     fn take_bindings(self) -> AllocVarDict<'a> {
         self.bindings
     }
-    
+
     fn reset_arg(&mut self, arity: usize) {
         self.arg_c   = 1;
         self.temp_lb = arity + 1;
-    }
-
-    fn reset_arg_at_head(&mut self, term: &'a Term) {
-        self.arg_c = 1;
-        self.temp_lb = term.arity() + 1;
-
-        match term {
-            &Term::Clause(_, _, ref subterms, _) =>
-                for (idx, tr) in subterms.iter().enumerate() {
-                    if let &Term::Var(_, _) = tr.as_ref() {
-                        self.in_use.insert(idx + 1);
-                    }
-                },
-            _ => {}
-        };
     }
 }
