@@ -151,6 +151,24 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "is_call {}, {}", r, at),
             &ControlInstruction::IsExecute(r, ref at) =>
                 write!(f, "is_execute {}, {}", r, at),
+            &ControlInstruction::IsAtomic(r) =>
+                write!(f, "is_atomic {}", r),
+            &ControlInstruction::IsCompound(r) =>
+                write!(f, "is_compound {}", r),
+            &ControlInstruction::IsFloat(r) =>
+                write!(f, "is_float {}", r),
+            &ControlInstruction::IsRational(r) =>
+                write!(f, "is_rational {}", r),
+            &ControlInstruction::IsNonVar(r) =>
+                write!(f, "is_non_var {}", r),
+            &ControlInstruction::IsString(r) =>
+                write!(f, "is_string {}", r),
+            &ControlInstruction::IsInteger(r) =>
+                write!(f, "is_integer {}", r),
+            &ControlInstruction::DynamicIs =>
+                write!(f, "call_is"),
+            &ControlInstruction::IsVar(r) =>
+                write!(f, "is_var {}", r),
             &ControlInstruction::JmpByCall(arity, offset) =>
                 write!(f, "jmp_by_call {}/{}", offset, arity),
             &ControlInstruction::JmpByExecute(arity, offset) =>
@@ -165,6 +183,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "call_throw"),
             &ControlInstruction::ThrowExecute =>
                 write!(f, "execute_throw"),
+            &ControlInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
+                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
+            &ControlInstruction::DynamicCompareNumber(cmp) =>
+                write!(f, "dynamic_number_test {}", cmp),
         }
     }
 }
@@ -186,11 +208,7 @@ impl fmt::Display for BuiltInInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &BuiltInInstruction::CleanUpBlock =>
-                write!(f, "clean_up_block"),
-            &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
-                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
-            &BuiltInInstruction::DynamicCompareNumber(cmp) =>
-                write!(f, "dynamic_number_test {}", cmp),
+                write!(f, "clean_up_block"),            
             &BuiltInInstruction::EraseBall =>
                 write!(f, "erase_ball"),
             &BuiltInInstruction::Fail =>
@@ -210,25 +228,7 @@ impl fmt::Display for BuiltInInstruction {
             &BuiltInInstruction::InstallNewBlock =>
                 write!(f, "install_new_block"),
             &BuiltInInstruction::InternalCallN =>
-                write!(f, "internal_call_N"),
-            &BuiltInInstruction::IsAtomic(r) =>
-                write!(f, "is_atomic {}", r),
-            &BuiltInInstruction::IsCompound(r) =>
-                write!(f, "is_compound {}", r),
-            &BuiltInInstruction::IsFloat(r) =>
-                write!(f, "is_float {}", r),
-            &BuiltInInstruction::IsRational(r) =>
-                write!(f, "is_rational {}", r),
-            &BuiltInInstruction::IsNonVar(r) =>
-                write!(f, "is_non_var {}", r),
-            &BuiltInInstruction::IsString(r) =>
-                write!(f, "is_string {}", r),
-            &BuiltInInstruction::IsInteger(r) =>
-                write!(f, "is_integer {}", r),
-            &BuiltInInstruction::DynamicIs =>
-                write!(f, "call_is"),
-            &BuiltInInstruction::IsVar(r) =>
-                write!(f, "is_var {}", r),
+                write!(f, "internal_call_N"),            
             &BuiltInInstruction::ResetBlock =>
                 write!(f, "reset_block"),
             &BuiltInInstruction::RestoreCutPolicy =>

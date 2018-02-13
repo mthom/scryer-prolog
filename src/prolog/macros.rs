@@ -30,7 +30,7 @@ macro_rules! deallocate {
 
 macro_rules! compare_number_instr {
     ($cmp: expr, $at_1: expr, $at_2: expr) => (
-        Line::BuiltIn(BuiltInInstruction::CompareNumber($cmp, $at_1, $at_2))
+        Line::Control(ControlInstruction::CompareNumber($cmp, $at_1, $at_2))
     )
 }
 
@@ -158,50 +158,50 @@ macro_rules! retry_me_else {
 
 macro_rules! is_atomic {
     ($reg:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsAtomic($reg))
+        Line::Control(ControlInstruction::IsAtomic($reg))
     )
 }
 
 macro_rules! is_integer {
     ($reg:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsInteger($reg))
+        Line::Control(ControlInstruction::IsInteger($reg))
     )
 }
 
 macro_rules! is_compound {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsCompound($r))
+        Line::Control(ControlInstruction::IsCompound($r))
     )
 }
 
 macro_rules! is_float {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsFloat($r))
+        Line::Control(ControlInstruction::IsFloat($r))
     )
 }
 
 macro_rules! is_rational {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsRational($r))
+        Line::Control(ControlInstruction::IsRational($r))
     )
 }
 
 
 macro_rules! is_nonvar {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsNonVar($r))
+        Line::Control(ControlInstruction::IsNonVar($r))
     )
 }
 
 macro_rules! is_string {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsString($r))
+        Line::Control(ControlInstruction::IsString($r))
     )
 }
 
 macro_rules! is_var {
     ($reg:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsVar($reg))
+        Line::Control(ControlInstruction::IsVar($reg))
     )
 }
 
@@ -469,13 +469,13 @@ macro_rules! display {
 
 macro_rules! dynamic_is {
     () => (
-        Line::BuiltIn(BuiltInInstruction::DynamicIs)
+        Line::Control(ControlInstruction::DynamicIs)
     )
 }
 
 macro_rules! dynamic_num_test {
     ($cmp:expr) => (
-        Line::BuiltIn(BuiltInInstruction::DynamicCompareNumber($cmp))
+        Line::Control(ControlInstruction::DynamicCompareNumber($cmp))
     )
 }
 
