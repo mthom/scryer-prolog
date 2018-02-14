@@ -79,7 +79,7 @@ The following predicates are built-in to rusty-wam.
     * Comparison operators: `>`, `<`, `=<`, `>=`, `=:=`, `=\=`.
 * `(@>)/2`
 * `(@>=)/2`
-* `(@=>)/2`
+* `(@=<)/2`
 * `(@<)/2`
 * `(\+)/1`
 * `(==)/2`
