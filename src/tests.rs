@@ -1351,6 +1351,29 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- A \\== B.");
     assert_prolog_success!(&mut wam, "?- A \\== 12.1.");
     assert_prolog_failure!(&mut wam, "?- X = x, f(X, x) \\== f(x, X).");
+
+    assert_prolog_success!(&mut wam, "?- X @=< Y.");
+    assert_prolog_failure!(&mut wam, "?- X @>= Y.");
+    assert_prolog_failure!(&mut wam, "?- X @> Y.");
+    assert_prolog_success!(&mut wam, "?- X @>= X.");
+    assert_prolog_failure!(&mut wam, "?- atom @=< \"string\".");
+    assert_prolog_success!(&mut wam, "?- atom @=< atom.");
+    assert_prolog_failure!(&mut wam, "?- atom @=< aaa.");
+    assert_prolog_success!(&mut wam, "?- atom @>= \"string\".");
+    assert_prolog_success!(&mut wam, "?- X is 3 + 3, X @>= Y.");
+    assert_prolog_success!(&mut wam, "?- f(X) @>= f(X).");
+    assert_prolog_success!(&mut wam, "?- f(X) @>= a.");
+    assert_prolog_failure!(&mut wam, "?- f(X) @=< a.");
+    assert_prolog_success!(&mut wam, "?- [1,2] @=< [1,2].");
+    assert_prolog_failure!(&mut wam, "?- [1,2,3] @=< [1,2].");
+    assert_prolog_success!(&mut wam, "?- [] @=< [1,2].");
+    assert_prolog_failure!(&mut wam, "?- [] @< 1.");
+    assert_prolog_failure!(&mut wam, "?- [] @< \"string\".");
+    assert_prolog_failure!(&mut wam, "?- [] @< atom.");
+    assert_prolog_success!(&mut wam, "?- atom @< [].");
+    assert_prolog_failure!(&mut wam, "?- 1.1 @< 1.");
+    assert_prolog_success!(&mut wam, "?- 1.0 @=< 1.");
+    assert_prolog_success!(&mut wam, "?- 1 @=< 1.0."); //TODO: currently this succeeds. make it fail.
 }
 
 #[test]

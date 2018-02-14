@@ -389,6 +389,29 @@ impl CompareNumberQT {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum CompareTermQT {
+    GreaterThan,
+    LessThan,
+    GreaterThanOrEqual,
+    LessThanOrEqual,
+    NotEqual,
+    Equal
+}
+
+impl CompareTermQT {
+    fn name<'a>(self) -> &'a str {
+        match self {
+            CompareTermQT::GreaterThan => "@>",
+            CompareTermQT::LessThan => "@<",
+            CompareTermQT::GreaterThanOrEqual => "@>=",
+            CompareTermQT::LessThanOrEqual => "@=<",
+            CompareTermQT::NotEqual => "\\=@=",
+            CompareTermQT::Equal => "=@="
+        }
+    }
+}
+
 // vars of predicate, toplevel offset.  Vec<Term> is always a vector
 // of vars (we get their adjoining cells this way).
 pub type JumpStub = Vec<Term>;
@@ -397,6 +420,7 @@ pub enum QueryTerm {
     Arg(Vec<Box<Term>>),
     CallN(Vec<Box<Term>>),
     Catch(Vec<Box<Term>>),
+    CompareTerm(CompareTermQT, Vec<Box<Term>>),
     Cut,
     Display(Vec<Box<Term>>),
     DuplicateTerm(Vec<Box<Term>>),
@@ -417,6 +441,7 @@ impl QueryTerm {
         match self {
             &QueryTerm::Arg(_) => 3,
             &QueryTerm::Catch(_) => 3,
+            &QueryTerm::CompareTerm(..) => 2,
             &QueryTerm::Display(_) => 1,
             &QueryTerm::Throw(_) => 1,
             &QueryTerm::DuplicateTerm(_) => 2,
@@ -446,6 +471,7 @@ pub enum ClauseType<'a> {
     CallN,
     Catch,
     CompareNumber(CompareNumberQT),
+    CompareTerm(CompareTermQT),
     Deep(Level, &'a Cell<RegType>, &'a TabledRc<Atom>, Option<Fixity>),
     Display,
     DuplicateTerm,
@@ -466,12 +492,13 @@ impl<'a> ClauseType<'a> {
             &ClauseType::CallN => "call",
             &ClauseType::Catch => "catch",
             &ClauseType::CompareNumber(qt) => qt.name(),
+            &ClauseType::CompareTerm(qt) => qt.name(),
             &ClauseType::Display => "display",
             &ClauseType::Deep(_, _, name, _) => name.as_str(),
             &ClauseType::DuplicateTerm => "duplicate_term",
             &ClauseType::Eq => "==",
             &ClauseType::Functor => "functor",
-            &ClauseType::Ground  => "ground",            
+            &ClauseType::Ground  => "ground",
             &ClauseType::Is => "is",
             &ClauseType::NotEq => "\\==",
             &ClauseType::Root(name) => name.as_str(),
@@ -549,6 +576,32 @@ pub enum Number {
     Float(OrderedFloat<f64>),
     Integer(Rc<BigInt>),
     Rational(Rc<Ratio<BigInt>>)
+}
+
+impl PartialOrd for Number {
+    fn partial_cmp(&self, other: &Number) -> Option<Ordering> {
+        match NumberPair::from(self.clone(), other.clone()) {
+            NumberPair::Integer(n1, n2) =>
+                Some(n1.cmp(&n2)),
+            NumberPair::Float(n1, n2) =>
+                Some(n1.cmp(&n2)),
+            NumberPair::Rational(n1, n2) =>
+                Some(n1.cmp(&n2))
+        }
+    }
+}
+
+impl Ord for Number {
+    fn cmp(&self, other: &Number) -> Ordering {
+        match NumberPair::from(self.clone(), other.clone()) {
+            NumberPair::Integer(n1, n2) =>
+                n1.cmp(&n2),
+            NumberPair::Float(n1, n2) =>
+                n1.cmp(&n2),
+            NumberPair::Rational(n1, n2) =>
+                n1.cmp(&n2)
+        }
+    }
 }
 
 impl fmt::Display for Number {
@@ -820,17 +873,17 @@ pub enum ArithmeticInstruction {
 }
 
 pub enum BuiltInInstruction {
-    CleanUpBlock,    
+    CleanUpBlock,
     EraseBall,
     Fail,
     GetArgCall,
     GetArgExecute,
     GetBall,
     GetCurrentBlock,
-    GetCutPoint(RegType),    
+    GetCutPoint(RegType),
     InstallCleaner,
     InstallNewBlock,
-    InternalCallN,    
+    InternalCallN,
     ResetBlock,
     RestoreCutPolicy,
     SetBall,
@@ -851,6 +904,8 @@ pub enum ControlInstruction {
     CatchExecute,
     CheckCpExecute,
     CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
+    CompareTermCall(CompareTermQT),
+    CompareTermExecute(CompareTermQT),
     DisplayCall,
     DisplayExecute,
     Deallocate,
@@ -868,7 +923,7 @@ pub enum ControlInstruction {
     GotoCall(usize, usize),    // p, arity.
     GotoExecute(usize, usize), // p, arity.
     GroundCall,
-    GroundExecute,    
+    GroundExecute,
     JmpByCall(usize, usize),    // arity, global_offset.
     JmpByExecute(usize, usize),
     IsCall(RegType, ArithmeticTerm),
@@ -896,7 +951,9 @@ impl ControlInstruction {
             &ControlInstruction::Call(_, _, _)  => true,
             &ControlInstruction::CatchCall => true,
             &ControlInstruction::CatchExecute => true,
-            &ControlInstruction::CompareNumber(..) => true,             
+            &ControlInstruction::CompareNumber(..) => true,
+            &ControlInstruction::CompareTermCall(..) => true,
+            &ControlInstruction::CompareTermExecute(..) => true,
             &ControlInstruction::DisplayCall => true,
             &ControlInstruction::DisplayExecute => true,
             &ControlInstruction::DuplicateTermCall => true,
@@ -906,7 +963,7 @@ impl ControlInstruction {
             &ControlInstruction::EqCall => true,
             &ControlInstruction::EqExecute => true,
             &ControlInstruction::Execute(_, _)  => true,
-            &ControlInstruction::CallN(_) => true,            
+            &ControlInstruction::CallN(_) => true,
             &ControlInstruction::ExecuteN(_) => true,
             &ControlInstruction::FunctorCall => true,
             &ControlInstruction::FunctorExecute => true,
@@ -930,7 +987,7 @@ impl ControlInstruction {
             &ControlInstruction::IsCall(..) => true,
             &ControlInstruction::IsExecute(..) => true,
             &ControlInstruction::JmpByCall(..) => true,
-            &ControlInstruction::JmpByExecute(..) => true,            
+            &ControlInstruction::JmpByExecute(..) => true,
             _ => false
         }
     }

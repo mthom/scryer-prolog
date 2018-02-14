@@ -580,3 +580,51 @@ macro_rules! not_eq_execute {
         Line::Control(ControlInstruction::NotEqExecute)
     )
 }
+
+macro_rules! compare_term_call {
+    ($qt:expr) => (
+        Line::Control(ControlInstruction::CompareTermCall($qt))
+    )
+}
+
+macro_rules! compare_term_execute {
+    ($qt:expr) => (
+        Line::Control(ControlInstruction::CompareTermExecute($qt))
+    )
+}
+
+macro_rules! term_cmp_gt {
+    () => (
+        CompareTermQT::GreaterThan
+    )
+}
+
+macro_rules! term_cmp_lt {
+    () => (
+        CompareTermQT::LessThan
+    )
+}
+
+macro_rules! term_cmp_gte {
+    () => (
+        CompareTermQT::GreaterThanOrEqual
+    )
+}
+
+macro_rules! term_cmp_lte {
+    () => (
+        CompareTermQT::LessThanOrEqual
+    )
+}
+
+macro_rules! term_cmp_ne {
+    () => (
+        CompareTermQT::NotEqual
+    )
+}
+
+macro_rules! term_cmp_eq {
+    () => (
+        CompareTermQT::Equal
+    )
+}

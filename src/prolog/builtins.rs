@@ -481,7 +481,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          retry_me_else!(12),
          allocate!(2),
          query![put_value!(temp_v!(3), 1)],
-         reset_block!(),         
+         reset_block!(),
          query![put_var!(perm_v!(1), 1)],
          get_ball!(),
          get_level!(perm_v!(2)),
@@ -489,7 +489,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          goto_call!(342, 0), // goto run_cleaners_with_handling/0, 342.
          query![put_unsafe_value!(1, 1)],
          deallocate!(),
-         goto_execute!(59, 1), // goto throw/1, 59.        
+         goto_execute!(59, 1), // goto throw/1, 59.
          trust_me!(),
          allocate!(0),
          goto_call!(354, 0), // goto run_cleaners_without_handling/0, 354.
@@ -542,6 +542,10 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          ground_execute!(), // ground/1, 384.
          eq_execute!(), // (==)/2, 385.
          not_eq_execute!(), // (\==)/2, 386.
+         compare_term_execute!(term_cmp_gte!()), // (@>=)/2, 387.
+         compare_term_execute!(term_cmp_lte!()), // (@=<)/2, 388.
+         compare_term_execute!(term_cmp_gt!()), // (@>)/2, 389.
+         compare_term_execute!(term_cmp_lt!()), // (@<)/2, 390.
     ]
 }
 
@@ -593,7 +597,11 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     op_dir.insert((tabled_rc!("=..", atom_tbl), Fixity::In), (XFX, 700));
     op_dir.insert((tabled_rc!("==", atom_tbl), Fixity::In), (XFX, 700));
     op_dir.insert((tabled_rc!("\\==", atom_tbl), Fixity::In), (XFX, 700));
-    
+    op_dir.insert((tabled_rc!("@=<", atom_tbl), Fixity::In), (XFX, 700));
+    op_dir.insert((tabled_rc!("@>=", atom_tbl), Fixity::In), (XFX, 700));
+    op_dir.insert((tabled_rc!("@<", atom_tbl), Fixity::In), (XFX, 700));
+    op_dir.insert((tabled_rc!("@>", atom_tbl), Fixity::In), (XFX, 700));
+
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
@@ -638,7 +646,11 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
 
     code_dir.insert((tabled_rc!("ground", atom_tbl), 1), (PredicateKeyType::BuiltIn, 384));
     code_dir.insert((tabled_rc!("==", atom_tbl), 2), (PredicateKeyType::BuiltIn, 385));
-    code_dir.insert((tabled_rc!("\\==", atom_tbl), 2), (PredicateKeyType::BuiltIn, 386));    
-    
+    code_dir.insert((tabled_rc!("\\==", atom_tbl), 2), (PredicateKeyType::BuiltIn, 386));
+    code_dir.insert((tabled_rc!("@>=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 387));
+    code_dir.insert((tabled_rc!("@=<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 388));
+    code_dir.insert((tabled_rc!("@>", atom_tbl), 2), (PredicateKeyType::BuiltIn, 389));
+    code_dir.insert((tabled_rc!("@<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 390));
+
     (builtin_code, code_dir, op_dir)
 }

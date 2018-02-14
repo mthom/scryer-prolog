@@ -96,6 +96,20 @@ impl fmt::Display for CompareNumberQT {
     }
 }
 
+impl fmt::Display for CompareTermQT {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &CompareTermQT::GreaterThan => write!(f, "@>"),
+            &CompareTermQT::GreaterThanOrEqual => write!(f, "@>="),
+            &CompareTermQT::LessThan => write!(f, "@<"),
+            &CompareTermQT::LessThanOrEqual => write!(f, "@<="),
+            &CompareTermQT::NotEqual => write!(f, "\\=@="),
+            &CompareTermQT::Equal => write!(f, "=@="),
+        }
+    }
+}
+
+
 impl fmt::Display for ControlInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -115,6 +129,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "catch_execute"),
             &ControlInstruction::CheckCpExecute =>
                 write!(f, "check_cp_execute"),
+            &ControlInstruction::CompareTermCall(qt) =>
+                write!(f, "compare_term_call {}", qt),
+            &ControlInstruction::CompareTermExecute(qt) =>
+                write!(f, "compare_term_execute {}", qt),
             &ControlInstruction::DisplayCall =>
                 write!(f, "display_call"),
             &ControlInstruction::DisplayExecute =>

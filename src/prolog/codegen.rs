@@ -257,6 +257,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             },
             &QueryTerm::Catch(_) =>
                 code.push(Line::Control(ControlInstruction::CatchCall)),
+            &QueryTerm::CompareTerm(qt, _) =>
+                code.push(Line::Control(ControlInstruction::CompareTermCall(qt))),
             &QueryTerm::Display(_) =>
                 code.push(Line::Control(ControlInstruction::DisplayCall)),
             &QueryTerm::DuplicateTerm(_) =>
@@ -303,6 +305,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         *ctrl = ControlInstruction::Execute(name, arity),
                     ControlInstruction::CallN(arity) =>
                         *ctrl = ControlInstruction::ExecuteN(arity),
+                    ControlInstruction::CompareTermCall(qt) =>
+                        *ctrl = ControlInstruction::CompareTermExecute(qt),
                     ControlInstruction::DisplayCall =>
                         *ctrl = ControlInstruction::DisplayExecute,
                     ControlInstruction::DuplicateTermCall =>

@@ -72,6 +72,10 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(0, ClauseType::CompareNumber(qt), terms);
                 QueryIterator { state_stack: vec![state] }
             },
+            &QueryTerm::CompareTerm(qt, ref terms) => {
+                let state = TermIterState::Clause(0, ClauseType::CompareTerm(qt), terms);
+                QueryIterator { state_stack: vec![state] }
+            },
             &QueryTerm::Is(ref terms) => {
                 let state = TermIterState::Clause(0, ClauseType::Is, terms);
                 QueryIterator { state_stack: vec![state] }
@@ -300,6 +304,11 @@ impl<'a> ChunkedIterator<'a>
                 &QueryTerm::Jump(ref vars) => {
                     result.push(term);
                     arity = vars.len();
+                    break;
+                },
+                &QueryTerm::CompareTerm(..) => {
+                    result.push(term);
+                    arity = 2;
                     break;
                 },
                 &QueryTerm::Term(ref inner_term) =>

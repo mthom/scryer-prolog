@@ -11,7 +11,7 @@ use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
 use prolog::tabled_rc::*;
 
-use std::cmp::max;
+use std::cmp::{max, Ordering};
 use std::rc::Rc;
 
 macro_rules! try_or_fail {
@@ -1112,6 +1112,147 @@ impl MachineState {
         self.p += 1;
     }
 
+    fn compare_term(&mut self, qt: CompareTermQT) {
+        let a1 = self[temp_v!(1)].clone();
+        let a2 = self[temp_v!(2)].clone();
+
+        match self.compare_term_test(a1, a2) {
+            Ordering::Greater =>
+                match qt {
+                    CompareTermQT::GreaterThan | CompareTermQT::GreaterThanOrEqual => return,
+                    _ => self.fail = true
+                },
+            Ordering::Equal =>
+                match qt {
+                    CompareTermQT::GreaterThanOrEqual | CompareTermQT::LessThanOrEqual => return,
+                    _ => self.fail = true
+                },
+            Ordering::Less =>
+                match qt {
+                    CompareTermQT::LessThan | CompareTermQT::LessThanOrEqual => return,
+                    _ => self.fail = true
+                }
+        };
+    }
+    
+    fn compare_term_test(&self, a1: Addr, a2: Addr) -> Ordering {
+        let iter = self.zipped_acyclic_pre_order_iter(a1, a2);
+
+        for (v1, v2) in iter {
+            match (v1, v2) {
+                (HeapCellValue::Addr(Addr::HeapCell(hc1)),
+                 HeapCellValue::Addr(Addr::HeapCell(hc2))) =>
+                    if hc1 != hc2 {
+                        return hc1.cmp(&hc2);
+                    } else {
+                        continue;
+                    },
+                (HeapCellValue::Addr(Addr::HeapCell(_)), _) =>
+                    return Ordering::Less,
+                (HeapCellValue::Addr(Addr::StackCell(fr1, sc1)),
+                 HeapCellValue::Addr(Addr::StackCell(fr2, sc2))) =>
+                    if fr1 > fr2 {
+                        return Ordering::Greater;
+                    } else if fr1 < fr2 || sc1 < sc2 {
+                        return Ordering::Less;
+                    } else if sc1 > sc2 {
+                        return Ordering::Greater;
+                    } else {
+                        continue;
+                    },
+                (HeapCellValue::Addr(Addr::StackCell(..)),
+                 HeapCellValue::Addr(Addr::HeapCell(_))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::StackCell(..)), _) =>
+                    return Ordering::Less,
+                (HeapCellValue::Addr(Addr::Con(Constant::Number(..))),
+                 HeapCellValue::Addr(Addr::HeapCell(_))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Number(..))),
+                 HeapCellValue::Addr(Addr::StackCell(..))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Number(n1))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Number(n2)))) =>
+                    if n1 != n2 {
+                        return n1.cmp(&n2);
+                    } else {
+                        continue;
+                    },
+                (HeapCellValue::Addr(Addr::Con(Constant::Number(_))), _) =>
+                    return Ordering::Less,
+                (HeapCellValue::Addr(Addr::Con(Constant::String(..))),
+                 HeapCellValue::Addr(Addr::HeapCell(_))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::String(..))),
+                 HeapCellValue::Addr(Addr::StackCell(..))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::String(_))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Number(_)))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::String(s1))),
+                 HeapCellValue::Addr(Addr::Con(Constant::String(s2)))) =>
+                    if s1 != s2 {
+                        return s1.cmp(&s2);
+                    } else {
+                        continue;
+                    },
+                (HeapCellValue::Addr(Addr::Con(Constant::String(_))), _) =>
+                    return Ordering::Less,
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
+                 HeapCellValue::Addr(Addr::HeapCell(_))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
+                 HeapCellValue::Addr(Addr::StackCell(..))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(_))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Number(_)))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(_))),
+                 HeapCellValue::Addr(Addr::Con(Constant::String(_)))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(s1))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Atom(s2)))) =>
+                    if s1 != s2 {
+                        return s1.cmp(&s2);
+                    } else {
+                        continue;
+                    },
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(_))), _) =>
+                    return Ordering::Less,
+                (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
+                    if ar1 < ar2 {
+                        return Ordering::Less;
+                    } else if ar1 > ar2 {
+                        return Ordering::Greater;
+                    } else if *n1 != *n2 {
+                        return n1.cmp(&n2);
+                    } else {
+                        continue;
+                    },                
+                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
+                    continue,
+                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::NamedStr(ar, n, _))
+              | (HeapCellValue::NamedStr(ar, n, _), HeapCellValue::Addr(Addr::Lis(_))) =>
+                    if ar == 2 && *n == "." {
+                        continue;
+                    } else if ar < 2 {
+                        return Ordering::Greater;
+                    } else if ar > 2 {
+                        return Ordering::Less;
+                    } else {
+                        return n.cmp(&String::from("."));
+                    },
+                (HeapCellValue::NamedStr(..), _) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Lis(_)), _) =>
+                    return Ordering::Greater,
+                _ => {}
+            }
+        };
+
+        Ordering::Equal
+    }
+
     fn reset_block(&mut self, addr: Addr) {
         // let addr = self.deref(self[temp_v!(1)].clone());
 
@@ -1128,7 +1269,7 @@ impl MachineState {
                                          cut_policy: &mut Box<CutPolicy>,
                                          instr: &BuiltInInstruction)
     {
-        match instr {            
+        match instr {
             &BuiltInInstruction::GetArgCall =>
                 try_or_fail!(self, {
                     let val = self.try_get_arg();
@@ -1273,7 +1414,7 @@ SetupCallCleanupCutPolicy.")
                 self.or_stack.truncate(self.b);
 
                 self.fail = true;
-            },            
+            },
             &BuiltInInstruction::InternalCallN =>
                 self.handle_internal_call_n(code_dir),
             &BuiltInInstruction::Fail => {
@@ -1381,8 +1522,8 @@ SetupCallCleanupCutPolicy.")
     // returns true on failure.
     fn eq_test(&self) -> bool
     {
-        let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
-        let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
+        let a1 = self[temp_v!(1)].clone();
+        let a2 = self[temp_v!(2)].clone();
 
         let iter = self.zipped_acyclic_pre_order_iter(a1, a2);
 
@@ -1397,7 +1538,7 @@ SetupCallCleanupCutPolicy.")
                 (HeapCellValue::Addr(a1), HeapCellValue::Addr(a2)) =>
                     if a1 != a2 {
                         return true;
-                    },                
+                    },
                 _ => return true
             }
         }
@@ -1497,6 +1638,14 @@ SetupCallCleanupCutPolicy.")
                         self.p = CodePtr::DirEntry(366); // goto sgc_on_success/2, 366.
                     }
                 };
+            },
+            &ControlInstruction::CompareTermCall(qt) => {
+                self.compare_term(qt);
+                self.p += 1;
+            },
+            &ControlInstruction::CompareTermExecute(qt) => {
+                self.compare_term(qt);
+                self.p = self.cp;
             },
             &ControlInstruction::Deallocate => {
                 let e = self.e;
@@ -1717,7 +1866,7 @@ SetupCallCleanupCutPolicy.")
             &ControlInstruction::NotEqExecute => {
                 self.fail = !self.eq_test();
                 self.p = self.cp;
-            },            
+            },
             &ControlInstruction::Proceed =>
                 self.p = self.cp,
             &ControlInstruction::ThrowCall => {
