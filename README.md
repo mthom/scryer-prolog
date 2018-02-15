@@ -85,6 +85,7 @@ The following predicates are built-in to rusty-wam.
 * `(==)/2`
 * `(\==)/2`
 * `(=)/2`
+* `(\=)/2`
 * `(=..)/2`
 * `(->)/2`
 * `(;)/2`

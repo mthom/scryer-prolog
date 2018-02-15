@@ -390,13 +390,13 @@ impl CompareNumberQT {
 }
 
 #[derive(Clone, Copy)]
-pub enum CompareTermQT {
-    GreaterThan,
+pub enum CompareTermQT {    
     LessThan,
-    GreaterThanOrEqual,
     LessThanOrEqual,
-    NotEqual,
-    Equal
+    Equal,
+    GreaterThanOrEqual,
+    GreaterThan,        
+    NotEqual,    
 }
 
 impl CompareTermQT {

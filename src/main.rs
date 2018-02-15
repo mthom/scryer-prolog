@@ -6,6 +6,7 @@ mod prolog;
 #[macro_use] mod test_utils;
 
 use prolog::io::*;
+use prolog::lib::control::*;
 use prolog::lib::lists::*;
 use prolog::machine::*;
 
@@ -35,7 +36,8 @@ fn prolog_repl() {
     let mut wam = Machine::new();
 
     load_init_str(&mut wam, LISTS);
-               
+    load_init_str(&mut wam, CONTROL);
+    
     loop {
         print!("prolog> ");
 
