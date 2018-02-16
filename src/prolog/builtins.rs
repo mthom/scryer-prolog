@@ -657,7 +657,6 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("@<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 390));
     code_dir.insert((tabled_rc!("=@=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 391));
     code_dir.insert((tabled_rc!("\\=@=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 392));
-    
-    
+
     (builtin_code, code_dir, op_dir)
 }
