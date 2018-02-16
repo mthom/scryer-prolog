@@ -1374,6 +1374,15 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- 1.1 @< 1.");
     assert_prolog_success!(&mut wam, "?- 1.0 @=< 1.");
     assert_prolog_success!(&mut wam, "?- 1 @=< 1.0."); //TODO: currently this succeeds. make it fail.
+
+    assert_prolog_success!(&mut wam, "?- X =@= Y.");
+    assert_prolog_failure!(&mut wam, "?- f(X) =@= f(x).");
+    assert_prolog_failure!(&mut wam, "?- X \\=@= X.");
+    assert_prolog_success!(&mut wam, "?- f(x) =@= f(x).");
+    assert_prolog_failure!(&mut wam, "?- [X,Y,Z] =@= [V,W,V].");
+    assert_prolog_success!(&mut wam, "?- [X,Y,Z] =@= [V,W,Z].");
+    assert_prolog_success!(&mut wam, "?- [X,Y,X] =@= [V,W,V].");
+    assert_prolog_success!(&mut wam, "?- g(B) = B, g(A) = A, A =@= B.");
 }
 
 #[test]

@@ -12,6 +12,7 @@ use prolog::or_stack::*;
 use prolog::tabled_rc::*;
 
 use std::cmp::{max, Ordering};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 macro_rules! try_or_fail {
@@ -259,7 +260,6 @@ impl MachineState {
     }
 
     fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, Vec<HeapCellValue>> {
-
         match at {
             &ArithmeticTerm::Reg(r) => {
                 let addr = self[r].clone();
@@ -1134,7 +1134,7 @@ impl MachineState {
                 }
         };
     }
-    
+
     fn compare_term_test(&self, a1: Addr, a2: Addr) -> Ordering {
         let iter = self.zipped_acyclic_pre_order_iter(a1, a2);
 
@@ -1228,7 +1228,7 @@ impl MachineState {
                         return n1.cmp(&n2);
                     } else {
                         continue;
-                    },                
+                    },
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
                     continue,
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::NamedStr(ar, n, _))
@@ -1547,6 +1547,49 @@ SetupCallCleanupCutPolicy.")
     }
 
     // returns true on failure.
+    fn structural_eq_test(&self) -> bool
+    {
+        let a1 = self[temp_v!(1)].clone();
+        let a2 = self[temp_v!(2)].clone();
+
+        let mut var_pairs = HashMap::new();
+
+        let iter = self.zipped_acyclic_pre_order_iter(a1, a2);
+
+        for (v1, v2) in iter {
+            match (v1, v2) {
+                (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
+                    if ar1 != ar2 || *n1 != *n2 {
+                        return true;
+                    },
+                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
+                    continue,
+                (HeapCellValue::Addr(v1 @ Addr::HeapCell(_)), HeapCellValue::Addr(v2 @ Addr::HeapCell(_)))
+              | (HeapCellValue::Addr(v1 @ Addr::HeapCell(_)), HeapCellValue::Addr(v2 @ Addr::StackCell(..)))
+              | (HeapCellValue::Addr(v1 @ Addr::StackCell(..)), HeapCellValue::Addr(v2 @ Addr::StackCell(..)))
+              | (HeapCellValue::Addr(v1 @ Addr::StackCell(..)), HeapCellValue::Addr(v2 @ Addr::HeapCell(_))) =>
+                    match (var_pairs.get(&v1).cloned(), var_pairs.get(&v2).cloned()) {
+                        (Some(ref v2_p), Some(ref v1_p)) if *v1_p == v1 && *v2_p == v2 =>
+                            continue,
+                        (Some(_), _) | (_, Some(_)) =>
+                            return true,
+                        (None, None) => {
+                            var_pairs.insert(v1.clone(), v2.clone());
+                            var_pairs.insert(v2, v1);
+                        }
+                    },
+                (HeapCellValue::Addr(a1), HeapCellValue::Addr(a2)) =>
+                    if a1 != a2 {
+                        return true;
+                    },
+                _ => return true
+            }
+        }
+
+        false
+    }
+
+    // returns true on failure.
     fn ground_test(&self) -> bool
     {
         let a = self.store(self.deref(self[temp_v!(1)].clone()));
@@ -1640,11 +1683,25 @@ SetupCallCleanupCutPolicy.")
                 };
             },
             &ControlInstruction::CompareTermCall(qt) => {
-                self.compare_term(qt);
+                match qt {
+                    CompareTermQT::Equal =>
+                        self.fail = self.structural_eq_test(),
+                    CompareTermQT::NotEqual =>
+                        self.fail = !self.structural_eq_test(),
+                    _ => self.compare_term(qt)
+                };
+
                 self.p += 1;
             },
             &ControlInstruction::CompareTermExecute(qt) => {
-                self.compare_term(qt);
+                match qt {
+                    CompareTermQT::Equal =>
+                        self.fail = self.structural_eq_test(),
+                    CompareTermQT::NotEqual =>
+                        self.fail = !self.structural_eq_test(),
+                    _ => self.compare_term(qt)
+                };
+                
                 self.p = self.cp;
             },
             &ControlInstruction::Deallocate => {

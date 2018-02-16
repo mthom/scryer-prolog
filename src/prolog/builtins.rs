@@ -546,6 +546,8 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          compare_term_execute!(term_cmp_lte!()), // (@=<)/2, 388.
          compare_term_execute!(term_cmp_gt!()), // (@>)/2, 389.
          compare_term_execute!(term_cmp_lt!()), // (@<)/2, 390.
+         compare_term_execute!(term_cmp_eq!()), // (=@=)/2, 391.
+         compare_term_execute!(term_cmp_ne!()), // (\=@=)/2, 392.
     ]
 }
 
@@ -601,6 +603,8 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     op_dir.insert((tabled_rc!("@>=", atom_tbl), Fixity::In), (XFX, 700));
     op_dir.insert((tabled_rc!("@<", atom_tbl), Fixity::In), (XFX, 700));
     op_dir.insert((tabled_rc!("@>", atom_tbl), Fixity::In), (XFX, 700));
+    op_dir.insert((tabled_rc!("=@=", atom_tbl), Fixity::In), (XFX, 700));
+    op_dir.insert((tabled_rc!("\\=@=", atom_tbl), Fixity::In), (XFX, 700));
 
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
@@ -651,6 +655,9 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("@=<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 388));
     code_dir.insert((tabled_rc!("@>", atom_tbl), 2), (PredicateKeyType::BuiltIn, 389));
     code_dir.insert((tabled_rc!("@<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 390));
-
+    code_dir.insert((tabled_rc!("=@=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 391));
+    code_dir.insert((tabled_rc!("\\=@=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 392));
+    
+    
     (builtin_code, code_dir, op_dir)
 }

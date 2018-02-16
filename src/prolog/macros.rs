@@ -581,12 +581,6 @@ macro_rules! not_eq_execute {
     )
 }
 
-macro_rules! compare_term_call {
-    ($qt:expr) => (
-        Line::Control(ControlInstruction::CompareTermCall($qt))
-    )
-}
-
 macro_rules! compare_term_execute {
     ($qt:expr) => (
         Line::Control(ControlInstruction::CompareTermExecute($qt))
