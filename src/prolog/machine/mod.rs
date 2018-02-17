@@ -46,8 +46,8 @@ impl Machine {
     pub fn new() -> Self {
         let atom_tbl = Rc::new(RefCell::new(HashSet::new()));
         let (code, code_dir, op_dir) = build_code_dir(atom_tbl.clone());
-        
-        
+
+
         Machine {
             ms: MachineState::new(atom_tbl),
             cut_policy: Box::new(DefaultCutPolicy {}),
@@ -121,7 +121,7 @@ impl Machine {
 
                     self.ms.execute_fact_instr(&fact_instr);
                 }
- 
+
                 self.ms.p += 1;
             },
             &Line::Indexing(ref indexing_instr) =>
@@ -194,9 +194,11 @@ impl Machine {
                 },
                 &VarData::Temp(cn, _, _) if cn == chunk_num => {
                     let r = var_data.as_reg_type();
-                    let addr = self.ms[r].clone();
-
-                    heap_locs.insert(var, addr);
+                    
+                    if r.reg_num() != 0 {
+                        let addr = self.ms[r].clone();
+                        heap_locs.insert(var, addr);
+                    }
                 },
                 _ => {}
             }
@@ -205,8 +207,8 @@ impl Machine {
 
     fn run_query<'a>(&mut self, alloc_locs: &AllocVarDict<'a>, heap_locs: &mut HeapVarDict<'a>)
     {
-        let end_ptr = CodePtr::TopLevel(0, self.cached_query_size());
-
+        let end_ptr = CodePtr::TopLevel(0, self.cached_query_size());        
+        
         while self.ms.p < end_ptr {
             if let CodePtr::TopLevel(mut cn, p) = self.ms.p {
                 match &self[CodePtr::TopLevel(cn, p)] {
@@ -224,7 +226,13 @@ impl Machine {
 
             match self.ms.p {
                 CodePtr::TopLevel(_, p) if p > 0 => {},
-                _ => break
+                _ => {
+                    if heap_locs.is_empty() {
+                        self.record_var_places(0, alloc_locs, heap_locs);
+                    }
+                    
+                    break;
+                }
             };
         }
     }

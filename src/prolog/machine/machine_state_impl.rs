@@ -1270,6 +1270,18 @@ impl MachineState {
                                          instr: &BuiltInInstruction)
     {
         match instr {
+            &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) => {
+                let n1 = try_or_fail!(self, self.get_number(at_1));
+                let n2 = try_or_fail!(self, self.get_number(at_2));
+
+                self.compare_numbers(cmp, n1, n2);
+            },
+            &BuiltInInstruction::DynamicCompareNumber(cmp) => {
+                let n1 = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(1)));
+                let n2 = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(2)));
+
+                self.compare_numbers(cmp, n1, n2);
+            },
             &BuiltInInstruction::GetArgCall =>
                 try_or_fail!(self, {
                     let val = self.try_get_arg();
@@ -1338,6 +1350,70 @@ SetupCallCleanupCutPolicy.")
                 };
 
                 self.p += 1;
+            },
+            &BuiltInInstruction::IsAtomic(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Con(_) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsInteger(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Con(Constant::Number(Number::Integer(_))) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsCompound(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Str(_) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsFloat(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Con(Constant::Number(Number::Float(_))) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsRational(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Con(Constant::Number(Number::Rational(_))) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsString(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Con(Constant::String(_)) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
+            &BuiltInInstruction::IsNonVar(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::HeapCell(_) | Addr::StackCell(..) => self.fail = true,
+                    _ => self.p += 1
+                };
+            },
+            &BuiltInInstruction::IsVar(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::HeapCell(_) | Addr::StackCell(_,_) => self.p += 1,
+                    _ => self.fail = true
+                };
             },
             &BuiltInInstruction::RestoreCutPolicy => {
                 let restore_default =
@@ -1737,89 +1813,13 @@ SetupCallCleanupCutPolicy.")
             &ControlInstruction::DuplicateTermExecute => {
                 self.duplicate_term();
                 self.p = self.cp;
-            },
-            &ControlInstruction::CompareNumber(cmp, ref at_1, ref at_2) => {
-                let n1 = try_or_fail!(self, self.get_number(at_1));
-                let n2 = try_or_fail!(self, self.get_number(at_2));
-
-                self.compare_numbers(cmp, n1, n2);
-            },
-            &ControlInstruction::DynamicCompareNumber(cmp) => {
-                let n1 = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(1)));
-                let n2 = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(2)));
-
-                self.compare_numbers(cmp, n1, n2);
-            },
+            },            
             &ControlInstruction::DynamicIs => {
                 let a = self[temp_v!(1)].clone();
                 let result = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(2)));
 
                 self.unify(a, Addr::Con(Constant::Number(result)));
                 self.p += 1;
-            },
-            &ControlInstruction::IsAtomic(r) => {
-                let d = self.store(self.deref(self[r].clone()));
-
-                match d {
-                    Addr::Con(_) => self.p += 1,
-                    _ => self.fail = true
-                };
-            },
-            &ControlInstruction::IsInteger(r) => {
-                let d = self.store(self.deref(self[r].clone()));
-
-                match d {
-                    Addr::Con(Constant::Number(Number::Integer(_))) => self.p += 1,
-                    _ => self.fail = true
-                };
-            },
-            &ControlInstruction::IsCompound(r) => {
-                let d = self.store(self.deref(self[r].clone()));
-
-                match d {
-                    Addr::Str(_) => self.p += 1,
-                    _ => self.fail = true
-                };
-            },
-            &ControlInstruction::IsFloat(r) => {
-                let d = self.store(self.deref(self[r].clone()));
-
-                match d {
-                    Addr::Con(Constant::Number(Number::Float(_))) => self.p += 1,
-                    _ => self.fail = true
-                };
-            },
-            &ControlInstruction::IsRational(r) => {
-                let d = self.store(self.deref(self[r].clone()));
-
-                match d {
-                    Addr::Con(Constant::Number(Number::Rational(_))) => self.p += 1,
-                    _ => self.fail = true
-                };
-            },
-            &ControlInstruction::IsString(r) => {
-                let d = self.store(self.deref(self[r].clone()));
-
-                match d {
-                    Addr::Con(Constant::String(_)) => self.p += 1,
-                    _ => self.fail = true
-                };
-            },
-            &ControlInstruction::IsNonVar(r) => {
-                let d = self.store(self.deref(self[r].clone()));
-
-                match d {
-                    Addr::HeapCell(_) | Addr::StackCell(..) => self.fail = true,
-                    _ => self.p += 1
-                };
-            },
-            &ControlInstruction::IsVar(r) => {
-                let d = self.store(self.deref(self[r].clone()));
-
-                match d {
-                    Addr::HeapCell(_) | Addr::StackCell(_,_) => self.p += 1,
-                    _ => self.fail = true
-                };
             },
             &ControlInstruction::EqCall => {
                 self.fail = self.eq_test();

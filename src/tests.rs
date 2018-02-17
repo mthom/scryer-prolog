@@ -1302,6 +1302,7 @@ fn test_queries_on_builtins()
 
     assert_prolog_success!(&mut wam, "?- X is 3 rdiv 4, rational(X).");
     assert_prolog_failure!(&mut wam, "?- rational(3).");
+    assert_prolog_failure!(&mut wam, "?- rational(f(X)).");
     assert_prolog_failure!(&mut wam, "?- rational(\"sdfsa\").");
     assert_prolog_failure!(&mut wam, "?- rational(atom).");
     assert_prolog_failure!(&mut wam, "?- rational(structure(functor)).");
@@ -1309,6 +1310,7 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- rational([1,2,X]).");
 
     assert_prolog_success!(&mut wam, "?- compound(functor(compound)).");
+    assert_prolog_success!(&mut wam, "?- compound(f(X)).");
     assert_prolog_failure!(&mut wam, "?- compound(3.14159269).");
     assert_prolog_failure!(&mut wam, "?- compound(3).");
     assert_prolog_failure!(&mut wam, "?- compound(\"sdfsa\").");
@@ -1319,6 +1321,7 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- string(functor(string)).");
     assert_prolog_failure!(&mut wam, "?- string(3.14159269).");
     assert_prolog_failure!(&mut wam, "?- string(3).");
+    assert_prolog_failure!(&mut wam, "?- string(f(X)).");
     assert_prolog_success!(&mut wam, "?- string(\"sdfsa\").");
     assert_prolog_failure!(&mut wam, "?- string(atom).");
     assert_prolog_failure!(&mut wam, "?- string([1,2,3]).");
@@ -1326,6 +1329,7 @@ fn test_queries_on_builtins()
     
     assert_prolog_success!(&mut wam, "?- X = nonvar, nonvar(X).");
     assert_prolog_failure!(&mut wam, "?- nonvar(X).");
+    assert_prolog_success!(&mut wam, "?- nonvar(f(X)).");
     assert_prolog_success!(&mut wam, "?- nonvar(functor(nonvar)).");
     assert_prolog_success!(&mut wam, "?- nonvar(3.14159269).");
     assert_prolog_success!(&mut wam, "?- nonvar(3).");

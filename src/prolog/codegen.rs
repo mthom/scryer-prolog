@@ -483,13 +483,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 };
 
                 match *term {
-                    &QueryTerm::Cut => {
+                    &QueryTerm::Cut =>
                         code.push(if chunk_num == 0 {
                             Line::Cut(CutInstruction::NeckCut)
                         } else {
                             Line::Cut(CutInstruction::Cut(perm_v!(1)))
-                        });
-                    },
+                        }),                    
                     &QueryTerm::Is(ref terms) => {
                         let (mut acode, at) = self.call_arith_eval(terms[1].as_ref(), 1)?;
                         code.append(&mut acode);
@@ -520,7 +519,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         }
                     },
                     &QueryTerm::Inlined(ref term) =>
-                        self.compile_inlined(term, term_loc, code)?,
+                        try!(self.compile_inlined(term, term_loc, code)),
                     _ => {
                         let num_perm_vars = if chunk_num == 0 {
                             conjunct_info.perm_vars()
@@ -530,10 +529,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
 
                         self.compile_query_line(term, term_loc, code, num_perm_vars, is_exposed);
                     },
-                };
-
-                self.marker.reset_contents();
+                };                
             }
+
+            self.marker.reset_contents();
         }
 
         Ok(())

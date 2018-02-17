@@ -30,7 +30,7 @@ macro_rules! deallocate {
 
 macro_rules! compare_number_instr {
     ($cmp: expr, $at_1: expr, $at_2: expr) => (
-        Line::Control(ControlInstruction::CompareNumber($cmp, $at_1, $at_2))
+        Line::BuiltIn(BuiltInInstruction::CompareNumber($cmp, $at_1, $at_2))
     )
 }
 
@@ -158,50 +158,50 @@ macro_rules! retry_me_else {
 
 macro_rules! is_atomic {
     ($reg:expr) => (
-        Line::Control(ControlInstruction::IsAtomic($reg))
+        Line::BuiltIn(BuiltInInstruction::IsAtomic($reg))
     )
 }
 
 macro_rules! is_integer {
     ($reg:expr) => (
-        Line::Control(ControlInstruction::IsInteger($reg))
+        Line::BuiltIn(BuiltInInstruction::IsInteger($reg))
     )
 }
 
 macro_rules! is_compound {
     ($r:expr) => (
-        Line::Control(ControlInstruction::IsCompound($r))
+        Line::BuiltIn(BuiltInInstruction::IsCompound($r))
     )
 }
 
 macro_rules! is_float {
     ($r:expr) => (
-        Line::Control(ControlInstruction::IsFloat($r))
+        Line::BuiltIn(BuiltInInstruction::IsFloat($r))
     )
 }
 
 macro_rules! is_rational {
     ($r:expr) => (
-        Line::Control(ControlInstruction::IsRational($r))
+        Line::BuiltIn(BuiltInInstruction::IsRational($r))
     )
 }
 
 
 macro_rules! is_nonvar {
     ($r:expr) => (
-        Line::Control(ControlInstruction::IsNonVar($r))
+        Line::BuiltIn(BuiltInInstruction::IsNonVar($r))
     )
 }
 
 macro_rules! is_string {
     ($r:expr) => (
-        Line::Control(ControlInstruction::IsString($r))
+        Line::BuiltIn(BuiltInInstruction::IsString($r))
     )
 }
 
 macro_rules! is_var {
     ($reg:expr) => (
-        Line::Control(ControlInstruction::IsVar($reg))
+        Line::BuiltIn(BuiltInInstruction::IsVar($reg))
     )
 }
 
@@ -475,7 +475,7 @@ macro_rules! dynamic_is {
 
 macro_rules! dynamic_num_test {
     ($cmp:expr) => (
-        Line::Control(ControlInstruction::DynamicCompareNumber($cmp))
+        Line::BuiltIn(BuiltInInstruction::DynamicCompareNumber($cmp))
     )
 }
 
