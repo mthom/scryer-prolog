@@ -1311,12 +1311,12 @@ fn test_queries_on_builtins()
 
     assert_prolog_success!(&mut wam, "?- compound(functor(compound)).");
     assert_prolog_success!(&mut wam, "?- compound(f(X)).");
+    assert_prolog_success!(&mut wam, "?- compound([1,2,3]).");
+    assert_prolog_failure!(&mut wam, "?- compound([]).");
     assert_prolog_failure!(&mut wam, "?- compound(3.14159269).");
     assert_prolog_failure!(&mut wam, "?- compound(3).");
     assert_prolog_failure!(&mut wam, "?- compound(\"sdfsa\").");
     assert_prolog_failure!(&mut wam, "?- compound(atom).");
-    assert_prolog_failure!(&mut wam, "?- compound([1,2,3]).");
-    assert_prolog_failure!(&mut wam, "?- compound([1,2,X]).");
 
     assert_prolog_failure!(&mut wam, "?- string(functor(string)).");
     assert_prolog_failure!(&mut wam, "?- string(3.14159269).");

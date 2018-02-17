@@ -1371,7 +1371,7 @@ SetupCallCleanupCutPolicy.")
                 let d = self.store(self.deref(self[r].clone()));
 
                 match d {
-                    Addr::Str(_) => self.p += 1,
+                    Addr::Str(_) | Addr::Lis(_) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1777,7 +1777,7 @@ SetupCallCleanupCutPolicy.")
                         self.fail = !self.structural_eq_test(),
                     _ => self.compare_term(qt)
                 };
-                
+
                 self.p = self.cp;
             },
             &ControlInstruction::Deallocate => {
@@ -1813,7 +1813,7 @@ SetupCallCleanupCutPolicy.")
             &ControlInstruction::DuplicateTermExecute => {
                 self.duplicate_term();
                 self.p = self.cp;
-            },            
+            },
             &ControlInstruction::DynamicIs => {
                 let a = self[temp_v!(1)].clone();
                 let result = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(2)));

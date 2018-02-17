@@ -368,7 +368,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 },
             &InlinedQueryTerm::IsCompound(ref inner_term) =>
                 match inner_term[0].as_ref() {
-                    &Term::Clause(..) => {
+                    &Term::Clause(..) | &Term::Cons(..) => {
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
@@ -504,7 +504,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                 if !target.is_empty() {
                                     code.push(Line::Query(target));
                                 }
-
+                                
                                 code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
                             },
                             &Term::Constant(_, ref c @ Constant::Number(_)) => {
