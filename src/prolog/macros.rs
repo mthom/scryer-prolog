@@ -622,3 +622,27 @@ macro_rules! term_cmp_eq {
         CompareTermQT::Equal
     )
 }
+
+macro_rules! install_inference_counter {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::InstallInferenceCounter($r))
+    )
+}
+
+macro_rules! remove_inference_counter {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::RemoveInferenceCounter($r))
+    )
+}
+
+macro_rules! inference_level {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::InferenceLevel)
+    )
+}
+
+macro_rules! default_trust_me {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::DefaultTrustMe)
+    )
+}

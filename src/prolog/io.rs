@@ -168,9 +168,9 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::IsCall(r, ref at) =>
                 write!(f, "is_call {}, {}", r, at),
             &ControlInstruction::IsExecute(r, ref at) =>
-                write!(f, "is_execute {}, {}", r, at),            
+                write!(f, "is_execute {}, {}", r, at),
             &ControlInstruction::DynamicIs =>
-                write!(f, "call_is"),            
+                write!(f, "call_is"),
             &ControlInstruction::JmpByCall(arity, offset) =>
                 write!(f, "jmp_by_call {}/{}", offset, arity),
             &ControlInstruction::JmpByExecute(arity, offset) =>
@@ -184,7 +184,7 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::ThrowCall =>
                 write!(f, "call_throw"),
             &ControlInstruction::ThrowExecute =>
-                write!(f, "execute_throw"),            
+                write!(f, "execute_throw"),
         }
     }
 }
@@ -207,6 +207,10 @@ impl fmt::Display for BuiltInInstruction {
         match self {
             &BuiltInInstruction::CleanUpBlock =>
                 write!(f, "clean_up_block"),
+            &BuiltInInstruction::DefaultTrustMe =>
+                write!(f, "default_trust_me"),
+            &BuiltInInstruction::InstallInferenceCounter(r) =>
+                write!(f, "install_inference_counter {}", r),
             &BuiltInInstruction::EraseBall =>
                 write!(f, "erase_ball"),
             &BuiltInInstruction::Fail =>
@@ -221,6 +225,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "get_current_block X1"),
             &BuiltInInstruction::GetCutPoint(r) =>
                 write!(f, "get_cp {}", r),
+            &BuiltInInstruction::InferenceLevel =>
+                write!(f, "inference_level"),
             &BuiltInInstruction::InstallCleaner =>
                 write!(f, "install_cleaner"),
             &BuiltInInstruction::InstallNewBlock =>
@@ -261,6 +267,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
             &BuiltInInstruction::DynamicCompareNumber(cmp) =>
                 write!(f, "dynamic_number_test {}", cmp),
+            &BuiltInInstruction::RemoveInferenceCounter(r) =>
+                write!(f, "remove_inference_counter {}", r)
         }
     }
 }

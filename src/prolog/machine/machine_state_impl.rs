@@ -185,7 +185,7 @@ impl MachineState {
         }
     }
 
-    fn unwind_trail(&mut self, a1: usize, a2: usize) {
+    pub(super) fn unwind_trail(&mut self, a1: usize, a2: usize) {
         for i in a1 .. a2 {
             match self.trail[i] {
                 Ref::HeapCell(r) =>
@@ -932,36 +932,7 @@ impl MachineState {
         }
     }
 
-    fn try_call_predicate(&mut self, code_dir: &CodeDir, name: TabledRc<Atom>, arity: usize)
-    {
-        let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| index.1);
-
-        match compiled_tl_index {
-            Some(compiled_tl_index) => {
-                self.cp = self.p + 1;
-                self.num_of_args = arity;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(compiled_tl_index);
-            },
-            None => self.fail = true
-        };
-    }
-
-    fn try_execute_predicate(&mut self, code_dir: &CodeDir, name: TabledRc<Atom>, arity: usize)
-    {
-        let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| index.1);
-
-        match compiled_tl_index {
-            Some(compiled_tl_index) => {
-                self.num_of_args = arity;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(compiled_tl_index);
-            },
-            None => self.fail = true
-        };
-    }
-
-    fn handle_internal_call_n(&mut self, code_dir: &CodeDir)
+    fn handle_internal_call_n(&mut self, call_policy: &mut Box<CallPolicy>, code_dir: &CodeDir)
     {
         let arity = self.num_of_args + 1;
         let pred  = self.registers[1].clone();
@@ -974,7 +945,7 @@ impl MachineState {
             self.registers[arity - 1] = pred;
 
             if let Some((name, arity)) = self.setup_call_n(arity - 1) {
-                self.try_execute_predicate(code_dir, name, arity);
+                try_or_fail!(self, call_policy.try_execute(self, code_dir, name, arity));
             }
         } else {
             self.fail = true;
@@ -1266,7 +1237,8 @@ impl MachineState {
     }
 
     pub(super) fn execute_built_in_instr(&mut self, code_dir: &CodeDir,
-                                         cut_policy: &mut Box<CutPolicy>,
+                                         call_policy: &mut Box<CallPolicy>,
+                                         cut_policy:  &mut Box<CutPolicy>,
                                          instr: &BuiltInInstruction)
     {
         match instr {
@@ -1276,11 +1248,20 @@ impl MachineState {
 
                 self.compare_numbers(cmp, n1, n2);
             },
+            &BuiltInInstruction::DefaultTrustMe => {
+                let mut call_policy = DefaultCallPolicy {};
+                try_or_fail!(self, call_policy.trust_me(self));
+            },
             &BuiltInInstruction::DynamicCompareNumber(cmp) => {
                 let n1 = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(1)));
                 let n2 = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(2)));
 
                 self.compare_numbers(cmp, n1, n2);
+            },
+            &BuiltInInstruction::EraseBall => {
+                self.ball.0 = 0;
+                self.ball.1.truncate(0);
+                self.p += 1;
             },
             &BuiltInInstruction::GetArgCall =>
                 try_or_fail!(self, {
@@ -1299,11 +1280,6 @@ impl MachineState {
                 let addr = self[temp_v!(1)].clone();
 
                 self.write_constant_to_var(addr, c);
-                self.p += 1;
-            },
-            &BuiltInInstruction::EraseBall => {
-                self.ball.0 = 0;
-                self.ball.1.truncate(0);
                 self.p += 1;
             },
             &BuiltInInstruction::GetBall => {
@@ -1333,6 +1309,24 @@ impl MachineState {
 
                 self.p += 1;
             },
+            &BuiltInInstruction::InferenceLevel => { // X1 = R, X2 = B.
+                let a1 = self[temp_v!(1)].clone();
+                let a2 = self.store(self.deref(self[temp_v!(2)].clone()));                
+
+                match a2 {
+                    Addr::Con(Constant::Usize(bp)) =>
+                        if self.b <= bp {
+                            let a2 = Addr::Con(atom!("!", self.atom_tbl));
+                            self.unify(a1, a2);
+                        } else {
+                            let a2 = Addr::Con(atom!("true", self.atom_tbl));
+                            self.unify(a1, a2);
+                        },
+                    _ => self.fail = true
+                };
+                
+                self.p += 1;
+            },
             &BuiltInInstruction::InstallCleaner => {
                 let addr = self[temp_v!(1)].clone();
                 let b = self.b;
@@ -1350,6 +1344,31 @@ SetupCallCleanupCutPolicy.")
                 };
 
                 self.p += 1;
+            },
+            &BuiltInInstruction::InstallInferenceCounter(r) => {
+                let addr = self.store(self.deref(self[r].clone()));
+                
+                if call_policy.downcast_ref::<CallWithInferenceLimitCallPolicy>().is_err() {
+                    CallWithInferenceLimitCallPolicy::new_in_place(self.atom_tbl.clone(), call_policy);
+                }
+
+                self.p += 1;
+                
+                match addr {
+                    Addr::Con(Constant::Number(Number::Integer(n))) =>
+                        match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
+                            Some(call_policy) => call_policy.add_limit(n),
+                            None => panic!("install_inference_counter: should have installed \\
+                                            CallWithInferenceLimitCallPolicy.")
+                        },
+                    _ => {
+                        let atom_tbl = self.atom_tbl.clone();                        
+                        self.throw_exception(functor!(atom_tbl,
+                                                      "type_error",
+                                                      1,
+                                                      [heap_atom!("integer_expected", atom_tbl)]))
+                    }
+                };                
             },
             &BuiltInInstruction::IsAtomic(r) => {
                 let d = self.store(self.deref(self[r].clone()));
@@ -1414,6 +1433,33 @@ SetupCallCleanupCutPolicy.")
                     Addr::HeapCell(_) | Addr::StackCell(_,_) => self.p += 1,
                     _ => self.fail = true
                 };
+            },
+            &BuiltInInstruction::RemoveInferenceCounter(r) => {
+                let restore_default =
+                    match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
+                        Some(call_policy) => {
+                            if let Some(diff) = call_policy.remove_limit() {
+                                let addr = self[r].clone();
+                                self.unify(addr, Addr::Con(integer!(diff)));
+                            } else {
+                                panic!("remove_inference_counters: no limit found.");
+                            }
+                            
+                            if call_policy.is_empty() {
+                                Some(call_policy.into_inner())
+                            } else {
+                                None
+                            }
+                        },
+                        None => panic!("remove_inference_counters: requires \\
+                                        CallWithInferenceLimitCallPolicy.")
+                    };
+
+                if let Some(new_policy) = restore_default {
+                    *call_policy = new_policy;
+                }
+
+                self.p += 1;
             },
             &BuiltInInstruction::RestoreCutPolicy => {
                 let restore_default =
@@ -1492,7 +1538,7 @@ SetupCallCleanupCutPolicy.")
                 self.fail = true;
             },
             &BuiltInInstruction::InternalCallN =>
-                self.handle_internal_call_n(code_dir),
+                self.handle_internal_call_n(call_policy, code_dir),
             &BuiltInInstruction::Fail => {
                 self.fail = true;
                 self.p += 1;
@@ -1683,7 +1729,9 @@ SetupCallCleanupCutPolicy.")
         false
     }
 
-    pub(super) fn execute_ctrl_instr(&mut self, code_dir: &CodeDir, cut_policy: &mut Box<CutPolicy>,
+    pub(super) fn execute_ctrl_instr(&mut self, code_dir: &CodeDir,
+                                     call_policy: &mut Box<CallPolicy>,
+                                     cut_policy:  &mut Box<CutPolicy>,
                                      instr: &ControlInstruction)
     {
         match instr {
@@ -1728,7 +1776,7 @@ SetupCallCleanupCutPolicy.")
                 self.p  = CodePtr::DirEntry(150);
             },
             &ControlInstruction::Call(ref name, arity, _) =>
-                self.try_call_predicate(code_dir, name.clone(), arity),
+                try_or_fail!(self, call_policy.try_call(self, code_dir, name.clone(), arity)),
             &ControlInstruction::CatchCall => {
                 self.cp = self.p + 1;
                 self.num_of_args = 3;
@@ -1742,7 +1790,7 @@ SetupCallCleanupCutPolicy.")
             },
             &ControlInstruction::CallN(arity) =>
                 if let Some((name, arity)) = self.setup_call_n(arity) {
-                    self.try_call_predicate(code_dir, name, arity);
+                    try_or_fail!(self, call_policy.try_call(self, code_dir, name, arity))
                 },
             &ControlInstruction::CheckCpExecute => {
                 let a = self.store(self.deref(self[temp_v!(2)].clone()));
@@ -1838,10 +1886,10 @@ SetupCallCleanupCutPolicy.")
                 self.p = self.cp;
             },
             &ControlInstruction::Execute(ref name, arity) =>
-                self.try_execute_predicate(code_dir, name.clone(), arity),
+                try_or_fail!(self, call_policy.try_execute(self, code_dir, name.clone(), arity)),
             &ControlInstruction::ExecuteN(arity) =>
                 if let Some((name, arity)) = self.setup_call_n(arity) {
-                    self.try_execute_predicate(code_dir, name, arity);
+                    try_or_fail!(self, call_policy.try_execute(self, code_dir, name, arity))
                 },
             &ControlInstruction::FunctorCall =>
                 try_or_fail!(self, {
@@ -1936,7 +1984,8 @@ SetupCallCleanupCutPolicy.")
         };
     }
 
-    pub(super) fn execute_indexed_choice_instr(&mut self, instr: &IndexedChoiceInstruction)
+    pub(super) fn execute_indexed_choice_instr(&mut self, instr: &IndexedChoiceInstruction,
+                                               call_policy: &mut Box<CallPolicy>)
     {
         match instr {
             &IndexedChoiceInstruction::Try(l) => {
@@ -1963,63 +2012,15 @@ SetupCallCleanupCutPolicy.")
                 self.hb = self.heap.h;
                 self.p += l;
             },
-            &IndexedChoiceInstruction::Retry(l) => {
-                let b = self.b - 1;
-                let n = self.or_stack[b].num_args();
-
-                for i in 1 .. n + 1 {
-                    self.registers[i] = self.or_stack[b][i].clone();
-                }
-
-                self.e  = self.or_stack[b].e;
-                self.cp = self.or_stack[b].cp;
-
-                self.or_stack[b].bp = self.p + 1;
-
-                let old_tr  = self.or_stack[b].tr;
-                let curr_tr = self.tr;
-
-                self.unwind_trail(old_tr, curr_tr);
-                self.tr = self.or_stack[b].tr;
-
-                self.trail.truncate(self.tr);
-                self.heap.truncate(self.or_stack[b].h);
-
-                self.hb = self.heap.h;
-
-                self.p += l;
-            },
-            &IndexedChoiceInstruction::Trust(l) => {
-                let b = self.b - 1;
-                let n = self.or_stack[b].num_args();
-
-                for i in 1 .. n + 1 {
-                    self.registers[i] = self.or_stack[b][i].clone();
-                }
-
-                self.e  = self.or_stack[b].e;
-                self.cp = self.or_stack[b].cp;
-
-                let old_tr  = self.or_stack[b].tr;
-                let curr_tr = self.tr;
-
-                self.unwind_trail(old_tr, curr_tr);
-
-                self.tr = self.or_stack[b].tr;
-                self.trail.truncate(self.tr);
-
-                self.heap.truncate(self.or_stack[b].h);
-                self.b = self.or_stack[b].b;
-
-                self.or_stack.truncate(self.b);
-
-                self.hb = self.heap.h;
-                self.p += l;
-            },
+            &IndexedChoiceInstruction::Retry(l) =>
+                try_or_fail!(self, call_policy.retry(self, l)),
+            &IndexedChoiceInstruction::Trust(l) =>
+                try_or_fail!(self, call_policy.trust(self, l))
         };
     }
 
-    pub(super) fn execute_choice_instr(&mut self, instr: &ChoiceInstruction)
+    pub(super) fn execute_choice_instr(&mut self, instr: &ChoiceInstruction,
+                                       call_policy: &mut Box<CallPolicy>)
     {
         match instr {
             &ChoiceInstruction::TryMeElse(offset) => {
@@ -2046,60 +2047,10 @@ SetupCallCleanupCutPolicy.")
                 self.hb = self.heap.h;
                 self.p += 1;
             },
-            &ChoiceInstruction::RetryMeElse(offset) => {
-                let b = self.b - 1;
-                let n = self.or_stack[b].num_args();
-
-                for i in 1 .. n + 1 {
-                    self.registers[i] = self.or_stack[b][i].clone();
-                }
-
-                self.e  = self.or_stack[b].e;
-                self.cp = self.or_stack[b].cp;
-
-                self.or_stack[b].bp = self.p + offset;
-
-                let old_tr  = self.or_stack[b].tr;
-                let curr_tr = self.tr;
-
-                self.unwind_trail(old_tr, curr_tr);
-                self.tr = self.or_stack[b].tr;
-
-                self.trail.truncate(self.tr);
-                self.heap.truncate(self.or_stack[b].h);
-
-                self.hb = self.heap.h;
-
-                self.p += 1;
-            },
-            &ChoiceInstruction::TrustMe => {
-                let b = self.b - 1;
-                let n = self.or_stack[b].num_args();
-
-                for i in 1 .. n + 1 {
-                    self.registers[i] = self.or_stack[b][i].clone();
-                }
-
-                self.e  = self.or_stack[b].e;
-                self.cp = self.or_stack[b].cp;
-
-                let old_tr  = self.or_stack[b].tr;
-                let curr_tr = self.tr;
-
-                self.unwind_trail(old_tr, curr_tr);
-
-                self.tr = self.or_stack[b].tr;
-                self.trail.truncate(self.tr);
-
-                self.heap.truncate(self.or_stack[b].h);
-
-                self.b = self.or_stack[b].b;
-
-                self.or_stack.truncate(self.b);
-
-                self.hb = self.heap.h;
-                self.p += 1;
-            }
+            &ChoiceInstruction::RetryMeElse(offset) =>
+                try_or_fail!(self, call_policy.retry_me_else(self, offset)),
+            &ChoiceInstruction::TrustMe =>
+                try_or_fail!(self, call_policy.trust_me(self))
         }
     }
 

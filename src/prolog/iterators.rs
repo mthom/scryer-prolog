@@ -36,6 +36,12 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(1, ClauseType::CallN, terms);
                 QueryIterator { state_stack: vec![state] }
             },
+            &QueryTerm::CallWithInferenceLimit(ref terms) => {
+                let ct    = ClauseType::CallWithInferenceLimit;
+                let state = TermIterState::Clause(0, ct, terms);
+
+                QueryIterator { state_stack: vec![state] }
+            },
             &QueryTerm::Catch(ref terms) => {
                 let state = TermIterState::Clause(0, ClauseType::Catch, terms);
                 QueryIterator { state_stack: vec![state] }
@@ -333,7 +339,8 @@ impl<'a> ChunkedIterator<'a>
                     arity = child_terms.len() + 1;
                     break;
                 },
-                &QueryTerm::Catch(ref child_terms) | &QueryTerm::Throw(ref child_terms) => {
+                &QueryTerm::Catch(ref child_terms)
+              | &QueryTerm::Throw(ref child_terms) => {
                     result.push(term);
                     arity = child_terms.len();
                     break;
@@ -344,7 +351,8 @@ impl<'a> ChunkedIterator<'a>
                     break;
                 },
                 &QueryTerm::Arg(_)
-              | &QueryTerm::Functor(_) => {
+              | &QueryTerm::Functor(_)
+              | &QueryTerm::CallWithInferenceLimit(_) => {
                     result.push(term);
                     arity = 3;
                     break;

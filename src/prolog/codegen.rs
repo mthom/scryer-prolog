@@ -245,6 +245,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
     fn add_conditional_call(code: &mut Code, qt: &QueryTerm, pvs: usize)
     {
         match qt {
+            &QueryTerm::CallWithInferenceLimit(_) =>
+                code.push(goto_call!(393, 3)),
             &QueryTerm::SetupCallCleanup(_) =>
                 code.push(goto_call!(294, 3)),
             &QueryTerm::Arg(_) => {

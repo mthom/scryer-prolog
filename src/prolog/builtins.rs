@@ -548,6 +548,76 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          compare_term_execute!(term_cmp_lt!()), // (@<)/2, 390.
          compare_term_execute!(term_cmp_eq!()), // (=@=)/2, 391.
          compare_term_execute!(term_cmp_ne!()), // (\=@=)/2, 392.
+         allocate!(4), // call_with_inference_limit/3, 393.
+         fact![get_var_in_fact!(perm_v!(3), 1),
+               get_var_in_fact!(perm_v!(2), 2),
+               get_var_in_fact!(perm_v!(1), 3)],
+         query![put_var!(perm_v!(4), 1)],
+         get_current_block!(),
+         query![put_value!(perm_v!(3), 1),
+                put_value!(perm_v!(2), 2),
+                put_value!(perm_v!(1), 3),
+                put_value!(perm_v!(4), 4)],
+         deallocate!(),
+         goto_execute!(400, 4), // goto call_with_inference_limit/4, 400.
+         try_me_else!(16), // call_with_inference_limit/4, 400.
+         allocate!(7),
+         fact![get_var_in_fact!(perm_v!(6), 1),
+               get_var_in_fact!(perm_v!(7), 2),
+               get_var_in_fact!(perm_v!(4), 3),
+               get_var_in_fact!(perm_v!(3), 4)],
+         query![put_var!(perm_v!(1), 1)],
+         install_new_block!(),
+         install_inference_counter!(perm_v!(7)),
+         get_cp!(perm_v!(5)),
+         query![put_value!(perm_v!(6), 1)],
+         call_n!(1),
+         query![put_var!(perm_v!(2), 3)],
+         remove_inference_counter!(perm_v!(2)),
+         query![put_value!(perm_v!(4), 1),
+                put_value!(perm_v!(5), 2)],
+         inference_level!(),
+         query![put_value!(perm_v!(3), 1),
+                put_value!(perm_v!(1), 2),
+                put_value!(perm_v!(2), 3)],
+         deallocate!(),
+         goto_execute!(436, 3), // goto end_block/3, 436.
+         default_trust_me!(), // 416.
+         allocate!(2),
+         fact![get_var_in_fact!(perm_v!(1), 3)],
+         query![put_value!(temp_v!(4), 1)],
+         reset_block!(),
+         query![put_var!(temp_v!(2), 1)],
+         remove_inference_counter!(temp_v!(1)),
+         query![put_var!(perm_v!(2), 1)],
+         get_ball!(),
+         erase_ball!(),
+         query![put_unsafe_value!(2, 1),
+                put_value!(perm_v!(1), 2)],
+         deallocate!(),
+         goto_execute!(429, 2), // goto handle_ile/2, 429.
+         try_me_else!(5), // handle_ile/2, 429.
+         switch_on_term!(1, 1, 0, 0),
+         fact![get_constant!(atom!("inference_limit_exceeded", atom_tbl), temp_v!(1)),
+               get_constant!(atom!("inference_limit_exceeded", atom_tbl), temp_v!(2))],
+         neck_cut!(),
+         proceed!(),
+         default_trust_me!(),
+         goto_execute!(59, 1), // goto throw/1, 59.
+         try_me_else!(9), // end_block/3, 436.
+         allocate!(1),
+         fact![get_var_in_fact!(perm_v!(1), 1)],
+         query![put_value!(temp_v!(2), 1)],
+         clean_up_block!(),
+         query![put_value!(perm_v!(1), 1)],
+         deallocate!(),
+         reset_block!(),
+         proceed!(),
+         default_trust_me!(),
+         install_inference_counter!(temp_v!(3)),
+         query![put_value!(temp_v!(2), 1)],
+         reset_block!(),
+         fail!()
     ]
 }
 
@@ -641,7 +711,13 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("=..", atom_tbl), 2), (PredicateKeyType::BuiltIn, 208));
 
     code_dir.insert((tabled_rc!("length", atom_tbl), 2), (PredicateKeyType::BuiltIn, 261));
-    code_dir.insert((tabled_rc!("setup_call_cleanup", atom_tbl), 3), (PredicateKeyType::BuiltIn, 294));
+    code_dir.insert((tabled_rc!("setup_call_cleanup", atom_tbl), 3),
+                    (PredicateKeyType::BuiltIn, 294));
+    code_dir.insert((tabled_rc!("call_with_inference_limit", atom_tbl), 3),
+                    (PredicateKeyType::BuiltIn, 393));
+    code_dir.insert((tabled_rc!("_handle_inference_limit_exceeded", atom_tbl), 2),
+                    (PredicateKeyType::BuiltIn, 421));
+
     code_dir.insert((tabled_rc!("compound", atom_tbl), 1), (PredicateKeyType::BuiltIn, 372));
     code_dir.insert((tabled_rc!("rational", atom_tbl), 1), (PredicateKeyType::BuiltIn, 374));
     code_dir.insert((tabled_rc!("string", atom_tbl), 1), (PredicateKeyType::BuiltIn, 376));

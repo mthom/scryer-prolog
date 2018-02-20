@@ -96,6 +96,7 @@ The following predicates are built-in to rusty-wam.
 * `atomic/1`
 * `between/3`
 * `call/1..63`
+* `call_with_inference_limit/3`
 * `catch/3`
 * `compound/1`
 * `display/1`

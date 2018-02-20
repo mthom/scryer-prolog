@@ -419,6 +419,7 @@ pub type JumpStub = Vec<Term>;
 pub enum QueryTerm {
     Arg(Vec<Box<Term>>),
     CallN(Vec<Box<Term>>),
+    CallWithInferenceLimit(Vec<Box<Term>>),
     Catch(Vec<Box<Term>>),
     CompareTerm(CompareTermQT, Vec<Box<Term>>),
     Cut,
@@ -453,6 +454,7 @@ impl QueryTerm {
             &QueryTerm::Jump(ref vars) => vars.len(),
             &QueryTerm::NotEq(_) => 2,
             &QueryTerm::CallN(ref terms) => terms.len(),
+            &QueryTerm::CallWithInferenceLimit(_) => 3,
             &QueryTerm::Cut => 0,
             &QueryTerm::SetupCallCleanup(_) => 3,
             &QueryTerm::Term(ref term) => term.arity(),
@@ -469,6 +471,7 @@ pub struct Rule {
 pub enum ClauseType<'a> {
     Arg,
     CallN,
+    CallWithInferenceLimit,
     Catch,
     CompareNumber(CompareNumberQT),
     CompareTerm(CompareTermQT),
@@ -490,6 +493,7 @@ impl<'a> ClauseType<'a> {
         match self {
             &ClauseType::Arg => "arg",
             &ClauseType::CallN => "call",
+            &ClauseType::CallWithInferenceLimit => "call_with_inference_limit",
             &ClauseType::Catch => "catch",
             &ClauseType::CompareNumber(qt) => qt.name(),
             &ClauseType::CompareTerm(qt) => qt.name(),
@@ -875,6 +879,7 @@ pub enum ArithmeticInstruction {
 pub enum BuiltInInstruction {
     CleanUpBlock,
     CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
+    DefaultTrustMe,
     DynamicCompareNumber(CompareNumberQT),
     EraseBall,
     Fail,
@@ -883,7 +888,9 @@ pub enum BuiltInInstruction {
     GetBall,
     GetCurrentBlock,
     GetCutPoint(RegType),
+    InferenceLevel,
     InstallCleaner,
+    InstallInferenceCounter(RegType),
     InstallNewBlock,
     InternalCallN,
     IsAtomic(RegType),
@@ -894,6 +901,7 @@ pub enum BuiltInInstruction {
     IsRational(RegType),
     IsString(RegType),
     IsVar(RegType),
+    RemoveInferenceCounter(RegType),
     ResetBlock,
     RestoreCutPolicy,
     SetBall,
@@ -938,7 +946,7 @@ pub enum ControlInstruction {
     IsExecute(RegType, ArithmeticTerm),
     NotEqCall,
     NotEqExecute,
-    Proceed,
+    Proceed,    
     ThrowCall,
     ThrowExecute,
 }

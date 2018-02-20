@@ -1,11 +1,18 @@
 use prolog::and_stack::*;
+use prolog::builtins::CodeDir;
 use prolog::ast::*;
 use prolog::copier::*;
+use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
 use prolog::tabled_rc::*;
 
 use downcast::Any;
+
+use std::cmp::Ordering;
+use std::collections::binary_heap::BinaryHeap;
+use std::mem::swap;
 use std::ops::{Index, IndexMut};
+use std::rc::Rc;
 
 pub(super) struct DuplicateTerm<'a> {
     state: &'a mut MachineState
@@ -176,6 +183,288 @@ pub struct MachineState {
     pub(super) interms: Vec<Number>, // intermediate numbers.
 }
 
+pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
+
+pub(crate) trait CallPolicy: Any {
+    fn try_call(&mut self, machine_st: &mut MachineState, code_dir: &CodeDir,
+                name: TabledRc<Atom>, arity: usize)
+                -> CallResult
+    {
+        let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| index.1);
+
+        match compiled_tl_index {
+            Some(compiled_tl_index) => {
+                machine_st.cp = machine_st.p + 1;
+                machine_st.num_of_args = arity;
+                machine_st.b0 = machine_st.b;
+                machine_st.p  = CodePtr::DirEntry(compiled_tl_index);
+            },
+            None => machine_st.fail = true
+        };
+
+        Ok(())
+    }
+
+    fn try_execute(&mut self, machine_st: &mut MachineState, code_dir: &CodeDir,
+                   name: TabledRc<Atom>, arity: usize)
+                   -> CallResult
+    {
+        let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| index.1);
+
+        match compiled_tl_index {
+            Some(compiled_tl_index) => {
+                machine_st.num_of_args = arity;
+                machine_st.b0 = machine_st.b;
+                machine_st.p  = CodePtr::DirEntry(compiled_tl_index);
+            },
+            None => machine_st.fail = true
+        };
+
+        Ok(())
+    }
+
+    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        let b = machine_st.b - 1;
+        let n = machine_st.or_stack[b].num_args();
+
+        for i in 1 .. n + 1 {
+            machine_st.registers[i] = machine_st.or_stack[b][i].clone();
+        }
+
+        machine_st.e  = machine_st.or_stack[b].e;
+        machine_st.cp = machine_st.or_stack[b].cp;
+
+        machine_st.or_stack[b].bp = machine_st.p + offset;
+
+        let old_tr  = machine_st.or_stack[b].tr;
+        let curr_tr = machine_st.tr;
+
+        machine_st.unwind_trail(old_tr, curr_tr);
+        machine_st.tr = machine_st.or_stack[b].tr;
+
+        machine_st.trail.truncate(machine_st.tr);
+        machine_st.heap.truncate(machine_st.or_stack[b].h);
+
+        machine_st.hb = machine_st.heap.h;
+
+        machine_st.p += 1;
+        
+        Ok(())
+    }
+
+    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        let b = machine_st.b - 1;
+        let n = machine_st.or_stack[b].num_args();
+
+        for i in 1 .. n + 1 {
+            machine_st.registers[i] = machine_st.or_stack[b][i].clone();
+        }
+
+        machine_st.e  = machine_st.or_stack[b].e;
+        machine_st.cp = machine_st.or_stack[b].cp;
+
+        machine_st.or_stack[b].bp = machine_st.p + 1;
+
+        let old_tr  = machine_st.or_stack[b].tr;
+        let curr_tr = machine_st.tr;
+
+        machine_st.unwind_trail(old_tr, curr_tr);
+        machine_st.tr = machine_st.or_stack[b].tr;
+
+        machine_st.trail.truncate(machine_st.tr);
+        machine_st.heap.truncate(machine_st.or_stack[b].h);
+
+        machine_st.hb = machine_st.heap.h;
+
+        machine_st.p += offset;
+
+        Ok(())
+    }
+
+    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {        
+        let b = machine_st.b - 1;
+        let n = machine_st.or_stack[b].num_args();
+
+        for i in 1 .. n + 1 {
+            machine_st.registers[i] = machine_st.or_stack[b][i].clone();
+        }
+
+        machine_st.e  = machine_st.or_stack[b].e;
+        machine_st.cp = machine_st.or_stack[b].cp;
+
+        let old_tr  = machine_st.or_stack[b].tr;
+        let curr_tr = machine_st.tr;
+
+        machine_st.unwind_trail(old_tr, curr_tr);
+
+        machine_st.tr = machine_st.or_stack[b].tr;
+        machine_st.trail.truncate(machine_st.tr);
+
+        machine_st.heap.truncate(machine_st.or_stack[b].h);
+        machine_st.b = machine_st.or_stack[b].b;
+
+        machine_st.or_stack.truncate(machine_st.b);
+
+        machine_st.hb = machine_st.heap.h;
+        machine_st.p += offset;
+
+        Ok(())
+    }
+
+    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult
+    {
+        let b = machine_st.b - 1;
+        let n = machine_st.or_stack[b].num_args();
+
+        for i in 1 .. n + 1 {
+            machine_st.registers[i] = machine_st.or_stack[b][i].clone();
+        }
+
+        machine_st.e  = machine_st.or_stack[b].e;
+        machine_st.cp = machine_st.or_stack[b].cp;
+
+        let old_tr  = machine_st.or_stack[b].tr;
+        let curr_tr = machine_st.tr;
+
+        machine_st.unwind_trail(old_tr, curr_tr);
+
+        machine_st.tr = machine_st.or_stack[b].tr;
+        machine_st.trail.truncate(machine_st.tr);
+
+        machine_st.heap.truncate(machine_st.or_stack[b].h);
+
+        machine_st.b = machine_st.or_stack[b].b;
+
+        machine_st.or_stack.truncate(machine_st.b);
+
+        machine_st.hb = machine_st.heap.h;
+        machine_st.p += 1;
+
+        Ok(())
+    }
+}
+
+downcast!(CallPolicy);
+
+pub(crate) struct DefaultCallPolicy {}
+
+impl CallPolicy for DefaultCallPolicy {}
+
+#[derive(Clone, Eq, PartialEq)]
+struct InferenceLimit(BigUint);
+
+// ensure the heap behaves as a min-heap.
+impl Ord for InferenceLimit {
+    fn cmp(&self, other: &InferenceLimit) -> Ordering {
+        other.0.cmp(&self.0)
+    }
+}
+
+impl PartialOrd for InferenceLimit {
+    fn partial_cmp(&self, other: &InferenceLimit) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+pub(crate) struct CallWithInferenceLimitCallPolicy {
+    atom_tbl: TabledData<Atom>,
+    pub(crate) prev_policy: Box<CallPolicy>,
+    count:  BigUint,
+    limits: BinaryHeap<InferenceLimit>
+}
+
+impl CallWithInferenceLimitCallPolicy {
+    pub(crate) fn new_in_place(atom_tbl: TabledData<Atom>, policy: &mut Box<CallPolicy>)
+    {
+        let mut prev_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
+        swap(&mut prev_policy, policy);        
+        
+        let new_policy = CallWithInferenceLimitCallPolicy { atom_tbl, prev_policy,
+                                                            count:  BigUint::zero(),
+                                                            limits: BinaryHeap::new() };
+
+        *policy = Box::new(new_policy);
+    }
+
+    fn increment(&mut self) -> CallResult {        
+        if let Some(ref limit) = self.limits.peek() {
+            if self.count == limit.0 {
+                return Err(vec![heap_atom!("inference_limit_exceeded", self.atom_tbl)])
+            } else {
+                self.count = BigUint::one() + &self.count;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn add_limit(&mut self, limit: Rc<BigInt>) {
+        match limit.to_biguint() {
+            Some(limit) => self.limits.push(InferenceLimit(limit + &self.count)),
+            _ => panic!("add_limit: expected unsigned integer.")
+        };
+    }
+
+    pub(crate) fn remove_limit(&mut self) -> Option<BigUint> {
+        self.limits.pop().map(|i| i.0 - &self.count)
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.limits.is_empty()
+    }
+    
+    pub(crate) fn into_inner(&mut self) -> Box<CallPolicy> {
+        let mut new_inner: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
+        swap(&mut self.prev_policy, &mut new_inner);
+        new_inner
+    }
+}
+
+impl CallPolicy for CallWithInferenceLimitCallPolicy {
+    fn try_call(&mut self, machine_st: &mut MachineState, code_dir: &CodeDir,
+                name: TabledRc<Atom>, arity: usize)
+                -> CallResult
+    {
+        self.prev_policy.try_call(machine_st, code_dir, name, arity)?;
+        self.increment()
+    }
+
+    fn try_execute(&mut self, machine_st: &mut MachineState, code_dir: &CodeDir,
+                   name: TabledRc<Atom>, arity: usize)
+                   -> CallResult
+    {
+        self.prev_policy.try_execute(machine_st, code_dir, name, arity)?;
+        self.increment()
+    }
+
+    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        self.prev_policy.retry_me_else(machine_st, offset)?;
+        self.increment()
+    }
+    
+    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        self.prev_policy.retry(machine_st, offset)?;
+        self.increment()
+    }
+    
+    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult
+    {
+        self.prev_policy.trust_me(machine_st)?;
+        self.increment()
+    }
+    
+    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        self.prev_policy.trust(machine_st, offset)?;
+        self.increment()
+    }
+}
+
 pub(crate) trait CutPolicy: Any {
     fn cut(&mut self, &mut MachineState, RegType);
 }
@@ -200,20 +489,20 @@ impl CutPolicy for DefaultCutPolicy {
             return;
         }
 
-        machine_st.p += 1;        
+        machine_st.p += 1;
     }
 }
 
 pub(crate) struct SetupCallCleanupCutPolicy {
     // locations of cleaners, cut points, the previous block
-    cont_pts: Vec<(Addr, usize, usize)> 
+    cont_pts: Vec<(Addr, usize, usize)>
 }
 
 impl SetupCallCleanupCutPolicy {
     pub(crate) fn new() -> Self {
         SetupCallCleanupCutPolicy { cont_pts: vec![] }
     }
-    
+
     pub(crate) fn out_of_cont_pts(&self) -> bool {
         self.cont_pts.is_empty()
     }
@@ -243,7 +532,7 @@ impl CutPolicy for SetupCallCleanupCutPolicy {
         }
 
         machine_st.p += 1;
-        
+
         if !self.out_of_cont_pts() {
             machine_st.cp = machine_st.p;
             machine_st.num_of_args = 0;

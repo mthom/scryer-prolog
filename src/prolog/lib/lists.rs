@@ -10,7 +10,7 @@ pub static LISTS: &str = "member(X, [X|_]).
                           memberchk(X, Xs) :- member(X, Xs), !.
 
                           reverse(Xs, Ys) :- var(Ys), !, reverse(Xs, [], Ys).
-                          reverse(Ys, Xs) :- var(Ys), reverse(Xs, [], Ys).
+                          reverse(Ys, Xs) :- reverse(Xs, [], Ys).
 
                           reverse([], Ys, Ys).
                           reverse([H|T], Ps, Rs) :-

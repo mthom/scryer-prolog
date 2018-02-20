@@ -19,6 +19,7 @@ use std::rc::Rc;
 
 pub struct Machine {
     ms: MachineState,
+    call_policy: Box<CallPolicy>,
     cut_policy: Box<CutPolicy>,
     code: Code,
     code_dir: CodeDir,
@@ -47,9 +48,9 @@ impl Machine {
         let atom_tbl = Rc::new(RefCell::new(HashSet::new()));
         let (code, code_dir, op_dir) = build_code_dir(atom_tbl.clone());
 
-
         Machine {
             ms: MachineState::new(atom_tbl),
+            call_policy: Box::new(DefaultCallPolicy {}),
             cut_policy: Box::new(DefaultCutPolicy {}),
             code,
             code_dir,
@@ -106,13 +107,15 @@ impl Machine {
             &Line::Arithmetic(ref arith_instr) =>
                 self.ms.execute_arith_instr(arith_instr),
             &Line::BuiltIn(ref built_in_instr) =>
-                self.ms.execute_built_in_instr(&self.code_dir, &mut self.cut_policy, built_in_instr),
+                self.ms.execute_built_in_instr(&self.code_dir, &mut self.call_policy,
+                                               &mut self.cut_policy, built_in_instr),
             &Line::Choice(ref choice_instr) =>
-                self.ms.execute_choice_instr(choice_instr),
+                self.ms.execute_choice_instr(choice_instr, &mut self.call_policy),
             &Line::Cut(ref cut_instr) =>
                 self.ms.execute_cut_instr(cut_instr, &mut self.cut_policy),
             &Line::Control(ref control_instr) =>
-                self.ms.execute_ctrl_instr(&self.code_dir, &mut self.cut_policy, control_instr),
+                self.ms.execute_ctrl_instr(&self.code_dir, &mut self.call_policy,
+                                           &mut self.cut_policy, control_instr),
             &Line::Fact(ref fact) => {
                 for fact_instr in fact {
                     if self.failed() {
@@ -127,7 +130,7 @@ impl Machine {
             &Line::Indexing(ref indexing_instr) =>
                 self.ms.execute_indexing_instr(&indexing_instr),
             &Line::IndexedChoice(ref choice_instr) =>
-                self.ms.execute_indexed_choice_instr(choice_instr),
+                self.ms.execute_indexed_choice_instr(choice_instr, &mut self.call_policy),
             &Line::Query(ref query) => {
                 for query_instr in query {
                     if self.failed() {
