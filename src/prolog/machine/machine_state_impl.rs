@@ -1311,11 +1311,11 @@ impl MachineState {
             },
             &BuiltInInstruction::InferenceLevel => { // X1 = R, X2 = B.
                 let a1 = self[temp_v!(1)].clone();
-                let a2 = self.store(self.deref(self[temp_v!(2)].clone()));                
+                let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
 
                 match a2 {
                     Addr::Con(Constant::Usize(bp)) =>
-                        if self.b <= bp {
+                        if self.b <= bp + 1 {
                             let a2 = Addr::Con(atom!("!", self.atom_tbl));
                             self.unify(a1, a2);
                         } else {
@@ -1324,7 +1324,7 @@ impl MachineState {
                         },
                     _ => self.fail = true
                 };
-                
+
                 self.p += 1;
             },
             &BuiltInInstruction::InstallCleaner => {
@@ -1340,35 +1340,41 @@ impl MachineState {
                 {
                     Some(cut_policy) => cut_policy.push_cont_pt(addr, b, block),
                     None => panic!("install_cleaner: should have installed \\
-SetupCallCleanupCutPolicy.")
+                                    SetupCallCleanupCutPolicy.")
                 };
 
                 self.p += 1;
             },
-            &BuiltInInstruction::InstallInferenceCounter(r) => {
-                let addr = self.store(self.deref(self[r].clone()));
-                
+            &BuiltInInstruction::InstallInferenceCounter(r1, r2, r3) => { // A1 = B, A2 = L
+                let a1 = self.store(self.deref(self[r1].clone()));
+                let a2 = self.store(self.deref(self[r2].clone()));
+
                 if call_policy.downcast_ref::<CallWithInferenceLimitCallPolicy>().is_err() {
-                    CallWithInferenceLimitCallPolicy::new_in_place(self.atom_tbl.clone(), call_policy);
+                    CallWithInferenceLimitCallPolicy::new_in_place(self.atom_tbl.clone(),
+                                                                   call_policy);
                 }
 
                 self.p += 1;
-                
-                match addr {
-                    Addr::Con(Constant::Number(Number::Integer(n))) =>
+
+                match (a1, a2) {
+                    (Addr::Con(Constant::Usize(bp)),
+                     Addr::Con(Constant::Number(Number::Integer(n)))) =>
                         match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
-                            Some(call_policy) => call_policy.add_limit(n),
+                            Some(call_policy) => {
+                                let count = call_policy.add_limit(n, bp);
+                                self[r3]  = Addr::Con(Constant::Number(Number::Integer(count)));
+                            },
                             None => panic!("install_inference_counter: should have installed \\
                                             CallWithInferenceLimitCallPolicy.")
                         },
                     _ => {
-                        let atom_tbl = self.atom_tbl.clone();                        
+                        let atom_tbl = self.atom_tbl.clone();
                         self.throw_exception(functor!(atom_tbl,
                                                       "type_error",
                                                       1,
                                                       [heap_atom!("integer_expected", atom_tbl)]))
                     }
-                };                
+                };
             },
             &BuiltInInstruction::IsAtomic(r) => {
                 let d = self.store(self.deref(self[r].clone()));
@@ -1434,21 +1440,20 @@ SetupCallCleanupCutPolicy.")
                     _ => self.fail = true
                 };
             },
-            &BuiltInInstruction::RemoveInferenceCounter(r) => {
+            &BuiltInInstruction::RemoveCallPolicyCheck => {
                 let restore_default =
                     match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
                         Some(call_policy) => {
-                            if let Some(diff) = call_policy.remove_limit() {
-                                let addr = self[r].clone();
-                                self.unify(addr, Addr::Con(integer!(diff)));
+                            let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                            if let Addr::Con(Constant::Usize(bp)) = a1 {
+                                if call_policy.is_empty() && bp == self.b {
+                                    Some(call_policy.into_inner())
+                                } else {
+                                    None
+                                }
                             } else {
-                                panic!("remove_inference_counters: no limit found.");
-                            }
-                            
-                            if call_policy.is_empty() {
-                                Some(call_policy.into_inner())
-                            } else {
-                                None
+                                panic!("remove_inference_counter: expected Usize in A1.");
                             }
                         },
                         None => panic!("remove_inference_counters: requires \\
@@ -1458,6 +1463,25 @@ SetupCallCleanupCutPolicy.")
                 if let Some(new_policy) = restore_default {
                     *call_policy = new_policy;
                 }
+
+                self.p += 1;
+            },
+            &BuiltInInstruction::RemoveInferenceCounter(r1, r2) => { // A1 = B, A2 = Count.
+                match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
+                    Some(call_policy) => {
+                        let a1 = self.store(self.deref(self[r1].clone()));
+
+                        if let Addr::Con(Constant::Usize(bp)) = a1 {
+                            let count = call_policy.remove_limit(bp);
+                            self[r2]  = Addr::Con(Constant::Number(Number::Integer(count)));
+
+                        } else {
+                            panic!("remove_inference_counter: expected Usize in A1.");
+                        }
+                    },
+                    None => panic!("remove_inference_counters: requires \\
+                                    CallWithInferenceLimitCallPolicy.")
+                };
 
                 self.p += 1;
             },

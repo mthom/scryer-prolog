@@ -431,6 +431,12 @@ macro_rules! add {
     )
 }
 
+macro_rules! sub {
+    ($at_1:expr, $at_2:expr, $o:expr) => (
+        Line::Arithmetic(ArithmeticInstruction::Sub($at_1, $at_2, $o))
+    )
+}
+
 macro_rules! get_arg_call {
     () => (
         Line::BuiltIn(BuiltInInstruction::GetArgCall)
@@ -624,14 +630,14 @@ macro_rules! term_cmp_eq {
 }
 
 macro_rules! install_inference_counter {
-    ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::InstallInferenceCounter($r))
+    ($r1:expr, $r2:expr, $r3:expr) => (
+        Line::BuiltIn(BuiltInInstruction::InstallInferenceCounter($r1, $r2, $r3))
     )
 }
 
 macro_rules! remove_inference_counter {
-    ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::RemoveInferenceCounter($r))
+    ($r1:expr, $r2:expr) => (
+        Line::BuiltIn(BuiltInInstruction::RemoveInferenceCounter($r1, $r2))
     )
 }
 
@@ -644,5 +650,11 @@ macro_rules! inference_level {
 macro_rules! default_trust_me {
     () => (
         Line::BuiltIn(BuiltInInstruction::DefaultTrustMe)
+    )
+}
+
+macro_rules! remove_call_policy_check {
+    () => (
+        Line::BuiltIn(BuiltInInstruction::RemoveCallPolicyCheck)
     )
 }

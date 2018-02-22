@@ -209,8 +209,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "clean_up_block"),
             &BuiltInInstruction::DefaultTrustMe =>
                 write!(f, "default_trust_me"),
-            &BuiltInInstruction::InstallInferenceCounter(r) =>
-                write!(f, "install_inference_counter {}", r),
+            &BuiltInInstruction::InstallInferenceCounter(r1, r2, r3) =>
+                write!(f, "install_inference_counter {}, {}, {}", r1, r2, r3),
             &BuiltInInstruction::EraseBall =>
                 write!(f, "erase_ball"),
             &BuiltInInstruction::Fail =>
@@ -267,8 +267,10 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
             &BuiltInInstruction::DynamicCompareNumber(cmp) =>
                 write!(f, "dynamic_number_test {}", cmp),
-            &BuiltInInstruction::RemoveInferenceCounter(r) =>
-                write!(f, "remove_inference_counter {}", r)
+            &BuiltInInstruction::RemoveCallPolicyCheck =>
+                write!(f, "remove_call_policy_check"),
+            &BuiltInInstruction::RemoveInferenceCounter(r1, r2) =>
+                write!(f, "remove_inference_counter {}, {}", r1, r2)
         }
     }
 }

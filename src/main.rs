@@ -6,12 +6,13 @@ mod prolog;
 #[macro_use] mod test_utils;
 
 use prolog::io::*;
-use prolog::lib::control::*;
-use prolog::lib::lists::*;
 use prolog::machine::*;
 
 #[cfg(test)]
 mod tests;
+
+pub static LISTS: &str   = include_str!("./prolog/lib/lists.pl");
+pub static CONTROL: &str = include_str!("./prolog/lib/control.pl");
 
 fn process_buffer(wam: &mut Machine, buffer: &str)
 {

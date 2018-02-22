@@ -2,14 +2,12 @@ use prolog::and_stack::*;
 use prolog::builtins::CodeDir;
 use prolog::ast::*;
 use prolog::copier::*;
-use prolog::num::{BigInt, BigUint, Zero, One};
+use prolog::num::{BigInt, Zero, One};
 use prolog::or_stack::*;
 use prolog::tabled_rc::*;
 
 use downcast::Any;
 
-use std::cmp::Ordering;
-use std::collections::binary_heap::BinaryHeap;
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
@@ -249,7 +247,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.hb = machine_st.heap.h;
 
         machine_st.p += 1;
-        
+
         Ok(())
     }
 
@@ -284,7 +282,7 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {        
+    {
         let b = machine_st.b - 1;
         let n = machine_st.or_stack[b].num_args();
 
@@ -353,69 +351,67 @@ pub(crate) struct DefaultCallPolicy {}
 
 impl CallPolicy for DefaultCallPolicy {}
 
-#[derive(Clone, Eq, PartialEq)]
-struct InferenceLimit(BigUint);
-
-// ensure the heap behaves as a min-heap.
-impl Ord for InferenceLimit {
-    fn cmp(&self, other: &InferenceLimit) -> Ordering {
-        other.0.cmp(&self.0)
-    }
-}
-
-impl PartialOrd for InferenceLimit {
-    fn partial_cmp(&self, other: &InferenceLimit) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 pub(crate) struct CallWithInferenceLimitCallPolicy {
     atom_tbl: TabledData<Atom>,
     pub(crate) prev_policy: Box<CallPolicy>,
-    count:  BigUint,
-    limits: BinaryHeap<InferenceLimit>
+    count:  BigInt,
+    limits: Vec<(Rc<BigInt>, usize)>
 }
 
 impl CallWithInferenceLimitCallPolicy {
     pub(crate) fn new_in_place(atom_tbl: TabledData<Atom>, policy: &mut Box<CallPolicy>)
     {
         let mut prev_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
-        swap(&mut prev_policy, policy);        
-        
-        let new_policy = CallWithInferenceLimitCallPolicy { atom_tbl, prev_policy,
-                                                            count:  BigUint::zero(),
-                                                            limits: BinaryHeap::new() };
+        swap(&mut prev_policy, policy);
 
+        let new_policy = CallWithInferenceLimitCallPolicy { atom_tbl, prev_policy,
+                                                            count:  BigInt::zero(),
+                                                            limits: vec![] };
         *policy = Box::new(new_policy);
     }
 
-    fn increment(&mut self) -> CallResult {        
-        if let Some(ref limit) = self.limits.peek() {
-            if self.count == limit.0 {
-                return Err(vec![heap_atom!("inference_limit_exceeded", self.atom_tbl)])
+    fn increment(&mut self) -> CallResult {
+        if let Some(&(ref limit, bp)) = self.limits.last() {
+            if self.count == **limit {
+                return Err(functor!(self.atom_tbl,
+                                    "inference_limit_exceeded",
+                                    1,
+                                    [HeapCellValue::Addr(Addr::Con(Constant::Usize(bp)))]));
             } else {
-                self.count = BigUint::one() + &self.count;
+                self.count = BigInt::one() + &self.count;
             }
         }
 
         Ok(())
     }
 
-    pub(crate) fn add_limit(&mut self, limit: Rc<BigInt>) {
-        match limit.to_biguint() {
-            Some(limit) => self.limits.push(InferenceLimit(limit + &self.count)),
-            _ => panic!("add_limit: expected unsigned integer.")
+    // returns the count.
+    pub(crate) fn add_limit(&mut self, limit: Rc<BigInt>, b: usize) -> Rc<BigInt> {
+        let limit = Rc::new(&*limit + &self.count);
+        
+        match self.limits.last().cloned() {
+            Some((ref inner_limit, _)) if *inner_limit <= limit => {},
+            _ => self.limits.push((limit, b))
         };
+
+        Rc::new(self.count.clone())
     }
 
-    pub(crate) fn remove_limit(&mut self) -> Option<BigUint> {
-        self.limits.pop().map(|i| i.0 - &self.count)
+    // returns the count.
+    pub(crate) fn remove_limit(&mut self, b: usize) -> Rc<BigInt> {
+        if let Some((_, bp)) = self.limits.last().cloned() {
+            if bp == b {
+                self.limits.pop();
+            }
+        }
+
+        Rc::new(self.count.clone())
     }
 
     pub(crate) fn is_empty(&self) -> bool {
         self.limits.is_empty()
     }
-    
+
     pub(crate) fn into_inner(&mut self) -> Box<CallPolicy> {
         let mut new_inner: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
         swap(&mut self.prev_policy, &mut new_inner);
@@ -445,19 +441,19 @@ impl CallPolicy for CallWithInferenceLimitCallPolicy {
         self.prev_policy.retry_me_else(machine_st, offset)?;
         self.increment()
     }
-    
+
     fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
     {
         self.prev_policy.retry(machine_st, offset)?;
         self.increment()
     }
-    
+
     fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult
     {
         self.prev_policy.trust_me(machine_st)?;
         self.increment()
     }
-    
+
     fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
     {
         self.prev_policy.trust(machine_st, offset)?;
