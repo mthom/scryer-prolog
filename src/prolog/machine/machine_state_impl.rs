@@ -1020,7 +1020,11 @@ impl MachineState {
     }
 
     pub(super) fn copy_and_align_ball_to_heap(&mut self) {
-        let diff = self.ball.0 - self.heap.h;
+        let diff = if self.ball.0 > self.heap.h {
+            self.ball.0 - self.heap.h
+        } else {
+            self.heap.h - self.ball.0
+        };
 
         for heap_value in self.ball.1.iter().cloned() {
             self.heap.push(match heap_value {
@@ -1829,6 +1833,36 @@ impl MachineState {
                         self.p = CodePtr::DirEntry(366); // goto sgc_on_success/2, 366.
                     }
                 };
+            },
+            &ControlInstruction::CompareCall => {
+                let a1 = self[temp_v!(1)].clone();
+                let a2 = self[temp_v!(2)].clone();
+                let a3 = self[temp_v!(3)].clone();
+
+                let c = Addr::Con(match self.compare_term_test(a2, a3) {
+                    Ordering::Greater => atom!(">", self.atom_tbl),
+                    Ordering::Equal   => atom!("=", self.atom_tbl),
+                    Ordering::Less    => atom!("<", self.atom_tbl)
+                });
+                
+                self.unify(a1, c);
+            
+                self.p += 1;
+            },
+            &ControlInstruction::CompareExecute => {
+                let a1 = self[temp_v!(1)].clone();
+                let a2 = self[temp_v!(2)].clone();
+                let a3 = self[temp_v!(3)].clone();
+
+                let c = Addr::Con(match self.compare_term_test(a2, a3) {
+                    Ordering::Greater => atom!(">", self.atom_tbl),
+                    Ordering::Equal   => atom!("=", self.atom_tbl),
+                    Ordering::Less    => atom!("<", self.atom_tbl)
+                });
+                
+                self.unify(a1, c);
+                
+                self.p = self.cp;
             },
             &ControlInstruction::CompareTermCall(qt) => {
                 match qt {

@@ -129,6 +129,10 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "catch_execute"),
             &ControlInstruction::CheckCpExecute =>
                 write!(f, "check_cp_execute"),
+            &ControlInstruction::CompareCall =>
+                write!(f, "compare_call"),
+            &ControlInstruction::CompareExecute =>
+                write!(f, "compare_execute"),
             &ControlInstruction::CompareTermCall(qt) =>
                 write!(f, "compare_term_call {}", qt),
             &ControlInstruction::CompareTermExecute(qt) =>

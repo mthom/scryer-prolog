@@ -632,7 +632,8 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          install_inference_counter!(temp_v!(1), temp_v!(2), temp_v!(4)),
          query![put_value!(temp_v!(3), 1)],
          reset_block!(),
-         fail!()
+         fail!(),
+         compare_execute!() // compare/3, 454.
     ]
 }
 
@@ -748,6 +749,7 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("@<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 390));
     code_dir.insert((tabled_rc!("=@=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 391));
     code_dir.insert((tabled_rc!("\\=@=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 392));
-
+    code_dir.insert((tabled_rc!("compare", atom_tbl), 3), (PredicateKeyType::BuiltIn, 454));
+    
     (builtin_code, code_dir, op_dir)
 }

@@ -421,6 +421,7 @@ pub enum QueryTerm {
     CallN(Vec<Box<Term>>),
     CallWithInferenceLimit(Vec<Box<Term>>),
     Catch(Vec<Box<Term>>),
+    Compare(Vec<Box<Term>>),
     CompareTerm(CompareTermQT, Vec<Box<Term>>),
     Cut,
     Display(Vec<Box<Term>>),
@@ -442,6 +443,7 @@ impl QueryTerm {
         match self {
             &QueryTerm::Arg(_) => 3,
             &QueryTerm::Catch(_) => 3,
+            &QueryTerm::Compare(_) => 3,
             &QueryTerm::CompareTerm(..) => 2,
             &QueryTerm::Display(_) => 1,
             &QueryTerm::Throw(_) => 1,
@@ -473,6 +475,7 @@ pub enum ClauseType<'a> {
     CallN,
     CallWithInferenceLimit,
     Catch,
+    Compare,
     CompareNumber(CompareNumberQT),
     CompareTerm(CompareTermQT),
     Deep(Level, &'a Cell<RegType>, &'a TabledRc<Atom>, Option<Fixity>),
@@ -495,6 +498,7 @@ impl<'a> ClauseType<'a> {
             &ClauseType::CallN => "call",
             &ClauseType::CallWithInferenceLimit => "call_with_inference_limit",
             &ClauseType::Catch => "catch",
+            &ClauseType::Compare => "compare",
             &ClauseType::CompareNumber(qt) => qt.name(),
             &ClauseType::CompareTerm(qt) => qt.name(),
             &ClauseType::Display => "display",
@@ -921,7 +925,9 @@ pub enum ControlInstruction {
     CallN(usize), // arity.
     CatchCall,
     CatchExecute,
-    CheckCpExecute,    
+    CheckCpExecute,
+    CompareCall,
+    CompareExecute,
     CompareTermCall(CompareTermQT),
     CompareTermExecute(CompareTermQT),
     DisplayCall,
@@ -987,6 +993,8 @@ impl ControlInstruction {
             &ControlInstruction::IsExecute(..) => true,
             &ControlInstruction::JmpByCall(..) => true,
             &ControlInstruction::JmpByExecute(..) => true,
+            &ControlInstruction::CompareCall => true,
+            &ControlInstruction::CompareExecute => true,
             _ => false
         }
     }

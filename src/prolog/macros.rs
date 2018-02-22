@@ -658,3 +658,9 @@ macro_rules! remove_call_policy_check {
         Line::BuiltIn(BuiltInInstruction::RemoveCallPolicyCheck)
     )
 }
+
+macro_rules! compare_execute {
+    () => (
+        Line::Control(ControlInstruction::CompareExecute)
+    )
+}

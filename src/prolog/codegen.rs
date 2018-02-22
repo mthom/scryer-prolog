@@ -259,6 +259,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
             },
             &QueryTerm::Catch(_) =>
                 code.push(Line::Control(ControlInstruction::CatchCall)),
+            &QueryTerm::Compare(_) =>
+                code.push(Line::Control(ControlInstruction::CompareCall)),
             &QueryTerm::CompareTerm(qt, _) =>
                 code.push(Line::Control(ControlInstruction::CompareTermCall(qt))),
             &QueryTerm::Display(_) =>
@@ -307,6 +309,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         *ctrl = ControlInstruction::Execute(name, arity),
                     ControlInstruction::CallN(arity) =>
                         *ctrl = ControlInstruction::ExecuteN(arity),
+                    ControlInstruction::CompareCall =>
+                        *ctrl = ControlInstruction::CompareExecute,
                     ControlInstruction::CompareTermCall(qt) =>
                         *ctrl = ControlInstruction::CompareTermExecute(qt),
                     ControlInstruction::DisplayCall =>
