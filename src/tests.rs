@@ -1551,4 +1551,16 @@ fn test_queries_on_call_with_inference_limit()
                             ["R = true", "X = 4", "S = true"],
                             ["R = true", "X = 5", "S = true"],
                             ["R = inference_limit_exceeded", "S = !", "X = _1"]]);
+    assert_prolog_success!(&mut wam, "?- call_with_inference_limit(g(X), 2, R), call_with_inference_limit(g(X), 1, S).",
+                           [["R = true", "X = 1", "S = !"],
+                            ["R = true", "X = 2", "S = !"],
+                            ["R = true", "X = 3", "S = !"],
+                            ["R = true", "X = 4", "S = !"],
+                            ["R = true", "X = 5", "S = !"],
+                            ["R = !", "X = 6", "S = !"]]);
+    assert_prolog_success!(&mut wam, "?- call_with_inference_limit(g(X), 2, R), call_with_inference_limit(g(X), 1, R).",
+                           [["R = !", "X = 6"]]);
+    assert_prolog_success!(&mut wam, "?- call_with_inference_limit(g(X), 1, R), call_with_inference_limit(g(X), 1, R).",
+                           [["R = inference_limit_exceeded", "X = _1"]]);
+    
 }
