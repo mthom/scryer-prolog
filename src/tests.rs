@@ -1518,4 +1518,27 @@ fn test_queries_on_call_with_inference_limit()
                             ["R = inference_limit_exceeded", "X = _1"]]);
     assert_prolog_success!(&mut wam, "?- call_with_inference_limit(e(X), 2, R).",
                            [["R = inference_limit_exceeded", "X = _1"]]);
+
+    submit(&mut wam, "f(X, R) :- call_with_inference_limit(g(X), 5, R).");
+    
+    assert_prolog_success!(&mut wam, "?- call_with_inference_limit(f(X, R), 3, S).",
+                           [["S = true", "X = 1", "R = true"],
+                            ["S = true", "X = 2", "R = true"],
+                            ["S = inference_limit_exceeded", "X = _1", "R = _2"]]);    
+    assert_prolog_success!(&mut wam, "?- call_with_inference_limit(f(X, R), 7, R).",
+                           [["R = true", "X = 1"],
+                            ["R = true", "X = 2"],
+                            ["R = true", "X = 3"],
+                            ["R = true", "X = 4"],
+                            ["R = !", "X = 5"]]);
+
+    submit(&mut wam, "g(1). g(2). g(3). g(4). g(5). g(6).");
+
+    assert_prolog_success!(&mut wam, "?- call_with_inference_limit(f(X, R), 7, S).",
+                           [["R = true", "X = 1", "S = true"],
+                            ["R = true", "X = 2", "S = true"],
+                            ["R = true", "X = 3", "S = true"],
+                            ["R = true", "X = 4", "S = true"],
+                            ["R = true", "X = 5", "S = true"],
+                            ["R = inference_limit_exceeded", "S = !", "X = _1"]]);
 }
