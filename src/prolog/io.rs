@@ -229,8 +229,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "get_current_block X1"),
             &BuiltInInstruction::GetCutPoint(r) =>
                 write!(f, "get_cp {}", r),
-            &BuiltInInstruction::InferenceLevel =>
-                write!(f, "inference_level"),
+            &BuiltInInstruction::InferenceLevel(r1, r2) =>
+                write!(f, "inference_level {}, {}", r1, r2),
             &BuiltInInstruction::InstallCleaner =>
                 write!(f, "install_cleaner"),
             &BuiltInInstruction::InstallNewBlock =>

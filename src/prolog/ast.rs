@@ -892,7 +892,7 @@ pub enum BuiltInInstruction {
     GetBall,
     GetCurrentBlock,
     GetCutPoint(RegType),
-    InferenceLevel,
+    InferenceLevel(RegType, RegType),
     InstallCleaner,
     InstallInferenceCounter(RegType, RegType, RegType),
     InstallNewBlock,

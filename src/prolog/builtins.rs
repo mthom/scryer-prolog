@@ -565,37 +565,37 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          deallocate!(),
          remove_call_policy_check!(),
          proceed!(),
-         try_me_else!(18), // call_with_inference_limit/5, 404.
+         try_me_else!(19), // call_with_inference_limit/5, 404.
          allocate!(9),
          fact![get_var_in_fact!(perm_v!(9), 1),
-               get_var_in_fact!(perm_v!(6), 2),
-               get_var_in_fact!(perm_v!(5), 3),
+               get_var_in_fact!(perm_v!(5), 2),
+               get_var_in_fact!(perm_v!(8), 3),
                get_var_in_fact!(perm_v!(3), 4),
                get_var_in_fact!(perm_v!(4), 5)],
          query![put_var!(perm_v!(1), 1)],
          install_new_block!(),
-         install_inference_counter!(perm_v!(4), perm_v!(6), perm_v!(8)),
+         query![put_var!(perm_v!(7), 3)],
+         install_inference_counter!(perm_v!(4), perm_v!(5), perm_v!(7)),
          query![put_value!(perm_v!(9), 1)],
          call_n!(1),
-         remove_inference_counter!(perm_v!(4), perm_v!(7)),
-         sub!(ArithmeticTerm::Reg(perm_v!(7)),
-              ArithmeticTerm::Reg(perm_v!(8)),
-              1),
+         inference_level!(perm_v!(8), perm_v!(4)),
+         query![put_var!(perm_v!(6), 2)],
+         remove_inference_counter!(perm_v!(4), perm_v!(6)),
          sub!(ArithmeticTerm::Reg(perm_v!(6)),
+              ArithmeticTerm::Reg(perm_v!(7)),
+              1),
+         sub!(ArithmeticTerm::Reg(perm_v!(5)),
               ArithmeticTerm::Interm(1),
               1),
-         query![put_value!(perm_v!(2), 1)],
+         query![put_var!(perm_v!(2), 1)],
          is_call!(temp_v!(1), ArithmeticTerm::Interm(1)),
-         query![put_value!(perm_v!(5), 1),
-                put_value!(perm_v!(4), 2)],
-         inference_level!(),
          query![put_value!(perm_v!(4), 1),
                 put_value!(perm_v!(3), 2),
                 put_value!(perm_v!(1), 3),
-                put_value!(perm_v!(2), 4)],
+                put_value!(perm_v!(2), 4)],         
          deallocate!(),
-         goto_execute!(442, 4), // goto end_block/4, 442.
-         default_trust_me!(), // 422.
+         goto_execute!(452, 4), // goto end_block/4, 452
+         default_trust_me!(), // 423
          allocate!(3),
          fact![get_var_in_fact!(perm_v!(1), 3),
                get_var_in_fact!(perm_v!(3), 5)],
@@ -603,37 +603,48 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          reset_block!(),
          query![put_var!(temp_v!(3), 2)],
          remove_inference_counter!(perm_v!(3), temp_v!(2)),
-         query![put_var!(perm_v!(2), 1)],
-         get_ball!(),
+         query![put_value!(perm_v!(3), 1),
+                put_var!(perm_v!(2), 2)],
+         jmp_call!(2, 5),
          erase_ball!(),
          query![put_value!(perm_v!(3), 1),
                 put_unsafe_value!(2, 2),
                 put_value!(perm_v!(1), 3)],
          deallocate!(),
-         goto_execute!(435, 3), // goto handle_ile/3, 435.
-         try_me_else!(4), // handle_ile/3, 435.
+         goto_execute!(444, 3), // goto handle_ile/3, 442.
+         try_me_else!(5), // the inner clause.         
+         query![put_value!(temp_v!(2), 1)],
+         get_ball!(),
+         neck_cut!(),
+         proceed!(),
+         default_trust_me!(),
+         remove_call_policy_check!(),
+         fail!(),
+         try_me_else!(4), // handle_ile/3, 444.
          fact![get_structure!(atom_tbl, "inference_limit_exceeded", 1, temp_v!(2), None),
                unify_value!(temp_v!(1)),
                get_constant!(atom!("inference_limit_exceeded", atom_tbl), temp_v!(3))],
          neck_cut!(),
          proceed!(),
          default_trust_me!(),
+         remove_call_policy_check!(),
          query![put_value!(temp_v!(2), 1)],
          goto_execute!(59, 1), // goto throw/1, 59.
-         try_me_else!(6), // end_block/4, 442.
+         try_me_else!(6), // end_block/4, 452.
          query![put_value!(temp_v!(3), 1)],
          clean_up_block!(),
          query![put_value!(temp_v!(2), 1)],
          reset_block!(),
          proceed!(),
          default_trust_me!(),
-         query![put_value!(temp_v!(4), 2),
-                put_var!(temp_v!(4), 4)],
-         install_inference_counter!(temp_v!(1), temp_v!(2), temp_v!(4)),
-         query![put_value!(temp_v!(3), 1)],
+         query![get_var_in_query!(temp_v!(5), 3),
+                put_value!(temp_v!(4), 2),
+                put_var!(temp_v!(6), 3)],
+         install_inference_counter!(temp_v!(1), temp_v!(4), temp_v!(6)),
+         query![put_value!(temp_v!(5), 1)],
          reset_block!(),
          fail!(),
-         compare_execute!() // compare/3, 454.
+         compare_execute!() // compare/3, 464.
     ]
 }
 
@@ -749,7 +760,7 @@ pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
     code_dir.insert((tabled_rc!("@<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 390));
     code_dir.insert((tabled_rc!("=@=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 391));
     code_dir.insert((tabled_rc!("\\=@=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 392));
-    code_dir.insert((tabled_rc!("compare", atom_tbl), 3), (PredicateKeyType::BuiltIn, 454));
+    code_dir.insert((tabled_rc!("compare", atom_tbl), 3), (PredicateKeyType::BuiltIn, 464));
     
     (builtin_code, code_dir, op_dir)
 }

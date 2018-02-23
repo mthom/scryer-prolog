@@ -370,7 +370,7 @@ impl CallWithInferenceLimitCallPolicy {
         *policy = Box::new(new_policy);
     }
 
-    fn increment(&mut self) -> CallResult {        
+    fn increment(&mut self) -> CallResult {
         if let Some(&(ref limit, bp)) = self.limits.last() {
             if self.count == **limit {
                 return Err(functor!(self.atom_tbl,
@@ -385,7 +385,6 @@ impl CallWithInferenceLimitCallPolicy {
         Ok(())
     }
 
-    // returns the count.
     pub(crate) fn add_limit(&mut self, limit: Rc<BigInt>, b: usize) -> Rc<BigInt> {
         let limit = Rc::new(&*limit + &self.count);
         
@@ -397,7 +396,6 @@ impl CallWithInferenceLimitCallPolicy {
         Rc::new(self.count.clone())
     }
 
-    // returns the count.
     pub(crate) fn remove_limit(&mut self, b: usize) -> Rc<BigInt> {
         if let Some((_, bp)) = self.limits.last().cloned() {
             if bp == b {

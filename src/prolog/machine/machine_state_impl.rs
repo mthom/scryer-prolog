@@ -216,6 +216,7 @@ impl MachineState {
                         let tr = self.tr;
                         let val = self.trail[tr - 1];
                         self.trail[i] = val;
+                        self.tr -= 1; // NEW.
                     },
                 Ref::StackCell(fr, _) => {
                     let b = self.b - 1;
@@ -232,6 +233,7 @@ impl MachineState {
                         let tr = self.tr;
                         let val = self.trail[tr - 1];
                         self.trail[i] = val;
+                        self.tr -= 1; // NEW.
                     }
                 }
             };
@@ -1313,9 +1315,9 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &BuiltInInstruction::InferenceLevel => { // X1 = R, X2 = B.
-                let a1 = self[temp_v!(1)].clone();
-                let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
+            &BuiltInInstruction::InferenceLevel(r1, r2) => { // X1 = R, X2 = B.
+                let a1 = self[r1].clone();
+                let a2 = self.store(self.deref(self[r2].clone()));
 
                 match a2 {
                     Addr::Con(Constant::Usize(bp)) =>
@@ -1366,7 +1368,7 @@ impl MachineState {
                         match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
                             Some(call_policy) => {
                                 let count = call_policy.add_limit(n, bp);
-                                self[r3]  = Addr::Con(Constant::Number(Number::Integer(count)));
+                                self[r3] = Addr::Con(Constant::Number(Number::Integer(count)));
                             },
                             None => panic!("install_inference_counter: should have installed \\
                                             CallWithInferenceLimitCallPolicy.")
@@ -1457,10 +1459,10 @@ impl MachineState {
                                     None
                                 }
                             } else {
-                                panic!("remove_inference_counter: expected Usize in A1.");
+                                panic!("remove_call_policy_check: expected Usize in A1.");
                             }
                         },
-                        None => panic!("remove_inference_counters: requires \\
+                        None => panic!("remove_call_policy_check: requires \\
                                         CallWithInferenceLimitCallPolicy.")
                     };
 
@@ -1470,15 +1472,14 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &BuiltInInstruction::RemoveInferenceCounter(r1, r2) => { // A1 = B, A2 = Count.
+            &BuiltInInstruction::RemoveInferenceCounter(r1, r2) => { // A1 = B
                 match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
                     Some(call_policy) => {
                         let a1 = self.store(self.deref(self[r1].clone()));
 
                         if let Addr::Con(Constant::Usize(bp)) = a1 {
                             let count = call_policy.remove_limit(bp);
-                            self[r2]  = Addr::Con(Constant::Number(Number::Integer(count)));
-
+                            self[r2] = Addr::Con(Constant::Number(Number::Integer(count)));
                         } else {
                             panic!("remove_inference_counter: expected Usize in A1.");
                         }
@@ -1844,9 +1845,9 @@ impl MachineState {
                     Ordering::Equal   => atom!("=", self.atom_tbl),
                     Ordering::Less    => atom!("<", self.atom_tbl)
                 });
-                
+
                 self.unify(a1, c);
-            
+
                 self.p += 1;
             },
             &ControlInstruction::CompareExecute => {
@@ -1859,9 +1860,9 @@ impl MachineState {
                     Ordering::Equal   => atom!("=", self.atom_tbl),
                     Ordering::Less    => atom!("<", self.atom_tbl)
                 });
-                
+
                 self.unify(a1, c);
-                
+
                 self.p = self.cp;
             },
             &ControlInstruction::CompareTermCall(qt) => {

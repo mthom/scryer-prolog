@@ -642,8 +642,8 @@ macro_rules! remove_inference_counter {
 }
 
 macro_rules! inference_level {
-    () => (
-        Line::BuiltIn(BuiltInInstruction::InferenceLevel)
+    ($r1:expr, $r2:expr) => (
+        Line::BuiltIn(BuiltInInstruction::InferenceLevel($r1, $r2))
     )
 }
 
