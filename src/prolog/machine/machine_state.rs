@@ -370,7 +370,7 @@ impl CallWithInferenceLimitCallPolicy {
         *policy = Box::new(new_policy);
     }
 
-    fn increment(&mut self) -> CallResult {
+    fn increment(&mut self) -> CallResult {        
         if let Some(&(ref limit, bp)) = self.limits.last() {
             if self.count == **limit {
                 return Err(functor!(self.atom_tbl,
