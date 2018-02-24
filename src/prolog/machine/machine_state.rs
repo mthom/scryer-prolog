@@ -2,7 +2,7 @@ use prolog::and_stack::*;
 use prolog::builtins::CodeDir;
 use prolog::ast::*;
 use prolog::copier::*;
-use prolog::num::{BigInt, Zero, One};
+use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
 use prolog::tabled_rc::*;
 
@@ -354,8 +354,8 @@ impl CallPolicy for DefaultCallPolicy {}
 pub(crate) struct CallWithInferenceLimitCallPolicy {
     atom_tbl: TabledData<Atom>,
     pub(crate) prev_policy: Box<CallPolicy>,
-    count:  BigInt,
-    limits: Vec<(Rc<BigInt>, usize)>
+    count:  BigUint,
+    limits: Vec<(BigUint, usize)>
 }
 
 impl CallWithInferenceLimitCallPolicy {
@@ -365,20 +365,20 @@ impl CallWithInferenceLimitCallPolicy {
         swap(&mut prev_policy, policy);
 
         let new_policy = CallWithInferenceLimitCallPolicy { atom_tbl, prev_policy,
-                                                            count:  BigInt::zero(),
+                                                            count:  BigUint::zero(),
                                                             limits: vec![] };
         *policy = Box::new(new_policy);
     }
 
     fn increment(&mut self) -> CallResult {
         if let Some(&(ref limit, bp)) = self.limits.last() {
-            if self.count == **limit {
+            if self.count == *limit {
                 return Err(functor!(self.atom_tbl,
                                     "inference_limit_exceeded",
                                     1,
                                     [HeapCellValue::Addr(Addr::Con(Constant::Usize(bp)))]));
             } else {
-                self.count = BigInt::one() + &self.count;
+                self.count += BigUint::one();
             }
         }
 
@@ -386,14 +386,17 @@ impl CallWithInferenceLimitCallPolicy {
     }
 
     pub(crate) fn add_limit(&mut self, limit: Rc<BigInt>, b: usize) -> Rc<BigInt> {
-        let limit = Rc::new(&*limit + &self.count);
-        
+        let limit = match limit.to_biguint() {
+            Some(limit) => limit + &self.count,
+            None => panic!("install_inference_counter: limit must be positive")
+        };
+
         match self.limits.last().cloned() {
             Some((ref inner_limit, _)) if *inner_limit <= limit => {},
             _ => self.limits.push((limit, b))
         };
 
-        Rc::new(self.count.clone())
+        Rc::new(BigInt::from(self.count.clone()))
     }
 
     pub(crate) fn remove_limit(&mut self, b: usize) -> Rc<BigInt> {
@@ -403,7 +406,7 @@ impl CallWithInferenceLimitCallPolicy {
             }
         }
 
-        Rc::new(self.count.clone())
+        Rc::new(BigInt::from(self.count.clone()))
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -463,7 +466,6 @@ pub(crate) trait CutPolicy: Any {
     fn cut(&mut self, &mut MachineState, RegType);
 }
 
-// from the downcast crate.
 downcast!(CutPolicy);
 
 pub(crate) struct DefaultCutPolicy {}
