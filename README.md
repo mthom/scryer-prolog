@@ -1,5 +1,10 @@
 # rusty-wam
 
+rusty-wam aims to become to Prolog what GHC is to Haskell: an open
+source industrial strength production environment that is also a
+testbed for bleeding edge research in logic and constraint
+programming, which is itself written in a high-level language.
+
 ## Phase 1
 
 Produce an implementation of the Warren Abstract Machine in Rust, done
@@ -37,8 +42,9 @@ Extend rusty-wam to include the following, among other features:
 
 ## Phase 3
 
-Use the WAM code produced by the completed code generator to target LLVM
-IR to get JIT-compiled and -executed Prolog programs.
+Use the WAM code produced by the completed code generator to get
+JIT-compiled and -executed Prolog programs. The question of how to get
+assembly from WAM code is something I'm still considering.
 
 It's my hope to use rusty-wam as the logic engine of a low level (and
 ideally, very fast) [Shen](http://shenlanguage.org) implementation.
