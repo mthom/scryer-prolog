@@ -8,6 +8,7 @@ use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::io::Error as IOError;
 use std::num::{ParseFloatError};
 use std::ops::{Add, AddAssign, Div, Index, IndexMut, Sub, Mul, Neg};
@@ -46,37 +47,27 @@ impl PredicateClause {
     pub fn first_arg(&self) -> Option<&Term> {
         match self {
             &PredicateClause::Fact(ref term) => term.first_arg(),
-            &PredicateClause::Rule(ref rule) =>
-                if let &QueryTerm::Term(ref term) = &rule.head.0 {
-                    term.first_arg()
-                } else {
-                    None
-                }
+            &PredicateClause::Rule(ref rule) => rule.head.1.first().map(|bt| bt.as_ref()),
         }
     }
 
     pub fn arity(&self) -> usize {
         match self {
             &PredicateClause::Fact(ref term) => term.arity(),
-            &PredicateClause::Rule(ref rule) => rule.head.0.arity()
+            &PredicateClause::Rule(ref rule) => rule.head.1.len()
         }
     }
 
-    pub fn name(&self) -> Option<TabledRc<Atom>> {
+    pub fn name(&self) -> Option<ClauseName> {
         match self {
             &PredicateClause::Fact(ref term) => term.name(),
-            &PredicateClause::Rule(ref rule) =>
-                if let &QueryTerm::Term(ref term) = &rule.head.0 {
-                    term.name()
-                } else {
-                    None
-                }
+            &PredicateClause::Rule(ref rule) => Some(rule.head.0.clone()),
         }
     }
 }
 
 pub enum Declaration {
-    Op(usize, Specifier, TabledRc<Atom>)
+    Op(usize, Specifier, ClauseName)
 }
 
 pub enum TopLevel {
@@ -88,7 +79,7 @@ pub enum TopLevel {
 }
 
 impl TopLevel {
-    pub fn name(&self) -> Option<TabledRc<Atom>> {
+    pub fn name(&self) -> Option<ClauseName> {
         match self {
             &TopLevel::Declaration(_) => None,
             &TopLevel::Fact(ref term) => term.name(),
@@ -99,15 +90,8 @@ impl TopLevel {
                     None
                 },
             &TopLevel::Query(_) => None,
-            &TopLevel::Rule(Rule { head: (QueryTerm::Term(ref term), _), .. }) =>
-                match term {
-                    &Term::Clause(_, ref name, ..)
-                  | &Term::Constant(_, Constant::Atom(ref name)) =>
-                        Some(name.clone()),
-                    _ =>
-                        None
-                },
-            _ => None
+            &TopLevel::Rule(Rule { ref head, .. }) =>
+                Some(head.0.clone())
         }
     }
 
@@ -118,14 +102,23 @@ impl TopLevel {
             &TopLevel::Predicate(ref clauses) =>
                 clauses.first().map(|t| t.arity()).unwrap_or(0),
             &TopLevel::Query(_) => 0,
-            &TopLevel::Rule(Rule { head: (ref qt, _), ..}) => qt.arity(),
+            &TopLevel::Rule(Rule { ref head, .. }) => head.1.len()
         }
     }
 }
 
 #[derive(Clone, Copy)]
 pub enum Level {
-    Deep, Shallow
+    Deep, Root, Shallow
+}
+
+impl Level {
+    pub fn child_level(self) -> Level {
+        match self {
+            Level::Root => Level::Shallow,
+            _ => Level::Deep
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -305,7 +298,7 @@ pub enum Fixity {
 
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum Constant {
-    Atom(TabledRc<Atom>),
+    Atom(ClauseName),
     Number(Number),
     String(Rc<String>),
     Usize(usize),
@@ -332,36 +325,57 @@ impl fmt::Display for Constant {
 #[derive(PartialEq, Eq, Clone)]
 pub enum Term {
     AnonVar,
-    Clause(Cell<RegType>, TabledRc<Atom>, Vec<Box<Term>>, Option<Fixity>),
+    Clause(Cell<RegType>, ClauseName, Vec<Box<Term>>, Option<Fixity>),
     Cons(Cell<RegType>, Box<Term>, Box<Term>),
     Constant(Cell<RegType>, Constant),
     Var(Cell<VarReg>, Rc<Var>)
 }
 
-pub enum InlinedQueryTerm {
-    CompareNumber(CompareNumberQT, Vec<Box<Term>>),
-    IsAtomic(Vec<Box<Term>>),
-    IsCompound(Vec<Box<Term>>),
-    IsInteger(Vec<Box<Term>>),
-    IsRational(Vec<Box<Term>>),
-    IsString(Vec<Box<Term>>),
-    IsFloat(Vec<Box<Term>>),
-    IsNonVar(Vec<Box<Term>>),
-    IsVar(Vec<Box<Term>>),
+#[derive(Clone, Copy)]
+pub enum InlinedClauseType {
+    CompareNumber(CompareNumberQT),
+    IsAtomic,
+    IsCompound,
+    IsInteger,
+    IsRational,
+    IsString,
+    IsFloat,
+    IsNonVar,
+    IsVar,
 }
 
-impl InlinedQueryTerm {
-    pub fn arity(&self) -> usize {
+impl InlinedClauseType {
+    pub fn name(&self) -> &'static str {
         match self {
-            &InlinedQueryTerm::CompareNumber(_, _) => 2,
-            &InlinedQueryTerm::IsAtomic(_) => 1,
-            &InlinedQueryTerm::IsCompound(_) => 1,
-            &InlinedQueryTerm::IsFloat(_) => 1,
-            &InlinedQueryTerm::IsRational(_) => 1,
-            &InlinedQueryTerm::IsString(_) => 1,
-            &InlinedQueryTerm::IsNonVar(_) => 1,
-            &InlinedQueryTerm::IsInteger(_) => 1,
-            &InlinedQueryTerm::IsVar(_) => 1,
+            &InlinedClauseType::CompareNumber(qt) => qt.name(),
+            &InlinedClauseType::IsAtomic => "atomic",
+            &InlinedClauseType::IsCompound => "compound",
+            &InlinedClauseType::IsInteger  => "integer",
+            &InlinedClauseType::IsRational => "rational",
+            &InlinedClauseType::IsString => "string",
+            &InlinedClauseType::IsFloat  => "float",
+            &InlinedClauseType::IsNonVar => "nonvar",
+            &InlinedClauseType::IsVar => "var"
+        }
+    }
+
+    pub fn from(name: &str, arity: usize) -> Option<Self> {
+        match (name, arity) {
+            (">", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThan)),
+            ("<", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThan)),
+            (">=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThanOrEqual)),
+            ("<=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThanOrEqual)),
+            ("=\\=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::NotEqual)),
+            ("=:=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::Equal)),
+            ("atomic", 1) => Some(InlinedClauseType::IsAtomic),
+            ("compound", 1) => Some(InlinedClauseType::IsCompound),
+            ("integer", 1) => Some(InlinedClauseType::IsInteger),
+            ("rational", 1) => Some(InlinedClauseType::IsRational),
+            ("string", 1) => Some(InlinedClauseType::IsString),
+            ("float", 1) => Some(InlinedClauseType::IsFloat),
+            ("nonvar", 1) => Some(InlinedClauseType::IsNonVar),
+            ("var", 1) => Some(InlinedClauseType::IsVar),
+            _ => None
         }
     }
 }
@@ -377,7 +391,7 @@ pub enum CompareNumberQT {
 }
 
 impl CompareNumberQT {
-    fn name<'a>(self) -> &'a str {
+    fn name(self) -> &'static str {
         match self {
             CompareNumberQT::GreaterThan => ">",
             CompareNumberQT::LessThan => "<",
@@ -390,13 +404,13 @@ impl CompareNumberQT {
 }
 
 #[derive(Clone, Copy)]
-pub enum CompareTermQT {    
+pub enum CompareTermQT {
     LessThan,
     LessThanOrEqual,
     Equal,
     GreaterThanOrEqual,
-    GreaterThan,        
-    NotEqual,    
+    GreaterThan,
+    NotEqual,
 }
 
 impl CompareTermQT {
@@ -417,118 +431,174 @@ impl CompareTermQT {
 pub type JumpStub = Vec<Term>;
 
 pub enum QueryTerm {
-    Arg(Vec<Box<Term>>),
-    CallN(Vec<Box<Term>>),
-    CallWithInferenceLimit(Vec<Box<Term>>),
-    Catch(Vec<Box<Term>>),
-    Compare(Vec<Box<Term>>),
-    CompareTerm(CompareTermQT, Vec<Box<Term>>),
+    Clause(Cell<RegType>, ClauseType, Vec<Box<Term>>),
     Cut,
-    Display(Vec<Box<Term>>),
-    DuplicateTerm(Vec<Box<Term>>),
-    Eq(Vec<Box<Term>>),
-    Functor(Vec<Box<Term>>),
-    Ground(Vec<Box<Term>>),
-    Inlined(InlinedQueryTerm),
-    Is(Vec<Box<Term>>),
-    Jump(JumpStub),
-    NotEq(Vec<Box<Term>>),
-    SetupCallCleanup(Vec<Box<Term>>),
-    Term(Term),
-    Throw(Vec<Box<Term>>)
+    Jump(JumpStub)
 }
 
 impl QueryTerm {
     pub fn arity(&self) -> usize {
         match self {
-            &QueryTerm::Arg(_) => 3,
-            &QueryTerm::Catch(_) => 3,
-            &QueryTerm::Compare(_) => 3,
-            &QueryTerm::CompareTerm(..) => 2,
-            &QueryTerm::Display(_) => 1,
-            &QueryTerm::Throw(_) => 1,
-            &QueryTerm::DuplicateTerm(_) => 2,
-            &QueryTerm::Eq(_) => 2,
-            &QueryTerm::Functor(_) => 3,
-            &QueryTerm::Ground(_) => 1,
-            &QueryTerm::Inlined(ref term) => term.arity(),
-            &QueryTerm::Is(_) => 2,
-            &QueryTerm::Jump(ref vars) => vars.len(),
-            &QueryTerm::NotEq(_) => 2,
-            &QueryTerm::CallN(ref terms) => terms.len(),
-            &QueryTerm::CallWithInferenceLimit(_) => 3,
+            &QueryTerm::Clause(_, _, ref subterms) => subterms.len(),
             &QueryTerm::Cut => 0,
-            &QueryTerm::SetupCallCleanup(_) => 3,
-            &QueryTerm::Term(ref term) => term.arity(),
+            &QueryTerm::Jump(ref vars) => vars.len()
         }
     }
 }
 
 pub struct Rule {
-    pub head: (QueryTerm, QueryTerm),
+    pub head: (ClauseName, Vec<Box<Term>>, QueryTerm),
     pub clauses: Vec<QueryTerm>
 }
 
-#[derive(Clone, Copy)]
-pub enum ClauseType<'a> {
+#[derive(Clone)]
+pub enum ClauseType {
     Arg,
     CallN,
     CallWithInferenceLimit,
     Catch,
     Compare,
-    CompareNumber(CompareNumberQT),
     CompareTerm(CompareTermQT),
-    Deep(Level, &'a Cell<RegType>, &'a TabledRc<Atom>, Option<Fixity>),
     Display,
     DuplicateTerm,
     Eq,
     Functor,
     Ground,
+    Inlined(InlinedClauseType),
     Is,
     NotEq,
-    Root(&'a TabledRc<Atom>),
+    Op(ClauseName, Fixity),
+    Named(ClauseName),
     SetupCallCleanup,
     Throw,
 }
 
-impl<'a> ClauseType<'a> {
-    pub fn name(&self) -> &'a str {
+impl ClauseType {
+    pub fn fixity(&self) -> Option<Fixity> {
         match self {
-            &ClauseType::Arg => "arg",
-            &ClauseType::CallN => "call",
-            &ClauseType::CallWithInferenceLimit => "call_with_inference_limit",
-            &ClauseType::Catch => "catch",
-            &ClauseType::Compare => "compare",
-            &ClauseType::CompareNumber(qt) => qt.name(),
-            &ClauseType::CompareTerm(qt) => qt.name(),
-            &ClauseType::Display => "display",
-            &ClauseType::Deep(_, _, name, _) => name.as_str(),
-            &ClauseType::DuplicateTerm => "duplicate_term",
-            &ClauseType::Eq => "==",
-            &ClauseType::Functor => "functor",
-            &ClauseType::Ground  => "ground",
-            &ClauseType::Is => "is",
-            &ClauseType::NotEq => "\\==",
-            &ClauseType::Root(name) => name.as_str(),
-            &ClauseType::SetupCallCleanup => "setup_call_cleanup",
-            &ClauseType::Throw => "throw"
-        }
-    }
-
-    pub fn level_of_subterms(self) -> Level {
-        match self {
-            ClauseType::Deep(..) => Level::Deep,
-            _ => Level::Shallow
+            &ClauseType::Compare | &ClauseType::CompareTerm(_)
+          | &ClauseType::Inlined(InlinedClauseType::CompareNumber(_))
+          | &ClauseType::NotEq | &ClauseType::Is | &ClauseType::Eq => Some(Fixity::In),
+            &ClauseType::Op(_, fixity) => Some(fixity),
+            _ => None
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
+pub enum ClauseName {
+    BuiltIn(&'static str),
+    User(TabledRc<Atom>)
+}
+
+impl Hash for ClauseName {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (*self.as_str()).hash(state)
+    }        
+}
+
+impl PartialEq for ClauseName {
+    fn eq(&self, other: &ClauseName) -> bool {
+        *self.as_str() == *other.as_str()
+    }
+}
+
+impl Eq for ClauseName {}
+
+impl Ord for ClauseName {
+    fn cmp(&self, other: &ClauseName) -> Ordering {
+        (*self.as_str()).cmp(other.as_str())
+    }
+}
+
+impl PartialOrd for ClauseName {
+    fn partial_cmp(&self, other: &ClauseName) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> From<&'a TabledRc<Atom>> for ClauseName {
+    fn from(name: &'a TabledRc<Atom>) -> ClauseName {
+        ClauseName::User(name.clone())
+    }
+}
+
+impl ClauseName {
+    pub fn as_str(&self) -> &str {
+        match self {
+            &ClauseName::BuiltIn(s) => s,
+            &ClauseName::User(ref name) => name.as_ref()
+        }
+    }
+}
+
+impl ClauseType {
+    pub fn name(&self) -> ClauseName {
+        match self {
+            &ClauseType::Arg => ClauseName::BuiltIn("arg"),
+            &ClauseType::CallN => ClauseName::BuiltIn("call"),
+            &ClauseType::CallWithInferenceLimit => ClauseName::BuiltIn("call_with_inference_limit"),
+            &ClauseType::Catch => ClauseName::BuiltIn("catch"),
+            &ClauseType::Compare => ClauseName::BuiltIn("compare"),
+            &ClauseType::CompareTerm(qt) => ClauseName::BuiltIn(qt.name()),
+            &ClauseType::Display => ClauseName::BuiltIn("display"),
+            &ClauseType::DuplicateTerm => ClauseName::BuiltIn("duplicate_term"),
+            &ClauseType::Eq => ClauseName::BuiltIn("=="),
+            &ClauseType::Functor => ClauseName::BuiltIn("functor"),
+            &ClauseType::Ground  => ClauseName::BuiltIn("ground"),
+            &ClauseType::Inlined(inlined) => ClauseName::BuiltIn(inlined.name()),
+            &ClauseType::Is => ClauseName::BuiltIn("is"),
+            &ClauseType::NotEq => ClauseName::BuiltIn("\\=="),
+            &ClauseType::Op(ref name, _) => name.clone(),
+            &ClauseType::Named(ref name) => name.clone(),
+            &ClauseType::SetupCallCleanup => ClauseName::BuiltIn("setup_call_cleanup"),
+            &ClauseType::Throw => ClauseName::BuiltIn("throw")
+        }
+    }
+
+    pub fn from(name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
+        match (name.as_str(), arity) {
+            ("arg", 3)   => ClauseType::Arg,
+            ("call", _)  => ClauseType::CallN,
+            ("call_with_inference_limit", 3) => ClauseType::CallWithInferenceLimit,
+            ("catch", 3) => ClauseType::Catch,
+            ("compare", 3) => ClauseType::Compare,
+            ("@>", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThan),
+            ("@<", 2) => ClauseType::CompareTerm(CompareTermQT::LessThan),
+            ("@>=", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual),
+            ("@<=", 2) => ClauseType::CompareTerm(CompareTermQT::LessThanOrEqual),
+            ("\\=@=", 2) => ClauseType::CompareTerm(CompareTermQT::NotEqual),
+            ("=@=", 2) => ClauseType::CompareTerm(CompareTermQT::Equal),
+            ("display", 1) => ClauseType::Display,
+            ("duplicate_term", 2) => ClauseType::DuplicateTerm,
+            ("==", 2) => ClauseType::Eq,
+            ("functor", 3) => ClauseType::Functor,
+            ("ground", 1) => ClauseType::Ground,
+            ("is", 2) => ClauseType::Is,
+            ("\\==", 2) => ClauseType::NotEq,
+            ("setup_call_cleanup", 3) => ClauseType::SetupCallCleanup,
+            ("throw", 1) => ClauseType::Throw,
+            _ => if let Some(fixity) = fixity {
+                ClauseType::Op(name, fixity)
+            } else {
+                ClauseType::Named(name)
+            }
+        }
+    }
+}
+
+impl From<InlinedClauseType> for ClauseType {
+    fn from(inlined_ct: InlinedClauseType) -> Self {
+        ClauseType::Inlined(inlined_ct)
+    }
+}
+
+#[derive(Clone)]
 pub enum TermRef<'a> {
     AnonVar(Level),
     Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     Constant(Level, &'a Cell<RegType>, &'a Constant),
-    Clause(ClauseType<'a>, &'a Vec<Box<Term>>),
+    Clause(Level, &'a Cell<RegType>, ClauseType, &'a Vec<Box<Term>>),
     Var(Level, &'a Cell<VarReg>, &'a Var)
 }
 
@@ -538,9 +608,8 @@ impl<'a> TermRef<'a> {
             TermRef::AnonVar(lvl)
           | TermRef::Cons(lvl, ..)
           | TermRef::Constant(lvl, ..)
-          | TermRef::Var(lvl, ..) => lvl,
-            TermRef::Clause(ClauseType::Deep(lvl, ..), ..) => lvl,
-            _ => Level::Shallow
+          | TermRef::Var(lvl, ..)
+          | TermRef::Clause(lvl, ..) => lvl
         }
     }
 }
@@ -921,7 +990,7 @@ pub enum ControlInstruction {
     Allocate(usize), // num_frames.
     ArgCall,
     ArgExecute,
-    Call(TabledRc<Atom>, usize, usize), // name, arity, perm_vars after threshold.
+    Call(ClauseName, usize, usize), // name, arity, perm_vars after threshold.
     CallN(usize), // arity.
     CatchCall,
     CatchExecute,
@@ -934,11 +1003,11 @@ pub enum ControlInstruction {
     DisplayExecute,
     Deallocate,
     DuplicateTermCall,
-    DuplicateTermExecute,    
+    DuplicateTermExecute,
     DynamicIs,
     EqCall,
     EqExecute,
-    Execute(TabledRc<Atom>, usize),
+    Execute(ClauseName, usize),
     ExecuteN(usize),
     FunctorCall,
     FunctorExecute,
@@ -949,11 +1018,11 @@ pub enum ControlInstruction {
     GroundExecute,
     JmpByCall(usize, usize),    // arity, global_offset.
     JmpByExecute(usize, usize),
-    IsCall(RegType, ArithmeticTerm),    
+    IsCall(RegType, ArithmeticTerm),
     IsExecute(RegType, ArithmeticTerm),
     NotEqCall,
     NotEqExecute,
-    Proceed,    
+    Proceed,
     ThrowCall,
     ThrowExecute,
 }
@@ -965,7 +1034,7 @@ impl ControlInstruction {
             &ControlInstruction::ArgExecute => true,
             &ControlInstruction::Call(_, _, _)  => true,
             &ControlInstruction::CatchCall => true,
-            &ControlInstruction::CatchExecute => true,            
+            &ControlInstruction::CatchExecute => true,
             &ControlInstruction::CompareTermCall(..) => true,
             &ControlInstruction::CompareTermExecute(..) => true,
             &ControlInstruction::DisplayCall => true,
@@ -1003,7 +1072,7 @@ impl ControlInstruction {
 pub enum IndexingInstruction {
     SwitchOnTerm(usize, usize, usize, usize),
     SwitchOnConstant(usize, HashMap<Constant, usize>),
-    SwitchOnStructure(usize, HashMap<(TabledRc<Atom>, usize), usize>)
+    SwitchOnStructure(usize, HashMap<(ClauseName, usize), usize>)
 }
 
 impl From<IndexingInstruction> for Line {
@@ -1015,7 +1084,7 @@ impl From<IndexingInstruction> for Line {
 pub enum FactInstruction {
     GetConstant(Level, Constant, RegType),
     GetList(Level, RegType),
-    GetStructure(Level, TabledRc<Atom>, usize, RegType, Option<Fixity>),
+    GetStructure(ClauseType, usize, RegType),
     GetValue(RegType, usize),
     GetVariable(RegType, usize),
     UnifyConstant(Constant),
@@ -1029,7 +1098,7 @@ pub enum QueryInstruction {
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
     PutList(Level, RegType),
-    PutStructure(Level, TabledRc<Atom>, usize, RegType, Option<Fixity>),
+    PutStructure(ClauseType, usize, RegType),
     PutUnsafeValue(usize, usize),
     PutValue(RegType, usize),
     PutVariable(RegType, usize),
@@ -1113,7 +1182,7 @@ pub enum Ref {
 #[derive(Clone, PartialEq)]
 pub enum HeapCellValue {
     Addr(Addr),
-    NamedStr(usize, TabledRc<Atom>, Option<Fixity>), // arity, name, fixity if it has one.
+    NamedStr(usize, ClauseName, Option<Fixity>), // arity, name, fixity if it has one.
 }
 
 impl HeapCellValue {
@@ -1233,15 +1302,7 @@ impl Term {
         }
     }
 
-    pub fn is_callable(&self) -> bool {
-        match self {
-            &Term::Clause(..) | &Term::Constant(_, Constant::Atom(_)) =>
-                true,
-            _ => false
-        }
-    }
-
-    pub fn name(&self) -> Option<TabledRc<Atom>> {
+    pub fn name(&self) -> Option<ClauseName> {
         match self {
             &Term::Constant(_, Constant::Atom(ref atom))
           | &Term::Clause(_, ref atom, ..) => Some(atom.clone()),
@@ -1259,20 +1320,27 @@ impl Term {
 
 pub enum TermIterState<'a> {
     AnonVar(Level),
-    Clause(usize, ClauseType<'a>, &'a Vec<Box<Term>>),
     Constant(Level, &'a Cell<RegType>, &'a Constant),
+    Clause(Level, usize, &'a Cell<RegType>, ClauseType, &'a Vec<Box<Term>>),
     InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     Var(Level, &'a Cell<VarReg>, &'a Var)
 }
 
 impl<'a> TermIterState<'a> {
-    pub fn to_state(lvl: Level, term: &'a Term) -> TermIterState<'a> {
+    pub fn subterm_to_state(lvl: Level, term: &'a Term) -> TermIterState<'a> {
         match term {
             &Term::AnonVar =>
                 TermIterState::AnonVar(lvl),
-            &Term::Clause(ref cell, ref atom, ref child_terms, fixity) =>
-                TermIterState::Clause(0, ClauseType::Deep(lvl, cell, atom, fixity), child_terms),
+            &Term::Clause(ref cell, ref name, ref subterms, fixity) => {                
+                let ct = if let Some(fixity) = fixity {
+                    ClauseType::Op(name.clone(), fixity)
+                } else {
+                    ClauseType::Named(name.clone())
+                };
+                
+                TermIterState::Clause(lvl, 0, cell, ct, subterms)
+            },
             &Term::Cons(ref cell, ref head, ref tail) =>
                 TermIterState::InitialCons(lvl, cell, head.as_ref(), tail.as_ref()),
             &Term::Constant(ref cell, ref constant) =>

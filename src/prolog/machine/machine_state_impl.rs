@@ -269,13 +269,7 @@ impl MachineState {
 
                 match item {
                     Addr::Con(Constant::Number(n)) => Ok(n),
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        Err(functor!(self.atom_tbl,
-                                     "instantiation_error",
-                                     1,
-                                     [heap_atom!("(is)/2", atom_tbl)]))
-                    }
+                    _ => Err(functor!("instantiation_error", 1, [heap_atom!("(is)/2")]))
                 }
             },
             &ArithmeticTerm::Interm(i)     => Ok(self.interms[i-1].clone()),
@@ -292,10 +286,7 @@ impl MachineState {
                 if let Some(r) = Ratio::from_float(fl.into_inner()) {
                     Ok(Rc::new(r))
                 } else {
-                    Err(functor!(self.atom_tbl,
-                                 "instantiation_error",
-                                 1,
-                                 [heap_atom!("(is)/2", self.atom_tbl)]))
+                    Err(functor!("instantiation_error", 1, [heap_atom!("(is)/2")]))
                 },
             Number::Integer(bi) =>
                 Ok(Rc::new(Ratio::from_integer((*bi).clone())))
@@ -316,9 +307,7 @@ impl MachineState {
 
     fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, Vec<HeapCellValue>>
     {
-        let instantiation_err = functor!(self.atom_tbl.clone(), "instantiation_error", 1,
-                                         [heap_atom!("(is)/2", self.atom_tbl.clone())]);
-
+        let instantiation_err = functor!("instantiation_error", 1, [heap_atom!("(is)/2")]);
         let a = self[r].clone();
 
         if let &Addr::Con(Constant::Number(ref n)) = &a {
@@ -378,8 +367,7 @@ impl MachineState {
             -> Result<Rc<Ratio<BigInt>>, Vec<HeapCellValue>>
     {
         if *r2 == Ratio::zero() {
-            Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                         [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+            Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
         } else {
             Ok(Rc::new(&*r1 / &*r2))
         }
@@ -390,13 +378,11 @@ impl MachineState {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                                 [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+                    Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
                 } else {
                     Ok(Rc::new(n1.div_floor(&n2)))
                 },
-            _ => Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                              [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+            _ => Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
         }
     }
 
@@ -405,22 +391,19 @@ impl MachineState {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                                 [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+                    Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
                 } else {
                     Ok(Rc::new(&*n1 / &*n2))
                 },
             _ =>
-                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
         }
     }
 
     fn div(&self, n1: Number, n2: Number) -> Result<Number, Vec<HeapCellValue>>
     {
         if n2.is_zero() {
-            Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                         [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+            Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
         } else {
             Ok(n1 / n2)
         }
@@ -435,8 +418,7 @@ impl MachineState {
                     _        => Ok(Rc::new(&*n1 >> usize::max_value()))
                 },
             _ =>
-                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
         }
     }
 
@@ -449,8 +431,7 @@ impl MachineState {
                     _        => Ok(Rc::new(&*n1 << usize::max_value()))
                 },
             _ =>
-                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
         }
     }
 
@@ -460,8 +441,7 @@ impl MachineState {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 ^ u_n2)),
             _ =>
-                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
         }
     }
 
@@ -471,8 +451,7 @@ impl MachineState {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
             _ =>
-                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
         }
     }
 
@@ -481,14 +460,12 @@ impl MachineState {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                                 [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+                    Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
                 } else {
                     Ok(Rc::new(n1.mod_floor(&n2)))
                 },
             _ =>
-                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
         }
     }
 
@@ -497,14 +474,12 @@ impl MachineState {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                                 [heap_atom!("zero_divisor", self.atom_tbl.clone())]))
+                    Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
                 } else {
                     Ok(Rc::new(&*n1 % &*n2))
                 },
             _ =>
-                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
         }
     }
 
@@ -514,8 +489,7 @@ impl MachineState {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
             _ =>
-                Err(functor!(self.atom_tbl.clone(), "evaluation_error", 1,
-                             [heap_atom!("expected_integer_args", self.atom_tbl.clone())]))
+                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
         }
     }
 
@@ -661,15 +635,15 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &FactInstruction::GetStructure(_, ref name, arity, reg, fixity) => {
+            &FactInstruction::GetStructure(ref ct, arity, reg) => {
                 let addr = self.deref(self[reg].clone());
 
                 match self.store(addr.clone()) {
                     Addr::Str(a) => {
                         let result = &self.heap[a];
 
-                        if let &HeapCellValue::NamedStr(narity, ref str, _) = result {
-                            if narity == arity && *name == *str {
+                        if let &HeapCellValue::NamedStr(narity, ref s, _) = result {
+                            if narity == arity && ct.name() == *s {
                                 self.s = a + 1;
                                 self.mode = MachineMode::Read;
                             } else {
@@ -681,7 +655,7 @@ impl MachineState {
                         let h = self.heap.h;
 
                         self.heap.push(HeapCellValue::Addr(Addr::Str(h + 1)));
-                        self.heap.push(HeapCellValue::NamedStr(arity, name.clone(), fixity));
+                        self.heap.push(HeapCellValue::NamedStr(arity, ct.name(), ct.fixity()));
 
                         self.bind(addr.as_var().unwrap(), Addr::HeapCell(h));
 
@@ -858,10 +832,10 @@ impl MachineState {
                 self[reg] = Addr::Con(constant.clone()),
             &QueryInstruction::PutList(_, reg) =>
                 self[reg] = Addr::Lis(self.heap.h),
-            &QueryInstruction::PutStructure(_, ref name, arity, reg, fixity) => {
+            &QueryInstruction::PutStructure(ref ct, arity, reg) => {
                 let h = self.heap.h;
 
-                self.heap.push(HeapCellValue::NamedStr(arity, name.clone(), fixity));
+                self.heap.push(HeapCellValue::NamedStr(arity, ct.name(), ct.fixity()));
                 self[reg] = Addr::Str(h);
             },
             &QueryInstruction::PutUnsafeValue(n, arg) => {
@@ -979,11 +953,8 @@ impl MachineState {
 
                 if let HeapCellValue::NamedStr(narity, name, _) = result {
                     if narity + arity > 63 {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "representation_error",
-                                                      1,
-                                                      [heap_atom!("exceeds_max_arity", atom_tbl)]));
+                        self.throw_exception(functor!("representation_error", 1,
+                                                      [heap_atom!("exceeds_max_arity")]));
                         return None;
                     }
 
@@ -1003,16 +974,12 @@ impl MachineState {
             },
             Addr::Con(Constant::Atom(name)) => (name, 0),
             Addr::HeapCell(_) | Addr::StackCell(_, _) => {
-                let atom_tbl = self.atom_tbl.clone();
-                self.throw_exception(functor!(atom_tbl, "instantiation_error", 0, []));
+                self.throw_exception(functor!("instantiation_error"));
                 return None;
             },
             _ => {
-                let atom_tbl = self.atom_tbl.clone();
-                self.throw_exception(functor!(atom_tbl,
-                                              "type_error",
-                                              2,
-                                              [heap_atom!("callable", atom_tbl),
+                self.throw_exception(functor!("type_error", 2,
+                                              [heap_atom!("callable"),
                                                HeapCellValue::Addr(addr)]));
                 return None;
             }
@@ -1065,10 +1032,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             } else {
-                return Err(functor!(self.atom_tbl,
-                                    "type_error",
-                                    1,
-                                    [heap_atom!("compound_expected", self.atom_tbl)]));
+                return Err(functor!("type_error", 1, [heap_atom!("compound_expected")]))
             }
         }
 
@@ -1201,7 +1165,7 @@ impl MachineState {
                         return Ordering::Less;
                     } else if ar1 > ar2 {
                         return Ordering::Greater;
-                    } else if *n1 != *n2 {
+                    } else if n1 != n2 {
                         return n1.cmp(&n2);
                     } else {
                         continue;
@@ -1210,14 +1174,14 @@ impl MachineState {
                     continue,
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::NamedStr(ar, n, _))
               | (HeapCellValue::NamedStr(ar, n, _), HeapCellValue::Addr(Addr::Lis(_))) =>
-                    if ar == 2 && *n == "." {
+                    if ar == 2 && n.as_str() == "." {
                         continue;
                     } else if ar < 2 {
                         return Ordering::Greater;
                     } else if ar > 2 {
                         return Ordering::Less;
                     } else {
-                        return n.cmp(&String::from("."));
+                        return n.as_str().cmp(".");
                     },
                 (HeapCellValue::NamedStr(..), _) =>
                     return Ordering::Greater,
@@ -1356,8 +1320,7 @@ impl MachineState {
                 let a2 = self.store(self.deref(self[r2].clone()));
 
                 if call_policy.downcast_ref::<CallWithInferenceLimitCallPolicy>().is_err() {
-                    CallWithInferenceLimitCallPolicy::new_in_place(self.atom_tbl.clone(),
-                                                                   call_policy);
+                    CallWithInferenceLimitCallPolicy::new_in_place(call_policy);
                 }
 
                 self.p += 1;
@@ -1373,13 +1336,7 @@ impl MachineState {
                             None => panic!("install_inference_counter: should have installed \\
                                             CallWithInferenceLimitCallPolicy.")
                         },
-                    _ => {
-                        let atom_tbl = self.atom_tbl.clone();
-                        self.throw_exception(functor!(atom_tbl,
-                                                      "type_error",
-                                                      1,
-                                                      [heap_atom!("integer_expected", atom_tbl)]))
-                    }
+                    _ => self.throw_exception(functor!("type_error", 1, [heap_atom!("integer_expected")]))
                 };
             },
             &BuiltInInstruction::IsAtomic(r) => {
@@ -1634,10 +1591,10 @@ impl MachineState {
 
                         self.unify(a1, f_a);
                     } else {
-                        return Err(functor!(self.atom_tbl, "instantiation_error", 0, []));
+                        return Err(functor!("instantiation_error"));
                     }
                 } else {
-                    return Err(functor!(self.atom_tbl, "instantiation_error", 0, []));
+                    return Err(functor!("instantiation_error"));
                 }
             },
             _ => {
@@ -1681,7 +1638,7 @@ impl MachineState {
         for (v1, v2) in iter {
             match (v1, v2) {
                 (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
-                    if ar1 != ar2 || *n1 != *n2 {
+                    if ar1 != ar2 || n1 != n2 {
                         return true;
                     },
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
@@ -1710,7 +1667,7 @@ impl MachineState {
         for (v1, v2) in iter {
             match (v1, v2) {
                 (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
-                    if ar1 != ar2 || *n1 != *n2 {
+                    if ar1 != ar2 || n1 != n2 {
                         return true;
                     },
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>

@@ -13,15 +13,19 @@ pub type ArithCont = (Code, Option<ArithmeticTerm>);
 
 impl<'a> ArithInstructionIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
-        self.state_stack.push(TermIterState::to_state(lvl, term));
+        self.state_stack.push(TermIterState::subterm_to_state(lvl, term));
     }
 
     fn new(term: &'a Term) -> Result<Self, ArithmeticError> {
         let state = match term {
             &Term::AnonVar =>
                 return Err(ArithmeticError::InvalidTerm),
-            &Term::Clause(_, ref name, ref terms, _) =>
-                TermIterState::Clause(0, ClauseType::Root(name), terms),
+            &Term::Clause(ref cell, ref name, ref terms, fixity) =>
+                match ClauseType::from(name.clone(), terms.len(), fixity) {
+                    ct @ ClauseType::Named(..) | ct @ ClauseType::Op(..) =>
+                        Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms)),
+                    _ => Err(ArithmeticError::InvalidOp)
+                }?,
             &Term::Constant(ref cell, ref cons) =>
                 TermIterState::Constant(Level::Shallow, cell, cons),
             &Term::Cons(_, _, _) =>
@@ -36,7 +40,7 @@ impl<'a> ArithInstructionIterator<'a> {
 
 pub enum ArithTermRef<'a> {
     Constant(&'a Constant),
-    Op(&'a str, usize), // name, arity.
+    Op(ClauseName, usize), // name, arity.
     Var(&'a Cell<VarReg>, &'a Var)
 }
 
@@ -48,14 +52,14 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
             match iter_state {
                 TermIterState::AnonVar(_) =>
                     return Some(Err(ArithmeticError::UninstantiatedVar)),
-                TermIterState::Clause(child_num, ct, child_terms) => {
-                    let arity = child_terms.len();
+                TermIterState::Clause(lvl, child_num, cell, ct, subterms) => {
+                    let arity = subterms.len();                    
 
                     if child_num == arity {
                         return Some(Ok(ArithTermRef::Op(ct.name(), arity)));
                     } else {
-                        self.state_stack.push(TermIterState::Clause(child_num + 1, ct, child_terms));
-                        self.push_subterm(ct.level_of_subterms(), child_terms[child_num].as_ref());
+                        self.state_stack.push(TermIterState::Clause(lvl, child_num + 1, cell, ct, subterms));
+                        self.push_subterm(lvl, subterms[child_num].as_ref());
                     }
                 },
                 TermIterState::Constant(_, _, c) =>
@@ -97,19 +101,19 @@ impl<'a> ArithmeticEvaluator<'a>
         ArithmeticEvaluator { bindings, interm: Vec::new(), interm_c: target_int }
     }
 
-    fn get_unary_instr(name: &str, a1: ArithmeticTerm, t: usize)
+    fn get_unary_instr(name: ClauseName, a1: ArithmeticTerm, t: usize)
                        -> Result<ArithmeticInstruction, ArithmeticError>
     {
-        match name {
+        match name.as_str() {
             "-" => Ok(ArithmeticInstruction::Neg(a1, t)),
              _  => Err(ArithmeticError::InvalidOp)
         }
     }
 
-    fn get_binary_instr(name: &str, a1: ArithmeticTerm, a2: ArithmeticTerm, t: usize)
+    fn get_binary_instr(name: ClauseName, a1: ArithmeticTerm, a2: ArithmeticTerm, t: usize)
                         -> Result<ArithmeticInstruction, ArithmeticError>
     {
-        match name {
+        match name.as_str() {
             "+"    => Ok(ArithmeticInstruction::Add(a1, a2, t)),
             "-"    => Ok(ArithmeticInstruction::Sub(a1, a2, t)),
             "/"    => Ok(ArithmeticInstruction::Div(a1, a2, t)),
@@ -137,7 +141,7 @@ impl<'a> ArithmeticEvaluator<'a>
         temp
     }
 
-    fn instr_from_clause(&mut self, name: &str, arity: usize)
+    fn instr_from_clause(&mut self, name: ClauseName, arity: usize)
                          -> Result<ArithmeticInstruction, ArithmeticError>
     {
         match arity {
@@ -215,7 +219,7 @@ impl<'a> ArithmeticEvaluator<'a>
                     self.interm.push(ArithmeticTerm::Reg(r));
                 },
                 ArithTermRef::Op(name, arity) => {
-                    code.push(Line::Arithmetic(self.instr_from_clause(&*name, arity)?));
+                    code.push(Line::Arithmetic(self.instr_from_clause(name, arity)?));
                 }
             }
         }

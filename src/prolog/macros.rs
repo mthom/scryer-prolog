@@ -1,3 +1,9 @@
+macro_rules! clause_name {
+    ($name: expr) => (
+        ClauseName::BuiltIn($name)
+    )
+}
+
 macro_rules! tabled_rc {
     ($e:expr, $tbl:expr) => (
         TabledRc::new(String::from($e), $tbl.clone())
@@ -6,7 +12,10 @@ macro_rules! tabled_rc {
 
 macro_rules! atom {
     ($e:expr, $tbl:expr) => (
-        Constant::Atom(tabled_rc!($e, $tbl))
+        Constant::Atom(ClauseName::User(tabled_rc!($e, $tbl)))
+    );
+    ($e:expr) => (
+        Constant::Atom(clause_name!($e))
     )
 }
 
@@ -47,22 +56,21 @@ macro_rules! query {
 }
 
 macro_rules! heap_atom {
+    ($name:expr) => (
+        HeapCellValue::Addr(Addr::Con(atom!($name)))
+    );
     ($name:expr, $tbl:expr) => (
         HeapCellValue::Addr(Addr::Con(atom!($name, $tbl)))
     )
 }
 
 macro_rules! functor {
-    ($tbl:expr, $name:expr, $len:expr, [$($args:expr),*]) => {{
-        if $len > 0 {
-            vec![ HeapCellValue::NamedStr($len,
-                                          tabled_rc!($name, $tbl),
-                                          None),
-                  $($args),* ]
-        } else {
-            vec![ heap_atom!($name, $tbl) ]
-        }
-    }}
+    ($name:expr) => (
+        vec![ heap_atom!($name) ]
+    );
+    ($name:expr, $len:expr, [$($args:expr),*]) => (
+        vec![ HeapCellValue::NamedStr($len, clause_name!($name), None), $($args),* ]
+    )
 }
 
 macro_rules! fact {
@@ -115,8 +123,11 @@ macro_rules! put_var {
 }
 
 macro_rules! put_structure {
-    ($tbl:expr, $lvl:expr, $name:expr, $arity:expr, $r:expr, $fix:expr) => (
-        QueryInstruction::PutStructure($lvl, tabled_rc!($name, $tbl), $arity, $r, $fix)
+    ($atom:expr, $arity:expr, $r:expr, Some($fix:expr)) => (
+        QueryInstruction::PutStructure(ClauseType::Op(clause_name!($atom), $fix), $arity, $r)
+    );
+    ($atom:expr, $arity:expr, $r:expr, None) => (
+        QueryInstruction::PutStructure(ClauseType::Named(clause_name!($atom)), $arity, $r)
     )
 }
 
@@ -368,12 +379,11 @@ macro_rules! get_constant {
 }
 
 macro_rules! get_structure {
-    ($tbl:expr, $atom:expr, $arity:expr, $r:expr, $fix:expr) => (
-        FactInstruction::GetStructure(Level::Shallow,
-                                      tabled_rc!($atom, $tbl),
-                                      $arity,
-                                      $r,
-                                      $fix)
+    ($atom:expr, $arity:expr, $r:expr, Some($fix:expr)) => (
+        FactInstruction::GetStructure(ClauseType::Op(clause_name!($atom), $fix), $arity, $r)
+    );
+    ($atom:expr, $arity:expr, $r:expr, None) => (
+        FactInstruction::GetStructure(ClauseType::Named(clause_name!($atom)), $arity, $r)
     )
 }
 

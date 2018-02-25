@@ -185,7 +185,7 @@ pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
 pub(crate) trait CallPolicy: Any {
     fn try_call(&mut self, machine_st: &mut MachineState, code_dir: &CodeDir,
-                name: TabledRc<Atom>, arity: usize)
+                name: ClauseName, arity: usize)
                 -> CallResult
     {
         let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| index.1);
@@ -204,7 +204,7 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn try_execute(&mut self, machine_st: &mut MachineState, code_dir: &CodeDir,
-                   name: TabledRc<Atom>, arity: usize)
+                   name: ClauseName, arity: usize)
                    -> CallResult
     {
         let compiled_tl_index = code_dir.get(&(name, arity)).map(|index| index.1);
@@ -351,20 +351,19 @@ pub(crate) struct DefaultCallPolicy {}
 
 impl CallPolicy for DefaultCallPolicy {}
 
-pub(crate) struct CallWithInferenceLimitCallPolicy {
-    atom_tbl: TabledData<Atom>,
+pub(crate) struct CallWithInferenceLimitCallPolicy {    
     pub(crate) prev_policy: Box<CallPolicy>,
     count:  BigUint,
     limits: Vec<(BigUint, usize)>
 }
 
 impl CallWithInferenceLimitCallPolicy {
-    pub(crate) fn new_in_place(atom_tbl: TabledData<Atom>, policy: &mut Box<CallPolicy>)
+    pub(crate) fn new_in_place(policy: &mut Box<CallPolicy>)
     {
         let mut prev_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
         swap(&mut prev_policy, policy);
 
-        let new_policy = CallWithInferenceLimitCallPolicy { atom_tbl, prev_policy,
+        let new_policy = CallWithInferenceLimitCallPolicy { prev_policy,
                                                             count:  BigUint::zero(),
                                                             limits: vec![] };
         *policy = Box::new(new_policy);
@@ -373,15 +372,13 @@ impl CallWithInferenceLimitCallPolicy {
     fn increment(&mut self) -> CallResult {
         if let Some(&(ref limit, bp)) = self.limits.last() {
             if self.count == *limit {
-                return Err(functor!(self.atom_tbl,
-                                    "inference_limit_exceeded",
-                                    1,
+                return Err(functor!("inference_limit_exceeded", 1,
                                     [HeapCellValue::Addr(Addr::Con(Constant::Usize(bp)))]));
             } else {
                 self.count += BigUint::one();
             }
         }
-
+        
         Ok(())
     }
 
@@ -422,7 +419,7 @@ impl CallWithInferenceLimitCallPolicy {
 
 impl CallPolicy for CallWithInferenceLimitCallPolicy {
     fn try_call(&mut self, machine_st: &mut MachineState, code_dir: &CodeDir,
-                name: TabledRc<Atom>, arity: usize)
+                name: ClauseName, arity: usize)
                 -> CallResult
     {
         self.prev_policy.try_call(machine_st, code_dir, name, arity)?;
@@ -430,7 +427,7 @@ impl CallPolicy for CallWithInferenceLimitCallPolicy {
     }
 
     fn try_execute(&mut self, machine_st: &mut MachineState, code_dir: &CodeDir,
-                   name: TabledRc<Atom>, arity: usize)
+                   name: ClauseName, arity: usize)
                    -> CallResult
     {
         self.prev_policy.try_execute(machine_st, code_dir, name, arity)?;

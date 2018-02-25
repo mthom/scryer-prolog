@@ -210,7 +210,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
 
         match lvl {
             Level::Deep => target.push(Target::subterm_to_variable(r)),
-            Level::Shallow => {
+            Level::Root | Level::Shallow => {
                 let k = self.arg_c;
                 self.arg_c += 1;
 
@@ -218,12 +218,9 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
             }
         };
     }
-
-    fn mark_non_var<Target>(&mut self,
-                            lvl: Level,
-                            term_loc: GenContext,
-                            cell: &Cell<RegType>,
-                            target: &mut Vec<Target>)
+    
+    fn mark_non_var<Target>(&mut self, lvl: Level, term_loc: GenContext,
+                            cell: &Cell<RegType>, target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
         let r = cell.get();
@@ -270,7 +267,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
         };
 
         match lvl {
-            Level::Shallow => {
+            Level::Root | Level::Shallow => {
                 let k = self.arg_c;
 
                 if self.is_curr_arg_distinct_from(var) {

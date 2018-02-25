@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -6,11 +7,25 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 pub type TabledData<T> = Rc<RefCell<HashSet<Rc<T>>>>;
-    
+
 #[derive(Clone)]
 pub struct TabledRc<T: Hash + Eq> {
     atom: Rc<T>,
     table: TabledData<T>
+}
+
+impl<T: Ord + Hash + Eq> PartialOrd for TabledRc<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering>
+    {
+        Some(self.atom.cmp(&other.atom))
+    }
+}
+
+impl<T: Ord + Hash + Eq> Ord for TabledRc<T> {
+    fn cmp(&self, other: &Self) -> Ordering
+    {
+        self.atom.cmp(&other.atom)
+    }
 }
 
 impl<T: Hash + Eq> PartialEq for TabledRc<T> {
@@ -23,9 +38,8 @@ impl<T: Hash + Eq> PartialEq for TabledRc<T> {
 impl<T: Hash + Eq> Eq for TabledRc<T> {}
 
 impl<T: Hash + Eq> Hash for TabledRc<T> {
-    fn hash<H: Hasher>(&self, state: &mut H)
-    {
-        self.atom.hash(state)        
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.atom.hash(state)
     }
 }
 
@@ -39,10 +53,6 @@ impl<T: Hash + Eq> TabledRc<T> {
         table.borrow_mut().insert(atom.clone());
 
         TabledRc { atom, table }
-    }
-
-    pub fn table(&self) -> TabledData<T> {
-        self.table.clone()
     }
 }
 

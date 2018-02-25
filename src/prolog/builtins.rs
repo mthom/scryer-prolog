@@ -1,11 +1,10 @@
 use prolog::ast::*;
 use prolog::num::bigint::{BigInt};
-use prolog::tabled_rc::*;
 
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub type PredicateKey = (TabledRc<Atom>, usize); // name, arity, type.
+pub type PredicateKey = (ClauseName, usize); // name, arity, type.
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PredicateKeyType {
@@ -13,13 +12,13 @@ pub enum PredicateKeyType {
     User
 }
 
-pub type OpDirKey = (TabledRc<Atom>, Fixity);
+pub type OpDirKey = (ClauseName, Fixity);
 // name and fixity -> operator type and precedence.
 pub type OpDir = HashMap<OpDirKey, (Specifier, usize)>;
 
 pub type CodeDir = HashMap<PredicateKey, (PredicateKeyType, usize)>;
 
-fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
+fn get_builtins() -> Code {
     vec![internal_call_n!(), // callN/N, 0.
          is_atomic!(temp_v!(1)), // atomic/1, 1.
          proceed!(),
@@ -115,25 +114,25 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          retry!(7),
          trust!(10),
          try_me_else!(4),
-         fact![get_constant!(atom!("!", atom_tbl), temp_v!(1)),
-               get_structure!(atom_tbl, ",", 2, temp_v!(2), Some(infix!())),
+         fact![get_constant!(atom!("!"), temp_v!(1)),
+               get_structure!(",", 2, temp_v!(2), Some(infix!())),
                unify_variable!(temp_v!(1)),
                unify_variable!(temp_v!(2))],
          set_cp!(temp_v!(3)),
          goto_execute!(83, 3),
          retry_me_else!(4),
-         fact![get_constant!(atom!("!", atom_tbl), temp_v!(1)),
-               get_constant!(atom!("!", atom_tbl), temp_v!(2))],
+         fact![get_constant!(atom!("!"), temp_v!(1)),
+               get_constant!(atom!("!"), temp_v!(2))],
          set_cp!(temp_v!(3)),
          proceed!(),
          trust_me!(),
-         fact![get_constant!(atom!("!", atom_tbl), temp_v!(1))],
+         fact![get_constant!(atom!("!"), temp_v!(1))],
          set_cp!(temp_v!(3)),
          query![put_value!(temp_v!(2), 1)],
          execute_n!(1),
          retry_me_else!(8),
          allocate!(3),
-         fact![get_structure!(atom_tbl, ",", 2, temp_v!(2), Some(infix!())),
+         fact![get_structure!(",", 2, temp_v!(2), Some(infix!())),
                unify_variable!(perm_v!(2)),
                unify_variable!(perm_v!(1)),
                get_var_in_fact!(perm_v!(3), 3)],
@@ -147,7 +146,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          retry_me_else!(10),
          allocate!(2),
          get_level!(perm_v!(2)),
-         fact![get_constant!(atom!("!", atom_tbl), temp_v!(2)),
+         fact![get_constant!(atom!("!"), temp_v!(2)),
                get_var_in_fact!(perm_v!(1), 3)],
          neck_cut!(),
          call_n!(1),
@@ -168,12 +167,12 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          indexed_try!(3),
          trust!(5),
          try_me_else!(3),
-         fact![get_structure!(atom_tbl, "->", 2, temp_v!(1), Some(infix!())),
+         fact![get_structure!("->", 2, temp_v!(1), Some(infix!())),
                unify_variable!(temp_v!(1)),
                unify_variable!(temp_v!(2))],
          goto_execute!(139, 3),
          trust_me!(),
-         fact![get_structure!(atom_tbl, "->", 2, temp_v!(1), Some(infix!())),
+         fact![get_structure!("->", 2, temp_v!(1), Some(infix!())),
                unify_void!(2)],
          query![put_value!(temp_v!(2), 1)],
          neck_cut!(),
@@ -232,13 +231,8 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          goto_execute!(149, 3), // goto get_arg/3.
          trust_me!(),
          query![get_var_in_query!(temp_v!(4), 1),
-                put_structure!(atom_tbl,
-                               Level::Shallow,
-                               String::from("type_error"),
-                               1,
-                               temp_v!(1),
-                               None),
-                set_constant!(atom!("integer_expected", atom_tbl))],
+                put_structure!("type_error", 1, temp_v!(1), None),
+                set_constant!(atom!("integer_expected"))],
          goto_execute!(59, 1), // goto throw/1.
          try_me_else!(5), // arg_/5, 173.
          fact![get_value!(temp_v!(1), 2),
@@ -405,13 +399,8 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          trust_me!(),
          fact![get_var_in_fact!(temp_v!(3), 1),
                get_var_in_fact!(temp_v!(4), 2)],
-         query![put_structure!(atom_tbl,
-                               Level::Shallow,
-                               String::from("type_error"),
-                               2,
-                               temp_v!(1),
-                               None),
-                set_constant!(atom!("integer_expected", atom_tbl)),
+         query![put_structure!("type_error", 2, temp_v!(1), None),
+                set_constant!(atom!("integer_expected")),
                 set_value!(temp_v!(4))],
          goto_execute!(59, 1), // goto throw/1, 59.
          switch_on_term!(1,2,5,0), // length/3, 281.
@@ -453,7 +442,8 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          try_me_else!(5), // 304.
          is_var!(temp_v!(1)),
          neck_cut!(),
-         query![put_constant!(Level::Shallow, atom!("instantiation_error", atom_tbl),
+         query![put_constant!(Level::Shallow,
+                              atom!("instantiation_error"),
                               temp_v!(1))],
          goto_execute!(59, 1),
          trust_me!(),
@@ -502,7 +492,7 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          get_cleaner_call!(),
          query![put_value!(perm_v!(2), 1),
                 put_var!(temp_v!(4), 2),
-                put_constant!(Level::Shallow, atom!("true", atom_tbl), temp_v!(3))],
+                put_constant!(Level::Shallow, atom!("true"), temp_v!(3))],
          goto_call!(5, 3), // goto catch/3, 5.
          set_cp!(perm_v!(1)),
          deallocate!(),
@@ -621,9 +611,9 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
          remove_call_policy_check!(),
          fail!(),
          try_me_else!(4), // handle_ile/3, 444.
-         fact![get_structure!(atom_tbl, "inference_limit_exceeded", 1, temp_v!(2), None),
+         fact![get_structure!("inference_limit_exceeded", 1, temp_v!(2), None),
                unify_value!(temp_v!(1)),
-               get_constant!(atom!("inference_limit_exceeded", atom_tbl), temp_v!(3))],
+               get_constant!(atom!("inference_limit_exceeded"), temp_v!(3))],
          neck_cut!(),
          proceed!(),
          default_trust_me!(),
@@ -648,119 +638,119 @@ fn get_builtins(atom_tbl: TabledData<Atom>) -> Code {
     ]
 }
 
-pub fn build_code_dir(atom_tbl: TabledData<Atom>) -> (Code, CodeDir, OpDir)
+pub fn build_code_dir() -> (Code, CodeDir, OpDir)
 {
     let mut code_dir = HashMap::new();
     let mut op_dir   = HashMap::new();
 
-    let builtin_code = get_builtins(atom_tbl.clone());
+    let builtin_code = get_builtins();
 
-    op_dir.insert((tabled_rc!(":-", atom_tbl), Fixity::In),   (XFX, 1200));
-    op_dir.insert((tabled_rc!(":-", atom_tbl), Fixity::Pre),  (FX, 1200));
-    op_dir.insert((tabled_rc!("?-", atom_tbl), Fixity::Pre),  (FX, 1200));
+    op_dir.insert((clause_name!(":-"), Fixity::In),   (XFX, 1200));
+    op_dir.insert((clause_name!(":-"), Fixity::Pre),  (FX, 1200));
+    op_dir.insert((clause_name!("?-"), Fixity::Pre),  (FX, 1200));
 
     // control operators.
-    op_dir.insert((tabled_rc!("\\+", atom_tbl), Fixity::Pre), (FY, 900));
-    op_dir.insert((tabled_rc!("=", atom_tbl), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("\\+"), Fixity::Pre), (FY, 900));
+    op_dir.insert((clause_name!("="), Fixity::In), (XFX, 700));
 
     // arithmetic operators.
-    op_dir.insert((tabled_rc!("is", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("+", atom_tbl), Fixity::In), (YFX, 500));
-    op_dir.insert((tabled_rc!("-", atom_tbl), Fixity::In), (YFX, 500));
-    op_dir.insert((tabled_rc!("/\\", atom_tbl), Fixity::In), (YFX, 500));
-    op_dir.insert((tabled_rc!("\\/", atom_tbl), Fixity::In), (YFX, 500));
-    op_dir.insert((tabled_rc!("xor", atom_tbl), Fixity::In), (YFX, 500));
-    op_dir.insert((tabled_rc!("//", atom_tbl), Fixity::In), (YFX, 400));
-    op_dir.insert((tabled_rc!("/", atom_tbl), Fixity::In), (YFX, 400));
-    op_dir.insert((tabled_rc!("div", atom_tbl), Fixity::In), (YFX, 400));
-    op_dir.insert((tabled_rc!("*", atom_tbl), Fixity::In), (YFX, 400));
-    op_dir.insert((tabled_rc!("-", atom_tbl), Fixity::Pre), (FY, 200));
-    op_dir.insert((tabled_rc!("rdiv", atom_tbl), Fixity::In), (YFX, 400));
-    op_dir.insert((tabled_rc!("<<", atom_tbl), Fixity::In), (YFX, 400));
-    op_dir.insert((tabled_rc!(">>", atom_tbl), Fixity::In), (YFX, 400));
-    op_dir.insert((tabled_rc!("mod", atom_tbl), Fixity::In), (YFX, 400));
-    op_dir.insert((tabled_rc!("rem", atom_tbl), Fixity::In), (YFX, 400));
+    op_dir.insert((clause_name!("is"), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("+"), Fixity::In), (YFX, 500));
+    op_dir.insert((clause_name!("-"), Fixity::In), (YFX, 500));
+    op_dir.insert((clause_name!("/\\"), Fixity::In), (YFX, 500));
+    op_dir.insert((clause_name!("\\/"), Fixity::In), (YFX, 500));
+    op_dir.insert((clause_name!("xor"), Fixity::In), (YFX, 500));
+    op_dir.insert((clause_name!("//"), Fixity::In), (YFX, 400));
+    op_dir.insert((clause_name!("/"), Fixity::In), (YFX, 400));
+    op_dir.insert((clause_name!("div"), Fixity::In), (YFX, 400));
+    op_dir.insert((clause_name!("*"), Fixity::In), (YFX, 400));
+    op_dir.insert((clause_name!("-"), Fixity::Pre), (FY, 200));
+    op_dir.insert((clause_name!("rdiv"), Fixity::In), (YFX, 400));
+    op_dir.insert((clause_name!("<<"), Fixity::In), (YFX, 400));
+    op_dir.insert((clause_name!(">>"), Fixity::In), (YFX, 400));
+    op_dir.insert((clause_name!("mod"), Fixity::In), (YFX, 400));
+    op_dir.insert((clause_name!("rem"), Fixity::In), (YFX, 400));
 
     // arithmetic comparison operators.
-    op_dir.insert((tabled_rc!(">", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("<", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("=\\=", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("=:=", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!(">=", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("=<", atom_tbl), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!(">"), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("<"), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("=\\="), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("=:="), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!(">="), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("=<"), Fixity::In), (XFX, 700));
 
     // control operators.
-    op_dir.insert((tabled_rc!(";", atom_tbl), Fixity::In), (XFY, 1100));
-    op_dir.insert((tabled_rc!("->", atom_tbl), Fixity::In), (XFY, 1050));
+    op_dir.insert((clause_name!(";"), Fixity::In), (XFY, 1100));
+    op_dir.insert((clause_name!("->"), Fixity::In), (XFY, 1050));
 
-    op_dir.insert((tabled_rc!("=..", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("==", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("\\==", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("@=<", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("@>=", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("@<", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("@>", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("=@=", atom_tbl), Fixity::In), (XFX, 700));
-    op_dir.insert((tabled_rc!("\\=@=", atom_tbl), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("=.."), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("=="), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("\\=="), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("@=<"), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("@>="), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("@<"), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("@>"), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("=@="), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("\\=@="), Fixity::In), (XFX, 700));
 
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
-        code_dir.insert((tabled_rc!("call", atom_tbl), arity), (PredicateKeyType::BuiltIn, 0));
+        code_dir.insert((clause_name!("call"), arity), (PredicateKeyType::BuiltIn, 0));
     }
 
-    code_dir.insert((tabled_rc!("atomic", atom_tbl), 1), (PredicateKeyType::BuiltIn, 1));
-    code_dir.insert((tabled_rc!("var", atom_tbl), 1), (PredicateKeyType::BuiltIn, 3));
-    code_dir.insert((tabled_rc!("false", atom_tbl), 0), (PredicateKeyType::BuiltIn, 61));
-    code_dir.insert((tabled_rc!("\\+", atom_tbl), 1), (PredicateKeyType::BuiltIn, 62));
-    code_dir.insert((tabled_rc!("duplicate_term", atom_tbl), 2), (PredicateKeyType::BuiltIn, 71));
-    code_dir.insert((tabled_rc!("catch", atom_tbl), 3), (PredicateKeyType::BuiltIn, 5));
-    code_dir.insert((tabled_rc!("throw", atom_tbl), 1), (PredicateKeyType::BuiltIn, 59));
-    code_dir.insert((tabled_rc!("=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 73));
-    code_dir.insert((tabled_rc!("true", atom_tbl), 0), (PredicateKeyType::BuiltIn, 75));
+    code_dir.insert((clause_name!("atomic"), 1), (PredicateKeyType::BuiltIn, 1));
+    code_dir.insert((clause_name!("var"), 1), (PredicateKeyType::BuiltIn, 3));
+    code_dir.insert((clause_name!("false"), 0), (PredicateKeyType::BuiltIn, 61));
+    code_dir.insert((clause_name!("\\+"), 1), (PredicateKeyType::BuiltIn, 62));
+    code_dir.insert((clause_name!("duplicate_term"), 2), (PredicateKeyType::BuiltIn, 71));
+    code_dir.insert((clause_name!("catch"), 3), (PredicateKeyType::BuiltIn, 5));
+    code_dir.insert((clause_name!("throw"), 1), (PredicateKeyType::BuiltIn, 59));
+    code_dir.insert((clause_name!("="), 2), (PredicateKeyType::BuiltIn, 73));
+    code_dir.insert((clause_name!("true"), 0), (PredicateKeyType::BuiltIn, 75));
 
-    code_dir.insert((tabled_rc!(",", atom_tbl), 2), (PredicateKeyType::BuiltIn, 76));
-    code_dir.insert((tabled_rc!(";", atom_tbl), 2), (PredicateKeyType::BuiltIn, 120));
-    code_dir.insert((tabled_rc!("->", atom_tbl), 2), (PredicateKeyType::BuiltIn, 138));
+    code_dir.insert((clause_name!(","), 2), (PredicateKeyType::BuiltIn, 76));
+    code_dir.insert((clause_name!(";"), 2), (PredicateKeyType::BuiltIn, 120));
+    code_dir.insert((clause_name!("->"), 2), (PredicateKeyType::BuiltIn, 138));
 
-    code_dir.insert((tabled_rc!("functor", atom_tbl), 3), (PredicateKeyType::BuiltIn, 146));
-    code_dir.insert((tabled_rc!("arg", atom_tbl), 3), (PredicateKeyType::BuiltIn, 150));
-    code_dir.insert((tabled_rc!("integer", atom_tbl), 1), (PredicateKeyType::BuiltIn, 147));
-    code_dir.insert((tabled_rc!("display", atom_tbl), 1), (PredicateKeyType::BuiltIn, 192));
+    code_dir.insert((clause_name!("functor"), 3), (PredicateKeyType::BuiltIn, 146));
+    code_dir.insert((clause_name!("arg"), 3), (PredicateKeyType::BuiltIn, 150));
+    code_dir.insert((clause_name!("integer"), 1), (PredicateKeyType::BuiltIn, 147));
+    code_dir.insert((clause_name!("display"), 1), (PredicateKeyType::BuiltIn, 192));
 
-    code_dir.insert((tabled_rc!("is", atom_tbl), 2), (PredicateKeyType::BuiltIn, 194));
-    code_dir.insert((tabled_rc!(">", atom_tbl), 2), (PredicateKeyType::BuiltIn, 196));
-    code_dir.insert((tabled_rc!("<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 198));
-    code_dir.insert((tabled_rc!(">=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 200));
-    code_dir.insert((tabled_rc!("<=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 202));
-    code_dir.insert((tabled_rc!("=\\=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 204));
-    code_dir.insert((tabled_rc!("=:=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 206));
-    code_dir.insert((tabled_rc!("=..", atom_tbl), 2), (PredicateKeyType::BuiltIn, 208));
+    code_dir.insert((clause_name!("is"), 2), (PredicateKeyType::BuiltIn, 194));
+    code_dir.insert((clause_name!(">"), 2), (PredicateKeyType::BuiltIn, 196));
+    code_dir.insert((clause_name!("<"), 2), (PredicateKeyType::BuiltIn, 198));
+    code_dir.insert((clause_name!(">="), 2), (PredicateKeyType::BuiltIn, 200));
+    code_dir.insert((clause_name!("<="), 2), (PredicateKeyType::BuiltIn, 202));
+    code_dir.insert((clause_name!("=\\="), 2), (PredicateKeyType::BuiltIn, 204));
+    code_dir.insert((clause_name!("=:="), 2), (PredicateKeyType::BuiltIn, 206));
+    code_dir.insert((clause_name!("=.."), 2), (PredicateKeyType::BuiltIn, 208));
 
-    code_dir.insert((tabled_rc!("length", atom_tbl), 2), (PredicateKeyType::BuiltIn, 261));
-    code_dir.insert((tabled_rc!("setup_call_cleanup", atom_tbl), 3),
+    code_dir.insert((clause_name!("length"), 2), (PredicateKeyType::BuiltIn, 261));
+    code_dir.insert((clause_name!("setup_call_cleanup"), 3),
                     (PredicateKeyType::BuiltIn, 294));
-    code_dir.insert((tabled_rc!("call_with_inference_limit", atom_tbl), 3),
+    code_dir.insert((clause_name!("call_with_inference_limit"), 3),
                     (PredicateKeyType::BuiltIn, 393));
-    code_dir.insert((tabled_rc!("_handle_inference_limit_exceeded", atom_tbl), 2),
+    code_dir.insert((clause_name!("_handle_inference_limit_exceeded"), 2),
                     (PredicateKeyType::BuiltIn, 421));
 
-    code_dir.insert((tabled_rc!("compound", atom_tbl), 1), (PredicateKeyType::BuiltIn, 372));
-    code_dir.insert((tabled_rc!("rational", atom_tbl), 1), (PredicateKeyType::BuiltIn, 374));
-    code_dir.insert((tabled_rc!("string", atom_tbl), 1), (PredicateKeyType::BuiltIn, 376));
-    code_dir.insert((tabled_rc!("float", atom_tbl), 1), (PredicateKeyType::BuiltIn, 378));
-    code_dir.insert((tabled_rc!("nonvar", atom_tbl), 1), (PredicateKeyType::BuiltIn, 380));
+    code_dir.insert((clause_name!("compound"), 1), (PredicateKeyType::BuiltIn, 372));
+    code_dir.insert((clause_name!("rational"), 1), (PredicateKeyType::BuiltIn, 374));
+    code_dir.insert((clause_name!("string"), 1), (PredicateKeyType::BuiltIn, 376));
+    code_dir.insert((clause_name!("float"), 1), (PredicateKeyType::BuiltIn, 378));
+    code_dir.insert((clause_name!("nonvar"), 1), (PredicateKeyType::BuiltIn, 380));
 
-    code_dir.insert((tabled_rc!("ground", atom_tbl), 1), (PredicateKeyType::BuiltIn, 384));
-    code_dir.insert((tabled_rc!("==", atom_tbl), 2), (PredicateKeyType::BuiltIn, 385));
-    code_dir.insert((tabled_rc!("\\==", atom_tbl), 2), (PredicateKeyType::BuiltIn, 386));
-    code_dir.insert((tabled_rc!("@>=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 387));
-    code_dir.insert((tabled_rc!("@=<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 388));
-    code_dir.insert((tabled_rc!("@>", atom_tbl), 2), (PredicateKeyType::BuiltIn, 389));
-    code_dir.insert((tabled_rc!("@<", atom_tbl), 2), (PredicateKeyType::BuiltIn, 390));
-    code_dir.insert((tabled_rc!("=@=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 391));
-    code_dir.insert((tabled_rc!("\\=@=", atom_tbl), 2), (PredicateKeyType::BuiltIn, 392));
-    code_dir.insert((tabled_rc!("compare", atom_tbl), 3), (PredicateKeyType::BuiltIn, 464));
+    code_dir.insert((clause_name!("ground"), 1), (PredicateKeyType::BuiltIn, 384));
+    code_dir.insert((clause_name!("=="), 2), (PredicateKeyType::BuiltIn, 385));
+    code_dir.insert((clause_name!("\\=="), 2), (PredicateKeyType::BuiltIn, 386));
+    code_dir.insert((clause_name!("@>="), 2), (PredicateKeyType::BuiltIn, 387));
+    code_dir.insert((clause_name!("@=<"), 2), (PredicateKeyType::BuiltIn, 388));
+    code_dir.insert((clause_name!("@>"), 2), (PredicateKeyType::BuiltIn, 389));
+    code_dir.insert((clause_name!("@<"), 2), (PredicateKeyType::BuiltIn, 390));
+    code_dir.insert((clause_name!("=@="), 2), (PredicateKeyType::BuiltIn, 391));
+    code_dir.insert((clause_name!("\\=@="), 2), (PredicateKeyType::BuiltIn, 392));
+    code_dir.insert((clause_name!("compare"), 3), (PredicateKeyType::BuiltIn, 464));
     
     (builtin_code, code_dir, op_dir)
 }

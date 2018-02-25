@@ -672,8 +672,8 @@ fn test_queries_on_call_n()
 {
     let mut wam = Machine::new();
 
-    submit(&mut wam, "maplist(Pred, []).
-                      maplist(Pred, [X|Xs]) :- call(Pred, X), maplist(Pred, Xs).");
+    submit(&mut wam, "maplist(_, []).
+                      maplist(P, [X|Xs]) :- call(P, X), maplist(P, Xs).");
     submit(&mut wam, "f(a). f(b). f(c).");
 
     assert_prolog_success!(&mut wam, "?- maplist(f, [X,Y,Z]).",

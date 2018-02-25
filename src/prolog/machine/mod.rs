@@ -46,7 +46,7 @@ impl Index<CodePtr> for Machine {
 impl Machine {
     pub fn new() -> Self {
         let atom_tbl = Rc::new(RefCell::new(HashSet::new()));
-        let (code, code_dir, op_dir) = build_code_dir(atom_tbl.clone());
+        let (code, code_dir, op_dir) = build_code_dir();
 
         Machine {
             ms: MachineState::new(atom_tbl),
@@ -67,7 +67,7 @@ impl Machine {
         self.ms.atom_tbl.clone()
     }
 
-    pub fn add_user_code<'a>(&mut self, name: TabledRc<Atom>, arity: usize, mut code: Code)
+    pub fn add_user_code<'a>(&mut self, name: ClauseName, arity: usize, mut code: Code)
                              -> EvalSession<'a>
     {
         match self.code_dir.get(&(name.clone(), arity)) {
@@ -165,8 +165,7 @@ impl Machine {
 
     fn query_stepper<'a>(&mut self)
     {
-        loop
-        {
+        loop {
             self.execute_instr();
 
             if self.failed() {
@@ -180,10 +179,8 @@ impl Machine {
         }
     }
 
-    fn record_var_places<'a>(&self,
-                             chunk_num: usize,
-                             alloc_locs: &AllocVarDict<'a>,
-                             heap_locs: &mut HeapVarDict<'a>)
+    fn record_var_places<'a>(&self, chunk_num: usize,
+                             alloc_locs: &AllocVarDict<'a>, heap_locs: &mut HeapVarDict<'a>)
     {
         for (var, var_data) in alloc_locs {
             match var_data {

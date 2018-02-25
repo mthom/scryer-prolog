@@ -13,21 +13,21 @@ use termion::event::Key;
 use std::io::{Write, stdin, stdout};
 use std::fmt;
 
+impl fmt::Display for ClauseName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 impl fmt::Display for FactInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &FactInstruction::GetConstant(Level::Shallow, ref constant, ref r) =>
-                write!(f, "get_constant {}, A{}", constant, r.reg_num()),
-            &FactInstruction::GetConstant(Level::Deep, ref constant, ref r) =>
-                write!(f, "get_constant {}, {}", constant, r),
-            &FactInstruction::GetList(Level::Shallow, ref r) =>
-                write!(f, "get_list A{}", r.reg_num()),
-            &FactInstruction::GetList(Level::Deep, ref r) =>
-                write!(f, "get_list {}", r),
-            &FactInstruction::GetStructure(Level::Deep, ref name, ref arity, ref r, _) =>
-                write!(f, "get_structure {}/{}, {}", name, arity, r),
-            &FactInstruction::GetStructure(Level::Shallow, ref name, ref arity, ref r, _) =>
-                write!(f, "get_structure {}/{}, A{}", name, arity, r.reg_num()),
+            &FactInstruction::GetConstant(lvl, ref constant, ref r) =>
+                write!(f, "get_constant {}, {}{}", constant, lvl, r.reg_num()),
+            &FactInstruction::GetList(lvl, ref r) =>
+                write!(f, "get_list {}{}", lvl, r.reg_num()),
+            &FactInstruction::GetStructure(ref ct, ref arity, ref r) =>
+                write!(f, "get_structure {}/{}, {}", ct.name(), arity, r),
             &FactInstruction::GetValue(ref x, ref a) =>
                 write!(f, "get_value {}, A{}", x, a),
             &FactInstruction::GetVariable(ref x, ref a) =>
@@ -51,18 +51,12 @@ impl fmt::Display for QueryInstruction {
         match self {
             &QueryInstruction::GetVariable(ref x, ref a) =>
                 write!(f, "query:get_variable {}, A{}", x, a),
-            &QueryInstruction::PutConstant(Level::Shallow, ref constant, ref r) =>
-                write!(f, "put_constant {}, A{}", constant, r.reg_num()),
-            &QueryInstruction::PutConstant(Level::Deep, ref constant, ref r) =>
-                write!(f, "put_constant {}, {}", constant, r),
-            &QueryInstruction::PutList(Level::Shallow, ref r) =>
-                write!(f, "put_list A{}", r.reg_num()),
-            &QueryInstruction::PutList(Level::Deep, ref r) =>
-                write!(f, "put_list {}", r),
-            &QueryInstruction::PutStructure(Level::Deep, ref name, ref arity, ref r, _) =>
-                write!(f, "put_structure {}/{}, {}", name, arity, r),
-            &QueryInstruction::PutStructure(Level::Shallow, ref name, ref arity, ref r, _) =>
-                write!(f, "put_structure {}/{}, A{}", name, arity, r.reg_num()),
+            &QueryInstruction::PutConstant(lvl, ref constant, ref r) =>
+                write!(f, "put_constant {}, {}{}", constant, lvl, r.reg_num()),
+            &QueryInstruction::PutList(lvl, ref r) =>
+                write!(f, "put_list {}{}", lvl, r.reg_num()),
+            &QueryInstruction::PutStructure(ref ct, ref arity, ref r) =>
+                write!(f, "put_structure {}/{}, {}", ct.name(), arity, r),
             &QueryInstruction::PutUnsafeValue(y, a) =>
                 write!(f, "put_unsafe_value Y{}, A{}", y, a),
             &QueryInstruction::PutValue(ref x, ref a) =>
@@ -382,7 +376,7 @@ impl fmt::Display for CutInstruction {
 impl fmt::Display for Level {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &Level::Shallow => write!(f, "A"),
+            &Level::Root | &Level::Shallow => write!(f, "A"),
             &Level::Deep => write!(f, "X")
         }
     }
@@ -531,7 +525,7 @@ fn compile_query<'a>(terms: &'a Vec<QueryTerm>, queue: &'a Vec<TopLevel>)
     let mut code = try!(cg.compile_query(terms));
 
     compile_appendix(&mut code, queue)?;
-
+    
     Ok((code, cg.take_vars()))
 }
 

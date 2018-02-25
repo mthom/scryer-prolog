@@ -1,4 +1,5 @@
 use prolog::ast::*;
+use prolog::iterators::*;
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -275,9 +276,9 @@ impl<'a> VariableFixtures<'a>
         }
     }
 
-    fn mark_head_vars_as_safe(&self, head: &Term, unsafe_vars: &mut HashMap<RegType, bool>)
+    fn mark_head_vars_as_safe(&self, head_iter: FactIterator<'a>, unsafe_vars: &mut HashMap<RegType, bool>)
     {
-        for term_ref in head.breadth_first_iter() {
+        for term_ref in head_iter {
             match term_ref {
                 TermRef::Var(Level::Shallow, cell, _) => {
                     unsafe_vars.remove(&cell.get().norm());
@@ -294,12 +295,12 @@ impl<'a> VariableFixtures<'a>
         self.mark_unsafe_vars(&mut unsafe_vars, query);
     }
 
-    pub fn mark_unsafe_vars_in_rule(&self, head: &Term, query: &mut CompiledQuery)
+    pub fn mark_unsafe_vars_in_rule(&self, head_iter: FactIterator<'a>, query: &mut CompiledQuery)
     {
         let mut unsafe_vars = HashMap::new();
 
         self.record_unsafe_vars(&mut unsafe_vars);
-        self.mark_head_vars_as_safe(head, &mut unsafe_vars);
+        self.mark_head_vars_as_safe(head_iter, &mut unsafe_vars);
         self.mark_unsafe_vars(&mut unsafe_vars, query);
     }
 }

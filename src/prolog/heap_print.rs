@@ -1,13 +1,12 @@
 use prolog::ast::*;
 use prolog::heap_iter::*;
-use prolog::tabled_rc::*;
 
 use std::cell::Cell;
 use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum TokenOrRedirect {
-    Atom(TabledRc<Atom>),
+    Atom(ClauseName),
     Redirect,
     Open,
     Close,
@@ -21,7 +20,7 @@ pub enum TokenOrRedirect {
 pub trait HeapCellValueFormatter {
     // this function belongs to the display predicate formatter, which it uses
     // to format all clauses.
-    fn format_struct(&self, arity: usize, name: TabledRc<Atom>, state_stack: &mut Vec<TokenOrRedirect>)
+    fn format_struct(&self, arity: usize, name: ClauseName, state_stack: &mut Vec<TokenOrRedirect>)
     {
         state_stack.push(TokenOrRedirect::Close);
 
@@ -38,7 +37,7 @@ pub trait HeapCellValueFormatter {
 
     // this can be overloaded to handle special cases, falling back on the default of
     // format_struct when convenient.
-    fn format_clause(&self, usize, TabledRc<Atom>, Option<Fixity>, &mut Vec<TokenOrRedirect>);
+    fn format_clause(&self, usize, ClauseType, &mut Vec<TokenOrRedirect>);
 }
 
 pub trait HeapCellValueOutputter {
@@ -95,18 +94,16 @@ impl HeapCellValueOutputter for PrinterOutputter {
 pub struct DisplayFormatter {}
 
 impl HeapCellValueFormatter for DisplayFormatter {
-    fn format_clause(&self, arity: usize, name: TabledRc<Atom>, fixity: Option<Fixity>,
-                     state_stack: &mut Vec<TokenOrRedirect>)
+    fn format_clause(&self, arity: usize, ct: ClauseType, state_stack: &mut Vec<TokenOrRedirect>)
     {
-        if fixity.is_some() {
+        if ct.fixity().is_some() {
             let mut new_name = String::from("'");
-            new_name += name.as_ref();
+            new_name += ct.name().as_str();
             new_name += "'";
-
-            let name = TabledRc::new(new_name, name.table());
-            self.format_struct(arity, name, state_stack);
+            
+            self.format_struct(arity, ct.name(), state_stack);
         } else {
-            self.format_struct(arity, name, state_stack);
+            self.format_struct(arity, ct.name(), state_stack);
         }
     }
 }
@@ -114,31 +111,30 @@ impl HeapCellValueFormatter for DisplayFormatter {
 pub struct TermFormatter {}
 
 impl HeapCellValueFormatter for TermFormatter {
-    fn format_clause(&self, arity: usize, name: TabledRc<Atom>, fixity: Option<Fixity>,
-                     state_stack: &mut Vec<TokenOrRedirect>)
+    fn format_clause(&self, arity: usize, ct: ClauseType, state_stack: &mut Vec<TokenOrRedirect>)
     {
-        if let Some(fixity) = fixity {
+        if let Some(fixity) = ct.fixity() {
             match fixity {
                 Fixity::Post => {
-                    state_stack.push(TokenOrRedirect::Atom(name));
+                    state_stack.push(TokenOrRedirect::Atom(ct.name()));
                     state_stack.push(TokenOrRedirect::Space);
                     state_stack.push(TokenOrRedirect::Redirect);
                 },
                 Fixity::Pre => {
                     state_stack.push(TokenOrRedirect::Redirect);
                     state_stack.push(TokenOrRedirect::Space);
-                    state_stack.push(TokenOrRedirect::Atom(name));
+                    state_stack.push(TokenOrRedirect::Atom(ct.name()));
                 },
                 Fixity::In => {
                     state_stack.push(TokenOrRedirect::Redirect);
                     state_stack.push(TokenOrRedirect::Space);
-                    state_stack.push(TokenOrRedirect::Atom(name));
+                    state_stack.push(TokenOrRedirect::Atom(ct.name()));
                     state_stack.push(TokenOrRedirect::Space);
                     state_stack.push(TokenOrRedirect::Redirect);
                 }
             }
         } else {
-            self.format_struct(arity, name, state_stack);
+            self.format_struct(arity, ct.name(), state_stack);
         }
     }
 }
@@ -161,8 +157,10 @@ impl<'a, Formatter: HeapCellValueFormatter, Outputter: HeapCellValueOutputter>
 
     fn handle_heap_term(&mut self, heap_val: HeapCellValue) {
         match heap_val {
-            HeapCellValue::NamedStr(arity, name, fixity) =>
-                self.formatter.format_clause(arity, name, fixity, &mut self.state_stack),
+            HeapCellValue::NamedStr(arity, name, fixity) => {
+                let ct = ClauseType::from(name, arity, fixity);
+                self.formatter.format_clause(arity, ct, &mut self.state_stack)
+            },
             HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
                 if !self.at_cdr("") {
                     self.outputter.append("[]");
