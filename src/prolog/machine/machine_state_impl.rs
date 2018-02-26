@@ -1218,6 +1218,10 @@ impl MachineState {
 
                 self.compare_numbers(cmp, n1, n2);
             },
+            &BuiltInInstruction::DefaultSetCutPoint(r) => {
+                let mut default_cut_policy = DefaultCutPolicy {};
+                default_cut_policy.cut(self, r);
+            },
             &BuiltInInstruction::DefaultTrustMe => {
                 let mut call_policy = DefaultCallPolicy {};
                 try_or_fail!(self, call_policy.trust_me(self));
@@ -1472,7 +1476,9 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &BuiltInInstruction::SetCutPoint(r) => {
+            &BuiltInInstruction::SetCutPoint(r) =>
+                cut_policy.cut(self, r),
+            /*{
                 let addr = self.store(self.deref(self[r].clone()));
 
                 match addr {
@@ -1487,7 +1493,7 @@ impl MachineState {
                     },
                     _ => self.fail = true
                 };
-            },
+            },*/
             &BuiltInInstruction::CleanUpBlock => {
                 let nb = self.store(self.deref(self[temp_v!(1)].clone()));
 

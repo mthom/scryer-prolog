@@ -951,8 +951,9 @@ pub enum ArithmeticInstruction {
 
 pub enum BuiltInInstruction {
     CleanUpBlock,
-    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
+    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),    
     DefaultTrustMe,
+    DefaultSetCutPoint(RegType),
     DynamicCompareNumber(CompareNumberQT),
     EraseBall,
     Fail,

@@ -119,7 +119,7 @@ fn get_builtins() -> Code {
                unify_variable!(temp_v!(1)),
                unify_variable!(temp_v!(2))],
          set_cp!(temp_v!(3)),
-         goto_execute!(83, 3),
+         goto_execute!(77, 3),
          retry_me_else!(4),
          fact![get_constant!(atom!("!"), temp_v!(1)),
                get_constant!(atom!("!"), temp_v!(2))],
@@ -142,7 +142,7 @@ fn get_builtins() -> Code {
                 put_unsafe_value!(1, 2),
                 put_value!(perm_v!(3), 3)],
          deallocate!(),
-         goto_execute!(83, 3),
+         goto_execute!(77, 3),
          retry_me_else!(10),
          allocate!(2),
          get_level!(perm_v!(2)),
@@ -475,7 +475,7 @@ fn get_builtins() -> Code {
          query![put_var!(perm_v!(1), 1)],
          get_ball!(),
          get_level!(perm_v!(2)),
-         set_cp!(perm_v!(2)),
+         default_set_cp!(perm_v!(2)),
          goto_call!(342, 0), // goto run_cleaners_with_handling/0, 342.
          query![put_unsafe_value!(1, 1)],
          deallocate!(),
@@ -494,7 +494,7 @@ fn get_builtins() -> Code {
                 put_var!(temp_v!(4), 2),
                 put_constant!(Level::Shallow, atom!("true"), temp_v!(3))],
          goto_call!(5, 3), // goto catch/3, 5.
-         set_cp!(perm_v!(1)),
+         default_set_cp!(perm_v!(1)),
          deallocate!(),
          goto_execute!(342, 0), // goto run_cleaners_with_handling/0, 342.
          trust_me!(),
@@ -506,7 +506,7 @@ fn get_builtins() -> Code {
          get_cleaner_call!(),
          query![put_value!(perm_v!(2), 1)],
          call_n!(1),
-         set_cp!(perm_v!(1)),
+         default_set_cp!(perm_v!(1)),
          deallocate!(),
          goto_execute!(354, 0), // goto run_cleaners_without_handling/0, 354.
          trust_me!(),

@@ -1387,6 +1387,12 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- [X,Y,Z] =@= [V,W,Z].");
     assert_prolog_success!(&mut wam, "?- [X,Y,X] =@= [V,W,V].");
     assert_prolog_success!(&mut wam, "?- g(B) = B, g(A) = A, A =@= B.");
+
+    assert_prolog_success!(&mut wam, "?- call(((G = 2 ; fail), B=3, !)).",
+                           [["G = 2", "B = 3"]]);
+
+    assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),display(S+G>B)), B=3, !), 100, R).",
+                           [["G = 2", "B = 3", "R = !", "S = 1"]]);
 }
 
 #[test]

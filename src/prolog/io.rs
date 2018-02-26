@@ -205,6 +205,8 @@ impl fmt::Display for BuiltInInstruction {
         match self {
             &BuiltInInstruction::CleanUpBlock =>
                 write!(f, "clean_up_block"),
+            &BuiltInInstruction::DefaultSetCutPoint(r) =>
+                write!(f, "default_set_cp {}", r),
             &BuiltInInstruction::DefaultTrustMe =>
                 write!(f, "default_trust_me"),
             &BuiltInInstruction::InstallInferenceCounter(r1, r2, r3) =>

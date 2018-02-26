@@ -657,6 +657,12 @@ macro_rules! inference_level {
     )
 }
 
+macro_rules! default_set_cp {
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::DefaultSetCutPoint($r))
+    )
+}
+
 macro_rules! default_trust_me {
     () => (
         Line::BuiltIn(BuiltInInstruction::DefaultTrustMe)
