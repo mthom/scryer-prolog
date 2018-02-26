@@ -1393,6 +1393,8 @@ fn test_queries_on_builtins()
 
     assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),display(S+G>B)), B=3, !), 100, R).",
                            [["G = 2", "B = 3", "R = !", "S = 1"]]);
+    assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),display(S+G>B)), B=3, !), 10, R).",
+                           [["S = _1", "G = _4", "B = _14", "R = inference_limit_exceeded"]]);
 }
 
 #[test]

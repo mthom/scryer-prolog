@@ -663,6 +663,12 @@ macro_rules! default_set_cp {
     )
 }
 
+macro_rules! default_retry_me_else {
+    ($o:expr) => (
+        Line::BuiltIn(BuiltInInstruction::DefaultRetryMeElse($o))
+    )
+}
+
 macro_rules! default_trust_me {
     () => (
         Line::BuiltIn(BuiltInInstruction::DefaultTrustMe)

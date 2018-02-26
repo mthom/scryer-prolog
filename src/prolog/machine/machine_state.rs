@@ -71,7 +71,7 @@ pub(super) struct DuplicateBallTerm<'a> {
 impl<'a> DuplicateBallTerm<'a> {
     pub(super) fn new(state: &'a mut MachineState) -> Self {
         let hb = state.heap.len();
-        DuplicateBallTerm { state: state, heap_boundary: hb }
+        DuplicateBallTerm { state, heap_boundary: hb }
     }
 }
 

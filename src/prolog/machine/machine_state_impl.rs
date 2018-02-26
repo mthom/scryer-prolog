@@ -216,7 +216,7 @@ impl MachineState {
                         let tr = self.tr;
                         let val = self.trail[tr - 1];
                         self.trail[i] = val;
-                        self.tr -= 1; // NEW.
+                        self.tr -= 1;
                     },
                 Ref::StackCell(fr, _) => {
                     let b = self.b - 1;
@@ -233,7 +233,7 @@ impl MachineState {
                         let tr = self.tr;
                         let val = self.trail[tr - 1];
                         self.trail[i] = val;
-                        self.tr -= 1; // NEW.
+                        self.tr -= 1;
                     }
                 }
             };
@@ -937,6 +937,9 @@ impl MachineState {
     fn throw_exception(&mut self, hcv: Vec<HeapCellValue>) {
         let h = self.heap.h;
 
+        self.ball.0 = 0;
+        self.ball.1.truncate(0);
+                
         self.registers[1] = Addr::HeapCell(h);
 
         self.heap.append(hcv);
@@ -1219,8 +1222,12 @@ impl MachineState {
                 self.compare_numbers(cmp, n1, n2);
             },
             &BuiltInInstruction::DefaultSetCutPoint(r) => {
-                let mut default_cut_policy = DefaultCutPolicy {};
-                default_cut_policy.cut(self, r);
+                let mut cut_policy = DefaultCutPolicy {};
+                cut_policy.cut(self, r);
+            },
+            &BuiltInInstruction::DefaultRetryMeElse(o) => {
+                let mut call_policy = DefaultCallPolicy {};
+                try_or_fail!(self, call_policy.retry_me_else(self, o));
             },
             &BuiltInInstruction::DefaultTrustMe => {
                 let mut call_policy = DefaultCallPolicy {};

@@ -48,7 +48,7 @@ fn get_builtins() -> Code {
                 put_unsafe_value!(1, 2)],
          deallocate!(),
          goto_execute!(44, 2), //21: goto end_block/2.
-         trust_me!(),
+         default_trust_me!(),
          allocate!(3),
          fact![get_var_in_fact!(perm_v!(2), 2),
                get_var_in_fact!(perm_v!(1), 3)],
@@ -72,7 +72,7 @@ fn get_builtins() -> Code {
          query![put_value!(perm_v!(2), 1)],
          deallocate!(),
          execute_n!(1),
-         trust_me!(),
+         default_trust_me!(),
          unwind_stack!(),
          try_me_else!(9), // end_block/2, 44.
          allocate!(1),
@@ -83,7 +83,7 @@ fn get_builtins() -> Code {
          deallocate!(),
          reset_block!(),
          proceed!(),
-         trust_me!(), // 53.
+         default_trust_me!(), // 53.
          allocate!(0),
          query![get_var_in_query!(temp_v!(3), 1),
                 put_value!(temp_v!(2), 1)],
@@ -446,7 +446,7 @@ fn get_builtins() -> Code {
                               atom!("instantiation_error"),
                               temp_v!(1))],
          goto_execute!(59, 1),
-         trust_me!(),
+         default_trust_me!(),
          query![get_var_in_query!(temp_v!(4), 2),
                 put_value!(temp_v!(3), 2),
                 get_var_in_query!(temp_v!(5), 3),
@@ -468,7 +468,7 @@ fn get_builtins() -> Code {
                 put_value!(perm_v!(1), 2)],
          deallocate!(),
          check_cp_execute!(),
-         retry_me_else!(12),
+         default_retry_me_else!(12),
          allocate!(2),
          query![put_value!(temp_v!(3), 1)],
          reset_block!(),
@@ -480,7 +480,7 @@ fn get_builtins() -> Code {
          query![put_unsafe_value!(1, 1)],
          deallocate!(),
          goto_execute!(59, 1), // goto throw/1, 59.
-         trust_me!(),
+         default_trust_me!(),
          allocate!(0),
          goto_call!(354, 0), // goto run_cleaners_without_handling/0, 354.
          deallocate!(),
@@ -497,7 +497,7 @@ fn get_builtins() -> Code {
          default_set_cp!(perm_v!(1)),
          deallocate!(),
          goto_execute!(342, 0), // goto run_cleaners_with_handling/0, 342.
-         trust_me!(),
+         default_trust_me!(),
          goto_execute!(382, 0), // goto restore_cut_points/0, 382.
          try_me_else!(10), // run_cleaners_without_handling/1, 354.
          allocate!(2),
@@ -509,7 +509,7 @@ fn get_builtins() -> Code {
          default_set_cp!(perm_v!(1)),
          deallocate!(),
          goto_execute!(354, 0), // goto run_cleaners_without_handling/0, 354.
-         trust_me!(),
+         default_trust_me!(),
          goto_execute!(382, 0), // goto restore_cut_points/0, 382.
          allocate!(1), // sgc_on_success/2, 366.
          fact![get_var_in_fact!(perm_v!(1), 2)],
