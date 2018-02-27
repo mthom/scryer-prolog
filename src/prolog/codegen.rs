@@ -466,7 +466,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                    code: &mut Code, is_exposed: bool)
                    -> Result<(), ParserError>
     {
-        for (chunk_num, _, terms) in iter
+        for (chunk_num, _, terms) in iter.rule_body_iter()
         {
             for (i, term) in terms.iter().enumerate()
             {
@@ -475,12 +475,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 } else {
                     GenContext::Last(chunk_num)
                 };
-
-                let term = if let &ChunkedTerm::BodyTerm(ref term) = term {
-                    Ok(term)
-                } else {
-                    Err(ParserError::InadmissibleQueryTerm)
-                }?;
 
                 match *term {
                     &QueryTerm::Cut =>

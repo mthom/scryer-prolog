@@ -220,8 +220,29 @@ pub struct ChunkedIterator<'a>
     deep_cut_encountered: bool
 }
 
+type ChunkedIteratorItem<'a>  = (usize, usize, Vec<ChunkedTerm<'a>>);
+type RuleBodyIteratorItem<'a> = (usize, usize, Vec<&'a QueryTerm>);
+
 impl<'a> ChunkedIterator<'a>
 {
+    pub fn rule_body_iter(self) -> Box<Iterator<Item=RuleBodyIteratorItem<'a>> + 'a>
+    {
+        Box::new(self.filter_map(|(cn, lt_arity, terms)| {
+            let filtered_terms: Vec<_> = terms.into_iter().filter_map(|ct| {
+                    match ct {
+                        ChunkedTerm::BodyTerm(qt) => Some(qt),
+                        _ => None
+                    }
+                }).collect();
+
+            if filtered_terms.is_empty() {
+                None
+            } else {
+                Some((cn, lt_arity, filtered_terms))
+            }
+        }))
+    }
+
     pub fn from_term_sequence(terms: &'a [QueryTerm]) -> Self
     {
         ChunkedIterator {
@@ -285,7 +306,7 @@ impl<'a> ChunkedIterator<'a>
                     }
                 },
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::Inlined(_), _)) =>
-                    result.push(term),                
+                    result.push(term),
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::CallN, ref subterms)) => {
                     result.push(term);
                     arity = subterms.len() + 1;
@@ -311,7 +332,7 @@ impl<'a> ChunkedIterator<'a>
 impl<'a> Iterator for ChunkedIterator<'a>
 {
     // the chunk number, last term arity, and vector of references.
-    type Item = (usize, usize, Vec<ChunkedTerm<'a>>);
+    type Item = ChunkedIteratorItem<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|term| self.take_chunk(term))
