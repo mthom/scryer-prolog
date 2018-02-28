@@ -630,7 +630,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
 
                     for c in stdin.keys() {
                         match c.unwrap() {
-                            Key::Char(' ') => {
+                            Key::Char(' ') | Key::Char(';') => {
                                 write!(stdout, " ;\n\r").unwrap();
                                 result = wam.continue_query(&alloc_locs, &mut heap_locs);
                                 break;
