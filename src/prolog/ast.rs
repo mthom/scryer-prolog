@@ -6,7 +6,7 @@ use prolog::tabled_rc::*;
 
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::Error as IOError;
@@ -66,8 +66,90 @@ impl PredicateClause {
     }
 }
 
+pub type OpDirKey = (ClauseName, Fixity);
+// name and fixity -> operator type and precedence.
+pub type OpDir = HashMap<OpDirKey, (Specifier, usize)>;
+
+pub type CodeDir = HashMap<PredicateKey, (PredicateKeyType, usize, ClauseName)>;
+
+pub type PredicateKey = (ClauseName, usize); // name, arity.
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PredicateKeyType {
+    BuiltIn,
+    User
+}
+
+pub struct ModuleDecl {
+    pub name: ClauseName,
+    pub exports: Vec<PredicateKey>
+}
+
+pub struct Module {
+    pub module_decl: ModuleDecl,
+    pub code_dir: CodeDir,
+    pub op_dir: OpDir
+}
+
+impl Module {
+    pub fn new(module_decl: ModuleDecl) -> Self {
+        Module { module_decl,
+                 code_dir: CodeDir::new(),
+                 op_dir: OpDir::new() }
+    }
+}
+
+impl SubModuleUser for Module {
+    fn op_dir(&mut self) -> &mut OpDir {
+        &mut self.op_dir
+    }
+
+    fn code_dir(&mut self) -> &mut CodeDir {
+        &mut self.code_dir
+    }
+}
+
+pub trait SubModuleUser {
+    fn op_dir(&mut self) -> &mut OpDir;
+    fn code_dir(&mut self) -> &mut CodeDir;
+
+    fn use_module(&mut self, submodule: &Module) -> EvalSession {
+        for (name, arity) in submodule.module_decl.exports.iter().cloned() {
+            let name = name.defrock_brackets();
+            
+            if arity == 1 {
+                if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::Pre)) {
+                    self.op_dir().insert((name.clone(), Fixity::Pre), op_data.clone());
+                }
+
+                if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::Post)) {
+                    self.op_dir().insert((name.clone(), Fixity::Post), op_data.clone());
+                }
+            } else if arity == 2 {
+                if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::In)) {
+                    self.op_dir().insert((name.clone(), Fixity::In), op_data.clone());
+                }
+            }
+
+            if self.code_dir().contains_key(&(name.clone(), arity)) {
+                println!("warning: overwriting {}/{}", &name, arity);
+            }
+
+            if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
+                self.code_dir().insert((name, arity), code_data.clone());
+            } else {
+                return EvalSession::from(EvalError::ModuleDoesNotContainExport);
+            }
+        }
+
+        EvalSession::EntrySuccess
+    }
+}
+
 pub enum Declaration {
-    Op(usize, Specifier, ClauseName)
+    Module(ModuleDecl),
+    Op(OpDecl),
+    UseModule(ClauseName)
 }
 
 pub enum TopLevel {
@@ -233,6 +315,104 @@ macro_rules! prefix {
     ($x:expr) => ($x & (FX | FY))
 }
 
+// labeled with chunk numbers.
+pub enum VarStatus {
+    Perm(usize), Temp(usize, TempVarData) // Perm(chunk_num) | Temp(chunk_num, _)
+}
+
+pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
+
+// Perm: 0 initially, a stack register once processed.
+// Temp: labeled with chunk_num and temp offset (unassigned if 0).
+pub enum VarData {
+    Perm(usize), Temp(usize, usize, TempVarData)
+}
+
+pub struct TempVarData {
+    pub last_term_arity: usize,
+    pub use_set: OccurrenceSet,
+    pub no_use_set: BTreeSet<usize>,
+    pub conflict_set: BTreeSet<usize>
+}
+
+pub type HeapVarDict  = HashMap<Rc<Var>, Addr>;
+pub type AllocVarDict = HashMap<Rc<Var>, VarData>;
+
+pub enum EvalError {
+    ImpermissibleEntry(String),
+    ModuleDoesNotContainExport,
+    ModuleNotFound,
+    NamelessEntry,
+    OpIsInfixAndPostFix,
+    ParserError(ParserError),
+    QueryFailure,
+    QueryFailureWithException(String)
+}
+
+pub enum EvalSession {
+    EntrySuccess,
+    Error(EvalError),
+    InitialQuerySuccess(AllocVarDict, HeapVarDict),
+    SubsequentQuerySuccess,
+}
+
+impl From<EvalError> for EvalSession {
+    fn from(err: EvalError) -> Self {
+        EvalSession::Error(err)
+    }
+}
+
+impl From<ParserError> for EvalError {
+    fn from(err: ParserError) -> Self {
+        EvalError::ParserError(err)
+    }
+}
+
+impl From<ParserError> for EvalSession {
+    fn from(err: ParserError) -> Self {
+        EvalSession::from(EvalError::ParserError(err))
+    }
+}
+
+pub struct OpDecl(pub usize, pub Specifier, pub ClauseName);
+
+impl OpDecl {
+    pub fn submit(&self, op_dir: &mut OpDir) -> Result<(), EvalError>
+    {
+        let (prec, spec, name) = (self.0, self.1, self.2.clone());
+
+        if is_infix!(spec) {
+            match op_dir.get(&(name.clone(), Fixity::Post)) {
+                Some(_) => return Err(EvalError::OpIsInfixAndPostFix),
+                _ => {}
+            };
+        }
+
+        if is_postfix!(spec) {
+            match op_dir.get(&(name.clone(), Fixity::In)) {
+                Some(_) => return Err(EvalError::OpIsInfixAndPostFix),
+                _ => {}
+            };
+        }
+
+        if prec > 0 {
+            match spec {
+                XFY | XFX | YFX => op_dir.insert((name.clone(), Fixity::In),
+                                                 (spec, prec)),
+                XF | YF => op_dir.insert((name.clone(), Fixity::Post), (spec, prec)),
+                FX | FY => op_dir.insert((name.clone(), Fixity::Pre), (spec,prec)),
+                _ => None
+            };
+        } else {
+            op_dir.remove(&(name.clone(), Fixity::Pre));
+            op_dir.remove(&(name.clone(), Fixity::In));
+            op_dir.remove(&(name.clone(), Fixity::Post));
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum ArithmeticError {
     InvalidAtom,
@@ -260,7 +440,10 @@ pub enum ParserError
     InadmissibleQueryTerm,
     IncompleteReduction,
     InconsistentEntry, // was InconsistentDeclaration.
+    InvalidModuleDecl,
+    InvalidModuleExport,
     InvalidRuleHead,
+    InvalidUseModuleDecl,
     ParseBigInt,
     ParseFloat(ParseFloatError),
     // TokenTooLong,
@@ -303,6 +486,22 @@ pub enum Constant {
     String(Rc<String>),
     Usize(usize),
     EmptyList
+}
+
+impl Constant {
+    pub fn to_atom(self) -> Option<ClauseName> {
+        match self {
+            Constant::Atom(a) => Some(a),
+            _ => None
+        }
+    }
+
+    pub fn to_integer(self) -> Option<Rc<BigInt>> {
+        match self {
+            Constant::Number(Number::Integer(b)) => Some(b),
+            _ => None
+        }
+    }
 }
 
 impl fmt::Display for Constant {
@@ -494,7 +693,7 @@ pub enum ClauseName {
 impl Hash for ClauseName {
     fn hash<H: Hasher>(&self, state: &mut H) {
         (*self.as_str()).hash(state)
-    }        
+    }
 }
 
 impl PartialEq for ClauseName {
@@ -523,11 +722,29 @@ impl<'a> From<&'a TabledRc<Atom>> for ClauseName {
     }
 }
 
+fn defrock_brackets(s: &str) -> &str {
+    if s.starts_with('(') && s.ends_with(')') {
+        &s[1 .. s.len() - 1]
+    } else {
+        s
+    }
+}
+
 impl ClauseName {
     pub fn as_str(&self) -> &str {
         match self {
             &ClauseName::BuiltIn(s) => s,
             &ClauseName::User(ref name) => name.as_ref()
+        }
+    }
+
+    fn defrock_brackets(self) -> Self {
+        match self {
+            ClauseName::BuiltIn(s) =>
+                ClauseName::BuiltIn(defrock_brackets(s)),
+            ClauseName::User(s) =>
+                ClauseName::User(tabled_rc!(defrock_brackets(s.as_str()).to_owned(),
+                                            s.atom_tbl()))
         }
     }
 }
@@ -599,7 +816,7 @@ pub enum TermRef<'a> {
     Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     Constant(Level, &'a Cell<RegType>, &'a Constant),
     Clause(Level, &'a Cell<RegType>, ClauseType, &'a Vec<Box<Term>>),
-    Var(Level, &'a Cell<VarReg>, &'a Var)
+    Var(Level, &'a Cell<VarReg>, Rc<Var>)
 }
 
 impl<'a> TermRef<'a> {
@@ -1196,18 +1413,27 @@ impl HeapCellValue {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum CodePtr {
-    DirEntry(usize),
+    DirEntry(usize, ClauseName), // offset, resident module name.
     TopLevel(usize, usize) // chunk_num, offset.
+}
+
+impl CodePtr {    
+    pub fn module_name(&self) -> ClauseName {
+        match self {
+            &CodePtr::DirEntry(_, ref name) => name.clone(),
+            _ => ClauseName::BuiltIn("user")
+        }
+    }
 }
 
 impl PartialOrd<CodePtr> for CodePtr {
     fn partial_cmp(&self, other: &CodePtr) -> Option<Ordering> {
         match (self, other) {
-            (&CodePtr::DirEntry(p1), &CodePtr::DirEntry(ref p2)) =>
-                p1.partial_cmp(p2),
-            (&CodePtr::DirEntry(_), &CodePtr::TopLevel(_, _)) =>
+            (&CodePtr::DirEntry(p1, _), &CodePtr::DirEntry(p2, _)) =>
+                p1.partial_cmp(&p2),
+            (&CodePtr::DirEntry(..), &CodePtr::TopLevel(_, _)) =>
                 Some(Ordering::Less),
             (&CodePtr::TopLevel(_, p1), &CodePtr::TopLevel(_, ref p2)) =>
                 p1.partial_cmp(p2),
@@ -1227,7 +1453,7 @@ impl Add<usize> for CodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            CodePtr::DirEntry(p) => CodePtr::DirEntry(p + rhs),
+            CodePtr::DirEntry(p, name) => CodePtr::DirEntry(p + rhs, name),
             CodePtr::TopLevel(cn, p) => CodePtr::TopLevel(cn, p + rhs)
         }
     }
@@ -1236,7 +1462,7 @@ impl Add<usize> for CodePtr {
 impl AddAssign<usize> for CodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut CodePtr::DirEntry(ref mut p) |
+            &mut CodePtr::DirEntry(ref mut p, _) |
             &mut CodePtr::TopLevel(_, ref mut p) => *p += rhs
         }
     }
@@ -1296,6 +1522,13 @@ impl IndexMut<usize> for Heap {
 pub type Registers = Vec<Addr>;
 
 impl Term {
+    pub fn to_constant(self) -> Option<Constant> {
+        match self {
+            Term::Constant(_, c) => Some(c),
+            _ => None
+        }
+    }
+
     pub fn first_arg(&self) -> Option<&Term> {
         match self {
             &Term::Clause(_, _, ref terms, _) =>
@@ -1326,7 +1559,7 @@ pub enum TermIterState<'a> {
     Clause(Level, usize, &'a Cell<RegType>, ClauseType, &'a Vec<Box<Term>>),
     InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
-    Var(Level, &'a Cell<VarReg>, &'a Var)
+    Var(Level, &'a Cell<VarReg>, Rc<Var>)
 }
 
 impl<'a> TermIterState<'a> {
@@ -1334,13 +1567,13 @@ impl<'a> TermIterState<'a> {
         match term {
             &Term::AnonVar =>
                 TermIterState::AnonVar(lvl),
-            &Term::Clause(ref cell, ref name, ref subterms, fixity) => {                
+            &Term::Clause(ref cell, ref name, ref subterms, fixity) => {
                 let ct = if let Some(fixity) = fixity {
                     ClauseType::Op(name.clone(), fixity)
                 } else {
                     ClauseType::Named(name.clone())
                 };
-                
+
                 TermIterState::Clause(lvl, 0, cell, ct, subterms)
             },
             &Term::Cons(ref cell, ref head, ref tail) =>
@@ -1348,7 +1581,7 @@ impl<'a> TermIterState<'a> {
             &Term::Constant(ref cell, ref constant) =>
                 TermIterState::Constant(lvl, cell, constant),
             &Term::Var(ref cell, ref var) =>
-                TermIterState::Var(lvl, cell, var)
+                TermIterState::Var(lvl, cell, (*var).clone())
         }
     }
 }

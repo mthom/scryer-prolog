@@ -1,28 +1,28 @@
 use prolog::allocator::*;
 use prolog::ast::*;
-use prolog::fixtures::*;
 use prolog::targets::*;
 
 use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap};
+use std::rc::Rc;
 
-pub struct DebrayAllocator<'a> {
-    bindings: HashMap<&'a Var, VarData>,
+pub struct DebrayAllocator {
+    bindings: HashMap<Rc<Var>, VarData>,
     arg_c:    usize,
     temp_lb:  usize,
-    contents: HashMap<usize, &'a Var>,
+    contents: HashMap<usize, Rc<Var>>,
     in_use:   BTreeSet<usize>,
 }
 
-impl<'a> DebrayAllocator<'a> {
-    fn is_curr_arg_distinct_from(&self, var: &'a Var) -> bool {
+impl DebrayAllocator {
+    fn is_curr_arg_distinct_from(&self, var: &Var) -> bool {
         match self.contents.get(&self.arg_c) {
             Some(t_var) if **t_var != *var => true,
             _ => false
         }
     }
 
-    fn occurs_shallowly_in_head(&self, var: &'a Var, r: usize) -> bool
+    fn occurs_shallowly_in_head(&self, var: &Var, r: usize) -> bool
     {
         match self.bindings.get(var).unwrap() {
             &VarData::Temp(_, _, ref tvd) =>
@@ -31,7 +31,7 @@ impl<'a> DebrayAllocator<'a> {
         }
     }
 
-    fn alloc_with_cr(&self, var: &'a Var) -> usize
+    fn alloc_with_cr(&self, var: &Var) -> usize
     {
         match self.bindings.get(var) {
             Some(&VarData::Temp(_, _, ref tvd)) => {
@@ -58,7 +58,7 @@ impl<'a> DebrayAllocator<'a> {
         }
     }
 
-    fn alloc_with_ca(&self, var: &'a Var) -> usize
+    fn alloc_with_ca(&self, var: &Var) -> usize
     {
         match self.bindings.get(var) {
             Some(&VarData::Temp(_, _, ref tvd)) => {
@@ -87,7 +87,7 @@ impl<'a> DebrayAllocator<'a> {
         }
     }
 
-    fn alloc_in_last_goal_hint(&self, chunk_num: usize) -> Option<(&'a Var, usize)>
+    fn alloc_in_last_goal_hint(&self, chunk_num: usize) -> Option<(Rc<Var>, usize)>
     {
         // we want to allocate a register to the k^{th} parameter, par_k.
         // par_k may not be a temporary variable.
@@ -103,7 +103,7 @@ impl<'a> DebrayAllocator<'a> {
                 let tvd = self.bindings.get(t_var).unwrap();
                 if let &VarData::Temp(_, _, ref tvd) = tvd {
                     if !tvd.use_set.contains(&(GenContext::Last(chunk_num), k)) {
-                        return Some((t_var, self.alloc_with_ca(t_var)));
+                        return Some((t_var.clone(), self.alloc_with_ca(t_var)));
                     }
                 }
 
@@ -113,7 +113,7 @@ impl<'a> DebrayAllocator<'a> {
         }
     }
 
-    fn evacuate_arg<Target>(&mut self, chunk_num: usize, target: &mut Vec<Target>)
+    fn evacuate_arg<'a, Target>(&mut self, chunk_num: usize, target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
         match self.alloc_in_last_goal_hint(chunk_num) {
@@ -127,7 +127,7 @@ impl<'a> DebrayAllocator<'a> {
                         target.push(Target::move_to_register(r, k));
 
                         self.contents.remove(&k);
-                        self.contents.insert(r.reg_num(), var);
+                        self.contents.insert(r.reg_num(), var.clone());
 
                         self.record_register(var, r);
                         self.in_use.insert(r.reg_num());
@@ -138,8 +138,8 @@ impl<'a> DebrayAllocator<'a> {
         };
     }
 
-    fn alloc_reg_to_var<Target>(&mut self, var: &'a Var, lvl: Level, term_loc: GenContext,
-                                target: &mut Vec<Target>)
+    fn alloc_reg_to_var<'a, Target>(&mut self, var: &Var, lvl: Level, term_loc: GenContext,
+                                    target: &mut Vec<Target>)
                                 -> usize
         where Target: CompilationTarget<'a>
     {
@@ -179,7 +179,7 @@ impl<'a> DebrayAllocator<'a> {
         final_index
     }
 
-    fn in_place(&self, var: &'a Var, term_loc: GenContext, r: RegType, k: usize) -> bool
+    fn in_place(&self, var: &Var, term_loc: GenContext, r: RegType, k: usize) -> bool
     {
         match term_loc {
             GenContext::Head if !r.is_perm() => r.reg_num() == k,
@@ -191,9 +191,9 @@ impl<'a> DebrayAllocator<'a> {
     }
 }
 
-impl<'a> Allocator<'a> for DebrayAllocator<'a>
+impl<'a> Allocator<'a> for DebrayAllocator
 {
-    fn new() -> DebrayAllocator<'a> {
+    fn new() -> DebrayAllocator {
         DebrayAllocator {
             arg_c:   1,
             temp_lb: 1,
@@ -244,14 +244,14 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
         }
     }
 
-    fn mark_var<Target>(&mut self, var: &'a Var, lvl: Level, cell: &'a Cell<VarReg>,
+    fn mark_var<Target>(&mut self, var: Rc<Var>, lvl: Level, cell: &Cell<VarReg>,
                         term_loc: GenContext, target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
-        let (r, is_new_var) = match self.get(var) {
+        let (r, is_new_var) = match self.get(var.clone()) {
             RegType::Temp(0) => {
                 // here, r is temporary *and* unassigned.
-                let o = self.alloc_reg_to_var(var, lvl, term_loc, target);
+                let o = self.alloc_reg_to_var(&var, lvl, term_loc, target);
 
                 cell.set(VarReg::Norm(RegType::Temp(o)));
 
@@ -259,7 +259,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
             },
             RegType::Perm(0) => {
                 let pr = cell.get().norm();
-                self.record_register(var, pr);
+                self.record_register(var.clone(), pr);
 
                 (pr, true)
             },
@@ -270,7 +270,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
             Level::Root | Level::Shallow => {
                 let k = self.arg_c;
 
-                if self.is_curr_arg_distinct_from(var) {
+                if self.is_curr_arg_distinct_from(&var) {
                     self.evacuate_arg(term_loc.chunk_num(), target);
                 }
 
@@ -278,7 +278,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
 
                 cell.set(VarReg::ArgAndNorm(r, k));
 
-                if !self.in_place(var, term_loc, r, k) {
+                if !self.in_place(&var, term_loc, r, k) {
                     if is_new_var {
                         target.push(Target::argument_to_variable(r, k));
                     } else {
@@ -288,7 +288,7 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
             },
             Level::Deep if is_new_var =>
                 if let GenContext::Head = term_loc {
-                    if self.occurs_shallowly_in_head(var, r.reg_num()) {
+                    if self.occurs_shallowly_in_head(&var, r.reg_num()) {
                         target.push(Target::subterm_to_value(r));
                     } else {
                         target.push(Target::subterm_to_variable(r));
@@ -303,8 +303,8 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
         if !r.is_perm() {
             let o = r.reg_num();
 
-            self.contents.insert(o, var);
-            self.record_register(var, r);
+            self.contents.insert(o, var.clone());
+            self.record_register(var.clone(), r);
             self.in_use.insert(o);
         }
     }
@@ -324,15 +324,15 @@ impl<'a> Allocator<'a> for DebrayAllocator<'a>
         self.arg_c += 1;
     }
 
-    fn bindings(&self) -> &AllocVarDict<'a> {
+    fn bindings(&self) -> &AllocVarDict {
         &self.bindings
     }
 
-    fn bindings_mut(&mut self) -> &mut AllocVarDict<'a> {
+    fn bindings_mut(&mut self) -> &mut AllocVarDict {
         &mut self.bindings
     }
 
-    fn take_bindings(self) -> AllocVarDict<'a> {
+    fn take_bindings(self) -> AllocVarDict {
         self.bindings
     }
 

@@ -3,6 +3,7 @@ use prolog::fixtures::*;
 use prolog::targets::*;
 
 use std::cell::Cell;
+use std::rc::Rc;
 
 pub trait Allocator<'a>
 {
@@ -12,7 +13,7 @@ pub trait Allocator<'a>
         where Target: CompilationTarget<'a>;
     fn mark_non_var<Target>(&mut self, Level, GenContext, &'a Cell<RegType>, &mut Vec<Target>)
         where Target: CompilationTarget<'a>;
-    fn mark_var<Target>(&mut self, &'a Var, Level, &'a Cell<VarReg>, GenContext, &mut Vec<Target>)
+    fn mark_var<Target>(&mut self, Rc<Var>, Level, &'a Cell<VarReg>, GenContext, &mut Vec<Target>)
         where Target: CompilationTarget<'a>;    
     
     fn reset(&mut self);
@@ -21,10 +22,10 @@ pub trait Allocator<'a>
     
     fn advance_arg(&mut self);
 
-    fn bindings(&self) -> &AllocVarDict<'a>;
-    fn bindings_mut(&mut self) -> &mut AllocVarDict<'a>;
+    fn bindings(&self) -> &AllocVarDict;
+    fn bindings_mut(&mut self) -> &mut AllocVarDict;
 
-    fn take_bindings(self) -> AllocVarDict<'a>;
+    fn take_bindings(self) -> AllocVarDict;
 
     fn drain_var_data(&mut self, vs: VariableFixtures<'a>) -> VariableFixtures<'a>
     {
@@ -33,10 +34,10 @@ pub trait Allocator<'a>
         for (var, (var_status, cells)) in vs.into_iter() {
             match var_status {
                 VarStatus::Temp(chunk_num, tvd) => {
-                    self.bindings_mut().insert(var, VarData::Temp(chunk_num, 0, tvd));
+                    self.bindings_mut().insert(var.clone(), VarData::Temp(chunk_num, 0, tvd));
                 },
                 VarStatus::Perm(_) => {
-                    self.bindings_mut().insert(var, VarData::Perm(0));
+                    self.bindings_mut().insert(var.clone(), VarData::Perm(0));
                     perm_vs.insert(var, (var_status, cells));
                 }
             };
@@ -45,12 +46,12 @@ pub trait Allocator<'a>
         perm_vs
     }
     
-    fn get(&self, var: &'a Var) -> RegType {
-        self.bindings().get(var).unwrap().as_reg_type()
+    fn get(&self, var: Rc<Var>) -> RegType {
+        self.bindings().get(&var).unwrap().as_reg_type()
     }
     
-    fn record_register(&mut self, var: &'a Var, r: RegType) {
-        match self.bindings_mut().get_mut(var).unwrap() {
+    fn record_register(&mut self, var: Rc<Var>, r: RegType) {
+        match self.bindings_mut().get_mut(&var).unwrap() {
             &mut VarData::Temp(_, ref mut s, _) => *s = r.reg_num(),
             &mut VarData::Perm(ref mut s) => *s = r.reg_num()
         }

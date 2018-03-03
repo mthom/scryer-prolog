@@ -34,7 +34,7 @@ impl<'a> QueryIterator<'a> {
             &Term::Constant(_, _) =>
                 return QueryIterator { state_stack: vec![] },
             &Term::Var(ref cell, ref var) =>
-                TermIterState::Var(Level::Root, cell, var)
+                TermIterState::Var(Level::Root, cell, (*var).clone())
         };
 
         QueryIterator { state_stack: vec![state] }
@@ -138,7 +138,7 @@ impl<'a> FactIterator<'a> {
             &Term::Constant(ref cell, ref constant) =>
                 vec![TermIterState::Constant(Level::Root, cell, constant)],
             &Term::Var(ref cell, ref var) =>
-                vec![TermIterState::Var(Level::Root, cell, var)]
+                vec![TermIterState::Var(Level::Root, cell, var.clone())]
         };
 
         FactIterator { state_queue: VecDeque::from(states) }

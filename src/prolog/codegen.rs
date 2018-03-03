@@ -8,39 +8,12 @@ use prolog::targets::*;
 
 use std::cell::Cell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::vec::Vec;
 
-pub struct CodeGenerator<'a, TermMarker> {
+pub struct CodeGenerator<TermMarker> {
     marker: TermMarker,
-    var_count: HashMap<&'a Var, usize>
-}
-
-pub enum EvalError {
-    OpIsInfixAndPostFix,
-    NamelessEntry,
-    ParserError(ParserError),
-    ImpermissibleEntry(String),
-    QueryFailure,
-    QueryFailureWithException(String)
-}
-
-pub enum EvalSession<'a> {
-    EntrySuccess,
-    Error(EvalError),
-    InitialQuerySuccess(AllocVarDict<'a>, HeapVarDict<'a>),
-    SubsequentQuerySuccess,
-}
-
-impl<'a> From<EvalError> for EvalSession<'a> {
-    fn from(err: EvalError) -> Self {
-        EvalSession::Error(err)
-    }
-}
-
-impl<'a> From<ParserError> for EvalSession<'a> {
-    fn from(err: ParserError) -> Self {
-        EvalSession::from(EvalError::ParserError(err))
-    }
+    var_count: HashMap<Rc<Var>, usize>
 }
 
 pub struct ConjunctInfo<'a> {
@@ -69,14 +42,14 @@ impl<'a> ConjunctInfo<'a>
     }
 }
 
-impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
+impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 {
     pub fn new() -> Self {
         CodeGenerator { marker:  Allocator::new(),
                         var_count: HashMap::new() }
     }
 
-    pub fn take_vars(self) -> AllocVarDict<'a> {
+    pub fn take_vars(self) -> AllocVarDict {
         self.marker.take_bindings()
     }
 
@@ -94,11 +67,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
         *self.var_count.get(var).unwrap()
     }
 
-    fn mark_non_callable(&mut self, name: &'a Atom, arity: usize, term_loc: GenContext,
+    fn mark_non_callable(&mut self, name: Rc<Atom>, arity: usize, term_loc: GenContext,
                          vr: &'a Cell<VarReg>, code: &mut Code)
                          -> RegType
     {
-        match self.marker.bindings().get(name) {
+        match self.marker.bindings().get(&name) {
             Some(&VarData::Temp(_, t, _)) if t != 0 => RegType::Temp(t),
             Some(&VarData::Perm(p)) if p != 0 => RegType::Perm(p),
             _ => {
@@ -149,7 +122,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                 target.push(Target::constant_subterm(constant.clone())),
             &Term::Var(ref cell, ref var) =>
                 if is_exposed || self.get_var_count(var) > 1 {
-                    self.marker.mark_var(var, Level::Deep, cell, term_loc, target);
+                    self.marker.mark_var(var.clone(), Level::Deep, cell, term_loc, target);
                 } else {
                     Self::add_or_increment_void_instr(target);
                 }
@@ -189,8 +162,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     } else {
                         self.marker.mark_anon_var(lvl, &mut target);
                     },
-                TermRef::Var(lvl @ Level::Shallow, ref cell, ref var) =>
-                    self.marker.mark_var(var, lvl, cell, term_loc, &mut target),
+                TermRef::Var(lvl @ Level::Shallow, cell, var) =>
+                    self.marker.mark_var(var.clone(), lvl, cell, term_loc, &mut target),
                 _ => {}
             };
         }
@@ -211,7 +184,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                     } else {
                         GenContext::Last(chunk_num)
                     }
-                };                
+                };
 
                 self.update_var_count(chunked_term.post_order_iter());
                 vs.mark_vars_in_chunk(chunked_term.post_order_iter(), lt_arity, term_loc);
@@ -356,7 +329,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
                         code.push(is_atomic!(r));
                     }
                 },
@@ -366,7 +339,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
                         code.push(is_compound!(r));
                     },
                     _ => {
@@ -379,7 +352,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
                         code.push(is_rational!(r));
                     },
                     _ => {
@@ -392,7 +365,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
                         code.push(is_float!(r));
                     },
                     _ => {
@@ -405,7 +378,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
                         code.push(is_string!(r));
                     },
                     _ => {
@@ -418,7 +391,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(fail!());
                     },
                     &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
                         code.push(is_nonvar!(r));
                     },
                     _ => {
@@ -431,7 +404,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
                         code.push(is_integer!(r));
                     },
                     _ => {
@@ -447,7 +420,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
-                        let r = self.mark_non_callable(name, 1, term_loc, vr, code);
+                        let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
                         code.push(is_var!(r));
                     }
                 }
@@ -492,7 +465,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<'a, TermMarker>
                                 let mut target = Vec::new();
 
                                 self.marker.reset_arg(2);
-                                self.marker.mark_var(name, Level::Shallow, vr,
+                                self.marker.mark_var(name.clone(), Level::Shallow, vr,
                                                      term_loc, &mut target);
 
                                 if !target.is_empty() {

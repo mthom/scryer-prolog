@@ -1,6 +1,5 @@
 use prolog::and_stack::*;
 use prolog::ast::*;
-use prolog::builtins::*;
 use prolog::copier::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
@@ -908,7 +907,8 @@ impl MachineState {
         }
     }
 
-    fn handle_internal_call_n(&mut self, call_policy: &mut Box<CallPolicy>, code_dir: &CodeDir)
+    fn handle_internal_call_n<'a>(&mut self, call_policy: &mut Box<CallPolicy>,
+                                  code_dirs: CodeDirs<'a>)
     {
         let arity = self.num_of_args + 1;
         let pred  = self.registers[1].clone();
@@ -921,7 +921,7 @@ impl MachineState {
             self.registers[arity - 1] = pred;
 
             if let Some((name, arity)) = self.setup_call_n(arity - 1) {
-                try_or_fail!(self, call_policy.try_execute(self, code_dir, name, arity));
+                try_or_fail!(self, call_policy.try_execute(self, code_dirs, name, arity));
             }
         } else {
             self.fail = true;
@@ -931,7 +931,7 @@ impl MachineState {
     fn goto_throw(&mut self) {
         self.num_of_args = 1;
         self.b0 = self.b;
-        self.p  = CodePtr::DirEntry(59);
+        self.p  = CodePtr::DirEntry(59, clause_name!("builtin"));
     }
 
     fn throw_exception(&mut self, hcv: Vec<HeapCellValue>) {
@@ -1209,10 +1209,10 @@ impl MachineState {
         };
     }
 
-    pub(super) fn execute_built_in_instr(&mut self, code_dir: &CodeDir,
-                                         call_policy: &mut Box<CallPolicy>,
-                                         cut_policy:  &mut Box<CutPolicy>,
-                                         instr: &BuiltInInstruction)
+    pub(super) fn execute_built_in_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
+                                             call_policy: &mut Box<CallPolicy>,
+                                             cut_policy:  &mut Box<CutPolicy>,
+                                             instr: &BuiltInInstruction)
     {
         match instr {
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) => {
@@ -1253,7 +1253,7 @@ impl MachineState {
             &BuiltInInstruction::GetArgExecute =>
                 try_or_fail!(self, {
                     let val = self.try_get_arg();
-                    self.p = self.cp;
+                    self.p = self.cp.clone();
                     val
                 }),
             &BuiltInInstruction::GetCurrentBlock => {
@@ -1537,7 +1537,7 @@ impl MachineState {
                 self.fail = true;
             },
             &BuiltInInstruction::InternalCallN =>
-                self.handle_internal_call_n(call_policy, code_dir),
+                self.handle_internal_call_n(call_policy, code_dirs),
             &BuiltInInstruction::Fail => {
                 self.fail = true;
                 self.p += 1;
@@ -1728,10 +1728,10 @@ impl MachineState {
         false
     }
 
-    pub(super) fn execute_ctrl_instr(&mut self, code_dir: &CodeDir,
-                                     call_policy: &mut Box<CallPolicy>,
-                                     cut_policy:  &mut Box<CutPolicy>,
-                                     instr: &ControlInstruction)
+    pub(super) fn execute_ctrl_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
+                                         call_policy: &mut Box<CallPolicy>,
+                                         cut_policy:  &mut Box<CutPolicy>,
+                                         instr: &ControlInstruction)
     {
         match instr {
             &ControlInstruction::Allocate(num_cells) => {
@@ -1749,7 +1749,7 @@ impl MachineState {
                         let index = self.e + 1;
 
                         self.and_stack[index].e  = self.e;
-                        self.and_stack[index].cp = self.cp;
+                        self.and_stack[index].cp = self.cp.clone();
                         self.and_stack[index].global_index = gi;
 
                         self.and_stack.resize(index, num_cells);
@@ -1760,48 +1760,49 @@ impl MachineState {
                     }
                 }
 
-                self.and_stack.push(gi, self.e, self.cp, num_cells);
+                self.and_stack.push(gi, self.e, self.cp.clone(), num_cells);
                 self.e = self.and_stack.len() - 1;
             },
             &ControlInstruction::ArgCall => {
-                self.cp = self.p + 1;
+                self.cp = self.p.clone() + 1;
                 self.num_of_args = 3;
                 self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(150);
+                self.p  = CodePtr::DirEntry(150, clause_name!("builtin"));
             },
             &ControlInstruction::ArgExecute => {
                 self.num_of_args = 3;
                 self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(150);
+                self.p  = CodePtr::DirEntry(150, clause_name!("builtin"));
             },
             &ControlInstruction::Call(ref name, arity, _) =>
-                try_or_fail!(self, call_policy.try_call(self, code_dir, name.clone(), arity)),
+                try_or_fail!(self, call_policy.try_call(self, code_dirs, name.clone(), arity)),
             &ControlInstruction::CatchCall => {
-                self.cp = self.p + 1;
+                self.cp = self.p.clone() + 1;
                 self.num_of_args = 3;
                 self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(5);
+                self.p  = CodePtr::DirEntry(5, clause_name!("builtin"));
             },
             &ControlInstruction::CatchExecute => {
                 self.num_of_args = 3;
                 self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(5);
+                self.p  = CodePtr::DirEntry(5, clause_name!("builtin"));
             },
             &ControlInstruction::CallN(arity) =>
                 if let Some((name, arity)) = self.setup_call_n(arity) {
-                    try_or_fail!(self, call_policy.try_call(self, code_dir, name, arity))
+                    try_or_fail!(self, call_policy.try_call(self, code_dirs, name, arity))
                 },
             &ControlInstruction::CheckCpExecute => {
                 let a = self.store(self.deref(self[temp_v!(2)].clone()));
 
                 match a {
                     Addr::Con(Constant::Usize(old_b)) if self.b > old_b + 1 => {
-                        self.p = self.cp;
+                        self.p = self.cp.clone();
                     },
                     _ => {
                         self.num_of_args = 2;
                         self.b0 = self.b;
-                        self.p = CodePtr::DirEntry(366); // goto sgc_on_success/2, 366.
+                        // goto sgc_on_success/2, 366.
+                        self.p = CodePtr::DirEntry(366, clause_name!("builtin"));
                     }
                 };
             },
@@ -1833,7 +1834,7 @@ impl MachineState {
 
                 self.unify(a1, c);
 
-                self.p = self.cp;
+                self.p = self.cp.clone();
             },
             &ControlInstruction::CompareTermCall(qt) => {
                 match qt {
@@ -1855,12 +1856,12 @@ impl MachineState {
                     _ => self.compare_term(qt)
                 };
 
-                self.p = self.cp;
+                self.p = self.cp.clone();
             },
             &ControlInstruction::Deallocate => {
                 let e = self.e;
 
-                self.cp = self.and_stack[e].cp;
+                self.cp = self.and_stack[e].cp.clone();
                 self.e  = self.and_stack[e].e;
 
                 self.p += 1;
@@ -1881,7 +1882,7 @@ impl MachineState {
 
                 println!("{}", output.result());
 
-                self.p = self.cp;
+                self.p = self.cp.clone();
             },
             &ControlInstruction::DuplicateTermCall => {
                 self.duplicate_term();
@@ -1889,7 +1890,7 @@ impl MachineState {
             },
             &ControlInstruction::DuplicateTermExecute => {
                 self.duplicate_term();
-                self.p = self.cp;
+                self.p = self.cp.clone();
             },
             &ControlInstruction::DynamicIs => {
                 let a = self[temp_v!(1)].clone();
@@ -1904,7 +1905,7 @@ impl MachineState {
             },
             &ControlInstruction::EqExecute => {
                 self.fail = self.eq_test();
-                self.p = self.cp;
+                self.p = self.cp.clone();
             },
             &ControlInstruction::GroundCall => {
                 self.fail = self.ground_test();
@@ -1912,13 +1913,13 @@ impl MachineState {
             },
             &ControlInstruction::GroundExecute => {
                 self.fail = self.ground_test();
-                self.p = self.cp;
+                self.p = self.cp.clone();
             },
             &ControlInstruction::Execute(ref name, arity) =>
-                try_or_fail!(self, call_policy.try_execute(self, code_dir, name.clone(), arity)),
+                try_or_fail!(self, call_policy.try_execute(self, code_dirs, name.clone(), arity)),
             &ControlInstruction::ExecuteN(arity) =>
                 if let Some((name, arity)) = self.setup_call_n(arity) {
-                    try_or_fail!(self, call_policy.try_execute(self, code_dir, name, arity))
+                    try_or_fail!(self, call_policy.try_execute(self, code_dirs, name, arity))
                 },
             &ControlInstruction::FunctorCall =>
                 try_or_fail!(self, {
@@ -1929,7 +1930,7 @@ impl MachineState {
             &ControlInstruction::FunctorExecute =>
                 try_or_fail!(self, {
                     let val = self.try_functor();
-                    self.p = self.cp;
+                    self.p = self.cp.clone();
                     val
                 }),
             &ControlInstruction::GetCleanerCall => {
@@ -1958,15 +1959,15 @@ impl MachineState {
                 self.fail = true;
             },
             &ControlInstruction::GotoCall(p, arity) => {
-                self.cp = self.p + 1;
+                self.cp = self.p.clone() + 1;
                 self.num_of_args = arity;
                 self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(p);
+                self.p  = CodePtr::DirEntry(p, clause_name!("builtin"));
             },
             &ControlInstruction::GotoExecute(p, arity) => {
                 self.num_of_args = arity;
                 self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(p);
+                self.p  = CodePtr::DirEntry(p, clause_name!("builtin"));
             },
             &ControlInstruction::IsCall(r, ref at) => {
                 let a1 = self[r].clone();
@@ -1980,10 +1981,10 @@ impl MachineState {
                 let a2 = try_or_fail!(self, self.get_number(at));
 
                 self.unify(a1, Addr::Con(Constant::Number(a2)));
-                self.p = self.cp;
+                self.p = self.cp.clone();
             },
             &ControlInstruction::JmpByCall(arity, offset) => {
-                self.cp = self.p + 1;
+                self.cp = self.p.clone() + 1;
                 self.num_of_args = arity;
                 self.b0 = self.b;
                 self.p += offset;
@@ -1999,12 +2000,12 @@ impl MachineState {
             },
             &ControlInstruction::NotEqExecute => {
                 self.fail = !self.eq_test();
-                self.p = self.cp;
+                self.p = self.cp.clone();
             },
             &ControlInstruction::Proceed =>
-                self.p = self.cp,
+                self.p = self.cp.clone(),
             &ControlInstruction::ThrowCall => {
-                self.cp = self.p + 1;
+                self.cp = self.p.clone() + 1;
                 self.goto_throw();
             },
             &ControlInstruction::ThrowExecute => {
@@ -2023,9 +2024,9 @@ impl MachineState {
 
                 self.or_stack.push(gi,
                                    self.e,
-                                   self.cp,
+                                   self.cp.clone(),
                                    self.b,
-                                   self.p + 1,
+                                   self.p.clone() + 1,
                                    self.tr,
                                    self.heap.h,
                                    self.b0,
@@ -2058,9 +2059,9 @@ impl MachineState {
 
                 self.or_stack.push(gi,
                                    self.e,
-                                   self.cp,
+                                   self.cp.clone(),
                                    self.b,
-                                   self.p + offset,
+                                   self.p.clone() + offset,
                                    self.tr,
                                    self.heap.h,
                                    self.b0,

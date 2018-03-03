@@ -54,6 +54,10 @@ impl<T: Hash + Eq> TabledRc<T> {
 
         TabledRc { atom, table }
     }
+
+    pub fn atom_tbl(&self) -> TabledData<T> {
+        self.table.clone()
+    }
 }
 
 impl<T: Hash + Eq> Drop for TabledRc<T> {

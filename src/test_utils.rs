@@ -1,5 +1,4 @@
-use prolog::codegen::*;
-use prolog::fixtures::*;
+use prolog::ast::*;
 use prolog::heap_print::*;
 use prolog::io::*;
 use prolog::machine::*;
@@ -63,9 +62,8 @@ impl HeapCellValueOutputter for TestOutputter {
     }
 }
 
-pub fn collect_test_output<'a>(wam: &mut Machine, alloc_locs: AllocVarDict<'a>,
-                               mut heap_locs: HeapVarDict<'a>)
-                               -> Vec<HashSet<String>>
+pub fn collect_test_output(wam: &mut Machine, alloc_locs: AllocVarDict, mut heap_locs: HeapVarDict)
+                           -> Vec<HashSet<String>>
 {
     let mut output = TestOutputter::new();
     
@@ -81,9 +79,9 @@ pub fn collect_test_output<'a>(wam: &mut Machine, alloc_locs: AllocVarDict<'a>,
     output.result()
 }
 
-pub fn collect_test_output_with_limit<'a>(wam: &mut Machine, alloc_locs: AllocVarDict<'a>,
-                                          mut heap_locs: HeapVarDict<'a>, limit: usize)
-                                          -> Vec<HashSet<String>>
+pub fn collect_test_output_with_limit(wam: &mut Machine, alloc_locs: AllocVarDict,
+                                      mut heap_locs: HeapVarDict, limit: usize)
+                                      -> Vec<HashSet<String>>
 {
     let mut output = TestOutputter::new();
     
@@ -118,7 +116,7 @@ pub fn submit(wam: &mut Machine, buffer: &str) -> bool
         
     match parse_code(wam, buffer) {
         Ok(tl) =>
-            match compile(wam, &tl) {
+            match compile_packet(wam, tl) {
                 EvalSession::InitialQuerySuccess(_, _) |
                 EvalSession::EntrySuccess |
                 EvalSession::SubsequentQuerySuccess =>
@@ -136,7 +134,7 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>
 
     match parse_code(wam, buffer) {
         Ok(tl) =>
-            match compile(wam, &tl) {
+            match compile_packet(wam, tl) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
                     result == collect_test_output(wam, alloc_locs, heap_locs),
                 EvalSession::EntrySuccess => true,
@@ -155,7 +153,7 @@ pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
 
     match parse_code(wam, buffer) {
         Ok(tl) =>
-            match compile(wam, &tl) {
+            match compile_packet(wam, tl) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
                     result == collect_test_output_with_limit(wam, alloc_locs,
                                                              heap_locs, limit),

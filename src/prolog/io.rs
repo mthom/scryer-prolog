@@ -1,7 +1,7 @@
 use prolog::ast::*;
+use prolog::builtins::*;
 use prolog::codegen::*;
 use prolog::debray_allocator::*;
-use prolog::fixtures::*;
 use prolog::heap_print::*;
 use prolog::machine::*;
 use prolog::parser::toplevel::*;
@@ -306,9 +306,11 @@ impl fmt::Display for IndexingInstruction {
 impl fmt::Display for EvalError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &EvalError::ModuleNotFound => write!(f, "module not found."),
+            &EvalError::ModuleDoesNotContainExport => write!(f, "module does not contain claimed export."),
             &EvalError::QueryFailure => write!(f, "false."),
             &EvalError::QueryFailureWithException(ref e) => write!(f, "{}", error_string(e)),
-            &EvalError::ImpermissibleEntry(ref msg) => write!(f, "cannot overwrite builtin {}", msg),
+            &EvalError::ImpermissibleEntry(ref msg) => write!(f, "cannot overwrite builtin {}.", msg),
             &EvalError::OpIsInfixAndPostFix =>
                 write!(f, "cannot define an op to be both postfix and infix."),
             &EvalError::NamelessEntry => write!(f, "the predicate head is not an atom or clause."),
@@ -438,16 +440,10 @@ pub fn print_code(code: &Code) {
     }
 }
 
-pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, ParserError>
+pub fn parse_code(wam: &Machine, buffer: &str) -> Result<TopLevelPacket, ParserError>
 {
-    let mut worker = TopLevelWorker::new(wam.atom_tbl(), wam.op_dir());
-    worker.parse_code(buffer)
-}
-
-pub fn parse_batch(wam: &mut Machine, buffer: &str) -> Result<Vec<TopLevelPacket>, ParserError>
-{
-    let mut worker = TopLevelWorker::new(wam.atom_tbl(), wam.op_dir());
-    worker.parse_batch(buffer)
+    let mut worker = TopLevelWorker::new(buffer.as_bytes(), wam.atom_tbl());
+    worker.parse_code(&wam.op_dir)
 }
 
 pub fn read() -> String {
@@ -512,7 +508,7 @@ fn set_first_index(code: &mut Code)
     }
 }
 
-fn compile_appendix(code: &mut Code, queue: &Vec<TopLevel>) -> Result<(), ParserError>
+fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>) -> Result<(), ParserError>
 {
     for tl in queue.iter() {
         set_first_index(code);
@@ -522,31 +518,31 @@ fn compile_appendix(code: &mut Code, queue: &Vec<TopLevel>) -> Result<(), Parser
     Ok(())
 }
 
-fn compile_query<'a>(terms: &'a Vec<QueryTerm>, queue: &'a Vec<TopLevel>)
-                     -> Result<(Code, AllocVarDict<'a>), ParserError>
+fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>)
+                 -> Result<(Code, AllocVarDict), ParserError>
 {
     let mut cg = CodeGenerator::<DebrayAllocator>::new();
-    let mut code = try!(cg.compile_query(terms));
+    let mut code = try!(cg.compile_query(&terms));
 
     compile_appendix(&mut code, queue)?;
-    
+
     Ok((code, cg.take_vars()))
 }
 
-fn compile_decl<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel, queue: &'b Vec<TopLevel>)
-                            -> EvalSession<'b>
+fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSession
 {
     match tl {
-        &TopLevel::Declaration(ref decl) => wam.submit_decl(decl),
+        TopLevel::Declaration(Declaration::Op(op_decl)) => {
+            try_eval_session!(op_decl.submit(&mut wam.op_dir));
+            EvalSession::EntrySuccess
+        },
+        TopLevel::Declaration(Declaration::UseModule(name)) =>
+            wam.use_module_in_toplevel(name),
+        TopLevel::Declaration(_) =>
+            EvalSession::from(ParserError::InvalidModuleDecl),
         _ => {
-            let mut code = match compile_relation(tl) {
-                Ok(code) => code,
-                Err(e) => return EvalSession::from(EvalError::ParserError(e))
-            };
-
-            if let Err(e) = compile_appendix(&mut code, queue) {
-                return EvalSession::from(e);
-            };
+            let mut code = try_eval_session!(compile_relation(&tl));
+            try_eval_session!(compile_appendix(&mut code, queue));
 
             if !code.is_empty() {
                 if let Some(name) = tl.name() {
@@ -561,34 +557,85 @@ fn compile_decl<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevel, queue: &'b V
     }
 }
 
-pub fn compile<'a, 'b: 'a>(wam: &'a mut Machine, tl: &'b TopLevelPacket) -> EvalSession<'b>
+pub fn compile_packet(wam: &mut Machine, tl: TopLevelPacket) -> EvalSession
 {
     match tl {
-        &TopLevelPacket::Query(ref terms, ref queue) =>
+        TopLevelPacket::Query(terms, queue) =>
             match compile_query(terms, queue) {
-                Ok((code, vars)) => wam.submit_query(code, vars),
+                Ok((mut code, vars)) => wam.submit_query(code, vars),
                 Err(e) => EvalSession::from(e)
             },
-        &TopLevelPacket::Decl(ref tl, ref queue) =>
+        TopLevelPacket::Decl(tl, queue) =>
             compile_decl(wam, tl, queue)
     }
 }
 
-pub fn compile_batch<'a, 'b: 'a>(wam: &'a mut Machine, tls: &'b Vec<TopLevelPacket>)
-                                 -> EvalSession<'b>
+pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
 {
+    fn get_module_name(module: &Option<Module>) -> ClauseName {
+        match module {
+            &Some(ref module) => module.module_decl.name.clone(),
+            _ => ClauseName::BuiltIn("builtin")
+        }
+    }
+
+    let mut module: Option<Module> = None;
+    let (mut code_dir, mut op_dir) = build_code_and_op_dirs();
+
+    let mut code = Vec::new();
+
+    let mut worker = TopLevelWorker::new(src_str.as_bytes(), wam.atom_tbl());
+    let tls = try_eval_session!(worker.parse_batch(&mut op_dir));
+    
     for tl in tls {
         match tl {
-            &TopLevelPacket::Query(..) =>
+            TopLevelPacket::Query(..) =>
                 return EvalSession::from(ParserError::ExpectedRel),
-            &TopLevelPacket::Decl(ref tl, ref queue) => {
-                let result = compile_decl(wam, tl, queue);
+            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::Module(module_decl)), _) =>
+                if module.is_none() {
+                    let (builtin_code_dir, builtin_op_dir) = build_code_and_op_dirs();
 
-                if let &EvalSession::Error(_) = &result {
-                    return result;
+                    code_dir.extend(builtin_code_dir.into_iter());
+                    op_dir.extend(builtin_op_dir.into_iter());
+
+                    module = Some(Module::new(module_decl));
+                } else {
+                    return EvalSession::from(ParserError::InvalidModuleDecl);
+                },
+            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseModule(name)), _) => {
+                if let Some(ref submodule) = wam.get_module(name.clone()) {
+                    if let Some(ref mut module) = module {
+                        module.use_module(submodule);
+                        continue;
+                    }
+                } else {
+                    return EvalSession::from(EvalError::ModuleNotFound);
                 }
+
+                wam.use_module_in_toplevel(name);
+            },
+            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::Op(..)), _) => {},
+            TopLevelPacket::Decl(decl, queue) => {
+                let p = code.len() + wam.code_size();
+                let mut decl_code = try_eval_session!(compile_relation(&decl));
+
+                try_eval_session!(compile_appendix(&mut decl_code, queue));
+
+                code.extend(decl_code.into_iter());
+                code_dir.insert((decl.name().unwrap(), decl.arity()),
+                                (PredicateKeyType::User, p, get_module_name(&module)));
             }
         }
+    }
+
+    if let Some(mut module) = module {
+        module.code_dir = code_dir;
+        module.op_dir = op_dir;
+
+        wam.add_module(module, code);
+    } else {
+        wam.add_batched_code(code, code_dir);
+        wam.add_batched_ops(op_dir);
     }
 
     EvalSession::EntrySuccess

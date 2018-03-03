@@ -686,3 +686,18 @@ macro_rules! compare_execute {
         Line::Control(ControlInstruction::CompareExecute)
     )
 }
+
+macro_rules! module_decl {
+    ($name:expr, $decls:expr) => (
+        ModuleDecl { name: $name, exports: $decls }
+    )
+}
+
+macro_rules! try_eval_session {
+    ($e:expr) => (
+        match $e {
+            Ok(result) => result,
+            Err(e) => return EvalSession::from(e)
+        }
+    )
+}

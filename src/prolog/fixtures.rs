@@ -5,30 +5,8 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::collections::btree_map::{IntoIter, IterMut, Values};
 use std::mem::swap;
+use std::rc::Rc;
 use std::vec::Vec;
-
-pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
-
-pub type HeapVarDict<'a>  = HashMap<&'a Var, Addr>;
-pub type AllocVarDict<'a> = HashMap<&'a Var, VarData>;
-
-pub struct TempVarData {
-    last_term_arity: usize,
-    pub use_set: OccurrenceSet,
-    pub no_use_set: BTreeSet<usize>,
-    pub conflict_set: BTreeSet<usize>
-}
-
-// labeled with chunk numbers.
-pub enum VarStatus {
-    Perm(usize), Temp(usize, TempVarData) // Perm(chunk_num) | Temp(chunk_num, _)
-}
-
-// Perm: 0 initially, a stack register once processed.
-// Temp: labeled with chunk_num and temp offset (unassigned if 0).
-pub enum VarData {
-    Perm(usize), Temp(usize, usize, TempVarData)
-}
 
 impl VarData {
     pub fn as_reg_type(&self) -> RegType {
@@ -73,8 +51,8 @@ impl TempVarData {
     }
 }
 
-type VariableFixture<'a>  = (VarStatus, Vec<&'a Cell<VarReg>>);
-pub struct VariableFixtures<'a>(BTreeMap<&'a Var, VariableFixture<'a>>);
+type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
+pub struct VariableFixtures<'a>(BTreeMap<Rc<Var>, VariableFixture<'a>>);
 
 impl<'a> VariableFixtures<'a>
 {
@@ -82,7 +60,7 @@ impl<'a> VariableFixtures<'a>
         VariableFixtures(BTreeMap::new())
     }
 
-    pub fn insert(&mut self, var: &'a Var, vs: VariableFixture<'a>) {
+    pub fn insert(&mut self, var: Rc<Var>, vs: VariableFixture<'a>) {
         self.0.insert(var, vs);
     }
 
@@ -98,14 +76,14 @@ impl<'a> VariableFixtures<'a>
         // Compute the conflict set of u.
 
         // 1.
-        let mut use_sets : HashMap<&'a Var, OccurrenceSet> = HashMap::new();
+        let mut use_sets: HashMap<Rc<Var>, OccurrenceSet> = HashMap::new();
 
-        for (ref var, &mut (ref mut var_status, _)) in self.iter_mut() {
+        for (var, &mut (ref mut var_status, _)) in self.iter_mut() {
             if let &mut VarStatus::Temp(_, ref mut var_data) = var_status {
                 let mut use_set = OccurrenceSet::new();
 
                 swap(&mut var_data.use_set, &mut use_set);
-                use_sets.insert(var, use_set);
+                use_sets.insert((*var).clone(), use_set);
             }
         }
 
@@ -136,11 +114,11 @@ impl<'a> VariableFixtures<'a>
         }
     }
 
-    fn get_mut(&mut self, u: &'a Var) -> Option<&mut VariableFixture<'a>> {
-        self.0.get_mut(u)
+    fn get_mut(&mut self, u: Rc<Var>) -> Option<&mut VariableFixture<'a>> {
+        self.0.get_mut(&u)
     }
 
-    fn iter_mut(&mut self) -> IterMut<&'a Var, VariableFixture<'a>> {
+    fn iter_mut(&mut self) -> IterMut<Rc<Var>, VariableFixture<'a>> {
         self.0.iter_mut()
     }
 
@@ -179,7 +157,7 @@ impl<'a> VariableFixtures<'a>
         let mut arg_c = 1;
 
         for term_ref in iter {
-            if let TermRef::Var(lvl, cell, var) = term_ref {
+            if let &TermRef::Var(lvl, cell, ref var) = &term_ref {
                 let mut status = self.0.remove(var)
                     .unwrap_or((VarStatus::Temp(chunk_num, TempVarData::new(lt_arity)), Vec::new()));
 
@@ -194,7 +172,7 @@ impl<'a> VariableFixtures<'a>
                     _ => status.0 = VarStatus::Perm(chunk_num)
                 };
 
-                self.0.insert(var, status);
+                self.0.insert(var.clone(), status);
             }
 
             if let Level::Shallow = term_ref.level() {
@@ -203,11 +181,11 @@ impl<'a> VariableFixtures<'a>
         }
     }
 
-    pub fn into_iter(self) -> IntoIter<&'a Var, VariableFixture<'a>> {
+    pub fn into_iter(self) -> IntoIter<Rc<Var>, VariableFixture<'a>> {
         self.0.into_iter()
     }
 
-    fn values(&self) -> Values<&'a Var, VariableFixture<'a>> {
+    fn values(&self) -> Values<Rc<Var>, VariableFixture<'a>> {
         self.0.values()
     }
 

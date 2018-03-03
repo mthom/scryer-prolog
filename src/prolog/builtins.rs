@@ -4,20 +4,6 @@ use prolog::num::bigint::{BigInt};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub type PredicateKey = (ClauseName, usize); // name, arity, type.
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PredicateKeyType {
-    BuiltIn,
-    User
-}
-
-pub type OpDirKey = (ClauseName, Fixity);
-// name and fixity -> operator type and precedence.
-pub type OpDir = HashMap<OpDirKey, (Specifier, usize)>;
-
-pub type CodeDir = HashMap<PredicateKey, (PredicateKeyType, usize)>;
-
 fn get_builtins() -> Code {
     vec![internal_call_n!(), // callN/N, 0.
          is_atomic!(temp_v!(1)), // atomic/1, 1.
@@ -278,7 +264,7 @@ fn get_builtins() -> Code {
          proceed!(),
          dynamic_num_test!(cmp_gte!()), // >=/2, 200.
          proceed!(),
-         dynamic_num_test!(cmp_lte!()), // <=/2, 202.
+         dynamic_num_test!(cmp_lte!()), // =</2, 202.
          proceed!(),
          dynamic_num_test!(cmp_ne!()), // =\=, 204.
          proceed!(),
@@ -582,7 +568,7 @@ fn get_builtins() -> Code {
          query![put_value!(perm_v!(4), 1),
                 put_value!(perm_v!(3), 2),
                 put_value!(perm_v!(1), 3),
-                put_value!(perm_v!(2), 4)],         
+                put_value!(perm_v!(2), 4)],
          deallocate!(),
          goto_execute!(452, 4), // goto end_block/4, 452
          default_trust_me!(), // 423
@@ -602,7 +588,7 @@ fn get_builtins() -> Code {
                 put_value!(perm_v!(1), 3)],
          deallocate!(),
          goto_execute!(444, 3), // goto handle_ile/3, 442.
-         try_me_else!(5), // the inner clause.         
+         try_me_else!(5), // the inner clause.
          query![put_value!(temp_v!(2), 1)],
          get_ball!(),
          neck_cut!(),
@@ -638,12 +624,10 @@ fn get_builtins() -> Code {
     ]
 }
 
-pub fn build_code_dir() -> (Code, CodeDir, OpDir)
+pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
 {
     let mut code_dir = HashMap::new();
     let mut op_dir   = HashMap::new();
-
-    let builtin_code = get_builtins();
 
     op_dir.insert((clause_name!(":-"), Fixity::In),   (XFX, 1200));
     op_dir.insert((clause_name!(":-"), Fixity::Pre),  (FX, 1200));
@@ -693,64 +677,168 @@ pub fn build_code_dir() -> (Code, CodeDir, OpDir)
     op_dir.insert((clause_name!("=@="), Fixity::In), (XFX, 700));
     op_dir.insert((clause_name!("\\=@="), Fixity::In), (XFX, 700));
 
+    let builtin = ClauseName::BuiltIn("builtin");
+
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
-        code_dir.insert((clause_name!("call"), arity), (PredicateKeyType::BuiltIn, 0));
+        code_dir.insert((clause_name!("call"), arity),
+                        (PredicateKeyType::BuiltIn, 0, builtin.clone()));
     }
 
-    code_dir.insert((clause_name!("atomic"), 1), (PredicateKeyType::BuiltIn, 1));
-    code_dir.insert((clause_name!("var"), 1), (PredicateKeyType::BuiltIn, 3));
-    code_dir.insert((clause_name!("false"), 0), (PredicateKeyType::BuiltIn, 61));
-    code_dir.insert((clause_name!("\\+"), 1), (PredicateKeyType::BuiltIn, 62));
-    code_dir.insert((clause_name!("duplicate_term"), 2), (PredicateKeyType::BuiltIn, 71));
-    code_dir.insert((clause_name!("catch"), 3), (PredicateKeyType::BuiltIn, 5));
-    code_dir.insert((clause_name!("throw"), 1), (PredicateKeyType::BuiltIn, 59));
-    code_dir.insert((clause_name!("="), 2), (PredicateKeyType::BuiltIn, 73));
-    code_dir.insert((clause_name!("true"), 0), (PredicateKeyType::BuiltIn, 75));
+    code_dir.insert((clause_name!("atomic"), 1),
+                    (PredicateKeyType::BuiltIn, 1, builtin.clone()));
+    code_dir.insert((clause_name!("var"), 1),
+                    (PredicateKeyType::BuiltIn, 3, builtin.clone()));
+    code_dir.insert((clause_name!("false"), 0),
+                    (PredicateKeyType::BuiltIn, 61, builtin.clone()));
+    code_dir.insert((clause_name!("\\+"), 1),
+                    (PredicateKeyType::BuiltIn, 62, builtin.clone()));
+    code_dir.insert((clause_name!("duplicate_term"), 2),
+                    (PredicateKeyType::BuiltIn, 71, builtin.clone()));
+    code_dir.insert((clause_name!("catch"), 3),
+                    (PredicateKeyType::BuiltIn, 5, builtin.clone()));
+    code_dir.insert((clause_name!("throw"), 1),
+                    (PredicateKeyType::BuiltIn, 59, builtin.clone()));
+    code_dir.insert((clause_name!("="), 2),
+                    (PredicateKeyType::BuiltIn, 73, builtin.clone()));
+    code_dir.insert((clause_name!("true"), 0),
+                    (PredicateKeyType::BuiltIn, 75, builtin.clone()));
 
-    code_dir.insert((clause_name!(","), 2), (PredicateKeyType::BuiltIn, 76));
-    code_dir.insert((clause_name!(";"), 2), (PredicateKeyType::BuiltIn, 120));
-    code_dir.insert((clause_name!("->"), 2), (PredicateKeyType::BuiltIn, 138));
+    code_dir.insert((clause_name!(","), 2),
+                    (PredicateKeyType::BuiltIn, 76, builtin.clone()));
+    code_dir.insert((clause_name!(";"), 2),
+                    (PredicateKeyType::BuiltIn, 120, builtin.clone()));
+    code_dir.insert((clause_name!("->"), 2),
+                    (PredicateKeyType::BuiltIn, 138, builtin.clone()));
 
-    code_dir.insert((clause_name!("functor"), 3), (PredicateKeyType::BuiltIn, 146));
-    code_dir.insert((clause_name!("arg"), 3), (PredicateKeyType::BuiltIn, 150));
-    code_dir.insert((clause_name!("integer"), 1), (PredicateKeyType::BuiltIn, 147));
-    code_dir.insert((clause_name!("display"), 1), (PredicateKeyType::BuiltIn, 192));
+    code_dir.insert((clause_name!("functor"), 3),
+                    (PredicateKeyType::BuiltIn, 146, builtin.clone()));
+    code_dir.insert((clause_name!("arg"), 3),
+                    (PredicateKeyType::BuiltIn, 150, builtin.clone()));
+    code_dir.insert((clause_name!("integer"), 1),
+                    (PredicateKeyType::BuiltIn, 147, builtin.clone()));
+    code_dir.insert((clause_name!("display"), 1),
+                    (PredicateKeyType::BuiltIn, 192, builtin.clone()));
 
-    code_dir.insert((clause_name!("is"), 2), (PredicateKeyType::BuiltIn, 194));
-    code_dir.insert((clause_name!(">"), 2), (PredicateKeyType::BuiltIn, 196));
-    code_dir.insert((clause_name!("<"), 2), (PredicateKeyType::BuiltIn, 198));
-    code_dir.insert((clause_name!(">="), 2), (PredicateKeyType::BuiltIn, 200));
-    code_dir.insert((clause_name!("<="), 2), (PredicateKeyType::BuiltIn, 202));
-    code_dir.insert((clause_name!("=\\="), 2), (PredicateKeyType::BuiltIn, 204));
-    code_dir.insert((clause_name!("=:="), 2), (PredicateKeyType::BuiltIn, 206));
-    code_dir.insert((clause_name!("=.."), 2), (PredicateKeyType::BuiltIn, 208));
+    code_dir.insert((clause_name!("is"), 2),
+                    (PredicateKeyType::BuiltIn, 194, builtin.clone()));
+    code_dir.insert((clause_name!(">"), 2),
+                    (PredicateKeyType::BuiltIn, 196, builtin.clone()));
+    code_dir.insert((clause_name!("<"), 2),
+                    (PredicateKeyType::BuiltIn, 198, builtin.clone()));
+    code_dir.insert((clause_name!(">="), 2),
+                    (PredicateKeyType::BuiltIn, 200, builtin.clone()));
+    code_dir.insert((clause_name!("=<"), 2),
+                    (PredicateKeyType::BuiltIn, 202, builtin.clone()));
+    code_dir.insert((clause_name!("=\\="), 2),
+                    (PredicateKeyType::BuiltIn, 204, builtin.clone()));
+    code_dir.insert((clause_name!("=:="), 2),
+                    (PredicateKeyType::BuiltIn, 206, builtin.clone()));
+    code_dir.insert((clause_name!("=.."), 2),
+                    (PredicateKeyType::BuiltIn, 208, builtin.clone()));
 
-    code_dir.insert((clause_name!("length"), 2), (PredicateKeyType::BuiltIn, 261));
+    code_dir.insert((clause_name!("length"), 2),
+                    (PredicateKeyType::BuiltIn, 261, builtin.clone()));
     code_dir.insert((clause_name!("setup_call_cleanup"), 3),
-                    (PredicateKeyType::BuiltIn, 294));
+                    (PredicateKeyType::BuiltIn, 294, builtin.clone()));
     code_dir.insert((clause_name!("call_with_inference_limit"), 3),
-                    (PredicateKeyType::BuiltIn, 393));
-    code_dir.insert((clause_name!("_handle_inference_limit_exceeded"), 2),
-                    (PredicateKeyType::BuiltIn, 421));
+                    (PredicateKeyType::BuiltIn, 393, builtin.clone()));
 
-    code_dir.insert((clause_name!("compound"), 1), (PredicateKeyType::BuiltIn, 372));
-    code_dir.insert((clause_name!("rational"), 1), (PredicateKeyType::BuiltIn, 374));
-    code_dir.insert((clause_name!("string"), 1), (PredicateKeyType::BuiltIn, 376));
-    code_dir.insert((clause_name!("float"), 1), (PredicateKeyType::BuiltIn, 378));
-    code_dir.insert((clause_name!("nonvar"), 1), (PredicateKeyType::BuiltIn, 380));
+    code_dir.insert((clause_name!("compound"), 1),
+                    (PredicateKeyType::BuiltIn, 372, builtin.clone()));
+    code_dir.insert((clause_name!("rational"), 1),
+                    (PredicateKeyType::BuiltIn, 374, builtin.clone()));
+    code_dir.insert((clause_name!("string"), 1),
+                    (PredicateKeyType::BuiltIn, 376, builtin.clone()));
+    code_dir.insert((clause_name!("float"), 1),
+                    (PredicateKeyType::BuiltIn, 378, builtin.clone()));
+    code_dir.insert((clause_name!("nonvar"), 1),
+                    (PredicateKeyType::BuiltIn, 380, builtin.clone()));
 
-    code_dir.insert((clause_name!("ground"), 1), (PredicateKeyType::BuiltIn, 384));
-    code_dir.insert((clause_name!("=="), 2), (PredicateKeyType::BuiltIn, 385));
-    code_dir.insert((clause_name!("\\=="), 2), (PredicateKeyType::BuiltIn, 386));
-    code_dir.insert((clause_name!("@>="), 2), (PredicateKeyType::BuiltIn, 387));
-    code_dir.insert((clause_name!("@=<"), 2), (PredicateKeyType::BuiltIn, 388));
-    code_dir.insert((clause_name!("@>"), 2), (PredicateKeyType::BuiltIn, 389));
-    code_dir.insert((clause_name!("@<"), 2), (PredicateKeyType::BuiltIn, 390));
-    code_dir.insert((clause_name!("=@="), 2), (PredicateKeyType::BuiltIn, 391));
-    code_dir.insert((clause_name!("\\=@="), 2), (PredicateKeyType::BuiltIn, 392));
-    code_dir.insert((clause_name!("compare"), 3), (PredicateKeyType::BuiltIn, 464));
-    
+    code_dir.insert((clause_name!("ground"), 1),
+                    (PredicateKeyType::BuiltIn, 384, builtin.clone()));
+    code_dir.insert((clause_name!("=="), 2),
+                    (PredicateKeyType::BuiltIn, 385, builtin.clone()));
+    code_dir.insert((clause_name!("\\=="), 2),
+                    (PredicateKeyType::BuiltIn, 386, builtin.clone()));
+    code_dir.insert((clause_name!("@>="), 2),
+                    (PredicateKeyType::BuiltIn, 387, builtin.clone()));
+    code_dir.insert((clause_name!("@=<"), 2),
+                    (PredicateKeyType::BuiltIn, 388, builtin.clone()));
+    code_dir.insert((clause_name!("@>"), 2),
+                    (PredicateKeyType::BuiltIn, 389, builtin.clone()));
+    code_dir.insert((clause_name!("@<"), 2),
+                    (PredicateKeyType::BuiltIn, 390, builtin.clone()));
+    code_dir.insert((clause_name!("=@="), 2),
+                    (PredicateKeyType::BuiltIn, 391, builtin.clone()));
+    code_dir.insert((clause_name!("\\=@="), 2),
+                    (PredicateKeyType::BuiltIn, 392, builtin.clone()));
+    code_dir.insert((clause_name!("compare"), 3),
+                    (PredicateKeyType::BuiltIn, 464, builtin.clone()));
+
+    (code_dir, op_dir)
+}
+
+pub fn default_build() -> (Code, CodeDir, OpDir)
+{
+    let builtin_code = get_builtins();
+    let (code_dir, op_dir) = build_code_and_op_dirs();
+
     (builtin_code, code_dir, op_dir)
+}
+
+#[allow(dead_code)]
+pub fn builtin_module() -> Module
+{
+    let (code_dir, op_dir) = build_code_and_op_dirs();
+    let mut module_decl = module_decl!(clause_name!("builtin"),
+                                       vec![(clause_name!("atomic"), 1),
+                                            (clause_name!("var"), 1),
+                                            (clause_name!("false"), 0),
+                                            (clause_name!("catch"), 3),
+                                            (clause_name!("throw"), 1),
+                                            (clause_name!("(\\+)"), 1),
+                                            (clause_name!("duplicate_term"), 2),
+                                            (clause_name!("(=)"), 2),
+                                            (clause_name!("true"), 0),
+                                            (clause_name!("(,)"), 2),                                      
+                                            (clause_name!("(;)"), 2),
+                                            (clause_name!("->"), 2),
+                                            (clause_name!("functor"), 3),
+                                            (clause_name!("arg"), 3),
+                                            (clause_name!("(=..)"), 3),
+                                            (clause_name!("display"), 1),
+                                            (clause_name!("is"), 2),
+                                            (clause_name!("(>)"), 2),
+                                            (clause_name!("(<)"), 2),
+                                            (clause_name!("(>=)"), 2),
+                                            (clause_name!("(=<)"), 2),
+                                            (clause_name!("(=\\=)"), 2),
+                                            (clause_name!("(=:=)"), 2),
+                                            (clause_name!("(@>)"), 2),
+                                            (clause_name!("(@<)"), 2),
+                                            (clause_name!("(@>=)"), 2),
+                                            (clause_name!("(@=<)"), 2),
+                                            (clause_name!("(=@=)"), 2),
+                                            (clause_name!("(\\=@=)"), 2),
+                                            (clause_name!("(==)"), 2),
+                                            (clause_name!("(\\==)"), 2),
+                                            (clause_name!("length"), 2),
+                                            (clause_name!("compound"), 1),
+                                            (clause_name!("rational"), 1),
+                                            (clause_name!("integer"), 1),
+                                            (clause_name!("string"), 1),
+                                            (clause_name!("float"), 1),
+                                            (clause_name!("nonvar"), 1),
+                                            (clause_name!("ground"), 1),
+                                            (clause_name!("setup_call_cleanup"), 3),
+                                            (clause_name!("call_with_inference_limit"), 3),
+                                            (clause_name!("compare"), 3)]);
+
+    for arity in 0 .. 63 {
+        module_decl.exports.push((clause_name!("call"), arity));
+    }
+
+    Module { module_decl, code_dir, op_dir }
 }

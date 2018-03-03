@@ -29,7 +29,7 @@ Extend rusty-wam to include the following, among other features:
 * Built-in predicates for list processing and top-level declarative
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
   etc.) (_done_).
-* A rudimentary module system.
+* A rudimentary module system (_in progress_).
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
   is straightforward with attributed variables.
@@ -102,6 +102,7 @@ The following predicates are built-in to rusty-wam.
 * `atomic/1`
 * `between/3`
 * `call/1..63`
+* `call_cleanup/2`
 * `call_with_inference_limit/3`
 * `catch/3`
 * `compare/3`
@@ -199,11 +200,31 @@ Note that the values of variables belonging to successful queries are
 printed out, on one line each. Uninstantiated variables are denoted by
 a number preceded by an underscore (`X = _0` in an example above).
 
-Lastly, rusty-wam supports dynamic operators. Using the built-in
+### Dynamic operators
+
+rusty-wam supports dynamic operators. Using the built-in
 arithmetic operators with the usual precedences,
 
 ```
 prolog> ?- display(-5 + 3 - (2 * 4) // 8).
 '-'('+'('-'(5), 3), '//'('*'(2, 4), 8))
 true.
+```
+
+New operators can be defined using the `op` declaration.
+
+### Modules
+
+rusty-wam has seemingly correct but presently untested support for a
+basic predicate-based module system. It provides a way to separate
+units of code into distinct namespaces, for both predicates and
+operators. See the files `src/prolog/lib/*.pl` for examples.
+
+At the time of this writing, several control and list processing
+operators are hidden within their own modules that have not
+been exported to the toplevel. To export them, write
+
+```
+prolog> :- use_module(library(lists)).
+prolog> :- use_module(library(control)).
 ```

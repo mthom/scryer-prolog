@@ -5,6 +5,7 @@ extern crate termion;
 mod prolog;
 #[macro_use] mod test_utils;
 
+use prolog::ast::*;
 use prolog::io::*;
 use prolog::machine::*;
 
@@ -17,20 +18,20 @@ pub static CONTROL: &str = include_str!("./prolog/lib/control.pl");
 fn process_buffer(wam: &mut Machine, buffer: &str)
 {
     match parse_code(wam, buffer) {
-        Ok(tl) => {
-            let result = compile(wam, &tl);
+        Ok(packet) => {
+            let result = compile_packet(wam, packet);
             print(wam, result);
         },
         Err(s) => println!("{:?}", s)
-    };
+    }
 }
 
 fn load_init_str(wam: &mut Machine, src_str: &str)
 {
-    match parse_batch(wam, src_str) {
-        Ok(tls) => compile_batch(wam, &tls),
-        Err(_)  => panic!("failed to parse batch from string.")
-    };
+    match compile_listing(wam, src_str) {
+        EvalSession::Error(_) => panic!("failed to parse batch from string."),
+        _ => {}
+    }
 }
 
 fn prolog_repl() {

@@ -1,8 +1,8 @@
 use prolog::ast::*;
-use prolog::fixtures::*;
 
 use std::cell::Cell;
 use std::cmp::{min, max};
+use std::rc::Rc;
 use std::vec::Vec;
 
 pub struct ArithInstructionIterator<'a> {
@@ -31,7 +31,7 @@ impl<'a> ArithInstructionIterator<'a> {
             &Term::Cons(_, _, _) =>
                 return Err(ArithmeticError::InvalidTerm),
             &Term::Var(ref cell, ref var) =>
-                TermIterState::Var(Level::Shallow, cell, var)
+                TermIterState::Var(Level::Shallow, cell, (*var).clone())
         };
 
         Ok(ArithInstructionIterator { state_stack: vec![state] })
@@ -41,7 +41,7 @@ impl<'a> ArithInstructionIterator<'a> {
 pub enum ArithTermRef<'a> {
     Constant(&'a Constant),
     Op(ClauseName, usize), // name, arity.
-    Var(&'a Cell<VarReg>, &'a Var)
+    Var(&'a Cell<VarReg>, Rc<Var>)
 }
 
 impl<'a> Iterator for ArithInstructionIterator<'a> {
@@ -65,7 +65,7 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                 TermIterState::Constant(_, _, c) =>
                     return Some(Ok(ArithTermRef::Constant(c))),
                 TermIterState::Var(_, cell, var) =>
-                    return Some(Ok(ArithTermRef::Var(cell, var))),
+                    return Some(Ok(ArithTermRef::Var(cell, var.clone()))),
                 _ =>
                     return Some(Err(ArithmeticError::InvalidTerm))
             };
@@ -76,7 +76,7 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
 }
 
 pub struct ArithmeticEvaluator<'a> {
-    bindings: &'a AllocVarDict<'a>,
+    bindings: &'a AllocVarDict,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize
 }
@@ -97,7 +97,7 @@ impl<'a> ArithmeticTermIter<'a> for &'a Term {
 
 impl<'a> ArithmeticEvaluator<'a>
 {
-    pub fn new(bindings: &'a AllocVarDict<'a>, target_int: usize) -> Self {
+    pub fn new(bindings: &'a AllocVarDict, target_int: usize) -> Self {
         ArithmeticEvaluator { bindings, interm: Vec::new(), interm_c: target_int }
     }
 
@@ -207,7 +207,7 @@ impl<'a> ArithmeticEvaluator<'a>
                 ArithTermRef::Constant(c) => self.push_constant(c)?,
                 ArithTermRef::Var(cell, name) => {
                     let r = if cell.get().norm().reg_num() == 0 {
-                        match self.bindings.get(name) {
+                        match self.bindings.get(&name) {
                             Some(&VarData::Temp(_, t, _)) if t != 0 => RegType::Temp(t),
                             Some(&VarData::Perm(p)) if p != 0 => RegType::Perm(p),
                             _ => return Err(ArithmeticError::UninstantiatedVar)
