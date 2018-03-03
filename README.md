@@ -75,6 +75,30 @@ strings.
 
 7. Add some form of JIT predicate indexing.
 
+## Installing rusty-wam
+
+First, install the latest stable version of
+[Rust](https://www.rust-lang.org/en-US/install.html) using your
+preferred method. Then clone the rusty-wam repo and build it with
+cargo, like so:
+
+```
+$> git clone https://github.com/mthom/rusty-wam --recursive
+$> cd rusty-wam
+$> cargo build
+```
+
+cargo will download and install the libraries rusty-wam uses automatically.
+rusty-wam can be run with the command `cargo run`, and likewise tests can be
+run with `cargo test`.
+
+Note on compatibility: rusty-wam should work on Linux, Mac OS X, and
+FreeBSD. Windows support hinges on the Termion library working in
+Windows terminals, which isn't yet the case, although work is
+underway. See the relevant Termion
+[issue](https://github.com/ticki/termion/issues/103) for more
+information.
+
 ## Built-in predicates
 
 The following predicates are built-in to rusty-wam.
@@ -216,12 +240,12 @@ New operators can be defined using the `op` declaration.
 ### Modules
 
 rusty-wam has seemingly correct but presently untested support for a
-basic predicate-based module system. It provides a way to separate
+simple predicate-based module system. It provides a way to separate
 units of code into distinct namespaces, for both predicates and
 operators. See the files `src/prolog/lib/*.pl` for examples.
 
 At the time of this writing, several control and list processing
-operators are hidden within their own modules that have not
+operators and predicates are hidden in their own modules that have not
 been exported to the toplevel. To export them, write
 
 ```
