@@ -167,9 +167,7 @@ impl<HeapCellIter> Iterator for HeapCellAcyclicIterator<HeapCellIter>
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(addr) = self.iter.stack().pop() {
-            if self.seen.contains(&addr) {
-                continue;
-            } else {
+            if !self.seen.contains(&addr) {
                 self.iter.stack().push(addr.clone());
                 self.seen.insert(addr);
                 break;
@@ -201,11 +199,9 @@ impl<HeapCellIter> Iterator for HeapCellZippedAcyclicIterator<HeapCellIter>
 
     fn next(&mut self) -> Option<Self::Item> {
         while let (Some(a1), Some(a2)) = (self.i1.stack().pop(), self.i2.stack().pop()) {
-            if self.seen.contains(&(a1.clone(), a2.clone())) {
-                continue;
-            } else {
+            if !self.seen.contains(&(a1.clone(), a2.clone())) {
                 self.i1.stack().push(a1.clone());
-                self.i2.stack().push(a2.clone());                
+                self.i2.stack().push(a2.clone());
                 self.seen.insert((a1, a2));
 
                 break;
