@@ -22,6 +22,71 @@ pub type Atom = String;
 
 pub type Var = String;
 
+pub type Specifier = u32;
+
+pub const XFX: u32 = 0x0001;
+pub const XFY: u32 = 0x0002;
+pub const YFX: u32 = 0x0004;
+pub const XF: u32  = 0x0010;
+pub const YF: u32  = 0x0020;
+pub const FX: u32  = 0x0040;
+pub const FY: u32  = 0x0080;
+pub const DELIMITER: u32 = 0x0100;
+pub const TERM: u32  = 0x1000;
+pub const LTERM: u32 = 0x3000;
+
+macro_rules! is_term {
+    ($x:expr) => ( ($x & TERM) != 0 )
+}
+
+macro_rules! is_lterm {
+    ($x:expr) => ( ($x & LTERM) != 0 )
+}
+
+macro_rules! is_op {
+    ($x:expr) => ( $x & (XF | YF | FX | FY | XFX | XFY | YFX) != 0 )
+}
+
+macro_rules! is_postfix {
+    ($x:expr) => ( $x & (XF | YF) != 0 )
+}
+
+macro_rules! is_infix {
+    ($x:expr) => ( ($x & (XFX | XFY | YFX)) != 0 )
+}
+
+macro_rules! is_xfx {
+    ($x:expr) => ( ($x & XFX) != 0 )
+}
+
+macro_rules! is_xfy {
+    ($x:expr) => ( ($x & XFY) != 0 )
+}
+
+macro_rules! is_yfx {
+    ($x:expr) => ( ($x & YFX) != 0 )
+}
+
+macro_rules! is_yf {
+    ($x:expr) => ( ($x & YF) != 0 )
+}
+
+macro_rules! is_xf {
+    ($x:expr) => ( ($x & XF) != 0 )
+}
+
+macro_rules! is_fx {
+    ($x:expr) => ( ($x & FX) != 0 )
+}
+
+macro_rules! is_fy {
+    ($x:expr) => ( ($x & FY) != 0 )
+}
+
+macro_rules! prefix {
+    ($x:expr) => ($x & (FX | FY))
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GenContext {
     Head, Mid(usize), Last(usize) // Mid & Last: chunk_num
@@ -106,12 +171,12 @@ impl SubModuleUser for Module {
 
     fn code_dir(&mut self) -> &mut CodeDir {
         &mut self.code_dir
-    }
+    }    
 }
 
 pub trait SubModuleUser {
     fn op_dir(&mut self) -> &mut OpDir;
-    fn code_dir(&mut self) -> &mut CodeDir;
+    fn code_dir(&mut self) -> &mut CodeDir;    
 
     fn use_module(&mut self, submodule: &Module) -> EvalSession {
         for (name, arity) in submodule.module_decl.exports.iter().cloned() {
@@ -248,71 +313,6 @@ impl Default for VarReg {
     fn default() -> Self {
         VarReg::Norm(RegType::default())
     }
-}
-
-pub type Specifier = u32;
-
-pub const XFX: u32 = 0x0001;
-pub const XFY: u32 = 0x0002;
-pub const YFX: u32 = 0x0004;
-pub const XF: u32  = 0x0010;
-pub const YF: u32  = 0x0020;
-pub const FX: u32  = 0x0040;
-pub const FY: u32  = 0x0080;
-pub const DELIMITER: u32 = 0x0100;
-pub const TERM: u32  = 0x1000;
-pub const LTERM: u32 = 0x3000;
-
-macro_rules! is_term {
-    ($x:expr) => ( ($x & TERM) != 0 )
-}
-
-macro_rules! is_lterm {
-    ($x:expr) => ( ($x & LTERM) != 0 )
-}
-
-macro_rules! is_op {
-    ($x:expr) => ( $x & (XF | YF | FX | FY | XFX | XFY | YFX) != 0 )
-}
-
-macro_rules! is_postfix {
-    ($x:expr) => ( $x & (XF | YF) != 0 )
-}
-
-macro_rules! is_infix {
-    ($x:expr) => ( ($x & (XFX | XFY | YFX)) != 0 )
-}
-
-macro_rules! is_xfx {
-    ($x:expr) => ( ($x & XFX) != 0 )
-}
-
-macro_rules! is_xfy {
-    ($x:expr) => ( ($x & XFY) != 0 )
-}
-
-macro_rules! is_yfx {
-    ($x:expr) => ( ($x & YFX) != 0 )
-}
-
-macro_rules! is_yf {
-    ($x:expr) => ( ($x & YF) != 0 )
-}
-
-macro_rules! is_xf {
-    ($x:expr) => ( ($x & XF) != 0 )
-}
-
-macro_rules! is_fx {
-    ($x:expr) => ( ($x & FX) != 0 )
-}
-
-macro_rules! is_fy {
-    ($x:expr) => ( ($x & FY) != 0 )
-}
-
-macro_rules! prefix {
-    ($x:expr) => ($x & (FX | FY))
 }
 
 // labeled with chunk numbers.
@@ -722,14 +722,6 @@ impl<'a> From<&'a TabledRc<Atom>> for ClauseName {
     }
 }
 
-fn defrock_brackets(s: &str) -> &str {
-    if s.starts_with('(') && s.ends_with(')') {
-        &s[1 .. s.len() - 1]
-    } else {
-        s
-    }
-}
-
 impl ClauseName {
     pub fn as_str(&self) -> &str {
         match self {
@@ -738,7 +730,15 @@ impl ClauseName {
         }
     }
 
-    fn defrock_brackets(self) -> Self {
+    pub fn defrock_brackets(self) -> Self {
+        fn defrock_brackets(s: &str) -> &str {
+            if s.starts_with('(') && s.ends_with(')') {
+                &s[1 .. s.len() - 1]
+            } else {
+                s
+            }
+        }
+        
         match self {
             ClauseName::BuiltIn(s) =>
                 ClauseName::BuiltIn(defrock_brackets(s)),
