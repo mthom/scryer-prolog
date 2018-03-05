@@ -628,9 +628,9 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
 {
     let mut code_dir = HashMap::new();
     let mut op_dir   = HashMap::new();
-    
+
     let builtin = ClauseName::BuiltIn("builtin");
-    
+
     op_dir.insert((clause_name!(":-"), Fixity::In),   (XFX, 1200, builtin.clone()));
     op_dir.insert((clause_name!(":-"), Fixity::Pre),  (FX, 1200, builtin.clone()));
     op_dir.insert((clause_name!("?-"), Fixity::Pre),  (FX, 1200, builtin.clone()));
@@ -688,90 +688,51 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
     code_dir.insert((clause_name!("atomic"), 1), (1, builtin.clone()));
     code_dir.insert((clause_name!("var"), 1), (3, builtin.clone()));
     code_dir.insert((clause_name!("false"), 0), (61, builtin.clone()));
-    code_dir.insert((clause_name!("\\+"), 1),
-                    (62, builtin.clone()));
-    code_dir.insert((clause_name!("duplicate_term"), 2),
-                    (71, builtin.clone()));
-    code_dir.insert((clause_name!("catch"), 3),
-                    (5, builtin.clone()));
-    code_dir.insert((clause_name!("throw"), 1),
-                    (59, builtin.clone()));
-    code_dir.insert((clause_name!("="), 2),
-                    (73, builtin.clone()));
-    code_dir.insert((clause_name!("true"), 0),
-                    (75, builtin.clone()));
+    code_dir.insert((clause_name!("\\+"), 1), (62, builtin.clone()));
+    code_dir.insert((clause_name!("duplicate_term"), 2), (71, builtin.clone()));
+    code_dir.insert((clause_name!("catch"), 3), (5, builtin.clone()));
+    code_dir.insert((clause_name!("throw"), 1), (59, builtin.clone()));
+    code_dir.insert((clause_name!("="), 2), (73, builtin.clone()));
+    code_dir.insert((clause_name!("true"), 0), (75, builtin.clone()));
 
-    code_dir.insert((clause_name!(","), 2),
-                    (76, builtin.clone()));
-    code_dir.insert((clause_name!(";"), 2),
-                    (120, builtin.clone()));
-    code_dir.insert((clause_name!("->"), 2),
-                    (138, builtin.clone()));
+    code_dir.insert((clause_name!(","), 2), (76, builtin.clone()));
+    code_dir.insert((clause_name!(";"), 2), (120, builtin.clone()));
+    code_dir.insert((clause_name!("->"), 2), (138, builtin.clone()));
 
-    code_dir.insert((clause_name!("functor"), 3),
-                    (146, builtin.clone()));
-    code_dir.insert((clause_name!("arg"), 3),
-                    (150, builtin.clone()));
-    code_dir.insert((clause_name!("integer"), 1),
-                    (147, builtin.clone()));
-    code_dir.insert((clause_name!("display"), 1),
-                    (192, builtin.clone()));
+    code_dir.insert((clause_name!("functor"), 3), (146, builtin.clone()));
+    code_dir.insert((clause_name!("arg"), 3), (150, builtin.clone()));
+    code_dir.insert((clause_name!("integer"), 1), (147, builtin.clone()));
+    code_dir.insert((clause_name!("display"), 1), (192, builtin.clone()));
 
-    code_dir.insert((clause_name!("is"), 2),
-                    (194, builtin.clone()));
-    code_dir.insert((clause_name!(">"), 2),
-                    (196, builtin.clone()));
-    code_dir.insert((clause_name!("<"), 2),
-                    (198, builtin.clone()));
-    code_dir.insert((clause_name!(">="), 2),
-                    (200, builtin.clone()));
-    code_dir.insert((clause_name!("=<"), 2),
-                    (202, builtin.clone()));
-    code_dir.insert((clause_name!("=\\="), 2),
-                    (204, builtin.clone()));
-    code_dir.insert((clause_name!("=:="), 2),
-                    (206, builtin.clone()));
-    code_dir.insert((clause_name!("=.."), 2),
-                    (208, builtin.clone()));
+    code_dir.insert((clause_name!("is"), 2), (194, builtin.clone()));
+    code_dir.insert((clause_name!(">"), 2), (196, builtin.clone()));
+    code_dir.insert((clause_name!("<"), 2), (198, builtin.clone()));
+    code_dir.insert((clause_name!(">="), 2), (200, builtin.clone()));
+    code_dir.insert((clause_name!("=<"), 2), (202, builtin.clone()));
+    code_dir.insert((clause_name!("=\\="), 2), (204, builtin.clone()));
+    code_dir.insert((clause_name!("=:="), 2), (206, builtin.clone()));
+    code_dir.insert((clause_name!("=.."), 2), (208, builtin.clone()));
 
-    code_dir.insert((clause_name!("length"), 2),
-                    (261, builtin.clone()));
-    code_dir.insert((clause_name!("setup_call_cleanup"), 3),
-                    (294, builtin.clone()));
-    code_dir.insert((clause_name!("call_with_inference_limit"), 3),
-                    (393, builtin.clone()));
+    code_dir.insert((clause_name!("length"), 2), (261, builtin.clone()));
+    code_dir.insert((clause_name!("setup_call_cleanup"), 3), (294, builtin.clone()));
+    code_dir.insert((clause_name!("call_with_inference_limit"), 3), (393, builtin.clone()));
 
-    code_dir.insert((clause_name!("compound"), 1),
-                    (372, builtin.clone()));
-    code_dir.insert((clause_name!("rational"), 1),
-                    (374, builtin.clone()));
-    code_dir.insert((clause_name!("string"), 1),
-                    (376, builtin.clone()));
-    code_dir.insert((clause_name!("float"), 1),
-                    (378, builtin.clone()));
-    code_dir.insert((clause_name!("nonvar"), 1),
-                    (380, builtin.clone()));
+    code_dir.insert((clause_name!("compound"), 1), (372, builtin.clone()));
+    code_dir.insert((clause_name!("rational"), 1), (374, builtin.clone()));
+    code_dir.insert((clause_name!("string"), 1), (376, builtin.clone()));
+    code_dir.insert((clause_name!("float"), 1), (378, builtin.clone()));
+    code_dir.insert((clause_name!("nonvar"), 1), (380, builtin.clone()));
 
-    code_dir.insert((clause_name!("ground"), 1),
-                    (384, builtin.clone()));
-    code_dir.insert((clause_name!("=="), 2),
-                    (385, builtin.clone()));
-    code_dir.insert((clause_name!("\\=="), 2),
-                    (386, builtin.clone()));
-    code_dir.insert((clause_name!("@>="), 2),
-                    (387, builtin.clone()));
-    code_dir.insert((clause_name!("@=<"), 2),
-                    (388, builtin.clone()));
-    code_dir.insert((clause_name!("@>"), 2),
-                    (389, builtin.clone()));
-    code_dir.insert((clause_name!("@<"), 2),
-                    (390, builtin.clone()));
-    code_dir.insert((clause_name!("=@="), 2),
-                    (391, builtin.clone()));
-    code_dir.insert((clause_name!("\\=@="), 2),
-                    (392, builtin.clone()));
-    code_dir.insert((clause_name!("compare"), 3),
-                    (464, builtin.clone()));
+    code_dir.insert((clause_name!("ground"), 1), (384, builtin.clone()));
+    code_dir.insert((clause_name!("=="), 2), (385, builtin.clone()));
+    code_dir.insert((clause_name!("\\=="), 2), (386, builtin.clone()));
+    code_dir.insert((clause_name!("@>="), 2), (387, builtin.clone()));
+    code_dir.insert((clause_name!("@=<"), 2), (388, builtin.clone()));
+    code_dir.insert((clause_name!("@>"), 2), (389, builtin.clone()));
+    code_dir.insert((clause_name!("@<"), 2), (390, builtin.clone()));
+    code_dir.insert((clause_name!("=@="), 2), (391, builtin.clone()));
+    code_dir.insert((clause_name!("\\=@="), 2), (392, builtin.clone()));
+    code_dir.insert((clause_name!("compare"), 3), (464, builtin.clone()));
 
     (code_dir, op_dir)
 }
@@ -798,7 +759,7 @@ pub fn builtin_module() -> Module
                                             (clause_name!("duplicate_term"), 2),
                                             (clause_name!("(=)"), 2),
                                             (clause_name!("true"), 0),
-                                            (clause_name!("(,)"), 2),                                      
+                                            (clause_name!("(,)"), 2),
                                             (clause_name!("(;)"), 2),
                                             (clause_name!("->"), 2),
                                             (clause_name!("functor"), 3),
