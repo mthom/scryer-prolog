@@ -253,7 +253,8 @@ prolog> :- use_module(library(lists)).
 prolog> :- use_module(library(control)).
 ```
 
-To define modules inline at the REPL, use the ":{{"\"}}:" delimiters:
+To define modules inline at the REPL, use the ":{{" and "}}:"
+delimiters:
 
 ```
 prolog> :{{
