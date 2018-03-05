@@ -446,30 +446,43 @@ pub fn parse_code(wam: &Machine, buffer: &str) -> Result<TopLevelPacket, ParserE
     worker.parse_code(&wam.op_dir)
 }
 
-pub fn read() -> String {
-    let _ = stdout().flush();
+pub enum Input {
+    Quit,
+    Clear,
+    Line(String),
+    Batch(String)
+}
 
-    let mut buffer = String::new();
+fn read_lines(buffer: &mut String, end_delim: &str) -> String {
     let mut result = String::new();
+    let stdin = stdin();
+
+    buffer.clear();
+    stdin.read_line(buffer).unwrap();
+
+    while &*buffer.trim() != end_delim {
+        result += buffer.as_str();
+        buffer.clear();
+        stdin.read_line(buffer).unwrap();
+    }
+
+    result
+}
+
+pub fn read() -> Input {
+    let _ = stdout().flush();
+    let mut buffer = String::new();
 
     let stdin = stdin();
     stdin.read_line(&mut buffer).unwrap();
 
-    if &*buffer.trim() == ":{" {
-        buffer.clear();
-
-        stdin.read_line(&mut buffer).unwrap();
-
-        while &*buffer.trim() != "}:" {
-            result += buffer.as_str();
-            buffer.clear();
-            stdin.read_line(&mut buffer).unwrap();
-        }
-    } else {
-        result = buffer;
+    match &*buffer.trim() {
+        ":{"    => Input::Line(read_lines(&mut buffer, "}:")),
+        ":{{"   => Input::Batch(read_lines(&mut buffer, "}}:")),
+        "quit"  => Input::Quit,
+        "clear" => Input::Clear,
+        _       => Input::Line(buffer)
     }
-
-    result
 }
 
 // throw errors if declaration or query found.
@@ -533,7 +546,7 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
 {
     match tl {
         TopLevel::Declaration(Declaration::Op(op_decl)) => {
-            try_eval_session!(op_decl.submit(&mut wam.op_dir));
+            try_eval_session!(op_decl.submit(clause_name!("user"), &mut wam.op_dir));
             EvalSession::EntrySuccess
         },
         TopLevel::Declaration(Declaration::UseModule(name)) =>
@@ -585,8 +598,10 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
     let mut code = Vec::new();
 
     let mut worker = TopLevelWorker::new(src_str.as_bytes(), wam.atom_tbl());
-    let tls = try_eval_session!(worker.parse_batch(&mut op_dir));
+
     
+    let tls = try_eval_session!(worker.parse_batch(&mut op_dir));
+
     for tl in tls {
         match tl {
             TopLevelPacket::Query(..) =>
@@ -622,15 +637,14 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                 try_eval_session!(compile_appendix(&mut decl_code, queue));
 
                 code.extend(decl_code.into_iter());
-                code_dir.insert((decl.name().unwrap(), decl.arity()),
-                                (PredicateKeyType::User, p, get_module_name(&module)));
+                code_dir.insert((decl.name().unwrap(), decl.arity()), (p, get_module_name(&module)));
             }
         }
     }
 
     if let Some(mut module) = module {
-        module.code_dir = code_dir;
-        module.op_dir = op_dir;
+        module.code_dir.extend(code_dir.into_iter());
+        module.op_dir.extend(op_dir.into_iter());
 
         wam.add_module(module, code);
     } else {

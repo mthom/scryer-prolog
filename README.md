@@ -252,3 +252,14 @@ been exported to the toplevel. To export them, write
 prolog> :- use_module(library(lists)).
 prolog> :- use_module(library(control)).
 ```
+
+To define modules inline at the REPL, use the ":{{"\"}}:" delimiters:
+
+```
+prolog> :{{
+:- module(test, [local_member/2]).
+:- use_module(library(lists)).
+
+local_member(X, Xs) :- member(X, Xs).
+}}:
+```

@@ -15,7 +15,7 @@ mod tests;
 pub static LISTS: &str   = include_str!("./prolog/lib/lists.pl");
 pub static CONTROL: &str = include_str!("./prolog/lib/control.pl");
 
-fn process_buffer(wam: &mut Machine, buffer: &str)
+fn parse_and_compile_line(wam: &mut Machine, buffer: &str)
 {
     match parse_code(wam, buffer) {
         Ok(packet) => {
@@ -39,20 +39,22 @@ fn prolog_repl() {
 
     load_init_str(&mut wam, LISTS);
     load_init_str(&mut wam, CONTROL);
-    
+
     loop {
         print!("prolog> ");
 
-        let buffer = read();
+        match read() {
+            Input::Line(line) => parse_and_compile_line(&mut wam, line.as_str()),
+            Input::Batch(batch) => {
+                compile_listing(&mut wam, batch.as_str());
+            },
+            Input::Quit => break,
+            Input::Clear => {
+                wam.clear();
+                continue;
+            }
+        };
 
-        if buffer == "quit\n" {
-            break;
-        } else if buffer == "clear\n" {
-            wam.clear();
-            continue;
-        }
-
-        process_buffer(&mut wam, buffer.as_str());
         wam.reset();
     }
 }

@@ -628,154 +628,150 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
 {
     let mut code_dir = HashMap::new();
     let mut op_dir   = HashMap::new();
-
-    op_dir.insert((clause_name!(":-"), Fixity::In),   (XFX, 1200));
-    op_dir.insert((clause_name!(":-"), Fixity::Pre),  (FX, 1200));
-    op_dir.insert((clause_name!("?-"), Fixity::Pre),  (FX, 1200));
+    
+    let builtin = ClauseName::BuiltIn("builtin");
+    
+    op_dir.insert((clause_name!(":-"), Fixity::In),   (XFX, 1200, builtin.clone()));
+    op_dir.insert((clause_name!(":-"), Fixity::Pre),  (FX, 1200, builtin.clone()));
+    op_dir.insert((clause_name!("?-"), Fixity::Pre),  (FX, 1200, builtin.clone()));
 
     // control operators.
-    op_dir.insert((clause_name!("\\+"), Fixity::Pre), (FY, 900));
-    op_dir.insert((clause_name!("="), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!("\\+"), Fixity::Pre), (FY, 900, builtin.clone()));
+    op_dir.insert((clause_name!("="), Fixity::In), (XFX, 700, builtin.clone()));
 
     // arithmetic operators.
-    op_dir.insert((clause_name!("is"), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("+"), Fixity::In), (YFX, 500));
-    op_dir.insert((clause_name!("-"), Fixity::In), (YFX, 500));
-    op_dir.insert((clause_name!("/\\"), Fixity::In), (YFX, 500));
-    op_dir.insert((clause_name!("\\/"), Fixity::In), (YFX, 500));
-    op_dir.insert((clause_name!("xor"), Fixity::In), (YFX, 500));
-    op_dir.insert((clause_name!("//"), Fixity::In), (YFX, 400));
-    op_dir.insert((clause_name!("/"), Fixity::In), (YFX, 400));
-    op_dir.insert((clause_name!("div"), Fixity::In), (YFX, 400));
-    op_dir.insert((clause_name!("*"), Fixity::In), (YFX, 400));
-    op_dir.insert((clause_name!("-"), Fixity::Pre), (FY, 200));
-    op_dir.insert((clause_name!("rdiv"), Fixity::In), (YFX, 400));
-    op_dir.insert((clause_name!("<<"), Fixity::In), (YFX, 400));
-    op_dir.insert((clause_name!(">>"), Fixity::In), (YFX, 400));
-    op_dir.insert((clause_name!("mod"), Fixity::In), (YFX, 400));
-    op_dir.insert((clause_name!("rem"), Fixity::In), (YFX, 400));
+    op_dir.insert((clause_name!("is"), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("+"), Fixity::In), (YFX, 500, builtin.clone()));
+    op_dir.insert((clause_name!("-"), Fixity::In), (YFX, 500, builtin.clone()));
+    op_dir.insert((clause_name!("/\\"), Fixity::In), (YFX, 500, builtin.clone()));
+    op_dir.insert((clause_name!("\\/"), Fixity::In), (YFX, 500, builtin.clone()));
+    op_dir.insert((clause_name!("xor"), Fixity::In), (YFX, 500, builtin.clone()));
+    op_dir.insert((clause_name!("//"), Fixity::In), (YFX, 400, builtin.clone()));
+    op_dir.insert((clause_name!("/"), Fixity::In), (YFX, 400, builtin.clone()));
+    op_dir.insert((clause_name!("div"), Fixity::In), (YFX, 400, builtin.clone()));
+    op_dir.insert((clause_name!("*"), Fixity::In), (YFX, 400, builtin.clone()));
+    op_dir.insert((clause_name!("-"), Fixity::Pre), (FY, 200, builtin.clone()));
+    op_dir.insert((clause_name!("rdiv"), Fixity::In), (YFX, 400, builtin.clone()));
+    op_dir.insert((clause_name!("<<"), Fixity::In), (YFX, 400, builtin.clone()));
+    op_dir.insert((clause_name!(">>"), Fixity::In), (YFX, 400, builtin.clone()));
+    op_dir.insert((clause_name!("mod"), Fixity::In), (YFX, 400, builtin.clone()));
+    op_dir.insert((clause_name!("rem"), Fixity::In), (YFX, 400, builtin.clone()));
 
     // arithmetic comparison operators.
-    op_dir.insert((clause_name!(">"), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("<"), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("=\\="), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("=:="), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!(">="), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("=<"), Fixity::In), (XFX, 700));
+    op_dir.insert((clause_name!(">"), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("<"), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("=\\="), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("=:="), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!(">="), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("=<"), Fixity::In), (XFX, 700, builtin.clone()));
 
     // control operators.
-    op_dir.insert((clause_name!(";"), Fixity::In), (XFY, 1100));
-    op_dir.insert((clause_name!("->"), Fixity::In), (XFY, 1050));
+    op_dir.insert((clause_name!(";"), Fixity::In), (XFY, 1100, builtin.clone()));
+    op_dir.insert((clause_name!("->"), Fixity::In), (XFY, 1050, builtin.clone()));
 
-    op_dir.insert((clause_name!("=.."), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("=="), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("\\=="), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("@=<"), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("@>="), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("@<"), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("@>"), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("=@="), Fixity::In), (XFX, 700));
-    op_dir.insert((clause_name!("\\=@="), Fixity::In), (XFX, 700));
-
-    let builtin = ClauseName::BuiltIn("builtin");
+    op_dir.insert((clause_name!("=.."), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("=="), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("\\=="), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("@=<"), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("@>="), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("@<"), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("@>"), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("=@="), Fixity::In), (XFX, 700, builtin.clone()));
+    op_dir.insert((clause_name!("\\=@="), Fixity::In), (XFX, 700, builtin.clone()));
 
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
-        code_dir.insert((clause_name!("call"), arity),
-                        (PredicateKeyType::BuiltIn, 0, builtin.clone()));
+        code_dir.insert((clause_name!("call"), arity), (0, builtin.clone()));
     }
 
-    code_dir.insert((clause_name!("atomic"), 1),
-                    (PredicateKeyType::BuiltIn, 1, builtin.clone()));
-    code_dir.insert((clause_name!("var"), 1),
-                    (PredicateKeyType::BuiltIn, 3, builtin.clone()));
-    code_dir.insert((clause_name!("false"), 0),
-                    (PredicateKeyType::BuiltIn, 61, builtin.clone()));
+    code_dir.insert((clause_name!("atomic"), 1), (1, builtin.clone()));
+    code_dir.insert((clause_name!("var"), 1), (3, builtin.clone()));
+    code_dir.insert((clause_name!("false"), 0), (61, builtin.clone()));
     code_dir.insert((clause_name!("\\+"), 1),
-                    (PredicateKeyType::BuiltIn, 62, builtin.clone()));
+                    (62, builtin.clone()));
     code_dir.insert((clause_name!("duplicate_term"), 2),
-                    (PredicateKeyType::BuiltIn, 71, builtin.clone()));
+                    (71, builtin.clone()));
     code_dir.insert((clause_name!("catch"), 3),
-                    (PredicateKeyType::BuiltIn, 5, builtin.clone()));
+                    (5, builtin.clone()));
     code_dir.insert((clause_name!("throw"), 1),
-                    (PredicateKeyType::BuiltIn, 59, builtin.clone()));
+                    (59, builtin.clone()));
     code_dir.insert((clause_name!("="), 2),
-                    (PredicateKeyType::BuiltIn, 73, builtin.clone()));
+                    (73, builtin.clone()));
     code_dir.insert((clause_name!("true"), 0),
-                    (PredicateKeyType::BuiltIn, 75, builtin.clone()));
+                    (75, builtin.clone()));
 
     code_dir.insert((clause_name!(","), 2),
-                    (PredicateKeyType::BuiltIn, 76, builtin.clone()));
+                    (76, builtin.clone()));
     code_dir.insert((clause_name!(";"), 2),
-                    (PredicateKeyType::BuiltIn, 120, builtin.clone()));
+                    (120, builtin.clone()));
     code_dir.insert((clause_name!("->"), 2),
-                    (PredicateKeyType::BuiltIn, 138, builtin.clone()));
+                    (138, builtin.clone()));
 
     code_dir.insert((clause_name!("functor"), 3),
-                    (PredicateKeyType::BuiltIn, 146, builtin.clone()));
+                    (146, builtin.clone()));
     code_dir.insert((clause_name!("arg"), 3),
-                    (PredicateKeyType::BuiltIn, 150, builtin.clone()));
+                    (150, builtin.clone()));
     code_dir.insert((clause_name!("integer"), 1),
-                    (PredicateKeyType::BuiltIn, 147, builtin.clone()));
+                    (147, builtin.clone()));
     code_dir.insert((clause_name!("display"), 1),
-                    (PredicateKeyType::BuiltIn, 192, builtin.clone()));
+                    (192, builtin.clone()));
 
     code_dir.insert((clause_name!("is"), 2),
-                    (PredicateKeyType::BuiltIn, 194, builtin.clone()));
+                    (194, builtin.clone()));
     code_dir.insert((clause_name!(">"), 2),
-                    (PredicateKeyType::BuiltIn, 196, builtin.clone()));
+                    (196, builtin.clone()));
     code_dir.insert((clause_name!("<"), 2),
-                    (PredicateKeyType::BuiltIn, 198, builtin.clone()));
+                    (198, builtin.clone()));
     code_dir.insert((clause_name!(">="), 2),
-                    (PredicateKeyType::BuiltIn, 200, builtin.clone()));
+                    (200, builtin.clone()));
     code_dir.insert((clause_name!("=<"), 2),
-                    (PredicateKeyType::BuiltIn, 202, builtin.clone()));
+                    (202, builtin.clone()));
     code_dir.insert((clause_name!("=\\="), 2),
-                    (PredicateKeyType::BuiltIn, 204, builtin.clone()));
+                    (204, builtin.clone()));
     code_dir.insert((clause_name!("=:="), 2),
-                    (PredicateKeyType::BuiltIn, 206, builtin.clone()));
+                    (206, builtin.clone()));
     code_dir.insert((clause_name!("=.."), 2),
-                    (PredicateKeyType::BuiltIn, 208, builtin.clone()));
+                    (208, builtin.clone()));
 
     code_dir.insert((clause_name!("length"), 2),
-                    (PredicateKeyType::BuiltIn, 261, builtin.clone()));
+                    (261, builtin.clone()));
     code_dir.insert((clause_name!("setup_call_cleanup"), 3),
-                    (PredicateKeyType::BuiltIn, 294, builtin.clone()));
+                    (294, builtin.clone()));
     code_dir.insert((clause_name!("call_with_inference_limit"), 3),
-                    (PredicateKeyType::BuiltIn, 393, builtin.clone()));
+                    (393, builtin.clone()));
 
     code_dir.insert((clause_name!("compound"), 1),
-                    (PredicateKeyType::BuiltIn, 372, builtin.clone()));
+                    (372, builtin.clone()));
     code_dir.insert((clause_name!("rational"), 1),
-                    (PredicateKeyType::BuiltIn, 374, builtin.clone()));
+                    (374, builtin.clone()));
     code_dir.insert((clause_name!("string"), 1),
-                    (PredicateKeyType::BuiltIn, 376, builtin.clone()));
+                    (376, builtin.clone()));
     code_dir.insert((clause_name!("float"), 1),
-                    (PredicateKeyType::BuiltIn, 378, builtin.clone()));
+                    (378, builtin.clone()));
     code_dir.insert((clause_name!("nonvar"), 1),
-                    (PredicateKeyType::BuiltIn, 380, builtin.clone()));
+                    (380, builtin.clone()));
 
     code_dir.insert((clause_name!("ground"), 1),
-                    (PredicateKeyType::BuiltIn, 384, builtin.clone()));
+                    (384, builtin.clone()));
     code_dir.insert((clause_name!("=="), 2),
-                    (PredicateKeyType::BuiltIn, 385, builtin.clone()));
+                    (385, builtin.clone()));
     code_dir.insert((clause_name!("\\=="), 2),
-                    (PredicateKeyType::BuiltIn, 386, builtin.clone()));
+                    (386, builtin.clone()));
     code_dir.insert((clause_name!("@>="), 2),
-                    (PredicateKeyType::BuiltIn, 387, builtin.clone()));
+                    (387, builtin.clone()));
     code_dir.insert((clause_name!("@=<"), 2),
-                    (PredicateKeyType::BuiltIn, 388, builtin.clone()));
+                    (388, builtin.clone()));
     code_dir.insert((clause_name!("@>"), 2),
-                    (PredicateKeyType::BuiltIn, 389, builtin.clone()));
+                    (389, builtin.clone()));
     code_dir.insert((clause_name!("@<"), 2),
-                    (PredicateKeyType::BuiltIn, 390, builtin.clone()));
+                    (390, builtin.clone()));
     code_dir.insert((clause_name!("=@="), 2),
-                    (PredicateKeyType::BuiltIn, 391, builtin.clone()));
+                    (391, builtin.clone()));
     code_dir.insert((clause_name!("\\=@="), 2),
-                    (PredicateKeyType::BuiltIn, 392, builtin.clone()));
+                    (392, builtin.clone()));
     code_dir.insert((clause_name!("compare"), 3),
-                    (PredicateKeyType::BuiltIn, 464, builtin.clone()));
+                    (464, builtin.clone()));
 
     (code_dir, op_dir)
 }

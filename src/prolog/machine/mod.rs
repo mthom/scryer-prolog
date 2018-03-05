@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 struct MachineCodeIndex<'a> {
     code_dir: &'a mut CodeDir,
-    op_dir: &'a mut OpDir
+    op_dir: &'a mut OpDir,
 }
 
 pub struct Machine {
@@ -54,7 +54,7 @@ impl<'a> SubModuleUser for MachineCodeIndex<'a> {
 
     fn code_dir(&mut self) -> &mut CodeDir {
         self.code_dir
-    }
+    }   
 }
 
 impl Machine {
@@ -73,7 +73,50 @@ impl Machine {
             cached_query: None
         }
     }
+    
+    fn remove_module(&mut self, module_name: ClauseName) {
+        let iter = if let Some(submodule) = self.modules.get(&module_name) {
+            submodule.module_decl.exports.iter().cloned()
+        } else {
+            return;
+        };
+        
+        for (name, arity) in iter {
+            let name = name.defrock_brackets();
+            
+            match self.code_dir.get(&(name.clone(), arity)).cloned() {
+                Some((_, ref mod_name)) if mod_name == &module_name => {
+                    self.code_dir.remove(&(name.clone(), arity));
+                    
+                    // remove or respecify ops.
+                    if arity == 2 {
+                        if let Some((_, _, mod_name)) = self.op_dir.get(&(name.clone(), Fixity::In)).cloned()
+                        {
+                            if mod_name == module_name {
+                                self.op_dir.remove(&(name.clone(), Fixity::In));
+                            }
+                        }
+                    } else if arity == 1 {
+                        if let Some((_, _, mod_name)) = self.op_dir.get(&(name.clone(), Fixity::Pre)).cloned()
+                        {
+                            if mod_name == module_name {
+                                self.op_dir.remove(&(name.clone(), Fixity::Pre));
+                            }
+                        }
 
+                        if let Some((_, _, mod_name)) = self.op_dir.get(&(name.clone(), Fixity::Post)).cloned()
+                        {                        
+                            if mod_name == module_name {
+                                self.op_dir.remove(&(name.clone(), Fixity::Post));
+                            }
+                        }
+                    }
+                },
+                _ => {}
+            };
+        }
+    }
+    
     pub fn failed(&self) -> bool {
         self.ms.fail
     }
@@ -83,10 +126,13 @@ impl Machine {
     }
 
     pub fn use_module_in_toplevel(&mut self, name: ClauseName) -> EvalSession {
+        self.remove_module(name.clone());
+        
         match self.modules.get(&name) {
             Some(ref module) => {
                 let mut indices = MachineCodeIndex { code_dir: &mut self.code_dir,
                                                      op_dir: &mut self.op_dir };
+                                
                 indices.use_module(module)
             },
             None => EvalSession::from(EvalError::ModuleNotFound)
@@ -114,7 +160,7 @@ impl Machine {
     pub fn add_user_code(&mut self, name: ClauseName, arity: usize, code: Code) -> EvalSession
     {
         match self.code_dir.get(&(name.clone(), arity)) {
-            Some(&(PredicateKeyType::BuiltIn, _, _)) =>
+            Some(&(_, ref mod_name)) if mod_name == &clause_name!("builtin") =>
                 return EvalSession::from(EvalError::ImpermissibleEntry(format!("{}/{}", name, arity))),
             _ => {}
         };
@@ -122,7 +168,7 @@ impl Machine {
         let offset = self.code.len();
 
         self.code.extend(code.into_iter());
-        self.code_dir.insert((name, arity), (PredicateKeyType::User, offset, clause_name!("user")));
+        self.code_dir.insert((name, arity), (offset, clause_name!("user")));
 
         EvalSession::EntrySuccess
     }

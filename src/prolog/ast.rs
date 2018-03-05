@@ -133,17 +133,11 @@ impl PredicateClause {
 
 pub type OpDirKey = (ClauseName, Fixity);
 // name and fixity -> operator type and precedence.
-pub type OpDir = HashMap<OpDirKey, (Specifier, usize)>;
+pub type OpDir = HashMap<OpDirKey, (Specifier, usize, ClauseName)>;
 
-pub type CodeDir = HashMap<PredicateKey, (PredicateKeyType, usize, ClauseName)>;
+pub type CodeDir = HashMap<PredicateKey, (usize, ClauseName)>;
 
 pub type PredicateKey = (ClauseName, usize); // name, arity.
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PredicateKeyType {
-    BuiltIn,
-    User
-}
 
 pub struct ModuleDecl {
     pub name: ClauseName,
@@ -377,7 +371,7 @@ impl From<ParserError> for EvalSession {
 pub struct OpDecl(pub usize, pub Specifier, pub ClauseName);
 
 impl OpDecl {
-    pub fn submit(&self, op_dir: &mut OpDir) -> Result<(), EvalError>
+    pub fn submit(&self, module: ClauseName, op_dir: &mut OpDir) -> Result<(), EvalError>
     {
         let (prec, spec, name) = (self.0, self.1, self.2.clone());
 
@@ -398,9 +392,9 @@ impl OpDecl {
         if prec > 0 {
             match spec {
                 XFY | XFX | YFX => op_dir.insert((name.clone(), Fixity::In),
-                                                 (spec, prec)),
-                XF | YF => op_dir.insert((name.clone(), Fixity::Post), (spec, prec)),
-                FX | FY => op_dir.insert((name.clone(), Fixity::Pre), (spec,prec)),
+                                                 (spec, prec, module.clone())),
+                XF | YF => op_dir.insert((name.clone(), Fixity::Post), (spec, prec, module.clone())),
+                FX | FY => op_dir.insert((name.clone(), Fixity::Pre), (spec, prec, module.clone())),
                 _ => None
             };
         } else {

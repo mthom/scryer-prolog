@@ -37,7 +37,7 @@ impl<'a> CodeDirs<'a> {
                       -> Option<(usize, ClauseName)>
     {
         let code_dir = self.get_current_code_dir(p);        
-        code_dir.get(&(name, arity)).map(|idx| (idx.1, idx.2.clone()))
+        code_dir.get(&(name, arity)).cloned()
     }
 }
 
