@@ -264,6 +264,7 @@ prolog> :{{
 local_member(X, Xs) :- member(X, Xs).
 }}:
 ```
+
 `use_module` directives can be qualified by adding a list of imports:
 
 ```
@@ -271,4 +272,4 @@ prolog> :- use_module(library(lists), [member/2]).
 ```
 
 A qualified `use_module` can be used to remove imports from the
-toplevel by giving it an empty import list.
+toplevel by calling it with an empty import list.
