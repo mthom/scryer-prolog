@@ -170,37 +170,60 @@ impl SubModuleUser for Module {
 
 pub trait SubModuleUser {
     fn op_dir(&mut self) -> &mut OpDir;
-    fn code_dir(&mut self) -> &mut CodeDir;    
+    fn code_dir(&mut self) -> &mut CodeDir;
 
-    fn use_module(&mut self, submodule: &Module) -> EvalSession {
-        for (name, arity) in submodule.module_decl.exports.iter().cloned() {
-            let name = name.defrock_brackets();
+    // returns true on successful import.
+    fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
+        let name = name.defrock_brackets();
             
-            if arity == 1 {
-                if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::Pre)) {
-                    self.op_dir().insert((name.clone(), Fixity::Pre), op_data.clone());
-                }
-
-                if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::Post)) {
-                    self.op_dir().insert((name.clone(), Fixity::Post), op_data.clone());
-                }
-            } else if arity == 2 {
-                if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::In)) {
-                    self.op_dir().insert((name.clone(), Fixity::In), op_data.clone());
-                }
+        if arity == 1 {
+            if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::Pre)) {
+                self.op_dir().insert((name.clone(), Fixity::Pre), op_data.clone());
             }
 
-            if self.code_dir().contains_key(&(name.clone(), arity)) {
-                println!("warning: overwriting {}/{}", &name, arity);
+            if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::Post)) {
+                self.op_dir().insert((name.clone(), Fixity::Post), op_data.clone());
             }
+        } else if arity == 2 {
+            if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::In)) {
+                self.op_dir().insert((name.clone(), Fixity::In), op_data.clone());
+            }
+        }
 
-            if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
-                self.code_dir().insert((name, arity), code_data.clone());
-            } else {
+        if self.code_dir().contains_key(&(name.clone(), arity)) {
+            println!("warning: overwriting {}/{}", &name, arity);
+        }
+
+        if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
+            self.code_dir().insert((name, arity), code_data.clone());
+            true
+        } else {
+            false
+        }
+    }
+    
+    fn use_qualified_module(&mut self, submodule: &Module, exports: Vec<PredicateKey>) -> EvalSession
+    {
+        for (name, arity) in exports {
+            if !submodule.module_decl.exports.contains(&(name.clone(), arity)) {
+                continue;
+            }
+            
+            if !self.import_decl(name, arity, submodule) {
                 return EvalSession::from(EvalError::ModuleDoesNotContainExport);
             }
         }
 
+        EvalSession::EntrySuccess
+    }
+    
+    fn use_module(&mut self, submodule: &Module) -> EvalSession {
+        for (name, arity) in submodule.module_decl.exports.iter().cloned() {
+            if !self.import_decl(name, arity, submodule) {
+                return EvalSession::from(EvalError::ModuleDoesNotContainExport);
+            }
+        }
+        
         EvalSession::EntrySuccess
     }
 }
@@ -208,7 +231,8 @@ pub trait SubModuleUser {
 pub enum Declaration {
     Module(ModuleDecl),
     Op(OpDecl),
-    UseModule(ClauseName)
+    UseModule(ClauseName),
+    UseQualifiedModule(ClauseName, Vec<PredicateKey>)
 }
 
 pub enum TopLevel {

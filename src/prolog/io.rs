@@ -551,6 +551,8 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
         },
         TopLevel::Declaration(Declaration::UseModule(name)) =>
             wam.use_module_in_toplevel(name),
+        TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)) =>
+            wam.use_qualified_module_in_toplevel(name, exports),
         TopLevel::Declaration(_) =>
             EvalSession::from(ParserError::InvalidModuleDecl),
         _ => {
@@ -628,6 +630,18 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                 }
 
                 wam.use_module_in_toplevel(name);
+            },
+            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)), _) => {
+                if let Some(ref submodule) = wam.get_module(name.clone()) {
+                    if let Some(ref mut module) = module {
+                        module.use_qualified_module(submodule, exports);
+                        continue;
+                    }
+                } else {
+                    return EvalSession::from(EvalError::ModuleNotFound);
+                }
+
+                wam.use_qualified_module_in_toplevel(name, exports);
             },
             TopLevelPacket::Decl(TopLevel::Declaration(Declaration::Op(..)), _) => {},
             TopLevelPacket::Decl(decl, queue) => {

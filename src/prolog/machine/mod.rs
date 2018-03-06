@@ -54,14 +54,14 @@ impl<'a> SubModuleUser for MachineCodeIndex<'a> {
 
     fn code_dir(&mut self) -> &mut CodeDir {
         self.code_dir
-    }   
+    }
 }
 
 impl Machine {
     pub fn new() -> Self {
         let atom_tbl = Rc::new(RefCell::new(HashSet::new()));
         let (code, code_dir, op_dir) = default_build();
-        
+
         Machine {
             ms: MachineState::new(atom_tbl),
             call_policy: Box::new(DefaultCallPolicy {}),
@@ -73,21 +73,21 @@ impl Machine {
             cached_query: None
         }
     }
-    
+
     fn remove_module(&mut self, module_name: ClauseName) {
         let iter = if let Some(submodule) = self.modules.get(&module_name) {
             submodule.module_decl.exports.iter().cloned()
         } else {
             return;
         };
-        
+
         for (name, arity) in iter {
             let name = name.defrock_brackets();
-            
+
             match self.code_dir.get(&(name.clone(), arity)).cloned() {
                 Some((_, ref mod_name)) if mod_name == &module_name => {
                     self.code_dir.remove(&(name.clone(), arity));
-                    
+
                     // remove or respecify ops.
                     if arity == 2 {
                         if let Some((_, _, mod_name)) = self.op_dir.get(&(name.clone(), Fixity::In)).cloned()
@@ -105,7 +105,7 @@ impl Machine {
                         }
 
                         if let Some((_, _, mod_name)) = self.op_dir.get(&(name.clone(), Fixity::Post)).cloned()
-                        {                        
+                        {
                             if mod_name == module_name {
                                 self.op_dir.remove(&(name.clone(), Fixity::Post));
                             }
@@ -116,7 +116,7 @@ impl Machine {
             };
         }
     }
-    
+
     pub fn failed(&self) -> bool {
         self.ms.fail
     }
@@ -125,30 +125,46 @@ impl Machine {
         self.ms.atom_tbl.clone()
     }
 
-    pub fn use_module_in_toplevel(&mut self, name: ClauseName) -> EvalSession {
+    pub fn use_qualified_module_in_toplevel(&mut self, name: ClauseName, exports: Vec<PredicateKey>)
+                                            -> EvalSession
+    {
         self.remove_module(name.clone());
-        
+
         match self.modules.get(&name) {
             Some(ref module) => {
                 let mut indices = MachineCodeIndex { code_dir: &mut self.code_dir,
                                                      op_dir: &mut self.op_dir };
-                                
+
+                indices.use_qualified_module(module, exports)
+            },
+            None => EvalSession::from(EvalError::ModuleNotFound)
+        }
+    }
+
+    pub fn use_module_in_toplevel(&mut self, name: ClauseName) -> EvalSession {
+        self.remove_module(name.clone());
+
+        match self.modules.get(&name) {
+            Some(ref module) => {
+                let mut indices = MachineCodeIndex { code_dir: &mut self.code_dir,
+                                                     op_dir: &mut self.op_dir };
+
                 indices.use_module(module)
             },
             None => EvalSession::from(EvalError::ModuleNotFound)
         }
     }
-    
+
     pub fn get_module(&self, name: ClauseName) -> Option<&Module> {
         self.modules.get(&name)
     }
-    
+
     pub fn add_batched_code(&mut self, mut code: Code, code_dir: CodeDir) {
         self.code.append(&mut code);
         self.code_dir.extend(code_dir.into_iter());
     }
 
-    pub fn add_batched_ops(&mut self, op_dir: OpDir) {        
+    pub fn add_batched_ops(&mut self, op_dir: OpDir) {
         self.op_dir.extend(op_dir.into_iter());
     }
 
@@ -156,7 +172,7 @@ impl Machine {
         self.modules.insert(module.module_decl.name.clone(), module);
         self.code.extend(code.into_iter());
     }
-    
+
     pub fn add_user_code(&mut self, name: ClauseName, arity: usize, code: Code) -> EvalSession
     {
         match self.code_dir.get(&(name.clone(), arity)) {
@@ -176,14 +192,14 @@ impl Machine {
     pub fn code_size(&self) -> usize {
         self.code.len()
     }
-    
+
     fn cached_query_size(&self) -> usize {
         match &self.cached_query {
             &Some(ref query) => query.len(),
             _ => 0
         }
     }
-    
+
     fn execute_instr(&mut self)
     {
         let instr = match self.ms.p {
@@ -291,7 +307,7 @@ impl Machine {
                 },
                 &VarData::Temp(cn, _, _) if cn == chunk_num => {
                     let r = var_data.as_reg_type();
-                    
+
                     if r.reg_num() != 0 {
                         let addr = self.ms[r].clone();
                         heap_locs.insert(var.clone(), addr);
@@ -304,8 +320,8 @@ impl Machine {
 
     fn run_query(&mut self, alloc_locs: &AllocVarDict, heap_locs: &mut HeapVarDict)
     {
-        let end_ptr = CodePtr::TopLevel(0, self.cached_query_size());        
-        
+        let end_ptr = CodePtr::TopLevel(0, self.cached_query_size());
+
         while self.ms.p < end_ptr {
             if let CodePtr::TopLevel(mut cn, p) = self.ms.p {
                 match &self[CodePtr::TopLevel(cn, p)] {
@@ -327,7 +343,7 @@ impl Machine {
                     if heap_locs.is_empty() {
                         self.record_var_places(0, alloc_locs, heap_locs);
                     }
-                    
+
                     break;
                 }
             };
@@ -350,7 +366,7 @@ impl Machine {
             EvalSession::from(EvalError::QueryFailure)
         }
     }
-    
+
     pub fn submit_query(&mut self, code: Code, alloc_locs: AllocVarDict) -> EvalSession
     {
         let mut heap_locs = HashMap::new();
