@@ -45,9 +45,11 @@ fn prolog_repl() {
 
         match read() {
             Input::Line(line) => parse_and_compile_line(&mut wam, line.as_str()),
-            Input::Batch(batch) => {
-                compile_listing(&mut wam, batch.as_str());
-            },
+            Input::Batch(batch) =>
+                match compile_listing(&mut wam, batch.as_str()) {
+                    EvalSession::Error(e) => println!("{}", e),
+                    _ => {}
+                },                
             Input::Quit => break,
             Input::Clear => {
                 wam.clear();

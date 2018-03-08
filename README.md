@@ -29,7 +29,7 @@ Extend rusty-wam to include the following, among other features:
 * Built-in predicates for list processing and top-level declarative
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
   etc.) (_done_).
-* A rudimentary module system (_in progress_).
+* A rudimentary module system (_done_).
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
   is straightforward with attributed variables.
@@ -88,9 +88,9 @@ $> cd rusty-wam
 $> cargo build
 ```
 
-cargo will download and install the libraries rusty-wam uses automatically.
-rusty-wam can be run with the command `cargo run`, and likewise tests can be
-run with `cargo test`.
+cargo will download and install the libraries rusty-wam uses
+automatically.  rusty-wam can be run with the command `cargo run`, and
+likewise tests can be run with `cargo test`.
 
 Note on compatibility: rusty-wam should work on Linux, Mac OS X, and
 FreeBSD. Windows support hinges on the Termion library working in
@@ -239,10 +239,10 @@ New operators can be defined using the `op` declaration.
 
 ### Modules
 
-rusty-wam has seemingly correct but presently untested support for a
-simple predicate-based module system. It provides a way to separate
-units of code into distinct namespaces, for both predicates and
-operators. See the files `src/prolog/lib/*.pl` for examples.
+rusty-wam supports for a simple predicate-based module system. It
+provides a way to separate units of code into distinct namespaces, for
+both predicates and operators. See the files `src/prolog/lib/*.pl` for
+examples.
 
 At the time of this writing, several control and list processing
 operators and predicates are hidden in their own modules that have not
