@@ -542,7 +542,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         let &Rule { head: (_, ref args, ref p1), ref clauses } = rule;
         let mut code = Vec::new();
 
-        self.marker.reset_arg(args.len());
         self.marker.reset_at_head(args);
         self.compile_seq_prelude(&conjunct_info, &mut code);
 
@@ -613,7 +612,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         let mut code = Vec::new();
 
         if let &Term::Clause(_, _, ref args, _) = term {
-            self.marker.reset_arg(args.len());
             self.marker.reset_at_head(args);
             
             let iter = FactInstruction::iter(term);

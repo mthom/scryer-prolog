@@ -10,6 +10,7 @@ pub struct DebrayAllocator {
     bindings: HashMap<Rc<Var>, VarData>,
     arg_c:    usize,
     temp_lb:  usize,
+    arity:    usize, // 0 if not at head.
     contents: HashMap<usize, Rc<Var>>,
     in_use:   BTreeSet<usize>,
 }
@@ -31,12 +32,17 @@ impl DebrayAllocator {
         }
     }
 
+    fn is_in_use(&self, r: usize) -> bool {
+        let in_use_range = r < self.arity && r > self.arg_c;
+        self.in_use.contains(&r) || in_use_range
+    }
+
     fn alloc_with_cr(&self, var: &Var) -> usize
     {
         match self.bindings.get(var) {
             Some(&VarData::Temp(_, _, ref tvd)) => {
                 for &(_, reg) in tvd.use_set.iter() {
-                    if !self.in_use.contains(&reg) {
+                    if !self.is_in_use(reg) {
                         return reg;
                     }
                 }
@@ -44,7 +50,7 @@ impl DebrayAllocator {
                 let mut result = 0;
 
                 for reg in self.temp_lb .. {
-                    if !self.in_use.contains(&reg) {
+                    if !self.is_in_use(reg) {
                         if !tvd.no_use_set.contains(&reg) {
                             result = reg;
                             break;
@@ -63,7 +69,7 @@ impl DebrayAllocator {
         match self.bindings.get(var) {
             Some(&VarData::Temp(_, _, ref tvd)) => {
                 for &(_, reg) in tvd.use_set.iter() {
-                    if !self.in_use.contains(&reg) {
+                    if !self.is_in_use(reg) {
                         return reg;
                     }
                 }
@@ -71,7 +77,7 @@ impl DebrayAllocator {
                 let mut result = 0;
 
                 for reg in self.temp_lb .. {
-                    if !self.in_use.contains(&reg) {
+                    if !self.is_in_use(reg) {
                         if !tvd.no_use_set.contains(&reg) {
                             if !tvd.conflict_set.contains(&reg) {
                                 result = reg;
@@ -124,10 +130,10 @@ impl DebrayAllocator {
                     let r = RegType::Temp(r);
 
                     target.push(Target::move_to_register(r, k));
-                    
+
                     self.contents.remove(&k);
                     self.contents.insert(r.reg_num(), var.clone());
-                    
+
                     self.record_register(var, r);
                     self.in_use.insert(r.reg_num());
                 }
@@ -193,6 +199,7 @@ impl<'a> Allocator<'a> for DebrayAllocator
 {
     fn new() -> DebrayAllocator {
         DebrayAllocator {
+            arity:   0,
             arg_c:   1,
             temp_lb: 1,
             bindings: HashMap::new(),
@@ -335,16 +342,25 @@ impl<'a> Allocator<'a> for DebrayAllocator
     }
 
     fn reset_at_head(&mut self, args: &Vec<Box<Term>>) {
+        self.reset_arg(args.len());
+        self.arity = args.len();
+
         for (idx, arg) in args.iter().enumerate() {
             if let &Term::Var(_, ref var) = arg.as_ref() {
-                self.contents.insert(idx + 1, var.clone());
-                self.in_use.insert(idx + 1);
+                let r = self.get(var.clone());
+
+                if !r.is_perm() && r.reg_num() == 0 {
+                    self.in_use.insert(idx + 1);
+                    self.contents.insert(idx + 1, var.clone());
+                    self.record_register(var.clone(), temp_v!(idx + 1));
+                }
             }
         }
     }
-    
+
     fn reset_arg(&mut self, arity: usize) {
+        self.arity   = 0;
         self.arg_c   = 1;
-        self.temp_lb = arity + 1;        
+        self.temp_lb = arity + 1;
     }
 }
