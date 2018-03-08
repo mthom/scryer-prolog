@@ -543,6 +543,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         let mut code = Vec::new();
 
         self.marker.reset_arg(args.len());
+        self.marker.reset_at_head(args);
         self.compile_seq_prelude(&conjunct_info, &mut code);
 
         let iter = FactIterator::from_rule_head_clause(args);
@@ -607,13 +608,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         vs.mark_vars_in_chunk(term.post_order_iter(), term.arity(), GenContext::Head);
 
         vs.populate_restricting_sets();
-
         self.marker.drain_var_data(vs);
-        self.marker.reset_arg(term.arity());
-
+        
         let mut code = Vec::new();
 
-        if let &Term::Clause(..) = term {
+        if let &Term::Clause(_, _, ref args, _) = term {
+            self.marker.reset_arg(args.len());
+            self.marker.reset_at_head(args);
+            
             let iter = FactInstruction::iter(term);
             let mut compiled_fact = self.compile_target(iter, GenContext::Head, false);
 

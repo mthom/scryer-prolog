@@ -123,15 +123,13 @@ impl DebrayAllocator {
                 if r != k {
                     let r = RegType::Temp(r);
 
-                    if r.reg_num() != k {
-                        target.push(Target::move_to_register(r, k));
-
-                        self.contents.remove(&k);
-                        self.contents.insert(r.reg_num(), var.clone());
-
-                        self.record_register(var, r);
-                        self.in_use.insert(r.reg_num());
-                    }
+                    target.push(Target::move_to_register(r, k));
+                    
+                    self.contents.remove(&k);
+                    self.contents.insert(r.reg_num(), var.clone());
+                    
+                    self.record_register(var, r);
+                    self.in_use.insert(r.reg_num());
                 }
             },
             _ => {}
@@ -218,7 +216,7 @@ impl<'a> Allocator<'a> for DebrayAllocator
             }
         };
     }
-    
+
     fn mark_non_var<Target>(&mut self, lvl: Level, term_loc: GenContext,
                             cell: &Cell<RegType>, target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
@@ -336,8 +334,17 @@ impl<'a> Allocator<'a> for DebrayAllocator
         self.bindings
     }
 
+    fn reset_at_head(&mut self, args: &Vec<Box<Term>>) {
+        for (idx, arg) in args.iter().enumerate() {
+            if let &Term::Var(_, ref var) = arg.as_ref() {
+                self.contents.insert(idx + 1, var.clone());
+                self.in_use.insert(idx + 1);
+            }
+        }
+    }
+    
     fn reset_arg(&mut self, arity: usize) {
         self.arg_c   = 1;
-        self.temp_lb = arity + 1;
+        self.temp_lb = arity + 1;        
     }
 }

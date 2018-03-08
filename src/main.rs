@@ -14,6 +14,7 @@ mod tests;
 
 pub static LISTS: &str   = include_str!("./prolog/lib/lists.pl");
 pub static CONTROL: &str = include_str!("./prolog/lib/control.pl");
+pub static QUEUES: &str = include_str!("./prolog/lib/queues.pl");
 
 fn parse_and_compile_line(wam: &mut Machine, buffer: &str)
 {
@@ -39,6 +40,7 @@ fn prolog_repl() {
 
     load_init_str(&mut wam, LISTS);
     load_init_str(&mut wam, CONTROL);
+    load_init_str(&mut wam, QUEUES);
 
     loop {
         print!("prolog> ");
@@ -49,7 +51,7 @@ fn prolog_repl() {
                 match compile_listing(&mut wam, batch.as_str()) {
                     EvalSession::Error(e) => println!("{}", e),
                     _ => {}
-                },                
+                },
             Input::Quit => break,
             Input::Clear => {
                 wam.clear();
