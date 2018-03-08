@@ -239,9 +239,9 @@ New operators can be defined using the `op` declaration.
 
 ### Modules
 
-rusty-wam supports for a simple predicate-based module system. It
-provides a way to separate units of code into distinct namespaces, for
-both predicates and operators. See the files `src/prolog/lib/*.pl` for
+rusty-wam has a simple predicate-based module system. It provides a
+way to separate units of code into distinct namespaces, for both
+predicates and operators. See the files `src/prolog/lib/*.pl` for
 examples.
 
 At the time of this writing, several control and list processing
