@@ -600,8 +600,6 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
     let mut code = Vec::new();
 
     let mut worker = TopLevelWorker::new(src_str.as_bytes(), wam.atom_tbl());
-
-    
     let tls = try_eval_session!(worker.parse_batch(&mut op_dir));
 
     for tl in tls {
