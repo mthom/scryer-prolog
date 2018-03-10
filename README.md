@@ -138,6 +138,7 @@ The following predicates are built-in to rusty-wam.
 * `functor/3`
 * `ground/1`
 * `integer/1`
+* `is_list/1`
 * `length/2`
 * `maplist/1..8`
 * `member/2`

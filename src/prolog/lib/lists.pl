@@ -1,4 +1,4 @@
-:- module(lists, [member/2, select/3, append/3, memberchk/2, reverse/2, maplist/2,
+:- module(lists, [member/2, select/3, append/3, is_list/1, memberchk/2, reverse/2, maplist/2,
 		  maplist/3, maplist/4, maplist/5, maplist/6, maplist/7, maplist/8,
 		  maplist/9]).
 
@@ -10,6 +10,10 @@ select(X, [Y|Xs], [Y|Ys]) :- select(X, Xs, Ys).
 
 append([], R, R).
 append([X|L], R, [X|S]) :- append(L, R, S).
+
+is_list(X) :- var(X), !, false.        
+is_list([]).
+is_list([_|T]) :- is_list(T).
 
 memberchk(X, Xs) :- member(X, Xs), !.
 
