@@ -123,6 +123,7 @@ The following predicates are built-in to rusty-wam.
 * `(;)/2`
 * `append/3`
 * `arg/3`
+* `atom/1`
 * `atomic/1`
 * `between/3`
 * `call/1..63`

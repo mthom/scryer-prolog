@@ -320,6 +320,19 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                                                 at_1.unwrap_or(interm!(1)),
                                                 at_2.unwrap_or(interm!(2))));
             },
+            InlinedClauseType::IsAtom =>
+                match terms[0].as_ref() {
+                    &Term::Constant(_, Constant::Atom(_)) => {
+                        code.push(succeed!());
+                    },
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
+                        code.push(is_atom!(r));
+                    }
+                    _ => {
+                        code.push(fail!());
+                    }
+                },
             InlinedClauseType::IsAtomic =>
                 match terms[0].as_ref() {
                     &Term::AnonVar | &Term::Clause(..) | &Term::Cons(..) => {
@@ -608,12 +621,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 
         vs.populate_restricting_sets();
         self.marker.drain_var_data(vs);
-        
+
         let mut code = Vec::new();
 
         if let &Term::Clause(_, _, ref args, _) = term {
             self.marker.reset_at_head(args);
-            
+
             let iter = FactInstruction::iter(term);
             let mut compiled_fact = self.compile_target(iter, GenContext::Head, false);
 

@@ -551,6 +551,7 @@ pub enum Term {
 #[derive(Clone, Copy)]
 pub enum InlinedClauseType {
     CompareNumber(CompareNumberQT),
+    IsAtom,
     IsAtomic,
     IsCompound,
     IsInteger,
@@ -565,6 +566,7 @@ impl InlinedClauseType {
     pub fn name(&self) -> &'static str {
         match self {
             &InlinedClauseType::CompareNumber(qt) => qt.name(),
+            &InlinedClauseType::IsAtom => "atom",
             &InlinedClauseType::IsAtomic => "atomic",
             &InlinedClauseType::IsCompound => "compound",
             &InlinedClauseType::IsInteger  => "integer",
@@ -584,6 +586,7 @@ impl InlinedClauseType {
             ("<=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThanOrEqual)),
             ("=\\=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::NotEqual)),
             ("=:=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::Equal)),
+            ("atom", 1) => Some(InlinedClauseType::IsAtom),
             ("atomic", 1) => Some(InlinedClauseType::IsAtomic),
             ("compound", 1) => Some(InlinedClauseType::IsCompound),
             ("integer", 1) => Some(InlinedClauseType::IsInteger),
@@ -1203,6 +1206,7 @@ pub enum BuiltInInstruction {
     InstallInferenceCounter(RegType, RegType, RegType),
     InstallNewBlock,
     InternalCallN,
+    IsAtom(RegType),
     IsAtomic(RegType),
     IsCompound(RegType),
     IsFloat(RegType),

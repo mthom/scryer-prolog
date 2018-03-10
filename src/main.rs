@@ -3,7 +3,6 @@
 extern crate termion;
 
 mod prolog;
-#[macro_use] mod test_utils;
 
 use prolog::ast::*;
 use prolog::io::*;

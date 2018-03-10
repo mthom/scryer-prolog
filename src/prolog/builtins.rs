@@ -620,7 +620,9 @@ fn get_builtins() -> Code {
          query![put_value!(temp_v!(5), 1)],
          reset_block!(),
          fail!(),
-         compare_execute!() // compare/3, 464.
+         compare_execute!(), // compare/3, 464.
+         is_atom!(temp_v!(1)), // atom/1, 465.
+         proceed!()
     ]
 }
 
@@ -733,7 +735,8 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
     code_dir.insert((clause_name!("=@="), 2), (391, builtin.clone()));
     code_dir.insert((clause_name!("\\=@="), 2), (392, builtin.clone()));
     code_dir.insert((clause_name!("compare"), 3), (464, builtin.clone()));
-
+    code_dir.insert((clause_name!("atom"), 1), (465, builtin.clone()));
+    
     (code_dir, op_dir)
 }
 

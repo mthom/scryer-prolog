@@ -1350,6 +1350,14 @@ impl MachineState {
                     _ => self.throw_exception(functor!("type_error", 1, [heap_atom!("integer_expected")]))
                 };
             },
+            &BuiltInInstruction::IsAtom(r) => {
+                let d = self.store(self.deref(self[r].clone()));
+
+                match d {
+                    Addr::Con(Constant::Atom(_)) => self.p += 1,
+                    _ => self.fail = true
+                };
+            },
             &BuiltInInstruction::IsAtomic(r) => {
                 let d = self.store(self.deref(self[r].clone()));
 

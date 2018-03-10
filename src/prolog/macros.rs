@@ -167,6 +167,12 @@ macro_rules! retry_me_else {
     )
 }
 
+macro_rules! is_atom {
+    ($reg:expr) => (
+        Line::BuiltIn(BuiltInInstruction::IsAtom($reg))
+    )
+}
+
 macro_rules! is_atomic {
     ($reg:expr) => (
         Line::BuiltIn(BuiltInInstruction::IsAtomic($reg))

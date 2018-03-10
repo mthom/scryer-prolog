@@ -249,6 +249,8 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "unwind_stack"),
             &BuiltInInstruction::Unify =>
                 write!(f, "unify"),
+            &BuiltInInstruction::IsAtom(r) =>
+                write!(f, "is_atom {}", r),
             &BuiltInInstruction::IsAtomic(r) =>
                 write!(f, "is_atomic {}", r),
             &BuiltInInstruction::IsCompound(r) =>
