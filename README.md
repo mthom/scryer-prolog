@@ -140,6 +140,7 @@ The following predicates are built-in to rusty-wam.
 * `ground/1`
 * `integer/1`
 * `is_list/1`
+* `keysort/2`
 * `length/2`
 * `maplist/1..8`
 * `member/2`
@@ -150,6 +151,7 @@ The following predicates are built-in to rusty-wam.
 * `reverse/2`
 * `select/3`
 * `setup_call_cleanup/3`
+* `sort/2`
 * `string/1`
 * `throw/1`
 * `true/0`

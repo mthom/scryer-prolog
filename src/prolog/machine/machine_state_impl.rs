@@ -91,8 +91,9 @@ impl MachineState {
         self.trail(r1);
     }
 
-    pub(super) fn print_term<Fmt, Outputter>(&self, a: Addr, fmt: Fmt, output: Outputter) -> Outputter
-        where Fmt: HeapCellValueFormatter, Outputter: HeapCellValueOutputter
+    pub(super) fn print_term<Fmt, Outputter>(&self, a: Addr, fmt: Fmt, output: Outputter)
+                                             -> Outputter
+      where Fmt: HeapCellValueFormatter, Outputter: HeapCellValueOutputter
     {
         let iter    = HeapCellPreOrderIterator::new(&self, a);
         let printer = HeapCellPrinter::new(iter, fmt, output);
@@ -939,7 +940,7 @@ impl MachineState {
 
         self.ball.0 = 0;
         self.ball.1.truncate(0);
-                
+
         self.registers[1] = Addr::HeapCell(h);
 
         self.heap.append(hcv);
@@ -1060,7 +1061,7 @@ impl MachineState {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
 
-        match self.compare_term_test(a1, a2) {
+        match self.compare_term_test(&a1, &a2) {
             Ordering::Greater =>
                 match qt {
                     CompareTermQT::GreaterThan | CompareTermQT::GreaterThanOrEqual => return,
@@ -1079,8 +1080,8 @@ impl MachineState {
         };
     }
 
-    fn compare_term_test(&self, a1: Addr, a2: Addr) -> Ordering {
-        let iter = self.zipped_acyclic_pre_order_iter(a1, a2);
+    fn compare_term_test(&self, a1: &Addr, a2: &Addr) -> Ordering {
+        let iter = self.zipped_acyclic_pre_order_iter(a1.clone(), a2.clone());
 
         for (v1, v2) in iter {
             match (v1, v2) {
@@ -1632,6 +1633,67 @@ impl MachineState {
         Ok(())
     }
 
+    fn to_list<Iter: Iterator<Item=Addr>>(&mut self, values: Iter) -> usize {
+        let head_addr = self.heap.h;
+
+        for value in values {
+            let h = self.heap.h;
+
+            self.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
+            self.heap.push(HeapCellValue::Addr(value));
+        }
+
+        self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
+        head_addr
+    }
+
+    fn try_from_list(&self, r: RegType) -> Result<Vec<Addr>, Vec<HeapCellValue>>
+    {
+        let a1 = self.store(self.deref(self[r].clone()));
+
+        match a1.clone() {
+            Addr::Lis(mut l) => {
+                let mut result = Vec::new();
+
+                result.push(self.heap[l].as_addr(l));
+                l += 1;
+                
+                loop {
+                    match self.heap[l].clone() {
+                        HeapCellValue::Addr(Addr::Lis(hcp)) => {
+                            result.push(self.heap[hcp].as_addr(hcp));
+                            l = hcp + 1;
+                        },
+                        HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
+                            break,
+                        hcv =>
+                            return Err(functor!("type_error", 2, [heap_atom!("list"), hcv]))
+                    };
+                }
+
+                Ok(result)
+            },
+            Addr::HeapCell(_) | Addr::StackCell(..) =>
+                Err(functor!("instantiation_error")),
+            addr =>
+                Err(functor!("type_error", 2, [heap_atom!("list"), HeapCellValue::Addr(addr)]))
+        }
+    }
+
+    fn project_onto_key(&self, a: Addr) -> Result<Addr, Vec<HeapCellValue>> {
+        match self.store(self.deref(a)) {
+            Addr::Str(s) =>
+                match self.heap[s].clone() {
+                    HeapCellValue::NamedStr(2, ref name, Some(Fixity::In))
+                        if *name == clause_name!("-") =>
+                           Ok(Addr::HeapCell(s+1)),
+                    _ =>
+                        panic!("Addr::Str doesn't point to NamedStr.")
+                },
+            a => Err(functor!("type_error", 2, [heap_atom!("callable"), HeapCellValue::Addr(a)]))
+        }
+    }
+    
     fn duplicate_term(&mut self) {
         let old_h = self.heap.h;
 
@@ -1819,7 +1881,7 @@ impl MachineState {
                 let a2 = self[temp_v!(2)].clone();
                 let a3 = self[temp_v!(3)].clone();
 
-                let c = Addr::Con(match self.compare_term_test(a2, a3) {
+                let c = Addr::Con(match self.compare_term_test(&a2, &a3) {
                     Ordering::Greater => atom!(">", self.atom_tbl),
                     Ordering::Equal   => atom!("=", self.atom_tbl),
                     Ordering::Less    => atom!("<", self.atom_tbl)
@@ -1834,7 +1896,7 @@ impl MachineState {
                 let a2 = self[temp_v!(2)].clone();
                 let a3 = self[temp_v!(3)].clone();
 
-                let c = Addr::Con(match self.compare_term_test(a2, a3) {
+                let c = Addr::Con(match self.compare_term_test(&a2, &a3) {
                     Ordering::Greater => atom!(">", self.atom_tbl),
                     Ordering::Equal   => atom!("=", self.atom_tbl),
                     Ordering::Less    => atom!("<", self.atom_tbl)
@@ -2012,6 +2074,76 @@ impl MachineState {
             },
             &ControlInstruction::Proceed =>
                 self.p = self.cp.clone(),
+            &ControlInstruction::SortCall => {
+                let mut list = try_or_fail!(self, {
+                    let val = self.try_from_list(temp_v!(1));
+                    self.p += 1;
+                    val
+                });
+                                
+                list.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
+                let heap_addr = Addr::HeapCell(self.to_list(list.into_iter()));
+                
+                let r2 = self[temp_v!(2)].clone();
+                self.unify(r2, heap_addr);
+            },
+            &ControlInstruction::SortExecute => {
+                let mut list = try_or_fail!(self, {
+                    let val = self.try_from_list(temp_v!(1));
+                    self.p = self.cp.clone();
+                    val
+                });
+                
+                list.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
+                let heap_addr = Addr::HeapCell(self.to_list(list.into_iter()));
+                
+                let r2 = self[temp_v!(2)].clone();
+                self.unify(r2, heap_addr);
+            },
+            &ControlInstruction::KeySortCall => {
+                let mut list = try_or_fail!(self, {
+                    let val = self.try_from_list(temp_v!(1));                                        
+                    self.p += 1;
+                    val
+                });
+
+                let mut key_pairs = Vec::new();
+                
+                for val in list {
+                    let key = try_or_fail!(self, self.project_onto_key(val.clone()));
+                    key_pairs.push((key, val.clone()));
+                }
+                
+                key_pairs.sort_unstable_by(|a1, a2| self.compare_term_test(&a1.0, &a2.0));
+                
+                let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
+                let heap_addr = Addr::HeapCell(self.to_list(key_pairs));
+                
+                let r2 = self[temp_v!(2)].clone();
+                self.unify(r2, heap_addr);
+            },
+            &ControlInstruction::KeySortExecute => {
+                let mut list = try_or_fail!(self, {
+                    let val = self.try_from_list(temp_v!(1));
+                    self.p = self.cp.clone();
+                    val
+                });
+                
+                let mut key_pairs = Vec::new();
+                
+                for val in list {
+                    let key = try_or_fail!(self, self.project_onto_key(val.clone()));
+                    key_pairs.push((key, val.clone()));
+                }
+                
+                key_pairs.sort_unstable_by(|a1, a2| self.compare_term_test(&a1.0, &a2.0));
+                
+                let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
+                let heap_addr = Addr::HeapCell(self.to_list(key_pairs));
+                            
+                let r2 = self[temp_v!(2)].clone();
+                self.unify(r2, heap_addr);
+            },
             &ControlInstruction::ThrowCall => {
                 self.cp = self.p.clone() + 1;
                 self.goto_throw();

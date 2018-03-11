@@ -240,12 +240,16 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(Line::Control(ControlInstruction::FunctorCall)),
                     &ClauseType::Inlined(_) =>
                         code.push(proceed!()),
+                    &ClauseType::KeySort =>
+                        code.push(keysort_call!()),
                     &ClauseType::NotEq =>
                         code.push(Line::Control(ControlInstruction::NotEqCall)),
                     &ClauseType::Named(ref name) | &ClauseType::Op(ref name, _) => {
                         let call = ControlInstruction::Call(name.clone(), terms.len(), pvs);
                         code.push(Line::Control(call));
                     },
+                    &ClauseType::Sort =>
+                        code.push(sort_call!()),                    
                     &ClauseType::Throw =>
                         code.push(Line::Control(ControlInstruction::ThrowCall)),
                     _ => {}
@@ -289,6 +293,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         *ctrl = ControlInstruction::NotEqExecute,
                     ControlInstruction::CatchCall =>
                         *ctrl = ControlInstruction::CatchExecute,
+                    ControlInstruction::KeySortCall =>
+                        *ctrl = ControlInstruction::KeySortExecute,
+                    ControlInstruction::SortCall =>
+                        *ctrl = ControlInstruction::SortExecute,
                     ControlInstruction::ThrowCall =>
                         *ctrl = ControlInstruction::ThrowExecute,
                     ControlInstruction::IsCall(r, at) =>

@@ -707,3 +707,15 @@ macro_rules! try_eval_session {
         }
     )
 }
+
+macro_rules! sort_call {
+    () => (
+        Line::Control(ControlInstruction::SortCall)
+    )
+}
+
+macro_rules! keysort_call {
+    () => (
+        Line::Control(ControlInstruction::KeySortCall)
+    )
+}

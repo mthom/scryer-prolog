@@ -173,12 +173,20 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "jmp_by_call {}/{}", offset, arity),
             &ControlInstruction::JmpByExecute(arity, offset) =>
                 write!(f, "jmp_by_execute {}/{}", offset, arity),
+            &ControlInstruction::KeySortCall =>
+                write!(f, "keysort_call"),
+            &ControlInstruction::KeySortExecute =>
+                write!(f, "keysort_execute"),
             &ControlInstruction::NotEqCall =>
                 write!(f, "neq_call"),
             &ControlInstruction::NotEqExecute =>
                 write!(f, "neq_execute"),
             &ControlInstruction::Proceed =>
                 write!(f, "proceed"),
+            &ControlInstruction::SortCall =>
+                write!(f, "call_sort"),
+            &ControlInstruction::SortExecute =>
+                write!(f, "execute_sort"),
             &ControlInstruction::ThrowCall =>
                 write!(f, "call_throw"),
             &ControlInstruction::ThrowExecute =>

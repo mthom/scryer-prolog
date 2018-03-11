@@ -686,10 +686,12 @@ pub enum ClauseType {
     Ground,
     Inlined(InlinedClauseType),
     Is,
+    KeySort,
     NotEq,
     Op(ClauseName, Fixity),
     Named(ClauseName),
     SetupCallCleanup,
+    Sort,
     Throw,
 }
 
@@ -773,24 +775,26 @@ impl ClauseName {
 impl ClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
-            &ClauseType::Arg => ClauseName::BuiltIn("arg"),
-            &ClauseType::CallN => ClauseName::BuiltIn("call"),
-            &ClauseType::CallWithInferenceLimit => ClauseName::BuiltIn("call_with_inference_limit"),
-            &ClauseType::Catch => ClauseName::BuiltIn("catch"),
-            &ClauseType::Compare => ClauseName::BuiltIn("compare"),
-            &ClauseType::CompareTerm(qt) => ClauseName::BuiltIn(qt.name()),
-            &ClauseType::Display => ClauseName::BuiltIn("display"),
-            &ClauseType::DuplicateTerm => ClauseName::BuiltIn("duplicate_term"),
-            &ClauseType::Eq => ClauseName::BuiltIn("=="),
-            &ClauseType::Functor => ClauseName::BuiltIn("functor"),
-            &ClauseType::Ground  => ClauseName::BuiltIn("ground"),
-            &ClauseType::Inlined(inlined) => ClauseName::BuiltIn(inlined.name()),
-            &ClauseType::Is => ClauseName::BuiltIn("is"),
-            &ClauseType::NotEq => ClauseName::BuiltIn("\\=="),
+            &ClauseType::Arg => clause_name!("arg"),
+            &ClauseType::CallN => clause_name!("call"),
+            &ClauseType::CallWithInferenceLimit => clause_name!("call_with_inference_limit"),
+            &ClauseType::Catch => clause_name!("catch"),
+            &ClauseType::Compare => clause_name!("compare"),
+            &ClauseType::CompareTerm(qt) => clause_name!(qt.name()),
+            &ClauseType::Display => clause_name!("display"),
+            &ClauseType::DuplicateTerm => clause_name!("duplicate_term"),
+            &ClauseType::Eq => clause_name!("=="),
+            &ClauseType::Functor => clause_name!("functor"),
+            &ClauseType::Ground  => clause_name!("ground"),
+            &ClauseType::Inlined(inlined) => clause_name!(inlined.name()),
+            &ClauseType::Is => clause_name!("is"),
+            &ClauseType::KeySort => clause_name!("keysort"),
+            &ClauseType::NotEq => clause_name!("\\=="),
             &ClauseType::Op(ref name, _) => name.clone(),
             &ClauseType::Named(ref name) => name.clone(),
-            &ClauseType::SetupCallCleanup => ClauseName::BuiltIn("setup_call_cleanup"),
-            &ClauseType::Throw => ClauseName::BuiltIn("throw")
+            &ClauseType::SetupCallCleanup => clause_name!("setup_call_cleanup"),
+            &ClauseType::Sort => clause_name!("sort"),
+            &ClauseType::Throw => clause_name!("throw")
         }
     }
 
@@ -813,8 +817,10 @@ impl ClauseType {
             ("functor", 3) => ClauseType::Functor,
             ("ground", 1) => ClauseType::Ground,
             ("is", 2) => ClauseType::Is,
+            ("keysort", 2) => ClauseType::KeySort,
             ("\\==", 2) => ClauseType::NotEq,
             ("setup_call_cleanup", 3) => ClauseType::SetupCallCleanup,
+            ("sort", 2) => ClauseType::Sort,
             ("throw", 1) => ClauseType::Throw,
             _ => if let Some(fixity) = fixity {
                 ClauseType::Op(name, fixity)
@@ -1257,13 +1263,17 @@ pub enum ControlInstruction {
     GotoExecute(usize, usize), // p, arity.
     GroundCall,
     GroundExecute,
-    JmpByCall(usize, usize),    // arity, global_offset.
-    JmpByExecute(usize, usize),
     IsCall(RegType, ArithmeticTerm),
     IsExecute(RegType, ArithmeticTerm),
+    JmpByCall(usize, usize),    // arity, global_offset.
+    JmpByExecute(usize, usize),
+    KeySortCall,
+    KeySortExecute,
     NotEqCall,
     NotEqExecute,
     Proceed,
+    SortCall,
+    SortExecute,
     ThrowCall,
     ThrowExecute,
 }
@@ -1305,6 +1315,10 @@ impl ControlInstruction {
             &ControlInstruction::JmpByExecute(..) => true,
             &ControlInstruction::CompareCall => true,
             &ControlInstruction::CompareExecute => true,
+            &ControlInstruction::SortCall => true,
+            &ControlInstruction::SortExecute => true,
+            &ControlInstruction::KeySortCall => true,
+            &ControlInstruction::KeySortExecute => true,
             _ => false
         }
     }
@@ -1429,7 +1443,7 @@ pub enum HeapCellValue {
 impl HeapCellValue {
     pub fn as_addr(&self, focus: usize) -> Addr {
         match self {
-            &HeapCellValue::Addr(ref a)    => a.clone(),
+            &HeapCellValue::Addr(ref a) => a.clone(),
             &HeapCellValue::NamedStr(_, _, _) => Addr::Str(focus)
         }
     }
