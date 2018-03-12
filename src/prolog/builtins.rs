@@ -622,7 +622,9 @@ fn get_builtins() -> Code {
          fail!(),
          compare_execute!(), // compare/3, 464.
          is_atom!(temp_v!(1)), // atom/1, 465.
-         proceed!()
+         proceed!(),
+         sort_execute!(), // sort/2, 467.
+         keysort_execute!() // keysort/2, 468.
     ]
 }
 
@@ -736,6 +738,8 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
     code_dir.insert((clause_name!("\\=@="), 2), (392, builtin.clone()));
     code_dir.insert((clause_name!("compare"), 3), (464, builtin.clone()));
     code_dir.insert((clause_name!("atom"), 1), (465, builtin.clone()));
+    code_dir.insert((clause_name!("sort"), 2), (467, builtin.clone()));
+    code_dir.insert((clause_name!("keysort"), 2), (468, builtin.clone()));
     
     (code_dir, op_dir)
 }
@@ -794,7 +798,10 @@ pub fn builtin_module() -> Module
                                             (clause_name!("ground"), 1),
                                             (clause_name!("setup_call_cleanup"), 3),
                                             (clause_name!("call_with_inference_limit"), 3),
-                                            (clause_name!("compare"), 3)]);
+                                            (clause_name!("compare"), 3),
+                                            (clause_name!("atom"), 1),
+                                            (clause_name!("sort"), 2),
+                                            (clause_name!("keysort"), 2)]);
 
     for arity in 0 .. 63 {
         module_decl.exports.push((clause_name!("call"), arity));

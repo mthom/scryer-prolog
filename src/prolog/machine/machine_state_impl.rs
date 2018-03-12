@@ -1633,6 +1633,22 @@ impl MachineState {
         Ok(())
     }
 
+    fn term_dedup(&self, list: &mut Vec<Addr>) {
+        let mut result = vec![];
+
+        for a2 in list.iter().cloned() {
+            if let Some(a1) = result.last().cloned() {
+                if self.compare_term_test(&a1, &a2) == Ordering::Equal {
+                    continue;
+                }
+            }
+
+            result.push(a2);
+        }
+        
+        *list = result;
+    }
+    
     fn to_list<Iter: Iterator<Item=Addr>>(&mut self, values: Iter) -> usize {
         let head_addr = self.heap.h;
 
@@ -2082,6 +2098,8 @@ impl MachineState {
                 });
                                 
                 list.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
+                self.term_dedup(&mut list);
+                
                 let heap_addr = Addr::HeapCell(self.to_list(list.into_iter()));
                 
                 let r2 = self[temp_v!(2)].clone();
@@ -2095,6 +2113,8 @@ impl MachineState {
                 });
                 
                 list.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
+                self.term_dedup(&mut list);
+                
                 let heap_addr = Addr::HeapCell(self.to_list(list.into_iter()));
                 
                 let r2 = self[temp_v!(2)].clone();
@@ -2114,7 +2134,7 @@ impl MachineState {
                     key_pairs.push((key, val.clone()));
                 }
                 
-                key_pairs.sort_unstable_by(|a1, a2| self.compare_term_test(&a1.0, &a2.0));
+                key_pairs.sort_by(|a1, a2| self.compare_term_test(&a1.0, &a2.0));
                 
                 let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
                 let heap_addr = Addr::HeapCell(self.to_list(key_pairs));
@@ -2136,7 +2156,7 @@ impl MachineState {
                     key_pairs.push((key, val.clone()));
                 }
                 
-                key_pairs.sort_unstable_by(|a1, a2| self.compare_term_test(&a1.0, &a2.0));
+                key_pairs.sort_by(|a1, a2| self.compare_term_test(&a1.0, &a2.0));
                 
                 let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
                 let heap_addr = Addr::HeapCell(self.to_list(key_pairs));

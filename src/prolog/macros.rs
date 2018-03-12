@@ -719,3 +719,15 @@ macro_rules! keysort_call {
         Line::Control(ControlInstruction::KeySortCall)
     )
 }
+
+macro_rules! sort_execute {
+    () => (
+        Line::Control(ControlInstruction::SortExecute)
+    )
+}
+
+macro_rules! keysort_execute {
+    () => (
+        Line::Control(ControlInstruction::KeySortExecute)
+    )
+}
