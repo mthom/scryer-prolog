@@ -222,7 +222,7 @@ impl<'a, Formatter: HeapCellValueFormatter, Outputter: HeapCellValueOutputter>
                             delimit.set(false);
                         },
                     TokenOrRedirect::CloseList(delimit) =>
-                        if delimit.get() == true {
+                        if delimit.get() {
                             self.outputter.append("]");
                         },
                     TokenOrRedirect::HeadTailSeparator =>
