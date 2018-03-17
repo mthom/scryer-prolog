@@ -1198,8 +1198,6 @@ impl MachineState {
     }
 
     fn reset_block(&mut self, addr: Addr) {
-        // let addr = self.deref(self[temp_v!(1)].clone());
-
         match self.store(addr) {
             Addr::Con(Constant::Usize(b)) => {
                 self.block = b;
@@ -1505,22 +1503,6 @@ impl MachineState {
             },
             &BuiltInInstruction::SetCutPoint(r) =>
                 cut_policy.cut(self, r),
-            /*{
-                let addr = self.store(self.deref(self[r].clone()));
-
-                match addr {
-                    Addr::Con(Constant::Usize(nb)) => {
-                        if self.b > nb {
-                            self.b = nb;
-                            self.tidy_trail();
-                            self.or_stack.truncate(self.b);
-                        }
-
-                        self.p += 1;
-                    },
-                    _ => self.fail = true
-                };
-            },*/
             &BuiltInInstruction::CleanUpBlock => {
                 let nb = self.store(self.deref(self[temp_v!(1)].clone()));
 
