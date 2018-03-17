@@ -34,7 +34,7 @@ impl DebrayAllocator {
 
     fn is_in_use(&self, r: usize) -> bool {
         let in_use_range = r <= self.arity && r >= self.arg_c;
-        self.in_use.contains(&r) || in_use_range
+        in_use_range || self.in_use.contains(&r)
     }
 
     fn alloc_with_cr(&self, var: &Var) -> usize

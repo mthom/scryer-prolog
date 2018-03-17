@@ -109,88 +109,32 @@ impl fmt::Display for ControlInstruction {
         match self {
             &ControlInstruction::Allocate(num_cells) =>
                 write!(f, "allocate {}", num_cells),
-            &ControlInstruction::ArgCall =>
-                write!(f, "arg_call"),
-            &ControlInstruction::ArgExecute =>
-                write!(f, "arg_execute"),
-            &ControlInstruction::Call(ref name, arity, pvs) =>
-                write!(f, "call {}/{}, {}", name, arity, pvs),
-            &ControlInstruction::CallN(arity) =>
-                write!(f, "call_N {}", arity),
-            &ControlInstruction::CatchCall =>
-                write!(f, "catch_call"),
-            &ControlInstruction::CatchExecute =>
-                write!(f, "catch_execute"),
+            &ControlInstruction::CallClause(ref ct, arity, pvs, true) =>
+                write!(f, "execute {}/{}, {}", ct.name(), arity, pvs),
+            &ControlInstruction::CallClause(ref ct, arity, pvs, false) =>
+                write!(f, "call {}/{}, {}", ct.name(), arity, pvs),
             &ControlInstruction::CheckCpExecute =>
                 write!(f, "check_cp_execute"),
-            &ControlInstruction::CompareCall =>
-                write!(f, "compare_call"),
-            &ControlInstruction::CompareExecute =>
-                write!(f, "compare_execute"),
-            &ControlInstruction::CompareTermCall(qt) =>
-                write!(f, "compare_term_call {}", qt),
-            &ControlInstruction::CompareTermExecute(qt) =>
-                write!(f, "compare_term_execute {}", qt),
-            &ControlInstruction::DisplayCall =>
-                write!(f, "display_call"),
-            &ControlInstruction::DisplayExecute =>
-                write!(f, "display_execute"),
-            &ControlInstruction::DuplicateTermCall =>
-                write!(f, "call_duplicate_term"),
-            &ControlInstruction::DuplicateTermExecute =>
-                write!(f, "execute_duplicate_term"),
-            &ControlInstruction::EqCall =>
-                write!(f, "eq_call"),
-            &ControlInstruction::EqExecute =>
-                write!(f, "eq_execute"),
-            &ControlInstruction::ExecuteN(arity) =>
-                write!(f, "execute_N {}", arity),
-            &ControlInstruction::FunctorCall =>
-                write!(f, "functor_call"),
-            &ControlInstruction::FunctorExecute =>
-                write!(f, "functor_execute"),
             &ControlInstruction::Deallocate =>
                 write!(f, "deallocate"),
-            &ControlInstruction::GroundCall =>
-                write!(f, "ground_call"),
-            &ControlInstruction::GroundExecute =>
-                write!(f, "ground_execute"),
-            &ControlInstruction::Execute(ref name, arity) =>
-                write!(f, "execute {}/{}", name, arity),
             &ControlInstruction::GetCleanerCall =>
                 write!(f, "get_cleaner_call"),
-            &ControlInstruction::GotoCall(p, arity) =>
+            &ControlInstruction::Goto(p, arity, false) =>
                 write!(f, "goto_call {}/{}", p, arity),
-            &ControlInstruction::GotoExecute(p, arity) =>
+            &ControlInstruction::Goto(p, arity, true) =>
                 write!(f, "goto_execute {}/{}", p, arity),
-            &ControlInstruction::IsCall(r, ref at) =>
+            &ControlInstruction::IsClause(false, r, ref at) =>
                 write!(f, "is_call {}, {}", r, at),
-            &ControlInstruction::IsExecute(r, ref at) =>
+            &ControlInstruction::IsClause(true, r, ref at) =>
                 write!(f, "is_execute {}, {}", r, at),
             &ControlInstruction::DynamicIs =>
                 write!(f, "call_is"),
-            &ControlInstruction::JmpByCall(arity, offset) =>
-                write!(f, "jmp_by_call {}/{}", offset, arity),
-            &ControlInstruction::JmpByExecute(arity, offset) =>
-                write!(f, "jmp_by_execute {}/{}", offset, arity),
-            &ControlInstruction::KeySortCall =>
-                write!(f, "keysort_call"),
-            &ControlInstruction::KeySortExecute =>
-                write!(f, "keysort_execute"),
-            &ControlInstruction::NotEqCall =>
-                write!(f, "neq_call"),
-            &ControlInstruction::NotEqExecute =>
-                write!(f, "neq_execute"),
+            &ControlInstruction::JmpBy(arity, offset, pvs, false) =>
+                write!(f, "jmp_by_call {}/{}, {}", offset, arity, pvs),
+            &ControlInstruction::JmpBy(arity, offset, pvs, true) =>
+                write!(f, "jmp_by_execute {}/{}, {}", offset, arity, pvs),
             &ControlInstruction::Proceed =>
                 write!(f, "proceed"),
-            &ControlInstruction::SortCall =>
-                write!(f, "call_sort"),
-            &ControlInstruction::SortExecute =>
-                write!(f, "execute_sort"),
-            &ControlInstruction::ThrowCall =>
-                write!(f, "call_throw"),
-            &ControlInstruction::ThrowExecute =>
-                write!(f, "execute_throw"),
         }
     }
 }
@@ -521,10 +465,9 @@ fn set_first_index(code: &mut Code)
 
     for (idx, line) in code.iter_mut().enumerate() {
         match line {
-            &mut Line::Control(ControlInstruction::JmpByExecute(_, ref mut offset))
-          | &mut Line::Control(ControlInstruction::JmpByCall(_, ref mut offset)) if *offset == 0 => {
-              *offset = code_len - idx;
-              break;
+            &mut Line::Control(ControlInstruction::JmpBy(_, ref mut offset, ..)) if *offset == 0 => {
+                *offset = code_len - idx;
+                break;
             },
             _ => {}
         };

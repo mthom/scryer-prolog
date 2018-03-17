@@ -3,10 +3,12 @@ use prolog::ast::*;
 use prolog::copier::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
+use prolog::heap_print::*;
 use prolog::tabled_rc::*;
 
 use downcast::Any;
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
@@ -36,7 +38,7 @@ impl<'a> CodeDirs<'a> {
     pub(crate) fn get(&self, name: ClauseName, arity: usize, p: &CodePtr)
                       -> Option<(usize, ClauseName)>
     {
-        let code_dir = self.get_current_code_dir(p);        
+        let code_dir = self.get_current_code_dir(p);
         code_dir.get(&(name, arity)).cloned()
     }
 }
@@ -230,7 +232,7 @@ pub(crate) trait CallPolicy: Any {
             },
             None => machine_st.fail = true
         };
-        
+
         Ok(())
     }
 
@@ -376,6 +378,154 @@ pub(crate) trait CallPolicy: Any {
 
         Ok(())
     }
+
+    fn try_call_clause<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
+                           ct: &ClauseType, arity: usize, lco: bool)
+                           -> CallResult
+    {
+        match ct {
+            &ClauseType::Arg => {
+                if !lco {
+                    machine_st.cp = machine_st.p.clone() + 1;
+                }
+
+                machine_st.num_of_args = 3;
+                machine_st.b0 = machine_st.b;
+                machine_st.p  = CodePtr::DirEntry(150, clause_name!("builtin"));
+
+                Ok(())
+            },
+            &ClauseType::Catch => {
+                if !lco {
+                    machine_st.cp = machine_st.p.clone() + 1;
+                }
+
+                machine_st.num_of_args = 3;
+                machine_st.b0 = machine_st.b;
+                machine_st.p  = CodePtr::DirEntry(5, clause_name!("builtin"));
+
+                Ok(())
+            },
+            &ClauseType::CallN =>
+                if let Some((name, arity)) = machine_st.setup_call_n(arity) {
+                    if lco {
+                        self.try_execute(machine_st, code_dirs, name, arity)
+                    } else {
+                        self.try_call(machine_st, code_dirs, name, arity)
+                    }
+                } else {
+                    Ok(())
+                },
+            &ClauseType::Compare => {
+                let a1 = machine_st[temp_v!(1)].clone();
+                let a2 = machine_st[temp_v!(2)].clone();
+                let a3 = machine_st[temp_v!(3)].clone();
+
+                let c = Addr::Con(match machine_st.compare_term_test(&a2, &a3) {
+                    Ordering::Greater => atom!(">", machine_st.atom_tbl),
+                    Ordering::Equal   => atom!("=", machine_st.atom_tbl),
+                    Ordering::Less    => atom!("<", machine_st.atom_tbl)
+                });
+
+                machine_st.unify(a1, c);
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::CompareTerm(qt) => {
+                match qt {
+                    CompareTermQT::Equal =>
+                        machine_st.fail = machine_st.structural_eq_test(),
+                    CompareTermQT::NotEqual =>
+                        machine_st.fail = !machine_st.structural_eq_test(),
+                    _ => machine_st.compare_term(qt)
+                };
+
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::Display => {
+                let output = machine_st.print_term(machine_st[temp_v!(1)].clone(),
+                                                   DisplayFormatter {},
+                                                   PrinterOutputter::new());
+
+                println!("{}", output.result());
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::DuplicateTerm => {
+                machine_st.duplicate_term();
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::Eq => {
+                machine_st.fail = machine_st.eq_test();
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::Ground => {
+                machine_st.fail = machine_st.ground_test();
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::Functor => {
+                machine_st.try_functor()?;
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::NotEq => {
+                machine_st.fail = !machine_st.eq_test();
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::Sort => {
+                let mut list = machine_st.try_from_list(temp_v!(1))?;
+
+                list.sort_unstable_by(|a1, a2| machine_st.compare_term_test(a1, a2));
+                machine_st.term_dedup(&mut list);
+
+                let heap_addr = Addr::HeapCell(machine_st.to_list(list.into_iter()));
+
+                let r2 = machine_st[temp_v!(2)].clone();
+                machine_st.unify(r2, heap_addr);
+
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::KeySort => {
+                let mut list = machine_st.try_from_list(temp_v!(1))?;
+                let mut key_pairs = Vec::new();
+
+                for val in list {
+                    let key = machine_st.project_onto_key(val.clone())?;
+                    key_pairs.push((key, val.clone()));
+                }
+
+                key_pairs.sort_by(|a1, a2| machine_st.compare_term_test(&a1.0, &a2.0));
+
+                let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
+                let heap_addr = Addr::HeapCell(machine_st.to_list(key_pairs));
+
+                let r2 = machine_st[temp_v!(2)].clone();
+                machine_st.unify(r2, heap_addr);
+
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::Throw => {
+                if !lco {
+                    machine_st.cp = machine_st.p.clone() + 1;
+                }
+                
+                machine_st.goto_throw();
+                Ok(())
+            },
+            &ClauseType::Named(ref name) | &ClauseType::Op(ref name, _) =>
+                if lco {
+                    self.try_execute(machine_st, code_dirs, name.clone(), arity)
+                } else {
+                    self.try_call(machine_st, code_dirs, name.clone(), arity)
+                },
+            &ClauseType::CallWithInferenceLimit => {
+                machine_st.goto_ptr(CodePtr::DirEntry(393, clause_name!("builtin")), 3, lco);
+                Ok(())
+            },
+            &ClauseType::SetupCallCleanup => {
+                machine_st.goto_ptr(CodePtr::DirEntry(294, clause_name!("builtin")), 3, lco);
+                Ok(())
+            },
+            _ => panic!("(is)/2 or an inlined command: should have been superseded by previous clause.")
+        }
+    }
 }
 
 downcast!(CallPolicy);
@@ -488,6 +638,14 @@ impl CallPolicy for CallWithInferenceLimitCallPolicy {
     fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
     {
         self.prev_policy.trust(machine_st, offset)?;
+        self.increment()
+    }
+
+    fn try_call_clause<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
+                           ct: &ClauseType, arity: usize, lco: bool)
+                           -> CallResult
+    {
+        self.prev_policy.try_call_clause(machine_st, code_dirs, ct, arity, lco)?;
         self.increment()
     }
 }

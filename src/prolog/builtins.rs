@@ -424,7 +424,7 @@ fn get_builtins() -> Code {
                 put_unsafe_value!(4, 2),
                 put_value!(perm_v!(2), 3)],
          deallocate!(),
-         jmp_execute!(3, 1),
+         jmp_execute!(3, 1, 0),
          try_me_else!(5), // 304.
          is_var!(temp_v!(1)),
          neck_cut!(),
@@ -581,7 +581,7 @@ fn get_builtins() -> Code {
          remove_inference_counter!(perm_v!(3), temp_v!(2)),
          query![put_value!(perm_v!(3), 1),
                 put_var!(perm_v!(2), 2)],
-         jmp_call!(2, 5),
+         jmp_call!(2, 5, 0),
          erase_ball!(),
          query![put_value!(perm_v!(3), 1),
                 put_unsafe_value!(2, 2),

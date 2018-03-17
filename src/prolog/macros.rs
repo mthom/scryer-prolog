@@ -228,15 +228,21 @@ macro_rules! trust_me {
     )
 }
 
+macro_rules! call_clause {
+    ($ct:expr, $arity:expr, $pvs:expr) => (
+        Line::Control(ControlInstruction::CallClause($ct, $arity, $pvs, false))
+    )
+}
+
 macro_rules! call_n {
     ($arity:expr) => (
-        Line::Control(ControlInstruction::CallN($arity))
+        Line::Control(ControlInstruction::CallClause(ClauseType::CallN, $arity, 0, false))
     )
 }
 
 macro_rules! execute_n {
     ($arity:expr) => (
-        Line::Control(ControlInstruction::ExecuteN($arity))
+        Line::Control(ControlInstruction::CallClause(ClauseType::CallN, $arity, 0, true))
     )
 }
 
@@ -272,13 +278,13 @@ macro_rules! install_new_block {
 
 macro_rules! goto_call {
     ($line:expr, $arity:expr) => (
-        Line::Control(ControlInstruction::GotoCall($line, $arity))
+        Line::Control(ControlInstruction::Goto($line, $arity, false))
     )
 }
 
 macro_rules! goto_execute {
     ($line:expr, $arity:expr) => (
-        Line::Control(ControlInstruction::GotoExecute($line, $arity))
+        Line::Control(ControlInstruction::Goto($line, $arity, true))
     )
 }
 
@@ -308,7 +314,8 @@ macro_rules! unify {
 
 macro_rules! is_call {
     ($r:expr, $at:expr) => (
-        Line::Control(ControlInstruction::IsCall($r, $at))
+        Line::Control(ControlInstruction::IsClause(false, $r, $at))
+
     )
 }
 
@@ -344,7 +351,7 @@ macro_rules! succeed {
 
 macro_rules! duplicate_term {
     () => (
-        Line::Control(ControlInstruction::DuplicateTermCall)
+        Line::Control(ControlInstruction::CallClause(ClauseType::DuplicateTerm, 2, 0, false))
     )
 }
 
@@ -395,13 +402,13 @@ macro_rules! get_structure {
 
 macro_rules! functor_call {
     () => (
-        Line::Control(ControlInstruction::FunctorCall)
+        Line::Control(ControlInstruction::CallClause(ClauseType::Functor, 3, 0, false))
     )
 }
 
 macro_rules! functor_execute {
     () => (
-        Line::Control(ControlInstruction::FunctorExecute)
+        Line::Control(ControlInstruction::CallClause(ClauseType::Functor, 3, 0, true))
     )
 }
 
@@ -485,7 +492,7 @@ macro_rules! infix {
 
 macro_rules! display {
     () => (
-        Line::Control(ControlInstruction::DisplayCall)
+        Line::Control(ControlInstruction::CallClause(ClauseType::Display, 1, 0, false))
     )
 }
 
@@ -538,14 +545,14 @@ macro_rules! cmp_eq {
 }
 
 macro_rules! jmp_call {
-    ($arity:expr, $offset:expr) => (
-        Line::Control(ControlInstruction::JmpByCall($arity, $offset))
+    ($arity:expr, $offset:expr, $pvs:expr) => (
+        Line::Control(ControlInstruction::JmpBy($arity, $offset, $pvs, false))
     )
 }
 
 macro_rules! jmp_execute {
-    ($arity:expr, $offset:expr) => (
-        Line::Control(ControlInstruction::JmpByExecute($arity, $offset))
+    ($arity:expr, $offset:expr, $pvs:expr) => (
+        Line::Control(ControlInstruction::JmpBy($arity, $offset, $pvs, true))
     )
 }
 
@@ -587,25 +594,25 @@ macro_rules! restore_cut_policy {
 
 macro_rules! ground_execute {
     () => (
-        Line::Control(ControlInstruction::GroundExecute)
+        Line::Control(ControlInstruction::CallClause(ClauseType::Ground, 1, 0, true))
     )
 }
 
 macro_rules! eq_execute {
     () => (
-        Line::Control(ControlInstruction::EqExecute)
+        Line::Control(ControlInstruction::CallClause(ClauseType::Eq, 2, 0, true))
     )
 }
 
 macro_rules! not_eq_execute {
     () => (
-        Line::Control(ControlInstruction::NotEqExecute)
+        Line::Control(ControlInstruction::CallClause(ClauseType::NotEq, 2, 0, true))
     )
 }
 
 macro_rules! compare_term_execute {
     ($qt:expr) => (
-        Line::Control(ControlInstruction::CompareTermExecute($qt))
+        Line::Control(ControlInstruction::CallClause(ClauseType::CompareTerm($qt), 2, 0, true))
     )
 }
 
@@ -689,7 +696,7 @@ macro_rules! remove_call_policy_check {
 
 macro_rules! compare_execute {
     () => (
-        Line::Control(ControlInstruction::CompareExecute)
+        Line::Control(ControlInstruction::CallClause(ClauseType::Compare, 2, 0, true))
     )
 }
 
@@ -708,26 +715,26 @@ macro_rules! try_eval_session {
     )
 }
 
-macro_rules! sort_call {
-    () => (
-        Line::Control(ControlInstruction::SortCall)
-    )
-}
-
-macro_rules! keysort_call {
-    () => (
-        Line::Control(ControlInstruction::KeySortCall)
-    )
-}
-
 macro_rules! sort_execute {
     () => (
-        Line::Control(ControlInstruction::SortExecute)
+        Line::Control(ControlInstruction::CallClause(ClauseType::Sort, 2, 0, true))
     )
 }
 
 macro_rules! keysort_execute {
     () => (
-        Line::Control(ControlInstruction::KeySortExecute)
+        Line::Control(ControlInstruction::CallClause(ClauseType::KeySort, 2, 0, true))
     )
+}
+
+macro_rules! return_from_clause {
+    ($lco:expr, $machine_st:expr) => {{
+        if $lco {
+            $machine_st.p = $machine_st.cp.clone();
+        } else {
+            $machine_st.p += 1;
+        }
+
+        Ok(())
+    }}
 }

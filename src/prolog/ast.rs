@@ -165,7 +165,7 @@ impl SubModuleUser for Module {
 
     fn code_dir(&mut self) -> &mut CodeDir {
         &mut self.code_dir
-    }    
+    }
 }
 
 pub trait SubModuleUser {
@@ -175,7 +175,7 @@ pub trait SubModuleUser {
     // returns true on successful import.
     fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
         let name = name.defrock_brackets();
-            
+
         if arity == 1 {
             if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::Pre)) {
                 self.op_dir().insert((name.clone(), Fixity::Pre), op_data.clone());
@@ -201,14 +201,14 @@ pub trait SubModuleUser {
             false
         }
     }
-    
+
     fn use_qualified_module(&mut self, submodule: &Module, exports: Vec<PredicateKey>) -> EvalSession
     {
         for (name, arity) in exports {
             if !submodule.module_decl.exports.contains(&(name.clone(), arity)) {
                 continue;
             }
-            
+
             if !self.import_decl(name, arity, submodule) {
                 return EvalSession::from(EvalError::ModuleDoesNotContainExport);
             }
@@ -216,14 +216,14 @@ pub trait SubModuleUser {
 
         EvalSession::EntrySuccess
     }
-    
+
     fn use_module(&mut self, submodule: &Module) -> EvalSession {
         for (name, arity) in submodule.module_decl.exports.iter().cloned() {
             if !self.import_decl(name, arity, submodule) {
                 return EvalSession::from(EvalError::ModuleDoesNotContainExport);
             }
         }
-        
+
         EvalSession::EntrySuccess
     }
 }
@@ -695,18 +695,6 @@ pub enum ClauseType {
     Throw,
 }
 
-impl ClauseType {
-    pub fn fixity(&self) -> Option<Fixity> {
-        match self {
-            &ClauseType::Compare | &ClauseType::CompareTerm(_)
-          | &ClauseType::Inlined(InlinedClauseType::CompareNumber(_))
-          | &ClauseType::NotEq | &ClauseType::Is | &ClauseType::Eq => Some(Fixity::In),
-            &ClauseType::Op(_, fixity) => Some(fixity),
-            _ => None
-        }
-    }
-}
-
 #[derive(Clone)]
 pub enum ClauseName {
     BuiltIn(&'static str),
@@ -761,7 +749,7 @@ impl ClauseName {
                 s
             }
         }
-        
+
         match self {
             ClauseName::BuiltIn(s) =>
                 ClauseName::BuiltIn(defrock_brackets(s)),
@@ -773,6 +761,16 @@ impl ClauseName {
 }
 
 impl ClauseType {
+    pub fn fixity(&self) -> Option<Fixity> {
+        match self {
+            &ClauseType::Compare | &ClauseType::CompareTerm(_)
+          | &ClauseType::Inlined(InlinedClauseType::CompareNumber(_))
+          | &ClauseType::NotEq | &ClauseType::Is | &ClauseType::Eq => Some(Fixity::In),
+            &ClauseType::Op(_, fixity) => Some(fixity),
+            _ => None
+        }
+    }
+
     pub fn name(&self) -> ClauseName {
         match self {
             &ClauseType::Arg => clause_name!("arg"),
@@ -1235,90 +1233,26 @@ pub enum BuiltInInstruction {
 #[derive(Clone)]
 pub enum ControlInstruction {
     Allocate(usize), // num_frames.
-    ArgCall,
-    ArgExecute,
-    Call(ClauseName, usize, usize), // name, arity, perm_vars after threshold.
-    CallN(usize), // arity.
-    CatchCall,
-    CatchExecute,
+    CallClause(ClauseType, usize, usize, bool), // name, arity, perm_vars after threshold, last call.
     CheckCpExecute,
-    CompareCall,
-    CompareExecute,
-    CompareTermCall(CompareTermQT),
-    CompareTermExecute(CompareTermQT),
-    DisplayCall,
-    DisplayExecute,
     Deallocate,
-    DuplicateTermCall,
-    DuplicateTermExecute,
-    DynamicIs,
-    EqCall,
-    EqExecute,
-    Execute(ClauseName, usize),
-    ExecuteN(usize),
-    FunctorCall,
-    FunctorExecute,
+    DynamicIs,    
     GetCleanerCall,
-    GotoCall(usize, usize),    // p, arity.
-    GotoExecute(usize, usize), // p, arity.
-    GroundCall,
-    GroundExecute,
-    IsCall(RegType, ArithmeticTerm),
-    IsExecute(RegType, ArithmeticTerm),
-    JmpByCall(usize, usize),    // arity, global_offset.
-    JmpByExecute(usize, usize),
-    KeySortCall,
-    KeySortExecute,
-    NotEqCall,
-    NotEqExecute,
-    Proceed,
-    SortCall,
-    SortExecute,
-    ThrowCall,
-    ThrowExecute,
+    Goto(usize, usize, bool),  // p, arity, last call.
+    IsClause(bool, RegType, ArithmeticTerm), // last call, register of var, term.
+    JmpBy(usize, usize, usize, bool), // arity, global_offset, perm_vars after threshold, last call.
+    Proceed
 }
 
 impl ControlInstruction {
     pub fn is_jump_instr(&self) -> bool {
         match self {
-            &ControlInstruction::ArgCall => true,
-            &ControlInstruction::ArgExecute => true,
-            &ControlInstruction::Call(_, _, _)  => true,
-            &ControlInstruction::CatchCall => true,
-            &ControlInstruction::CatchExecute => true,
-            &ControlInstruction::CompareTermCall(..) => true,
-            &ControlInstruction::CompareTermExecute(..) => true,
-            &ControlInstruction::DisplayCall => true,
-            &ControlInstruction::DisplayExecute => true,
-            &ControlInstruction::DuplicateTermCall => true,
-            &ControlInstruction::DuplicateTermExecute => true,
+            &ControlInstruction::CallClause(..)  => true,
             &ControlInstruction::DynamicIs => true,
-            &ControlInstruction::EqCall => true,
-            &ControlInstruction::EqExecute => true,
-            &ControlInstruction::Execute(_, _)  => true,
-            &ControlInstruction::CallN(_) => true,
-            &ControlInstruction::ExecuteN(_) => true,
-            &ControlInstruction::FunctorCall => true,
-            &ControlInstruction::FunctorExecute => true,
-            &ControlInstruction::NotEqCall => true,
-            &ControlInstruction::NotEqExecute => true,
-            &ControlInstruction::ThrowCall => true,
-            &ControlInstruction::ThrowExecute => true,
             &ControlInstruction::GetCleanerCall => true,
-            &ControlInstruction::GotoCall(..) => true,
-            &ControlInstruction::GotoExecute(..) => true,
-            &ControlInstruction::GroundCall => true,
-            &ControlInstruction::GroundExecute => true,
-            &ControlInstruction::IsCall(..) => true,
-            &ControlInstruction::IsExecute(..) => true,
-            &ControlInstruction::JmpByCall(..) => true,
-            &ControlInstruction::JmpByExecute(..) => true,
-            &ControlInstruction::CompareCall => true,
-            &ControlInstruction::CompareExecute => true,
-            &ControlInstruction::SortCall => true,
-            &ControlInstruction::SortExecute => true,
-            &ControlInstruction::KeySortCall => true,
-            &ControlInstruction::KeySortExecute => true,
+            &ControlInstruction::Goto(..) => true,
+            &ControlInstruction::IsClause(..) => true,
+            &ControlInstruction::JmpBy(..) => true,
             _ => false
         }
     }
@@ -1455,7 +1389,7 @@ pub enum CodePtr {
     TopLevel(usize, usize) // chunk_num, offset.
 }
 
-impl CodePtr {    
+impl CodePtr {
     pub fn module_name(&self) -> ClauseName {
         match self {
             &CodePtr::DirEntry(_, ref name) => name.clone(),

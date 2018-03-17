@@ -24,8 +24,7 @@ pub struct ConjunctInfo<'a> {
 
 impl<'a> ConjunctInfo<'a>
 {
-    fn new(perm_vs: VariableFixtures<'a>, num_of_chunks: usize, has_deep_cut: bool) -> Self
-    {
+    fn new(perm_vs: VariableFixtures<'a>, num_of_chunks: usize, has_deep_cut: bool) -> Self {
         ConjunctInfo { perm_vs, num_of_chunks, has_deep_cut }
     }
 
@@ -205,55 +204,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
     fn add_conditional_call(code: &mut Code, qt: &QueryTerm, pvs: usize)
     {
         match qt {
-            &QueryTerm::Jump(ref vars) => {
-                code.push(jmp_call!(vars.len(), 0));
-            },
+            &QueryTerm::Jump(ref vars) =>
+                code.push(jmp_call!(vars.len(), 0, pvs)),
             &QueryTerm::Clause(_, ref ct, ref terms) =>
-                match ct {
-                    &ClauseType::CallWithInferenceLimit =>
-                        code.push(goto_call!(393, 3)),
-                    &ClauseType::SetupCallCleanup =>
-                        code.push(goto_call!(294, 3)),
-                    &ClauseType::Arg => {
-                        let call = ControlInstruction::ArgCall;
-                        code.push(Line::Control(call));
-                    },
-                    &ClauseType::CallN => {
-                        let call = ControlInstruction::CallN(terms.len());
-                        code.push(Line::Control(call));
-                    },
-                    &ClauseType::Catch =>
-                        code.push(Line::Control(ControlInstruction::CatchCall)),
-                    &ClauseType::Compare =>
-                        code.push(Line::Control(ControlInstruction::CompareCall)),
-                    &ClauseType::CompareTerm(qt) =>
-                        code.push(Line::Control(ControlInstruction::CompareTermCall(qt))),
-                    &ClauseType::Display =>
-                        code.push(Line::Control(ControlInstruction::DisplayCall)),
-                    &ClauseType::DuplicateTerm =>
-                        code.push(Line::Control(ControlInstruction::DuplicateTermCall)),
-                    &ClauseType::Eq =>
-                        code.push(Line::Control(ControlInstruction::EqCall)),
-                    &ClauseType::Ground =>
-                        code.push(Line::Control(ControlInstruction::GroundCall)),
-                    &ClauseType::Functor =>
-                        code.push(Line::Control(ControlInstruction::FunctorCall)),
-                    &ClauseType::Inlined(_) =>
-                        code.push(proceed!()),
-                    &ClauseType::KeySort =>
-                        code.push(keysort_call!()),
-                    &ClauseType::NotEq =>
-                        code.push(Line::Control(ControlInstruction::NotEqCall)),
-                    &ClauseType::Named(ref name) | &ClauseType::Op(ref name, _) => {
-                        let call = ControlInstruction::Call(name.clone(), terms.len(), pvs);
-                        code.push(Line::Control(call));
-                    },
-                    &ClauseType::Sort =>
-                        code.push(sort_call!()),                    
-                    &ClauseType::Throw =>
-                        code.push(Line::Control(ControlInstruction::ThrowCall)),
-                    _ => {}
-                },
+                code.push(call_clause!(ct.clone(), terms.len(), pvs)),
             _ => {}
         }
     }
@@ -265,42 +219,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         match code.last_mut() {
             Some(&mut Line::Control(ref mut ctrl)) =>
                 match ctrl.clone() {
-                    ControlInstruction::GotoCall(p, arity) =>
-                        *ctrl = ControlInstruction::GotoExecute(p, arity),
-                    ControlInstruction::ArgCall =>
-                        *ctrl = ControlInstruction::ArgExecute,
-                    ControlInstruction::Call(name, arity, _) =>
-                        *ctrl = ControlInstruction::Execute(name, arity),
-                    ControlInstruction::CallN(arity) =>
-                        *ctrl = ControlInstruction::ExecuteN(arity),
-                    ControlInstruction::CompareCall =>
-                        *ctrl = ControlInstruction::CompareExecute,
-                    ControlInstruction::CompareTermCall(qt) =>
-                        *ctrl = ControlInstruction::CompareTermExecute(qt),
-                    ControlInstruction::DisplayCall =>
-                        *ctrl = ControlInstruction::DisplayExecute,
-                    ControlInstruction::DuplicateTermCall =>
-                        *ctrl = ControlInstruction::DuplicateTermExecute,
-                    ControlInstruction::EqCall =>
-                        *ctrl = ControlInstruction::EqExecute,
-                    ControlInstruction::GroundCall =>
-                        *ctrl = ControlInstruction::GroundExecute,
-                    ControlInstruction::FunctorCall =>
-                        *ctrl = ControlInstruction::FunctorExecute,
-                    ControlInstruction::JmpByCall(arity, offset) =>
-                        *ctrl = ControlInstruction::JmpByExecute(arity, offset),
-                    ControlInstruction::NotEqCall =>
-                        *ctrl = ControlInstruction::NotEqExecute,
-                    ControlInstruction::CatchCall =>
-                        *ctrl = ControlInstruction::CatchExecute,
-                    ControlInstruction::KeySortCall =>
-                        *ctrl = ControlInstruction::KeySortExecute,
-                    ControlInstruction::SortCall =>
-                        *ctrl = ControlInstruction::SortExecute,
-                    ControlInstruction::ThrowCall =>
-                        *ctrl = ControlInstruction::ThrowExecute,
-                    ControlInstruction::IsCall(r, at) =>
-                        *ctrl = ControlInstruction::IsExecute(r, at),
+                    ControlInstruction::CallClause(ct, arity, pvs, false) =>
+                        *ctrl = ControlInstruction::CallClause(ct, arity, pvs, true),
+                    ControlInstruction::Goto(p, arity, false) =>
+                        *ctrl = ControlInstruction::Goto(p, arity, true),
+                    ControlInstruction::JmpBy(arity, offset, pvs, false) =>
+                        *ctrl = ControlInstruction::JmpBy(arity, offset, pvs, true),
+                    ControlInstruction::IsClause(false, r, at) =>
+                        *ctrl = ControlInstruction::IsClause(true, r, at),
                     ControlInstruction::Proceed => {},
                     _ => dealloc_index += 1 // = code.len()
                 },

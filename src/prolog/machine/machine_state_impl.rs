@@ -91,8 +91,7 @@ impl MachineState {
         self.trail(r1);
     }
 
-    pub(super) fn print_term<Fmt, Outputter>(&self, a: Addr, fmt: Fmt, output: Outputter)
-                                             -> Outputter
+    pub(super) fn print_term<Fmt, Outputter>(&self, a: Addr, fmt: Fmt, output: Outputter) -> Outputter
       where Fmt: HeapCellValueFormatter, Outputter: HeapCellValueOutputter
     {
         let iter    = HeapCellPreOrderIterator::new(&self, a);
@@ -101,7 +100,7 @@ impl MachineState {
         printer.print()
     }
 
-    fn unify(&mut self, a1: Addr, a2: Addr) {
+    pub(super) fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
 
         self.fail = false;
@@ -929,7 +928,7 @@ impl MachineState {
         }
     }
 
-    fn goto_throw(&mut self) {
+    pub(super) fn goto_throw(&mut self) {
         self.num_of_args = 1;
         self.b0 = self.b;
         self.p  = CodePtr::DirEntry(59, clause_name!("builtin"));
@@ -947,7 +946,7 @@ impl MachineState {
         self.goto_throw();
     }
 
-    fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
+    pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
     {
         let addr = self.store(self.deref(self.registers[arity].clone()));
 
@@ -1057,7 +1056,7 @@ impl MachineState {
         self.p += 1;
     }
 
-    fn compare_term(&mut self, qt: CompareTermQT) {
+    pub(super) fn compare_term(&mut self, qt: CompareTermQT) {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
 
@@ -1080,7 +1079,7 @@ impl MachineState {
         };
     }
 
-    fn compare_term_test(&self, a1: &Addr, a2: &Addr) -> Ordering {
+    pub(super) fn compare_term_test(&self, a1: &Addr, a2: &Addr) -> Ordering {
         let iter = self.zipped_acyclic_pre_order_iter(a1.clone(), a2.clone());
 
         for (v1, v2) in iter {
@@ -1564,7 +1563,7 @@ impl MachineState {
         };
     }
 
-    fn try_functor(&mut self) -> Result<(), Vec<HeapCellValue>> {
+    pub(super) fn try_functor(&mut self) -> Result<(), Vec<HeapCellValue>> {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
         match a1.clone() {
@@ -1633,7 +1632,7 @@ impl MachineState {
         Ok(())
     }
 
-    fn term_dedup(&self, list: &mut Vec<Addr>) {
+    pub(super) fn term_dedup(&self, list: &mut Vec<Addr>) {
         let mut result = vec![];
 
         for a2 in list.iter().cloned() {
@@ -1645,11 +1644,11 @@ impl MachineState {
 
             result.push(a2);
         }
-        
+
         *list = result;
     }
-    
-    fn to_list<Iter: Iterator<Item=Addr>>(&mut self, values: Iter) -> usize {
+
+    pub(super) fn to_list<Iter: Iterator<Item=Addr>>(&mut self, values: Iter) -> usize {
         let head_addr = self.heap.h;
 
         for value in values {
@@ -1663,7 +1662,7 @@ impl MachineState {
         head_addr
     }
 
-    fn try_from_list(&self, r: RegType) -> Result<Vec<Addr>, Vec<HeapCellValue>>
+    pub(super) fn try_from_list(&self, r: RegType) -> Result<Vec<Addr>, Vec<HeapCellValue>>
     {
         let a1 = self.store(self.deref(self[r].clone()));
 
@@ -1673,7 +1672,7 @@ impl MachineState {
 
                 result.push(self.heap[l].as_addr(l));
                 l += 1;
-                
+
                 loop {
                     match self.heap[l].clone() {
                         HeapCellValue::Addr(Addr::Lis(hcp)) => {
@@ -1696,7 +1695,7 @@ impl MachineState {
         }
     }
 
-    fn project_onto_key(&self, a: Addr) -> Result<Addr, Vec<HeapCellValue>> {
+    pub(super) fn project_onto_key(&self, a: Addr) -> Result<Addr, Vec<HeapCellValue>> {
         match self.store(self.deref(a)) {
             Addr::Str(s) =>
                 match self.heap[s].clone() {
@@ -1709,8 +1708,8 @@ impl MachineState {
             a => Err(functor!("type_error", 2, [heap_atom!("callable"), HeapCellValue::Addr(a)]))
         }
     }
-    
-    fn duplicate_term(&mut self) {
+
+    pub(super) fn duplicate_term(&mut self) {
         let old_h = self.heap.h;
 
         let a1 = self[temp_v!(1)].clone();
@@ -1727,7 +1726,7 @@ impl MachineState {
     }
 
     // returns true on failure.
-    fn eq_test(&self) -> bool
+    pub(super) fn eq_test(&self) -> bool
     {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
@@ -1754,7 +1753,7 @@ impl MachineState {
     }
 
     // returns true on failure.
-    fn structural_eq_test(&self) -> bool
+    pub(super) fn structural_eq_test(&self) -> bool
     {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
@@ -1797,7 +1796,7 @@ impl MachineState {
     }
 
     // returns true on failure.
-    fn ground_test(&self) -> bool
+    pub(super) fn ground_test(&self) -> bool
     {
         let a = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -1849,34 +1848,8 @@ impl MachineState {
                 self.and_stack.push(gi, self.e, self.cp.clone(), num_cells);
                 self.e = self.and_stack.len() - 1;
             },
-            &ControlInstruction::ArgCall => {
-                self.cp = self.p.clone() + 1;
-                self.num_of_args = 3;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(150, clause_name!("builtin"));
-            },
-            &ControlInstruction::ArgExecute => {
-                self.num_of_args = 3;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(150, clause_name!("builtin"));
-            },
-            &ControlInstruction::Call(ref name, arity, _) =>
-                try_or_fail!(self, call_policy.try_call(self, code_dirs, name.clone(), arity)),
-            &ControlInstruction::CatchCall => {
-                self.cp = self.p.clone() + 1;
-                self.num_of_args = 3;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(5, clause_name!("builtin"));
-            },
-            &ControlInstruction::CatchExecute => {
-                self.num_of_args = 3;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(5, clause_name!("builtin"));
-            },
-            &ControlInstruction::CallN(arity) =>
-                if let Some((name, arity)) = self.setup_call_n(arity) {
-                    try_or_fail!(self, call_policy.try_call(self, code_dirs, name, arity))
-                },
+            &ControlInstruction::CallClause(ref ct, arity, _, lco) =>
+                try_or_fail!(self, call_policy.try_call_clause(self, code_dirs, ct, arity, lco)),
             &ControlInstruction::CheckCpExecute => {
                 let a = self.store(self.deref(self[temp_v!(2)].clone()));
 
@@ -1892,58 +1865,6 @@ impl MachineState {
                     }
                 };
             },
-            &ControlInstruction::CompareCall => {
-                let a1 = self[temp_v!(1)].clone();
-                let a2 = self[temp_v!(2)].clone();
-                let a3 = self[temp_v!(3)].clone();
-
-                let c = Addr::Con(match self.compare_term_test(&a2, &a3) {
-                    Ordering::Greater => atom!(">", self.atom_tbl),
-                    Ordering::Equal   => atom!("=", self.atom_tbl),
-                    Ordering::Less    => atom!("<", self.atom_tbl)
-                });
-
-                self.unify(a1, c);
-
-                self.p += 1;
-            },
-            &ControlInstruction::CompareExecute => {
-                let a1 = self[temp_v!(1)].clone();
-                let a2 = self[temp_v!(2)].clone();
-                let a3 = self[temp_v!(3)].clone();
-
-                let c = Addr::Con(match self.compare_term_test(&a2, &a3) {
-                    Ordering::Greater => atom!(">", self.atom_tbl),
-                    Ordering::Equal   => atom!("=", self.atom_tbl),
-                    Ordering::Less    => atom!("<", self.atom_tbl)
-                });
-
-                self.unify(a1, c);
-
-                self.p = self.cp.clone();
-            },
-            &ControlInstruction::CompareTermCall(qt) => {
-                match qt {
-                    CompareTermQT::Equal =>
-                        self.fail = self.structural_eq_test(),
-                    CompareTermQT::NotEqual =>
-                        self.fail = !self.structural_eq_test(),
-                    _ => self.compare_term(qt)
-                };
-
-                self.p += 1;
-            },
-            &ControlInstruction::CompareTermExecute(qt) => {
-                match qt {
-                    CompareTermQT::Equal =>
-                        self.fail = self.structural_eq_test(),
-                    CompareTermQT::NotEqual =>
-                        self.fail = !self.structural_eq_test(),
-                    _ => self.compare_term(qt)
-                };
-
-                self.p = self.cp.clone();
-            },
             &ControlInstruction::Deallocate => {
                 let e = self.e;
 
@@ -1952,32 +1873,6 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &ControlInstruction::DisplayCall => {
-                let output = self.print_term(self[temp_v!(1)].clone(),
-                                             DisplayFormatter {},
-                                             PrinterOutputter::new());
-
-                println!("{}", output.result());
-
-                self.p += 1;
-            },
-            &ControlInstruction::DisplayExecute => {
-                let output = self.print_term(self[temp_v!(1)].clone(),
-                                             DisplayFormatter {},
-                                             PrinterOutputter::new());
-
-                println!("{}", output.result());
-
-                self.p = self.cp.clone();
-            },
-            &ControlInstruction::DuplicateTermCall => {
-                self.duplicate_term();
-                self.p += 1;
-            },
-            &ControlInstruction::DuplicateTermExecute => {
-                self.duplicate_term();
-                self.p = self.cp.clone();
-            },
             &ControlInstruction::DynamicIs => {
                 let a = self[temp_v!(1)].clone();
                 let result = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(2)));
@@ -1985,40 +1880,6 @@ impl MachineState {
                 self.unify(a, Addr::Con(Constant::Number(result)));
                 self.p += 1;
             },
-            &ControlInstruction::EqCall => {
-                self.fail = self.eq_test();
-                self.p += 1;
-            },
-            &ControlInstruction::EqExecute => {
-                self.fail = self.eq_test();
-                self.p = self.cp.clone();
-            },
-            &ControlInstruction::GroundCall => {
-                self.fail = self.ground_test();
-                self.p += 1;
-            },
-            &ControlInstruction::GroundExecute => {
-                self.fail = self.ground_test();
-                self.p = self.cp.clone();
-            },
-            &ControlInstruction::Execute(ref name, arity) =>
-                try_or_fail!(self, call_policy.try_execute(self, code_dirs, name.clone(), arity)),
-            &ControlInstruction::ExecuteN(arity) =>
-                if let Some((name, arity)) = self.setup_call_n(arity) {
-                    try_or_fail!(self, call_policy.try_execute(self, code_dirs, name, arity))
-                },
-            &ControlInstruction::FunctorCall =>
-                try_or_fail!(self, {
-                    let val = self.try_functor();
-                    self.p += 1;
-                    val
-                }),
-            &ControlInstruction::FunctorExecute =>
-                try_or_fail!(self, {
-                    let val = self.try_functor();
-                    self.p = self.cp.clone();
-                    val
-                }),
             &ControlInstruction::GetCleanerCall => {
                 let dest = self[temp_v!(1)].clone();
 
@@ -2044,134 +1905,37 @@ impl MachineState {
 
                 self.fail = true;
             },
-            &ControlInstruction::GotoCall(p, arity) => {
-                self.cp = self.p.clone() + 1;
-                self.num_of_args = arity;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(p, clause_name!("builtin"));
-            },
-            &ControlInstruction::GotoExecute(p, arity) => {
-                self.num_of_args = arity;
-                self.b0 = self.b;
-                self.p  = CodePtr::DirEntry(p, clause_name!("builtin"));
-            },
-            &ControlInstruction::IsCall(r, ref at) => {
+            &ControlInstruction::Goto(p, arity, lco) =>
+                self.goto_ptr(CodePtr::DirEntry(p, clause_name!("builtin")), arity, lco),
+            &ControlInstruction::IsClause(lco, r, ref at) => {
                 let a1 = self[r].clone();
                 let a2 = try_or_fail!(self, self.get_number(at));
 
                 self.unify(a1, Addr::Con(Constant::Number(a2)));
-                self.p += 1;
+                try_or_fail!(self, return_from_clause!(lco, self));
             },
-            &ControlInstruction::IsExecute(r, ref at) => {
-                let a1 = self[r].clone();
-                let a2 = try_or_fail!(self, self.get_number(at));
+            &ControlInstruction::JmpBy(arity, offset, _, lco) => {
+                if !lco {
+                    self.cp = self.p.clone() + 1;
+                }
 
-                self.unify(a1, Addr::Con(Constant::Number(a2)));
-                self.p = self.cp.clone();
-            },
-            &ControlInstruction::JmpByCall(arity, offset) => {
-                self.cp = self.p.clone() + 1;
                 self.num_of_args = arity;
                 self.b0 = self.b;
                 self.p += offset;
-            },
-            &ControlInstruction::JmpByExecute(arity, offset) => {
-                self.num_of_args = arity;
-                self.b0 = self.b;
-                self.p += offset;
-            },
-            &ControlInstruction::NotEqCall => {
-                self.fail = !self.eq_test();
-                self.p += 1;
-            },
-            &ControlInstruction::NotEqExecute => {
-                self.fail = !self.eq_test();
-                self.p = self.cp.clone();
             },
             &ControlInstruction::Proceed =>
                 self.p = self.cp.clone(),
-            &ControlInstruction::SortCall => {
-                let mut list = try_or_fail!(self, {
-                    let val = self.try_from_list(temp_v!(1));
-                    self.p += 1;
-                    val
-                });
-                                
-                list.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
-                self.term_dedup(&mut list);
-                
-                let heap_addr = Addr::HeapCell(self.to_list(list.into_iter()));
-                
-                let r2 = self[temp_v!(2)].clone();
-                self.unify(r2, heap_addr);
-            },
-            &ControlInstruction::SortExecute => {
-                let mut list = try_or_fail!(self, {
-                    let val = self.try_from_list(temp_v!(1));
-                    self.p = self.cp.clone();
-                    val
-                });
-                
-                list.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
-                self.term_dedup(&mut list);
-                
-                let heap_addr = Addr::HeapCell(self.to_list(list.into_iter()));
-                
-                let r2 = self[temp_v!(2)].clone();
-                self.unify(r2, heap_addr);
-            },
-            &ControlInstruction::KeySortCall => {
-                let mut list = try_or_fail!(self, {
-                    let val = self.try_from_list(temp_v!(1));                                        
-                    self.p += 1;
-                    val
-                });
-
-                let mut key_pairs = Vec::new();
-                
-                for val in list {
-                    let key = try_or_fail!(self, self.project_onto_key(val.clone()));
-                    key_pairs.push((key, val.clone()));
-                }
-                
-                key_pairs.sort_by(|a1, a2| self.compare_term_test(&a1.0, &a2.0));
-                
-                let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
-                let heap_addr = Addr::HeapCell(self.to_list(key_pairs));
-                
-                let r2 = self[temp_v!(2)].clone();
-                self.unify(r2, heap_addr);
-            },
-            &ControlInstruction::KeySortExecute => {
-                let mut list = try_or_fail!(self, {
-                    let val = self.try_from_list(temp_v!(1));
-                    self.p = self.cp.clone();
-                    val
-                });
-                
-                let mut key_pairs = Vec::new();
-                
-                for val in list {
-                    let key = try_or_fail!(self, self.project_onto_key(val.clone()));
-                    key_pairs.push((key, val.clone()));
-                }
-                
-                key_pairs.sort_by(|a1, a2| self.compare_term_test(&a1.0, &a2.0));
-                
-                let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
-                let heap_addr = Addr::HeapCell(self.to_list(key_pairs));
-                            
-                let r2 = self[temp_v!(2)].clone();
-                self.unify(r2, heap_addr);
-            },
-            &ControlInstruction::ThrowCall => {
-                self.cp = self.p.clone() + 1;
-                self.goto_throw();
-            },
-            &ControlInstruction::ThrowExecute => {
-                self.goto_throw();
-            },
         };
+    }
+
+    pub(super) fn goto_ptr(&mut self, p: CodePtr, arity: usize, lco:bool) {
+        if !lco {
+            self.cp = self.p.clone() + 1;
+        }
+
+        self.num_of_args = arity;
+        self.b0 = self.b;
+        self.p  = p;
     }
 
     pub(super) fn execute_indexed_choice_instr(&mut self, instr: &IndexedChoiceInstruction,
