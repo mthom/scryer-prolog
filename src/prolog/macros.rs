@@ -168,57 +168,57 @@ macro_rules! retry_me_else {
 }
 
 macro_rules! is_atom {
-    ($reg:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsAtom($reg))
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::CallInlined(InlinedClauseType::IsAtom, vec![$r]))
     )
 }
 
 macro_rules! is_atomic {
-    ($reg:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsAtomic($reg))
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::CallInlined(InlinedClauseType::IsAtomic, vec![$r]))
     )
 }
 
 macro_rules! is_integer {
-    ($reg:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsInteger($reg))
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::CallInlined(InlinedClauseType::IsInteger, vec![$r]))
     )
 }
 
 macro_rules! is_compound {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsCompound($r))
+        Line::BuiltIn(BuiltInInstruction::CallInlined(InlinedClauseType::IsCompound, vec![$r]))
     )
 }
 
 macro_rules! is_float {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsFloat($r))
+        Line::BuiltIn(BuiltInInstruction::CallInlined(InlinedClauseType::IsFloat, vec![$r]))
     )
 }
 
 macro_rules! is_rational {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsRational($r))
+        Line::BuiltIn(BuiltInInstruction::CallInlined(InlinedClauseType::IsRational, vec![$r]))
     )
 }
 
 
 macro_rules! is_nonvar {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsNonVar($r))
+        Line::BuiltIn(BuiltInInstruction::CallInlined(InlinedClauseType::IsNonVar, vec![$r]))
     )
 }
 
 macro_rules! is_string {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsString($r))
+        Line::BuiltIn(BuiltInInstruction::CallInlined(InlinedClauseType::IsString, vec![$r]))
     )
 }
 
 macro_rules! is_var {
-    ($reg:expr) => (
-        Line::BuiltIn(BuiltInInstruction::IsVar($reg))
+    ($r:expr) => (
+        Line::BuiltIn(BuiltInInstruction::CallInlined(InlinedClauseType::IsVar, vec![$r]))
     )
 }
 
@@ -462,13 +462,13 @@ macro_rules! sub {
 
 macro_rules! get_arg_call {
     () => (
-        Line::BuiltIn(BuiltInInstruction::GetArgCall)
+        Line::BuiltIn(BuiltInInstruction::GetArg(false))
     )
 }
 
 macro_rules! get_arg_execute {
     () => (
-        Line::BuiltIn(BuiltInInstruction::GetArgExecute)
+        Line::BuiltIn(BuiltInInstruction::GetArg(true))
     )
 }
 
@@ -504,7 +504,8 @@ macro_rules! dynamic_is {
 
 macro_rules! dynamic_num_test {
     ($cmp:expr) => (
-        Line::BuiltIn(BuiltInInstruction::DynamicCompareNumber($cmp))
+        Line::BuiltIn(BuiltInInstruction::CallInlined(InlinedClauseType::CompareNumber($cmp),
+                                                      vec![temp_v!(1), temp_v!(2)]))
     )
 }
 

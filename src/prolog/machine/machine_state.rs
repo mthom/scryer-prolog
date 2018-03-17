@@ -532,7 +532,10 @@ pub(crate) trait CallPolicy: Any {
 
                 Ok(())
             },
-            _ => panic!("inlined command: should have been superseded by previous clause.")
+            &ClauseType::Inlined(ref inlined) => {
+                machine_st.execute_inlined(inlined, &vec![temp_v!(1), temp_v!(2)]);
+                Ok(())
+            }
         }
     }
 }

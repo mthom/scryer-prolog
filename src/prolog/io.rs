@@ -153,8 +153,14 @@ impl fmt::Display for IndexedChoiceInstruction {
 impl fmt::Display for BuiltInInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &BuiltInInstruction::CallInlined(InlinedClauseType::CompareNumber(cmp), ref rs) =>
+                write!(f, "number_test {}, {}, {}", cmp, &rs[0], &rs[1]),
+            &BuiltInInstruction::CallInlined(ict, ref rs) =>
+                write!(f, "call_inlined_{}, {}", ict.name(), &rs[0]),
             &BuiltInInstruction::CleanUpBlock =>
                 write!(f, "clean_up_block"),
+            &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
+                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
             &BuiltInInstruction::DefaultSetCutPoint(r) =>
                 write!(f, "default_set_cp {}", r),
             &BuiltInInstruction::DefaultRetryMeElse(o) =>
@@ -167,9 +173,9 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "erase_ball"),
             &BuiltInInstruction::Fail =>
                 write!(f, "false"),
-            &BuiltInInstruction::GetArgCall =>
+            &BuiltInInstruction::GetArg(false) =>
                 write!(f, "get_arg_call X1, X2, X3"),
-            &BuiltInInstruction::GetArgExecute =>
+            &BuiltInInstruction::GetArg(true) =>
                 write!(f, "get_arg_execute X1, X2, X3"),
             &BuiltInInstruction::GetBall =>
                 write!(f, "get_ball X1"),
@@ -199,28 +205,6 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "unwind_stack"),
             &BuiltInInstruction::Unify =>
                 write!(f, "unify"),
-            &BuiltInInstruction::IsAtom(r) =>
-                write!(f, "is_atom {}", r),
-            &BuiltInInstruction::IsAtomic(r) =>
-                write!(f, "is_atomic {}", r),
-            &BuiltInInstruction::IsCompound(r) =>
-                write!(f, "is_compound {}", r),
-            &BuiltInInstruction::IsFloat(r) =>
-                write!(f, "is_float {}", r),
-            &BuiltInInstruction::IsRational(r) =>
-                write!(f, "is_rational {}", r),
-            &BuiltInInstruction::IsNonVar(r) =>
-                write!(f, "is_non_var {}", r),
-            &BuiltInInstruction::IsString(r) =>
-                write!(f, "is_string {}", r),
-            &BuiltInInstruction::IsInteger(r) =>
-                write!(f, "is_integer {}", r),
-            &BuiltInInstruction::IsVar(r) =>
-                write!(f, "is_var {}", r),
-            &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
-                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
-            &BuiltInInstruction::DynamicCompareNumber(cmp) =>
-                write!(f, "dynamic_number_test {}", cmp),
             &BuiltInInstruction::RemoveCallPolicyCheck =>
                 write!(f, "remove_call_policy_check"),
             &BuiltInInstruction::RemoveInferenceCounter(r1, r2) =>
