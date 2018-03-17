@@ -498,7 +498,7 @@ macro_rules! display {
 
 macro_rules! dynamic_is {
     () => (
-        Line::Control(ControlInstruction::DynamicIs)
+        Line::Control(ControlInstruction::CallClause(ClauseType::Is, 2, 0, false))
     )
 }
 

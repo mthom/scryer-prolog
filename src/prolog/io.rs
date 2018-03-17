@@ -127,8 +127,6 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "is_call {}, {}", r, at),
             &ControlInstruction::IsClause(true, r, ref at) =>
                 write!(f, "is_execute {}, {}", r, at),
-            &ControlInstruction::DynamicIs =>
-                write!(f, "call_is"),
             &ControlInstruction::JmpBy(arity, offset, pvs, false) =>
                 write!(f, "jmp_by_call {}/{}, {}", offset, arity, pvs),
             &ControlInstruction::JmpBy(arity, offset, pvs, true) =>

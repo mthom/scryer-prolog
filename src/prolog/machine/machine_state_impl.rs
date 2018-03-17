@@ -304,7 +304,7 @@ impl MachineState {
         Rc::new(BigInt::from_signed_bytes_le(&f(&u_n1, &u_n2).to_bytes_le()))
     }
 
-    fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, Vec<HeapCellValue>>
+    pub(super) fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, Vec<HeapCellValue>>
     {
         let instantiation_err = functor!("instantiation_error", 1, [heap_atom!("(is)/2")]);
         let a = self[r].clone();
@@ -1871,13 +1871,6 @@ impl MachineState {
                 self.cp = self.and_stack[e].cp.clone();
                 self.e  = self.and_stack[e].e;
 
-                self.p += 1;
-            },
-            &ControlInstruction::DynamicIs => {
-                let a = self[temp_v!(1)].clone();
-                let result = try_or_fail!(self, self.arith_eval_by_metacall(temp_v!(2)));
-
-                self.unify(a, Addr::Con(Constant::Number(result)));
                 self.p += 1;
             },
             &ControlInstruction::GetCleanerCall => {

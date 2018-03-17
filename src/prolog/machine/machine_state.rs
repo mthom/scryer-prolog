@@ -523,7 +523,16 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.goto_ptr(CodePtr::DirEntry(294, clause_name!("builtin")), 3, lco);
                 Ok(())
             },
-            _ => panic!("(is)/2 or an inlined command: should have been superseded by previous clause.")
+            &ClauseType::Is => {
+                let a = machine_st[temp_v!(1)].clone();
+                let result = machine_st.arith_eval_by_metacall(temp_v!(2))?;
+
+                machine_st.unify(a, Addr::Con(Constant::Number(result)));
+                machine_st.p += 1;
+
+                Ok(())
+            },
+            _ => panic!("inlined command: should have been superseded by previous clause.")
         }
     }
 }

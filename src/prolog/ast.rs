@@ -1236,7 +1236,6 @@ pub enum ControlInstruction {
     CallClause(ClauseType, usize, usize, bool), // name, arity, perm_vars after threshold, last call.
     CheckCpExecute,
     Deallocate,
-    DynamicIs,    
     GetCleanerCall,
     Goto(usize, usize, bool),  // p, arity, last call.
     IsClause(bool, RegType, ArithmeticTerm), // last call, register of var, term.
@@ -1248,7 +1247,6 @@ impl ControlInstruction {
     pub fn is_jump_instr(&self) -> bool {
         match self {
             &ControlInstruction::CallClause(..)  => true,
-            &ControlInstruction::DynamicIs => true,
             &ControlInstruction::GetCleanerCall => true,
             &ControlInstruction::Goto(..) => true,
             &ControlInstruction::IsClause(..) => true,
