@@ -262,15 +262,7 @@ impl MachineState {
 
     fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, Vec<HeapCellValue>> {
         match at {
-            &ArithmeticTerm::Reg(r) => {
-                let addr = self[r].clone();
-                let item = self.store(self.deref(addr));
-
-                match item {
-                    Addr::Con(Constant::Number(n)) => Ok(n),
-                    _ => Err(functor!("instantiation_error", 1, [heap_atom!("(is)/2")]))
-                }
-            },
+            &ArithmeticTerm::Reg(r) =>        self.arith_eval_by_metacall(r),
             &ArithmeticTerm::Interm(i)     => Ok(self.interms[i-1].clone()),
             &ArithmeticTerm::Number(ref n) => Ok(n.clone()),
         }
@@ -325,13 +317,13 @@ impl MachineState {
                         "+" => interms.push(a1 + a2),
                         "-" => interms.push(a1 - a2),
                         "*" => interms.push(a1 * a2),
-                        "rdiv" =>
-                            match NumberPair::from(a1, a2) {
-                                NumberPair::Rational(r1, r2) =>
-                                    interms.push(Number::Rational(self.rdiv(r1, r2)?)),
-                                _ =>
-                                    return Err(instantiation_err)
-                            },
+                        "rdiv" => {
+                            let r1 = self.get_rational(&ArithmeticTerm::Number(a1))?;
+                            let r2 = self.get_rational(&ArithmeticTerm::Number(a2))?;
+
+                            let result = Number::Rational(self.rdiv(r1, r2)?);
+                            interms.push(result)
+                        },
                         "//"  => interms.push(Number::Integer(self.idiv(a1, a2)?)),
                         "div" => interms.push(Number::Integer(self.fidiv(a1, a2)?)),
                         ">>"  => interms.push(Number::Integer(self.shr(a1, a2)?)),
