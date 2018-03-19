@@ -301,10 +301,6 @@ impl MachineState {
         let instantiation_err = functor!("instantiation_error", 1, [heap_atom!("(is)/2")]);
         let a = self[r].clone();
 
-        if let &Addr::Con(Constant::Number(ref n)) = &a {
-            return Ok(n.clone());
-        }
-
         let mut interms: Vec<Number> = Vec::with_capacity(64);
 
         for heap_val in self.post_order_iter(a) {
@@ -1202,17 +1198,17 @@ impl MachineState {
     pub(super) fn execute_inlined(&mut self, inlined: &InlinedClauseType, rs: &Vec<RegType>)
     {
         let r1 = rs[0].clone();
-        
+
         match inlined {
             &InlinedClauseType::CompareNumber(cmp) => {
                 let r2 = rs[1].clone();
-                
+
                 let n1 = try_or_fail!(self, self.arith_eval_by_metacall(r1));
                 let n2 = try_or_fail!(self, self.arith_eval_by_metacall(r2));
 
                 self.compare_numbers(cmp, n1, n2);
             },
-            &InlinedClauseType::IsAtom => {                
+            &InlinedClauseType::IsAtom => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1283,10 +1279,10 @@ impl MachineState {
                     Addr::HeapCell(_) | Addr::StackCell(_,_) => self.p += 1,
                     _ => self.fail = true
                 };
-            },            
+            },
         }
     }
-    
+
     pub(super) fn execute_built_in_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
                                              call_policy: &mut Box<CallPolicy>,
                                              cut_policy:  &mut Box<CutPolicy>,
@@ -1294,7 +1290,7 @@ impl MachineState {
     {
         match instr {
             &BuiltInInstruction::CallInlined(ref inlined, ref rs) =>
-                self.execute_inlined(inlined, rs),            
+                self.execute_inlined(inlined, rs),
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) => {
                 let n1 = try_or_fail!(self, self.get_number(at_1));
                 let n2 = try_or_fail!(self, self.get_number(at_2));
@@ -1327,7 +1323,7 @@ impl MachineState {
                     } else {
                         self.p += 1;
                     }
-                    
+
                     val
                 }),
             &BuiltInInstruction::GetCurrentBlock => {
