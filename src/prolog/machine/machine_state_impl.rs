@@ -1076,8 +1076,6 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::HeapCell(hc2))) =>
                     if hc1 != hc2 {
                         return hc1.cmp(&hc2);
-                    } else {
-                        continue;
                     },
                 (HeapCellValue::Addr(Addr::HeapCell(_)), _) =>
                     return Ordering::Less,
@@ -1089,8 +1087,6 @@ impl MachineState {
                         return Ordering::Less;
                     } else if sc1 > sc2 {
                         return Ordering::Greater;
-                    } else {
-                        continue;
                     },
                 (HeapCellValue::Addr(Addr::StackCell(..)),
                  HeapCellValue::Addr(Addr::HeapCell(_))) =>
@@ -1107,8 +1103,6 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::Con(Constant::Number(n2)))) =>
                     if n1 != n2 {
                         return n1.cmp(&n2);
-                    } else {
-                        continue;
                     },
                 (HeapCellValue::Addr(Addr::Con(Constant::Number(_))), _) =>
                     return Ordering::Less,
@@ -1125,8 +1119,6 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::Con(Constant::String(s2)))) =>
                     if s1 != s2 {
                         return s1.cmp(&s2);
-                    } else {
-                        continue;
                     },
                 (HeapCellValue::Addr(Addr::Con(Constant::String(_))), _) =>
                     return Ordering::Less,
@@ -1146,8 +1138,6 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::Con(Constant::Atom(s2)))) =>
                     if s1 != s2 {
                         return s1.cmp(&s2);
-                    } else {
-                        continue;
                     },
                 (HeapCellValue::Addr(Addr::Con(Constant::Atom(_))), _) =>
                     return Ordering::Less,
@@ -1158,8 +1148,6 @@ impl MachineState {
                         return Ordering::Greater;
                     } else if n1 != n2 {
                         return n1.cmp(&n2);
-                    } else {
-                        continue;
                     },
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
                     continue,
