@@ -613,22 +613,6 @@ impl CallWithInferenceLimitCallPolicy {
 }
 
 impl CallPolicy for CallWithInferenceLimitCallPolicy {
-    fn try_call<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
-                    name: ClauseName, arity: usize)
-                -> CallResult
-    {
-        self.prev_policy.try_call(machine_st, code_dirs, name, arity)?;
-        self.increment()
-    }
-
-    fn try_execute<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
-                       name: ClauseName, arity: usize)
-                       -> CallResult
-    {
-        self.prev_policy.try_execute(machine_st, code_dirs, name, arity)?;
-        self.increment()
-    }
-
     fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
     {
         self.prev_policy.retry_me_else(machine_st, offset)?;
