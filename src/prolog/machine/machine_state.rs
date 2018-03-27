@@ -215,6 +215,17 @@ pub struct MachineState {
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
 pub(crate) trait CallPolicy: Any {
+    fn context_call<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
+                        name: ClauseName, arity: usize, lco: bool)
+                        -> CallResult
+    {
+        if lco {
+            self.try_execute(machine_st, code_dirs, name, arity)
+        } else {
+            self.try_call(machine_st, code_dirs, name, arity)
+        }
+    }
+    
     fn try_call<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
                     name: ClauseName, arity: usize)
                     -> CallResult
@@ -408,11 +419,7 @@ pub(crate) trait CallPolicy: Any {
             },
             &ClauseType::CallN =>
                 if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-                    if lco {
-                        self.try_execute(machine_st, code_dirs, name, arity)
-                    } else {
-                        self.try_call(machine_st, code_dirs, name, arity)
-                    }
+                    self.context_call(machine_st, code_dirs, name, arity, lco)
                 } else {
                     Ok(())
                 },
@@ -510,11 +517,7 @@ pub(crate) trait CallPolicy: Any {
                 Ok(())
             },
             &ClauseType::Named(ref name) | &ClauseType::Op(ref name, _) =>
-                if lco {
-                    self.try_execute(machine_st, code_dirs, name.clone(), arity)
-                } else {
-                    self.try_call(machine_st, code_dirs, name.clone(), arity)
-                },
+                self.context_call(machine_st, code_dirs, name.clone(), arity, lco),
             &ClauseType::CallWithInferenceLimit => {
                 machine_st.goto_ptr(CodePtr::DirEntry(393, clause_name!("builtin")), 3, lco);
                 Ok(())

@@ -1285,13 +1285,13 @@ impl MachineState {
 
                 self.compare_numbers(cmp, n1, n2);
             },
-            &BuiltInInstruction::DefaultSetCutPoint(r) => {
-                let mut cut_policy = DefaultCutPolicy {};
-                cut_policy.cut(self, r);
-            },
             &BuiltInInstruction::DefaultRetryMeElse(o) => {
                 let mut call_policy = DefaultCallPolicy {};
                 try_or_fail!(self, call_policy.retry_me_else(self, o));
+            },
+            &BuiltInInstruction::DefaultSetCutPoint(r) => {
+                let mut cut_policy = DefaultCutPolicy {};
+                cut_policy.cut(self, r);
             },
             &BuiltInInstruction::DefaultTrustMe => {
                 let mut call_policy = DefaultCallPolicy {};
