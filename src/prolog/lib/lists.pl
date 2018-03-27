@@ -1,6 +1,5 @@
 :- module(lists, [member/2, select/3, append/3, is_list/1, memberchk/2, reverse/2, maplist/2,
-		  flatten/2, maplist/3, maplist/4, maplist/5, maplist/6, maplist/7, maplist/8,
-		  maplist/9]).
+		  maplist/3, maplist/4, maplist/5, maplist/6, maplist/7, maplist/8, maplist/9]).
 
 member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
@@ -23,14 +22,6 @@ reverse(Ys, Xs) :- reverse(Xs, [], Ys).
 reverse([], Ys, Ys).
 reverse([H|T], Ps, Rs) :-
     reverse(T, [H|Ps], Rs).
-
-flatten([], List, List) :- !.
-flatten([Head|Tail], List0, List) :- !,
-    flatten(Head, List0, List1),
-    flatten(Tail, List1, List).
-flatten(Other, [Other|List], List).
-
-flatten(Tree, List) :- flatten(Tree, List, []).
 
 maplist(_, []).
 maplist(Cont1, [E1|E1s]) :-

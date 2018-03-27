@@ -136,7 +136,6 @@ The following predicates are built-in to rusty-wam.
 * `display/1`
 * `duplicate_term/2`
 * `false/0`
-* `flatten/2`
 * `float/1`
 * `functor/3`
 * `ground/1`
