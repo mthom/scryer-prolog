@@ -536,7 +536,7 @@ fn get_builtins() -> Code {
                 put_value!(perm_v!(2), 3),
                 put_value!(perm_v!(5), 4),
                 put_value!(perm_v!(1), 5)],
-         goto_call!(404, 5), // goto call_with_inference_limit/4, 404.
+         goto_call!(404, 5), // goto call_with_inference_limit/5, 404.
          query![put_value!(perm_v!(1), 1)],
          deallocate!(),
          remove_call_policy_check!(),

@@ -1196,8 +1196,8 @@ pub enum BuiltInInstruction {
     CleanUpBlock,
     CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
     DefaultRetryMeElse(usize),
-    DefaultTrustMe,
     DefaultSetCutPoint(RegType),
+    DefaultTrustMe,    
     EraseBall,
     Fail,
     GetArg(bool), // last call.

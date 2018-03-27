@@ -161,10 +161,10 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "clean_up_block"),
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
                 write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
+            &BuiltInInstruction::DefaultRetryMeElse(o) =>
+                write!(f, "default_retry_me_else {}", o),            
             &BuiltInInstruction::DefaultSetCutPoint(r) =>
                 write!(f, "default_set_cp {}", r),
-            &BuiltInInstruction::DefaultRetryMeElse(o) =>
-                write!(f, "default_retry_me_else {}", o),
             &BuiltInInstruction::DefaultTrustMe =>
                 write!(f, "default_trust_me"),
             &BuiltInInstruction::InstallInferenceCounter(r1, r2, r3) =>
