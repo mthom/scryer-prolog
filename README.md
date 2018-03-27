@@ -150,6 +150,7 @@ The following predicates are built-in to rusty-wam.
 * `nonvar/1`
 * `once/1`
 * `rational/1`
+* `repeat/0`
 * `reverse/2`
 * `select/3`
 * `setup_call_cleanup/3`

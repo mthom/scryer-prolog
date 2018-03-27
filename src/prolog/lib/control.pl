@@ -1,4 +1,4 @@
-:- module(control, [(\=)/2, between/3, call_cleanup/2, once/1]).
+:- module(control, [(\=)/2, between/3, call_cleanup/2, once/1, repeat/0]).
 
 :- op(700, xfx, \=).
 
@@ -15,3 +15,6 @@ between(Lower1, Upper, X) :-
     Lower1 < Upper,
     Lower2 is Lower1 + 1,
     between(Lower2, Upper, X).
+
+repeat.
+repeat :- repeat.
