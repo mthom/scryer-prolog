@@ -122,6 +122,7 @@ The following predicates are built-in to rusty-wam.
 * `(=..)/2`
 * `(->)/2`
 * `(;)/2`
+* `acyclic_term/2`
 * `append/3`
 * `arg/3`
 * `atom/1`

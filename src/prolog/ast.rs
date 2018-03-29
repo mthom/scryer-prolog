@@ -673,6 +673,7 @@ pub struct Rule {
 
 #[derive(Clone)]
 pub enum ClauseType {
+    AcyclicTerm,
     Arg,
     CallN,
     CallWithInferenceLimit,
@@ -773,7 +774,8 @@ impl ClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &ClauseType::Arg => clause_name!("arg"),
+            &ClauseType::AcyclicTerm => clause_name!("acyclic_term"),
+            &ClauseType::Arg => clause_name!("arg"),            
             &ClauseType::CallN => clause_name!("call"),
             &ClauseType::CallWithInferenceLimit => clause_name!("call_with_inference_limit"),
             &ClauseType::Catch => clause_name!("catch"),
@@ -798,6 +800,7 @@ impl ClauseType {
 
     pub fn from(name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
         match (name.as_str(), arity) {
+            ("acyclic_term", 1) => ClauseType::AcyclicTerm,
             ("arg", 3)   => ClauseType::Arg,
             ("call", _)  => ClauseType::CallN,
             ("call_with_inference_limit", 3) => ClauseType::CallWithInferenceLimit,

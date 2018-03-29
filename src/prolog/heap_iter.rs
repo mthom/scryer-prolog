@@ -59,18 +59,16 @@ impl<'a> Iterator for HeapCellPreOrderIterator<'a> {
     type Item = HeapCellValue;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(a) = self.state_stack.pop() {
+        self.state_stack.pop().map(|a| {
             match self.follow(a) {
-                Addr::HeapCell(h) => Some(self.machine_st.heap[h].clone()),
-                Addr::StackCell(fr, sc) => {
-                    let heap_val = HeapCellValue::Addr(self.machine_st.and_stack[fr][sc].clone());
-                    Some(heap_val)
-                },
-                da => Some(HeapCellValue::Addr(da))
+                Addr::HeapCell(h) =>
+                    self.machine_st.heap[h].clone(),
+                Addr::StackCell(fr, sc) =>
+                    HeapCellValue::Addr(self.machine_st.and_stack[fr][sc].clone()),
+                da =>
+                    HeapCellValue::Addr(da)
             }
-        } else {
-            None
-        }
+        })
     }
 }
 
@@ -119,6 +117,10 @@ impl<'a> Iterator for HeapCellPostOrderIterator<'a> {
 }
 
 impl MachineState {
+    pub fn pre_order_iter<'a>(&'a self, a: Addr) -> HeapCellPreOrderIterator<'a> {
+        HeapCellPreOrderIterator::new(self, a)
+    }
+    
     pub fn post_order_iter<'a>(&'a self, a: Addr) -> HeapCellPostOrderIterator<'a> {
         HeapCellPostOrderIterator::new(HeapCellPreOrderIterator::new(self, a))
     }
