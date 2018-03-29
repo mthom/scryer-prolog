@@ -728,6 +728,12 @@ macro_rules! keysort_execute {
     )
 }
 
+macro_rules! acyclic_term_execute {
+    () => (
+        Line::Control(ControlInstruction::CallClause(ClauseType::AcyclicTerm, 1, 0, true))
+    )
+}
+
 macro_rules! return_from_clause {
     ($lco:expr, $machine_st:expr) => {{
         if $lco {
