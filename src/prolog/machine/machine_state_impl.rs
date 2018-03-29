@@ -11,7 +11,7 @@ use prolog::or_stack::*;
 use prolog::tabled_rc::*;
 
 use std::cmp::{max, Ordering};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 macro_rules! try_or_fail {
@@ -1001,6 +1001,30 @@ impl MachineState {
         }
     }
 
+    pub(super) fn is_cyclic_term(&self, addr: Addr) -> bool {
+        let mut seen = HashSet::new();
+        let mut fail = false;
+        
+        let mut iter = self.pre_order_iter(addr);
+
+        loop {
+            if let Some(addr) = iter.stack().last() {
+                if !seen.contains(addr) {                            
+                    seen.insert(addr.clone());
+                } else {
+                    fail = true;
+                    break;
+                }                            
+            }
+
+            if iter.next().is_none() {
+                break;
+            }
+        }
+
+        fail
+    }
+    
     fn try_get_arg(&mut self) -> Result<(), Vec<HeapCellValue>>
     {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));

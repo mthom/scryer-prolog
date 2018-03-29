@@ -132,10 +132,13 @@ impl PredicateClause {
 }
 
 pub type OpDirKey = (ClauseName, Fixity);
+
 // name and fixity -> operator type and precedence.
 pub type OpDir = HashMap<OpDirKey, (Specifier, usize, ClauseName)>;
 
 pub type CodeDir = HashMap<PredicateKey, (usize, ClauseName)>;
+
+pub type TermDir = HashMap<PredicateKey, Predicate>;
 
 pub type PredicateKey = (ClauseName, usize); // name, arity.
 
@@ -249,11 +252,7 @@ impl TopLevel {
             &TopLevel::Declaration(_) => None,
             &TopLevel::Fact(ref term) => term.name(),
             &TopLevel::Predicate(ref clauses) =>
-                if let Some(ref term) = clauses.first() {
-                    term.name()
-                } else {
-                    None
-                },
+                clauses.first().and_then(|ref term| term.name()),
             &TopLevel::Query(_) => None,
             &TopLevel::Rule(Rule { ref head, .. }) =>
                 Some(head.0.clone())
@@ -268,6 +267,15 @@ impl TopLevel {
                 clauses.first().map(|t| t.arity()).unwrap_or(0),
             &TopLevel::Query(_) => 0,
             &TopLevel::Rule(Rule { ref head, .. }) => head.1.len()
+        }
+    }
+
+    pub fn as_predicate(self) -> Option<Predicate> {
+        match self {
+            TopLevel::Fact(term) => Some(vec![PredicateClause::Fact(term)]),
+            TopLevel::Rule(rule) => Some(vec![PredicateClause::Rule(rule)]),
+            TopLevel::Predicate(pred) => Some(pred),
+            _ => None
         }
     }
 }
@@ -680,6 +688,7 @@ pub enum ClauseType {
     Catch,
     Compare,
     CompareTerm(CompareTermQT),
+    CyclicTerm,
     Display,
     DuplicateTerm,
     Eq,
@@ -775,12 +784,13 @@ impl ClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &ClauseType::AcyclicTerm => clause_name!("acyclic_term"),
-            &ClauseType::Arg => clause_name!("arg"),            
+            &ClauseType::Arg => clause_name!("arg"),
             &ClauseType::CallN => clause_name!("call"),
             &ClauseType::CallWithInferenceLimit => clause_name!("call_with_inference_limit"),
             &ClauseType::Catch => clause_name!("catch"),
             &ClauseType::Compare => clause_name!("compare"),
             &ClauseType::CompareTerm(qt) => clause_name!(qt.name()),
+            &ClauseType::CyclicTerm => clause_name!("cyclic_term"),
             &ClauseType::Display => clause_name!("display"),
             &ClauseType::DuplicateTerm => clause_name!("duplicate_term"),
             &ClauseType::Eq => clause_name!("=="),
@@ -806,6 +816,7 @@ impl ClauseType {
             ("call_with_inference_limit", 3) => ClauseType::CallWithInferenceLimit,
             ("catch", 3) => ClauseType::Catch,
             ("compare", 3) => ClauseType::Compare,
+            ("cyclic_term", 1) => ClauseType::CyclicTerm,
             ("@>", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThan),
             ("@<", 2) => ClauseType::CompareTerm(CompareTermQT::LessThan),
             ("@>=", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual),
@@ -1200,7 +1211,7 @@ pub enum BuiltInInstruction {
     CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
     DefaultRetryMeElse(usize),
     DefaultSetCutPoint(RegType),
-    DefaultTrustMe,    
+    DefaultTrustMe,
     EraseBall,
     Fail,
     GetArg(bool), // last call.
@@ -1211,7 +1222,7 @@ pub enum BuiltInInstruction {
     InstallCleaner,
     InstallInferenceCounter(RegType, RegType, RegType),
     InstallNewBlock,
-    InternalCallN,        
+    InternalCallN,
     RemoveCallPolicyCheck,
     RemoveInferenceCounter(RegType, RegType),
     ResetBlock,

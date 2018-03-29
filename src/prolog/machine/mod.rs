@@ -25,8 +25,9 @@ pub struct Machine {
     call_policy: Box<CallPolicy>,
     cut_policy: Box<CutPolicy>,
     code: Code,
-    code_dir: CodeDir,
+    code_dir: CodeDir,    
     pub op_dir: OpDir,
+    term_dir: TermDir,
     modules: HashMap<ClauseName, Module>,
     cached_query: Option<Code>
 }
@@ -68,6 +69,7 @@ impl Machine {
             cut_policy: Box::new(DefaultCutPolicy {}),
             code,
             code_dir,
+            term_dir: TermDir::new(),
             op_dir,
             modules: HashMap::new(),
             cached_query: None
@@ -173,7 +175,8 @@ impl Machine {
         self.code.extend(code.into_iter());
     }
 
-    pub fn add_user_code(&mut self, name: ClauseName, arity: usize, code: Code) -> EvalSession
+    pub fn add_user_code(&mut self, name: ClauseName, arity: usize, code: Code, pred: Predicate)
+                         -> EvalSession
     {
         match self.code_dir.get(&(name.clone(), arity)) {
             Some(&(_, ref mod_name)) if mod_name == &clause_name!("builtin") =>
@@ -184,8 +187,9 @@ impl Machine {
         let offset = self.code.len();
 
         self.code.extend(code.into_iter());
+        self.term_dir.insert((name.clone(), arity), pred);
         self.code_dir.insert((name, arity), (offset, clause_name!("user")));
-
+        
         EvalSession::EntrySuccess
     }
 

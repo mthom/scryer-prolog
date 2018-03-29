@@ -626,6 +626,7 @@ fn get_builtins() -> Code {
          sort_execute!(), // sort/2, 467.
          keysort_execute!(), // keysort/2, 468.
          acyclic_term_execute!(), // acyclic_term/1, 469.
+         cyclic_term_execute!(), // cyclic_term/1, 470.
     ]
 }
 
@@ -742,6 +743,7 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
     code_dir.insert((clause_name!("sort"), 2), (467, builtin.clone()));
     code_dir.insert((clause_name!("keysort"), 2), (468, builtin.clone()));
     code_dir.insert((clause_name!("acyclic_term"), 1), (469, builtin.clone()));
+    code_dir.insert((clause_name!("cyclic_term"), 1), (470, builtin.clone()));
     
     (code_dir, op_dir)
 }
@@ -804,7 +806,8 @@ pub fn builtin_module() -> Module
                                             (clause_name!("atom"), 1),
                                             (clause_name!("sort"), 2),
                                             (clause_name!("keysort"), 2),
-                                            (clause_name!("acyclic_term"), 1)]);
+                                            (clause_name!("acyclic_term"), 1),
+                                            (clause_name!("cyclic_term"), 1)]);
 
     for arity in 0 .. 63 {
         module_decl.exports.push((clause_name!("call"), arity));

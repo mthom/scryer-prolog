@@ -134,6 +134,7 @@ The following predicates are built-in to rusty-wam.
 * `catch/3`
 * `compare/3`
 * `compound/1`
+* `cyclic_term/1`
 * `display/1`
 * `duplicate_term/2`
 * `false/0`

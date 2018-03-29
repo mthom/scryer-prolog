@@ -1,7 +1,6 @@
 use prolog::and_stack::*;
 use prolog::ast::*;
 use prolog::copier::*;
-use prolog::heap_iter::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
 use prolog::heap_print::*;
@@ -10,7 +9,7 @@ use prolog::tabled_rc::*;
 use downcast::Any;
 
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
@@ -397,30 +396,8 @@ pub(crate) trait CallPolicy: Any {
     {
         match ct {
             &ClauseType::AcyclicTerm => {
-                let addr = machine_st[temp_v!(1)].clone();
-                let mut seen = HashSet::new();
-                let mut fail = false;
-                
-                {
-                    let mut iter = machine_st.pre_order_iter(addr);
-
-                    loop {
-                        if let Some(addr) = iter.stack().last() {
-                            if !seen.contains(addr) {                            
-                                seen.insert(addr.clone());
-                            } else {
-                                fail = true;
-                                break;
-                            }                            
-                        }
-
-                        if iter.next().is_none() {
-                            break;
-                        }
-                    }
-                }
-
-                machine_st.fail = fail;
+                let addr = machine_st[temp_v!(1)].clone();                
+                machine_st.fail = machine_st.is_cyclic_term(addr);
                 return_from_clause!(lco, machine_st)
             },
             &ClauseType::Arg => {
@@ -474,6 +451,11 @@ pub(crate) trait CallPolicy: Any {
                     _ => machine_st.compare_term(qt)
                 };
 
+                return_from_clause!(lco, machine_st)
+            },
+            &ClauseType::CyclicTerm => {
+                let addr = machine_st[temp_v!(1)].clone();                
+                machine_st.fail = !machine_st.is_cyclic_term(addr);
                 return_from_clause!(lco, machine_st)
             },
             &ClauseType::Display => {

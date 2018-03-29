@@ -496,7 +496,7 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
 
             if !code.is_empty() {
                 if let Some(name) = tl.name() {
-                    wam.add_user_code(name, tl.arity(), code)
+                    wam.add_user_code(name, tl.arity(), code, tl.as_predicate().unwrap())
                 } else {
                     EvalSession::from(EvalError::NamelessEntry)
                 }

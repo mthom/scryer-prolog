@@ -7,7 +7,7 @@ use prolog::iterators::*;
 use prolog::targets::*;
 
 use std::cell::Cell;
-use std::collections::HashMap;
+use std::collections::{HashMap};
 use std::rc::Rc;
 use std::vec::Vec;
 
