@@ -136,7 +136,7 @@ pub type OpDirKey = (ClauseName, Fixity);
 // name and fixity -> operator type and precedence.
 pub type OpDir = HashMap<OpDirKey, (Specifier, usize, ClauseName)>;
 
-pub type CodeDir = HashMap<PredicateKey, (usize, ClauseName)>;
+pub type CodeDir = HashMap<PredicateKey, CodeIndex>;
 
 pub type TermDir = HashMap<PredicateKey, Predicate>;
 
@@ -198,11 +198,19 @@ pub trait SubModuleUser {
         }
 
         if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
+            if let Some(ref mut global_code_data) = self.code_dir().get_mut(&(name.clone(), arity)) {
+                global_code_data.1 = code_data.1.clone();
+                global_code_data.0.set(code_data.0.get());
+
+                return true; // done to appease the borrow checker.
+            }
+
             self.code_dir().insert((name, arity), code_data.clone());
-            true
         } else {
-            false
+            return false;
         }
+
+        true
     }
 
     fn use_qualified_module(&mut self, submodule: &Module, exports: Vec<PredicateKey>) -> EvalSession
@@ -698,8 +706,8 @@ pub enum ClauseType {
     Is,
     KeySort,
     NotEq,
-    Op(ClauseName, Fixity),
-    Named(ClauseName),
+    Op(ClauseName, Fixity, CodeIndex),
+    Named(ClauseName, CodeIndex),
     SetupCallCleanup,
     Sort,
     Throw,
@@ -776,7 +784,7 @@ impl ClauseType {
             &ClauseType::Compare | &ClauseType::CompareTerm(_)
           | &ClauseType::Inlined(InlinedClauseType::CompareNumber(_))
           | &ClauseType::NotEq | &ClauseType::Is | &ClauseType::Eq => Some(Fixity::In),
-            &ClauseType::Op(_, fixity) => Some(fixity),
+            &ClauseType::Op(_, fixity, _) => Some(fixity),
             _ => None
         }
     }
@@ -800,8 +808,8 @@ impl ClauseType {
             &ClauseType::Is => clause_name!("is"),
             &ClauseType::KeySort => clause_name!("keysort"),
             &ClauseType::NotEq => clause_name!("\\=="),
-            &ClauseType::Op(ref name, _) => name.clone(),
-            &ClauseType::Named(ref name) => name.clone(),
+            &ClauseType::Op(ref name, ..) => name.clone(),
+            &ClauseType::Named(ref name, ..) => name.clone(),
             &ClauseType::SetupCallCleanup => clause_name!("setup_call_cleanup"),
             &ClauseType::Sort => clause_name!("sort"),
             &ClauseType::Throw => clause_name!("throw")
@@ -835,9 +843,9 @@ impl ClauseType {
             ("sort", 2) => ClauseType::Sort,
             ("throw", 1) => ClauseType::Throw,
             _ => if let Some(fixity) = fixity {
-                ClauseType::Op(name, fixity)
+                ClauseType::Op(name, fixity, CodeIndex::default())
             } else {
-                ClauseType::Named(name)
+                ClauseType::Named(name, CodeIndex::default())
             }
         }
     }
@@ -1385,6 +1393,21 @@ impl HeapCellValue {
     }
 }
 
+#[derive(Clone)]
+pub struct CodeIndex(pub Rc<Cell<usize>>, pub ClauseName);
+
+impl CodeIndex {
+    pub fn is_undefined(&self) -> bool {
+        self.0.get() == 0 && self.1 == clause_name!("")
+    }
+}
+
+impl From<(usize, ClauseName)> for CodeIndex {
+    fn from(value: (usize, ClauseName)) -> Self {
+        CodeIndex(Rc::new(Cell::new(value.0)), value.1)
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub enum CodePtr {
     DirEntry(usize, ClauseName), // offset, resident module name.
@@ -1411,6 +1434,12 @@ impl PartialOrd<CodePtr> for CodePtr {
                 p1.partial_cmp(p2),
             _ => Some(Ordering::Greater)
         }
+    }
+}
+
+impl Default for CodeIndex {
+    fn default() -> Self {
+        CodeIndex(Rc::new(Cell::new(0)), clause_name!(""))
     }
 }
 
@@ -1541,9 +1570,9 @@ impl<'a> TermIterState<'a> {
                 TermIterState::AnonVar(lvl),
             &Term::Clause(ref cell, ref name, ref subterms, fixity) => {
                 let ct = if let Some(fixity) = fixity {
-                    ClauseType::Op(name.clone(), fixity)
+                    ClauseType::Op(name.clone(), fixity, CodeIndex::default())
                 } else {
-                    ClauseType::Named(name.clone())
+                    ClauseType::Named(name.clone(), CodeIndex::default())
                 };
 
                 TermIterState::Clause(lvl, 0, cell, ct, subterms)

@@ -688,62 +688,64 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
     // there are 63 registers in the VM, so call/N is defined for all 0 <= N <= 62
     // (an extra register is needed for the predicate name)
     for arity in 0 .. 63 {
-        code_dir.insert((clause_name!("call"), arity), (0, builtin.clone()));
+        code_dir.insert((clause_name!("call"), arity), CodeIndex::from((0, builtin.clone())));
     }
 
-    code_dir.insert((clause_name!("atomic"), 1), (1, builtin.clone()));
-    code_dir.insert((clause_name!("var"), 1), (3, builtin.clone()));
-    code_dir.insert((clause_name!("false"), 0), (61, builtin.clone()));
-    code_dir.insert((clause_name!("\\+"), 1), (62, builtin.clone()));
-    code_dir.insert((clause_name!("duplicate_term"), 2), (71, builtin.clone()));
-    code_dir.insert((clause_name!("catch"), 3), (5, builtin.clone()));
-    code_dir.insert((clause_name!("throw"), 1), (59, builtin.clone()));
-    code_dir.insert((clause_name!("="), 2), (73, builtin.clone()));
-    code_dir.insert((clause_name!("true"), 0), (75, builtin.clone()));
+    code_dir.insert((clause_name!("atomic"), 1), CodeIndex::from((1, builtin.clone())));
+    code_dir.insert((clause_name!("var"), 1), CodeIndex::from((3, builtin.clone())));
+    code_dir.insert((clause_name!("false"), 0), CodeIndex::from((61, builtin.clone())));
+    code_dir.insert((clause_name!("\\+"), 1), CodeIndex::from((62, builtin.clone())));
+    code_dir.insert((clause_name!("duplicate_term"), 2), CodeIndex::from((71, builtin.clone())));
+    code_dir.insert((clause_name!("catch"), 3), CodeIndex::from((5, builtin.clone())));
+    code_dir.insert((clause_name!("throw"), 1), CodeIndex::from((59, builtin.clone())));
+    code_dir.insert((clause_name!("="), 2), CodeIndex::from((73, builtin.clone())));
+    code_dir.insert((clause_name!("true"), 0), CodeIndex::from((75, builtin.clone())));
 
-    code_dir.insert((clause_name!(","), 2), (76, builtin.clone()));
-    code_dir.insert((clause_name!(";"), 2), (120, builtin.clone()));
-    code_dir.insert((clause_name!("->"), 2), (138, builtin.clone()));
+    code_dir.insert((clause_name!(","), 2), CodeIndex::from((76, builtin.clone())));
+    code_dir.insert((clause_name!(";"), 2), CodeIndex::from((120, builtin.clone())));
+    code_dir.insert((clause_name!("->"), 2), CodeIndex::from((138, builtin.clone())));
 
-    code_dir.insert((clause_name!("functor"), 3), (146, builtin.clone()));
-    code_dir.insert((clause_name!("arg"), 3), (150, builtin.clone()));
-    code_dir.insert((clause_name!("integer"), 1), (147, builtin.clone()));
-    code_dir.insert((clause_name!("display"), 1), (192, builtin.clone()));
+    code_dir.insert((clause_name!("functor"), 3), CodeIndex::from((146, builtin.clone())));
+    code_dir.insert((clause_name!("arg"), 3), CodeIndex::from((150, builtin.clone())));
+    code_dir.insert((clause_name!("integer"), 1), CodeIndex::from((147, builtin.clone())));
+    code_dir.insert((clause_name!("display"), 1), CodeIndex::from((192, builtin.clone())));
 
-    code_dir.insert((clause_name!("is"), 2), (194, builtin.clone()));
-    code_dir.insert((clause_name!(">"), 2), (196, builtin.clone()));
-    code_dir.insert((clause_name!("<"), 2), (198, builtin.clone()));
-    code_dir.insert((clause_name!(">="), 2), (200, builtin.clone()));
-    code_dir.insert((clause_name!("=<"), 2), (202, builtin.clone()));
-    code_dir.insert((clause_name!("=\\="), 2), (204, builtin.clone()));
-    code_dir.insert((clause_name!("=:="), 2), (206, builtin.clone()));
-    code_dir.insert((clause_name!("=.."), 2), (208, builtin.clone()));
+    code_dir.insert((clause_name!("is"), 2), CodeIndex::from((194, builtin.clone())));
+    code_dir.insert((clause_name!(">"), 2), CodeIndex::from((196, builtin.clone())));
+    code_dir.insert((clause_name!("<"), 2), CodeIndex::from((198, builtin.clone())));
+    code_dir.insert((clause_name!(">="), 2), CodeIndex::from((200, builtin.clone())));
+    code_dir.insert((clause_name!("=<"), 2), CodeIndex::from((202, builtin.clone())));
+    code_dir.insert((clause_name!("=\\="), 2), CodeIndex::from((204, builtin.clone())));
+    code_dir.insert((clause_name!("=:="), 2), CodeIndex::from((206, builtin.clone())));
+    code_dir.insert((clause_name!("=.."), 2), CodeIndex::from((208, builtin.clone())));
 
-    code_dir.insert((clause_name!("length"), 2), (261, builtin.clone()));
-    code_dir.insert((clause_name!("setup_call_cleanup"), 3), (294, builtin.clone()));
-    code_dir.insert((clause_name!("call_with_inference_limit"), 3), (393, builtin.clone()));
+    code_dir.insert((clause_name!("length"), 2), CodeIndex::from((261, builtin.clone())));
+    code_dir.insert((clause_name!("setup_call_cleanup"), 3),
+                    CodeIndex::from((294, builtin.clone())));
+    code_dir.insert((clause_name!("call_with_inference_limit"), 3),
+                    CodeIndex::from((393, builtin.clone())));
 
-    code_dir.insert((clause_name!("compound"), 1), (372, builtin.clone()));
-    code_dir.insert((clause_name!("rational"), 1), (374, builtin.clone()));
-    code_dir.insert((clause_name!("string"), 1), (376, builtin.clone()));
-    code_dir.insert((clause_name!("float"), 1), (378, builtin.clone()));
-    code_dir.insert((clause_name!("nonvar"), 1), (380, builtin.clone()));
+    code_dir.insert((clause_name!("compound"), 1), CodeIndex::from((372, builtin.clone())));
+    code_dir.insert((clause_name!("rational"), 1), CodeIndex::from((374, builtin.clone())));
+    code_dir.insert((clause_name!("string"), 1), CodeIndex::from((376, builtin.clone())));
+    code_dir.insert((clause_name!("float"), 1), CodeIndex::from((378, builtin.clone())));
+    code_dir.insert((clause_name!("nonvar"), 1), CodeIndex::from((380, builtin.clone())));
 
-    code_dir.insert((clause_name!("ground"), 1), (384, builtin.clone()));
-    code_dir.insert((clause_name!("=="), 2), (385, builtin.clone()));
-    code_dir.insert((clause_name!("\\=="), 2), (386, builtin.clone()));
-    code_dir.insert((clause_name!("@>="), 2), (387, builtin.clone()));
-    code_dir.insert((clause_name!("@=<"), 2), (388, builtin.clone()));
-    code_dir.insert((clause_name!("@>"), 2), (389, builtin.clone()));
-    code_dir.insert((clause_name!("@<"), 2), (390, builtin.clone()));
-    code_dir.insert((clause_name!("=@="), 2), (391, builtin.clone()));
-    code_dir.insert((clause_name!("\\=@="), 2), (392, builtin.clone()));
-    code_dir.insert((clause_name!("compare"), 3), (464, builtin.clone()));
-    code_dir.insert((clause_name!("atom"), 1), (465, builtin.clone()));
-    code_dir.insert((clause_name!("sort"), 2), (467, builtin.clone()));
-    code_dir.insert((clause_name!("keysort"), 2), (468, builtin.clone()));
-    code_dir.insert((clause_name!("acyclic_term"), 1), (469, builtin.clone()));
-    code_dir.insert((clause_name!("cyclic_term"), 1), (470, builtin.clone()));
+    code_dir.insert((clause_name!("ground"), 1), CodeIndex::from((384, builtin.clone())));
+    code_dir.insert((clause_name!("=="), 2), CodeIndex::from((385, builtin.clone())));
+    code_dir.insert((clause_name!("\\=="), 2), CodeIndex::from((386, builtin.clone())));
+    code_dir.insert((clause_name!("@>="), 2), CodeIndex::from((387, builtin.clone())));
+    code_dir.insert((clause_name!("@=<"), 2), CodeIndex::from((388, builtin.clone())));
+    code_dir.insert((clause_name!("@>"), 2), CodeIndex::from((389, builtin.clone())));
+    code_dir.insert((clause_name!("@<"), 2), CodeIndex::from((390, builtin.clone())));
+    code_dir.insert((clause_name!("=@="), 2), CodeIndex::from((391, builtin.clone())));
+    code_dir.insert((clause_name!("\\=@="), 2), CodeIndex::from((392, builtin.clone())));
+    code_dir.insert((clause_name!("compare"), 3), CodeIndex::from((464, builtin.clone())));
+    code_dir.insert((clause_name!("atom"), 1), CodeIndex::from((465, builtin.clone())));
+    code_dir.insert((clause_name!("sort"), 2), CodeIndex::from((467, builtin.clone())));
+    code_dir.insert((clause_name!("keysort"), 2), CodeIndex::from((468, builtin.clone())));
+    code_dir.insert((clause_name!("acyclic_term"), 1), CodeIndex::from((469, builtin.clone())));
+    code_dir.insert((clause_name!("cyclic_term"), 1), CodeIndex::from((470, builtin.clone())));
     
     (code_dir, op_dir)
 }

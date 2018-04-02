@@ -103,6 +103,16 @@ impl fmt::Display for CompareTermQT {
     }
 }
 
+impl fmt::Display for ClauseType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
+                write!(f, "{}:{}/{}", idx.1, name, idx.0.get()),
+            ref ct =>
+                write!(f, "{}", ct.name())
+        }
+    }
+}
 
 impl fmt::Display for ControlInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -110,9 +120,9 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::Allocate(num_cells) =>
                 write!(f, "allocate {}", num_cells),
             &ControlInstruction::CallClause(ref ct, arity, pvs, true) =>
-                write!(f, "execute {}/{}, {}", ct.name(), arity, pvs),
+                write!(f, "execute {}/{}, {}", ct, arity, pvs),
             &ControlInstruction::CallClause(ref ct, arity, pvs, false) =>
-                write!(f, "call {}/{}, {}", ct.name(), arity, pvs),
+                write!(f, "call {}/{}, {}", ct, arity, pvs),
             &ControlInstruction::CheckCpExecute =>
                 write!(f, "check_cp_execute"),
             &ControlInstruction::Deallocate =>
@@ -162,7 +172,7 @@ impl fmt::Display for BuiltInInstruction {
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
                 write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
             &BuiltInInstruction::DefaultRetryMeElse(o) =>
-                write!(f, "default_retry_me_else {}", o),            
+                write!(f, "default_retry_me_else {}", o),
             &BuiltInInstruction::DefaultSetCutPoint(r) =>
                 write!(f, "default_set_cp {}", r),
             &BuiltInInstruction::DefaultTrustMe =>
@@ -421,6 +431,58 @@ pub fn read() -> Input {
     }
 }
 
+pub(crate) trait TLInfo {
+    fn update_entry_index(&self, &ClauseName, usize, CodeIndex, &mut CodeIndex, usize);
+
+    // give the correct CodePtr offsets to CallClause's whose types are
+    // Named and Op. Enable late binding by setting to the default.
+    fn label_clauses(&self, code_size: usize, code_dir: &mut CodeDir, code: &mut Code)
+    {
+        for line in code.iter_mut() {
+            if let &mut Line::Control(ControlInstruction::CallClause(ref mut ct, a1, ..)) = line {
+                match ct {
+                    &mut ClauseType::Named(ref n1, ref mut cp)
+                  | &mut ClauseType::Op(ref n1, _, ref mut cp) => {
+                      let entry = code_dir.entry((n1.clone(), a1)).or_insert(CodeIndex::default());
+                      self.update_entry_index(n1, a1, entry.clone(), cp, code_size);
+                  },
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+struct DeclInfo { name: ClauseName, arity: usize, module_name: ClauseName }
+
+impl TLInfo for DeclInfo {
+    fn update_entry_index(&self, n1: &ClauseName, a1: usize, mut entry: CodeIndex,
+                          cp: &mut CodeIndex, code_size: usize)
+    {
+        let (name, arity) = (self.name.clone(), self.arity);
+
+        if entry.0.get() == 0 {
+            if &name == n1 && arity == a1 {
+                // *entry = default(); // implement logical view update semantics.
+                entry.0.set(code_size);
+            }
+        }
+
+        entry.1 = self.module_name.clone();
+        *cp = entry;
+    }
+}
+
+struct QueryInfo {}
+
+impl TLInfo for QueryInfo {
+    fn update_entry_index(&self, _: &ClauseName, _: usize, entry: CodeIndex,
+                          cp: &mut CodeIndex, _: usize)
+    {
+        *cp = entry;
+    }
+}
+
 // throw errors if declaration or query found.
 fn compile_relation(tl: &TopLevel) -> Result<Code, ParserError>
 {
@@ -438,9 +500,9 @@ fn compile_relation(tl: &TopLevel) -> Result<Code, ParserError>
     }
 }
 
-// set first jmp_by_call or jmp_by_index instruction to code.len() - idx,
-// where idx is the place it occurs. It only does this to the *first* uninitialized
-// jmp index it encounters, then returns.
+// set first jmp_by_call or jmp_by_index instruction to code.len() -
+// idx, where idx is the place it occurs. It only does this to the
+// *first* uninitialized jmp index it encounters, then returns.
 fn set_first_index(code: &mut Code)
 {
     let code_len = code.len();
@@ -466,13 +528,17 @@ fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>) -> Result<(), ParserE
     Ok(())
 }
 
-fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>)
+fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, code_size: usize,
+                 code_dir: &mut CodeDir)
                  -> Result<(Code, AllocVarDict), ParserError>
 {
     let mut cg = CodeGenerator::<DebrayAllocator>::new();
     let mut code = try!(cg.compile_query(&terms));
 
     compile_appendix(&mut code, queue)?;
+
+    let query_info = QueryInfo {};
+    query_info.label_clauses(code_size, code_dir, &mut code);
 
     Ok((code, cg.take_vars()))
 }
@@ -491,15 +557,22 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
         TopLevel::Declaration(_) =>
             EvalSession::from(ParserError::InvalidModuleDecl),
         _ => {
+            let name = try_eval_session!(if let Some(name) = tl.name() {
+                Ok(name)
+            } else {
+                Err(EvalError::NamelessEntry)
+            });
+
             let mut code = try_eval_session!(compile_relation(&tl));
             try_eval_session!(compile_appendix(&mut code, queue));
 
+            let decl_info = DeclInfo { name: name.clone(), arity: tl.arity(),
+                                       module_name: clause_name!("user") };
+
+            decl_info.label_clauses(wam.code_size(), &mut wam.code_dir, &mut code);
+
             if !code.is_empty() {
-                if let Some(name) = tl.name() {
-                    wam.add_user_code(name, tl.arity(), code, tl.as_predicate().unwrap())
-                } else {
-                    EvalSession::from(EvalError::NamelessEntry)
-                }
+                wam.add_user_code(name, tl.arity(), code, tl.as_predicate().unwrap())
             } else {
                 EvalSession::from(EvalError::ImpermissibleEntry(String::from("no code generated.")))
             }
@@ -511,7 +584,7 @@ pub fn compile_packet(wam: &mut Machine, tl: TopLevelPacket) -> EvalSession
 {
     match tl {
         TopLevelPacket::Query(terms, queue) =>
-            match compile_query(terms, queue) {
+            match compile_query(terms, queue, wam.code_size(), &mut wam.code_dir) {
                 Ok((mut code, vars)) => wam.submit_query(code, vars),
                 Err(e) => EvalSession::from(e)
             },
@@ -525,7 +598,7 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
     fn get_module_name(module: &Option<Module>) -> ClauseName {
         match module {
             &Some(ref module) => module.module_decl.name.clone(),
-            _ => ClauseName::BuiltIn("builtin")
+            _ => ClauseName::BuiltIn("user")
         }
     }
 
@@ -583,8 +656,21 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
 
                 try_eval_session!(compile_appendix(&mut decl_code, queue));
 
+                let name = try_eval_session!(if let Some(name) = decl.name() {
+                    Ok(name)
+                } else {
+                    Err(EvalError::NamelessEntry)
+                });
+
+                let module_name = get_module_name(&module);
+
+                let decl_info = DeclInfo { name, arity: decl.arity(), module_name };
+                decl_info.label_clauses(p, &mut code_dir, &mut decl_code);
+
                 code.extend(decl_code.into_iter());
-                code_dir.insert((decl.name().unwrap(), decl.arity()), (p, get_module_name(&module)));
+
+                let index = CodeIndex::from((p, get_module_name(&module)));
+                code_dir.insert((decl_info.name.clone(), decl_info.arity), index);
             }
         }
     }

@@ -124,10 +124,14 @@ macro_rules! put_var {
 
 macro_rules! put_structure {
     ($atom:expr, $arity:expr, $r:expr, Some($fix:expr)) => (
-        QueryInstruction::PutStructure(ClauseType::Op(clause_name!($atom), $fix), $arity, $r)
+        QueryInstruction::PutStructure(ClauseType::Op(clause_name!($atom), $fix, CodeIndex::default()),
+                                       $arity,
+                                       $r)
     );
     ($atom:expr, $arity:expr, $r:expr, None) => (
-        QueryInstruction::PutStructure(ClauseType::Named(clause_name!($atom)), $arity, $r)
+        QueryInstruction::PutStructure(ClauseType::Named(clause_name!($atom), CodeIndex::default()),
+                                       $arity,
+                                       $r)
     )
 }
 
@@ -393,10 +397,14 @@ macro_rules! get_constant {
 
 macro_rules! get_structure {
     ($atom:expr, $arity:expr, $r:expr, Some($fix:expr)) => (
-        FactInstruction::GetStructure(ClauseType::Op(clause_name!($atom), $fix), $arity, $r)
+        FactInstruction::GetStructure(ClauseType::Op(clause_name!($atom), $fix, CodeIndex::default()),
+                                      $arity,
+                                      $r)
     );
     ($atom:expr, $arity:expr, $r:expr, None) => (
-        FactInstruction::GetStructure(ClauseType::Named(clause_name!($atom)), $arity, $r)
+        FactInstruction::GetStructure(ClauseType::Named(clause_name!($atom), CodeIndex::default()),
+                                      $arity,
+                                      $r)
     )
 }
 

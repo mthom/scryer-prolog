@@ -28,16 +28,12 @@ impl<'a> CodeDirs<'a> {
         let module_name = p.module_name();
 
         match module_name {
-            ClauseName::BuiltIn("user") | ClauseName::BuiltIn("builtin") =>
-                self.code_dir,
-            _ =>
-                &self.modules.get(&module_name).unwrap().code_dir
+            ClauseName::BuiltIn("user") | ClauseName::BuiltIn("builtin") => self.code_dir,
+            _ => &self.modules.get(&module_name).unwrap().code_dir
         }
     }
 
-    pub(crate) fn get(&self, name: ClauseName, arity: usize, p: &CodePtr)
-                      -> Option<(usize, ClauseName)>
-    {
+    pub(super) fn get(&self, name: ClauseName, arity: usize, p: &CodePtr) -> Option<CodeIndex> {
         let code_dir = self.get_current_code_dir(p);
         code_dir.get(&(name, arity)).cloned()
     }
@@ -215,54 +211,46 @@ pub struct MachineState {
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
 pub(crate) trait CallPolicy: Any {
-    fn context_call<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
-                        name: ClauseName, arity: usize, lco: bool)
-                        -> CallResult
-    {
-        if lco {
-            self.try_execute(machine_st, code_dirs, name, arity)
-        } else {
-            self.try_call(machine_st, code_dirs, name, arity)
-        }
-    }
-    
-    fn try_call<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
-                    name: ClauseName, arity: usize)
+    fn context_call(&mut self, machine_st: &mut MachineState, arity: usize, idx: CodeIndex, lco: bool)
                     -> CallResult
     {
-        let compiled_tl_index = code_dirs.get(name, arity, &machine_st.p);
+        if lco {
+            self.try_execute(machine_st, arity, idx)
+        } else {
+            self.try_call(machine_st, arity, idx)
+        }
+    }
 
-        match compiled_tl_index {
-            Some(compiled_tl_index) => {
-                let module_name = compiled_tl_index.1.clone();
+    fn try_call(&mut self, machine_st: &mut MachineState, arity: usize, idx: CodeIndex) -> CallResult
+    {        
+        if idx.is_undefined() {
+            machine_st.fail = true;
+        } else {
+            let compiled_tl_index = idx.0.get();
+            let module_name = idx.1;
 
-                machine_st.cp = machine_st.p.clone() + 1;
-                machine_st.num_of_args = arity;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(compiled_tl_index.0, module_name);
-            },
-            None => machine_st.fail = true
-        };
+            machine_st.cp = machine_st.p.clone() + 1;
+            machine_st.num_of_args = arity;
+            machine_st.b0 = machine_st.b;
+            machine_st.p  = CodePtr::DirEntry(compiled_tl_index, module_name);
+        }
 
         Ok(())
     }
 
-    fn try_execute<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
-                       name: ClauseName, arity: usize)
+    fn try_execute<'a>(&mut self, machine_st: &mut MachineState, arity: usize, idx: CodeIndex)
                        -> CallResult
-    {
-        let compiled_tl_index = code_dirs.get(name, arity, &machine_st.p);
+    {        
+        if idx.is_undefined() {
+            machine_st.fail = true;
+        } else {
+            let compiled_tl_index = idx.0.get();
+            let module_name = idx.1;
 
-        match compiled_tl_index {
-            Some(compiled_tl_index) => {
-                let module_name = compiled_tl_index.1.clone();
-
-                machine_st.num_of_args = arity;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(compiled_tl_index.0, module_name);
-            },
-            None => machine_st.fail = true
-        };
+            machine_st.num_of_args = arity;
+            machine_st.b0 = machine_st.b;
+            machine_st.p  = CodePtr::DirEntry(compiled_tl_index, module_name);
+        }
 
         Ok(())
     }
@@ -396,7 +384,7 @@ pub(crate) trait CallPolicy: Any {
     {
         match ct {
             &ClauseType::AcyclicTerm => {
-                let addr = machine_st[temp_v!(1)].clone();                
+                let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = machine_st.is_cyclic_term(addr);
                 return_from_clause!(lco, machine_st)
             },
@@ -422,21 +410,26 @@ pub(crate) trait CallPolicy: Any {
 
                 Ok(())
             },
-            &ClauseType::CallN =>
+            &ClauseType::CallN => {
                 if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-                    self.context_call(machine_st, code_dirs, name, arity, lco)
-                } else {
-                    Ok(())
-                },
+                    if let Some(idx) = code_dirs.get(name, arity, &machine_st.p.clone()) {
+                        return self.context_call(machine_st, arity, idx, lco);
+                    } else {
+                        machine_st.fail = true;
+                    }
+                }
+
+                Ok(())
+            },
             &ClauseType::Compare => {
                 let a1 = machine_st[temp_v!(1)].clone();
                 let a2 = machine_st[temp_v!(2)].clone();
                 let a3 = machine_st[temp_v!(3)].clone();
 
                 let c = Addr::Con(match machine_st.compare_term_test(&a2, &a3) {
-                    Ordering::Greater => atom!(">", machine_st.atom_tbl),
-                    Ordering::Equal   => atom!("=", machine_st.atom_tbl),
-                    Ordering::Less    => atom!("<", machine_st.atom_tbl)
+                    Ordering::Greater => atom!(">"),
+                    Ordering::Equal   => atom!("="),
+                    Ordering::Less    => atom!("<")
                 });
 
                 machine_st.unify(a1, c);
@@ -454,7 +447,7 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(lco, machine_st)
             },
             &ClauseType::CyclicTerm => {
-                let addr = machine_st[temp_v!(1)].clone();                
+                let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = !machine_st.is_cyclic_term(addr);
                 return_from_clause!(lco, machine_st)
             },
@@ -522,12 +515,12 @@ pub(crate) trait CallPolicy: Any {
                 if !lco {
                     machine_st.cp = machine_st.p.clone() + 1;
                 }
-                
+
                 machine_st.goto_throw();
                 Ok(())
             },
-            &ClauseType::Named(ref name) | &ClauseType::Op(ref name, _) =>
-                self.context_call(machine_st, code_dirs, name.clone(), arity, lco),
+            &ClauseType::Named(_, ref idx) | &ClauseType::Op(_, _, ref idx) =>
+                self.context_call(machine_st, arity, idx.clone(), lco),
             &ClauseType::CallWithInferenceLimit => {
                 machine_st.goto_ptr(CodePtr::DirEntry(393, clause_name!("builtin")), 3, lco);
                 Ok(())

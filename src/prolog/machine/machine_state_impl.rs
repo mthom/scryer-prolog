@@ -909,11 +909,14 @@ impl MachineState {
             self.registers[arity - 1] = pred;
 
             if let Some((name, arity)) = self.setup_call_n(arity - 1) {
-                try_or_fail!(self, call_policy.try_execute(self, code_dirs, name, arity));
+                if let Some(idx) = code_dirs.get(name, arity, &self.p.clone()) {
+                    try_or_fail!(self, call_policy.try_execute(self, arity, idx));
+                    return;
+                }
             }
-        } else {
-            self.fail = true;
         }
+        
+        self.fail = true;        
     }
 
     pub(super) fn goto_throw(&mut self) {

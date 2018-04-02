@@ -25,8 +25,8 @@ pub struct Machine {
     call_policy: Box<CallPolicy>,
     cut_policy: Box<CutPolicy>,
     code: Code,
-    code_dir: CodeDir,    
-    pub op_dir: OpDir,
+    pub(super) code_dir: CodeDir,
+    pub(super) op_dir: OpDir,
     term_dir: TermDir,
     modules: HashMap<ClauseName, Module>,
     cached_query: Option<Code>
@@ -87,7 +87,7 @@ impl Machine {
             let name = name.defrock_brackets();
 
             match self.code_dir.get(&(name.clone(), arity)).cloned() {
-                Some((_, ref mod_name)) if mod_name == &module_name => {
+                Some(CodeIndex (_, ref mod_name)) if mod_name == &module_name => {
                     self.code_dir.remove(&(name.clone(), arity));
 
                     // remove or respecify ops.
@@ -179,7 +179,7 @@ impl Machine {
                          -> EvalSession
     {
         match self.code_dir.get(&(name.clone(), arity)) {
-            Some(&(_, ref mod_name)) if mod_name == &clause_name!("builtin") =>
+            Some(&CodeIndex (_, ref mod_name)) if mod_name == &clause_name!("builtin") =>
                 return EvalSession::from(EvalError::ImpermissibleEntry(format!("{}/{}", name, arity))),
             _ => {}
         };
@@ -188,7 +188,12 @@ impl Machine {
 
         self.code.extend(code.into_iter());
         self.term_dir.insert((name.clone(), arity), pred);
-        self.code_dir.insert((name, arity), (offset, clause_name!("user")));
+
+        let entry = self.code_dir.entry((name, arity))
+            .or_insert(CodeIndex::from((offset, clause_name!("user"))));
+
+        entry.0.set(offset);
+        entry.1 = clause_name!("user");
         
         EvalSession::EntrySuccess
     }
