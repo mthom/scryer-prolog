@@ -1,13 +1,13 @@
 extern crate num;
 extern crate ordered_float;
 
-pub mod allocator;
 pub mod and_stack;
 #[macro_use]
 pub mod macros;
 #[macro_use]
 pub mod ast;
 #[macro_use]
+pub mod allocator;
 pub mod arithmetic;
 pub mod builtins;
 pub mod codegen;

@@ -48,7 +48,11 @@ pub trait Allocator<'a>
     }
     
     fn get(&self, var: Rc<Var>) -> RegType {
-        self.bindings().get(&var).unwrap().as_reg_type()
+        self.bindings().get(&var).map_or(temp_v!(0), |v| v.as_reg_type())
+    }
+
+    fn is_unbound(&self, var: Rc<Var>) -> bool {
+        self.get(var) == temp_v!(0)
     }
     
     fn record_register(&mut self, var: Rc<Var>, r: RegType) {
