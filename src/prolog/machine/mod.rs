@@ -306,13 +306,12 @@ impl Machine {
     {
         for (var, var_data) in alloc_locs {
             match var_data {
-                &VarData::Perm(_) => {
+                &VarData::Perm(p) if p > 0 => {
                     let e = self.ms.e;
-
                     let r = var_data.as_reg_type().reg_num();
                     let addr = self.ms.and_stack[e][r].clone();
-
-                    heap_locs.insert(var.clone(), addr);
+                    
+                    heap_locs.insert(var.clone(), addr);                    
                 },
                 &VarData::Temp(cn, _, _) if cn == chunk_num => {
                     let r = var_data.as_reg_type();

@@ -668,7 +668,8 @@ pub type JumpStub = Vec<Term>;
 
 pub enum QueryTerm {
     Clause(Cell<RegType>, ClauseType, Vec<Box<Term>>),
-    Cut,
+    BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
+    UnblockedCut,
     Jump(JumpStub)
 }
 
@@ -676,7 +677,7 @@ impl QueryTerm {
     pub fn arity(&self) -> usize {
         match self {
             &QueryTerm::Clause(_, _, ref subterms) => subterms.len(),
-            &QueryTerm::Cut => 0,
+            &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut => 0,
             &QueryTerm::Jump(ref vars) => vars.len()
         }
     }

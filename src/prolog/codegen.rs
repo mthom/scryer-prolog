@@ -161,6 +161,17 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                     } else {
                         self.marker.mark_anon_var(lvl, &mut target);
                     },
+                TermRef::Var(lvl @ Level::Shallow, cell, ref var) if var.as_str() == "!" => {
+                    if self.marker.is_unbound(var.clone()) {
+                        if term_loc != GenContext::Head {
+                            self.marker.mark_reserved_var(var.clone(), lvl, cell, term_loc,
+                                                          &mut target, perm_v!(1), false);
+                            continue;
+                        }
+                    }
+
+                    self.marker.mark_var(var.clone(), lvl, cell, term_loc, &mut target);
+                },
                 TermRef::Var(lvl @ Level::Shallow, cell, var) =>
                     self.marker.mark_var(var.clone(), lvl, cell, term_loc, &mut target),
                 _ => {}
@@ -397,7 +408,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 };
 
                 match *term {
-                    &QueryTerm::Cut =>
+                    &QueryTerm::UnblockedCut =>
+                        code.push(set_cp!(self.marker.get(rc_atom!("!")))),                    
+                    &QueryTerm::BlockedCut =>
                         code.push(if chunk_num == 0 {
                             Line::Cut(CutInstruction::NeckCut)
                         } else {
@@ -469,7 +482,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
     {
         // add a proceed to bookend any trailing cuts.
         match toc {
-            &QueryTerm::Cut => code.push(proceed!()),
+            &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut => code.push(proceed!()),
             _ => {}
         };
 

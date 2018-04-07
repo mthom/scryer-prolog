@@ -50,7 +50,8 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(Level::Root, 0, cell, ct.clone(), terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            &QueryTerm::Cut => QueryIterator { state_stack: vec![] },
+            &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut =>
+                QueryIterator { state_stack: vec![] },
             &QueryTerm::Jump(ref vars) => {
                 let state_stack = vars.iter().rev().map(|t| {
                     TermIterState::subterm_to_state(Level::Shallow, t)
@@ -213,11 +214,24 @@ impl<'a> ChunkedTerm<'a> {
     }
 }
 
+fn contains_cut_var<'a, Iter: Iterator<Item=&'a Term>>(terms: Iter) -> bool {
+    for term in terms {
+        if let &Term::Var(_, ref var) = term {
+            if var.as_str() == "!" {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 pub struct ChunkedIterator<'a>
 {
     pub chunk_num: usize,
     iter: Box<Iterator<Item=ChunkedTerm<'a>> + 'a>,
-    deep_cut_encountered: bool
+    deep_cut_encountered: bool,
+    cut_var_in_head: bool
 }
 
 type ChunkedIteratorItem<'a>  = (usize, usize, Vec<ChunkedTerm<'a>>);
@@ -248,7 +262,8 @@ impl<'a> ChunkedIterator<'a>
         ChunkedIterator {
             chunk_num: 0,
             iter: Box::new(terms.iter().map(|t| ChunkedTerm::BodyTerm(t))),
-            deep_cut_encountered: false
+            deep_cut_encountered: false,
+            cut_var_in_head: false
         }
     }
 
@@ -260,7 +275,8 @@ impl<'a> ChunkedIterator<'a>
         ChunkedIterator {
             chunk_num: 0,
             iter: Box::new(iter),
-            deep_cut_encountered: false
+            deep_cut_encountered: false,
+            cut_var_in_head: false
         }
     }
 
@@ -276,6 +292,7 @@ impl<'a> ChunkedIterator<'a>
             chunk_num: 0,
             iter: Box::new(iter),
             deep_cut_encountered: false,
+            cut_var_in_head: false
         }
     }
 
@@ -291,20 +308,32 @@ impl<'a> ChunkedIterator<'a>
 
         while let Some(term) = item {
             match term {
-                ChunkedTerm::HeadClause(..) =>
-                    result.push(term),
+                ChunkedTerm::HeadClause(_, terms) => {
+                    if contains_cut_var(terms.iter().map(|t| t.as_ref())) {
+                        self.cut_var_in_head = true;
+                    }
+
+                    result.push(term);
+                },
                 ChunkedTerm::BodyTerm(&QueryTerm::Jump(ref vars)) => {
                     result.push(term);
                     arity = vars.len();
+
+                    if contains_cut_var(vars.iter()) && !self.cut_var_in_head {
+                        self.deep_cut_encountered = true;
+                    }
+                    
                     break;
                 },
-                ChunkedTerm::BodyTerm(&QueryTerm::Cut) => {
+                ChunkedTerm::BodyTerm(&QueryTerm::BlockedCut) => {
                     result.push(term);
 
                     if self.chunk_num > 0 {
                         self.deep_cut_encountered = true;
                     }
                 },
+                ChunkedTerm::BodyTerm(&QueryTerm::UnblockedCut) =>
+                    result.push(term),                
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::Inlined(_), _)) =>
                     result.push(term),
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::CallN, ref subterms)) => {

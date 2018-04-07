@@ -249,7 +249,7 @@ impl<'a> Allocator<'a> for DebrayAllocator
         }
     }
 
-    fn mark_var<Target>(&mut self, var: Rc<Var>, lvl: Level, cell: &Cell<VarReg>,
+    fn mark_var<Target>(&mut self, var: Rc<Var>, lvl: Level, cell: &'a Cell<VarReg>,
                         term_loc: GenContext, target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
@@ -271,6 +271,14 @@ impl<'a> Allocator<'a> for DebrayAllocator
             r => (r, false)
         };
 
+        self.mark_reserved_var(var, lvl, cell, term_loc, target, r, is_new_var);
+    }
+
+    fn mark_reserved_var<Target>(&mut self, var: Rc<Var>, lvl: Level, cell: &'a Cell<VarReg>,
+                                 term_loc: GenContext, target: &mut Vec<Target>, r: RegType,
+                                 is_new_var: bool)
+      where Target: CompilationTarget<'a>
+    {
         match lvl {
             Level::Root | Level::Shallow => {
                 let k = self.arg_c;
