@@ -103,19 +103,7 @@ impl GenContext {
 
 pub struct Predicate(pub Vec<PredicateClause>);
 
-impl Predicate {
-    pub fn name(&self) -> Option<ClauseName> {
-        self.0.first().and_then(|t| t.name())
-    }
-
-    pub fn arity(&self) -> usize {
-        if let Some(ref clause) = self.0.first() {
-            clause.arity()
-        } else {
-            0
-        }        
-    }
-    
+impl Predicate {    
     pub fn clauses(self) -> Vec<PredicateClause> {
         self.0
     }
