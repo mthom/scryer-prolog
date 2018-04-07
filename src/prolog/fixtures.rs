@@ -159,7 +159,8 @@ impl<'a> VariableFixtures<'a>
         for term_ref in iter {
             if let &TermRef::Var(lvl, cell, ref var) = &term_ref {
                 let mut status = self.0.remove(var)
-                    .unwrap_or((VarStatus::Temp(chunk_num, TempVarData::new(lt_arity)), Vec::new()));
+                    .unwrap_or((VarStatus::Temp(chunk_num, TempVarData::new(lt_arity)),
+                                Vec::new()));
 
                 status.1.push(cell);
 

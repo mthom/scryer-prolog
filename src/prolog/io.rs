@@ -492,7 +492,7 @@ fn compile_relation(tl: &TopLevel) -> Result<Code, ParserError>
         &TopLevel::Declaration(_) | &TopLevel::Query(_) =>
             Err(ParserError::ExpectedRel),
         &TopLevel::Predicate(ref clauses) =>
-            cg.compile_predicate(clauses),
+            cg.compile_predicate(&clauses.0),
         &TopLevel::Fact(ref fact) =>
             Ok(cg.compile_fact(fact)),
         &TopLevel::Rule(ref rule) =>
@@ -576,7 +576,7 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
             print_code(&code);
             
             if !code.is_empty() {
-                wam.add_user_code(name, tl.arity(), code, tl.as_predicate().unwrap())
+                wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
             } else {
                 EvalSession::from(EvalError::ImpermissibleEntry(String::from("no code generated.")))
             }

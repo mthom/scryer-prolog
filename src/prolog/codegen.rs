@@ -408,8 +408,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 };
 
                 match *term {
-                    &QueryTerm::UnblockedCut =>
-                        code.push(set_cp!(self.marker.get(rc_atom!("!")))),                    
+                    &QueryTerm::UnblockedCut(ref cell) =>
+                        code.push(set_cp!(cell.get().norm())),
                     &QueryTerm::BlockedCut =>
                         code.push(if chunk_num == 0 {
                             Line::Cut(CutInstruction::NeckCut)
@@ -482,7 +482,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
     {
         // add a proceed to bookend any trailing cuts.
         match toc {
-            &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut => code.push(proceed!()),
+            &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => code.push(proceed!()),
             _ => {}
         };
 

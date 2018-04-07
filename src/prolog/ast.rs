@@ -101,7 +101,25 @@ impl GenContext {
     }
 }
 
-pub type Predicate = Vec<PredicateClause>;
+pub struct Predicate(pub Vec<PredicateClause>);
+
+impl Predicate {
+    pub fn name(&self) -> Option<ClauseName> {
+        self.0.first().and_then(|t| t.name())
+    }
+
+    pub fn arity(&self) -> usize {
+        if let Some(ref clause) = self.0.first() {
+            clause.arity()
+        } else {
+            0
+        }        
+    }
+    
+    pub fn clauses(self) -> Vec<PredicateClause> {
+        self.0
+    }
+}
 
 pub enum PredicateClause {
     Fact(Term),
@@ -260,7 +278,7 @@ impl TopLevel {
             &TopLevel::Declaration(_) => None,
             &TopLevel::Fact(ref term) => term.name(),
             &TopLevel::Predicate(ref clauses) =>
-                clauses.first().and_then(|ref term| term.name()),
+                clauses.0.first().and_then(|ref term| term.name()),
             &TopLevel::Query(_) => None,
             &TopLevel::Rule(Rule { ref head, .. }) =>
                 Some(head.0.clone())
@@ -272,18 +290,18 @@ impl TopLevel {
             &TopLevel::Declaration(_) => 0,
             &TopLevel::Fact(ref term) => term.arity(),
             &TopLevel::Predicate(ref clauses) =>
-                clauses.first().map(|t| t.arity()).unwrap_or(0),
+                clauses.0.first().map(|t| t.arity()).unwrap_or(0),
             &TopLevel::Query(_) => 0,
             &TopLevel::Rule(Rule { ref head, .. }) => head.1.len()
         }
     }
 
-    pub fn as_predicate(self) -> Option<Predicate> {
+    pub fn as_predicate(self) -> Result<Predicate, TopLevel> {
         match self {
-            TopLevel::Fact(term) => Some(vec![PredicateClause::Fact(term)]),
-            TopLevel::Rule(rule) => Some(vec![PredicateClause::Rule(rule)]),
-            TopLevel::Predicate(pred) => Some(pred),
-            _ => None
+            TopLevel::Fact(term) => Ok(Predicate(vec![PredicateClause::Fact(term)])),
+            TopLevel::Rule(rule) => Ok(Predicate(vec![PredicateClause::Rule(rule)])),
+            TopLevel::Predicate(pred) => Ok(pred),
+            _ => Err(self)
         }
     }
 }
@@ -669,7 +687,7 @@ pub type JumpStub = Vec<Term>;
 pub enum QueryTerm {
     Clause(Cell<RegType>, ClauseType, Vec<Box<Term>>),
     BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
-    UnblockedCut,
+    UnblockedCut(Cell<VarReg>),
     Jump(JumpStub)
 }
 
@@ -677,7 +695,7 @@ impl QueryTerm {
     pub fn arity(&self) -> usize {
         match self {
             &QueryTerm::Clause(_, _, ref subterms) => subterms.len(),
-            &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut => 0,
+            &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => 0,
             &QueryTerm::Jump(ref vars) => vars.len()
         }
     }

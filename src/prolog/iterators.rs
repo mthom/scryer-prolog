@@ -2,6 +2,7 @@ use prolog::ast::*;
 
 use std::collections::VecDeque;
 use std::iter::*;
+use std::rc::Rc;
 use std::vec::Vec;
 
 pub struct QueryIterator<'a> {
@@ -50,8 +51,12 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(Level::Root, 0, cell, ct.clone(), terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut =>
+            &QueryTerm::BlockedCut =>
                 QueryIterator { state_stack: vec![] },
+            &QueryTerm::UnblockedCut(ref cell) => {
+                let state = TermIterState::Var(Level::Root, cell, rc_atom!("!"));
+                QueryIterator { state_stack: vec![state] }
+            },
             &QueryTerm::Jump(ref vars) => {
                 let state_stack = vars.iter().rev().map(|t| {
                     TermIterState::subterm_to_state(Level::Shallow, t)
@@ -322,7 +327,7 @@ impl<'a> ChunkedIterator<'a>
                     if contains_cut_var(vars.iter()) && !self.cut_var_in_head {
                         self.deep_cut_encountered = true;
                     }
-                    
+
                     break;
                 },
                 ChunkedTerm::BodyTerm(&QueryTerm::BlockedCut) => {
@@ -332,8 +337,8 @@ impl<'a> ChunkedIterator<'a>
                         self.deep_cut_encountered = true;
                     }
                 },
-                ChunkedTerm::BodyTerm(&QueryTerm::UnblockedCut) =>
-                    result.push(term),                
+                ChunkedTerm::BodyTerm(&QueryTerm::UnblockedCut(..)) =>
+                    result.push(term),
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::Inlined(_), _)) =>
                     result.push(term),
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::CallN, ref subterms)) => {
