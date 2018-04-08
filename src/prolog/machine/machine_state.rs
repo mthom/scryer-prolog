@@ -395,7 +395,7 @@ pub(crate) trait CallPolicy: Any {
 
                 machine_st.num_of_args = 3;
                 machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(150, clause_name!("builtin"));
+                machine_st.p  = CodePtr::DirEntry(166, clause_name!("builtin"));
 
                 Ok(())
             },
@@ -522,11 +522,11 @@ pub(crate) trait CallPolicy: Any {
             &ClauseType::Named(_, ref idx) | &ClauseType::Op(_, _, ref idx) =>
                 self.context_call(machine_st, arity, idx.clone(), lco),
             &ClauseType::CallWithInferenceLimit => {
-                machine_st.goto_ptr(CodePtr::DirEntry(393, clause_name!("builtin")), 3, lco);
+                machine_st.goto_ptr(CodePtr::DirEntry(409, clause_name!("builtin")), 3, lco);
                 Ok(())
             },
             &ClauseType::SetupCallCleanup => {
-                machine_st.goto_ptr(CodePtr::DirEntry(294, clause_name!("builtin")), 3, lco);
+                machine_st.goto_ptr(CodePtr::DirEntry(310, clause_name!("builtin")), 3, lco);
                 Ok(())
             },
             &ClauseType::Is => {
@@ -723,8 +723,8 @@ impl CutPolicy for SetupCallCleanupCutPolicy {
             machine_st.cp = machine_st.p.clone();
             machine_st.num_of_args = 0;
             machine_st.b0 = machine_st.b;
-            // goto_call run_cleaners_without_handling/0, 354.
-            machine_st.p = CodePtr::DirEntry(354, clause_name!("builtin"));
+            // goto_call run_cleaners_without_handling/0, 370.
+            machine_st.p = CodePtr::DirEntry(370, clause_name!("builtin"));
         }
     }
 }

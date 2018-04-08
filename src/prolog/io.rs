@@ -540,8 +540,6 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, code_size: usize,
     let query_info = QueryInfo {};
     query_info.label_clauses(code_size, code_dir, &mut code);
 
-    print_code(&code);
-    
     Ok((code, cg.take_vars()))
 }
 
@@ -573,8 +571,6 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
 
             decl_info.label_clauses(wam.code_size(), &mut wam.code_dir, &mut code);
 
-            print_code(&code);
-            
             if !code.is_empty() {
                 wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
             } else {

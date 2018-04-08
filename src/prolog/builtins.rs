@@ -93,7 +93,7 @@ fn get_builtins() -> Code {
          fact![get_value!(temp_v!(1), 2)], // =/2, 73.
          proceed!(),
          proceed!(), // true/0, 75.
-         get_cp!(temp_v!(3)), // ','/2, 76
+         get_cp!(temp_v!(3)), // ','/2, 76.
          try_me_else!(18), // ','/3, 77.
          switch_on_term!(4, 1, 0, 0),
          indexed_try!(4),
@@ -116,7 +116,7 @@ fn get_builtins() -> Code {
          set_cp!(temp_v!(3)),
          query![put_value!(temp_v!(2), 1)],
          execute_n!(1),
-         retry_me_else!(8),
+         retry_me_else!(8), // 95.
          allocate!(3),
          fact![get_structure!(",", 2, temp_v!(2), Some(infix!())),
                unify_variable!(perm_v!(2)),
@@ -148,40 +148,57 @@ fn get_builtins() -> Code {
          deallocate!(),
          execute_n!(1),
          get_cp!(temp_v!(3)), // ';'/2, 120.
-         try_me_else!(12),
-         switch_on_term!(4, 0, 0, 1),
-         indexed_try!(3),
+         try_me_else!(16), // ';'/3, 121.
+         switch_on_term!(0, 12, 0, 1), // Fail on variable input.
+         indexed_try!(2),
          trust!(5),
-         try_me_else!(3),
          fact![get_structure!("->", 2, temp_v!(1), Some(infix!())),
                unify_variable!(temp_v!(1)),
-               unify_variable!(temp_v!(2))],
-         goto_execute!(139, 3),
-         trust_me!(),
+               unify_variable!(temp_v!(4))],
+         query![put_value!(temp_v!(4), 2)],
+         goto_execute!(147, 3), // goto '->'/3.
+         retry_me_else!(5),
          fact![get_structure!("->", 2, temp_v!(1), Some(infix!())),
                unify_void!(2)],
+         set_cp!(temp_v!(3)),
          query![put_value!(temp_v!(2), 1)],
-         neck_cut!(),
          execute_n!(1),
+         retry_me_else!(4),
+         fact![get_constant!(atom!("!"), temp_v!(1))],
+         set_cp!(temp_v!(3)),
+         proceed!(),
+         retry_me_else!(4),
+         fact![get_constant!(atom!("!"), temp_v!(2))],
+         set_cp!(temp_v!(3)),
+         proceed!(),
          retry_me_else!(2),
          execute_n!(1),
          trust_me!(),
          query![put_value!(temp_v!(2), 1)],
          execute_n!(1),
-         get_cp!(temp_v!(3)), // '->'/2, 138.
-         allocate!(2), // '->'/3, 139.
+         get_cp!(temp_v!(3)), // '->'/2, 146.
+         try_me_else!(7), // '->'/3, 147.
+         allocate!(1),
+         fact![get_constant!(atom!("!"), temp_v!(2)),
+               get_var_in_fact!(perm_v!(1), 3)],
+         call_n!(1),
+         set_cp!(perm_v!(1)),
+         deallocate!(),
+         proceed!(),
+         trust_me!(),
+         allocate!(2),
          fact![get_var_in_fact!(perm_v!(1), 2),
-               get_var_in_fact!(perm_v!(2), 3)], // cut point.
+               get_var_in_fact!(perm_v!(2), 3)],
          call_n!(1),
          set_cp!(perm_v!(2)),
          query![put_unsafe_value!(1, 1)],
          deallocate!(),
          execute_n!(1),
-         functor_execute!(), // functor/3, 146.
-         is_integer!(temp_v!(1)), // integer/1, 147.
+         functor_execute!(), // functor/3, 162.
+         is_integer!(temp_v!(1)), // integer/1, 163.
          proceed!(),
-         get_arg_execute!(), // get_arg/3, 149.
-         try_me_else!(10), // arg/3, 150.
+         get_arg_execute!(), // get_arg/3, 165.
+         try_me_else!(10), // arg/3, 166.
          allocate!(4),
          fact![get_var_in_fact!(perm_v!(1), 1),
                get_var_in_fact!(perm_v!(2), 2),
@@ -198,7 +215,7 @@ fn get_builtins() -> Code {
                 put_value!(perm_v!(2), 4),
                 put_value!(perm_v!(4), 5)],
          deallocate!(),
-         goto_execute!(173, 5), // goto arg_/3.
+         goto_execute!(189, 5), // goto arg_/5, 175.
          retry_me_else!(10),
          allocate!(3),
          fact![get_var_in_fact!(perm_v!(1), 1),
@@ -214,25 +231,25 @@ fn get_builtins() -> Code {
                 put_value!(perm_v!(2), 2),
                 put_value!(perm_v!(3), 3)],
          deallocate!(),
-         goto_execute!(149, 3), // goto get_arg/3.
+         goto_execute!(165, 3), // goto get_arg/3, 185.
          trust_me!(),
          query![get_var_in_query!(temp_v!(4), 1),
                 put_structure!("type_error", 1, temp_v!(1), None),
                 set_constant!(atom!("integer_expected"))],
          goto_execute!(59, 1), // goto throw/1.
-         try_me_else!(5), // arg_/5, 173.
+         try_me_else!(5), // arg_/5, 189.
          fact![get_value!(temp_v!(1), 2),
                get_value!(temp_v!(1), 3)],
          neck_cut!(),
          query![put_value!(temp_v!(4), 2),
                 put_value!(temp_v!(5), 3)],
-         goto_execute!(149, 3), // goto get_arg/3.
+         goto_execute!(165, 3), // goto get_arg/3.
          retry_me_else!(4),
          fact![get_value!(temp_v!(1), 2)],
          query![put_value!(temp_v!(4), 2),
                 get_var_in_query!(temp_v!(6), 3),
                 put_value!(temp_v!(5), 3)],
-         goto_execute!(149, 3), // goto get_arg/3
+         goto_execute!(165, 3), // goto get_arg/3, 197.
          trust_me!(),
          allocate!(5),
          fact![get_var_in_fact!(perm_v!(2), 1),
@@ -253,24 +270,24 @@ fn get_builtins() -> Code {
                 put_value!(perm_v!(3), 4),
                 put_value!(perm_v!(5), 5)],
          deallocate!(),
-         goto_execute!(173, 5), // goto arg_/5.
-         display!(), // display/1, 192.
+         goto_execute!(189, 5), // goto arg_/5, 207.
+         display!(), // display/1, 208.
          proceed!(),
-         dynamic_is!(), // is/2, 194.
+         dynamic_is!(), // is/2, 210.
          proceed!(),
-         dynamic_num_test!(cmp_gt!()), // >/2, 196.
+         dynamic_num_test!(cmp_gt!()), // >/2, 212.
          proceed!(),
-         dynamic_num_test!(cmp_lt!()), // </2, 198.
+         dynamic_num_test!(cmp_lt!()), // </2, 214.
          proceed!(),
-         dynamic_num_test!(cmp_gte!()), // >=/2, 200.
+         dynamic_num_test!(cmp_gte!()), // >=/2, 216.
          proceed!(),
-         dynamic_num_test!(cmp_lte!()), // =</2, 202.
+         dynamic_num_test!(cmp_lte!()), // =</2, 218.
          proceed!(),
-         dynamic_num_test!(cmp_ne!()), // =\=, 204.
+         dynamic_num_test!(cmp_ne!()), // =\=, 220.
          proceed!(),
-         dynamic_num_test!(cmp_eq!()), // =:=, 206.
+         dynamic_num_test!(cmp_eq!()), // =:=, 222.
          proceed!(),
-         try_me_else!(5), // =.., 208.
+         try_me_else!(5), // =.., 224.
          fact![get_var_in_fact!(temp_v!(3), 1),
                get_list!(Level::Shallow, temp_v!(2)),
                unify_value!(temp_v!(3)),
@@ -295,7 +312,7 @@ fn get_builtins() -> Code {
                 put_constant!(Level::Shallow, integer!(1), temp_v!(3)),
                 put_unsafe_value!(2, 4)],
          deallocate!(),
-         goto_execute!(236, 4), // goto get_args/4.
+         goto_execute!(252, 4), // goto get_args/4, 239.
          trust_me!(),
          allocate!(5),
          get_level!(perm_v!(1)),
@@ -305,7 +322,7 @@ fn get_builtins() -> Code {
                unify_variable!(perm_v!(4))],
          query![put_value!(perm_v!(4), 1),
                 put_var!(perm_v!(2), 2)],
-         goto_call!(261, 2), // goto length/2.
+         goto_call!(277, 2), // goto length/2, 245.
          query![put_value!(perm_v!(3), 1),
                 put_value!(perm_v!(5), 2),
                 put_value!(perm_v!(2), 3)],
@@ -316,14 +333,14 @@ fn get_builtins() -> Code {
                 put_constant!(Level::Shallow, integer!(1), temp_v!(3)),
                 put_unsafe_value!(2, 4)],
          deallocate!(),
-         goto_execute!(236, 4), // goto get_args/4, 236.
-         try_me_else!(5), // get_args/4, 236.
+         goto_execute!(252, 4), // goto get_args/4, 252.
+         try_me_else!(5), // get_args/4, 252.
          fact![get_var_in_fact!(temp_v!(5), 1),
                get_constant!(integer!(0), temp_v!(4))],
          neck_cut!(),
          query![put_value!(temp_v!(5), 1),
                 put_constant!(Level::Shallow, Constant::EmptyList, temp_v!(2))],
-         goto_execute!(73, 2), // goto =/2.
+         goto_execute!(73, 2), // goto =/2, 256.
          trust_me!(),
          switch_on_term!(3, 0, 1, 0),
          indexed_try!(3),
@@ -361,15 +378,15 @@ fn get_builtins() -> Code {
                 put_unsafe_value!(2, 3),
                 put_value!(perm_v!(1), 4)],
          deallocate!(),
-         goto_execute!(236, 4), // goto get_args/4, 236.
-         try_me_else!(6), // length/2, 261.
+         goto_execute!(252, 4), // goto get_args/4, 276.
+         try_me_else!(6), // length/2, 277.
          fact![get_var_in_fact!(temp_v!(4), 1),
                get_var_in_fact!(temp_v!(3), 2)],
          is_var!(temp_v!(3)),
          neck_cut!(),
          query![put_value!(temp_v!(4), 1),
                 put_constant!(Level::Shallow, integer!(0), temp_v!(2))],
-         goto_execute!(281, 3), // goto length/3, 281.
+         goto_execute!(297, 3), // goto length/3, 282.
          retry_me_else!(10),
          allocate!(1),
          get_level!(perm_v!(1)),
@@ -378,7 +395,7 @@ fn get_builtins() -> Code {
          is_integer!(temp_v!(3)),
          query![put_value!(temp_v!(4), 1),
                 put_constant!(Level::Shallow, integer!(0), temp_v!(2))],
-         goto_call!(281, 3), // goto length/3, 281.
+         goto_call!(297, 3), // goto length/3, 289.
          cut!(perm_v!(1)),
          deallocate!(),
          proceed!(),
@@ -388,8 +405,8 @@ fn get_builtins() -> Code {
          query![put_structure!("type_error", 2, temp_v!(1), None),
                 set_constant!(atom!("integer_expected")),
                 set_value!(temp_v!(4))],
-         goto_execute!(59, 1), // goto throw/1, 59.
-         switch_on_term!(1,2,5,0), // length/3, 281.
+         goto_execute!(59, 1), // goto throw/1, 296.
+         switch_on_term!(1, 2, 5, 0), // length/3, 297.
          try_me_else!(3),
          fact![get_constant!(Constant::EmptyList, temp_v!(1)),
                get_var_in_fact!(temp_v!(4), 2),
@@ -411,8 +428,8 @@ fn get_builtins() -> Code {
                 put_unsafe_value!(2, 2),
                 put_value!(perm_v!(3), 3)],
          deallocate!(),
-         goto_execute!(281, 3), // goto length/3, 281.
-         allocate!(4), // setup_call_cleanup/3, 294.
+         goto_execute!(297, 3), // goto length/3, 309.
+         allocate!(4), // setup_call_cleanup/3, 310.
          get_level!(perm_v!(1)),
          fact![get_var_in_fact!(perm_v!(2), 2),
                get_var_in_fact!(perm_v!(3), 3)],
@@ -425,7 +442,7 @@ fn get_builtins() -> Code {
                 put_value!(perm_v!(2), 3)],
          deallocate!(),
          jmp_execute!(3, 1, 0),
-         try_me_else!(5), // 304.
+         try_me_else!(5), // 320.
          is_var!(temp_v!(1)),
          neck_cut!(),
          query![put_constant!(Level::Shallow,
@@ -437,8 +454,8 @@ fn get_builtins() -> Code {
                 put_value!(temp_v!(3), 2),
                 get_var_in_query!(temp_v!(5), 3),
                 put_value!(temp_v!(4), 3)],
-         goto_execute!(312, 3),
-         try_me_else!(13), // sgc_helper/3, 312.
+         goto_execute!(328, 3),
+         try_me_else!(13), // sgc_helper/3, 328.
          allocate!(4),
          fact![get_var_in_fact!(perm_v!(4), 1),
                get_var_in_fact!(perm_v!(3), 2),
@@ -462,16 +479,16 @@ fn get_builtins() -> Code {
          get_ball!(),
          get_level!(perm_v!(2)),
          default_set_cp!(perm_v!(2)),
-         goto_call!(342, 0), // goto run_cleaners_with_handling/0, 342.
+         goto_call!(358, 0), // goto run_cleaners_with_handling/0, 349.
          query![put_unsafe_value!(1, 1)],
          deallocate!(),
          goto_execute!(59, 1), // goto throw/1, 59.
          default_trust_me!(),
          allocate!(0),
-         goto_call!(354, 0), // goto run_cleaners_without_handling/0, 354.
+         goto_call!(370, 0), // goto run_cleaners_without_handling/0, 355.
          deallocate!(),
          fail!(),
-         try_me_else!(10), // run_cleaners_with_handling/0, 342.
+         try_me_else!(10), // run_cleaners_with_handling/0, 358.
          allocate!(2),
          get_level!(perm_v!(1)),
          query![put_var!(perm_v!(2), 1)],
@@ -482,10 +499,10 @@ fn get_builtins() -> Code {
          goto_call!(5, 3), // goto catch/3, 5.
          default_set_cp!(perm_v!(1)),
          deallocate!(),
-         goto_execute!(342, 0), // goto run_cleaners_with_handling/0, 342.
+         goto_execute!(358, 0), // goto run_cleaners_with_handling/0, 367.
          default_trust_me!(),
-         goto_execute!(382, 0), // goto restore_cut_points/0, 382.
-         try_me_else!(10), // run_cleaners_without_handling/1, 354.
+         goto_execute!(398, 0), // goto restore_cut_points/0, 369.
+         try_me_else!(10), // run_cleaners_without_handling/0, 370.
          allocate!(2),
          get_level!(perm_v!(1)),
          query![put_var!(perm_v!(2), 1)],
@@ -494,37 +511,37 @@ fn get_builtins() -> Code {
          call_n!(1),
          default_set_cp!(perm_v!(1)),
          deallocate!(),
-         goto_execute!(354, 0), // goto run_cleaners_without_handling/0, 354.
+         goto_execute!(370, 0), // goto run_cleaners_without_handling/0, 379.
          default_trust_me!(),
-         goto_execute!(382, 0), // goto restore_cut_points/0, 382.
-         allocate!(1), // sgc_on_success/2, 366.
+         goto_execute!(398, 0), // goto restore_cut_points/0, 381.
+         allocate!(1), // sgc_on_success/2, 382.
          fact![get_var_in_fact!(perm_v!(1), 2)],
          reset_block!(),
          cut!(perm_v!(1)),
          deallocate!(),
          proceed!(),
-         is_compound!(temp_v!(1)), // compound/1, 372.
+         is_compound!(temp_v!(1)), // compound/1, 388.
          proceed!(),
-         is_rational!(temp_v!(1)), // rational/1, 374.
+         is_rational!(temp_v!(1)), // rational/1, 390.
          proceed!(),
-         is_string!(temp_v!(1)), // string/1, 376.
+         is_string!(temp_v!(1)), // string/1, 392.
          proceed!(),
-         is_float!(temp_v!(1)), // float/1, 378.
+         is_float!(temp_v!(1)), // float/1, 394.
          proceed!(),
-         is_nonvar!(temp_v!(1)), // nonvar/1, 380.
+         is_nonvar!(temp_v!(1)), // nonvar/1, 396.
          proceed!(),
-         restore_cut_policy!(), // restore_cut_policy/0, 382.
+         restore_cut_policy!(), // restore_cut_policy/0, 398.
          proceed!(),
-         ground_execute!(), // ground/1, 384.
-         eq_execute!(), // (==)/2, 385.
-         not_eq_execute!(), // (\==)/2, 386.
-         compare_term_execute!(term_cmp_gte!()), // (@>=)/2, 387.
-         compare_term_execute!(term_cmp_lte!()), // (@=<)/2, 388.
-         compare_term_execute!(term_cmp_gt!()), // (@>)/2, 389.
-         compare_term_execute!(term_cmp_lt!()), // (@<)/2, 390.
-         compare_term_execute!(term_cmp_eq!()), // (=@=)/2, 391.
-         compare_term_execute!(term_cmp_ne!()), // (\=@=)/2, 392.
-         allocate!(5), // call_with_inference_limit/3, 393.
+         ground_execute!(), // ground/1, 400.
+         eq_execute!(), // (==)/2, 401.
+         not_eq_execute!(), // (\==)/2, 402.
+         compare_term_execute!(term_cmp_gte!()), // (@>=)/2, 403.
+         compare_term_execute!(term_cmp_lte!()), // (@=<)/2, 404.
+         compare_term_execute!(term_cmp_gt!()), // (@>)/2, 405.
+         compare_term_execute!(term_cmp_lt!()), // (@<)/2, 406.
+         compare_term_execute!(term_cmp_eq!()), // (=@=)/2, 407.
+         compare_term_execute!(term_cmp_ne!()), // (\=@=)/2, 408.
+         allocate!(5), // call_with_inference_limit/3, 409.
          fact![get_var_in_fact!(perm_v!(4), 1),
                get_var_in_fact!(perm_v!(3), 2),
                get_var_in_fact!(perm_v!(2), 3)],
@@ -536,12 +553,12 @@ fn get_builtins() -> Code {
                 put_value!(perm_v!(2), 3),
                 put_value!(perm_v!(5), 4),
                 put_value!(perm_v!(1), 5)],
-         goto_call!(404, 5), // goto call_with_inference_limit/5, 404.
+         goto_call!(420, 5), // goto call_with_inference_limit/5, 415
          query![put_value!(perm_v!(1), 1)],
          deallocate!(),
          remove_call_policy_check!(),
          proceed!(),
-         try_me_else!(19), // call_with_inference_limit/5, 404.
+         try_me_else!(19), // call_with_inference_limit/5, 420.
          allocate!(9),
          fact![get_var_in_fact!(perm_v!(9), 1),
                get_var_in_fact!(perm_v!(5), 2),
@@ -570,8 +587,8 @@ fn get_builtins() -> Code {
                 put_value!(perm_v!(1), 3),
                 put_value!(perm_v!(2), 4)],
          deallocate!(),
-         goto_execute!(452, 4), // goto end_block/4, 452
-         default_trust_me!(), // 423
+         goto_execute!(468, 4), // goto end_block/4, 468
+         default_trust_me!(), // 439
          allocate!(3),
          fact![get_var_in_fact!(perm_v!(1), 3),
                get_var_in_fact!(perm_v!(3), 5)],
@@ -587,7 +604,7 @@ fn get_builtins() -> Code {
                 put_unsafe_value!(2, 2),
                 put_value!(perm_v!(1), 3)],
          deallocate!(),
-         goto_execute!(444, 3), // goto handle_ile/3, 442.
+         goto_execute!(460, 3), // goto handle_ile/3, 451.
          try_me_else!(5), // the inner clause.
          query![put_value!(temp_v!(2), 1)],
          get_ball!(),
@@ -596,7 +613,7 @@ fn get_builtins() -> Code {
          default_trust_me!(),
          remove_call_policy_check!(),
          fail!(),
-         try_me_else!(4), // handle_ile/3, 444.
+         try_me_else!(4), // handle_ile/3, 460.
          fact![get_structure!("inference_limit_exceeded", 1, temp_v!(2), None),
                unify_value!(temp_v!(1)),
                get_constant!(atom!("inference_limit_exceeded"), temp_v!(3))],
@@ -606,7 +623,7 @@ fn get_builtins() -> Code {
          remove_call_policy_check!(),
          query![put_value!(temp_v!(2), 1)],
          goto_execute!(59, 1), // goto throw/1, 59.
-         try_me_else!(6), // end_block/4, 452.
+         try_me_else!(6), // end_block/4, 468.
          query![put_value!(temp_v!(3), 1)],
          clean_up_block!(),
          query![put_value!(temp_v!(2), 1)],
@@ -620,13 +637,13 @@ fn get_builtins() -> Code {
          query![put_value!(temp_v!(5), 1)],
          reset_block!(),
          fail!(),
-         compare_execute!(), // compare/3, 464.
-         is_atom!(temp_v!(1)), // atom/1, 465.
+         compare_execute!(), // compare/3, 480.
+         is_atom!(temp_v!(1)), // atom/1, 481.
          proceed!(),
-         sort_execute!(), // sort/2, 467.
-         keysort_execute!(), // keysort/2, 468.
-         acyclic_term_execute!(), // acyclic_term/1, 469.
-         cyclic_term_execute!(), // cyclic_term/1, 470.
+         sort_execute!(), // sort/2, 483.
+         keysort_execute!(), // keysort/2, 484.
+         acyclic_term_execute!(), // acyclic_term/1, 485.
+         cyclic_term_execute!(), // cyclic_term/1, 486.
     ]
 }
 
@@ -703,50 +720,50 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
 
     code_dir.insert((clause_name!(","), 2), CodeIndex::from((76, builtin.clone())));
     code_dir.insert((clause_name!(";"), 2), CodeIndex::from((120, builtin.clone())));
-    code_dir.insert((clause_name!("->"), 2), CodeIndex::from((138, builtin.clone())));
+    code_dir.insert((clause_name!("->"), 2), CodeIndex::from((146, builtin.clone())));
 
-    code_dir.insert((clause_name!("functor"), 3), CodeIndex::from((146, builtin.clone())));
-    code_dir.insert((clause_name!("arg"), 3), CodeIndex::from((150, builtin.clone())));
-    code_dir.insert((clause_name!("integer"), 1), CodeIndex::from((147, builtin.clone())));
-    code_dir.insert((clause_name!("display"), 1), CodeIndex::from((192, builtin.clone())));
+    code_dir.insert((clause_name!("functor"), 3), CodeIndex::from((162, builtin.clone())));
+    code_dir.insert((clause_name!("arg"), 3), CodeIndex::from((166, builtin.clone())));
+    code_dir.insert((clause_name!("integer"), 1), CodeIndex::from((163, builtin.clone())));
+    code_dir.insert((clause_name!("display"), 1), CodeIndex::from((208, builtin.clone())));
 
-    code_dir.insert((clause_name!("is"), 2), CodeIndex::from((194, builtin.clone())));
-    code_dir.insert((clause_name!(">"), 2), CodeIndex::from((196, builtin.clone())));
-    code_dir.insert((clause_name!("<"), 2), CodeIndex::from((198, builtin.clone())));
-    code_dir.insert((clause_name!(">="), 2), CodeIndex::from((200, builtin.clone())));
-    code_dir.insert((clause_name!("=<"), 2), CodeIndex::from((202, builtin.clone())));
-    code_dir.insert((clause_name!("=\\="), 2), CodeIndex::from((204, builtin.clone())));
-    code_dir.insert((clause_name!("=:="), 2), CodeIndex::from((206, builtin.clone())));
-    code_dir.insert((clause_name!("=.."), 2), CodeIndex::from((208, builtin.clone())));
+    code_dir.insert((clause_name!("is"), 2), CodeIndex::from((210, builtin.clone())));
+    code_dir.insert((clause_name!(">"), 2), CodeIndex::from((212, builtin.clone())));
+    code_dir.insert((clause_name!("<"), 2), CodeIndex::from((214, builtin.clone())));
+    code_dir.insert((clause_name!(">="), 2), CodeIndex::from((216, builtin.clone())));
+    code_dir.insert((clause_name!("=<"), 2), CodeIndex::from((218, builtin.clone())));
+    code_dir.insert((clause_name!("=\\="), 2), CodeIndex::from((220, builtin.clone())));
+    code_dir.insert((clause_name!("=:="), 2), CodeIndex::from((222, builtin.clone())));
+    code_dir.insert((clause_name!("=.."), 2), CodeIndex::from((224, builtin.clone())));
 
-    code_dir.insert((clause_name!("length"), 2), CodeIndex::from((261, builtin.clone())));
+    code_dir.insert((clause_name!("length"), 2), CodeIndex::from((277, builtin.clone())));
     code_dir.insert((clause_name!("setup_call_cleanup"), 3),
-                    CodeIndex::from((294, builtin.clone())));
+                    CodeIndex::from((310, builtin.clone())));
     code_dir.insert((clause_name!("call_with_inference_limit"), 3),
-                    CodeIndex::from((393, builtin.clone())));
+                    CodeIndex::from((409, builtin.clone())));
 
-    code_dir.insert((clause_name!("compound"), 1), CodeIndex::from((372, builtin.clone())));
-    code_dir.insert((clause_name!("rational"), 1), CodeIndex::from((374, builtin.clone())));
-    code_dir.insert((clause_name!("string"), 1), CodeIndex::from((376, builtin.clone())));
-    code_dir.insert((clause_name!("float"), 1), CodeIndex::from((378, builtin.clone())));
-    code_dir.insert((clause_name!("nonvar"), 1), CodeIndex::from((380, builtin.clone())));
+    code_dir.insert((clause_name!("compound"), 1), CodeIndex::from((388, builtin.clone())));
+    code_dir.insert((clause_name!("rational"), 1), CodeIndex::from((390, builtin.clone())));
+    code_dir.insert((clause_name!("string"), 1), CodeIndex::from((392, builtin.clone())));
+    code_dir.insert((clause_name!("float"), 1), CodeIndex::from((394, builtin.clone())));
+    code_dir.insert((clause_name!("nonvar"), 1), CodeIndex::from((396, builtin.clone())));
 
-    code_dir.insert((clause_name!("ground"), 1), CodeIndex::from((384, builtin.clone())));
-    code_dir.insert((clause_name!("=="), 2), CodeIndex::from((385, builtin.clone())));
-    code_dir.insert((clause_name!("\\=="), 2), CodeIndex::from((386, builtin.clone())));
-    code_dir.insert((clause_name!("@>="), 2), CodeIndex::from((387, builtin.clone())));
-    code_dir.insert((clause_name!("@=<"), 2), CodeIndex::from((388, builtin.clone())));
-    code_dir.insert((clause_name!("@>"), 2), CodeIndex::from((389, builtin.clone())));
-    code_dir.insert((clause_name!("@<"), 2), CodeIndex::from((390, builtin.clone())));
-    code_dir.insert((clause_name!("=@="), 2), CodeIndex::from((391, builtin.clone())));
-    code_dir.insert((clause_name!("\\=@="), 2), CodeIndex::from((392, builtin.clone())));
-    code_dir.insert((clause_name!("compare"), 3), CodeIndex::from((464, builtin.clone())));
-    code_dir.insert((clause_name!("atom"), 1), CodeIndex::from((465, builtin.clone())));
-    code_dir.insert((clause_name!("sort"), 2), CodeIndex::from((467, builtin.clone())));
-    code_dir.insert((clause_name!("keysort"), 2), CodeIndex::from((468, builtin.clone())));
-    code_dir.insert((clause_name!("acyclic_term"), 1), CodeIndex::from((469, builtin.clone())));
-    code_dir.insert((clause_name!("cyclic_term"), 1), CodeIndex::from((470, builtin.clone())));
-    
+    code_dir.insert((clause_name!("ground"), 1), CodeIndex::from((400, builtin.clone())));
+    code_dir.insert((clause_name!("=="), 2), CodeIndex::from((401, builtin.clone())));
+    code_dir.insert((clause_name!("\\=="), 2), CodeIndex::from((402, builtin.clone())));
+    code_dir.insert((clause_name!("@>="), 2), CodeIndex::from((403, builtin.clone())));
+    code_dir.insert((clause_name!("@=<"), 2), CodeIndex::from((404, builtin.clone())));
+    code_dir.insert((clause_name!("@>"), 2), CodeIndex::from((405, builtin.clone())));
+    code_dir.insert((clause_name!("@<"), 2), CodeIndex::from((406, builtin.clone())));
+    code_dir.insert((clause_name!("=@="), 2), CodeIndex::from((407, builtin.clone())));
+    code_dir.insert((clause_name!("\\=@="), 2), CodeIndex::from((408, builtin.clone())));
+    code_dir.insert((clause_name!("compare"), 3), CodeIndex::from((480, builtin.clone())));
+    code_dir.insert((clause_name!("atom"), 1), CodeIndex::from((481, builtin.clone())));
+    code_dir.insert((clause_name!("sort"), 2), CodeIndex::from((483, builtin.clone())));
+    code_dir.insert((clause_name!("keysort"), 2), CodeIndex::from((484, builtin.clone())));
+    code_dir.insert((clause_name!("acyclic_term"), 1), CodeIndex::from((485, builtin.clone())));
+    code_dir.insert((clause_name!("cyclic_term"), 1), CodeIndex::from((486, builtin.clone())));
+
     (code_dir, op_dir)
 }
 

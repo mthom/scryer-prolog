@@ -1857,8 +1857,8 @@ impl MachineState {
                     _ => {
                         self.num_of_args = 2;
                         self.b0 = self.b;
-                        // goto sgc_on_success/2, 366.
-                        self.p = CodePtr::DirEntry(366, clause_name!("builtin"));
+                        // goto sgc_on_success/2, 382.
+                        self.p = CodePtr::DirEntry(382, clause_name!("builtin"));
                     }
                 };
             },
