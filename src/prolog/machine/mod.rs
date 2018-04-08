@@ -180,7 +180,9 @@ impl Machine {
     {
         match self.code_dir.get(&(name.clone(), arity)) {
             Some(&CodeIndex (_, ref mod_name)) if mod_name == &clause_name!("builtin") =>
-                return EvalSession::from(EvalError::ImpermissibleEntry(format!("{}/{}", name, arity))),
+                return EvalSession::from(EvalError::ImpermissibleEntry(format!("{}/{}",
+                                                                               name,
+                                                                               arity))),
             _ => {}
         };
 
@@ -192,7 +194,7 @@ impl Machine {
         let entry = self.code_dir.entry((name, arity))
             .or_insert(CodeIndex::from((offset, clause_name!("user"))));
 
-        entry.0.set(offset);
+        entry.0.set(IndexPtr::Index(offset));
         entry.1 = clause_name!("user");
         
         EvalSession::EntrySuccess

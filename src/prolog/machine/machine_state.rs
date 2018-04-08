@@ -210,46 +210,62 @@ pub struct MachineState {
 
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
+fn predicate_existence_error(name: ClauseName, arity: usize) -> Vec<HeapCellValue>
+{
+    let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name)));
+
+    let mut error = functor!("existence_error", 2, [heap_atom!("procedure"), heap_str!(4)]);
+    error.append(&mut functor!("/", 2, [name, heap_integer!(arity)], Fixity::In));
+
+    error
+}
+
 pub(crate) trait CallPolicy: Any {
-    fn context_call(&mut self, machine_st: &mut MachineState, arity: usize, idx: CodeIndex, lco: bool)
+    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                    arity: usize, idx: CodeIndex, lco: bool)
                     -> CallResult
     {
         if lco {
-            self.try_execute(machine_st, arity, idx)
+            self.try_execute(machine_st, name, arity, idx)
         } else {
-            self.try_call(machine_st, arity, idx)
+            self.try_call(machine_st, name, arity, idx)
         }
     }
 
-    fn try_call(&mut self, machine_st: &mut MachineState, arity: usize, idx: CodeIndex) -> CallResult
-    {        
-        if idx.is_undefined() {
-            machine_st.fail = true;
-        } else {
-            let compiled_tl_index = idx.0.get();
-            let module_name = idx.1;
+    fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                arity: usize, idx: CodeIndex)
+                -> CallResult
+    {
+        match idx.0.get() {
+            IndexPtr::Undefined =>
+                return Err(predicate_existence_error(name, arity)),
+            IndexPtr::Index(compiled_tl_index) => {
+                let module_name = idx.1;
 
-            machine_st.cp = machine_st.p.clone() + 1;
-            machine_st.num_of_args = arity;
-            machine_st.b0 = machine_st.b;
-            machine_st.p  = CodePtr::DirEntry(compiled_tl_index, module_name);
+                machine_st.cp = machine_st.p.clone() + 1;
+                machine_st.num_of_args = arity;
+                machine_st.b0 = machine_st.b;
+                machine_st.p  = CodePtr::DirEntry(compiled_tl_index, module_name);
+            }
         }
 
         Ok(())
     }
 
-    fn try_execute<'a>(&mut self, machine_st: &mut MachineState, arity: usize, idx: CodeIndex)
+    fn try_execute<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                       arity: usize, idx: CodeIndex)
                        -> CallResult
-    {        
-        if idx.is_undefined() {
-            machine_st.fail = true;
-        } else {
-            let compiled_tl_index = idx.0.get();
-            let module_name = idx.1;
+    {
+        match idx.0.get() {
+            IndexPtr::Undefined =>
+                return Err(predicate_existence_error(name, arity)),
+            IndexPtr::Index(compiled_tl_index) => {
+                let module_name = idx.1;
 
-            machine_st.num_of_args = arity;
-            machine_st.b0 = machine_st.b;
-            machine_st.p  = CodePtr::DirEntry(compiled_tl_index, module_name);
+                machine_st.num_of_args = arity;
+                machine_st.b0 = machine_st.b;
+                machine_st.p  = CodePtr::DirEntry(compiled_tl_index, module_name);
+            }
         }
 
         Ok(())
@@ -412,8 +428,8 @@ pub(crate) trait CallPolicy: Any {
             },
             &ClauseType::CallN => {
                 if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-                    if let Some(idx) = code_dirs.get(name, arity, &machine_st.p.clone()) {
-                        return self.context_call(machine_st, arity, idx, lco);
+                    if let Some(idx) = code_dirs.get(name.clone(), arity, &machine_st.p.clone()) {
+                        return self.context_call(machine_st, name, arity, idx, lco);
                     } else {
                         machine_st.fail = true;
                     }
@@ -519,8 +535,8 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.goto_throw();
                 Ok(())
             },
-            &ClauseType::Named(_, ref idx) | &ClauseType::Op(_, _, ref idx) =>
-                self.context_call(machine_st, arity, idx.clone(), lco),
+            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
+                self.context_call(machine_st, name.clone(), arity, idx.clone(), lco),
             &ClauseType::CallWithInferenceLimit => {
                 machine_st.goto_ptr(CodePtr::DirEntry(409, clause_name!("builtin")), 3, lco);
                 Ok(())

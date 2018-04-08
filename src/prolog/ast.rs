@@ -103,7 +103,7 @@ impl GenContext {
 
 pub struct Predicate(pub Vec<PredicateClause>);
 
-impl Predicate {    
+impl Predicate {
     pub fn clauses(self) -> Vec<PredicateClause> {
         self.0
     }
@@ -1400,18 +1400,23 @@ impl HeapCellValue {
     }
 }
 
-#[derive(Clone)]
-pub struct CodeIndex(pub Rc<Cell<usize>>, pub ClauseName);
+#[derive(Clone, Copy, PartialEq)]
+pub enum IndexPtr {
+    Undefined, Index(usize)
+}
 
-impl CodeIndex {
-    pub fn is_undefined(&self) -> bool {
-        self.0.get() == 0 && self.1 == clause_name!("")
+#[derive(Clone)]
+pub struct CodeIndex(pub Rc<Cell<IndexPtr>>, pub ClauseName);
+
+impl Default for CodeIndex {
+    fn default() -> Self {
+        CodeIndex(Rc::new(Cell::new(IndexPtr::Undefined)), clause_name!(""))
     }
 }
 
 impl From<(usize, ClauseName)> for CodeIndex {
     fn from(value: (usize, ClauseName)) -> Self {
-        CodeIndex(Rc::new(Cell::new(value.0)), value.1)
+        CodeIndex(Rc::new(Cell::new(IndexPtr::Index(value.0))), value.1)
     }
 }
 
@@ -1441,12 +1446,6 @@ impl PartialOrd<CodePtr> for CodePtr {
                 p1.partial_cmp(p2),
             _ => Some(Ordering::Greater)
         }
-    }
-}
-
-impl Default for CodeIndex {
-    fn default() -> Self {
-        CodeIndex(Rc::new(Cell::new(0)), clause_name!(""))
     }
 }
 

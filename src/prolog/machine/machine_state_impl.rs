@@ -909,8 +909,8 @@ impl MachineState {
             self.registers[arity - 1] = pred;
 
             if let Some((name, arity)) = self.setup_call_n(arity - 1) {
-                if let Some(idx) = code_dirs.get(name, arity, &self.p.clone()) {
-                    try_or_fail!(self, call_policy.try_execute(self, arity, idx));
+                if let Some(idx) = code_dirs.get(name.clone(), arity, &self.p.clone()) {
+                    try_or_fail!(self, call_policy.try_execute(self, name, arity, idx));
                     return;
                 }
             }

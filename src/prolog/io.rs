@@ -13,6 +13,16 @@ use termion::event::Key;
 use std::io::{Write, stdin, stdout};
 use std::fmt;
 
+
+impl fmt::Display for IndexPtr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &IndexPtr::Undefined => write!(f, "undefined"),
+            &IndexPtr::Index(i)  => write!(f, "{}", i)
+        }
+    }
+}
+
 impl fmt::Display for ClauseName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.as_str())
@@ -461,10 +471,10 @@ impl TLInfo for DeclInfo {
     {
         let (name, arity) = (self.name.clone(), self.arity);
 
-        if entry.0.get() == 0 {
+        if entry.0.get() == IndexPtr::Undefined {
             if &name == n1 && arity == a1 {
                 // *entry = default(); // implement logical view update semantics.
-                entry.0.set(code_size);
+                entry.0.set(IndexPtr::Index(code_size));
             }
         }
 
@@ -669,7 +679,7 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
 
                 code.extend(decl_code.into_iter());
 
-                let index = CodeIndex::from((p, get_module_name(&module)));
+                let index = CodeIndex::default();
                 code_dir.insert((decl_info.name.clone(), decl_info.arity), index);
             }
         }
