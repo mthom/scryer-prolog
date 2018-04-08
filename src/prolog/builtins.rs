@@ -333,7 +333,7 @@ fn get_builtins() -> Code {
                 put_constant!(Level::Shallow, integer!(1), temp_v!(3)),
                 put_unsafe_value!(2, 4)],
          deallocate!(),
-         goto_execute!(252, 4), // goto get_args/4, 252.
+         goto_execute!(252, 4), // goto get_args/4, 251.
          try_me_else!(5), // get_args/4, 252.
          fact![get_var_in_fact!(temp_v!(5), 1),
                get_constant!(integer!(0), temp_v!(4))],
