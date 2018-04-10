@@ -210,11 +210,11 @@ pub struct MachineState {
 
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
-fn predicate_existence_error(name: ClauseName, arity: usize) -> Vec<HeapCellValue>
+fn predicate_existence_error(name: ClauseName, arity: usize, h: usize) -> Vec<HeapCellValue>
 {
     let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name)));
 
-    let mut error = functor!("existence_error", 2, [heap_atom!("procedure"), heap_str!(4)]);
+    let mut error = functor!("existence_error", 2, [heap_atom!("procedure"), heap_str!(3 + h)]);
     error.append(&mut functor!("/", 2, [name, heap_integer!(arity)], Fixity::In));
 
     error
@@ -238,7 +238,7 @@ pub(crate) trait CallPolicy: Any {
     {
         match idx.0.get() {
             IndexPtr::Undefined =>
-                return Err(predicate_existence_error(name, arity)),
+                return Err(predicate_existence_error(name, arity, machine_st.heap.h)),
             IndexPtr::Index(compiled_tl_index) => {
                 let module_name = idx.1;
 
@@ -258,7 +258,7 @@ pub(crate) trait CallPolicy: Any {
     {
         match idx.0.get() {
             IndexPtr::Undefined =>
-                return Err(predicate_existence_error(name, arity)),
+                return Err(predicate_existence_error(name, arity, machine_st.heap.h)),
             IndexPtr::Index(compiled_tl_index) => {
                 let module_name = idx.1;
 

@@ -925,6 +925,13 @@ impl MachineState {
         self.p  = CodePtr::DirEntry(59, clause_name!("builtin"));
     }
 
+    fn unwind_stack(&mut self) {
+        self.b = self.block;
+        self.or_stack.truncate(self.b);
+        
+        self.fail = true;
+    }  
+
     fn throw_exception(&mut self, hcv: Vec<HeapCellValue>) {
         let h = self.heap.h;
 
@@ -1535,12 +1542,8 @@ impl MachineState {
                 let addr = self.deref(self[temp_v!(1)].clone());
                 self.reset_block(addr);
             },
-            &BuiltInInstruction::UnwindStack => {
-                self.b = self.block;
-                self.or_stack.truncate(self.b);
-
-                self.fail = true;
-            },
+            &BuiltInInstruction::UnwindStack =>
+                self.unwind_stack(),
             &BuiltInInstruction::InternalCallN =>
                 self.handle_internal_call_n(call_policy, code_dirs),
             &BuiltInInstruction::Fail => {

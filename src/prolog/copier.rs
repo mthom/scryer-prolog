@@ -12,9 +12,9 @@ pub trait CopierTarget
     fn deref(&self, Addr) -> Addr;
     fn stack(&mut self) -> &mut AndStack;
 
-    // duplicate_term(L1, L2) uses Cheney's algorithm to copy the term at
-    // L1 to L2. forwarding_terms is kept to restore the innards of L1
-    // after it's been copied to L2.
+    // duplicate_term(L1, L2) uses Cheney's algorithm to copy the term
+    // at L1 to L2. trail is kept to restore the innards of L1 after
+    // it's been copied to L2.
     fn duplicate_term(&mut self, a: Addr) where Self: IndexMut<usize, Output=HeapCellValue>
     {
         let mut trail: Vec<(Ref, HeapCellValue)>= Vec::new();
@@ -31,13 +31,13 @@ pub trait CopierTarget
                     match a.clone() {
                         Addr::Lis(a) => {
                             self[scan] = HeapCellValue::Addr(Addr::Lis(self.threshold()));
-
+                            
                             let hcv = self[a].clone();
                             self.push(hcv);
-
+                            
                             let hcv = self[a+1].clone();
                             self.push(hcv);
-
+                            
                             scan += 1;
                         },
                         Addr::HeapCell(_) | Addr::StackCell(_, _) => {

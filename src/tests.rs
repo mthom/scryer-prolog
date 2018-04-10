@@ -359,8 +359,7 @@ fn test_queries_on_predicates() {
     assert_prolog_failure!(&mut wam, "?- p(a, b, c).");
     assert_prolog_success!(&mut wam, "?- p(a, b, C).", [["C = x"]]);
 
-    submit(&mut wam, "p(X) :- q(X). p(X) :- r(X).");
-    submit(&mut wam, "q(X) :- a.");
+    submit(&mut wam, "p(X) :- r(X).");
     submit(&mut wam, "r(X) :- s(X, t). r(X) :- t(X, u).");
 
     submit(&mut wam, "s(x, t).");
@@ -529,23 +528,6 @@ fn test_queries_on_cuts() {
     submit(&mut wam, "b.");
 
     assert_prolog_success!(&mut wam, "?- a(X).", [["X = c"]]);
-
-    wam.clear();
-
-    assert_prolog_failure!(&mut wam, "?- c(X).");
-
-    submit(&mut wam, "a(X) :- b, c(X), !. a(X) :- d(X).");
-    submit(&mut wam, "b.");
-
-    assert_prolog_failure!(&mut wam, "?- a(X).");
-
-    submit(&mut wam, "d(d).");
-
-    assert_prolog_success!(&mut wam, "?- a(X).", [["X = d"]]);
-
-    submit(&mut wam, "c(c).");
-
-    assert_prolog_success!(&mut wam, "?- a(X).", [["X = c"]]);
 }
 
 #[test]
@@ -603,170 +585,6 @@ fn test_queries_on_lists()
                             ["X = d", "Y = f", "Z = _14"]]);
     assert_prolog_failure!(&mut wam, "?- member([X, Y, Y], [a, [b, c], [b, b], [Z, x], [d, f]]).");
     assert_prolog_failure!(&mut wam, "?- member([X, Y, Z], [a, [b, c], [b, b], [Z, x], [d, f]]).");
-}
-
-#[test]
-fn test_queries_on_indexed_predicates()
-{
-    let mut wam = Machine::new();
-
-    submit(&mut wam, "p(a) :- a.
-                      p(b) :- b, f(X).
-                      p(c) :- c, g(X).
-                      p(f(a)) :- a.
-                      p(g(b, c)) :- b.
-                      p(g(b)) :- b.
-                      p([a|b]) :- a.
-                      p([]).
-                      p(X) :- x.
-                      p([c, d, e]).");
-
-    assert_prolog_failure!(&mut wam, "?- p(a).");
-    assert_prolog_failure!(&mut wam, "?- p(b).");
-    assert_prolog_failure!(&mut wam, "?- p(c).");
-    assert_prolog_failure!(&mut wam, "?- p(f(a)).");
-    assert_prolog_failure!(&mut wam, "?- p(g(b, X)).");
-    assert_prolog_failure!(&mut wam, "?- p(g(Y, X)).");
-    assert_prolog_failure!(&mut wam, "?- p(g(Y, c)).");
-    assert_prolog_failure!(&mut wam, "?- p(g(b)).");
-    assert_prolog_success!(&mut wam, "?- p([]).");
-    assert_prolog_success!(&mut wam, "?- p([c, d, e]).");
-    assert_prolog_success!(&mut wam, "?- p([c, d | X]).", [["X = [e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([c|X]).", [["X = [d, e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([Y|X]).", [["Y = c", "X = [d, e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([Y|[d|Xs]]).", [["Xs = [e]", "Y = c"]]);
-
-    submit(&mut wam, "a.");
-
-    assert_prolog_success!(&mut wam, "?- p(a).");
-    assert_prolog_failure!(&mut wam, "?- p(b).");
-    assert_prolog_failure!(&mut wam, "?- p(c).");
-    assert_prolog_success!(&mut wam, "?- p(f(a)).");
-    assert_prolog_failure!(&mut wam, "?- p(g(b, X)).");
-    assert_prolog_failure!(&mut wam, "?- p(g(Y, X)).");
-    assert_prolog_failure!(&mut wam, "?- p(g(Y, c)).");
-    assert_prolog_failure!(&mut wam, "?- p(g(b)).");
-    assert_prolog_success!(&mut wam, "?- p([]).");
-    assert_prolog_success!(&mut wam, "?- p([c, d, e]).");
-    assert_prolog_success!(&mut wam, "?- p([c, d | X]).", [["X = [e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([c|X]).", [["X = [d, e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([Y|X]).", [["X = b", "Y = a"],
-                                                      ["Y = c", "X = [d, e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([Y|[d|Xs]]).", [["Xs = [e]", "Y = c"]]);
-
-    submit(&mut wam, "b.");
-    submit(&mut wam, "f(x).");
-
-    assert_prolog_success!(&mut wam, "?- p(a).");
-    assert_prolog_success!(&mut wam, "?- p(b).");
-    assert_prolog_failure!(&mut wam, "?- p(c).");
-    assert_prolog_success!(&mut wam, "?- p(f(a)).");
-    assert_prolog_success!(&mut wam, "?- p(g(b, X)).", [["X = c"]]);
-    assert_prolog_success!(&mut wam, "?- p(g(Y, X)).", [["X = c", "Y = b"]]);
-    assert_prolog_success!(&mut wam, "?- p(g(Y, c)).", [["Y = b"]]);
-    assert_prolog_success!(&mut wam, "?- p(g(b)).");
-    assert_prolog_success!(&mut wam, "?- p([]).");
-    assert_prolog_success!(&mut wam, "?- p([c, d, e]).");
-    assert_prolog_success!(&mut wam, "?- p([c, d | X]).", [["X = [e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([c|X]).", [["X = [d, e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([Y|X]).", [["X = b", "Y = a"],
-                                                      ["Y = c", "X = [d, e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([Y|[d|Xs]]).", [["Xs = [e]", "Y = c"]]);
-
-    submit(&mut wam, "c.");
-    submit(&mut wam, "g(X).");
-
-    assert_prolog_success!(&mut wam, "?- p(a).");
-    assert_prolog_success!(&mut wam, "?- p(b).");
-    assert_prolog_success!(&mut wam, "?- p(c).");
-    assert_prolog_success!(&mut wam, "?- p(f(a)).");
-    assert_prolog_success!(&mut wam, "?- p(g(b, X)).", [["X = c"]]);
-    assert_prolog_success!(&mut wam, "?- p(g(Y, X)).", [["X = c", "Y = b"]]);
-    assert_prolog_success!(&mut wam, "?- p(g(Y, c)).", [["Y = b"]]);
-    assert_prolog_success!(&mut wam, "?- p(g(b)).");
-    assert_prolog_success!(&mut wam, "?- p([]).");
-    assert_prolog_success!(&mut wam, "?- p([c, d, e]).");
-    assert_prolog_success!(&mut wam, "?- p([c, d | X]).", [["X = [e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([c|X]).", [["X = [d, e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([Y|X]).", [["X = b", "Y = a"],
-                                                      ["Y = c", "X = [d, e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([Y|[d|Xs]]).", [["Xs = [e]", "Y = c"]]);
-    assert_prolog_failure!(&mut wam, "?- p(blah).");
-
-    submit(&mut wam, "x.");
-
-    assert_prolog_success!(&mut wam, "?- p(a).");
-    assert_prolog_success!(&mut wam, "?- p(b).");
-    assert_prolog_success!(&mut wam, "?- p(c).");
-    assert_prolog_success!(&mut wam, "?- p(true(a)).");
-
-    assert_prolog_success!(&mut wam, "?- p(g(b, X)).", [["X = c"],
-                                                        ["X = _2"]]);
-    assert_prolog_success!(&mut wam, "?- p(g(Y, X)).", [["X = c", "Y = b"],
-                                                        ["X = _2", "Y = _1"]]);
-    assert_prolog_success!(&mut wam, "?- p(g(Y, c)).", [["Y = b"],
-                                                        ["Y = _1"]]);
-
-    assert_prolog_success!(&mut wam, "?- p(g(b)).");
-    assert_prolog_success!(&mut wam, "?- p([]).");
-    assert_prolog_success!(&mut wam, "?- p([c, d, e]).");
-
-    assert_prolog_success!(&mut wam, "?- p([c, d | X]).", [["X = _1"],
-                                                           ["X = [e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([c|X]).", [["X = _1"],
-                                                      ["X = [d, e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([Y|X]).", [["X = b", "Y = a"],
-                                                      ["X = _1", "Y = _0"],
-                                                      ["Y = c", "X = [d, e]"]]);
-    assert_prolog_success!(&mut wam, "?- p([Y|[d|Xs]]).", [["Xs = _1", "Y = _2"],
-                                                           ["Xs = [e]", "Y = c"]]);
-
-    assert_prolog_success!(&mut wam, "?- p(blah).");
-
-    submit(&mut wam, "ind_call(or(X, Y)) :- ind_call(X).
-                      ind_call(trace) :- trace.
-                      ind_call(or(X, Y)) :- ind_call(Y).
-                      ind_call(notrace) :- notrace.
-                      ind_call(nl) :- nl.
-                      ind_call(X) :- builtin(X).
-                      ind_call(X) :- extern(X).
-                      ind_call(ind_call(X)) :- ind_call(X).
-                      ind_call(repeat).
-                      ind_call(repeat) :- ind_call(repeat).
-                      ind_call(false).");
-
-    assert_prolog_success!(&mut wam, "?- ind_call(repeat).");
-    assert_prolog_success!(&mut wam, "?- ind_call(false).");
-    assert_prolog_success!(&mut wam, "?- ind_call(ind_call(repeat)).");
-    assert_prolog_success!(&mut wam, "?- ind_call(ind_call(false)).");
-    assert_prolog_failure!(&mut wam, "?- ind_call(notrace).");
-    assert_prolog_failure!(&mut wam, "?- ind_call(nl).");
-    assert_prolog_failure!(&mut wam, "?- ind_call(builtin(X)).");
-    assert_prolog_failure!(&mut wam, "?- ind_call(extern(X)).");
-
-    submit(&mut wam, "notrace.");
-    submit(&mut wam, "nl.");
-
-    assert_prolog_success!(&mut wam, "?- ind_call(repeat).");
-    assert_prolog_success!(&mut wam, "?- ind_call(false).");
-    assert_prolog_success!(&mut wam, "?- ind_call(ind_call(repeat)).");
-    assert_prolog_success!(&mut wam, "?- ind_call(ind_call(false)).");
-    assert_prolog_success!(&mut wam, "?- ind_call(notrace).");
-    assert_prolog_success!(&mut wam, "?- ind_call(nl).");
-    assert_prolog_failure!(&mut wam, "?- ind_call(builtin(X)).");
-    assert_prolog_failure!(&mut wam, "?- ind_call(extern(X)).");
-
-    submit(&mut wam, "builtin(X).");
-    submit(&mut wam, "extern(x).");
-
-    assert_prolog_success!(&mut wam, "?- ind_call(repeat).");
-    assert_prolog_success!(&mut wam, "?- ind_call(false).");
-    assert_prolog_success!(&mut wam, "?- ind_call(ind_call(repeat)).");
-    assert_prolog_success!(&mut wam, "?- ind_call(ind_call(false)).");
-    assert_prolog_success!(&mut wam, "?- ind_call(notrace).");
-    assert_prolog_success!(&mut wam, "?- ind_call(nl).");
-    assert_prolog_success!(&mut wam, "?- ind_call(builtin(X)).", [["X = _1"]]);
-    assert_prolog_success!(&mut wam, "?- ind_call(extern(X)).", [["X = _1"]]);
 }
 
 #[test]
