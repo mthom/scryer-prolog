@@ -466,7 +466,6 @@ pub enum ParserError
     BuiltInArityMismatch(&'static str),
     UnexpectedChar(char),
     UnexpectedEOF,
-    FailedMatch(String),
     IO(IOError),
     ExpectedRel,
     InadmissibleFact,
