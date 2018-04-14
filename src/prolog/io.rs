@@ -4,7 +4,7 @@ use prolog::codegen::*;
 use prolog::debray_allocator::*;
 use prolog::heap_print::*;
 use prolog::machine::*;
-use prolog::parser::toplevel::*;
+use prolog::toplevel::*;
 
 use termion::raw::IntoRawMode;
 use termion::input::TermRead;
@@ -12,7 +12,6 @@ use termion::event::Key;
 
 use std::io::{Write, stdin, stdout};
 use std::fmt;
-
 
 impl fmt::Display for IndexPtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -472,8 +471,7 @@ impl TLInfo for DeclInfo {
         let (name, arity) = (self.name.clone(), self.arity);
 
         if entry.0.get() == IndexPtr::Undefined {
-            if &name == n1 && arity == a1 {
-                // *entry = default(); // implement logical view update semantics.
+            if &name == n1 && arity == a1 {                
                 entry.0.set(IndexPtr::Index(code_size));
             }
         }
@@ -673,14 +671,18 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                 });
 
                 let module_name = get_module_name(&module);
+                let decl_info = DeclInfo { name, arity: decl.arity(),
+                                           module_name: module_name.clone() };
 
-                let decl_info = DeclInfo { name, arity: decl.arity(), module_name };
+                {
+                    let index = code_dir.entry((decl_info.name.clone(), decl_info.arity))
+                        .or_insert(CodeIndex::default());
+
+                    index.0.set(IndexPtr::Index(p));
+                }
+                
                 decl_info.label_clauses(p, &mut code_dir, &mut decl_code);
-
                 code.extend(decl_code.into_iter());
-
-                let index = CodeIndex::default();
-                code_dir.insert((decl_info.name.clone(), decl_info.arity), index);
             }
         }
     }

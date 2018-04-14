@@ -10,13 +10,10 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::Error as IOError;
-use std::num::{ParseFloatError};
 use std::ops::{Add, AddAssign, Div, Index, IndexMut, Sub, Mul, Neg};
 use std::rc::Rc;
 use std::str::Utf8Error;
 use std::vec::Vec;
-
-pub const LEXER_BUF_SIZE: usize = 4096;
 
 pub type Atom = String;
 
@@ -461,17 +458,13 @@ pub enum ArithmeticError {
     UninstantiatedVar
 }
 
-/* 'TokenTooLong' is hard to detect reliably if we don't process the
-input one character at a time. It would be easy to detect if the regex
-library supported matching on iterator inputs, but it currently does
-not. This is fine, mostly; the typical Prolog program will not contain
-tokens exceeding 4096 chars in length. */
-
 #[derive(Debug)]
 pub enum ParserError
 {
     Arithmetic(ArithmeticError),
+    BackQuotedString,
     BuiltInArityMismatch(&'static str),
+    UnexpectedChar(char),
     UnexpectedEOF,
     FailedMatch(String),
     IO(IOError),
@@ -479,14 +472,14 @@ pub enum ParserError
     InadmissibleFact,
     InadmissibleQueryTerm,
     IncompleteReduction,
-    InconsistentEntry, // was InconsistentDeclaration.
+    InconsistentEntry,
     InvalidModuleDecl,
     InvalidModuleExport,
     InvalidRuleHead,
     InvalidUseModuleDecl,
+    MissingQuote,
     ParseBigInt,
-    ParseFloat(ParseFloatError),
-    // TokenTooLong,
+    ParseFloat,
     Utf8Conversion(Utf8Error)
 }
 
@@ -508,12 +501,6 @@ impl From<Utf8Error> for ParserError {
     }
 }
 
-impl From<ParseFloatError> for ParserError {
-    fn from(err: ParseFloatError) -> ParserError {
-        ParserError::ParseFloat(err)
-    }
-}
-
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum Fixity {
     In, Post, Pre
@@ -522,6 +509,7 @@ pub enum Fixity {
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum Constant {
     Atom(ClauseName),
+    Char(char),
     Number(Number),
     String(Rc<String>),
     Usize(usize),
@@ -549,12 +537,14 @@ impl fmt::Display for Constant {
         match self {
             &Constant::Atom(ref atom) =>
                 write!(f, "{}", atom),
+            &Constant::Char(c) =>
+                write!(f, "#\\{}", c),
             &Constant::EmptyList =>
                 write!(f, "[]"),
             &Constant::Number(ref n) =>
                 write!(f, "{}", n),
             &Constant::String(ref s) =>
-                write!(f, "{}", s),
+                write!(f, "\"{}\"", s),
             &Constant::Usize(integer) =>
                 write!(f, "u{}", integer)
         }

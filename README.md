@@ -1,6 +1,6 @@
 # rusty-wam
 
-rusty-wam aims to become to Prolog what GHC is to Haskell: an open
+rusty-wam aims to become to ISO Prolog what GHC is to Haskell: an open
 source industrial strength production environment that is also a
 testbed for bleeding edge research in logic and constraint
 programming, which is itself written in a high-level language.

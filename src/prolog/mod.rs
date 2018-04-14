@@ -8,6 +8,7 @@ pub mod macros;
 pub mod ast;
 #[macro_use]
 pub mod allocator;
+pub mod toplevel;
 pub mod arithmetic;
 pub mod builtins;
 pub mod codegen;
