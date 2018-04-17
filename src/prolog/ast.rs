@@ -537,7 +537,7 @@ impl fmt::Display for Constant {
             &Constant::Atom(ref atom) =>
                 write!(f, "{}", atom),
             &Constant::Char(c) =>
-                write!(f, "#\\{}", c),
+                write!(f, "{}", c as u8),
             &Constant::EmptyList =>
                 write!(f, "[]"),
             &Constant::Number(ref n) =>
