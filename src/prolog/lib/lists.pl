@@ -16,8 +16,7 @@ is_list([_|T]) :- is_list(T).
 
 memberchk(X, Xs) :- member(X, Xs), !.
 
-reverse(Xs, Ys) :- var(Ys), !, reverse(Xs, [], Ys).
-reverse(Ys, Xs) :- reverse(Xs, [], Ys).
+reverse(Xs, Ys) :- reverse(Xs, [], Ys).
 
 reverse([], Ys, Ys).
 reverse([H|T], Ps, Rs) :-
