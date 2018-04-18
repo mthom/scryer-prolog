@@ -426,17 +426,16 @@ pub(crate) trait CallPolicy: Any {
 
                 Ok(())
             },
-            &ClauseType::CallN => {
+            &ClauseType::CallN =>
                 if let Some((name, arity)) = machine_st.setup_call_n(arity) {
                     if let Some(idx) = code_dirs.get(name.clone(), arity, &machine_st.p.clone()) {
-                        return self.context_call(machine_st, name, arity, idx, lco);
+                        self.context_call(machine_st, name, arity, idx, lco)
                     } else {
-                        machine_st.fail = true;
+                        Err(predicate_existence_error(name, arity, machine_st.heap.h))
                     }
-                }
-
-                Ok(())
-            },
+                } else {
+                    Ok(())
+                },
             &ClauseType::Compare => {
                 let a1 = machine_st[temp_v!(1)].clone();
                 let a2 = machine_st[temp_v!(2)].clone();

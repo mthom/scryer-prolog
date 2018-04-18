@@ -679,6 +679,7 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                         .or_insert(CodeIndex::default());
 
                     index.0.set(IndexPtr::Index(p));
+                    index.1 = module_name;
                 }
                 
                 decl_info.label_clauses(p, &mut code_dir, &mut decl_code);
