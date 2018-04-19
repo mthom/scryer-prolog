@@ -28,11 +28,12 @@ impl<'a> CodeDirs<'a> {
     {
         match in_mod.as_str() {
             "user" | "builtin" => self.code_dir.get(&(name, arity)).cloned(),
-            _ => match self.modules.get(&in_mod) {
-                Some(&Module { ref code_dir, .. }) =>
-                    code_dir.get(&(name, arity)).cloned().map(CodeIndex::from),
-                None => None
-            }
+            _ =>
+                match self.modules.get(&in_mod) {
+                    Some(&Module { ref code_dir, .. }) =>
+                        code_dir.get(&(name, arity)).cloned().map(CodeIndex::from),
+                    None => None
+                }
         }
     }
 }
@@ -426,8 +427,7 @@ pub(crate) trait CallPolicy: Any {
             },
             &ClauseType::CallN =>
                 if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-                    if let Some(idx) = code_dirs.get(name.clone(), arity, machine_st.p.module_name())
-                    {
+                    if let Some(idx) = code_dirs.get(name.clone(), arity, clause_name!("user")) {
                         self.context_call(machine_st, name, arity, idx, lco)
                     } else {
                         Err(predicate_existence_error(name, arity, machine_st.heap.h))
