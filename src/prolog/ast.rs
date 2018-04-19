@@ -139,6 +139,8 @@ pub type OpDirKey = (ClauseName, Fixity);
 // name and fixity -> operator type and precedence.
 pub type OpDir = HashMap<OpDirKey, (Specifier, usize, ClauseName)>;
 
+pub type ModuleCodeDir = HashMap<PredicateKey, ModuleCodeIndex>;
+
 pub type CodeDir = HashMap<PredicateKey, CodeIndex>;
 
 pub type TermDir = HashMap<PredicateKey, Predicate>;
@@ -152,16 +154,22 @@ pub struct ModuleDecl {
 
 pub struct Module {
     pub module_decl: ModuleDecl,
-    pub code_dir: CodeDir,
+    pub code_dir: ModuleCodeDir,
     pub op_dir: OpDir
 }
 
 impl Module {
     pub fn new(module_decl: ModuleDecl) -> Self {
         Module { module_decl,
-                 code_dir: CodeDir::new(),
+                 code_dir: ModuleCodeDir::new(),
                  op_dir: OpDir::new() }
     }
+}
+
+pub fn as_module_code_dir(code_dir: CodeDir) -> ModuleCodeDir {
+    code_dir.into_iter()
+        .map(|(k, code_idx)| (k, ModuleCodeIndex(code_idx.0.get(), code_idx.1)))        
+        .collect()        
 }
 
 impl SubModuleUser for Module {
@@ -169,51 +177,40 @@ impl SubModuleUser for Module {
         &mut self.op_dir
     }
 
-    fn code_dir(&mut self) -> &mut CodeDir {
-        &mut self.code_dir
+    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
+        self.code_dir.insert((name, arity), idx);
     }
 }
 
 pub trait SubModuleUser {
     fn op_dir(&mut self) -> &mut OpDir;
-    fn code_dir(&mut self) -> &mut CodeDir;
+    fn insert_dir_entry(&mut self, ClauseName, usize, ModuleCodeIndex);
 
     // returns true on successful import.
     fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
         let name = name.defrock_brackets();
-
-        if arity == 1 {
-            if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::Pre)) {
-                self.op_dir().insert((name.clone(), Fixity::Pre), op_data.clone());
-            }
-
-            if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::Post)) {
-                self.op_dir().insert((name.clone(), Fixity::Post), op_data.clone());
-            }
-        } else if arity == 2 {
-            if let Some(op_data) = submodule.op_dir.get(&(name.clone(), Fixity::In)) {
-                self.op_dir().insert((name.clone(), Fixity::In), op_data.clone());
+        
+        {
+            let mut insert_op_dir = |fix| {
+                if let Some(op_data) = submodule.op_dir.get(&(name.clone(), fix)) {
+                    self.op_dir().insert((name.clone(), fix), op_data.clone());
+                }
+            };
+            
+            if arity == 1 {
+                insert_op_dir(Fixity::Pre);
+                insert_op_dir(Fixity::Post);
+            } else if arity == 2 {
+                insert_op_dir(Fixity::In);
             }
         }
-
-        if self.code_dir().contains_key(&(name.clone(), arity)) {
-            println!("warning: overwriting {}/{}", &name, arity);
-        }
-
+        
         if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
-            if let Some(ref mut global_code_data) = self.code_dir().get_mut(&(name.clone(), arity)) {
-                global_code_data.1 = code_data.1.clone();
-                global_code_data.0.set(code_data.0.get());
-
-                return true; // done to appease the borrow checker.
-            }
-
-            self.code_dir().insert((name, arity), code_data.clone());
+            self.insert_dir_entry(name, arity, code_data.clone());
+            true
         } else {
-            return false;
+            false
         }
-
-        true
     }
 
     fn use_qualified_module(&mut self, submodule: &Module, exports: Vec<PredicateKey>) -> EvalSession
@@ -1396,6 +1393,15 @@ pub enum IndexPtr {
 
 #[derive(Clone)]
 pub struct CodeIndex(pub Rc<Cell<IndexPtr>>, pub ClauseName);
+
+#[derive(Clone)]
+pub struct ModuleCodeIndex(pub IndexPtr, pub ClauseName);
+
+impl From<ModuleCodeIndex> for CodeIndex {
+    fn from(value: ModuleCodeIndex) -> Self {
+        CodeIndex(Rc::new(Cell::new(value.0)), value.1.clone())
+    }
+}
 
 impl Default for CodeIndex {
     fn default() -> Self {

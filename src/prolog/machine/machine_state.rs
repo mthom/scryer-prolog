@@ -24,18 +24,16 @@ impl<'a> CodeDirs<'a> {
         CodeDirs { code_dir, modules }
     }
 
-    fn get_current_code_dir(&self, p: &CodePtr) -> &CodeDir {
-        let module_name = p.module_name();
-
-        match module_name {
-            ClauseName::BuiltIn("user") | ClauseName::BuiltIn("builtin") => self.code_dir,
-            _ => &self.modules.get(&module_name).unwrap().code_dir
+    pub(super) fn get(&self, name: ClauseName, arity: usize, in_mod: ClauseName) -> Option<CodeIndex>
+    {
+        match in_mod.as_str() {
+            "user" | "builtin" => self.code_dir.get(&(name, arity)).cloned(),
+            _ => match self.modules.get(&in_mod) {
+                Some(&Module { ref code_dir, .. }) =>
+                    code_dir.get(&(name, arity)).cloned().map(CodeIndex::from),
+                None => None
+            }
         }
-    }
-
-    pub(super) fn get(&self, name: ClauseName, arity: usize, p: &CodePtr) -> Option<CodeIndex> {
-        let code_dir = self.get_current_code_dir(p);
-        code_dir.get(&(name, arity)).cloned()
     }
 }
 
@@ -428,7 +426,8 @@ pub(crate) trait CallPolicy: Any {
             },
             &ClauseType::CallN =>
                 if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-                    if let Some(idx) = code_dirs.get(name.clone(), arity, &machine_st.p.clone()) {
+                    if let Some(idx) = code_dirs.get(name.clone(), arity, machine_st.p.module_name())
+                    {
                         self.context_call(machine_st, name, arity, idx, lco)
                     } else {
                         Err(predicate_existence_error(name, arity, machine_st.heap.h))

@@ -642,7 +642,7 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                 } else {
                     return EvalSession::from(EvalError::ModuleNotFound);
                 }
-
+                
                 wam.use_module_in_toplevel(name);
             },
             TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)), _) => {
@@ -689,7 +689,7 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
     }
 
     if let Some(mut module) = module {
-        module.code_dir.extend(code_dir.into_iter());
+        module.code_dir.extend(as_module_code_dir(code_dir));
         module.op_dir.extend(op_dir.into_iter());
 
         wam.add_module(module, code);

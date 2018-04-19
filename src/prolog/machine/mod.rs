@@ -53,8 +53,17 @@ impl<'a> SubModuleUser for MachineCodeIndex<'a> {
         self.op_dir
     }
 
-    fn code_dir(&mut self) -> &mut CodeDir {
-        self.code_dir
+    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
+        if let Some(ref mut code_idx) = self.code_dir.get_mut(&(name.clone(), arity)) {
+            println!("warning: overwriting {}/{}", &name, arity);
+            
+            code_idx.0.set(idx.0);
+            code_idx.1 = idx.1;
+
+            return;
+        }
+        
+        self.code_dir.insert((name, arity), CodeIndex::from(idx));
     }
 }
 
@@ -132,8 +141,8 @@ impl Machine {
     {
         self.remove_module(name.clone());
 
-        match self.modules.get(&name) {
-            Some(ref module) => {
+        match self.modules.get_mut(&name) {
+            Some(ref mut module) => {
                 let mut indices = MachineCodeIndex { code_dir: &mut self.code_dir,
                                                      op_dir: &mut self.op_dir };
 
@@ -146,8 +155,8 @@ impl Machine {
     pub fn use_module_in_toplevel(&mut self, name: ClauseName) -> EvalSession {
         self.remove_module(name.clone());
 
-        match self.modules.get(&name) {
-            Some(ref module) => {
+        match self.modules.get_mut(&name) {
+            Some(ref mut module) => {
                 let mut indices = MachineCodeIndex { code_dir: &mut self.code_dir,
                                                      op_dir: &mut self.op_dir };
 
@@ -196,7 +205,7 @@ impl Machine {
 
         entry.0.set(IndexPtr::Index(offset));
         entry.1 = clause_name!("user");
-        
+
         EvalSession::EntrySuccess
     }
 
@@ -312,8 +321,8 @@ impl Machine {
                     let e = self.ms.e;
                     let r = var_data.as_reg_type().reg_num();
                     let addr = self.ms.and_stack[e][r].clone();
-                    
-                    heap_locs.insert(var.clone(), addr);                    
+
+                    heap_locs.insert(var.clone(), addr);
                 },
                 &VarData::Temp(cn, _, _) if cn == chunk_num => {
                     let r = var_data.as_reg_type();

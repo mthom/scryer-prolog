@@ -832,5 +832,5 @@ pub fn builtin_module() -> Module
         module_decl.exports.push((clause_name!("call"), arity));
     }
 
-    Module { module_decl, code_dir, op_dir }
+    Module { module_decl, code_dir: as_module_code_dir(code_dir), op_dir }
 }
