@@ -115,8 +115,10 @@ impl fmt::Display for CompareTermQT {
 impl fmt::Display for ClauseType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
-                write!(f, "{}:{}/{}", idx.1, name, idx.0.get()),
+            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) => {
+                let idx = idx.0.borrow();
+                write!(f, "{}:{}/{}", idx.1, name, idx.0)
+            },
             ref ct =>
                 write!(f, "{}", ct.name())
         }
@@ -465,18 +467,23 @@ pub(crate) trait TLInfo {
 struct DeclInfo { name: ClauseName, arity: usize, module_name: ClauseName }
 
 impl TLInfo for DeclInfo {
-    fn update_entry_index(&self, n1: &ClauseName, a1: usize, mut entry: CodeIndex,
+    fn update_entry_index(&self, n1: &ClauseName, a1: usize, entry: CodeIndex,
                           cp: &mut CodeIndex, code_size: usize)
     {
         let (name, arity) = (self.name.clone(), self.arity);
-
-        if entry.0.get() == IndexPtr::Undefined {
-            if &name == n1 && arity == a1 {                
-                entry.0.set(IndexPtr::Index(code_size));
+        
+        {
+            let mut entry = entry.0.borrow_mut();
+            
+            if entry.0 == IndexPtr::Undefined {
+                if &name == n1 && arity == a1 {                
+                    entry.0 = IndexPtr::Index(code_size);
+                }
             }
-        }
 
-        entry.1 = self.module_name.clone();
+            entry.1 = self.module_name.clone();
+        }
+        
         *cp = entry;
     }
 }
@@ -675,11 +682,10 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                                            module_name: module_name.clone() };
 
                 {
-                    let index = code_dir.entry((decl_info.name.clone(), decl_info.arity))
+                    let idx = code_dir.entry((decl_info.name.clone(), decl_info.arity))
                         .or_insert(CodeIndex::default());
-
-                    index.0.set(IndexPtr::Index(p));
-                    index.1 = module_name;
+                
+                    set_code_index!(idx, IndexPtr::Index(p), module_name);
                 }
                 
                 decl_info.label_clauses(p, &mut code_dir, &mut decl_code);

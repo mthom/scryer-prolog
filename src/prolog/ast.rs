@@ -4,7 +4,7 @@ use prolog::num::rational::Ratio;
 use prolog::ordered_float::*;
 use prolog::tabled_rc::*;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fmt;
@@ -168,8 +168,11 @@ impl Module {
 
 pub fn as_module_code_dir(code_dir: CodeDir) -> ModuleCodeDir {
     code_dir.into_iter()
-        .map(|(k, code_idx)| (k, ModuleCodeIndex(code_idx.0.get(), code_idx.1)))        
-        .collect()        
+        .map(|(k, code_idx)| {
+            let (idx, module_name) = code_idx.0.borrow().clone();
+            (k, ModuleCodeIndex(idx, module_name))
+        })
+        .collect()
 }
 
 impl SubModuleUser for Module {
@@ -189,14 +192,14 @@ pub trait SubModuleUser {
     // returns true on successful import.
     fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
         let name = name.defrock_brackets();
-        
+
         {
             let mut insert_op_dir = |fix| {
                 if let Some(op_data) = submodule.op_dir.get(&(name.clone(), fix)) {
                     self.op_dir().insert((name.clone(), fix), op_data.clone());
                 }
             };
-            
+
             if arity == 1 {
                 insert_op_dir(Fixity::Pre);
                 insert_op_dir(Fixity::Post);
@@ -204,7 +207,7 @@ pub trait SubModuleUser {
                 insert_op_dir(Fixity::In);
             }
         }
-        
+
         if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
             self.insert_dir_entry(name, arity, code_data.clone());
             true
@@ -1392,26 +1395,26 @@ pub enum IndexPtr {
 }
 
 #[derive(Clone)]
-pub struct CodeIndex(pub Rc<Cell<IndexPtr>>, pub ClauseName);
+pub struct CodeIndex(pub Rc<RefCell<(IndexPtr, ClauseName)>>);
 
 #[derive(Clone)]
 pub struct ModuleCodeIndex(pub IndexPtr, pub ClauseName);
 
 impl From<ModuleCodeIndex> for CodeIndex {
     fn from(value: ModuleCodeIndex) -> Self {
-        CodeIndex(Rc::new(Cell::new(value.0)), value.1.clone())
+        CodeIndex(Rc::new(RefCell::new((value.0, value.1.clone()))))
     }
 }
 
 impl Default for CodeIndex {
     fn default() -> Self {
-        CodeIndex(Rc::new(Cell::new(IndexPtr::Undefined)), clause_name!(""))
+        CodeIndex(Rc::new(RefCell::new((IndexPtr::Undefined, clause_name!("")))))
     }
 }
 
 impl From<(usize, ClauseName)> for CodeIndex {
     fn from(value: (usize, ClauseName)) -> Self {
-        CodeIndex(Rc::new(Cell::new(IndexPtr::Index(value.0))), value.1)
+        CodeIndex(Rc::new(RefCell::new((IndexPtr::Index(value.0), value.1))))
     }
 }
 

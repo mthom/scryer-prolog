@@ -56,9 +56,7 @@ impl<'a> SubModuleUser for MachineCodeIndex<'a> {
     fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
         if let Some(ref mut code_idx) = self.code_dir.get_mut(&(name.clone(), arity)) {
             println!("warning: overwriting {}/{}", &name, arity);
-            
-            code_idx.0.set(idx.0);
-            code_idx.1 = idx.1;
+            set_code_index!(code_idx, idx.0, idx.1); 
 
             return;
         }
@@ -96,7 +94,11 @@ impl Machine {
             let name = name.defrock_brackets();
 
             match self.code_dir.get(&(name.clone(), arity)).cloned() {
-                Some(CodeIndex (_, ref mod_name)) if mod_name == &module_name => {
+                Some(CodeIndex (ref code_idx)) => {
+                    if &code_idx.borrow().1 != &module_name {
+                        continue;
+                    }
+                    
                     self.code_dir.remove(&(name.clone(), arity));
 
                     // remove or respecify ops.
@@ -188,10 +190,12 @@ impl Machine {
                          -> EvalSession
     {
         match self.code_dir.get(&(name.clone(), arity)) {
-            Some(&CodeIndex (_, ref mod_name)) if mod_name == &clause_name!("builtin") =>
-                return EvalSession::from(EvalError::ImpermissibleEntry(format!("{}/{}",
-                                                                               name,
-                                                                               arity))),
+            Some(&CodeIndex (ref idx)) =>
+                if idx.borrow().1 == clause_name!("builtin") {
+                    return EvalSession::from(EvalError::ImpermissibleEntry(format!("{}/{}",
+                                                                                   name,
+                                                                                   arity)))
+                },
             _ => {}
         };
 
@@ -200,12 +204,10 @@ impl Machine {
         self.code.extend(code.into_iter());
         self.term_dir.insert((name.clone(), arity), pred);
 
-        let entry = self.code_dir.entry((name, arity))
+        let idx = self.code_dir.entry((name, arity))
             .or_insert(CodeIndex::from((offset, clause_name!("user"))));
 
-        entry.0.set(IndexPtr::Index(offset));
-        entry.1 = clause_name!("user");
-
+        set_code_index!(idx, IndexPtr::Index(offset), clause_name!("user"));
         EvalSession::EntrySuccess
     }
 

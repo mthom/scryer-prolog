@@ -235,11 +235,11 @@ pub(crate) trait CallPolicy: Any {
                 arity: usize, idx: CodeIndex)
                 -> CallResult
     {
-        match idx.0.get() {
+        match idx.0.borrow().0 {
             IndexPtr::Undefined =>
                 return Err(predicate_existence_error(name, arity, machine_st.heap.h)),
             IndexPtr::Index(compiled_tl_index) => {
-                let module_name = idx.1;
+                let module_name = idx.0.borrow().1.clone();
 
                 machine_st.cp = machine_st.p.clone() + 1;
                 machine_st.num_of_args = arity;
@@ -255,11 +255,11 @@ pub(crate) trait CallPolicy: Any {
                        arity: usize, idx: CodeIndex)
                        -> CallResult
     {
-        match idx.0.get() {
+        match idx.0.borrow().0 {
             IndexPtr::Undefined =>
                 return Err(predicate_existence_error(name, arity, machine_st.heap.h)),
             IndexPtr::Index(compiled_tl_index) => {
-                let module_name = idx.1;
+                let module_name = idx.0.borrow().1.clone();
 
                 machine_st.num_of_args = arity;
                 machine_st.b0 = machine_st.b;

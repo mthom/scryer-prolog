@@ -774,3 +774,12 @@ macro_rules! return_from_clause {
         Ok(())
     }}
 }
+
+macro_rules! set_code_index {
+    ($idx:expr, $ip:expr, $mod_name:expr) => {{
+        let mut idx = $idx.0.borrow_mut();
+
+        idx.0 = $ip;
+        idx.1 = $mod_name.clone();
+    }}
+}
