@@ -267,7 +267,7 @@ impl fmt::Display for EvalError {
             &EvalError::ModuleDoesNotContainExport => write!(f, "module does not contain claimed export."),
             &EvalError::QueryFailure => write!(f, "false."),
             &EvalError::QueryFailureWithException(ref e) => write!(f, "{}", error_string(e)),
-            &EvalError::ImpermissibleEntry(ref msg) => write!(f, "cannot overwrite builtin {}.", msg),
+            &EvalError::ImpermissibleEntry(ref msg) => write!(f, "cannot overwrite {}.", msg),
             &EvalError::OpIsInfixAndPostFix =>
                 write!(f, "cannot define an op to be both postfix and infix."),
             &EvalError::NamelessEntry => write!(f, "the predicate head is not an atom or clause."),

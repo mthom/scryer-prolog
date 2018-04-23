@@ -190,12 +190,10 @@ impl Machine {
                          -> EvalSession
     {
         match self.code_dir.get(&(name.clone(), arity)) {
-            Some(&CodeIndex (ref idx)) =>
-                if idx.borrow().1 == clause_name!("builtin") {
+            Some(&CodeIndex (ref idx)) if idx.borrow().1 != clause_name!("user") =>
                     return EvalSession::from(EvalError::ImpermissibleEntry(format!("{}/{}",
                                                                                    name,
-                                                                                   arity)))
-                },
+                                                                                   arity))),                
             _ => {}
         };
 
