@@ -602,6 +602,9 @@ impl<R: Read> TopLevelWorker<R> {
                     let tl = TopLevel::Declaration(Declaration::Module(actual_mod));
                     results.push(TopLevelPacket::Decl(tl, vec![]));
                 },
+                TopLevel::Declaration(decl) => {
+                    results.push(TopLevelPacket::Decl(TopLevel::Declaration(decl), vec![]));
+                },
                 tl => preds.extend(tl.as_predicate().ok().unwrap().clauses().into_iter())
             };
         }
