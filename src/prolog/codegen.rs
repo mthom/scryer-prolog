@@ -195,7 +195,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         GenContext::Last(chunk_num)
                     }
                 };
-
+                
                 self.update_var_count(chunked_term.post_order_iter());
                 vs.mark_vars_in_chunk(chunked_term.post_order_iter(), lt_arity, term_loc);
             }

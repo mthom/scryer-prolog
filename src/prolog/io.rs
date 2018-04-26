@@ -119,8 +119,7 @@ impl fmt::Display for ClauseType {
                 let idx = idx.0.borrow();
                 write!(f, "{}:{}/{}", idx.1, name, idx.0)
             },
-            ref ct =>
-                write!(f, "{}", ct.name())
+            ref ct => write!(f, "{}", ct.name())
         }
     }
 }
@@ -212,6 +211,10 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "install_new_block"),
             &BuiltInInstruction::InternalCallN =>
                 write!(f, "internal_call_N"),
+            &BuiltInInstruction::RemoveCallPolicyCheck =>
+                write!(f, "remove_call_policy_check"),
+            &BuiltInInstruction::RemoveInferenceCounter(r1, r2) =>
+                write!(f, "remove_inference_counter {}, {}", r1, r2),            
             &BuiltInInstruction::ResetBlock =>
                 write!(f, "reset_block"),
             &BuiltInInstruction::RestoreCutPolicy =>
@@ -226,10 +229,6 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "unwind_stack"),
             &BuiltInInstruction::Unify =>
                 write!(f, "unify"),
-            &BuiltInInstruction::RemoveCallPolicyCheck =>
-                write!(f, "remove_call_policy_check"),
-            &BuiltInInstruction::RemoveInferenceCounter(r1, r2) =>
-                write!(f, "remove_inference_counter {}, {}", r1, r2)
         }
     }
 }

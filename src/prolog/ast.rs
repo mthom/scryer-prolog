@@ -705,6 +705,7 @@ pub enum ClauseType {
     Op(ClauseName, Fixity, CodeIndex),
     Named(ClauseName, CodeIndex),
     SetupCallCleanup,
+    SkipMaxList,
     Sort,
     Throw,
 }
@@ -807,6 +808,7 @@ impl ClauseType {
             &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
             &ClauseType::SetupCallCleanup => clause_name!("setup_call_cleanup"),
+            &ClauseType::SkipMaxList => clause_name!("'$skip_max_list'"),
             &ClauseType::Sort => clause_name!("sort"),
             &ClauseType::Throw => clause_name!("throw")
         }
@@ -836,6 +838,7 @@ impl ClauseType {
             ("keysort", 2) => ClauseType::KeySort,
             ("\\==", 2) => ClauseType::NotEq,
             ("setup_call_cleanup", 3) => ClauseType::SetupCallCleanup,
+            ("'$skip_max_list'", 4) => ClauseType::SkipMaxList,
             ("sort", 2) => ClauseType::Sort,
             ("throw", 1) => ClauseType::Throw,
             _ => if let Some(fixity) = fixity {
@@ -1232,7 +1235,7 @@ pub enum BuiltInInstruction {
     ResetBlock,
     RestoreCutPolicy,
     SetBall,
-    SetCutPoint(RegType),
+    SetCutPoint(RegType),    
     Succeed,
     Unify,
     UnwindStack
