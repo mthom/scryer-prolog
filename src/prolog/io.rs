@@ -266,7 +266,7 @@ impl fmt::Display for EvalError {
             &EvalError::ModuleDoesNotContainExport => write!(f, "module does not contain claimed export."),
             &EvalError::QueryFailure => write!(f, "false."),
             &EvalError::QueryFailureWithException(ref e) => write!(f, "{}", error_string(e)),
-            &EvalError::ImpermissibleEntry(ref msg) => write!(f, "cannot overwrite builtin {}.", msg),
+            &EvalError::ImpermissibleEntry(ref msg) => write!(f, "cannot overwrite {}.", msg),
             &EvalError::OpIsInfixAndPostFix =>
                 write!(f, "cannot define an op to be both postfix and infix."),
             &EvalError::NamelessEntry => write!(f, "the predicate head is not an atom or clause."),
@@ -642,7 +642,11 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
             TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseModule(name)), _) => {
                 if let Some(ref submodule) = wam.get_module(name.clone()) {
                     if let Some(ref mut module) = module {
+                        let mut code_index = machine_code_index!(&mut code_dir, &mut op_dir);
+                        
                         module.use_module(submodule);
+                        code_index.use_module(submodule);
+                        
                         continue;
                     }
                 } else {
@@ -654,7 +658,11 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
             TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)), _) => {
                 if let Some(ref submodule) = wam.get_module(name.clone()) {
                     if let Some(ref mut module) = module {
-                        module.use_qualified_module(submodule, exports);
+                        let mut code_index = machine_code_index!(&mut code_dir, &mut op_dir);
+                        
+                        module.use_qualified_module(submodule, &exports);
+                        code_index.use_qualified_module(submodule, &exports);
+                        
                         continue;
                     }
                 } else {

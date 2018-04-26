@@ -216,9 +216,9 @@ pub trait SubModuleUser {
         }
     }
 
-    fn use_qualified_module(&mut self, submodule: &Module, exports: Vec<PredicateKey>) -> EvalSession
+    fn use_qualified_module(&mut self, submodule: &Module, exports: &Vec<PredicateKey>) -> EvalSession
     {
-        for (name, arity) in exports {
+        for (name, arity) in exports.iter().cloned() {
             if !submodule.module_decl.exports.contains(&(name.clone(), arity)) {
                 continue;
             }

@@ -570,7 +570,7 @@ impl<R: Read> TopLevelWorker<R> {
 
     pub fn parse_batch(&mut self, op_dir: &mut OpDir) -> Result<Vec<TopLevelPacket>, EvalError>
     {
-        let mut preds = vec![]; 
+        let mut preds = vec![];
         let mut mod_name = clause_name!("user");
         let mut results = vec![];
         let mut rel_worker = RelationWorker::new();
@@ -601,6 +601,9 @@ impl<R: Read> TopLevelWorker<R> {
                     mod_name = actual_mod.name.clone();
                     let tl = TopLevel::Declaration(Declaration::Module(actual_mod));
                     results.push(TopLevelPacket::Decl(tl, vec![]));
+                },
+                TopLevel::Declaration(decl) => {
+                    results.push(TopLevelPacket::Decl(TopLevel::Declaration(decl), vec![]));
                 },
                 tl => preds.extend(tl.as_predicate().ok().unwrap().clauses().into_iter())
             };
