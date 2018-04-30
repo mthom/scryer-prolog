@@ -15,9 +15,9 @@ use std::mem::swap;
 use std::ops::Index;
 use std::rc::Rc;
 
-struct MachineCodeIndex<'a> {
-    code_dir: &'a mut CodeDir,
-    op_dir: &'a mut OpDir,
+pub(super) struct MachineCodeIndex<'a> {
+    pub(super) code_dir: &'a mut CodeDir,
+    pub(super) op_dir: &'a mut OpDir,
 }
 
 pub struct Machine {
@@ -148,7 +148,7 @@ impl Machine {
                 let mut indices = MachineCodeIndex { code_dir: &mut self.code_dir,
                                                      op_dir: &mut self.op_dir };
 
-                indices.use_qualified_module(module, exports)
+                indices.use_qualified_module(module, &exports)
             },
             None => EvalSession::from(EvalError::ModuleNotFound)
         }

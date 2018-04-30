@@ -555,6 +555,12 @@ pub(crate) trait CallPolicy: Any {
             &ClauseType::Inlined(ref inlined) => {
                 machine_st.execute_inlined(inlined, &vec![temp_v!(1), temp_v!(2)]);
                 Ok(())
+            },
+            &ClauseType::SkipMaxList => {
+                machine_st.skip_max_list();
+                machine_st.p += 1;
+                
+                Ok(())
             }
         }
     }

@@ -4,7 +4,7 @@ use prolog::copier::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
 use prolog::machine::machine_state::*;
-use prolog::num::{Integer, ToPrimitive, Zero};
+use prolog::num::{Integer, Signed, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
@@ -24,6 +24,14 @@ macro_rules! try_or_fail {
             }
         }
     }}
+}
+
+// used by '$skip_max_list'.
+enum CycleSearchResult {
+    EmptyList,
+    NotList,
+    PartialOrProperList(usize, usize), // returns the list length (up to max), and an offset into the heap.
+    UntouchedList(usize) // return the offset of an uniterated Addr::Lis(offset).
 }
 
 impl MachineState {
@@ -915,8 +923,8 @@ impl MachineState {
                 }
             }
         }
-        
-        self.fail = true;        
+
+        self.fail = true;
     }
 
     pub(super) fn goto_throw(&mut self) {
@@ -928,9 +936,9 @@ impl MachineState {
     fn unwind_stack(&mut self) {
         self.b = self.block;
         self.or_stack.truncate(self.b);
-        
+
         self.fail = true;
-    }  
+    }
 
     fn throw_exception(&mut self, hcv: Vec<HeapCellValue>) {
         let h = self.heap.h;
@@ -1014,17 +1022,17 @@ impl MachineState {
     pub(super) fn is_cyclic_term(&self, addr: Addr) -> bool {
         let mut seen = HashSet::new();
         let mut fail = false;
-        
+
         let mut iter = self.pre_order_iter(addr);
 
         loop {
             if let Some(addr) = iter.stack().last() {
-                if !seen.contains(addr) {                            
+                if !seen.contains(addr) {
                     seen.insert(addr.clone());
                 } else {
                     fail = true;
                     break;
-                }                            
+                }
             }
 
             if iter.next().is_none() {
@@ -1034,7 +1042,7 @@ impl MachineState {
 
         fail
     }
-    
+
     fn try_get_arg(&mut self) -> Result<(), Vec<HeapCellValue>>
     {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
@@ -1666,6 +1674,13 @@ impl MachineState {
     {
         let a1 = self.store(self.deref(self[r].clone()));
 
+        // detect cycles.
+        match self.detect_cycles(usize::max_value(), a1.clone()) {
+            CycleSearchResult::PartialOrProperList(_, h)
+                if self.store(self.deref(self.heap[h].as_addr(h))).is_empty_list() => {},
+            _ => return Err(functor!("type_error", 2, [heap_atom!("list"), HeapCellValue::Addr(a1)]))
+        };
+
         match a1.clone() {
             Addr::Lis(mut l) => {
                 let mut result = Vec::new();
@@ -1707,6 +1722,106 @@ impl MachineState {
                 },
             a => Err(functor!("type_error", 2, [heap_atom!("callable"), HeapCellValue::Addr(a)]))
         }
+    }
+
+    fn detect_cycles(&self, max_steps: usize, addr: Addr) -> CycleSearchResult
+    {
+        let addr = self.store(self.deref(addr));
+
+        let mut hare = match addr {
+            Addr::Lis(offset) if max_steps > 0 => offset + 1,
+            Addr::Lis(offset) => return CycleSearchResult::UntouchedList(offset),
+            Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
+            _ => return CycleSearchResult::NotList
+        };
+
+        // use Brent's algorithm to detect cycles.
+        let mut tortoise = hare;
+        let mut power = 2;
+        let mut steps = 1;
+
+        loop {
+            if steps == max_steps {
+                return CycleSearchResult::PartialOrProperList(steps, hare);
+            }
+
+            match self.heap[hare].clone() {
+                HeapCellValue::Addr(Addr::Lis(l)) => {
+                    hare = l + 1;
+                    steps += 1;
+
+                    if tortoise == hare {
+                        return CycleSearchResult::NotList;
+                    } else if steps == power {
+                        tortoise = hare;
+                        power <<= 1;
+                    }
+                },
+                HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
+                    return CycleSearchResult::PartialOrProperList(steps, hare),
+                HeapCellValue::Addr(Addr::HeapCell(hc)) if hc == hare =>
+                    return CycleSearchResult::PartialOrProperList(steps, hare),
+                HeapCellValue::Addr(ref sc @ Addr::StackCell(..))
+                    if *sc == self.store(self.deref(sc.clone())) =>
+                      return CycleSearchResult::PartialOrProperList(steps, hare),
+                _ => return CycleSearchResult::NotList
+            }
+        }
+    }
+
+    fn finalize_skip_max_list(&mut self, n: usize, addr: Addr) {
+        let target_n = self[temp_v!(1)].clone();
+        self.unify(Addr::Con(integer!(n)), target_n);
+
+        if !self.fail {
+            let xs = self[temp_v!(4)].clone();
+            self.unify(addr, xs);
+        }
+    }
+
+/*
+  '$skip_max_list'(N, Max, Xs0, Xs):
+  valid modes: Max is always +Max (a non-negative integer), Xs, Xs0 and N are all ?_.
+
+  Modes        | Conditions for success
+  ======================================================================================
+      ?N, -Xs0 : N = 0, Xs = Xs0.
+      ?N, +Xs0 : Xs0 is a proper or partial list, Xs0 = [X1, X2, ..., XN | Xs], N = Max,
+                 if |Xs0| >= Max, or, Xs = [] and N = |Xs0|.
+*/
+    pub(super) fn skip_max_list(&mut self) {
+        let max = self.store(self.deref(self[temp_v!(2)].clone()));
+
+        match max {
+            Addr::Con(Constant::Number(Number::Integer(ref max)))
+                if !max.is_negative() => {
+                    let n = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                    match n {
+                        Addr::Con(Constant::Number(Number::Integer(ref n))) if n.is_zero() => {
+                            let xs0 = self[temp_v!(3)].clone();
+                            let xs  = self[temp_v!(4)].clone();
+
+                            self.unify(xs0, xs);
+                        },
+                        _ => {
+                            let max = max.to_usize().unwrap_or(usize::max_value());
+
+                            match self.detect_cycles(max, self[temp_v!(3)].clone()) {
+                                CycleSearchResult::UntouchedList(l) =>
+                                    self.finalize_skip_max_list(0, Addr::Lis(l)),
+                                CycleSearchResult::EmptyList =>
+                                    self.finalize_skip_max_list(0, Addr::Con(Constant::EmptyList)),
+                                CycleSearchResult::PartialOrProperList(n, hc) =>
+                                    self.finalize_skip_max_list(n, Addr::HeapCell(hc)),
+                                CycleSearchResult::NotList =>
+                                    self.fail = true
+                            }
+                        }
+                    }
+                },
+            _ => self.fail = true
+        };
     }
 
     pub(super) fn duplicate_term(&mut self) {

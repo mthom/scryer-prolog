@@ -808,7 +808,7 @@ impl ClauseType {
             &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
             &ClauseType::SetupCallCleanup => clause_name!("setup_call_cleanup"),
-            &ClauseType::SkipMaxList => clause_name!("'$skip_max_list'"),
+            &ClauseType::SkipMaxList => clause_name!("$skip_max_list"),
             &ClauseType::Sort => clause_name!("sort"),
             &ClauseType::Throw => clause_name!("throw")
         }
@@ -838,7 +838,7 @@ impl ClauseType {
             ("keysort", 2) => ClauseType::KeySort,
             ("\\==", 2) => ClauseType::NotEq,
             ("setup_call_cleanup", 3) => ClauseType::SetupCallCleanup,
-            ("'$skip_max_list'", 4) => ClauseType::SkipMaxList,
+            ("$skip_max_list", 4) => ClauseType::SkipMaxList,
             ("sort", 2) => ClauseType::Sort,
             ("throw", 1) => ClauseType::Throw,
             _ => if let Some(fixity) = fixity {
@@ -1360,6 +1360,13 @@ impl Addr {
             _ => true
         }
     }
+
+    pub fn is_empty_list(&self) -> bool {
+        match self {
+            &Addr::Con(Constant::EmptyList) => true,
+            _ => false
+        }
+    }
 }
 
 impl From<Ref> for Addr {
@@ -1405,7 +1412,7 @@ pub struct ModuleCodeIndex(pub IndexPtr, pub ClauseName);
 
 impl From<ModuleCodeIndex> for CodeIndex {
     fn from(value: ModuleCodeIndex) -> Self {
-        CodeIndex(Rc::new(RefCell::new((value.0, value.1.clone()))))
+        CodeIndex(Rc::new(RefCell::new((value.0, value.1))))
     }
 }
 
