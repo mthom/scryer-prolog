@@ -1644,4 +1644,8 @@ fn test_queries_on_skip_max_list() {
     assert_prolog_failure!(&mut wam, "?- Xs = [a,b|Xs], '$skip_max_list'(3, 5, X, Xs0).");
     assert_prolog_failure!(&mut wam, "?- X = [a,b|Y], Y = [c,d|X], '$skip_max_list'(4, 5, X, Xs0).");
     assert_prolog_failure!(&mut wam, "?- X = [a,b|Y], Y = [c,d|X], '$skip_max_list'(4, 3, X, Xs0).");
+
+    // tests on non lists.
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 9, non_list, Xs).",
+                           [["Xs = non_list", "N = 0"]]);
 }

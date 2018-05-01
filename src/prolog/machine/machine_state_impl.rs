@@ -1759,8 +1759,9 @@ impl MachineState {
                 },
                 HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
                     return CycleSearchResult::PartialOrProperList(steps, hare),
-                HeapCellValue::Addr(Addr::HeapCell(hc)) if hc == hare =>
-                    return CycleSearchResult::PartialOrProperList(steps, hare),
+                HeapCellValue::Addr(ref hc @ Addr::HeapCell(_))
+                    if Addr::HeapCell(hare) == self.store(self.deref(hc.clone())) =>
+                      return CycleSearchResult::PartialOrProperList(steps, hare),
                 HeapCellValue::Addr(ref sc @ Addr::StackCell(..))
                     if *sc == self.store(self.deref(sc.clone())) =>
                       return CycleSearchResult::PartialOrProperList(steps, hare),
@@ -1787,7 +1788,7 @@ impl MachineState {
   ======================================================================================
       ?N, -Xs0 : N = 0, Xs = Xs0.
       ?N, +Xs0 : Xs0 is a proper or partial list, Xs0 = [X1, X2, ..., XN | Xs], N = Max,
-                 if |Xs0| >= Max, or, Xs = [] and N = |Xs0|.
+                 if |Xs0| >= Max, or, Xs = Xs0 and N = |Xs0|.
 */
     pub(super) fn skip_max_list(&mut self) {
         let max = self.store(self.deref(self[temp_v!(2)].clone()));
@@ -1814,8 +1815,10 @@ impl MachineState {
                                     self.finalize_skip_max_list(0, Addr::Con(Constant::EmptyList)),
                                 CycleSearchResult::PartialOrProperList(n, hc) =>
                                     self.finalize_skip_max_list(n, Addr::HeapCell(hc)),
-                                CycleSearchResult::NotList =>
-                                    self.fail = true
+                                CycleSearchResult::NotList => {
+                                    let xs0 = self[temp_v!(3)].clone();
+                                    self.finalize_skip_max_list(0, xs0);
+                                }
                             }
                         }
                     }
