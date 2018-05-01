@@ -1360,13 +1360,6 @@ impl Addr {
             _ => true
         }
     }
-
-    pub fn is_empty_list(&self) -> bool {
-        match self {
-            &Addr::Con(Constant::EmptyList) => true,
-            _ => false
-        }
-    }
 }
 
 impl From<Ref> for Addr {

@@ -29,9 +29,10 @@ macro_rules! try_or_fail {
 // used by '$skip_max_list'.
 enum CycleSearchResult {
     EmptyList,
-    NotList,
-    PartialOrProperList(usize, usize), // returns the list length (up to max), and an offset into the heap.
-    UntouchedList(usize) // return the offset of an uniterated Addr::Lis(offset).
+    NotList,    
+    PartialList(usize, usize), // the list length (up to max), and an offset into the heap.
+    ProperList(usize), // the list length.
+    UntouchedList(usize) // the address of an uniterated Addr::Lis(address).
 }
 
 impl MachineState {
@@ -1676,8 +1677,7 @@ impl MachineState {
 
         // detect cycles.
         match self.detect_cycles(usize::max_value(), a1.clone()) {
-            CycleSearchResult::PartialOrProperList(_, h)
-                if self.store(self.deref(self.heap[h].as_addr(h))).is_empty_list() => {},
+            CycleSearchResult::ProperList(_) => {},
             _ => return Err(functor!("type_error", 2, [heap_atom!("list"), HeapCellValue::Addr(a1)]))
         };
 
@@ -1742,7 +1742,7 @@ impl MachineState {
 
         loop {
             if steps == max_steps {
-                return CycleSearchResult::PartialOrProperList(steps, hare);
+                return CycleSearchResult::PartialList(steps, hare);
             }
 
             match self.heap[hare].clone() {
@@ -1758,14 +1758,8 @@ impl MachineState {
                     }
                 },
                 HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
-                    return CycleSearchResult::PartialOrProperList(steps, hare),
-                HeapCellValue::Addr(ref hc @ Addr::HeapCell(_))
-                    if Addr::HeapCell(hare) == self.store(self.deref(hc.clone())) =>
-                      return CycleSearchResult::PartialOrProperList(steps, hare),
-                HeapCellValue::Addr(ref sc @ Addr::StackCell(..))
-                    if *sc == self.store(self.deref(sc.clone())) =>
-                      return CycleSearchResult::PartialOrProperList(steps, hare),
-                _ => return CycleSearchResult::NotList
+                    return CycleSearchResult::ProperList(steps),
+                _ => return CycleSearchResult::PartialList(steps, hare)
             }
         }
     }
@@ -1779,17 +1773,7 @@ impl MachineState {
             self.unify(addr, xs);
         }
     }
-
-/*
-  '$skip_max_list'(N, Max, Xs0, Xs):
-  valid modes: Max is always +Max (a non-negative integer), Xs, Xs0 and N are all ?_.
-
-  Modes        | Conditions for success
-  ======================================================================================
-      ?N, -Xs0 : N = 0, Xs = Xs0.
-      ?N, +Xs0 : Xs0 is a proper or partial list, Xs0 = [X1, X2, ..., XN | Xs], N = Max,
-                 if |Xs0| >= Max, or, Xs = Xs0 and N = |Xs0|.
-*/
+    
     pub(super) fn skip_max_list(&mut self) {
         let max = self.store(self.deref(self[temp_v!(2)].clone()));
 
@@ -1813,8 +1797,10 @@ impl MachineState {
                                     self.finalize_skip_max_list(0, Addr::Lis(l)),
                                 CycleSearchResult::EmptyList =>
                                     self.finalize_skip_max_list(0, Addr::Con(Constant::EmptyList)),
-                                CycleSearchResult::PartialOrProperList(n, hc) =>
+                                CycleSearchResult::PartialList(n, hc) =>
                                     self.finalize_skip_max_list(n, Addr::HeapCell(hc)),
+                                CycleSearchResult::ProperList(n) =>
+                                    self.finalize_skip_max_list(n, Addr::Con(Constant::EmptyList)),
                                 CycleSearchResult::NotList => {
                                     let xs0 = self[temp_v!(3)].clone();
                                     self.finalize_skip_max_list(0, xs0);
