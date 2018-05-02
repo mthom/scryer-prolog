@@ -537,7 +537,7 @@ impl fmt::Display for Constant {
             &Constant::Atom(ref atom) =>
                 write!(f, "{}", atom),
             &Constant::Char(c) =>
-                write!(f, "{}", c as u8),
+                write!(f, "'{}'", c as u8),
             &Constant::EmptyList =>
                 write!(f, "[]"),
             &Constant::Number(ref n) =>
@@ -1358,13 +1358,6 @@ impl Addr {
         match self {
             &Addr::StackCell(fr, _) if fr > e => false,
             _ => true
-        }
-    }
-
-    pub fn is_empty_list(&self) -> bool {
-        match self {
-            &Addr::Con(Constant::EmptyList) => true,
-            _ => false
         }
     }
 }
