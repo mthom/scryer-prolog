@@ -952,6 +952,16 @@ impl MachineState {
         self.goto_throw();
     }
 
+    pub(super) fn existence_error(&self, name: ClauseName, arity: usize) -> Vec<HeapCellValue> {
+        let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name)));
+        let h = self.heap.h;
+        
+        let mut error = functor!("existence_error", 2, [heap_atom!("procedure"), heap_str!(3 + h)]);
+        error.append(&mut functor!("/", 2, [name, heap_integer!(arity)], Fixity::In));
+        
+        error
+    }
+    
     pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
     {
         let addr = self.store(self.deref(self.registers[arity].clone()));

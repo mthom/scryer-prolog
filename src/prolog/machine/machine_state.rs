@@ -209,16 +209,6 @@ pub struct MachineState {
 
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
-fn predicate_existence_error(name: ClauseName, arity: usize, h: usize) -> Vec<HeapCellValue>
-{
-    let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name)));
-
-    let mut error = functor!("existence_error", 2, [heap_atom!("procedure"), heap_str!(3 + h)]);
-    error.append(&mut functor!("/", 2, [name, heap_integer!(arity)], Fixity::In));
-
-    error
-}
-
 pub(crate) trait CallPolicy: Any {
     fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
                     arity: usize, idx: CodeIndex, lco: bool)
@@ -237,7 +227,7 @@ pub(crate) trait CallPolicy: Any {
     {
         match idx.0.borrow().0 {
             IndexPtr::Undefined =>
-                return Err(predicate_existence_error(name, arity, machine_st.heap.h)),
+                return Err(machine_st.existence_error(name, arity)),
             IndexPtr::Index(compiled_tl_index) => {
                 let module_name = idx.0.borrow().1.clone();
 
@@ -257,7 +247,7 @@ pub(crate) trait CallPolicy: Any {
     {
         match idx.0.borrow().0 {
             IndexPtr::Undefined =>
-                return Err(predicate_existence_error(name, arity, machine_st.heap.h)),
+                return Err(machine_st.existence_error(name, arity)),
             IndexPtr::Index(compiled_tl_index) => {
                 let module_name = idx.0.borrow().1.clone();
 
@@ -430,7 +420,7 @@ pub(crate) trait CallPolicy: Any {
                     if let Some(idx) = code_dirs.get(name.clone(), arity, clause_name!("user")) {
                         self.context_call(machine_st, name, arity, idx, lco)
                     } else {
-                        Err(predicate_existence_error(name, arity, machine_st.heap.h))
+                        Err(machine_st.existence_error(name, arity))
                     }
                 } else {
                     Ok(())
