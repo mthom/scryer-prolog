@@ -486,6 +486,8 @@ pub(crate) trait CallPolicy: Any {
             &ClauseType::Sort => {
                 let mut list = machine_st.try_from_list(temp_v!(1))?;
 
+                machine_st.check_sort_errors()?;
+                
                 list.sort_unstable_by(|a1, a2| machine_st.compare_term_test(a1, a2));
                 machine_st.term_dedup(&mut list);
 
@@ -500,6 +502,8 @@ pub(crate) trait CallPolicy: Any {
                 let mut list = machine_st.try_from_list(temp_v!(1))?;
                 let mut key_pairs = Vec::new();
 
+                machine_st.check_keysort_errors()?;
+                
                 for val in list {
                     let key = machine_st.project_onto_key(val.clone())?;
                     key_pairs.push((key, val.clone()));

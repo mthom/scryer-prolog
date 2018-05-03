@@ -19,6 +19,7 @@ pub enum ValidType {
     Integer,
     List,
     Number,
+    Pair,
     PredicateIndicator,
     Variable
 }
@@ -38,6 +39,7 @@ impl ValidType {
             ValidType::Integer => "integer",
             ValidType::List => "list",
             ValidType::Number => "number",
+            ValidType::Pair => "pair",
             ValidType::PredicateIndicator => "predicate_indicator",
             ValidType::Variable => "variable"
         }

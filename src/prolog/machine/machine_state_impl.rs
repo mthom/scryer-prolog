@@ -28,15 +28,6 @@ macro_rules! try_or_fail {
     }}
 }
 
-// used by '$skip_max_list'.
-enum CycleSearchResult {
-    EmptyList,
-    NotList,
-    PartialList(usize, usize), // the list length (up to max), and an offset into the heap.
-    ProperList(usize), // the list length.
-    UntouchedList(usize) // the address of an uniterated Addr::Lis(address).
-}
-
 impl MachineState {
     pub(super) fn new(atom_tbl: TabledData<Atom>) -> MachineState {
         MachineState {
@@ -467,7 +458,7 @@ impl MachineState {
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),            
+                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
             (Number::Integer(_), n2) =>
                 Err(self.error_form(self.type_error(ValidType::Integer,
                                                       Addr::Con(Constant::Number(n2))))),
@@ -517,7 +508,7 @@ impl MachineState {
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),            
+                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
             (Number::Integer(_), n2) =>
                 Err(self.error_form(self.type_error(ValidType::Integer,
                                                       Addr::Con(Constant::Number(n2))))),
@@ -991,7 +982,7 @@ impl MachineState {
                     if narity + arity > 63 {
                         let representation_error =
                             self.error_form(self.representation_error(RepFlag::MaxArity));
-                        
+
                         self.throw_exception(representation_error);
 
                         return None;
@@ -1015,13 +1006,13 @@ impl MachineState {
             Addr::HeapCell(_) | Addr::StackCell(_, _) => {
                 let instantiation_error = self.error_form(self.instantiation_error());
                 self.throw_exception(instantiation_error);
-                
+
                 return None;
             },
             _ => {
                 let type_error = self.error_form(self.type_error(ValidType::Callable, addr));
                 self.throw_exception(type_error);
-                
+
                 return None;
             }
         };
@@ -1709,12 +1700,6 @@ impl MachineState {
     {
         let a1 = self.store(self.deref(self[r].clone()));
 
-        // detect cycles.
-        match self.detect_cycles(usize::max_value(), a1.clone()) {
-            CycleSearchResult::ProperList(_) => {},
-            _ => return Err(functor!("type_error", 2, [heap_atom!("list"), HeapCellValue::Addr(a1)]))
-        };
-
         match a1.clone() {
             Addr::Lis(mut l) => {
                 let mut result = Vec::new();
@@ -1744,21 +1729,24 @@ impl MachineState {
         }
     }
 
+    // see 8.4.4.3 of Draft Technical Corrigendum 2 for an error guide.
     pub(super) fn project_onto_key(&self, a: Addr) -> Result<Addr, MachineError> {
         match self.store(self.deref(a)) {
+            Addr::HeapCell(_) | Addr::StackCell(..) =>
+                Err(self.error_form(self.instantiation_error())),
             Addr::Str(s) =>
                 match self.heap[s].clone() {
                     HeapCellValue::NamedStr(2, ref name, Some(Fixity::In))
                         if *name == clause_name!("-") =>
                            Ok(Addr::HeapCell(s+1)),
-                    _ =>
-                        panic!("Addr::Str doesn't point to NamedStr.")
+                    _ => Err(self.error_form(self.type_error(ValidType::Pair,
+                                                             self.heap[s].as_addr(s))))
                 },
             a => Err(self.error_form(self.type_error(ValidType::Callable, a)))
         }
     }
 
-    fn detect_cycles(&self, max_steps: usize, addr: Addr) -> CycleSearchResult
+    pub(super) fn detect_cycles(&self, max_steps: usize, addr: Addr) -> CycleSearchResult
     {
         let addr = self.store(self.deref(addr));
 
