@@ -37,28 +37,16 @@ impl MachineState {
         }
     }
 
-    // see 8.4.4 of Draft Technical Corrigendum 2.
-    pub(super) fn check_keysort_errors(&self) -> Result<(), MachineError> {
-        let pairs  = self.store(self.deref(self[temp_v!(1)].clone()));
-        let sorted = self.store(self.deref(self[temp_v!(2)].clone()));
-
-        match self.detect_cycles(usize::max_value(), pairs.clone()) {
-            CycleSearchResult::PartialList(..) =>
-                Err(self.error_form(self.instantiation_error())),
-            CycleSearchResult::NotList =>
-                Err(self.error_form(self.type_error(ValidType::List, pairs))),
-            _ => Ok(())
-        }?;
-
-        match self.detect_cycles(usize::max_value(), sorted.clone()) {
-            CycleSearchResult::NotList if !sorted.is_ref() =>
-                Err(self.error_form(self.type_error(ValidType::List, sorted))),
+    fn check_for_list_pairs(&self, list: Addr) -> Result<(), MachineError> {
+        match self.detect_cycles(usize::max_value(), list.clone()) {
+            CycleSearchResult::NotList if !list.is_ref() =>
+                Err(self.error_form(self.type_error(ValidType::List, list))),
             _ => {
-                let mut addr = sorted;
+                let mut addr = list;
 
                 while let Addr::Lis(l) = self.store(self.deref(addr)) {
                     let mut new_l = l;
-                    
+
                     loop {
                         match self.heap[new_l].clone() {
                             HeapCellValue::Addr(Addr::Str(l)) => new_l = l,
@@ -77,6 +65,22 @@ impl MachineState {
                 Ok(())
             }
         }
+    }
+
+    // see 8.4.4 of Draft Technical Corrigendum 2.
+    pub(super) fn check_keysort_errors(&self) -> Result<(), MachineError> {
+        let pairs  = self.store(self.deref(self[temp_v!(1)].clone()));
+        let sorted = self.store(self.deref(self[temp_v!(2)].clone()));
+
+        match self.detect_cycles(usize::max_value(), pairs.clone()) {
+            CycleSearchResult::PartialList(..) =>
+                Err(self.error_form(self.instantiation_error())),
+            CycleSearchResult::NotList =>
+                Err(self.error_form(self.type_error(ValidType::List, pairs))),
+            _ => Ok(())
+        }?;
+
+        self.check_for_list_pairs(sorted)
     }
 
     pub(super) fn evaluation_error(&self, eval_error: EvalError) -> MachineError {

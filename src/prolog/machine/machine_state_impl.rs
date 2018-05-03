@@ -1744,7 +1744,7 @@ impl MachineState {
                     _ => Err(self.error_form(self.type_error(ValidType::Pair,
                                                              self.heap[s].as_addr(s))))
                 },
-            a => Err(self.error_form(self.type_error(ValidType::Callable, a)))
+            a => Err(self.error_form(self.type_error(ValidType::Pair, a)))
         }
     }
 
