@@ -32,7 +32,7 @@ impl MachineState {
 
         match self.detect_cycles(usize::max_value(), sorted.clone()) {
             CycleSearchResult::NotList if !sorted.is_ref() =>
-                Err(self.error_form(self.type_error(ValidType::List, sorted))),
+                Err(self.error_form(self.type_error(ValidType::List, sorted))),            
             _ => Ok(())
         }
     }

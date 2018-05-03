@@ -1724,8 +1724,10 @@ impl MachineState {
             },
             Addr::HeapCell(_) | Addr::StackCell(..) =>
                 Err(self.error_form(self.instantiation_error())),
-            addr =>
-                Err(self.error_form(self.type_error(ValidType::List, addr)))
+            Addr::Con(Constant::EmptyList) =>
+                Ok(vec![]),
+            _ =>
+                Err(self.error_form(self.type_error(ValidType::List, a1)))
         }
     }
 
@@ -1781,7 +1783,10 @@ impl MachineState {
                 },
                 HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
                     return CycleSearchResult::ProperList(steps),
-                _ => return CycleSearchResult::PartialList(steps, hare)
+                HeapCellValue::Addr(Addr::HeapCell(_)) | HeapCellValue::Addr(Addr::StackCell(..)) =>
+                    return CycleSearchResult::PartialList(steps, hare),
+                _ =>
+                    return CycleSearchResult::NotList
             }
         }
     }
