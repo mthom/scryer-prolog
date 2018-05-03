@@ -1716,7 +1716,7 @@ impl MachineState {
                         HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
                             break,
                         hcv =>
-                            return Err(self.type_error(ValidType::List, hcv.as_addr(l)))
+                            return Err(self.type_error(ValidType::List, a1))
                     };
                 }
 

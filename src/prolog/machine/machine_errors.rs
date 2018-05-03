@@ -56,10 +56,12 @@ impl MachineState {
             _ => {
                 let mut addr = sorted;
 
-                while let Addr::Lis(mut l) = self.store(self.deref(addr)) {
+                while let Addr::Lis(l) = self.store(self.deref(addr)) {
+                    let mut new_l = l;
+                    
                     loop {
-                        match self.heap[l].clone() {
-                            HeapCellValue::Addr(Addr::Str(new_l)) => l = new_l,
+                        match self.heap[new_l].clone() {
+                            HeapCellValue::Addr(Addr::Str(l)) => new_l = l,
                             HeapCellValue::NamedStr(2, ref name, Some(Fixity::In))
                                 if name.as_str() == "-" => break,
                             HeapCellValue::Addr(Addr::HeapCell(_)) => break,
@@ -69,7 +71,7 @@ impl MachineState {
                         };
                     }
 
-                    addr = Addr::HeapCell(l + 2);
+                    addr = self.store(self.deref(Addr::HeapCell(l + 1)));
                 }
 
                 Ok(())
