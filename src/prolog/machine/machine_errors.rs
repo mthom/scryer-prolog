@@ -71,7 +71,7 @@ impl MachineState {
                         };
                     }
 
-                    addr = self.store(self.deref(Addr::HeapCell(l + 1)));
+                    addr = Addr::HeapCell(l + 1);
                 }
 
                 Ok(())
