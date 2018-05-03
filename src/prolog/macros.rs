@@ -119,6 +119,12 @@ macro_rules! get_value {
     )
 }
 
+macro_rules! set_void {
+    ($n:expr) => (
+        QueryInstruction::SetVoid($n)
+    )
+}
+
 macro_rules! set_value {
     ($r:expr) => (
         QueryInstruction::SetValue($r)

@@ -259,18 +259,18 @@ impl fmt::Display for IndexingInstruction {
     }
 }
 
-impl fmt::Display for EvalError {
+impl fmt::Display for SessionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &EvalError::ModuleNotFound => write!(f, "module not found."),
-            &EvalError::ModuleDoesNotContainExport => write!(f, "module does not contain claimed export."),
-            &EvalError::QueryFailure => write!(f, "false."),
-            &EvalError::QueryFailureWithException(ref e) => write!(f, "{}", error_string(e)),
-            &EvalError::ImpermissibleEntry(ref msg) => write!(f, "cannot overwrite {}.", msg),
-            &EvalError::OpIsInfixAndPostFix =>
+            &SessionError::ModuleNotFound => write!(f, "module not found."),
+            &SessionError::ModuleDoesNotContainExport => write!(f, "module does not contain claimed export."),
+            &SessionError::QueryFailure => write!(f, "false."),
+            &SessionError::QueryFailureWithException(ref e) => write!(f, "{}", error_string(e)),
+            &SessionError::ImpermissibleEntry(ref msg) => write!(f, "cannot overwrite {}.", msg),
+            &SessionError::OpIsInfixAndPostFix =>
                 write!(f, "cannot define an op to be both postfix and infix."),
-            &EvalError::NamelessEntry => write!(f, "the predicate head is not an atom or clause."),
-            &EvalError::ParserError(ref e) => write!(f, "{:?}", e)
+            &SessionError::NamelessEntry => write!(f, "the predicate head is not an atom or clause."),
+            &SessionError::ParserError(ref e) => write!(f, "{:?}", e)
         }
     }
 }
@@ -574,7 +574,7 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
             let name = try_eval_session!(if let Some(name) = tl.name() {
                 Ok(name)
             } else {
-                Err(EvalError::NamelessEntry)
+                Err(SessionError::NamelessEntry)
             });
 
             let mut code = try_eval_session!(compile_relation(&tl));
@@ -588,7 +588,7 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
             if !code.is_empty() {
                 wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
             } else {
-                EvalSession::from(EvalError::ImpermissibleEntry(String::from("no code generated.")))
+                EvalSession::from(SessionError::ImpermissibleEntry(String::from("no code generated.")))
             }
         }
     }
@@ -650,7 +650,7 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                         continue;
                     }
                 } else {
-                    return EvalSession::from(EvalError::ModuleNotFound);
+                    return EvalSession::from(SessionError::ModuleNotFound);
                 }
                 
                 wam.use_module_in_toplevel(name);
@@ -666,7 +666,7 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                         continue;
                     }
                 } else {
-                    return EvalSession::from(EvalError::ModuleNotFound);
+                    return EvalSession::from(SessionError::ModuleNotFound);
                 }
 
                 wam.use_qualified_module_in_toplevel(name, exports);
@@ -681,7 +681,7 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                 let name = try_eval_session!(if let Some(name) = decl.name() {
                     Ok(name)
                 } else {
-                    Err(EvalError::NamelessEntry)
+                    Err(SessionError::NamelessEntry)
                 });
 
                 let module_name = get_module_name(&module);
@@ -734,7 +734,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
             }
 
             loop {
-                let mut result = EvalSession::from(EvalError::QueryFailure);
+                let mut result = EvalSession::from(SessionError::QueryFailure);
                 let mut output = PrinterOutputter::new();
 
                 let bindings = wam.heap_view(&heap_locs, output).result();
@@ -763,14 +763,14 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                         }
                     }
 
-                    if let &EvalSession::Error(EvalError::QueryFailure) = &result
+                    if let &EvalSession::Error(SessionError::QueryFailure) = &result
                     {
                         write!(stdout, "false.\n\r").unwrap();
                         stdout.flush().unwrap();
                         return;
                     }
 
-                    if let &EvalSession::Error(EvalError::QueryFailureWithException(ref e)) = &result
+                    if let &EvalSession::Error(SessionError::QueryFailureWithException(ref e)) = &result
                     {
                         write!(stdout, "{}\n\r", error_string(e)).unwrap();
                         stdout.flush().unwrap();

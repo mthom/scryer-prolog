@@ -568,7 +568,7 @@ impl<R: Read> TopLevelWorker<R> {
         TopLevelWorker { parser: Parser::new(inner, atom_tbl) }
     }
 
-    pub fn parse_batch(&mut self, op_dir: &mut OpDir) -> Result<Vec<TopLevelPacket>, EvalError>
+    pub fn parse_batch(&mut self, op_dir: &mut OpDir) -> Result<Vec<TopLevelPacket>, SessionError>
     {
         let mut preds = vec![];
         let mut mod_name = clause_name!("user");

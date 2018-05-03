@@ -1,8 +1,10 @@
 use prolog::and_stack::*;
 use prolog::ast::*;
+use prolog::builtins::*;
 use prolog::copier::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
+use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{Integer, Signed, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
@@ -29,7 +31,7 @@ macro_rules! try_or_fail {
 // used by '$skip_max_list'.
 enum CycleSearchResult {
     EmptyList,
-    NotList,    
+    NotList,
     PartialList(usize, usize), // the list length (up to max), and an offset into the heap.
     ProperList(usize), // the list length.
     UntouchedList(usize) // the address of an uniterated Addr::Lis(address).
@@ -269,7 +271,7 @@ impl MachineState {
         };
     }
 
-    fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, Vec<HeapCellValue>> {
+    fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, MachineError> {
         match at {
             &ArithmeticTerm::Reg(r) =>        self.arith_eval_by_metacall(r),
             &ArithmeticTerm::Interm(i)     => Ok(self.interms[i-1].clone()),
@@ -277,7 +279,7 @@ impl MachineState {
         }
     }
 
-    fn get_rational(&self, at: &ArithmeticTerm) -> Result<Rc<Ratio<BigInt>>, Vec<HeapCellValue>> {
+    fn get_rational(&self, at: &ArithmeticTerm) -> Result<Rc<Ratio<BigInt>>, MachineError> {
         let n = self.get_number(at)?;
 
         match n {
@@ -286,7 +288,7 @@ impl MachineState {
                 if let Some(r) = Ratio::from_float(fl.into_inner()) {
                     Ok(Rc::new(r))
                 } else {
-                    Err(functor!("instantiation_error", 1, [heap_atom!("(is)/2")]))
+                    Err(self.error_form(self.instantiation_error()))
                 },
             Number::Integer(bi) =>
                 Ok(Rc::new(Ratio::from_integer((*bi).clone())))
@@ -305,9 +307,8 @@ impl MachineState {
         Rc::new(BigInt::from_signed_bytes_le(&f(&u_n1, &u_n2).to_bytes_le()))
     }
 
-    pub(super) fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, Vec<HeapCellValue>>
+    pub(super) fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, MachineError>
     {
-        let instantiation_err = functor!("instantiation_error", 1, [heap_atom!("(is)/2")]);
         let a = self[r].clone();
 
         let mut interms: Vec<Number> = Vec::with_capacity(64);
@@ -338,7 +339,7 @@ impl MachineState {
                         "xor" => interms.push(Number::Integer(self.xor(a1, a2)?)),
                         "mod" => interms.push(Number::Integer(self.modulus(a1, a2)?)),
                         "rem" => interms.push(Number::Integer(self.remainder(a1, a2)?)),
-                        _     => return Err(instantiation_err)
+                        _     => return Err(self.error_form(self.instantiation_error()))
                     }
                 },
                 HeapCellValue::NamedStr(1, name, Some(Fixity::Pre)) => {
@@ -346,13 +347,13 @@ impl MachineState {
 
                     match name.as_str() {
                         "-" => interms.push(- a1),
-                         _  => return Err(instantiation_err)
+                         _  => return Err(self.error_form(self.instantiation_error()))
                     }
                 },
                 HeapCellValue::Addr(Addr::Con(Constant::Number(n))) =>
                     interms.push(n),
                 _ =>
-                    return Err(instantiation_err)
+                    return Err(self.error_form(self.instantiation_error()))
             }
         };
 
@@ -360,52 +361,61 @@ impl MachineState {
     }
 
     fn rdiv(&self, r1: Rc<Ratio<BigInt>>, r2: Rc<Ratio<BigInt>>)
-            -> Result<Rc<Ratio<BigInt>>, Vec<HeapCellValue>>
+            -> Result<Rc<Ratio<BigInt>>, MachineError>
     {
         if *r2 == Ratio::zero() {
-            Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
+            Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor)))
         } else {
             Ok(Rc::new(&*r1 / &*r2))
         }
     }
 
-    fn fidiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    fn fidiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
+                    Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor)))
                 } else {
                     Ok(Rc::new(n1.div_floor(&n2)))
                 },
-            _ => Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
+            (Number::Integer(_), n2) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n2))))),
+            (n1, _) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n1)))))
         }
     }
 
-    fn idiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    fn idiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
+                    Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor)))
                 } else {
                     Ok(Rc::new(&*n1 / &*n2))
                 },
-            _ =>
-                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
+            (Number::Integer(_), n2) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n2))))),
+            (n1, _) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n1)))))
         }
     }
 
-    fn div(&self, n1: Number, n2: Number) -> Result<Number, Vec<HeapCellValue>>
+    fn div(&self, n1: Number, n2: Number) -> Result<Number, MachineError>
     {
         if n2.is_zero() {
-            Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
+            Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor)))
         } else {
             Ok(n1 / n2)
         }
     }
 
-    fn shr(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    fn shr(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
@@ -413,12 +423,16 @@ impl MachineState {
                     Some(n2) => Ok(Rc::new(&*n1 >> n2)),
                     _        => Ok(Rc::new(&*n1 >> usize::max_value()))
                 },
-            _ =>
-                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
+            (Number::Integer(_), n2) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n2))))),
+            (n1, _) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n1)))))
         }
     }
 
-    fn shl(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    fn shl(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
@@ -426,66 +440,90 @@ impl MachineState {
                     Some(n2) => Ok(Rc::new(&*n1 << n2)),
                     _        => Ok(Rc::new(&*n1 << usize::max_value()))
                 },
-            _ =>
-                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
+            (Number::Integer(_), n2) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n2))))),
+            (n1, _) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n1)))))
         }
     }
 
-    fn xor(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    fn xor(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 ^ u_n2)),
-            _ =>
-                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
+            (Number::Integer(_), n2) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n2))))),
+            (n1, _) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n1)))))
         }
     }
 
-    fn and(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    fn and(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
-            _ =>
-                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
+                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),            
+            (Number::Integer(_), n2) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n2))))),
+            (n1, _) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n1)))))
         }
     }
 
-    fn modulus(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    fn modulus(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
+                    Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor)))
                 } else {
                     Ok(Rc::new(n1.mod_floor(&n2)))
                 },
-            _ =>
-                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
+            (Number::Integer(_), n2) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n2))))),
+            (n1, _) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n1)))))
         }
     }
 
-    fn remainder(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    fn remainder(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(functor!("evaluation_error", 1, [heap_atom!("zero_divisor")]))
+                    Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor)))
                 } else {
                     Ok(Rc::new(&*n1 % &*n2))
                 },
-            _ =>
-                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
+            (Number::Integer(_), n2) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n2))))),
+            (n1, _) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n1)))))
         }
     }
 
-    fn or(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, Vec<HeapCellValue>>
+    fn or(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
     {
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
-            _ =>
-                Err(functor!("evaluation_error", 1, [heap_atom!("expected_integer_args")]))
+                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),            
+            (Number::Integer(_), n2) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n2))))),
+            (n1, _) =>
+                Err(self.error_form(self.type_error(ValidType::Integer,
+                                                      Addr::Con(Constant::Number(n1)))))
         }
     }
 
@@ -941,28 +979,6 @@ impl MachineState {
         self.fail = true;
     }
 
-    fn throw_exception(&mut self, hcv: Vec<HeapCellValue>) {
-        let h = self.heap.h;
-
-        self.ball.0 = 0;
-        self.ball.1.truncate(0);
-
-        self.registers[1] = Addr::HeapCell(h);
-
-        self.heap.append(hcv);
-        self.goto_throw();
-    }
-
-    pub(super) fn existence_error(&self, name: ClauseName, arity: usize) -> Vec<HeapCellValue> {
-        let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name)));
-        let h = self.heap.h;
-        
-        let mut error = functor!("existence_error", 2, [heap_atom!("procedure"), heap_str!(3 + h)]);
-        error.append(&mut functor!("/", 2, [name, heap_integer!(arity)], Fixity::In));
-        
-        error
-    }
-    
     pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
     {
         let addr = self.store(self.deref(self.registers[arity].clone()));
@@ -973,8 +989,11 @@ impl MachineState {
 
                 if let HeapCellValue::NamedStr(narity, name, _) = result {
                     if narity + arity > 63 {
-                        self.throw_exception(functor!("representation_error", 1,
-                                                      [heap_atom!("exceeds_max_arity")]));
+                        let representation_error =
+                            self.error_form(self.representation_error(RepFlag::MaxArity));
+                        
+                        self.throw_exception(representation_error);
+
                         return None;
                     }
 
@@ -994,13 +1013,15 @@ impl MachineState {
             },
             Addr::Con(Constant::Atom(name)) => (name, 0),
             Addr::HeapCell(_) | Addr::StackCell(_, _) => {
-                self.throw_exception(functor!("instantiation_error"));
+                let instantiation_error = self.error_form(self.instantiation_error());
+                self.throw_exception(instantiation_error);
+                
                 return None;
             },
             _ => {
-                self.throw_exception(functor!("type_error", 2,
-                                              [heap_atom!("callable"),
-                                               HeapCellValue::Addr(addr)]));
+                let type_error = self.error_form(self.type_error(ValidType::Callable, addr));
+                self.throw_exception(type_error);
+                
                 return None;
             }
         };
@@ -1054,7 +1075,7 @@ impl MachineState {
         fail
     }
 
-    fn try_get_arg(&mut self) -> Result<(), Vec<HeapCellValue>>
+    fn try_get_arg(&mut self) -> Result<(), MachineError>
     {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -1076,7 +1097,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             } else {
-                return Err(functor!("type_error", 1, [heap_atom!("compound_expected")]))
+                return Err(self.error_form(self.type_error(ValidType::Compound, a2)));
             }
         }
 
@@ -1447,7 +1468,7 @@ impl MachineState {
 
                 self.p += 1;
 
-                match (a1, a2) {
+                match (a1, a2.clone()) {
                     (Addr::Con(Constant::Usize(bp)),
                      Addr::Con(Constant::Number(Number::Integer(n)))) =>
                         match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
@@ -1458,7 +1479,10 @@ impl MachineState {
                             None => panic!("install_inference_counter: should have installed \\
                                             CallWithInferenceLimitCallPolicy.")
                         },
-                    _ => self.throw_exception(functor!("type_error", 1, [heap_atom!("integer_expected")]))
+                    _ => {
+                        let type_error = self.error_form(self.type_error(ValidType::Integer, a2));
+                        self.throw_exception(type_error)
+                    }
                 };
             },
             &BuiltInInstruction::RemoveCallPolicyCheck => {
@@ -1582,7 +1606,7 @@ impl MachineState {
         };
     }
 
-    pub(super) fn try_functor(&mut self) -> Result<(), Vec<HeapCellValue>> {
+    pub(super) fn try_functor(&mut self) -> Result<(), MachineError> {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
         match a1.clone() {
@@ -1631,10 +1655,10 @@ impl MachineState {
 
                         self.unify(a1, f_a);
                     } else {
-                        return Err(functor!("instantiation_error"));
+                        return Err(self.error_form(self.instantiation_error()));
                     }
                 } else {
-                    return Err(functor!("instantiation_error"));
+                    return Err(self.error_form(self.instantiation_error()));
                 }
             },
             _ => {
@@ -1681,7 +1705,7 @@ impl MachineState {
         head_addr
     }
 
-    pub(super) fn try_from_list(&self, r: RegType) -> Result<Vec<Addr>, Vec<HeapCellValue>>
+    pub(super) fn try_from_list(&self, r: RegType) -> Result<Vec<Addr>, MachineError>
     {
         let a1 = self.store(self.deref(self[r].clone()));
 
@@ -1707,20 +1731,20 @@ impl MachineState {
                         HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
                             break,
                         hcv =>
-                            return Err(functor!("type_error", 2, [heap_atom!("list"), hcv]))
+                            return Err(self.type_error(ValidType::List, hcv.as_addr(l)))
                     };
                 }
 
                 Ok(result)
             },
             Addr::HeapCell(_) | Addr::StackCell(..) =>
-                Err(functor!("instantiation_error")),
+                Err(self.error_form(self.instantiation_error())),
             addr =>
-                Err(functor!("type_error", 2, [heap_atom!("list"), HeapCellValue::Addr(addr)]))
+                Err(self.error_form(self.type_error(ValidType::List, addr)))
         }
     }
 
-    pub(super) fn project_onto_key(&self, a: Addr) -> Result<Addr, Vec<HeapCellValue>> {
+    pub(super) fn project_onto_key(&self, a: Addr) -> Result<Addr, MachineError> {
         match self.store(self.deref(a)) {
             Addr::Str(s) =>
                 match self.heap[s].clone() {
@@ -1730,7 +1754,7 @@ impl MachineState {
                     _ =>
                         panic!("Addr::Str doesn't point to NamedStr.")
                 },
-            a => Err(functor!("type_error", 2, [heap_atom!("callable"), HeapCellValue::Addr(a)]))
+            a => Err(self.error_form(self.type_error(ValidType::Callable, a)))
         }
     }
 
@@ -1783,7 +1807,7 @@ impl MachineState {
             self.unify(addr, xs);
         }
     }
-    
+
     pub(super) fn skip_max_list(&mut self) {
         let max = self.store(self.deref(self[temp_v!(2)].clone()));
 

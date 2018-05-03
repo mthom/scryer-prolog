@@ -224,7 +224,7 @@ pub trait SubModuleUser {
             }
 
             if !self.import_decl(name, arity, submodule) {
-                return EvalSession::from(EvalError::ModuleDoesNotContainExport);
+                return EvalSession::from(SessionError::ModuleDoesNotContainExport);
             }
         }
 
@@ -234,7 +234,7 @@ pub trait SubModuleUser {
     fn use_module(&mut self, submodule: &Module) -> EvalSession {
         for (name, arity) in submodule.module_decl.exports.iter().cloned() {
             if !self.import_decl(name, arity, submodule) {
-                return EvalSession::from(EvalError::ModuleDoesNotContainExport);
+                return EvalSession::from(SessionError::ModuleDoesNotContainExport);
             }
         }
 
@@ -375,7 +375,7 @@ pub struct TempVarData {
 pub type HeapVarDict  = HashMap<Rc<Var>, Addr>;
 pub type AllocVarDict = HashMap<Rc<Var>, VarData>;
 
-pub enum EvalError {
+pub enum SessionError {
     ImpermissibleEntry(String),
     ModuleDoesNotContainExport,
     ModuleNotFound,
@@ -388,46 +388,46 @@ pub enum EvalError {
 
 pub enum EvalSession {
     EntrySuccess,
-    Error(EvalError),
+    Error(SessionError),
     InitialQuerySuccess(AllocVarDict, HeapVarDict),
     SubsequentQuerySuccess,
 }
 
-impl From<EvalError> for EvalSession {
-    fn from(err: EvalError) -> Self {
+impl From<SessionError> for EvalSession {
+    fn from(err: SessionError) -> Self {
         EvalSession::Error(err)
     }
 }
 
-impl From<ParserError> for EvalError {
+impl From<ParserError> for SessionError {
     fn from(err: ParserError) -> Self {
-        EvalError::ParserError(err)
+        SessionError::ParserError(err)
     }
 }
 
 impl From<ParserError> for EvalSession {
     fn from(err: ParserError) -> Self {
-        EvalSession::from(EvalError::ParserError(err))
+        EvalSession::from(SessionError::ParserError(err))
     }
 }
 
 pub struct OpDecl(pub usize, pub Specifier, pub ClauseName);
 
 impl OpDecl {
-    pub fn submit(&self, module: ClauseName, op_dir: &mut OpDir) -> Result<(), EvalError>
+    pub fn submit(&self, module: ClauseName, op_dir: &mut OpDir) -> Result<(), SessionError>
     {
         let (prec, spec, name) = (self.0, self.1, self.2.clone());
 
         if is_infix!(spec) {
             match op_dir.get(&(name.clone(), Fixity::Post)) {
-                Some(_) => return Err(EvalError::OpIsInfixAndPostFix),
+                Some(_) => return Err(SessionError::OpIsInfixAndPostFix),
                 _ => {}
             };
         }
 
         if is_postfix!(spec) {
             match op_dir.get(&(name.clone(), Fixity::In)) {
-                Some(_) => return Err(EvalError::OpIsInfixAndPostFix),
+                Some(_) => return Err(SessionError::OpIsInfixAndPostFix),
                 _ => {}
             };
         }

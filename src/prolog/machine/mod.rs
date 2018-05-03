@@ -3,6 +3,7 @@ use prolog::builtins::*;
 use prolog::heap_print::*;
 use prolog::tabled_rc::*;
 
+mod machine_errors;
 pub(crate) mod machine_state;
 #[macro_use]
 mod machine_state_impl;
@@ -150,7 +151,7 @@ impl Machine {
 
                 indices.use_qualified_module(module, &exports)
             },
-            None => EvalSession::from(EvalError::ModuleNotFound)
+            None => EvalSession::from(SessionError::ModuleNotFound)
         }
     }
 
@@ -164,7 +165,7 @@ impl Machine {
 
                 indices.use_module(module)
             },
-            None => EvalSession::from(EvalError::ModuleNotFound)
+            None => EvalSession::from(SessionError::ModuleNotFound)
         }
     }
 
@@ -191,7 +192,7 @@ impl Machine {
     {
         match self.code_dir.get(&(name.clone(), arity)) {
             Some(&CodeIndex (ref idx)) if idx.borrow().1 != clause_name!("user") =>
-                    return EvalSession::from(EvalError::ImpermissibleEntry(format!("{}/{}",
+                    return EvalSession::from(SessionError::ImpermissibleEntry(format!("{}/{}",
                                                                                    name,
                                                                                    arity))),                
             _ => {}
@@ -380,9 +381,9 @@ impl Machine {
                                          PrinterOutputter::new())
                           .result();
 
-            EvalSession::from(EvalError::QueryFailureWithException(msg))
+            EvalSession::from(SessionError::QueryFailureWithException(msg))
         } else {
-            EvalSession::from(EvalError::QueryFailure)
+            EvalSession::from(SessionError::QueryFailure)
         }
     }
 
@@ -407,7 +408,7 @@ impl Machine {
             self.ms.p = self.ms.or_stack[b].bp.clone();
 
             if let CodePtr::TopLevel(_, 0) = self.ms.p {
-                return EvalSession::from(EvalError::QueryFailure);
+                return EvalSession::from(SessionError::QueryFailure);
             }
 
             self.run_query(alloc_l, heap_l);
@@ -418,7 +419,7 @@ impl Machine {
                 EvalSession::SubsequentQuerySuccess
             }
         } else {
-            EvalSession::from(EvalError::QueryFailure)
+            EvalSession::from(SessionError::QueryFailure)
         }
     }
 

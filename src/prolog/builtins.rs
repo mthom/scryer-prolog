@@ -4,6 +4,92 @@ use prolog::num::bigint::{BigInt};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+// from 7.12.2 b) of 13211-1:1995
+#[derive(Clone, Copy)]
+pub enum ValidType {
+    Atom,
+    Atomic,
+    Byte,
+    Callable,
+    Character,
+    Compound,
+    Evaluable,
+    InByte,
+    InCharacter,
+    Integer,
+    List,
+    Number,
+    PredicateIndicator,
+    Variable
+}
+
+impl ValidType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ValidType::Atom => "atom",
+            ValidType::Atomic => "atomic",
+            ValidType::Byte => "byte",
+            ValidType::Callable => "callable",
+            ValidType::Character => "character",
+            ValidType::Compound => "compound",
+            ValidType::Evaluable => "evaluable",
+            ValidType::InByte => "in_byte",
+            ValidType::InCharacter => "in_character",
+            ValidType::Integer => "integer",
+            ValidType::List => "list",
+            ValidType::Number => "number",
+            ValidType::PredicateIndicator => "predicate_indicator",
+            ValidType::Variable => "variable"
+        }
+    }
+}
+
+// from 7.12.2 f) of 13211-1:1995
+#[derive(Clone, Copy)]
+pub enum RepFlag {
+    Character,
+    CharacterCode,
+    InCharacterCode,
+    MaxArity,
+    MaxInteger,
+    MinInteger
+}
+
+impl RepFlag {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RepFlag::Character => "character",
+            RepFlag::CharacterCode => "character_code",
+            RepFlag::InCharacterCode => "in_character_code",
+            RepFlag::MaxArity => "max_arity",
+            RepFlag::MaxInteger => "max_integer",
+            RepFlag::MinInteger => "min_integer"
+        }
+    }
+}
+
+// from 7.12.2 g) of 13211-1:1995
+#[derive(Clone, Copy)]
+pub enum EvalError {
+    FloatOverflow,
+    IntOverflow,
+    Undefined,
+    Underflow,
+    ZeroDivisor
+}
+
+impl EvalError {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EvalError::FloatOverflow => "float_overflow",
+            EvalError::IntOverflow => "int_overflow",
+            EvalError::Undefined => "undefined",
+            EvalError::Underflow => "underflow",
+            EvalError::ZeroDivisor => "zero_divisor"
+        }
+    }
+}
+
 fn get_builtins() -> Code {
     vec![internal_call_n!(), // callN/N, 0.
          is_atomic!(temp_v!(1)), // atomic/1, 1.
@@ -234,8 +320,12 @@ fn get_builtins() -> Code {
          goto_execute!(165, 3), // goto get_arg/3, 185.
          trust_me!(),
          query![get_var_in_query!(temp_v!(4), 1),
-                put_structure!("type_error", 1, temp_v!(1), None),
-                set_constant!(atom!("integer_expected"))],
+                put_structure!("type_error", 2, temp_v!(2), None),
+                set_constant!(atom!(ValidType::Integer.as_str())),
+                set_value!(temp_v!(4)),
+                put_structure!("error", 2, temp_v!(1), None),
+                set_value!(temp_v!(2)),
+                set_void!(1)],
          goto_execute!(59, 1), // goto throw/1.
          try_me_else!(5), // arg_/5, 189.
          fact![get_value!(temp_v!(1), 2),
