@@ -1410,6 +1410,39 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- [X,Y,X] =@= [V,W,V].");
     assert_prolog_success!(&mut wam, "?- g(B) = B, g(A) = A, A =@= B.");
 
+    assert_prolog_success!(&mut wam, "?- keysort([1-1, 1-1], Sorted).",
+                           [["Sorted = [1 - 1, 1 - 1]"]]);
+    assert_prolog_success!(&mut wam, "?- keysort([2-99, 1-a, 3-f(_), 1-z, 1-a, 2-44], Sorted).",
+                           [["Sorted = [1 - a, 1 - z, 1 - a, 2 - 99, 2 - 44, 3 - f(_7)]"]]);
+    assert_prolog_success!(&mut wam, "?- keysort([X-1,1-1],[2-1,1-1]).",
+                           [["X = 2"]]);
+    
+    assert_prolog_success!(&mut wam, "?- keysort([], L).",
+                           [["L = []"]]);
+    assert_prolog_success!(&mut wam, "?- catch(keysort([a|_], _), error(E, _), true).",
+                           [["E = instantiation_error"]]);
+    assert_prolog_success!(&mut wam, "?- catch(keysort([],[a|a]),error(Pat, _),true).",
+                           [["Pat = type_error(list, [a | a])"]]);
+    assert_prolog_success!(&mut wam, "?- catch(keysort(_, _), error(E, _), true).",
+                           [["E = type_error(list, _12)"]]);
+    assert_prolog_success!(&mut wam, "?- catch(keysort([a-1], [_|b]), error(E, _), true).",
+                           [["E = type_error(list, [_23 | b])"]]);
+    assert_prolog_success!(&mut wam, "?- catch(keysort([a-1], [a-b,c-d,a]), error(E, _), true).",
+                           [["E = type_error(pair, a)"]]);
+    assert_prolog_success!(&mut wam, "?- catch(keysort([a], [a-b]), error(E, _), true).",
+                           [["E = type_error(pair, a)"]]);
+
+    assert_prolog_success!(&mut wam, "?- catch(sort([a|_], _), error(E, _), true).",
+                           [["E = instantiation_error"]]);
+    assert_prolog_success!(&mut wam, "?- catch(sort([],[a|a]),error(Pat, _),true).",
+                           [["Pat = type_error(list, [a | a])"]]);
+    assert_prolog_success!(&mut wam, "?- sort([], L).",
+                           [["L = []"]]);
+    assert_prolog_success!(&mut wam, "?- catch(sort(_, []), error(E, _), true).",
+                           [["E = type_error(list, _12)"]]);
+    assert_prolog_success!(&mut wam, "?- catch(sort([a,b,c], not_a_list), error(E, _), true).",
+                           [["E = type_error(list, not_a_list)"]]);
+    
     assert_prolog_success!(&mut wam, "?- call(((G = 2 ; fail), B=3, !)).",
                            [["G = 2", "B = 3"]]);
 
@@ -1632,6 +1665,26 @@ fn test_queries_on_skip_max_list() {
     assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 3, [a,b,c], Xs).",
                            [["Xs = []"]]);
 
+    // tests on proper and empty lists with no max.
+    
+    // test on proper and empty lists.
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, -1, [], Xs).",
+                           [["Xs = []", "N = 0"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, -1, [a,b,c], Xs).",
+                           [["Xs = []", "N = 3"]]);
+
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, -1, [], Xs).",
+                           [["Xs = []", "N = 0"]]);
+
+    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(4, -1, [], Xs).");
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, -1, [a,b,c], Xs).",
+                           [["Xs = []"]]);
+    
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(0, -1, [], Xs).",
+                           [["Xs = []"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, -1, [a,b,c], Xs).",
+                           [["Xs = []"]]);
+    
     // tests on partial lists.
     assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 4, [a,b,c|X], Xs0).",
                            [["X = _1", "Xs0 = _1"]]);

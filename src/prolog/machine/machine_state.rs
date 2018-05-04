@@ -484,9 +484,10 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(lco, machine_st)
             },
             &ClauseType::Sort => {
-                let mut list = machine_st.try_from_list(temp_v!(1))?;
-
                 machine_st.check_sort_errors()?;
+                
+                let stub = machine_st.functor_stub(clause_name!("sort"), 2);
+                let mut list = machine_st.try_from_list(temp_v!(1), stub)?;                                
                 
                 list.sort_unstable_by(|a1, a2| machine_st.compare_term_test(a1, a2));
                 machine_st.term_dedup(&mut list);
@@ -499,10 +500,11 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(lco, machine_st)
             },
             &ClauseType::KeySort => {
-                let mut list = machine_st.try_from_list(temp_v!(1))?;
-                let mut key_pairs = Vec::new();
-
                 machine_st.check_keysort_errors()?;
+                
+                let stub = machine_st.functor_stub(clause_name!("keysort"), 2);
+                let mut list = machine_st.try_from_list(temp_v!(1), stub)?;
+                let mut key_pairs = Vec::new();                
                 
                 for val in list {
                     let key = machine_st.project_onto_key(val.clone())?;
@@ -551,7 +553,7 @@ pub(crate) trait CallPolicy: Any {
                 Ok(())
             },
             &ClauseType::SkipMaxList => {
-                machine_st.skip_max_list();
+                machine_st.skip_max_list()?;
                 machine_st.p += 1;
                 
                 Ok(())
