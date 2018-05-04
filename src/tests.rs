@@ -1416,7 +1416,8 @@ fn test_queries_on_builtins()
                            [["Sorted = [1 - a, 1 - z, 1 - a, 2 - 99, 2 - 44, 3 - f(_7)]"]]);
     assert_prolog_success!(&mut wam, "?- keysort([X-1,1-1],[2-1,1-1]).",
                            [["X = 2"]]);
-    
+    //TODO: enable the printer to print cyclic terms. Then run this test.
+    //assert_prolog_failure!(&mut wam, "?- Pairs = [a-a|Pairs], keysort(Pairs, _).");
     assert_prolog_success!(&mut wam, "?- keysort([], L).",
                            [["L = []"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a|_], _), error(E, _), true).",

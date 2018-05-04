@@ -1,6 +1,7 @@
 use prolog::and_stack::*;
 use prolog::ast::*;
 
+use std::collections::HashMap;
 use std::ops::IndexMut;
 
 pub trait CopierTarget
@@ -21,6 +22,11 @@ pub trait CopierTarget
         let mut scan = self.source();
         let old_h = self.threshold();
 
+        // Lists have a flattened representation as structures,
+        // removing the need for a NamedStr variant, so we use a
+        // redirection table for reconstructing lists.
+        let mut list_redirect = HashMap::new();
+        
         self.push(HeapCellValue::Addr(a));
 
         while scan < self.threshold() {
@@ -30,6 +36,13 @@ pub trait CopierTarget
                 HeapCellValue::Addr(a) =>
                     match a.clone() {
                         Addr::Lis(a) => {
+                            if let Some(idx) = list_redirect.get(&a) {
+                                self[scan] = HeapCellValue::Addr(Addr::Lis(*idx));
+                                scan += 1;
+                                continue;
+                            }
+
+                            list_redirect.insert(a, self.threshold());                            
                             self[scan] = HeapCellValue::Addr(Addr::Lis(self.threshold()));
                             
                             let hcv = self[a].clone();
