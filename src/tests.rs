@@ -271,7 +271,7 @@ fn test_queries_on_rules() {
     assert_prolog_success!(&mut wam, "?- p(f(X, g(Y), Z), g(Z), h).",
                            [["Z = b", "Y = b", "X = f(a)"]]);
     assert_prolog_success!(&mut wam, "?- p(Z, Y, X).",
-                           [["X = h", "Y = g(b)", "Z = f(f(a), g(b), _7)"]]);
+                           [["X = h", "Y = g(b)", "Z = f(f(a), g(b), _)"]]);
     assert_prolog_success!(&mut wam, "?- p(f(X, Y, Z), Y, h).",
                            [["Y = g(b)", "Z = _3", "X = f(a)"]]);
 
@@ -539,7 +539,7 @@ fn test_queries_on_lists()
 
     assert_prolog_success!(&mut wam, "?- p([Z, Z]).", [["Z = _0"]]);
     assert_prolog_failure!(&mut wam, "?- p([Z, W, Y]).");
-    assert_prolog_success!(&mut wam, "?- p([Z | W]).", [["Z = _0", "W = [_3]"]]);
+    assert_prolog_success!(&mut wam, "?- p([Z | W]).", [["Z = _0", "W = [_]"]]);
     assert_prolog_success!(&mut wam, "?- p([Z | [Z]]).", [["Z = _0"]]);
     assert_prolog_success!(&mut wam, "?- p([Z | [W]]).", [["Z = _2", "W = _0"]]);
     assert_prolog_failure!(&mut wam, "?- p([Z | []]).");
@@ -600,7 +600,7 @@ fn test_queries_on_conjuctive_queries() {
     submit(&mut wam, "p(a, [f(g(X))]).");
     submit(&mut wam, "q(Y, c).");
 
-    assert_prolog_success!(&mut wam, "?- p(X, Y), q(Y, Z).", [["Y = [f(g(_9))]", "X = a", "Z = c"]]);
+    assert_prolog_success!(&mut wam, "?- p(X, Y), q(Y, Z).", [["Y = [f(g(_))]", "X = a", "Z = c"]]);
     assert_prolog_failure!(&mut wam, "?- p(X, Y), q(Y, X).");
 
     submit(&mut wam, "member(X, [X|_]).
@@ -632,10 +632,10 @@ fn test_queries_on_conjuctive_queries() {
     submit(&mut wam, "q(Y, c).");
 
     assert_prolog_success!(&mut wam, "?- p(X, Y), q(Y, Z).",
-                           [["X = a",  "Z = c", "Y = [f(g(_9))]"],
+                           [["X = a",  "Z = c", "Y = [f(g(_))]"],
                             ["X = _0", "Z = c", "Y = c"]]);
     assert_prolog_success!(&mut wam, "?- p(X, Y), !, q(Y, Z).",
-                           [["Z = c", "Y = [f(g(_9))]", "X = a"]]);
+                           [["Z = c", "Y = [f(g(_))]", "X = a"]]);
 
     submit(&mut wam, "q([f(g(x))], Z). q([f(g(y))], Y). q([f(g(z))], a).");
 
@@ -1260,8 +1260,8 @@ fn test_queries_on_builtins()
 
     assert_prolog_success!(&mut wam, "?- functor(F, f, 0).", [["F = f"]]);
 
-    assert_prolog_success!(&mut wam, "?- functor(Func, f, 3).", [["Func = f(_2, _3, _4)"]]);
-    assert_prolog_success!(&mut wam, "?- functor(Func, f, 4).", [["Func = f(_2, _3, _4, _5)"]]);
+    assert_prolog_success!(&mut wam, "?- functor(Func, f, 3).", [["Func = f(_, _, _)"]]);
+    assert_prolog_success!(&mut wam, "?- functor(Func, f, 4).", [["Func = f(_, _, _, _)"]]);
 
     assert_prolog_success!(&mut wam, "?- catch(functor(F, \"sdf\", 3), error(E, _), true).",
                            [["E = instantiation_error", "F = _1"]]);
@@ -1289,14 +1289,14 @@ fn test_queries_on_builtins()
 
     assert_prolog_success_with_limit!(&mut wam, "?- length(Xs, N).",
                                       [["N = 0", "Xs = []"],
-                                       ["N = 1", "Xs = [_3]"],
-                                       ["N = 2", "Xs = [_3, _6]"],
-                                       ["N = 3", "Xs = [_3, _6, _9]"],
-                                       ["N = 4", "Xs = [_3, _6, _9, _12]"],
-                                       ["N = 5", "Xs = [_3, _6, _9, _12, _15]"]],
+                                       ["N = 1", "Xs = [_]"],
+                                       ["N = 2", "Xs = [_, _]"],
+                                       ["N = 3", "Xs = [_, _, _]"],
+                                       ["N = 4", "Xs = [_, _, _, _]"],
+                                       ["N = 5", "Xs = [_, _, _, _, _]"]],
                                       6);
 
-    assert_prolog_success!(&mut wam, "?- length(Xs, 3).", [["Xs = [_2, _5, _8]"]]);
+    assert_prolog_success!(&mut wam, "?- length(Xs, 3).", [["Xs = [_, _, _]"]]);
     assert_prolog_success!(&mut wam, "?- length([a,b,c], N).", [["N = 3"]]);
     assert_prolog_success!(&mut wam, "?- length([], N).", [["N = 0"]]);
     assert_prolog_success!(&mut wam, "?- length(Xs, 0).", [["Xs = []"]]);
@@ -1413,11 +1413,14 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- keysort([1-1, 1-1], Sorted).",
                            [["Sorted = [1 - 1, 1 - 1]"]]);
     assert_prolog_success!(&mut wam, "?- keysort([2-99, 1-a, 3-f(_), 1-z, 1-a, 2-44], Sorted).",
-                           [["Sorted = [1 - a, 1 - z, 1 - a, 2 - 99, 2 - 44, 3 - f(_7)]"]]);
+                           [["Sorted = [1 - a, 1 - z, 1 - a, 2 - 99, 2 - 44, 3 - f(_)]"]]);
     assert_prolog_success!(&mut wam, "?- keysort([X-1,1-1],[2-1,1-1]).",
                            [["X = 2"]]);
-    //TODO: enable the printer to print cyclic terms. Then run this test.
-    //assert_prolog_failure!(&mut wam, "?- Pairs = [a-a|Pairs], keysort(Pairs, _).");
+
+    assert_prolog_failure!(&mut wam, "?- Pairs = [a-a|Pairs], keysort(Pairs, _).");
+//    assert_prolog_success!(&mut wam, "?- Pairs = [a-a|Pairs], catch(keysort(Pairs, _), error(E, _), true).",
+  //                         [["E = type_error(list, Pairs)", "Pairs = [a - a | Pairs]"]]);
+    
     assert_prolog_success!(&mut wam, "?- keysort([], L).",
                            [["L = []"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a|_], _), error(E, _), true).",
@@ -1425,9 +1428,9 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- catch(keysort([],[a|a]),error(Pat, _),true).",
                            [["Pat = type_error(list, [a | a])"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort(_, _), error(E, _), true).",
-                           [["E = type_error(list, _12)"]]);
+                           [["E = type_error(list, _)"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a-1], [_|b]), error(E, _), true).",
-                           [["E = type_error(list, [_23 | b])"]]);
+                           [["E = type_error(list, [_ | b])"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a-1], [a-b,c-d,a]), error(E, _), true).",
                            [["E = type_error(pair, a)"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a], [a-b]), error(E, _), true).",
@@ -1440,7 +1443,7 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- sort([], L).",
                            [["L = []"]]);
     assert_prolog_success!(&mut wam, "?- catch(sort(_, []), error(E, _), true).",
-                           [["E = type_error(list, _12)"]]);
+                           [["E = type_error(list, _)"]]);
     assert_prolog_success!(&mut wam, "?- catch(sort([a,b,c], not_a_list), error(E, _), true).",
                            [["E = type_error(list, not_a_list)"]]);
     

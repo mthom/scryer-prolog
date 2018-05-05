@@ -179,45 +179,6 @@ where HCIter: Iterator<Item=HeapCellValue> + MutStackHCIterator
     }
 }
 
-pub struct HCDerefAcyclicIterator<HCIter> {
-    iter: HCIter,
-    seen: HashSet<Addr>
-}
-
-pub type HCDerefAcyclicPreOrderIterator<'a> = HCDerefAcyclicIterator<HCPreOrderIterator<'a>>;
-
-impl<'a> HCPreOrderIterator<'a> {
-    pub fn deref_acyclic_iter(self) -> HCDerefAcyclicPreOrderIterator<'a> {
-        HCDerefAcyclicIterator::new(self)
-    }
-}
-
-impl<HCIter: MutStackHCIterator> HCDerefAcyclicIterator<HCIter>
-{
-    pub fn new(iter: HCIter) -> Self {
-        HCDerefAcyclicIterator { iter, seen: HashSet::new() }
-    }
-}
-
-impl<HCIter> Iterator for HCDerefAcyclicIterator<HCIter>
-   where HCIter: Iterator<Item=HeapCellValue> + MutStackHCIterator
-{
-    type Item = HeapCellValue;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.iter.next() {
-                Some(HeapCellValue::Addr(addr)) =>
-                    if !self.seen.contains(&addr) {
-                        self.seen.insert(addr.clone());
-                        return Some(HeapCellValue::Addr(addr));
-                    },
-                item => return item
-            }
-        }
-    }
-}
-
 pub struct HCZippedAcyclicIterator<HCIter> {
     i1: HCIter,
     i2: HCIter,

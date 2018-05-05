@@ -1,6 +1,7 @@
 use prolog::and_stack::*;
 use prolog::ast::*;
 use prolog::copier::*;
+use prolog::machine::machine_errors::MachineStub;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
 use prolog::heap_print::*;
@@ -13,6 +14,22 @@ use std::collections::HashMap;
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
+
+pub(super) struct Ball {
+    pub(super) boundary: usize, // ball.0
+    pub(super) stub: MachineStub, // ball.1    
+}
+
+impl Ball {
+    pub(super) fn new() -> Self {
+        Ball { boundary: 0, stub: MachineStub::new() }
+    }
+    
+    pub(super) fn reset(&mut self) {
+        self.boundary = 0;
+        self.stub.clear();
+    }
+}
 
 pub(crate) struct CodeDirs<'a> {
     code_dir: &'a CodeDir,
@@ -109,7 +126,7 @@ impl<'a> Index<usize> for DuplicateBallTerm<'a> {
             &self.state.heap[index]
         } else {
             let index = index - self.heap_boundary;
-            &self.state.ball.1[index]
+            &self.state.ball.stub[index]
         }
     }
 }
@@ -120,7 +137,7 @@ impl<'a> IndexMut<usize> for DuplicateBallTerm<'a> {
             &mut self.state.heap[index]
         } else {
             let index = index - self.heap_boundary;
-            &mut self.state.ball.1[index]
+            &mut self.state.ball.stub[index]
         }
     }
 }
@@ -132,11 +149,11 @@ impl<'a> CopierTarget for DuplicateBallTerm<'a> {
     }
 
     fn threshold(&self) -> usize {
-        self.heap_boundary + self.state.ball.1.len()
+        self.heap_boundary + self.state.ball.stub.len()
     }
 
     fn push(&mut self, hcv: HeapCellValue) {
-        self.state.ball.1.push(hcv);
+        self.state.ball.stub.push(hcv);
     }
 
     fn store(&self, a: Addr) -> Addr {
@@ -203,7 +220,8 @@ pub struct MachineState {
     pub(super) tr: usize,
     pub(super) hb: usize,
     pub(super) block: usize, // an offset into the OR stack.
-    pub(super) ball: (usize, Vec<HeapCellValue>), // heap boundary, and a term copy
+    pub(super) ball: Ball,
+    pub(super) redirect: CellRedirect,
     pub(super) interms: Vec<Number>, // intermediate numbers.
 }
 

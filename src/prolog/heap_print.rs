@@ -4,6 +4,7 @@ use prolog::machine::machine_state::MachineState;
 
 use std::borrow::Cow;
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 #[derive(Clone)]
@@ -58,7 +59,7 @@ pub struct PrinterOutputter {
     contents: String
 }
 
-impl HCValueOutputter for PrinterOutputter {    
+impl HCValueOutputter for PrinterOutputter {
     type Output = String;
 
     fn new() -> Self {
@@ -102,7 +103,7 @@ impl HCValueFormatter for DisplayFormatter {
             let mut new_name = String::from("'");
             new_name += ct.name().as_str();
             new_name += "'";
-            
+
             self.format_struct(arity, ct.name(), state_stack);
         } else {
             self.format_struct(arity, ct.name(), state_stack);
@@ -142,41 +143,90 @@ impl HCValueFormatter for TermFormatter {
 }
 
 pub struct HCPrinter<'a, Formatter, Outputter> {
-    formatter:   Formatter,
-    outputter:   Outputter,
-    iter:        HCDerefAcyclicPreOrderIterator<'a>,
-    state_stack: Vec<TokenOrRedirect>,
-    heap_locs:   Cow<'a, HeapVarDict>
+    formatter:    Formatter,
+    outputter:    Outputter,
+    machine_st:   &'a MachineState,
+    state_stack:  Vec<TokenOrRedirect>,
+    heap_locs:    Cow<'a, HeapVarDict>,
+    printed_vars: HashSet<Addr>
 }
 
 impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     HCPrinter<'a, Formatter, Outputter>
 {
-    pub fn new(machine_st: &'a MachineState, addr: Addr, fmt: Formatter, output: Outputter) -> Self
+    pub fn new(machine_st: &'a MachineState, fmt: Formatter, output: Outputter) -> Self
     {
-        let iter = HCPreOrderIterator::new(&machine_st, addr);
-        
         HCPrinter { formatter: fmt,
                     outputter: output,
-                    iter: iter.deref_acyclic_iter(),
+                    machine_st,
                     state_stack: vec![],
-                    heap_locs: Cow::default() }
+                    heap_locs: Cow::default(),
+                    printed_vars: HashSet::new() }
     }
 
-    pub fn from_heap_locs(machine_st: &'a MachineState, addr: Addr, fmt: Formatter,
+    pub fn from_heap_locs(machine_st: &'a MachineState, fmt: Formatter,
                           output: Outputter, heap_locs: &'a HeapVarDict)
                           -> Self
     {
-        let iter = HCPreOrderIterator::new(&machine_st, addr);
+        let mut printer = Self::new(machine_st, fmt, output);
         
-        HCPrinter { formatter: fmt,
-                    outputter: output,
-                    iter: iter.deref_acyclic_iter(),
-                    state_stack: vec![],
-                    heap_locs: Cow::Borrowed(heap_locs) }
+        printer.heap_locs = Cow::Borrowed(heap_locs);
+        printer
+    }
+
+    pub fn from_heap_locs_as_seen(machine_st: &'a MachineState, fmt: Formatter,
+                                  output: Outputter, heap_locs: &'a HeapVarDict)
+                                  -> Self
+    {
+        let mut printer = Self::from_heap_locs(machine_st, fmt, output, heap_locs);
+
+        for (_, addr) in heap_locs.iter() {
+            let addr = machine_st.store(machine_st.deref(addr.clone()));
+            printer.printed_vars.insert(addr.clone());
+        }
+        
+        printer
     }
     
-    fn handle_heap_term(&mut self, heap_val: HeapCellValue) {
+    // returns a HeapCellValue iff the next element to come hasn't been seen previously.
+    fn check_for_seen(&mut self, iter: &mut HCPreOrderIterator) -> Option<HeapCellValue> {
+        iter.stack().last().cloned().and_then(|addr| {
+            let addr = self.machine_st.store(self.machine_st.deref(addr));
+
+            for (var, var_addr) in self.heap_locs.iter() {
+                if &addr == &self.machine_st.store(self.machine_st.deref(var_addr.clone())) {
+                    if !self.printed_vars.contains(&addr) {
+                        self.printed_vars.insert(addr);
+                        return iter.next();
+                    } else {
+                        iter.stack().pop();
+                        self.outputter.append(var.as_str());
+
+                        return None;
+                    }
+                }
+            }
+
+            // addr is not the address of a named variable. If it is a variable,
+            // it must be anonymous.
+            if addr.is_ref() {
+                self.outputter.append("_");
+                iter.stack().pop();
+                
+                None
+            } else {
+                iter.next()
+            }
+        })
+    }
+
+    fn handle_heap_term(&mut self, iter: &mut HCPreOrderIterator)
+    {
+        let heap_val = match self.check_for_seen(iter) {
+            Some(heap_val) => heap_val,
+            _ => return
+        };
+        
         match heap_val {
             HeapCellValue::NamedStr(arity, name, fixity) => {
                 let ct = ClauseType::from(name, arity, fixity);
@@ -220,7 +270,11 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         }
     }
 
-    pub fn print(mut self) -> Outputter {
+    //TODO: idea: hand a mutable ref to iter to handle_heap_term,
+    // and have it query the stack before getting the next thing.
+    pub fn print(mut self, addr: Addr) -> Outputter {
+        let mut iter = HCPreOrderIterator::new(&self.machine_st, addr);
+
         loop {
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
@@ -228,10 +282,8 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                         self.outputter.append(" "),
                     TokenOrRedirect::Atom(atom) =>
                         self.outputter.append(atom.as_str()),
-                    TokenOrRedirect::Redirect => {
-                        let heap_val = self.iter.next().unwrap();
-                        self.handle_heap_term(heap_val);
-                    },
+                    TokenOrRedirect::Redirect =>
+                        self.handle_heap_term(&mut iter),
                     TokenOrRedirect::Close =>
                         self.outputter.append(")"),
                     TokenOrRedirect::Open =>
@@ -251,8 +303,8 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                     TokenOrRedirect::Comma =>
                         self.outputter.append(", ")
                 }
-            } else if let Some(heap_val) = self.iter.next() {
-                self.handle_heap_term(heap_val);
+            } else if !iter.stack().is_empty() {
+                self.handle_heap_term(&mut iter);
             } else {
                 break;
             }

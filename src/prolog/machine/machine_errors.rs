@@ -135,8 +135,8 @@ impl MachineState {
     pub(super) fn throw_exception(&mut self, err: MachineError) {
         let h = self.heap.h;
 
-        self.ball.0 = 0;
-        self.ball.1.truncate(0);
+        self.ball.boundary = 0;
+        self.ball.stub.truncate(0);
 
         self.heap.append(err);
 

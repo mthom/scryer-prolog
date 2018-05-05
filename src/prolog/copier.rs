@@ -4,6 +4,19 @@ use prolog::ast::*;
 use std::collections::HashMap;
 use std::ops::IndexMut;
 
+// allows us to reconstruct a HeapVarDict by relating variables
+// in an existing HeapVarDict to the ones created in fn duplicate_term.
+// It is used to create meaningful error reports at the toplevel.
+pub struct CellRedirect(pub HashMap<Addr, Addr>);
+
+impl CellRedirect {
+    pub fn new() -> Self {
+        CellRedirect(HashMap::new())
+    }
+}
+
+pub type Trail = Vec<(Ref, HeapCellValue)>;
+
 pub trait CopierTarget
 {
     fn source(&self) -> usize;
@@ -13,21 +26,50 @@ pub trait CopierTarget
     fn deref(&self, Addr) -> Addr;
     fn stack(&mut self) -> &mut AndStack;
 
+    fn compile_redirect(&mut self, trail: Trail, list_redirect: HashMap<usize, usize>, old_h: usize)
+                        -> CellRedirect
+        where Self: IndexMut<usize, Output=HeapCellValue>
+    {
+        let mut cell_redirect: HashMap<Addr, Addr> = HashMap::new();
+        
+        for (r, hcv) in trail {
+            let addr = Addr::from(r);
+            
+            match r {
+                Ref::HeapCell(hc) => {                    
+                    cell_redirect.insert(addr, self[hc].as_addr(hc) - old_h);                    
+                    self[hc] = hcv;
+                },
+                Ref::StackCell(fr, sc) => {
+                    cell_redirect.insert(addr, self.stack()[fr][sc].clone() - old_h);
+                    self.stack()[fr][sc] = hcv.as_addr(0);
+                }
+            }
+        }
+
+        for (l, h) in list_redirect {
+            cell_redirect.insert(Addr::Lis(l), Addr::Lis(h - old_h));
+        }
+
+        CellRedirect(cell_redirect)
+    }
+    
     // duplicate_term(L1, L2) uses Cheney's algorithm to copy the term
     // at L1 to L2. trail is kept to restore the innards of L1 after
     // it's been copied to L2.
-    fn duplicate_term(&mut self, a: Addr) where Self: IndexMut<usize, Output=HeapCellValue>
+    fn duplicate_term(&mut self, addr: Addr) -> CellRedirect
+      where Self: IndexMut<usize, Output=HeapCellValue>
     {
-        let mut trail: Vec<(Ref, HeapCellValue)>= Vec::new();
-        let mut scan = self.source();
-        let old_h = self.threshold();
+        let mut trail = Trail::new();
+        let mut scan = self.source();        
+        let old_h = self.threshold();        
 
-        // Lists have a flattened representation as structures,
-        // removing the need for a NamedStr variant, so we use a
-        // redirection table for reconstructing lists.
+        // Lists have a compressed representation as structures,
+        // removing the need for NamedStr, so we use a redirection
+        // table for copying lists.
         let mut list_redirect = HashMap::new();
         
-        self.push(HeapCellValue::Addr(a));
+        self.push(HeapCellValue::Addr(addr));
 
         while scan < self.threshold() {
             match self[scan].clone() {
@@ -110,11 +152,6 @@ pub trait CopierTarget
             }
         }
 
-        for (r, hcv) in trail {
-            match r {
-                Ref::HeapCell(hc) => self[hc] = hcv,
-                Ref::StackCell(fr, sc) => self.stack()[fr][sc] = hcv.as_addr(0)
-            }
-        }
+        self.compile_redirect(trail, list_redirect, old_h)
     }
 }

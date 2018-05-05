@@ -57,11 +57,11 @@ impl<'a> SubModuleUser for MachineCodeIndex<'a> {
     fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
         if let Some(ref mut code_idx) = self.code_dir.get_mut(&(name.clone(), arity)) {
             println!("warning: overwriting {}/{}", &name, arity);
-            set_code_index!(code_idx, idx.0, idx.1); 
+            set_code_index!(code_idx, idx.0, idx.1);
 
             return;
         }
-        
+
         self.code_dir.insert((name, arity), CodeIndex::from(idx));
     }
 }
@@ -99,7 +99,7 @@ impl Machine {
                     if &code_idx.borrow().1 != &module_name {
                         continue;
                     }
-                    
+
                     self.code_dir.remove(&(name.clone(), arity));
 
                     // remove or respecify ops.
@@ -194,7 +194,7 @@ impl Machine {
             Some(&CodeIndex (ref idx)) if idx.borrow().1 != clause_name!("user") =>
                     return EvalSession::from(SessionError::ImpermissibleEntry(format!("{}/{}",
                                                                                    name,
-                                                                                   arity))),                
+                                                                                   arity))),
             _ => {}
         };
 
@@ -370,18 +370,20 @@ impl Machine {
         }
     }
 
-    fn fail(&mut self) -> EvalSession
+    fn fail(&mut self, heap_locs: &HeapVarDict) -> EvalSession
     {
-        if self.ms.ball.1.len() > 0 {
+        if self.ms.ball.stub.len() > 0 {
             let h = self.ms.heap.h;
             self.ms.copy_and_align_ball_to_heap();
 
-            let msg = self.ms.print_term(Addr::HeapCell(h),
-                                         TermFormatter {},
-                                         PrinterOutputter::new())
-                          .result();
+            let heap_locs = self.ms.reconstruct_dict(heap_locs, h);
+            let error_str = self.ms.print_exception(Addr::HeapCell(h),
+                                                    &heap_locs,
+                                                    TermFormatter {},
+                                                    PrinterOutputter::new())
+                                .result();
 
-            EvalSession::from(SessionError::QueryFailureWithException(msg))
+            EvalSession::from(SessionError::QueryFailureWithException(error_str))
         } else {
             EvalSession::from(SessionError::QueryFailure)
         }
@@ -395,7 +397,7 @@ impl Machine {
         self.run_query(&alloc_locs, &mut heap_locs);
 
         if self.failed() {
-            self.fail()
+            self.fail(&heap_locs)
         } else {
             EvalSession::InitialQuerySuccess(alloc_locs, heap_locs)
         }
@@ -414,7 +416,7 @@ impl Machine {
             self.run_query(alloc_l, heap_l);
 
             if self.failed() {
-                self.fail()
+                self.fail(&heap_l)
             } else {
                 EvalSession::SubsequentQuerySuccess
             }

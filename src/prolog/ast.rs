@@ -1362,6 +1362,32 @@ impl Addr {
     }
 }
 
+impl Add<usize> for Addr {
+    type Output = Addr;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        match self {
+            Addr::Lis(a) => Addr::Lis(a + rhs),
+            Addr::HeapCell(hc) => Addr::HeapCell(hc + rhs),
+            Addr::Str(s) => Addr::Str(s + rhs),
+            _ => self
+        }
+    }
+}
+
+impl Sub<usize> for Addr {
+    type Output = Addr;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        match self {
+            Addr::Lis(a) => Addr::Lis(a - rhs),
+            Addr::HeapCell(hc) => Addr::HeapCell(hc - rhs),
+            Addr::Str(s) => Addr::Str(s - rhs),
+            _ => self
+        }
+    }
+}
+
 impl From<Ref> for Addr {
     fn from(r: Ref) -> Self {
         match r {
@@ -1371,7 +1397,7 @@ impl From<Ref> for Addr {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Hash, Eq, PartialEq)]
 pub enum Ref {
     HeapCell(usize),
     StackCell(usize, usize)

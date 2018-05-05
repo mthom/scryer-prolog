@@ -49,7 +49,8 @@ impl MachineState {
             tr: 0,
             hb: 0,
             block: 0,
-            ball: (0, Vec::new()),
+            ball: Ball::new(),
+            redirect: CellRedirect::new(),
             interms: vec![Number::default(); 256]
         }
     }
@@ -97,7 +98,7 @@ impl MachineState {
     fn print_var_eq<Fmt, Outputter>(&self, var: Rc<Var>, addr: Addr, var_dir: &HeapVarDict,
                                     fmt: Fmt, mut output: Outputter)
                                     -> Outputter
-        where Fmt: HCValueFormatter, Outputter: HCValueOutputter
+      where Fmt: HCValueFormatter, Outputter: HCValueOutputter
     {
         let orig_len = output.len();
         
@@ -106,8 +107,8 @@ impl MachineState {
         output.append(var.as_str());
         output.append(" = ");
         
-        let printer    = HCPrinter::from_heap_locs(&self, addr, fmt, output, var_dir);
-        let mut output = printer.print();
+        let printer    = HCPrinter::from_heap_locs(&self, fmt, output, var_dir);
+        let mut output = printer.print(addr);
 
         if output.ends_with(var.as_str()) {
             output.truncate(orig_len);
@@ -115,13 +116,23 @@ impl MachineState {
 
         output
     }
+
+    pub(super)
+    fn print_exception<Fmt, Outputter>(&self, addr: Addr, var_dir: &HeapVarDict,
+                                       fmt: Fmt, output: Outputter)
+                                       -> Outputter
+      where Fmt: HCValueFormatter, Outputter: HCValueOutputter
+    {
+        let printer = HCPrinter::from_heap_locs_as_seen(&self, fmt, output, var_dir);
+        printer.print(addr)
+    }
     
     pub(super)
     fn print_term<Fmt, Outputter>(&self, addr: Addr, fmt: Fmt, output: Outputter) -> Outputter
       where Fmt: HCValueFormatter, Outputter: HCValueOutputter
     {
-        let printer = HCPrinter::new(&self, addr, fmt, output);
-        printer.print()
+        let printer = HCPrinter::new(&self, fmt, output);
+        printer.print(addr)
     }
 
     pub(super) fn unify(&mut self, a1: Addr, a2: Addr) {
@@ -1089,26 +1100,25 @@ impl MachineState {
         Some((name, arity + narity - 1))
     }
 
-    pub(super) fn copy_and_align_ball_to_heap(&mut self) {
-        let diff = if self.ball.0 > self.heap.h {
-            self.ball.0 - self.heap.h
+    fn heap_ball_boundary_diff(&self) -> usize {
+        if self.ball.boundary > self.heap.h {
+            self.ball.boundary - self.heap.h
         } else {
-            self.heap.h - self.ball.0
-        };
-
-        for heap_value in self.ball.1.iter().cloned() {
+            self.heap.h - self.ball.boundary
+        }
+    }
+    
+    pub(super) fn copy_and_align_ball_to_heap(&mut self) -> usize {
+        let diff = self.heap_ball_boundary_diff();
+        
+        for heap_value in self.ball.stub.iter().cloned() {
             self.heap.push(match heap_value {
-                HeapCellValue::Addr(Addr::Con(c)) =>
-                    HeapCellValue::Addr(Addr::Con(c)),
-                HeapCellValue::Addr(Addr::Lis(a)) =>
-                    HeapCellValue::Addr(Addr::Lis(a - diff)),
-                HeapCellValue::Addr(Addr::HeapCell(hc)) =>
-                    HeapCellValue::Addr(Addr::HeapCell(hc - diff)),
-                HeapCellValue::Addr(Addr::Str(s)) =>
-                    HeapCellValue::Addr(Addr::Str(s - diff)),
+                HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
                 _ => heap_value
             });
         }
+
+        diff
     }
 
     pub(super) fn is_cyclic_term(&self, addr: Addr) -> bool {
@@ -1179,6 +1189,25 @@ impl MachineState {
         self.p += 1;
     }
 
+    // everything in self.redirect is potentially offset on the heap by 'offset',
+    // so correct for that when building the HeapVarDict.
+    pub(super) fn reconstruct_dict(&self, heap_locs: &HeapVarDict, offset: usize) -> HeapVarDict
+    {
+        let mut dest_heap_locs = HeapVarDict::new();
+
+      'outer:
+        for (orig_addr, addr) in self.redirect.0.iter() {            
+            for (var, var_addr) in heap_locs.iter() {
+                if orig_addr == &self.store(self.deref(var_addr.clone())) {
+                    dest_heap_locs.insert(var.clone(), addr.clone() + offset);
+                    continue 'outer;
+                }
+            }
+        }
+
+        dest_heap_locs
+    }
+    
     pub(super) fn compare_term(&mut self, qt: CompareTermQT) {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
@@ -1433,8 +1462,7 @@ impl MachineState {
                 try_or_fail!(self, call_policy.trust_me(self));
             },
             &BuiltInInstruction::EraseBall => {
-                self.ball.0 = 0;
-                self.ball.1.truncate(0);
+                self.ball.reset();                
                 self.p += 1;
             },
             &BuiltInInstruction::GetArg(lco) =>
@@ -1460,7 +1488,7 @@ impl MachineState {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));
                 let h = self.heap.h;
 
-                if self.ball.1.len() > 0 {
+                if self.ball.stub.len() > 0 {
                     self.copy_and_align_ball_to_heap();
                 } else {
                     self.fail = true;
@@ -1608,13 +1636,14 @@ impl MachineState {
             },
             &BuiltInInstruction::SetBall => {
                 let addr = self[temp_v!(1)].clone();
-                self.ball.0 = self.heap.h;
+                self.ball.boundary = self.heap.h;
 
-                {
+                let cell_redirect = {
                     let mut duplicator = DuplicateBallTerm::new(self);
-                    duplicator.duplicate_term(addr);
-                }
+                    duplicator.duplicate_term(addr)                                        
+                };
 
+                self.redirect.0.extend(cell_redirect.0.into_iter());
                 self.p += 1;
             },
             &BuiltInInstruction::SetCutPoint(r) =>
@@ -2323,6 +2352,8 @@ impl MachineState {
         self.or_stack.clear();
         self.registers = vec![Addr::HeapCell(0); 64];
         self.block = 0;
-        self.ball = (0, Vec::new());
+        
+        self.ball.reset();
+        self.redirect.0.clear();
     }
 }
