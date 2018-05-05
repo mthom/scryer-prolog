@@ -23,7 +23,7 @@ impl TestOutputter {
     }
 }
 
-impl HeapCellValueOutputter for TestOutputter {
+impl HCValueOutputter for TestOutputter {
     type Output = Vec<HashSet<String>>;
 
     fn new() -> Self {

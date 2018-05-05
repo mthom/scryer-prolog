@@ -424,7 +424,7 @@ impl Machine {
     }
 
     pub fn heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter) -> Outputter
-        where Outputter: HeapCellValueOutputter
+       where Outputter: HCValueOutputter
     {
         for (var, addr) in var_dir {
             output.begin_new_var();

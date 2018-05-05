@@ -94,10 +94,10 @@ impl MachineState {
     }
 
     pub(super) fn print_term<Fmt, Outputter>(&self, a: Addr, fmt: Fmt, output: Outputter) -> Outputter
-      where Fmt: HeapCellValueFormatter, Outputter: HeapCellValueOutputter
+      where Fmt: HCValueFormatter, Outputter: HCValueOutputter
     {
-        let iter    = HeapCellPreOrderIterator::new(&self, a);
-        let printer = HeapCellPrinter::new(iter, fmt, output);
+        let iter    = HCPreOrderIterator::new(&self, a);
+        let printer = HCPrinter::new(iter, fmt, output);
 
         printer.print()
     }

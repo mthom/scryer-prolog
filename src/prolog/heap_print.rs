@@ -17,7 +17,7 @@ pub enum TokenOrRedirect {
     Space
 }
 
-pub trait HeapCellValueFormatter {
+pub trait HCValueFormatter {
     // this function belongs to the display predicate formatter, which it uses
     // to format all clauses.
     fn format_struct(&self, arity: usize, name: ClauseName, state_stack: &mut Vec<TokenOrRedirect>)
@@ -40,7 +40,7 @@ pub trait HeapCellValueFormatter {
     fn format_clause(&self, usize, ClauseType, &mut Vec<TokenOrRedirect>);
 }
 
-pub trait HeapCellValueOutputter {
+pub trait HCValueOutputter {
     type Output;
 
     fn new() -> Self;
@@ -56,7 +56,7 @@ pub struct PrinterOutputter {
     contents: String
 }
 
-impl HeapCellValueOutputter for PrinterOutputter {    
+impl HCValueOutputter for PrinterOutputter {    
     type Output = String;
 
     fn new() -> Self {
@@ -93,7 +93,7 @@ impl HeapCellValueOutputter for PrinterOutputter {
 // the 'classic' display corresponding to the display predicate.
 pub struct DisplayFormatter {}
 
-impl HeapCellValueFormatter for DisplayFormatter {
+impl HCValueFormatter for DisplayFormatter {
     fn format_clause(&self, arity: usize, ct: ClauseType, state_stack: &mut Vec<TokenOrRedirect>)
     {
         if ct.fixity().is_some() {
@@ -110,7 +110,7 @@ impl HeapCellValueFormatter for DisplayFormatter {
 
 pub struct TermFormatter {}
 
-impl HeapCellValueFormatter for TermFormatter {
+impl HCValueFormatter for TermFormatter {
     fn format_clause(&self, arity: usize, ct: ClauseType, state_stack: &mut Vec<TokenOrRedirect>)
     {
         if let Some(fixity) = ct.fixity() {
@@ -139,20 +139,20 @@ impl HeapCellValueFormatter for TermFormatter {
     }
 }
 
-pub struct HeapCellPrinter<'a, Formatter, Outputter> {
+pub struct HCPrinter<'a, Formatter, Outputter> {
     formatter:   Formatter,
     outputter:   Outputter,
-    iter:        HeapCellPreOrderIterator<'a>,
+    iter:        HCPreOrderIterator<'a>,
     state_stack: Vec<TokenOrRedirect>
 }
 
-impl<'a, Formatter: HeapCellValueFormatter, Outputter: HeapCellValueOutputter>
-    HeapCellPrinter<'a, Formatter, Outputter>
+impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
+    HCPrinter<'a, Formatter, Outputter>
 {
-    pub fn new(iter: HeapCellPreOrderIterator<'a>, formatter: Formatter, outputter: Outputter)
+    pub fn new(iter: HCPreOrderIterator<'a>, formatter: Formatter, outputter: Outputter)
                -> Self
     {
-        HeapCellPrinter { formatter, outputter, iter, state_stack: vec![] }
+        HCPrinter { formatter, outputter, iter, state_stack: vec![] }
     }
 
     fn handle_heap_term(&mut self, heap_val: HeapCellValue) {
