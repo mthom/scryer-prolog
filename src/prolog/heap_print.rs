@@ -1,6 +1,7 @@
 use prolog::ast::*;
 use prolog::heap_iter::*;
 
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -143,18 +144,33 @@ pub struct HCPrinter<'a, Formatter, Outputter> {
     formatter:   Formatter,
     outputter:   Outputter,
     iter:        HCPreOrderIterator<'a>,
-    state_stack: Vec<TokenOrRedirect>
+    state_stack: Vec<TokenOrRedirect>,
+    heap_locs:   Cow<'a, HeapVarDict>
 }
 
 impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     HCPrinter<'a, Formatter, Outputter>
 {
-    pub fn new(iter: HCPreOrderIterator<'a>, formatter: Formatter, outputter: Outputter)
-               -> Self
+    pub fn new(iter: HCPreOrderIterator<'a>, fmt: Formatter, output: Outputter) -> Self
     {
-        HCPrinter { formatter, outputter, iter, state_stack: vec![] }
+        HCPrinter { formatter: fmt,
+                    outputter: output,
+                    iter,
+                    state_stack: vec![],
+                    heap_locs: Cow::default() }
     }
 
+    pub fn from_heap_locs(iter: HCPreOrderIterator<'a>, fmt: Formatter,
+                          output: Outputter, heap_locs: &'a HeapVarDict)
+                          -> Self
+    {
+        HCPrinter { formatter: fmt,
+                    outputter: output,
+                    iter,
+                    state_stack: vec![],
+                    heap_locs: Cow::Borrowed(heap_locs) }
+    }
+    
     fn handle_heap_term(&mut self, heap_val: HeapCellValue) {
         match heap_val {
             HeapCellValue::NamedStr(arity, name, fixity) => {

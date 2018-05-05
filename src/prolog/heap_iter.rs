@@ -120,7 +120,7 @@ impl MachineState {
     pub fn pre_order_iter<'a>(&'a self, a: Addr) -> HCPreOrderIterator<'a> {
         HCPreOrderIterator::new(self, a)
     }
-    
+
     pub fn post_order_iter<'a>(&'a self, a: Addr) -> HCPostOrderIterator<'a> {
         HCPostOrderIterator::new(HCPreOrderIterator::new(self, a))
     }
@@ -176,6 +176,37 @@ where HCIter: Iterator<Item=HeapCellValue> + MutStackHCIterator
         }
 
         self.iter.next()
+    }
+}
+
+pub struct HCDerefAcyclicIterator<HCIter> {
+    iter: HCIter,
+    seen: HashSet<Addr>
+}
+
+impl<HCIter: MutStackHCIterator> HCDerefAcyclicIterator<HCIter>
+{
+    pub fn new(iter: HCIter) -> Self {
+        HCDerefAcyclicIterator { iter, seen: HashSet::new() }
+    }
+}
+
+impl<HCIter> Iterator for HCDerefAcyclicIterator<HCIter>
+   where HCIter: Iterator<Item=HeapCellValue> + MutStackHCIterator
+{
+    type Item = HeapCellValue;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.iter.next() {
+                Some(HeapCellValue::Addr(addr)) =>
+                    if !self.seen.contains(&addr) {
+                        self.seen.insert(addr.clone());
+                        return Some(HeapCellValue::Addr(addr));
+                    },
+                item => return item
+            }
+        }
     }
 }
 
