@@ -93,12 +93,34 @@ impl MachineState {
         self.trail(r1);
     }
 
-    pub(super) fn print_term<Fmt, Outputter>(&self, a: Addr, fmt: Fmt, output: Outputter) -> Outputter
+    pub(super)
+    fn print_var_eq<Fmt, Outputter>(&self, var: Rc<Var>, addr: Addr, var_dir: &HeapVarDict,
+                                    fmt: Fmt, mut output: Outputter)
+                                    -> Outputter
+        where Fmt: HCValueFormatter, Outputter: HCValueOutputter
+    {
+        let orig_len = output.len();
+        
+        output.begin_new_var();
+
+        output.append(var.as_str());
+        output.append(" = ");
+        
+        let printer    = HCPrinter::from_heap_locs(&self, addr, fmt, output, var_dir);
+        let mut output = printer.print();
+
+        if output.ends_with(var.as_str()) {
+            output.truncate(orig_len);
+        }
+
+        output
+    }
+    
+    pub(super)
+    fn print_term<Fmt, Outputter>(&self, addr: Addr, fmt: Fmt, output: Outputter) -> Outputter
       where Fmt: HCValueFormatter, Outputter: HCValueOutputter
     {
-        let iter    = HCPreOrderIterator::new(&self, a);
-        let printer = HCPrinter::new(iter, fmt, output);
-
+        let printer = HCPrinter::new(&self, addr, fmt, output);
         printer.print()
     }
 

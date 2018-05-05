@@ -1,5 +1,6 @@
 use prolog::ast::*;
 use prolog::heap_iter::*;
+use prolog::machine::machine_state::MachineState;
 
 use std::borrow::Cow;
 use std::cell::Cell;
@@ -143,7 +144,7 @@ impl HCValueFormatter for TermFormatter {
 pub struct HCPrinter<'a, Formatter, Outputter> {
     formatter:   Formatter,
     outputter:   Outputter,
-    iter:        HCPreOrderIterator<'a>,
+    iter:        HCDerefAcyclicPreOrderIterator<'a>,
     state_stack: Vec<TokenOrRedirect>,
     heap_locs:   Cow<'a, HeapVarDict>
 }
@@ -151,22 +152,26 @@ pub struct HCPrinter<'a, Formatter, Outputter> {
 impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     HCPrinter<'a, Formatter, Outputter>
 {
-    pub fn new(iter: HCPreOrderIterator<'a>, fmt: Formatter, output: Outputter) -> Self
+    pub fn new(machine_st: &'a MachineState, addr: Addr, fmt: Formatter, output: Outputter) -> Self
     {
+        let iter = HCPreOrderIterator::new(&machine_st, addr);
+        
         HCPrinter { formatter: fmt,
                     outputter: output,
-                    iter,
+                    iter: iter.deref_acyclic_iter(),
                     state_stack: vec![],
                     heap_locs: Cow::default() }
     }
 
-    pub fn from_heap_locs(iter: HCPreOrderIterator<'a>, fmt: Formatter,
+    pub fn from_heap_locs(machine_st: &'a MachineState, addr: Addr, fmt: Formatter,
                           output: Outputter, heap_locs: &'a HeapVarDict)
                           -> Self
     {
+        let iter = HCPreOrderIterator::new(&machine_st, addr);
+        
         HCPrinter { formatter: fmt,
                     outputter: output,
-                    iter,
+                    iter: iter.deref_acyclic_iter(),
                     state_stack: vec![],
                     heap_locs: Cow::Borrowed(heap_locs) }
     }

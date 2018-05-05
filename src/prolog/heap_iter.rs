@@ -184,6 +184,14 @@ pub struct HCDerefAcyclicIterator<HCIter> {
     seen: HashSet<Addr>
 }
 
+pub type HCDerefAcyclicPreOrderIterator<'a> = HCDerefAcyclicIterator<HCPreOrderIterator<'a>>;
+
+impl<'a> HCPreOrderIterator<'a> {
+    pub fn deref_acyclic_iter(self) -> HCDerefAcyclicPreOrderIterator<'a> {
+        HCDerefAcyclicIterator::new(self)
+    }
+}
+
 impl<HCIter: MutStackHCIterator> HCDerefAcyclicIterator<HCIter>
 {
     pub fn new(iter: HCIter) -> Self {

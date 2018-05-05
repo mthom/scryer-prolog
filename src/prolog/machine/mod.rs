@@ -4,7 +4,7 @@ use prolog::heap_print::*;
 use prolog::tabled_rc::*;
 
 mod machine_errors;
-pub(crate) mod machine_state;
+pub(super) mod machine_state;
 #[macro_use]
 mod machine_state_impl;
 
@@ -427,12 +427,8 @@ impl Machine {
        where Outputter: HCValueOutputter
     {
         for (var, addr) in var_dir {
-            output.begin_new_var();
-
-            output.append(var.as_str());
-            output.append(" = ");
-
-            output = self.ms.print_term(addr.clone(), TermFormatter {}, output);
+            let fmt = TermFormatter {};
+            output = self.ms.print_var_eq(var.clone(), addr.clone(), var_dir, fmt, output);
         }
 
         output
