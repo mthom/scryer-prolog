@@ -1121,10 +1121,9 @@ impl MachineState {
         diff
     }
 
-    pub(super) fn is_cyclic_term(&self, addr: Addr) -> bool {
+    pub(crate) fn is_cyclic_term(&self, addr: Addr) -> bool {
         let mut seen = HashSet::new();
         let mut fail = false;
-
         let mut iter = self.pre_order_iter(addr);
 
         loop {
@@ -1188,26 +1187,7 @@ impl MachineState {
 
         self.p += 1;
     }
-
-    // everything in self.redirect is potentially offset on the heap by 'offset',
-    // so correct for that when building the HeapVarDict.
-    pub(super) fn reconstruct_dict(&self, heap_locs: &HeapVarDict, offset: usize) -> HeapVarDict
-    {
-        let mut dest_heap_locs = HeapVarDict::new();
-
-      'outer:
-        for (orig_addr, addr) in self.redirect.0.iter() {            
-            for (var, var_addr) in heap_locs.iter() {
-                if orig_addr == &self.store(self.deref(var_addr.clone())) {
-                    dest_heap_locs.insert(var.clone(), addr.clone() + offset);
-                    continue 'outer;
-                }
-            }
-        }
-
-        dest_heap_locs
-    }
-    
+            
     pub(super) fn compare_term(&mut self, qt: CompareTermQT) {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
@@ -1638,12 +1618,11 @@ impl MachineState {
                 let addr = self[temp_v!(1)].clone();
                 self.ball.boundary = self.heap.h;
 
-                let cell_redirect = {
+                self.redirect = {
                     let mut duplicator = DuplicateBallTerm::new(self);
-                    duplicator.duplicate_term(addr)                                        
+                    duplicator.duplicate_term_and_redirect(addr)
                 };
-
-                self.redirect.0.extend(cell_redirect.0.into_iter());
+                
                 self.p += 1;
             },
             &BuiltInInstruction::SetCutPoint(r) =>
@@ -2354,6 +2333,6 @@ impl MachineState {
         self.block = 0;
         
         self.ball.reset();
-        self.redirect.0.clear();
+        self.redirect.clear();
     }
 }

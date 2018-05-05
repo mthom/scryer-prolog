@@ -375,8 +375,7 @@ impl Machine {
         if self.ms.ball.stub.len() > 0 {
             let h = self.ms.heap.h;
             self.ms.copy_and_align_ball_to_heap();
-
-            let heap_locs = self.ms.reconstruct_dict(heap_locs, h);
+            
             let error_str = self.ms.print_exception(Addr::HeapCell(h),
                                                     &heap_locs,
                                                     TermFormatter {},

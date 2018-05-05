@@ -169,7 +169,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                           -> Self
     {
         let mut printer = Self::new(machine_st, fmt, output);
-        
+
         printer.heap_locs = Cow::Borrowed(heap_locs);
         printer
     }
@@ -184,10 +184,20 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             let addr = machine_st.store(machine_st.deref(addr.clone()));
             printer.printed_vars.insert(addr.clone());
         }
-        
+
         printer
     }
-    
+
+    fn print_offset(&mut self, addr: Addr) {
+        match addr {
+            Addr::HeapCell(h) | Addr::Lis(h) =>
+                self.outputter.append(format!("_{}", h).as_str()),
+            Addr::StackCell(fr, sc) =>
+                self.outputter.append(format!("s_{}_{}", fr, sc).as_str()),
+            _ => {}
+        }
+    }
+
     // returns a HeapCellValue iff the next element to come hasn't been seen previously.
     fn check_for_seen(&mut self, iter: &mut HCPreOrderIterator) -> Option<HeapCellValue> {
         iter.stack().last().cloned().and_then(|addr| {
@@ -207,13 +217,16 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 }
             }
 
-            // addr is not the address of a named variable. If it is a variable,
-            // it must be anonymous.
-            if addr.is_ref() {
-                self.outputter.append("_");
-                iter.stack().pop();
-                
-                None
+            if self.machine_st.is_cyclic_term(addr.clone()) {
+                if self.printed_vars.contains(&addr) {
+                    iter.stack().pop();
+                    self.print_offset(addr);
+                    
+                    None
+                } else {
+                    self.printed_vars.insert(addr);
+                    iter.next()
+                }
             } else {
                 iter.next()
             }
@@ -226,7 +239,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             Some(heap_val) => heap_val,
             _ => return
         };
-        
+
         match heap_val {
             HeapCellValue::NamedStr(arity, name, fixity) => {
                 let ct = ClauseType::from(name, arity, fixity);
@@ -249,11 +262,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
 
                 self.state_stack.push(TokenOrRedirect::OpenList(cell));
             },
-            HeapCellValue::Addr(Addr::HeapCell(h)) =>
-                self.outputter.append(format!("_{}", h).as_str()),
-            HeapCellValue::Addr(Addr::StackCell(fr, sc)) =>
-                self.outputter.append(format!("s_{}_{}", fr, sc).as_str()),
-            HeapCellValue::Addr(Addr::Str(_)) => {}
+            HeapCellValue::Addr(addr) => self.print_offset(addr)
         }
     }
 
