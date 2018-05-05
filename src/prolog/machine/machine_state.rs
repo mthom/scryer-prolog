@@ -221,7 +221,6 @@ pub struct MachineState {
     pub(super) hb: usize,
     pub(super) block: usize, // an offset into the OR stack.
     pub(super) ball: Ball,
-    pub(super) redirect: CellRedirect,
     pub(super) interms: Vec<Number>, // intermediate numbers.
 }
 

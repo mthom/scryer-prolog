@@ -190,7 +190,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
 
     fn print_offset(&mut self, addr: Addr) {
         match addr {
-            Addr::HeapCell(h) | Addr::Lis(h) =>
+            Addr::HeapCell(h) | Addr::Lis(h) | Addr::Str(h) =>
                 self.outputter.append(format!("_{}", h).as_str()),
             Addr::StackCell(fr, sc) =>
                 self.outputter.append(format!("s_{}_{}", fr, sc).as_str()),

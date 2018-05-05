@@ -4,30 +4,13 @@ use prolog::ast::*;
 use std::collections::HashMap;
 use std::ops::IndexMut;
 
-pub type Trail = Vec<(Ref, HeapCellValue)>;
+type Trail = Vec<(Ref, HeapCellValue)>;
 
-pub struct RedirectInfo {
-    trail: Trail,
-    list_redirect: HashMap<usize, usize>,
-    offset: usize
+pub(crate) struct RedirectInfo {
+    trail: Trail    
 }
 
-// allows us to reconstruct a HeapVarDict by relating variables
-// in an existing HeapVarDict to the ones created in fn duplicate_term.
-// It is used to create meaningful error reports at the toplevel.
-pub struct CellRedirect(pub HashMap<Addr, Addr>);
-
-impl CellRedirect {
-    pub fn new() -> Self {
-        CellRedirect(HashMap::new())
-    }
-
-    pub fn clear(&mut self) {
-        self.0.clear();
-    }
-}
-
-pub trait CopierTarget
+pub(crate) trait CopierTarget
 {
     fn source(&self) -> usize;
     fn threshold(&self) -> usize;
@@ -35,34 +18,6 @@ pub trait CopierTarget
     fn store(&self, Addr) -> Addr;
     fn deref(&self, Addr) -> Addr;
     fn stack(&mut self) -> &mut AndStack;
-
-    // unwind the trail *and* compute a cell redirection table.
-    fn unwind_and_redirect(&mut self, redirect: RedirectInfo) -> CellRedirect
-      where Self: IndexMut<usize, Output=HeapCellValue>
-    {
-        let mut cell_redirect: HashMap<Addr, Addr> = HashMap::new();
-
-        for (r, hcv) in redirect.trail {
-            let addr = Addr::from(r);
-
-            match r {
-                Ref::HeapCell(h) => {
-                    cell_redirect.insert(addr, self[h].as_addr(h) - redirect.offset);
-                    self[h] = hcv;
-                },
-                Ref::StackCell(fr, sc) => {
-                    cell_redirect.insert(addr, self.stack()[fr][sc].clone() - redirect.offset);
-                    self.stack()[fr][sc] = hcv.as_addr(0);
-                }
-            };
-        }
-
-        for (l, h) in redirect.list_redirect {
-            cell_redirect.insert(Addr::Lis(l), Addr::Lis(h - redirect.offset));
-        }
-
-        CellRedirect(cell_redirect)
-    }
 
     fn unwind_trail(&mut self, redirect: RedirectInfo)
       where Self: IndexMut<usize, Output=HeapCellValue>
@@ -173,14 +128,7 @@ pub trait CopierTarget
             }
         }
 
-        RedirectInfo { trail, list_redirect, offset: old_h }
-    }
-
-    fn duplicate_term_and_redirect(&mut self, addr: Addr) -> CellRedirect
-      where Self: IndexMut<usize, Output=HeapCellValue>
-    {
-        let redirect = self.duplicate_term_impl(addr);
-        self.unwind_and_redirect(redirect)
+        RedirectInfo { trail }
     }
 
     fn duplicate_term(&mut self, addr: Addr)

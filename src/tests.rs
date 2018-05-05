@@ -1313,6 +1313,13 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- duplicate_term(f(X), f(X)).",
                            [["X = _1"]]);
 
+    // test duplicate_term on cyclic terms.
+    assert_prolog_failure!(&mut wam, "?- X = g(X, Y), Y = f(X), duplicate_term(Y, g(Z)).");
+    assert_prolog_success!(&mut wam, "?- X = g(X, Y), Y = f(X), duplicate_term(Y, f(Z)).",
+                           [["Y = f(g(X, Y))", "X = g(X, f(X))", "Z = g(Z, f(Z))"]]);
+    assert_prolog_success!(&mut wam, "?- X = g(X, Y), Y = f(X), duplicate_term(Y, V).",
+                           [["Y = f(g(X, Y))", "X = g(X, f(X))", "V = f(g(_9, V))"]]);
+    
     assert_prolog_success!(&mut wam, "?- float(3.14159269).");
     assert_prolog_failure!(&mut wam, "?- float(3).");
     assert_prolog_failure!(&mut wam, "?- float(\"sdfsa\").");

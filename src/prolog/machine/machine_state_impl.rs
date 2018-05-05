@@ -50,7 +50,6 @@ impl MachineState {
             hb: 0,
             block: 0,
             ball: Ball::new(),
-            redirect: CellRedirect::new(),
             interms: vec![Number::default(); 256]
         }
     }
@@ -1618,9 +1617,9 @@ impl MachineState {
                 let addr = self[temp_v!(1)].clone();
                 self.ball.boundary = self.heap.h;
 
-                self.redirect = {
+                {
                     let mut duplicator = DuplicateBallTerm::new(self);
-                    duplicator.duplicate_term_and_redirect(addr)
+                    duplicator.duplicate_term(addr);
                 };
                 
                 self.p += 1;
@@ -2333,6 +2332,5 @@ impl MachineState {
         self.block = 0;
         
         self.ball.reset();
-        self.redirect.clear();
     }
 }
