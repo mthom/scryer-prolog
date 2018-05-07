@@ -183,14 +183,18 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         printer
     }
 
-    fn print_offset(&mut self, addr: Addr) {
+    fn offset_as_string(&self, addr: Addr) -> Option<String> {
         match addr {
             Addr::HeapCell(h) | Addr::Lis(h) | Addr::Str(h) =>
-                self.outputter.append(format!("_{}", h).as_str()),
+                Some(format!("_{}", h)),
             Addr::StackCell(fr, sc) =>
-                self.outputter.append(format!("s_{}_{}", fr, sc).as_str()),
-            _ => {}
+                Some(format!("s_{}_{}", fr, sc)),
+            _ => None
         }
+    }
+
+    fn print_offset(&mut self, addr: Addr) {
+        self.offset_as_string(addr).map(|s| self.outputter.append(s.as_str()));
     }
 
     fn check_for_seen(&mut self, iter: &mut HCPreOrderIterator) -> Option<HeapCellValue> {
@@ -214,6 +218,11 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
 
                         None
                     } else {
+                        if let Some(s) = self.offset_as_string(addr.clone()) {
+                            let var = Rc::new(s);
+                            self.heap_locs.insert(addr.clone(), var);
+                        }
+
                         self.printed_vars.insert(addr);
                         iter.next()
                     }
