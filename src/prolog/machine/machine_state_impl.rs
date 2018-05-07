@@ -122,7 +122,7 @@ impl MachineState {
                                        -> Outputter
       where Fmt: HCValueFormatter, Outputter: HCValueOutputter
     {
-        let printer = HCPrinter::from_heap_locs_as_seen(&self, fmt, output, var_dir);
+        let printer = HCPrinter::from_heap_locs(&self, fmt, output, var_dir);
         printer.print(addr)
     }
     

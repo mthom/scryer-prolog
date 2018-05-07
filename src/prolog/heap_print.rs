@@ -2,9 +2,8 @@ use prolog::ast::*;
 use prolog::heap_iter::*;
 use prolog::machine::machine_state::MachineState;
 
-use std::borrow::Cow;
 use std::cell::Cell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 #[derive(Clone)]
@@ -142,13 +141,23 @@ impl HCValueFormatter for TermFormatter {
     }
 }
 
+type ReverseHeapVarDict<'a> = HashMap<Addr, Rc<Var>>;
+
 pub struct HCPrinter<'a, Formatter, Outputter> {
     formatter:    Formatter,
     outputter:    Outputter,
     machine_st:   &'a MachineState,
     state_stack:  Vec<TokenOrRedirect>,
-    heap_locs:    Cow<'a, HeapVarDict>,
+    heap_locs:    ReverseHeapVarDict<'a>,
     printed_vars: HashSet<Addr>
+}
+
+fn reverse_heap_locs<'a>(machine_st: &'a MachineState, heap_locs: &'a HeapVarDict)
+                         -> ReverseHeapVarDict<'a>
+{
+    heap_locs.iter().map(|(var, var_addr)| {
+        (machine_st.store(machine_st.deref(var_addr.clone())), var.clone())
+    }).collect()
 }
 
 impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
@@ -160,7 +169,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                     outputter: output,
                     machine_st,
                     state_stack: vec![],
-                    heap_locs: Cow::default(),
+                    heap_locs: ReverseHeapVarDict::new(),
                     printed_vars: HashSet::new() }
     }
 
@@ -170,21 +179,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     {
         let mut printer = Self::new(machine_st, fmt, output);
 
-        printer.heap_locs = Cow::Borrowed(heap_locs);
-        printer
-    }
-
-    pub fn from_heap_locs_as_seen(machine_st: &'a MachineState, fmt: Formatter,
-                                  output: Outputter, heap_locs: &'a HeapVarDict)
-                                  -> Self
-    {
-        let mut printer = Self::from_heap_locs(machine_st, fmt, output, heap_locs);
-
-        for (_, addr) in heap_locs.iter() {
-            let addr = machine_st.store(machine_st.deref(addr.clone()));
-            printer.printed_vars.insert(addr.clone());
-        }
-
+        printer.heap_locs = reverse_heap_locs(machine_st, heap_locs);
         printer
     }
 
@@ -198,37 +193,33 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         }
     }
 
-    // returns a HeapCellValue iff the next element to come hasn't been seen previously.
     fn check_for_seen(&mut self, iter: &mut HCPreOrderIterator) -> Option<HeapCellValue> {
         iter.stack().last().cloned().and_then(|addr| {
             let addr = self.machine_st.store(self.machine_st.deref(addr));
 
-            for (var, var_addr) in self.heap_locs.iter() {
-                if &addr == &self.machine_st.store(self.machine_st.deref(var_addr.clone())) {
-                    if !self.printed_vars.contains(&addr) {
-                        self.printed_vars.insert(addr);
-                        return iter.next();
-                    } else {
-                        iter.stack().pop();
-                        self.outputter.append(var.as_str());
-
-                        return None;
-                    }
-                }
-            }
-
-            if self.machine_st.is_cyclic_term(addr.clone()) {
-                if self.printed_vars.contains(&addr) {
-                    iter.stack().pop();
-                    self.print_offset(addr);
-                    
-                    None
-                } else {
+            match self.heap_locs.get(&addr).cloned() {
+                Some(var) => if !self.printed_vars.contains(&addr) {
                     self.printed_vars.insert(addr);
+                    return iter.next();
+                } else {
+                    iter.stack().pop();
+                    self.outputter.append(var.as_str());
+
+                    return None;
+                },
+                None => if self.machine_st.is_cyclic_term(addr.clone()) {
+                    if self.printed_vars.contains(&addr) {
+                        iter.stack().pop();
+                        self.print_offset(addr);
+
+                        None
+                    } else {
+                        self.printed_vars.insert(addr);
+                        iter.next()
+                    }
+                } else {
                     iter.next()
                 }
-            } else {
-                iter.next()
             }
         })
     }
@@ -279,8 +270,6 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         }
     }
 
-    //TODO: idea: hand a mutable ref to iter to handle_heap_term,
-    // and have it query the stack before getting the next thing.
     pub fn print(mut self, addr: Addr) -> Outputter {
         let mut iter = HCPreOrderIterator::new(&self.machine_st, addr);
 
