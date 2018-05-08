@@ -399,7 +399,10 @@ impl RelationWorker {
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
             Term::Clause(r, name, mut terms, fixity) =>
-                if let Some(inlined_ct) = InlinedClauseType::from(name.as_str(), terms.len()) {
+                if let Some(system_ct) = SystemClauseType::from(name.as_str(), terms.len()) {
+                    Ok(QueryTerm::Clause(r, ClauseType::System(system_ct), terms))
+                }
+                else if let Some(inlined_ct) = InlinedClauseType::from(name.as_str(), terms.len()) {
                     Ok(QueryTerm::Clause(r, ClauseType::Inlined(inlined_ct), terms))
                 } else if name.as_str() == ";" {
                     if terms.len() == 2 {

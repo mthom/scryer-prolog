@@ -769,12 +769,6 @@ macro_rules! cyclic_term_execute {
     )
 }
 
-macro_rules! skip_max_list_execute {
-    () => (
-        Line::Control(ControlInstruction::CallClause(ClauseType::SkipMaxList, 4, 0, true))
-    )
-}
-
 macro_rules! return_from_clause {
     ($lco:expr, $machine_st:expr) => {{
         if $lco {
