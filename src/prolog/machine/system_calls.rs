@@ -1,0 +1,162 @@
+use prolog::ast::*;
+use prolog::machine::machine_errors::*;
+use prolog::machine::machine_state::*;
+use prolog::num::{ToPrimitive, Zero};
+use prolog::num::bigint::BigInt;
+
+use std::rc::Rc;
+
+struct BrentAlgState {
+    hare: usize,
+    tortoise: usize,
+    power: usize,
+    steps: usize
+}
+
+impl BrentAlgState {
+    fn new(hare: usize) -> Self {
+        BrentAlgState { hare, tortoise: hare, power: 2, steps: 1 }
+    }
+}
+
+impl MachineState {    
+    // a step in Brent's algorithm.
+    fn brents_alg_step(&self, brent_st: &mut BrentAlgState) -> Option<CycleSearchResult>
+    {
+        match self.heap[brent_st.hare].clone() {
+            HeapCellValue::Addr(Addr::Lis(l)) => {
+                brent_st.hare = l + 1;
+                brent_st.steps += 1;
+
+                if brent_st.tortoise == brent_st.hare {
+                    return Some(CycleSearchResult::NotList);
+                } else if brent_st.steps == brent_st.power {
+                    brent_st.tortoise = brent_st.hare;
+                    brent_st.power <<= 1;
+                }
+
+                None
+            },
+            HeapCellValue::NamedStr(..) =>
+                Some(CycleSearchResult::NotList),
+            HeapCellValue::Addr(addr) =>
+                match self.store(self.deref(addr)) {
+                    Addr::Con(Constant::EmptyList) =>
+                        Some(CycleSearchResult::ProperList(brent_st.steps)),
+                    Addr::HeapCell(_) | Addr::StackCell(..) =>
+                        Some(CycleSearchResult::PartialList(brent_st.steps, brent_st.hare)),
+                    _ =>
+                        Some(CycleSearchResult::NotList)
+                }
+        }
+    }
+
+    pub(super) fn detect_cycles_with_max(&self, max_steps: usize, addr: Addr) -> CycleSearchResult
+    {
+        let addr = self.store(self.deref(addr));
+
+        let mut hare = match addr {
+            Addr::Lis(offset) if max_steps > 0 => offset + 1,
+            Addr::Lis(offset) => return CycleSearchResult::UntouchedList(offset),
+            Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
+            _ => return CycleSearchResult::NotList
+        };
+
+        let mut brent_st = BrentAlgState::new(hare);
+        
+        loop {
+            if brent_st.steps == max_steps {
+                return CycleSearchResult::PartialList(brent_st.steps, brent_st.hare);
+            }
+
+            if let Some(result) = self.brents_alg_step(&mut brent_st) {
+                return result;
+            }
+        }
+    }
+
+    pub(super) fn detect_cycles(&self, addr: Addr) -> CycleSearchResult
+    {
+        let addr = self.store(self.deref(addr));
+
+        let mut hare = match addr {
+            Addr::Lis(offset) => offset + 1,
+            Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
+            _ => return CycleSearchResult::NotList
+        };
+
+        let mut brent_st = BrentAlgState::new(hare);
+        
+        loop {
+            if let Some(result) = self.brents_alg_step(&mut brent_st) {
+                return result;
+            }
+        }
+    }
+    
+    fn finalize_skip_max_list(&mut self, n: usize, addr: Addr) {
+        let target_n = self[temp_v!(1)].clone();
+        self.unify(Addr::Con(integer!(n)), target_n);
+
+        if !self.fail {
+            let xs = self[temp_v!(4)].clone();
+            self.unify(addr, xs);
+        }
+    }
+
+    pub(super) fn skip_max_list(&mut self) -> Result<(), MachineError> {
+        let max_steps = self.arith_eval_by_metacall(temp_v!(2))?;
+
+        match max_steps {
+            Number::Integer(ref max_steps)
+                if max_steps.to_isize().map(|i| i >= -1).unwrap_or(false) => {
+                    let n = self.store(self.deref(self[temp_v!(1)].clone()));
+                    
+                    match n {
+                        Addr::Con(Constant::Number(Number::Integer(ref n))) if n.is_zero() => {
+                            let xs0 = self[temp_v!(3)].clone();
+                            let xs  = self[temp_v!(4)].clone();
+
+                            self.unify(xs0, xs);
+                        },
+                        _ => {
+                            let search_result = if let Some(max_steps) = max_steps.to_isize() {
+                                if max_steps == -1 {
+                                    self.detect_cycles(self[temp_v!(3)].clone())
+                                } else {
+                                    self.detect_cycles_with_max(max_steps as usize,
+                                                                self[temp_v!(3)].clone())
+                                }
+                            } else {
+                                self.detect_cycles(self[temp_v!(3)].clone())
+                            };
+
+                            match search_result {
+                                CycleSearchResult::UntouchedList(l) =>
+                                    self.finalize_skip_max_list(0, Addr::Lis(l)),
+                                CycleSearchResult::EmptyList =>
+                                    self.finalize_skip_max_list(0, Addr::Con(Constant::EmptyList)),
+                                CycleSearchResult::PartialList(n, hc) =>
+                                    self.finalize_skip_max_list(n, Addr::HeapCell(hc)),
+                                CycleSearchResult::ProperList(n) =>
+                                    self.finalize_skip_max_list(n, Addr::Con(Constant::EmptyList)),
+                                CycleSearchResult::NotList => {
+                                    let xs0 = self[temp_v!(3)].clone();
+                                    self.finalize_skip_max_list(0, xs0);
+                                }
+                            }
+                        }
+                    }
+                },
+            _ => self.fail = true
+        };
+
+        Ok(())
+    }
+    
+    pub(super) fn execute_system(&mut self, ct: &SystemClauseType) -> Result<(), MachineError> {
+        match ct {
+            &SystemClauseType::SkipMaxList => self.skip_max_list()
+        }
+    }
+}
