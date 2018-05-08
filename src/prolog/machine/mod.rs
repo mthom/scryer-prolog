@@ -7,6 +7,7 @@ mod machine_errors;
 pub(super) mod machine_state;
 #[macro_use]
 mod machine_state_impl;
+mod system_calls;
 
 use prolog::machine::machine_state::*;
 

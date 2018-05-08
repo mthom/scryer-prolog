@@ -100,12 +100,12 @@ impl MachineState {
       where Fmt: HCValueFormatter, Outputter: HCValueOutputter
     {
         let orig_len = output.len();
-        
+
         output.begin_new_var();
 
         output.append(var.as_str());
         output.append(" = ");
-        
+
         let printer    = HCPrinter::from_heap_locs(&self, fmt, output, var_dir);
         let mut output = printer.print(addr);
 
@@ -125,7 +125,7 @@ impl MachineState {
         let printer = HCPrinter::from_heap_locs_as_seen(&self, fmt, output, var_dir);
         printer.print(addr)
     }
-    
+
     pub(super)
     fn print_term<Fmt, Outputter>(&self, addr: Addr, fmt: Fmt, output: Outputter) -> Outputter
       where Fmt: HCValueFormatter, Outputter: HCValueOutputter
@@ -1106,10 +1106,10 @@ impl MachineState {
             self.heap.h - self.ball.boundary
         }
     }
-    
+
     pub(super) fn copy_and_align_ball_to_heap(&mut self) -> usize {
         let diff = self.heap_ball_boundary_diff();
-        
+
         for heap_value in self.ball.stub.iter().cloned() {
             self.heap.push(match heap_value {
                 HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
@@ -1186,7 +1186,7 @@ impl MachineState {
 
         self.p += 1;
     }
-            
+
     pub(super) fn compare_term(&mut self, qt: CompareTermQT) {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
@@ -1441,7 +1441,7 @@ impl MachineState {
                 try_or_fail!(self, call_policy.trust_me(self));
             },
             &BuiltInInstruction::EraseBall => {
-                self.ball.reset();                
+                self.ball.reset();
                 self.p += 1;
             },
             &BuiltInInstruction::GetArg(lco) =>
@@ -1621,7 +1621,7 @@ impl MachineState {
                     let mut duplicator = DuplicateBallTerm::new(self);
                     duplicator.duplicate_term(addr);
                 };
-                
+
                 self.p += 1;
             },
             &BuiltInInstruction::SetCutPoint(r) =>
@@ -1839,157 +1839,6 @@ impl MachineState {
                 },
             a => Err(self.error_form(self.type_error(ValidType::Pair, a), stub))
         }
-    }
-
-    pub(super) fn detect_cycles_with_max(&self, max_steps: usize, addr: Addr) -> CycleSearchResult
-    {
-        let addr = self.store(self.deref(addr));
-
-        let mut hare = match addr {
-            Addr::Lis(offset) if max_steps > 0 => offset + 1,
-            Addr::Lis(offset) => return CycleSearchResult::UntouchedList(offset),
-            Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
-            _ => return CycleSearchResult::NotList
-        };
-
-        // use Brent's algorithm to detect cycles.
-        let mut tortoise = hare;
-        let mut power = 2;
-        let mut steps = 1;
-
-        loop {
-            if steps == max_steps {
-                return CycleSearchResult::PartialList(steps, hare);
-            }
-
-            match self.heap[hare].clone() {
-                HeapCellValue::Addr(Addr::Lis(l)) => {
-                    hare = l + 1;
-                    steps += 1;
-
-                    if tortoise == hare {
-                        return CycleSearchResult::NotList;
-                    } else if steps == power {
-                        tortoise = hare;
-                        power <<= 1;
-                    }
-                },
-                HeapCellValue::NamedStr(..) =>
-                    return CycleSearchResult::NotList,
-                HeapCellValue::Addr(addr) =>
-                    match self.store(self.deref(addr)) {
-                        Addr::Con(Constant::EmptyList) =>
-                            return CycleSearchResult::ProperList(steps),
-                        Addr::HeapCell(_) | Addr::StackCell(..) =>
-                            return CycleSearchResult::PartialList(steps, hare),
-                        _ =>
-                            return CycleSearchResult::NotList
-                    }
-            }
-        }
-    }
-
-    pub(super) fn detect_cycles(&self, addr: Addr) -> CycleSearchResult
-    {
-        let addr = self.store(self.deref(addr));
-
-        let mut hare = match addr {
-            Addr::Lis(offset) => offset + 1,
-            Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
-            _ => return CycleSearchResult::NotList
-        };
-
-        // use Brent's algorithm to detect cycles.
-        let mut tortoise = hare;
-        let mut power = 2;
-        let mut steps = 1;
-
-        loop {
-            match self.heap[hare].clone() {
-                HeapCellValue::Addr(Addr::Lis(l)) => {
-                    hare = l + 1;
-                    steps += 1;
-
-                    if tortoise == hare {
-                        return CycleSearchResult::NotList;
-                    } else if steps == power {
-                        tortoise = hare;
-                        power <<= 1;
-                    }
-                },
-                HeapCellValue::NamedStr(..) =>
-                    return CycleSearchResult::NotList,
-                HeapCellValue::Addr(addr) =>
-                    match self.store(self.deref(addr)) {
-                        Addr::Con(Constant::EmptyList) =>
-                            return CycleSearchResult::ProperList(steps),
-                        Addr::HeapCell(_) | Addr::StackCell(..) =>
-                            return CycleSearchResult::PartialList(steps, hare),
-                        _ =>
-                            return CycleSearchResult::NotList
-                    }
-            }
-        }
-    }
-
-    fn finalize_skip_max_list(&mut self, n: usize, addr: Addr) {
-        let target_n = self[temp_v!(1)].clone();
-        self.unify(Addr::Con(integer!(n)), target_n);
-
-        if !self.fail {
-            let xs = self[temp_v!(4)].clone();
-            self.unify(addr, xs);
-        }
-    }
-
-    pub(super) fn skip_max_list(&mut self) -> Result<(), MachineError> {
-        let max_steps = self.arith_eval_by_metacall(temp_v!(2))?;
-
-        match max_steps {
-            Number::Integer(ref max_steps)
-                if max_steps.to_isize().map(|i| i >= -1).unwrap_or(false) => {
-                    let n = self.store(self.deref(self[temp_v!(1)].clone()));
-                    
-                    match n {
-                        Addr::Con(Constant::Number(Number::Integer(ref n))) if n.is_zero() => {
-                            let xs0 = self[temp_v!(3)].clone();
-                            let xs  = self[temp_v!(4)].clone();
-
-                            self.unify(xs0, xs);
-                        },
-                        _ => {
-                            let search_result = if let Some(max_steps) = max_steps.to_isize() {
-                                if max_steps == -1 {
-                                    self.detect_cycles(self[temp_v!(3)].clone())
-                                } else {
-                                    self.detect_cycles_with_max(max_steps as usize,
-                                                                self[temp_v!(3)].clone())
-                                }
-                            } else {
-                                self.detect_cycles(self[temp_v!(3)].clone())
-                            };
-
-                            match search_result {
-                                CycleSearchResult::UntouchedList(l) =>
-                                    self.finalize_skip_max_list(0, Addr::Lis(l)),
-                                CycleSearchResult::EmptyList =>
-                                    self.finalize_skip_max_list(0, Addr::Con(Constant::EmptyList)),
-                                CycleSearchResult::PartialList(n, hc) =>
-                                    self.finalize_skip_max_list(n, Addr::HeapCell(hc)),
-                                CycleSearchResult::ProperList(n) =>
-                                    self.finalize_skip_max_list(n, Addr::Con(Constant::EmptyList)),
-                                CycleSearchResult::NotList => {
-                                    let xs0 = self[temp_v!(3)].clone();
-                                    self.finalize_skip_max_list(0, xs0);
-                                }
-                            }
-                        }
-                    }
-                },
-            _ => self.fail = true
-        };
-
-        Ok(())
     }
 
     pub(super) fn duplicate_term(&mut self) {
@@ -2330,7 +2179,7 @@ impl MachineState {
         self.or_stack.clear();
         self.registers = vec![Addr::HeapCell(0); 64];
         self.block = 0;
-        
+
         self.ball.reset();
     }
 }

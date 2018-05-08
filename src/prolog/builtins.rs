@@ -736,7 +736,6 @@ fn get_builtins() -> Code {
          keysort_execute!(), // keysort/2, 484.
          acyclic_term_execute!(), // acyclic_term/1, 485.
          cyclic_term_execute!(), // cyclic_term/1, 486.
-         skip_max_list_execute!() // '$skip_max_list', 487.
     ]
 }
 
@@ -856,7 +855,6 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
     code_dir.insert((clause_name!("keysort"), 2), CodeIndex::from((484, builtin.clone())));
     code_dir.insert((clause_name!("acyclic_term"), 1), CodeIndex::from((485, builtin.clone())));
     code_dir.insert((clause_name!("cyclic_term"), 1), CodeIndex::from((486, builtin.clone())));
-    code_dir.insert((clause_name!("$skip_max_list"), 4), CodeIndex::from((487, builtin.clone())));
     
     (code_dir, op_dir)
 }

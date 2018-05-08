@@ -684,6 +684,26 @@ pub struct Rule {
 }
 
 #[derive(Clone)]
+pub enum SystemClauseType {
+    SkipMaxList
+}
+
+impl SystemClauseType {
+    pub fn name(&self) -> ClauseName {
+        match self {
+            &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
+        }
+    }
+    
+    pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
+        match (name, arity) {
+            ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
+            _ => None
+        }
+    }
+}
+
+#[derive(Clone)]
 pub enum ClauseType {
     AcyclicTerm,
     Arg,
@@ -705,8 +725,8 @@ pub enum ClauseType {
     Op(ClauseName, Fixity, CodeIndex),
     Named(ClauseName, CodeIndex),
     SetupCallCleanup,
-    SkipMaxList,
     Sort,
+    System(SystemClauseType),
     Throw,
 }
 
@@ -788,14 +808,14 @@ impl ClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &ClauseType::AcyclicTerm => clause_name!("acyclic_term"),
+            &ClauseType::AcyclicTerm => clause_name!("$acyclic_term"),
             &ClauseType::Arg => clause_name!("arg"),
             &ClauseType::CallN => clause_name!("call"),
             &ClauseType::CallWithInferenceLimit => clause_name!("call_with_inference_limit"),
             &ClauseType::Catch => clause_name!("catch"),
             &ClauseType::Compare => clause_name!("compare"),
             &ClauseType::CompareTerm(qt) => clause_name!(qt.name()),
-            &ClauseType::CyclicTerm => clause_name!("cyclic_term"),
+            &ClauseType::CyclicTerm => clause_name!("$cyclic_term"),
             &ClauseType::Display => clause_name!("display"),
             &ClauseType::DuplicateTerm => clause_name!("duplicate_term"),
             &ClauseType::Eq => clause_name!("=="),
@@ -803,26 +823,26 @@ impl ClauseType {
             &ClauseType::Ground  => clause_name!("ground"),
             &ClauseType::Inlined(inlined) => clause_name!(inlined.name()),
             &ClauseType::Is => clause_name!("is"),
-            &ClauseType::KeySort => clause_name!("keysort"),
+            &ClauseType::KeySort => clause_name!("$keysort"),
             &ClauseType::NotEq => clause_name!("\\=="),
             &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
             &ClauseType::SetupCallCleanup => clause_name!("setup_call_cleanup"),
-            &ClauseType::SkipMaxList => clause_name!("$skip_max_list"),
-            &ClauseType::Sort => clause_name!("sort"),
+            &ClauseType::System(ref system) => system.name(),
+            &ClauseType::Sort => clause_name!("$sort"),
             &ClauseType::Throw => clause_name!("throw")
         }
     }
 
     pub fn from(name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
         match (name.as_str(), arity) {
-            ("acyclic_term", 1) => ClauseType::AcyclicTerm,
+            ("$acyclic_term", 1) => ClauseType::AcyclicTerm,
             ("arg", 3)   => ClauseType::Arg,
             ("call", _)  => ClauseType::CallN,
             ("call_with_inference_limit", 3) => ClauseType::CallWithInferenceLimit,
             ("catch", 3) => ClauseType::Catch,
             ("compare", 3) => ClauseType::Compare,
-            ("cyclic_term", 1) => ClauseType::CyclicTerm,
+            ("$cyclic_term", 1) => ClauseType::CyclicTerm,
             ("@>", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThan),
             ("@<", 2) => ClauseType::CompareTerm(CompareTermQT::LessThan),
             ("@>=", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual),
@@ -835,11 +855,10 @@ impl ClauseType {
             ("functor", 3) => ClauseType::Functor,
             ("ground", 1) => ClauseType::Ground,
             ("is", 2) => ClauseType::Is,
-            ("keysort", 2) => ClauseType::KeySort,
+            ("$keysort", 2) => ClauseType::KeySort,
             ("\\==", 2) => ClauseType::NotEq,
-            ("setup_call_cleanup", 3) => ClauseType::SetupCallCleanup,
-            ("$skip_max_list", 4) => ClauseType::SkipMaxList,
-            ("sort", 2) => ClauseType::Sort,
+            ("setup_call_cleanup", 3) => ClauseType::SetupCallCleanup,            
+            ("$sort", 2) => ClauseType::Sort,
             ("throw", 1) => ClauseType::Throw,
             _ => if let Some(fixity) = fixity {
                 ClauseType::Op(name, fixity, CodeIndex::default())

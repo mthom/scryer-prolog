@@ -17,14 +17,14 @@ use std::rc::Rc;
 
 pub(super) struct Ball {
     pub(super) boundary: usize, // ball.0
-    pub(super) stub: MachineStub, // ball.1    
+    pub(super) stub: MachineStub, // ball.1
 }
 
 impl Ball {
     pub(super) fn new() -> Self {
         Ball { boundary: 0, stub: MachineStub::new() }
     }
-    
+
     pub(super) fn reset(&mut self) {
         self.boundary = 0;
         self.stub.clear();
@@ -502,10 +502,10 @@ pub(crate) trait CallPolicy: Any {
             },
             &ClauseType::Sort => {
                 machine_st.check_sort_errors()?;
-                
+
                 let stub = machine_st.functor_stub(clause_name!("sort"), 2);
-                let mut list = machine_st.try_from_list(temp_v!(1), stub)?;                                
-                
+                let mut list = machine_st.try_from_list(temp_v!(1), stub)?;
+
                 list.sort_unstable_by(|a1, a2| machine_st.compare_term_test(a1, a2));
                 machine_st.term_dedup(&mut list);
 
@@ -518,11 +518,11 @@ pub(crate) trait CallPolicy: Any {
             },
             &ClauseType::KeySort => {
                 machine_st.check_keysort_errors()?;
-                
+
                 let stub = machine_st.functor_stub(clause_name!("keysort"), 2);
                 let mut list = machine_st.try_from_list(temp_v!(1), stub)?;
-                let mut key_pairs = Vec::new();                
-                
+                let mut key_pairs = Vec::new();
+
                 for val in list {
                     let key = machine_st.project_onto_key(val.clone())?;
                     key_pairs.push((key, val.clone()));
@@ -569,11 +569,9 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.execute_inlined(inlined, &vec![temp_v!(1), temp_v!(2)]);
                 Ok(())
             },
-            &ClauseType::SkipMaxList => {
-                machine_st.skip_max_list()?;
-                machine_st.p += 1;
-                
-                Ok(())
+            &ClauseType::System(ref system) => {
+                machine_st.execute_system(system)?;
+                return_from_clause!(lco, machine_st)
             }
         }
     }
