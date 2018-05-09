@@ -70,14 +70,15 @@ impl<'a> SubModuleUser for MachineCodeIndex<'a> {
 impl Machine {
     pub fn new() -> Self {
         let atom_tbl = Rc::new(RefCell::new(HashSet::new()));
-        let (code, code_dir, op_dir) = default_build();
+        let op_dir = default_op_dir(); //TODO: change to the builtins module once it's done.
+        //let (code, code_dir, op_dir) = default_build();
 
         Machine {
             ms: MachineState::new(atom_tbl),
             call_policy: Box::new(DefaultCallPolicy {}),
             cut_policy: Box::new(DefaultCutPolicy {}),
-            code,
-            code_dir,
+            code: Code::new(),
+            code_dir: CodeDir::new(),
             term_dir: TermDir::new(),
             op_dir,
             modules: HashMap::new(),

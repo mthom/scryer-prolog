@@ -1041,7 +1041,15 @@ impl MachineState {
         self.p  = CodePtr::DirEntry(59, clause_name!("builtin"));
     }
 
-    fn unwind_stack(&mut self) {
+    pub(super) fn set_ball(&mut self) {
+        let addr = self[temp_v!(1)].clone();
+        self.ball.boundary = self.heap.h;
+             
+        let mut duplicator = DuplicateBallTerm::new(self);
+        duplicator.duplicate_term(addr);        
+    }
+    
+    pub(super) fn unwind_stack(&mut self) {
         self.b = self.block;
         self.or_stack.truncate(self.b);
 
@@ -1614,14 +1622,7 @@ impl MachineState {
                 self.p += 1;
             },
             &BuiltInInstruction::SetBall => {
-                let addr = self[temp_v!(1)].clone();
-                self.ball.boundary = self.heap.h;
-
-                {
-                    let mut duplicator = DuplicateBallTerm::new(self);
-                    duplicator.duplicate_term(addr);
-                };
-
+                self.set_ball();
                 self.p += 1;
             },
             &BuiltInInstruction::SetCutPoint(r) =>

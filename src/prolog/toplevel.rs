@@ -393,17 +393,13 @@ impl RelationWorker {
                 if name.as_str() == "!" || name.as_str() == "blocked_!" {
                     Ok(QueryTerm::BlockedCut)
                 } else {
-                    Ok(QueryTerm::Clause(r, ClauseType::Named(name, CodeIndex::default()),
-                                         vec![]))
+                    Ok(QueryTerm::Clause(r, ClauseType::Named(name, CodeIndex::default()), vec![]))
                 },
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
             Term::Clause(r, name, mut terms, fixity) =>
                 if let Some(system_ct) = SystemClauseType::from(name.as_str(), terms.len()) {
                     Ok(QueryTerm::Clause(r, ClauseType::System(system_ct), terms))
-                }
-                else if let Some(inlined_ct) = InlinedClauseType::from(name.as_str(), terms.len()) {
-                    Ok(QueryTerm::Clause(r, ClauseType::Inlined(inlined_ct), terms))
                 } else if name.as_str() == ";" {
                     if terms.len() == 2 {
                         let term = Term::Clause(r, name.clone(), terms, fixity);
@@ -612,7 +608,10 @@ impl<R: Read> TopLevelWorker<R> {
             };
         }
 
-        results.push(deque_to_packet(append_preds(&mut preds), rel_worker.parse_queue()?));
+        if !preds.is_empty() {
+            results.push(deque_to_packet(append_preds(&mut preds), rel_worker.parse_queue()?));
+        }
+        
         Ok(results)
     }
 

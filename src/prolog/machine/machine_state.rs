@@ -434,10 +434,16 @@ pub(crate) trait CallPolicy: Any {
             },
             &ClauseType::CallN =>
                 if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-                    if let Some(idx) = code_dirs.get(name.clone(), arity, clause_name!("user")) {
-                        self.context_call(machine_st, name, arity, idx, lco)
-                    } else {
-                        Err(machine_st.existence_error(name, arity))
+                    let user = clause_name!("user");
+                    
+                    match ClauseType::from(name.clone(), arity, None) {
+                        ClauseType::Op(..) | ClauseType::Named(..) =>
+                            if let Some(idx) = code_dirs.get(name.clone(), arity, user) {
+                                self.context_call(machine_st, name, arity, idx, lco)
+                            } else {
+                                Err(machine_st.existence_error(name, arity))
+                            },
+                        ct => self.try_call_clause(machine_st, code_dirs, &ct, arity, lco),
                     }
                 } else {
                     Ok(())

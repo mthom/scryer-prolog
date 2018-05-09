@@ -192,11 +192,13 @@ pub trait SubModuleUser {
     // returns true on successful import.
     fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
         let name = name.defrock_brackets();
-
+        let mut found_op = false;
+        
         {
             let mut insert_op_dir = |fix| {
                 if let Some(op_data) = submodule.op_dir.get(&(name.clone(), fix)) {
                     self.op_dir().insert((name.clone(), fix), op_data.clone());
+                    found_op = true;
                 }
             };
 
@@ -212,7 +214,7 @@ pub trait SubModuleUser {
             self.insert_dir_entry(name, arity, code_data.clone());
             true
         } else {
-            false
+            found_op
         }
     }
 
@@ -227,7 +229,7 @@ pub trait SubModuleUser {
                 return EvalSession::from(SessionError::ModuleDoesNotContainExport);
             }
         }
-
+        
         EvalSession::EntrySuccess
     }
 
@@ -594,7 +596,7 @@ impl InlinedClauseType {
             (">", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThan)),
             ("<", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThan)),
             (">=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThanOrEqual)),
-            ("<=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThanOrEqual)),
+            ("=<", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThanOrEqual)),
             ("=\\=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::NotEqual)),
             ("=:=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::Equal)),
             ("atom", 1) => Some(InlinedClauseType::IsAtom),
@@ -808,14 +810,14 @@ impl ClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &ClauseType::AcyclicTerm => clause_name!("$acyclic_term"),
+            &ClauseType::AcyclicTerm => clause_name!("acyclic_term"),
             &ClauseType::Arg => clause_name!("arg"),
             &ClauseType::CallN => clause_name!("call"),
             &ClauseType::CallWithInferenceLimit => clause_name!("call_with_inference_limit"),
             &ClauseType::Catch => clause_name!("catch"),
             &ClauseType::Compare => clause_name!("compare"),
             &ClauseType::CompareTerm(qt) => clause_name!(qt.name()),
-            &ClauseType::CyclicTerm => clause_name!("$cyclic_term"),
+            &ClauseType::CyclicTerm => clause_name!("cyclic_term"),
             &ClauseType::Display => clause_name!("display"),
             &ClauseType::DuplicateTerm => clause_name!("duplicate_term"),
             &ClauseType::Eq => clause_name!("=="),
@@ -823,26 +825,30 @@ impl ClauseType {
             &ClauseType::Ground  => clause_name!("ground"),
             &ClauseType::Inlined(inlined) => clause_name!(inlined.name()),
             &ClauseType::Is => clause_name!("is"),
-            &ClauseType::KeySort => clause_name!("$keysort"),
+            &ClauseType::KeySort => clause_name!("keysort"),
             &ClauseType::NotEq => clause_name!("\\=="),
             &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
             &ClauseType::SetupCallCleanup => clause_name!("setup_call_cleanup"),
             &ClauseType::System(ref system) => system.name(),
-            &ClauseType::Sort => clause_name!("$sort"),
+            &ClauseType::Sort => clause_name!("sort"),
             &ClauseType::Throw => clause_name!("throw")
         }
     }
 
     pub fn from(name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
+        if let Some(inlined_ct) = InlinedClauseType::from(name.as_str(), arity) {
+            return ClauseType::Inlined(inlined_ct);
+        }
+        
         match (name.as_str(), arity) {
-            ("$acyclic_term", 1) => ClauseType::AcyclicTerm,
+            ("acyclic_term", 1) => ClauseType::AcyclicTerm,
             ("arg", 3)   => ClauseType::Arg,
             ("call", _)  => ClauseType::CallN,
             ("call_with_inference_limit", 3) => ClauseType::CallWithInferenceLimit,
             ("catch", 3) => ClauseType::Catch,
             ("compare", 3) => ClauseType::Compare,
-            ("$cyclic_term", 1) => ClauseType::CyclicTerm,
+            ("cyclic_term", 1) => ClauseType::CyclicTerm,
             ("@>", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThan),
             ("@<", 2) => ClauseType::CompareTerm(CompareTermQT::LessThan),
             ("@>=", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual),
@@ -855,10 +861,10 @@ impl ClauseType {
             ("functor", 3) => ClauseType::Functor,
             ("ground", 1) => ClauseType::Ground,
             ("is", 2) => ClauseType::Is,
-            ("$keysort", 2) => ClauseType::KeySort,
+            ("keysort", 2) => ClauseType::KeySort,
             ("\\==", 2) => ClauseType::NotEq,
             ("setup_call_cleanup", 3) => ClauseType::SetupCallCleanup,            
-            ("$sort", 2) => ClauseType::Sort,
+            ("sort", 2) => ClauseType::Sort,
             ("throw", 1) => ClauseType::Throw,
             _ => if let Some(fixity) = fixity {
                 ClauseType::Op(name, fixity, CodeIndex::default())

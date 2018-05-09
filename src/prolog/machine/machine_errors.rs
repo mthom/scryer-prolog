@@ -141,6 +141,8 @@ impl MachineState {
         self.heap.append(err);
 
         self.registers[1] = Addr::HeapCell(h);
-        self.goto_throw();
+
+        self.set_ball();
+        self.unwind_stack();       
     }
 }

@@ -739,17 +739,17 @@ fn get_builtins() -> Code {
     ]
 }
 
-pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
+pub fn default_op_dir() -> OpDir
 {
-    let mut code_dir = HashMap::new();
-    let mut op_dir   = HashMap::new();
-
-    let builtin = ClauseName::BuiltIn("builtin");
-
-    op_dir.insert((clause_name!(":-"), Fixity::In),   (XFX, 1200, builtin.clone()));
-    op_dir.insert((clause_name!(":-"), Fixity::Pre),  (FX, 1200, builtin.clone()));
-    op_dir.insert((clause_name!("?-"), Fixity::Pre),  (FX, 1200, builtin.clone()));
-
+    let mut op_dir = HashMap::new();    
+    let module_name = clause_name!("builtins");
+    
+    op_dir.insert((clause_name!(":-"), Fixity::In),  (XFX, 1200, module_name.clone()));
+    op_dir.insert((clause_name!(":-"), Fixity::Pre), (FX, 1200, module_name.clone()));
+    op_dir.insert((clause_name!("?-"), Fixity::Pre), (FX, 1200, module_name.clone()));    
+    // op_dir.insert((clause_name!("/"), Fixity::In), (YFX, 400, module_name.clone()));
+    
+/*
     // control operators.
     op_dir.insert((clause_name!("\\+"), Fixity::Pre), (FY, 900, builtin.clone()));
     op_dir.insert((clause_name!("="), Fixity::In), (XFX, 700, builtin.clone()));
@@ -761,8 +761,7 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
     op_dir.insert((clause_name!("/\\"), Fixity::In), (YFX, 500, builtin.clone()));
     op_dir.insert((clause_name!("\\/"), Fixity::In), (YFX, 500, builtin.clone()));
     op_dir.insert((clause_name!("xor"), Fixity::In), (YFX, 500, builtin.clone()));
-    op_dir.insert((clause_name!("//"), Fixity::In), (YFX, 400, builtin.clone()));
-    op_dir.insert((clause_name!("/"), Fixity::In), (YFX, 400, builtin.clone()));
+    op_dir.insert((clause_name!("//"), Fixity::In), (YFX, 400, builtin.clone()));    
     op_dir.insert((clause_name!("div"), Fixity::In), (YFX, 400, builtin.clone()));
     op_dir.insert((clause_name!("*"), Fixity::In), (YFX, 400, builtin.clone()));
     op_dir.insert((clause_name!("-"), Fixity::Pre), (FY, 200, builtin.clone()));
@@ -819,7 +818,7 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
     code_dir.insert((clause_name!("integer"), 1), CodeIndex::from((163, builtin.clone())));
     code_dir.insert((clause_name!("display"), 1), CodeIndex::from((208, builtin.clone())));
 
-    code_dir.insert((clause_name!("is"), 2), CodeIndex::from((210, builtin.clone())));
+    //code_dir.insert((clause_name!("is"), 2), CodeIndex::from((210, builtin.clone())));
     code_dir.insert((clause_name!(">"), 2), CodeIndex::from((212, builtin.clone())));
     code_dir.insert((clause_name!("<"), 2), CodeIndex::from((214, builtin.clone())));
     code_dir.insert((clause_name!(">="), 2), CodeIndex::from((216, builtin.clone())));
@@ -851,14 +850,13 @@ pub fn build_code_and_op_dirs() -> (CodeDir, OpDir)
     code_dir.insert((clause_name!("\\=@="), 2), CodeIndex::from((408, builtin.clone())));
     code_dir.insert((clause_name!("compare"), 3), CodeIndex::from((480, builtin.clone())));
     code_dir.insert((clause_name!("atom"), 1), CodeIndex::from((481, builtin.clone())));
-    code_dir.insert((clause_name!("sort"), 2), CodeIndex::from((483, builtin.clone())));
-    code_dir.insert((clause_name!("keysort"), 2), CodeIndex::from((484, builtin.clone())));
-    code_dir.insert((clause_name!("acyclic_term"), 1), CodeIndex::from((485, builtin.clone())));
-    code_dir.insert((clause_name!("cyclic_term"), 1), CodeIndex::from((486, builtin.clone())));
     
     (code_dir, op_dir)
+     */
+    op_dir
 }
 
+/*
 pub fn default_build() -> (Code, CodeDir, OpDir)
 {
     let builtin_code = get_builtins();
@@ -866,64 +864,4 @@ pub fn default_build() -> (Code, CodeDir, OpDir)
 
     (builtin_code, code_dir, op_dir)
 }
-
-#[allow(dead_code)]
-pub fn builtin_module() -> Module
-{
-    let (code_dir, op_dir) = build_code_and_op_dirs();
-    let mut module_decl = module_decl!(clause_name!("builtin"),
-                                       vec![(clause_name!("atomic"), 1),
-                                            (clause_name!("var"), 1),
-                                            (clause_name!("false"), 0),
-                                            (clause_name!("catch"), 3),
-                                            (clause_name!("throw"), 1),
-                                            (clause_name!("(\\+)"), 1),
-                                            (clause_name!("duplicate_term"), 2),
-                                            (clause_name!("(=)"), 2),
-                                            (clause_name!("true"), 0),
-                                            (clause_name!("(,)"), 2),
-                                            (clause_name!("(;)"), 2),
-                                            (clause_name!("->"), 2),
-                                            (clause_name!("functor"), 3),
-                                            (clause_name!("arg"), 3),
-                                            (clause_name!("(=..)"), 3),
-                                            (clause_name!("display"), 1),
-                                            (clause_name!("is"), 2),
-                                            (clause_name!("(>)"), 2),
-                                            (clause_name!("(<)"), 2),
-                                            (clause_name!("(>=)"), 2),
-                                            (clause_name!("(=<)"), 2),
-                                            (clause_name!("(=\\=)"), 2),
-                                            (clause_name!("(=:=)"), 2),
-                                            (clause_name!("(@>)"), 2),
-                                            (clause_name!("(@<)"), 2),
-                                            (clause_name!("(@>=)"), 2),
-                                            (clause_name!("(@=<)"), 2),
-                                            (clause_name!("(=@=)"), 2),
-                                            (clause_name!("(\\=@=)"), 2),
-                                            (clause_name!("(==)"), 2),
-                                            (clause_name!("(\\==)"), 2),
-                                            (clause_name!("length"), 2),
-                                            (clause_name!("compound"), 1),
-                                            (clause_name!("rational"), 1),
-                                            (clause_name!("integer"), 1),
-                                            (clause_name!("string"), 1),
-                                            (clause_name!("float"), 1),
-                                            (clause_name!("nonvar"), 1),
-                                            (clause_name!("ground"), 1),
-                                            (clause_name!("setup_call_cleanup"), 3),
-                                            (clause_name!("call_with_inference_limit"), 3),
-                                            (clause_name!("compare"), 3),
-                                            (clause_name!("atom"), 1),
-                                            (clause_name!("sort"), 2),
-                                            (clause_name!("keysort"), 2),
-                                            (clause_name!("acyclic_term"), 1),
-                                            (clause_name!("cyclic_term"), 1),
-                                            (clause_name!("$skip_max_list"), 4)]);
-
-    for arity in 0 .. 63 {
-        module_decl.exports.push((clause_name!("call"), arity));
-    }
-
-    Module { module_decl, code_dir: as_module_code_dir(code_dir), op_dir }
-}
+*/

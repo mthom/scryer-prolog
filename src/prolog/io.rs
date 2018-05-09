@@ -550,7 +550,7 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, code_size: usize,
     let mut code = try!(cg.compile_query(&terms));
 
     compile_appendix(&mut code, queue)?;
-
+    
     let query_info = QueryInfo {};
     query_info.label_clauses(code_size, code_dir, &mut code);
 
@@ -617,7 +617,9 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
     }
 
     let mut module: Option<Module> = None;
-    let (mut code_dir, mut op_dir) = build_code_and_op_dirs();
+    
+    let mut code_dir = CodeDir::new();
+    let mut op_dir   = default_op_dir();
 
     let mut code = Vec::new();
 
@@ -630,10 +632,10 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                 return EvalSession::from(ParserError::ExpectedRel),
             TopLevelPacket::Decl(TopLevel::Declaration(Declaration::Module(module_decl)), _) =>
                 if module.is_none() {
-                    let (builtin_code_dir, builtin_op_dir) = build_code_and_op_dirs();
+                    // let builtin_op_dir = default_module_setup(module_decl.name.clone());
 
-                    code_dir.extend(builtin_code_dir.into_iter());
-                    op_dir.extend(builtin_op_dir.into_iter());
+                    // code_dir.extend(builtin_code_dir.into_iter());
+                    // op_dir.extend(builtin_op_dir.into_iter());
 
                     module = Some(Module::new(module_decl));
                 } else {

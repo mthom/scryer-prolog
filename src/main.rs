@@ -1,6 +1,7 @@
 #[macro_use] extern crate downcast;
 extern crate termion;
 
+#[macro_use]
 mod prolog;
 
 use prolog::ast::*;
@@ -10,6 +11,7 @@ use prolog::machine::*;
 #[cfg(test)]
 mod tests;
 
+pub static BUILTINS: &str = include_str!("./prolog/lib/builtins.pl");
 pub static LISTS: &str   = include_str!("./prolog/lib/lists.pl");
 pub static CONTROL: &str = include_str!("./prolog/lib/control.pl");
 pub static QUEUES: &str = include_str!("./prolog/lib/queues.pl");
@@ -33,12 +35,19 @@ fn load_init_str(wam: &mut Machine, src_str: &str)
     }
 }
 
+fn load_init_str_and_include(wam: &mut Machine, src_str: &str, module: &'static str)
+{
+    load_init_str(wam, src_str);
+    wam.use_module_in_toplevel(clause_name!(module));
+}
+
 fn prolog_repl() {
     let mut wam = Machine::new();
 
-    load_init_str(&mut wam, LISTS);
-    load_init_str(&mut wam, CONTROL);
-    load_init_str(&mut wam, QUEUES);
+    load_init_str_and_include(&mut wam, BUILTINS, "builtins");
+//    load_init_str(&mut wam, LISTS);
+//    load_init_str(&mut wam, CONTROL);
+//    load_init_str(&mut wam, QUEUES);
 
     loop {
         print!("prolog> ");
