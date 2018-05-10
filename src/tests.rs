@@ -934,10 +934,96 @@ fn test_queries_on_call_n()
 }
 
 #[test]
+fn test_queries_on_arithmetic()
+{
+    let mut wam = Machine::new();
+    load_init_str_and_include(&mut wam, BUILTINS, "builtins");
+    
+    assert_prolog_success!(&mut wam, "?- X is 1, X is X.", [["X = 1"]]);
+    assert_prolog_failure!(&mut wam, "?- X is 1, X is X + 1.");
+    assert_prolog_success!(&mut wam, "?- X is 1, X is X + 0.", [["X = 1"]]);
+    assert_prolog_success!(&mut wam, "?- X is 1, X is X * 1.", [["X = 1"]]);
+    assert_prolog_failure!(&mut wam, "?- X is 1, X is X * 2.");
+
+    assert_prolog_failure!(&mut wam, "?- X is 1 + a.");
+    assert_prolog_failure!(&mut wam, "?- X is 1 + Y.");
+    assert_prolog_success!(&mut wam, "?- Y is 2 + 2 - 2, X is 1 + Y, X = 3.",
+                           [["X = 3", "Y = 2"]]);
+    assert_prolog_failure!(&mut wam, "?- Y is 2 + 2 - 2, X is 1 + Y, X = 2.");
+
+    assert_prolog_success!(&mut wam, "?- 6 is 6.");
+    assert_prolog_success!(&mut wam, "?- 6 is 3 + 3.");
+    assert_prolog_success!(&mut wam, "?- 6 is 3 * 2.");
+    assert_prolog_failure!(&mut wam, "?- 7 is 3 * 2.");
+    assert_prolog_failure!(&mut wam, "?- 7 is 3.5 * 2.");
+    assert_prolog_success!(&mut wam, "?- 7.0 is 3.5 * 2.");
+    assert_prolog_success!(&mut wam, "?- 7.0 is 14 / 2.");
+    assert_prolog_failure!(&mut wam, "?- 4.666 is 14.0 / 3.");
+    assert_prolog_success!(&mut wam, "?- 4.0 is 8.0 / 2.");
+
+    submit(&mut wam, "f(X) :- X is 5 // 0.");
+
+    assert_prolog_success!(&mut wam, "?- catch(f(X), error(evaluation_error(E), _), true), E = zero_divisor.",
+                           [["E = zero_divisor", "X = _1"]]);
+
+    submit(&mut wam, "f(X) :- X is (5 rdiv 1) / 0.");
+
+    assert_prolog_success!(&mut wam, "?- catch(f(X), error(evaluation_error(E), _), true), E = zero_divisor.",
+                           [["E = zero_divisor", "X = _1"]]);
+
+    submit(&mut wam, "f(X) :- X is 5.0 / 0.");
+
+    assert_prolog_success!(&mut wam, "?- catch(f(X), error(evaluation_error(E), _), true), E = zero_divisor.",
+                           [["E = zero_divisor", "X = _1"]]);
+
+    assert_prolog_success!(&mut wam, "?- X is ((3 + 4) // 2) + 2 - 1 // 1, Y is 2+2, Z is X+Y.",
+                           [["Y = 4", "X = 4", "Z = 8"]]);
+
+    assert_prolog_success!(&mut wam, "?- X is ((3 + 4) // 2) + 2 - 1 // 1, Y is 2+2, Z = 8, Y is 4.",
+                           [["Y = 4", "X = 4", "Z = 8"]]);
+
+    assert_prolog_success!(&mut wam, "?- X is (3 rdiv 4) / 2, Y is 3 rdiv 8, X = Y.",
+                           [["X = 3/8", "Y = 3/8"]]);
+
+    assert_prolog_success!(&mut wam, "?- X is 10 xor -4, X is -10.", [["X = -10"]]);
+    assert_prolog_success!(&mut wam, "?- X is 4 xor -7, X is -3.", [["X = -3"]]);
+    assert_prolog_success!(&mut wam, "?- X is 10 xor 5 + 55, X = 70.", [["X = 70"]]);
+
+    assert_prolog_success!(&mut wam, "?- X is 10 rem -3, X = 1.",   [["X = 1"]]);
+    assert_prolog_success!(&mut wam, "?- X is 10 mod -3, X is -2.", [["X = -2"]]);
+
+    assert_prolog_success!(&mut wam, "?- call(is, X, 3 + 4).", [["X = 7"]]);
+
+    assert_prolog_success!(&mut wam, "?- Y is 3 + 3, call(is, X, Y + 4).", [["Y = 6", "X = 10"]]);
+    assert_prolog_success!(&mut wam, "?- call(is, X, 3 + 4.5).", [["X = 7.5"]]);
+    assert_prolog_success!(&mut wam, "?- X is 2 rdiv 3, call(is, Y, X*X).", [["X = 2/3", "Y = 4/9"]]);
+
+    assert_prolog_failure!(&mut wam, "?- call(>, 3, 3 + 3).");
+    assert_prolog_failure!(&mut wam, "?- X is 3 + 3, call(>, 3, X).");
+
+    assert_prolog_success!(&mut wam, "?- X is 3 + 3, call(<, 3, X).", [["X = 6"]]);
+    assert_prolog_success!(&mut wam, "?- X is 3 + 3, X =:= 3 + 3.", [["X = 6"]]);
+
+    assert_prolog_success!(&mut wam, "?- catch(call(is, X, 3 // 0), error(E, _), true).",
+                           [["X = _5", "E = evaluation_error(zero_divisor)"]]);
+
+    assert_prolog_success!(&mut wam, "?- catch(call(is, X, 3 // 3), _, true).", [["X = 1"]]);
+
+    submit(&mut wam, "f(X, Sum) :- ( integer(X) -> Sum is X + X * X + 3 ;
+                                     var(X) -> Sum = 1, X = 1 ).");
+
+    assert_prolog_success!(&mut wam, "?- f(X, Sum).", [["X = 1", "Sum = 1"]]);
+    assert_prolog_success!(&mut wam, "?- f(5, Sum).", [["Sum = 33"]]);
+    assert_prolog_success!(&mut wam, "?- f(5, 33).");
+    assert_prolog_failure!(&mut wam, "?- f(5, 32).");
+}
+
+#[test]
 fn test_queries_on_exceptions()
 {
     let mut wam = Machine::new();
-
+    load_init_str_and_include(&mut wam, BUILTINS, "builtins");
+    
     submit(&mut wam, "f(a). f(_) :- throw(stuff).");
     submit(&mut wam, "handle(stuff).");
 
@@ -1037,91 +1123,7 @@ fn test_queries_on_exceptions()
                             ["E = an_error_1", "X = _1"],
                             ["E = an_error_2", "X = _1"]]);
 }
-
-#[test]
-fn test_queries_on_arithmetic()
-{
-    let mut wam = Machine::new();
-
-    assert_prolog_success!(&mut wam, "?- X is 1, X is X.", [["X = 1"]]);
-    assert_prolog_failure!(&mut wam, "?- X is 1, X is X + 1.");
-    assert_prolog_success!(&mut wam, "?- X is 1, X is X + 0.", [["X = 1"]]);
-    assert_prolog_success!(&mut wam, "?- X is 1, X is X * 1.", [["X = 1"]]);
-    assert_prolog_failure!(&mut wam, "?- X is 1, X is X * 2.");
-
-    assert_prolog_failure!(&mut wam, "?- X is 1 + a.");
-    assert_prolog_failure!(&mut wam, "?- X is 1 + Y.");
-    assert_prolog_success!(&mut wam, "?- Y is 2 + 2 - 2, X is 1 + Y, X = 3.",
-                           [["X = 3", "Y = 2"]]);
-    assert_prolog_failure!(&mut wam, "?- Y is 2 + 2 - 2, X is 1 + Y, X = 2.");
-
-    assert_prolog_success!(&mut wam, "?- 6 is 6.");
-    assert_prolog_success!(&mut wam, "?- 6 is 3 + 3.");
-    assert_prolog_success!(&mut wam, "?- 6 is 3 * 2.");
-    assert_prolog_failure!(&mut wam, "?- 7 is 3 * 2.");
-    assert_prolog_failure!(&mut wam, "?- 7 is 3.5 * 2.");
-    assert_prolog_success!(&mut wam, "?- 7.0 is 3.5 * 2.");
-    assert_prolog_success!(&mut wam, "?- 7.0 is 14 / 2.");
-    assert_prolog_failure!(&mut wam, "?- 4.666 is 14.0 / 3.");
-    assert_prolog_success!(&mut wam, "?- 4.0 is 8.0 / 2.");
-
-    submit(&mut wam, "f(X) :- X is 5 // 0.");
-
-    assert_prolog_success!(&mut wam, "?- catch(f(X), error(evaluation_error(E), _), true), E = zero_divisor.",
-                           [["E = zero_divisor", "X = _1"]]);
-
-    submit(&mut wam, "f(X) :- X is (5 rdiv 1) / 0.");
-
-    assert_prolog_success!(&mut wam, "?- catch(f(X), error(evaluation_error(E), _), true), E = zero_divisor.",
-                           [["E = zero_divisor", "X = _1"]]);
-
-    submit(&mut wam, "f(X) :- X is 5.0 / 0.");
-
-    assert_prolog_success!(&mut wam, "?- catch(f(X), error(evaluation_error(E), _), true), E = zero_divisor.",
-                           [["E = zero_divisor", "X = _1"]]);
-
-    assert_prolog_success!(&mut wam, "?- X is ((3 + 4) // 2) + 2 - 1 // 1, Y is 2+2, Z is X+Y.",
-                           [["Y = 4", "X = 4", "Z = 8"]]);
-
-    assert_prolog_success!(&mut wam, "?- X is ((3 + 4) // 2) + 2 - 1 // 1, Y is 2+2, Z = 8, Y is 4.",
-                           [["Y = 4", "X = 4", "Z = 8"]]);
-
-    assert_prolog_success!(&mut wam, "?- X is (3 rdiv 4) / 2, Y is 3 rdiv 8, X = Y.",
-                           [["X = 3/8", "Y = 3/8"]]);
-
-    assert_prolog_success!(&mut wam, "?- X is 10 xor -4, X is -10.", [["X = -10"]]);
-    assert_prolog_success!(&mut wam, "?- X is 4 xor -7, X is -3.", [["X = -3"]]);
-    assert_prolog_success!(&mut wam, "?- X is 10 xor 5 + 55, X = 70.", [["X = 70"]]);
-
-    assert_prolog_success!(&mut wam, "?- X is 10 rem -3, X = 1.",   [["X = 1"]]);
-    assert_prolog_success!(&mut wam, "?- X is 10 mod -3, X is -2.", [["X = -2"]]);
-
-    assert_prolog_success!(&mut wam, "?- call(is, X, 3 + 4).", [["X = 7"]]);
-
-    assert_prolog_success!(&mut wam, "?- Y is 3 + 3, call(is, X, Y + 4).", [["Y = 6", "X = 10"]]);
-    assert_prolog_success!(&mut wam, "?- call(is, X, 3 + 4.5).", [["X = 7.5"]]);
-    assert_prolog_success!(&mut wam, "?- X is 2 rdiv 3, call(is, Y, X*X).", [["X = 2/3", "Y = 4/9"]]);
-
-    assert_prolog_failure!(&mut wam, "?- call(>, 3, 3 + 3).");
-    assert_prolog_failure!(&mut wam, "?- X is 3 + 3, call(>, 3, X).");
-
-    assert_prolog_success!(&mut wam, "?- X is 3 + 3, call(<, 3, X).", [["X = 6"]]);
-    assert_prolog_success!(&mut wam, "?- X is 3 + 3, X =:= 3 + 3.", [["X = 6"]]);
-
-    assert_prolog_success!(&mut wam, "?- catch(call(is, X, 3 // 0), error(E, _), true).",
-                           [["X = _5", "E = evaluation_error(zero_divisor)"]]);
-
-    assert_prolog_success!(&mut wam, "?- catch(call(is, X, 3 // 3), _, true).", [["X = 1"]]);
-
-    submit(&mut wam, "f(X, Sum) :- ( integer(X) -> Sum is X + X * X + 3 ;
-                                     var(X) -> Sum = 1, X = 1 ).");
-
-    assert_prolog_success!(&mut wam, "?- f(X, Sum).", [["X = 1", "Sum = 1"]]);
-    assert_prolog_success!(&mut wam, "?- f(5, Sum).", [["Sum = 33"]]);
-    assert_prolog_success!(&mut wam, "?- f(5, 33).");
-    assert_prolog_failure!(&mut wam, "?- f(5, 32).");
-}
-
+/*
 #[test]
 fn test_queries_on_conditionals()
 {
@@ -1714,3 +1716,4 @@ fn test_queries_on_skip_max_list() {
     assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 9, non_list, Xs).",
                            [["Xs = non_list", "N = 0"]]);
 }
+*/

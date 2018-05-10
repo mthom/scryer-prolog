@@ -601,6 +601,22 @@ pub fn compile_packet(wam: &mut Machine, tl: TopLevelPacket) -> EvalSession
     }
 }
 
+pub static BUILTINS: &str = include_str!("./lib/builtins.pl");
+
+pub fn load_init_str(wam: &mut Machine, src_str: &str)
+{
+    match compile_listing(wam, src_str) {
+        EvalSession::Error(_) => panic!("failed to parse batch from string."),
+        _ => {}
+    }
+}
+
+pub fn load_init_str_and_include(wam: &mut Machine, src_str: &str, module: &'static str)
+{
+    load_init_str(wam, src_str);
+    wam.use_module_in_toplevel(clause_name!(module));
+}
+
 pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
 {
     fn get_module_name(module: &Option<Module>) -> ClauseName {

@@ -711,13 +711,31 @@ pub struct Rule {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
-    SkipMaxList
+    CleanUpBlock,
+    EraseBall,
+    Fail,
+    GetBall,
+    GetCurrentBlock,
+    InstallNewBlock,
+    ResetBlock,
+    SetBall,
+    SkipMaxList,
+    UnwindStack
 }
 
 impl SystemClauseType {
     pub fn arity(&self) -> usize {
         match self {
-            &SystemClauseType::SkipMaxList => 4
+            &SystemClauseType::CleanUpBlock => 1,
+            &SystemClauseType::EraseBall => 0,
+            &SystemClauseType::Fail => 0,
+            &SystemClauseType::GetBall => 1,
+            &SystemClauseType::GetCurrentBlock => 1,
+            &SystemClauseType::InstallNewBlock => 1,
+            &SystemClauseType::ResetBlock => 1,
+            &SystemClauseType::SetBall => 1,
+            &SystemClauseType::SkipMaxList => 4,
+            &SystemClauseType::UnwindStack => 0
         }
     }
     
@@ -727,13 +745,31 @@ impl SystemClauseType {
     
     pub fn name(&self) -> ClauseName {
         match self {
+            &SystemClauseType::CleanUpBlock => clause_name!("$clean_up_block"),
+            &SystemClauseType::EraseBall => clause_name!("$erase_ball"),
+            &SystemClauseType::Fail => clause_name!("$fail"),
+            &SystemClauseType::GetBall => clause_name!("$get_ball"),
+            &SystemClauseType::GetCurrentBlock => clause_name!("$get_current_block"),
+            &SystemClauseType::InstallNewBlock => clause_name!("$install_new_block"),
+            &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
+            &SystemClauseType::SetBall => clause_name!("$set_ball"),
             &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
+            &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
         }
     }
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
+            ("$clean_up_block", 1) => Some(SystemClauseType::CleanUpBlock),
+            ("$erase_ball", 0) => Some(SystemClauseType::EraseBall),
+            ("$fail", 0) => Some(SystemClauseType::Fail),
+            ("$get_ball", 1) => Some(SystemClauseType::GetBall),
+            ("$get_current_block", 1) => Some(SystemClauseType::GetCurrentBlock),
+            ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
+            ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
+            ("$set_ball", 1) => Some(SystemClauseType::SetBall),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
+            ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             _ => None
         }
     }

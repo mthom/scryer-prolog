@@ -400,37 +400,35 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, mut arity: usize,
                   code_dirs: CodeDirs<'a>, lco: bool)
                   -> CallResult
     {
-        loop {
-            if let Some((name, mut arity)) = machine_st.setup_call_n(arity) {
-                let user = clause_name!("user");
+        while let Some((name, inner_arity)) = machine_st.setup_call_n(arity) {
+            let user = clause_name!("user");
 
-                if machine_st.fail {
-                    return Ok(());
-                }
-                
-                match ClauseType::from(name.clone(), arity, None) {
-                    ClauseType::CallN => {                        
-                        machine_st.num_of_args = arity;
-                        machine_st.handle_internal_call_n();
-                                                
-                        continue;
-                    },
-                    ClauseType::BuiltIn(built_in) =>
-                        machine_st.setup_built_in_call(built_in, lco),
-                    ClauseType::Inlined(inlined) =>
-                        machine_st.execute_inlined(&inlined),
-                    ClauseType::Op(..) | ClauseType::Named(..) =>
-                        if let Some(idx) = code_dirs.get(name.clone(), arity, user) {
-                            self.context_call(machine_st, name, arity, idx, lco)?;
-                        } else {
-                            return Err(machine_st.existence_error(name, arity));
-                        }
-                };
-            }
+            match ClauseType::from(name.clone(), inner_arity, None) {
+                ClauseType::CallN => {
+                    machine_st.handle_internal_call_n(inner_arity);
+                    
+                    if machine_st.fail {
+                        return Ok(());
+                    }
+                    
+                    arity = inner_arity;
+                    continue;
+                },
+                ClauseType::BuiltIn(built_in) =>
+                    machine_st.setup_built_in_call(built_in, lco),
+                ClauseType::Inlined(inlined) =>
+                    machine_st.execute_inlined(&inlined),
+                ClauseType::Op(..) | ClauseType::Named(..) =>
+                    if let Some(idx) = code_dirs.get(name.clone(), inner_arity, user) {
+                        self.context_call(machine_st, name, inner_arity, idx, lco)?;
+                    } else {
+                        return Err(machine_st.existence_error(name, inner_arity));
+                    }
+            };
 
             break;
         }
@@ -441,10 +439,82 @@ pub(crate) trait CallPolicy: Any {
     fn system_call(&mut self, machine_st: &mut MachineState, ct: &SystemClauseType) -> CallResult
     {
         match ct {
+            &SystemClauseType::CleanUpBlock => {
+                let nb = machine_st.store(machine_st.deref(machine_st[temp_v!(1)].clone()));
+
+                match nb {
+                    Addr::Con(Constant::Usize(nb)) => {
+                        let b = machine_st.b - 1;
+
+                        if nb > 0 && machine_st.or_stack[b].b == nb {
+                            machine_st.b = machine_st.or_stack[nb - 1].b;
+                            machine_st.or_stack.truncate(machine_st.b);
+                        }                        
+                    },
+                    _ => machine_st.fail = true
+                };
+
+                Ok(())
+            },
+            &SystemClauseType::EraseBall => {
+                machine_st.ball.reset();
+                Ok(())
+            },
+            &SystemClauseType::Fail => {
+                machine_st.fail = true;
+                Ok(())
+            },
+            &SystemClauseType::GetBall => {
+                let addr = machine_st.store(machine_st.deref(machine_st[temp_v!(1)].clone()));
+                let h = machine_st.heap.h;
+
+                if machine_st.ball.stub.len() > 0 {
+                    machine_st.copy_and_align_ball_to_heap();
+                } else {
+                    machine_st.fail = true;
+                    return Ok(());
+                }
+
+                let ball = machine_st.heap[h].as_addr(h);
+
+                match addr.as_var() {
+                    Some(r) => machine_st.bind(r, ball),                    
+                    _ => machine_st.fail = true
+                };
+
+                Ok(())
+            },
+            &SystemClauseType::GetCurrentBlock => {
+                let c = Constant::Usize(machine_st.block);
+                let addr = machine_st[temp_v!(1)].clone();
+
+                machine_st.write_constant_to_var(addr, c);
+                Ok(())
+            },
+            &SystemClauseType::InstallNewBlock => {
+                machine_st.block = machine_st.b;
+                
+                let c = Constant::Usize(machine_st.block);
+                let addr = machine_st[temp_v!(1)].clone();
+
+                machine_st.write_constant_to_var(addr, c);
+                Ok(())
+            },
+            &SystemClauseType::ResetBlock => {
+                let addr = machine_st.deref(machine_st[temp_v!(1)].clone());
+                machine_st.reset_block(addr);
+                Ok(())
+            },
+            &SystemClauseType::SetBall => {
+                machine_st.set_ball();
+                Ok(())
+            },
             &SystemClauseType::SkipMaxList => {
                 machine_st.skip_max_list()?;
-                machine_st.p += 1;
-
+                Ok(())
+            },
+            &SystemClauseType::UnwindStack => {
+                machine_st.unwind_stack();
                 Ok(())
             }
         }
@@ -549,7 +619,7 @@ pub(crate) trait CallPolicy: Any {
 
                 let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
                 let heap_addr = Addr::HeapCell(machine_st.to_list(key_pairs));
-
+                
                 let r2 = machine_st[temp_v!(2)].clone();
                 machine_st.unify(r2, heap_addr);
 
@@ -564,8 +634,10 @@ pub(crate) trait CallPolicy: Any {
 
                 Ok(())
             },
-            &BuiltInClauseType::System(ref ct) =>
-                self.system_call(machine_st, ct),
+            &BuiltInClauseType::System(ref ct) => {
+                self.system_call(machine_st, ct)?;
+                return_from_clause!(lco, machine_st)
+            }
         }
     }
 }

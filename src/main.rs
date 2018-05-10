@@ -11,7 +11,6 @@ use prolog::machine::*;
 #[cfg(test)]
 mod tests;
 
-pub static BUILTINS: &str = include_str!("./prolog/lib/builtins.pl");
 pub static LISTS: &str   = include_str!("./prolog/lib/lists.pl");
 pub static CONTROL: &str = include_str!("./prolog/lib/control.pl");
 pub static QUEUES: &str = include_str!("./prolog/lib/queues.pl");
@@ -25,20 +24,6 @@ fn parse_and_compile_line(wam: &mut Machine, buffer: &str)
         },
         Err(s) => println!("{:?}", s)
     }
-}
-
-fn load_init_str(wam: &mut Machine, src_str: &str)
-{
-    match compile_listing(wam, src_str) {
-        EvalSession::Error(_) => panic!("failed to parse batch from string."),
-        _ => {}
-    }
-}
-
-fn load_init_str_and_include(wam: &mut Machine, src_str: &str, module: &'static str)
-{
-    load_init_str(wam, src_str);
-    wam.use_module_in_toplevel(clause_name!(module));
 }
 
 fn prolog_repl() {

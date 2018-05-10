@@ -152,11 +152,5 @@ impl MachineState {
         };
 
         Ok(())
-    }
-    
-    pub(super) fn execute_system(&mut self, ct: &SystemClauseType) -> Result<(), MachineError> {
-        match ct {
-            &SystemClauseType::SkipMaxList => self.skip_max_list()
-        }
-    }
+    }    
 }

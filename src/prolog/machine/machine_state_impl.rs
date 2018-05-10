@@ -80,7 +80,7 @@ impl MachineState {
         };
     }
 
-    fn bind(&mut self, r1: Ref, a2: Addr) {
+    pub(super) fn bind(&mut self, r1: Ref, a2: Addr) {
         let t2 = self.store(a2);
 
         match r1 {
@@ -273,7 +273,7 @@ impl MachineState {
         }
     }
 
-    fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
+    pub(super) fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
         let addr = self.deref(addr);
 
         match self.store(addr) {
@@ -1011,9 +1011,9 @@ impl MachineState {
         }
     }
 
-    pub(super) fn handle_internal_call_n(&mut self)
+    pub(super) fn handle_internal_call_n(&mut self, arity: usize)
     {
-        let arity = self.num_of_args + 1;
+        let arity = arity + 1;
         let pred  = self.registers[1].clone();
 
         for i in 2 .. arity {
@@ -1310,12 +1310,9 @@ impl MachineState {
         Ordering::Equal
     }
 
-    fn reset_block(&mut self, addr: Addr) {
+    pub(super) fn reset_block(&mut self, addr: Addr) {
         match self.store(addr) {
-            Addr::Con(Constant::Usize(b)) => {
-                self.block = b;
-                self.p += 1;
-            },
+            Addr::Con(Constant::Usize(b)) => self.block = b,
             _ => self.fail = true
         };
     }

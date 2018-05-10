@@ -393,7 +393,7 @@ impl RelationWorker {
                 if name.as_str() == "!" || name.as_str() == "blocked_!" {
                     Ok(QueryTerm::BlockedCut)
                 } else {
-                    Ok(QueryTerm::Clause(r, ClauseType::Named(name, CodeIndex::default()), vec![]))
+                    Ok(QueryTerm::Clause(r, ClauseType::from(name, 0, None), vec![]))
                 },
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
