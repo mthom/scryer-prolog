@@ -193,7 +193,7 @@ pub trait SubModuleUser {
     fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
         let name = name.defrock_brackets();
         let mut found_op = false;
-        
+
         {
             let mut insert_op_dir = |fix| {
                 if let Some(op_data) = submodule.op_dir.get(&(name.clone(), fix)) {
@@ -229,7 +229,7 @@ pub trait SubModuleUser {
                 return EvalSession::from(SessionError::ModuleDoesNotContainExport);
             }
         }
-        
+
         EvalSession::EntrySuccess
     }
 
@@ -561,59 +561,83 @@ pub enum Term {
     Var(Cell<VarReg>, Rc<Var>)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum InlinedClauseType {
-    CompareNumber(CompareNumberQT),
-    IsAtom,
-    IsAtomic,
-    IsCompound,
-    IsInteger,
-    IsRational,
-    IsString,
-    IsFloat,
-    IsNonVar,
-    IsVar,
+    CompareNumber(CompareNumberQT, RegType, RegType),
+    IsAtom(RegType),
+    IsAtomic(RegType),
+    IsCompound(RegType),
+    IsInteger(RegType),
+    IsRational(RegType),
+    IsString(RegType),
+    IsFloat(RegType),
+    IsNonVar(RegType),
+    IsVar(RegType),
 }
 
 impl InlinedClauseType {
     pub fn name(&self) -> &'static str {
         match self {
-            &InlinedClauseType::CompareNumber(qt) => qt.name(),
-            &InlinedClauseType::IsAtom => "atom",
-            &InlinedClauseType::IsAtomic => "atomic",
-            &InlinedClauseType::IsCompound => "compound",
-            &InlinedClauseType::IsInteger  => "integer",
-            &InlinedClauseType::IsRational => "rational",
-            &InlinedClauseType::IsString => "string",
-            &InlinedClauseType::IsFloat  => "float",
-            &InlinedClauseType::IsNonVar => "nonvar",
-            &InlinedClauseType::IsVar => "var"
+            &InlinedClauseType::CompareNumber(qt, ..) => qt.name(),
+            &InlinedClauseType::IsAtom(..) => "atom",
+            &InlinedClauseType::IsAtomic(..) => "atomic",
+            &InlinedClauseType::IsCompound(..) => "compound",
+            &InlinedClauseType::IsInteger (..) => "integer",
+            &InlinedClauseType::IsRational(..) => "rational",
+            &InlinedClauseType::IsString(..) => "string",
+            &InlinedClauseType::IsFloat (..) => "float",
+            &InlinedClauseType::IsNonVar(..) => "nonvar",
+            &InlinedClauseType::IsVar(..) => "var"
         }
     }
 
+    pub fn arity(&self) -> usize {
+        match self {
+            &InlinedClauseType::CompareNumber(..) => 2,
+            &InlinedClauseType::IsAtom(..) => 1,
+            &InlinedClauseType::IsAtomic(..) => 1,
+            &InlinedClauseType::IsCompound(..) => 1,
+            &InlinedClauseType::IsInteger (..) => 1,
+            &InlinedClauseType::IsRational(..) => 1,
+            &InlinedClauseType::IsString(..) => 1,
+            &InlinedClauseType::IsFloat (..) => 1, 
+            &InlinedClauseType::IsNonVar(..) => 1,
+            &InlinedClauseType::IsVar(..) => 1
+        }
+    }
+    
     pub fn from(name: &str, arity: usize) -> Option<Self> {
+        let r1 = temp_v!(1);
+        let r2 = temp_v!(2);
+        
         match (name, arity) {
-            (">", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThan)),
-            ("<", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThan)),
-            (">=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThanOrEqual)),
-            ("=<", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThanOrEqual)),
-            ("=\\=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::NotEqual)),
-            ("=:=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::Equal)),
-            ("atom", 1) => Some(InlinedClauseType::IsAtom),
-            ("atomic", 1) => Some(InlinedClauseType::IsAtomic),
-            ("compound", 1) => Some(InlinedClauseType::IsCompound),
-            ("integer", 1) => Some(InlinedClauseType::IsInteger),
-            ("rational", 1) => Some(InlinedClauseType::IsRational),
-            ("string", 1) => Some(InlinedClauseType::IsString),
-            ("float", 1) => Some(InlinedClauseType::IsFloat),
-            ("nonvar", 1) => Some(InlinedClauseType::IsNonVar),
-            ("var", 1) => Some(InlinedClauseType::IsVar),
+            (">", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThan, r1, r2)),
+            ("<", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThan, r1, r2)),
+            (">=", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThanOrEqual,r1, r2)),
+            ("=<", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThanOrEqual, r1, r2)),
+            ("=\\=", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::NotEqual, r1, r2)),
+            ("=:=", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::Equal, r1, r2)),
+            ("atom", 1) => Some(InlinedClauseType::IsAtom(r1)),
+            ("atomic", 1) => Some(InlinedClauseType::IsAtomic(r1)),
+            ("compound", 1) => Some(InlinedClauseType::IsCompound(r1)),
+            ("integer", 1) => Some(InlinedClauseType::IsInteger(r1)),
+            ("rational", 1) => Some(InlinedClauseType::IsRational(r1)),
+            ("string", 1) => Some(InlinedClauseType::IsString(r1)),
+            ("float", 1) => Some(InlinedClauseType::IsFloat(r1)),
+            ("nonvar", 1) => Some(InlinedClauseType::IsNonVar(r1)),
+            ("var", 1) => Some(InlinedClauseType::IsVar(r1)),
             _ => None
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum CompareNumberQT {
     GreaterThan,
     LessThan,
@@ -636,7 +660,7 @@ impl CompareNumberQT {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum CompareTermQT {
     LessThan,
     LessThanOrEqual,
@@ -685,18 +709,28 @@ pub struct Rule {
     pub clauses: Vec<QueryTerm>
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
     SkipMaxList
 }
 
 impl SystemClauseType {
+    pub fn arity(&self) -> usize {
+        match self {
+            &SystemClauseType::SkipMaxList => 4
+        }
+    }
+    
+    pub fn fixity(&self) -> Option<Fixity> {
+        None
+    }
+    
     pub fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
         }
     }
-    
+
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
@@ -705,13 +739,9 @@ impl SystemClauseType {
     }
 }
 
-#[derive(Clone)]
-pub enum ClauseType {
-    AcyclicTerm,
-    Arg,
-    CallN,
-    CallWithInferenceLimit,
-    Catch,
+#[derive(Copy, Clone, PartialEq)]
+pub enum BuiltInClauseType {
+    AcyclicTerm,    
     Compare,
     CompareTerm(CompareTermQT),
     CyclicTerm,
@@ -720,16 +750,20 @@ pub enum ClauseType {
     Eq,
     Functor,
     Ground,
-    Inlined(InlinedClauseType),
     Is,
     KeySort,
     NotEq,
-    Op(ClauseName, Fixity, CodeIndex),
-    Named(ClauseName, CodeIndex),
-    SetupCallCleanup,
     Sort,
-    System(SystemClauseType),
-    Throw,
+    System(SystemClauseType)
+}
+
+#[derive(Clone)]
+pub enum ClauseType {    
+    BuiltIn(BuiltInClauseType),
+    CallN,
+    Inlined(InlinedClauseType),    
+    Op(ClauseName, Fixity, CodeIndex),
+    Named(ClauseName, CodeIndex)
 }
 
 #[derive(Clone)]
@@ -797,12 +831,84 @@ impl ClauseName {
     }
 }
 
+impl BuiltInClauseType {
+    fn fixity(&self) -> Option<Fixity> {
+        match self {
+            &BuiltInClauseType::Compare | &BuiltInClauseType::CompareTerm(_)
+          | &BuiltInClauseType::NotEq   | &BuiltInClauseType::Is | &BuiltInClauseType::Eq
+                => Some(Fixity::In),
+            _ => None
+        }
+    }
+
+    pub fn name(&self) -> ClauseName {
+        match self {
+            &BuiltInClauseType::AcyclicTerm => clause_name!("acyclic_term"),            
+            &BuiltInClauseType::Compare => clause_name!("compare"),
+            &BuiltInClauseType::CompareTerm(qt) => clause_name!(qt.name()),
+            &BuiltInClauseType::CyclicTerm => clause_name!("cyclic_term"),
+            &BuiltInClauseType::Display => clause_name!("display"),
+            &BuiltInClauseType::DuplicateTerm => clause_name!("duplicate_term"),
+            &BuiltInClauseType::Eq => clause_name!("=="),
+            &BuiltInClauseType::Functor => clause_name!("functor"),
+            &BuiltInClauseType::Ground  => clause_name!("ground"),
+            &BuiltInClauseType::Is => clause_name!("is"),
+            &BuiltInClauseType::KeySort => clause_name!("keysort"),
+            &BuiltInClauseType::NotEq => clause_name!("\\=="),            
+            &BuiltInClauseType::Sort => clause_name!("sort"),
+            &BuiltInClauseType::System(system) => system.name()
+        }
+    }    
+
+    pub fn arity(&self) -> usize {
+        match self {
+            &BuiltInClauseType::AcyclicTerm => 1,        
+            &BuiltInClauseType::Compare => 2,
+            &BuiltInClauseType::CompareTerm(_) => 2,
+            &BuiltInClauseType::CyclicTerm => 1,
+            &BuiltInClauseType::Display => 1,
+            &BuiltInClauseType::DuplicateTerm => 2,
+            &BuiltInClauseType::Eq => 2,
+            &BuiltInClauseType::Functor => 3,
+            &BuiltInClauseType::Ground  => 1,
+            &BuiltInClauseType::Is => 2,
+            &BuiltInClauseType::KeySort => 2,
+            &BuiltInClauseType::NotEq => 2,
+            &BuiltInClauseType::Sort => 2,
+            &BuiltInClauseType::System(system) => system.arity()                
+        }
+    }
+    
+    pub fn from(name: &str, arity: usize) -> Option<Self> {
+        match (name, arity) {
+            ("acyclic_term", 1) => Some(BuiltInClauseType::AcyclicTerm),
+            ("compare", 3) => Some(BuiltInClauseType::Compare),
+            ("cyclic_term", 1) => Some(BuiltInClauseType::CyclicTerm),
+            ("@>", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThan)),
+            ("@<", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::LessThan)),
+            ("@>=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual)),
+            ("@<=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::LessThanOrEqual)),
+            ("\\=@=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::NotEqual)),
+            ("=@=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::Equal)),
+            ("display", 1) => Some(BuiltInClauseType::Display),
+            ("duplicate_term", 2) => Some(BuiltInClauseType::DuplicateTerm),
+            ("==", 2) => Some(BuiltInClauseType::Eq),
+            ("functor", 3) => Some(BuiltInClauseType::Functor),
+            ("ground", 1) => Some(BuiltInClauseType::Ground),
+            ("is", 2) => Some(BuiltInClauseType::Is),
+            ("keysort", 2) => Some(BuiltInClauseType::KeySort),
+            ("\\==", 2) => Some(BuiltInClauseType::NotEq),
+            ("sort", 2) => Some(BuiltInClauseType::Sort),
+            _ => SystemClauseType::from(name, arity).map(BuiltInClauseType::System)
+        }
+    }
+}
+
 impl ClauseType {
     pub fn fixity(&self) -> Option<Fixity> {
         match self {
-            &ClauseType::Compare | &ClauseType::CompareTerm(_)
-          | &ClauseType::Inlined(InlinedClauseType::CompareNumber(_))
-          | &ClauseType::NotEq | &ClauseType::Is | &ClauseType::Eq => Some(Fixity::In),
+            &ClauseType::BuiltIn(ref built_in) => built_in.fixity(),
+            &ClauseType::Inlined(InlinedClauseType::CompareNumber(..)) => Some(Fixity::In),
             &ClauseType::Op(_, fixity, _) => Some(fixity),
             _ => None
         }
@@ -810,68 +916,30 @@ impl ClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &ClauseType::AcyclicTerm => clause_name!("acyclic_term"),
-            &ClauseType::Arg => clause_name!("arg"),
-            &ClauseType::CallN => clause_name!("call"),
-            &ClauseType::CallWithInferenceLimit => clause_name!("call_with_inference_limit"),
-            &ClauseType::Catch => clause_name!("catch"),
-            &ClauseType::Compare => clause_name!("compare"),
-            &ClauseType::CompareTerm(qt) => clause_name!(qt.name()),
-            &ClauseType::CyclicTerm => clause_name!("cyclic_term"),
-            &ClauseType::Display => clause_name!("display"),
-            &ClauseType::DuplicateTerm => clause_name!("duplicate_term"),
-            &ClauseType::Eq => clause_name!("=="),
-            &ClauseType::Functor => clause_name!("functor"),
-            &ClauseType::Ground  => clause_name!("ground"),
+            &ClauseType::CallN => clause_name!("call"),            
+            &ClauseType::BuiltIn(built_in) => built_in.name(),
             &ClauseType::Inlined(inlined) => clause_name!(inlined.name()),
-            &ClauseType::Is => clause_name!("is"),
-            &ClauseType::KeySort => clause_name!("keysort"),
-            &ClauseType::NotEq => clause_name!("\\=="),
             &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
-            &ClauseType::SetupCallCleanup => clause_name!("setup_call_cleanup"),
-            &ClauseType::System(ref system) => system.name(),
-            &ClauseType::Sort => clause_name!("sort"),
-            &ClauseType::Throw => clause_name!("throw")
         }
     }
 
     pub fn from(name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
-        if let Some(inlined_ct) = InlinedClauseType::from(name.as_str(), arity) {
-            return ClauseType::Inlined(inlined_ct);
-        }
-        
-        match (name.as_str(), arity) {
-            ("acyclic_term", 1) => ClauseType::AcyclicTerm,
-            ("arg", 3)   => ClauseType::Arg,
-            ("call", _)  => ClauseType::CallN,
-            ("call_with_inference_limit", 3) => ClauseType::CallWithInferenceLimit,
-            ("catch", 3) => ClauseType::Catch,
-            ("compare", 3) => ClauseType::Compare,
-            ("cyclic_term", 1) => ClauseType::CyclicTerm,
-            ("@>", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThan),
-            ("@<", 2) => ClauseType::CompareTerm(CompareTermQT::LessThan),
-            ("@>=", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual),
-            ("@<=", 2) => ClauseType::CompareTerm(CompareTermQT::LessThanOrEqual),
-            ("\\=@=", 2) => ClauseType::CompareTerm(CompareTermQT::NotEqual),
-            ("=@=", 2) => ClauseType::CompareTerm(CompareTermQT::Equal),
-            ("display", 1) => ClauseType::Display,
-            ("duplicate_term", 2) => ClauseType::DuplicateTerm,
-            ("==", 2) => ClauseType::Eq,
-            ("functor", 3) => ClauseType::Functor,
-            ("ground", 1) => ClauseType::Ground,
-            ("is", 2) => ClauseType::Is,
-            ("keysort", 2) => ClauseType::KeySort,
-            ("\\==", 2) => ClauseType::NotEq,
-            ("setup_call_cleanup", 3) => ClauseType::SetupCallCleanup,            
-            ("sort", 2) => ClauseType::Sort,
-            ("throw", 1) => ClauseType::Throw,
-            _ => if let Some(fixity) = fixity {
-                ClauseType::Op(name, fixity, CodeIndex::default())
-            } else {
-                ClauseType::Named(name, CodeIndex::default())
-            }
-        }
+        InlinedClauseType::from(name.as_str(), arity)
+            .map(ClauseType::Inlined)
+            .unwrap_or_else(|| {
+                BuiltInClauseType::from(name.as_str(), arity)
+                    .map(ClauseType::BuiltIn)
+                    .unwrap_or_else(|| {
+                        if let Some(fixity) = fixity {
+                            ClauseType::Op(name, fixity, CodeIndex::default())
+                        } else if name.as_str() == "call" {
+                            ClauseType::CallN
+                        } else {
+                            ClauseType::Named(name, CodeIndex::default())
+                        }
+                    })
+            })            
     }
 }
 
@@ -902,18 +970,21 @@ impl<'a> TermRef<'a> {
     }
 }
 
+#[derive(Clone)]
 pub enum ChoiceInstruction {
     RetryMeElse(usize),
     TrustMe,
     TryMeElse(usize)
 }
 
+#[derive(Clone)]
 pub enum CutInstruction {
     Cut(RegType),
     GetLevel(RegType),
     NeckCut
 }
 
+#[derive(Clone)]
 pub enum IndexedChoiceInstruction {
     Retry(usize),
     Trust(usize),
@@ -1219,6 +1290,7 @@ impl ArithmeticTerm {
     }
 }
 
+#[derive(Clone)]
 pub enum ArithmeticInstruction {
     Add(ArithmeticTerm, ArithmeticTerm, usize),
     Sub(ArithmeticTerm, ArithmeticTerm, usize),
@@ -1237,8 +1309,8 @@ pub enum ArithmeticInstruction {
     Neg(ArithmeticTerm, usize)
 }
 
+#[derive(Clone)]
 pub enum BuiltInInstruction {
-    CallInlined(InlinedClauseType, Vec<RegType>),
     CleanUpBlock,
     CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
     DefaultRetryMeElse(usize),
@@ -1254,13 +1326,12 @@ pub enum BuiltInInstruction {
     InstallCleaner,
     InstallInferenceCounter(RegType, RegType, RegType),
     InstallNewBlock,
-    InternalCallN,
     RemoveCallPolicyCheck,
     RemoveInferenceCounter(RegType, RegType),
     ResetBlock,
     RestoreCutPolicy,
     SetBall,
-    SetCutPoint(RegType),    
+    SetCutPoint(RegType),
     Succeed,
     Unify,
     UnwindStack
@@ -1292,6 +1363,7 @@ impl ControlInstruction {
     }
 }
 
+#[derive(Clone)]
 pub enum IndexingInstruction {
     SwitchOnTerm(usize, usize, usize, usize),
     SwitchOnConstant(usize, HashMap<Constant, usize>),
@@ -1304,6 +1376,7 @@ impl From<IndexingInstruction> for Line {
     }
 }
 
+#[derive(Clone)]
 pub enum FactInstruction {
     GetConstant(Level, Constant, RegType),
     GetList(Level, RegType),
@@ -1317,6 +1390,7 @@ pub enum FactInstruction {
     UnifyVoid(usize)
 }
 
+#[derive(Clone)]
 pub enum QueryInstruction {
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
@@ -1336,6 +1410,7 @@ pub type CompiledFact = Vec<FactInstruction>;
 
 pub type CompiledQuery = Vec<QueryInstruction>;
 
+#[derive(Clone)]
 pub enum Line {
     Arithmetic(ArithmeticInstruction),
     BuiltIn(BuiltInInstruction),
@@ -1474,15 +1549,39 @@ impl From<(usize, ClauseName)> for CodeIndex {
 
 #[derive(Clone, PartialEq)]
 pub enum CodePtr {
+    BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
+    CallN(usize, LocalCodePtr), // the arity of the call, successor call.
+    Local(LocalCodePtr)
+}
+
+impl CodePtr {
+    pub fn local(&self) -> LocalCodePtr {
+        match self {
+            &CodePtr::BuiltInClause(_, ref local)
+          | &CodePtr::CallN(_, ref local)
+          | &CodePtr::Local(ref local) => local.clone()
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum LocalCodePtr {
     DirEntry(usize, ClauseName), // offset, resident module name.
     TopLevel(usize, usize) // chunk_num, offset.
 }
 
-impl CodePtr {
+impl LocalCodePtr {
     pub fn module_name(&self) -> ClauseName {
         match self {
-            &CodePtr::DirEntry(_, ref name) => name.clone(),
+            &LocalCodePtr::DirEntry(_, ref name) => name.clone(),
             _ => ClauseName::BuiltIn("user")
+        }
+    }
+
+    pub fn assign_if_local(&mut self, cp: CodePtr) {
+        match cp {
+            CodePtr::Local(local) => *self = local,            
+            _ => {}
         }
     }
 }
@@ -1490,11 +1589,20 @@ impl CodePtr {
 impl PartialOrd<CodePtr> for CodePtr {
     fn partial_cmp(&self, other: &CodePtr) -> Option<Ordering> {
         match (self, other) {
-            (&CodePtr::DirEntry(p1, _), &CodePtr::DirEntry(p2, _)) =>
+            (&CodePtr::Local(ref l1), &CodePtr::Local(ref l2)) => l1.partial_cmp(l2),            
+            _ => Some(Ordering::Greater)
+        }
+    }
+}
+
+impl PartialOrd<LocalCodePtr> for LocalCodePtr {
+    fn partial_cmp(&self, other: &LocalCodePtr) -> Option<Ordering> {
+        match (self, other) {
+            (&LocalCodePtr::DirEntry(p1, _), &LocalCodePtr::DirEntry(p2, _)) =>
                 p1.partial_cmp(&p2),
-            (&CodePtr::DirEntry(..), &CodePtr::TopLevel(_, _)) =>
+            (&LocalCodePtr::DirEntry(..), &LocalCodePtr::TopLevel(_, _)) =>
                 Some(Ordering::Less),
-            (&CodePtr::TopLevel(_, p1), &CodePtr::TopLevel(_, ref p2)) =>
+            (&LocalCodePtr::TopLevel(_, p1), &LocalCodePtr::TopLevel(_, ref p2)) =>
                 p1.partial_cmp(p2),
             _ => Some(Ordering::Greater)
         }
@@ -1503,7 +1611,33 @@ impl PartialOrd<CodePtr> for CodePtr {
 
 impl Default for CodePtr {
     fn default() -> Self {
-        CodePtr::TopLevel(0, 0)
+        CodePtr::Local(LocalCodePtr::default())
+    }
+}
+
+impl Default for LocalCodePtr {
+    fn default() -> Self {
+        LocalCodePtr::TopLevel(0, 0)
+    }
+}
+
+impl Add<usize> for LocalCodePtr {
+    type Output = LocalCodePtr;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        match self {
+            LocalCodePtr::DirEntry(p, name) => LocalCodePtr::DirEntry(p + rhs, name),
+            LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs)
+        }
+    }
+}
+
+impl AddAssign<usize> for LocalCodePtr {
+    fn add_assign(&mut self, rhs: usize) {
+        match self {
+            &mut LocalCodePtr::DirEntry(ref mut p, _) |
+            &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs
+        }
     }
 }
 
@@ -1512,8 +1646,9 @@ impl Add<usize> for CodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            CodePtr::DirEntry(p, name) => CodePtr::DirEntry(p + rhs, name),
-            CodePtr::TopLevel(cn, p) => CodePtr::TopLevel(cn, p + rhs)
+            CodePtr::Local(local) => CodePtr::Local(local + rhs),
+            CodePtr::BuiltInClause(_, local) => CodePtr::Local(local + rhs),
+            CodePtr::CallN(_, local) => CodePtr::Local(local + rhs),
         }
     }
 }
@@ -1521,8 +1656,8 @@ impl Add<usize> for CodePtr {
 impl AddAssign<usize> for CodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut CodePtr::DirEntry(ref mut p, _) |
-            &mut CodePtr::TopLevel(_, ref mut p) => *p += rhs
+            &mut CodePtr::Local(ref mut local) => *local += rhs,
+            _ => *self = CodePtr::Local(self.local() + rhs)
         }
     }
 }

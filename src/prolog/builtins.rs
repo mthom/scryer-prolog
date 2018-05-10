@@ -1,8 +1,6 @@
 use prolog::ast::*;
-use prolog::num::bigint::{BigInt};
 
 use std::collections::HashMap;
-use std::rc::Rc;
 
 // from 7.12.2 b) of 13211-1:1995
 #[derive(Clone, Copy)]
@@ -92,7 +90,8 @@ impl EvalError {
     }
 }
 
-fn get_builtins() -> Code {
+/*
+fn get_builtins() -> Code {    
     vec![internal_call_n!(), // callN/N, 0.
          is_atomic!(temp_v!(1)), // atomic/1, 1.
          proceed!(),
@@ -737,7 +736,7 @@ fn get_builtins() -> Code {
          acyclic_term_execute!(), // acyclic_term/1, 485.
          cyclic_term_execute!(), // cyclic_term/1, 486.
     ]
-}
+} */
 
 pub fn default_op_dir() -> OpDir
 {

@@ -38,7 +38,7 @@ impl MachineState {
             b0: 0,
             e: 0,
             num_of_args: 0,
-            cp: CodePtr::default(),
+            cp: LocalCodePtr::default(),
             fail: false,
             heap: Heap::with_capacity(256),
             mode: MachineMode::Write,
@@ -670,7 +670,7 @@ impl MachineState {
             &ArithmeticInstruction::Xor(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
-
+                
                 self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.xor(n1, n2)));
                 self.p += 1;
             },
@@ -1011,8 +1011,7 @@ impl MachineState {
         }
     }
 
-    fn handle_internal_call_n<'a>(&mut self, call_policy: &mut Box<CallPolicy>,
-                                  code_dirs: CodeDirs<'a>)
+    pub(super) fn handle_internal_call_n(&mut self)
     {
         let arity = self.num_of_args + 1;
         let pred  = self.registers[1].clone();
@@ -1023,32 +1022,20 @@ impl MachineState {
 
         if arity > 1 {
             self.registers[arity - 1] = pred;
-
-            if let Some((name, arity)) = self.setup_call_n(arity - 1) {
-                if let Some(idx) = code_dirs.get(name.clone(), arity, self.p.module_name()) {
-                    try_or_fail!(self, call_policy.try_execute(self, name, arity, idx));
-                    return;
-                }
-            }
+            return;
         }
 
         self.fail = true;
     }
 
-    pub(super) fn goto_throw(&mut self) {
-        self.num_of_args = 1;
-        self.b0 = self.b;
-        self.p  = CodePtr::DirEntry(59, clause_name!("builtin"));
-    }
-
     pub(super) fn set_ball(&mut self) {
         let addr = self[temp_v!(1)].clone();
         self.ball.boundary = self.heap.h;
-             
+
         let mut duplicator = DuplicateBallTerm::new(self);
-        duplicator.duplicate_term(addr);        
+        duplicator.duplicate_term(addr);
     }
-    
+
     pub(super) fn unwind_stack(&mut self) {
         self.b = self.block;
         self.or_stack.truncate(self.b);
@@ -1071,7 +1058,6 @@ impl MachineState {
                             self.error_form(self.representation_error(RepFlag::MaxArity), stub);
 
                         self.throw_exception(representation_error);
-
                         return None;
                     }
 
@@ -1334,20 +1320,15 @@ impl MachineState {
         };
     }
 
-    pub(super) fn execute_inlined(&mut self, inlined: &InlinedClauseType, rs: &Vec<RegType>)
-    {
-        let r1 = rs[0].clone();
-
+    pub(super) fn execute_inlined(&mut self, inlined: &InlinedClauseType) {
         match inlined {
-            &InlinedClauseType::CompareNumber(cmp) => {
-                let r2 = rs[1].clone();
-
+            &InlinedClauseType::CompareNumber(cmp, r1, r2) => {
                 let n1 = try_or_fail!(self, self.arith_eval_by_metacall(r1));
                 let n2 = try_or_fail!(self, self.arith_eval_by_metacall(r2));
 
                 self.compare_numbers(cmp, n1, n2);
             },
-            &InlinedClauseType::IsAtom => {
+            &InlinedClauseType::IsAtom(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1355,7 +1336,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsAtomic => {
+            &InlinedClauseType::IsAtomic(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1363,7 +1344,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsInteger => {
+            &InlinedClauseType::IsInteger(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1371,7 +1352,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsCompound => {
+            &InlinedClauseType::IsCompound(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1379,7 +1360,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsFloat => {
+            &InlinedClauseType::IsFloat(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1387,7 +1368,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsRational => {
+            &InlinedClauseType::IsRational(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1395,7 +1376,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsString => {
+            &InlinedClauseType::IsString(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1403,7 +1384,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsNonVar => {
+            &InlinedClauseType::IsNonVar(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1411,7 +1392,7 @@ impl MachineState {
                     _ => self.p += 1
                 };
             },
-            &InlinedClauseType::IsVar => {
+            &InlinedClauseType::IsVar(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1428,8 +1409,6 @@ impl MachineState {
                                              instr: &BuiltInInstruction)
     {
         match instr {
-            &BuiltInInstruction::CallInlined(ref inlined, ref rs) =>
-                self.execute_inlined(inlined, rs),
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) => {
                 let n1 = try_or_fail!(self, self.get_number(at_1));
                 let n2 = try_or_fail!(self, self.get_number(at_2));
@@ -1457,7 +1436,7 @@ impl MachineState {
                     let val = self.try_get_arg();
 
                     if lco {
-                        self.p = self.cp.clone();
+                        self.p = CodePtr::Local(self.cp.clone());
                     } else {
                         self.p += 1;
                     }
@@ -1658,8 +1637,6 @@ impl MachineState {
             },
             &BuiltInInstruction::UnwindStack =>
                 self.unwind_stack(),
-            &BuiltInInstruction::InternalCallN =>
-                self.handle_internal_call_n(call_policy, code_dirs),
             &BuiltInInstruction::Fail => {
                 self.fail = true;
                 self.p += 1;
@@ -1946,66 +1923,86 @@ impl MachineState {
         false
     }
 
+    pub(super) fn setup_built_in_call(&mut self, ct: BuiltInClauseType, lco: bool)
+    {        
+        self.num_of_args = ct.arity();
+        self.b0 = self.b;
+
+        self.p = CodePtr::BuiltInClause(ct, self.p.local());
+    }
+
+    pub(super) fn allocate(&mut self, num_cells: usize) {
+        let gi = self.next_global_index();
+
+        self.p += 1;
+
+        if self.e + 1 < self.and_stack.len() {
+            let and_gi = self.and_stack[self.e].global_index;
+            let or_gi = self.or_stack.top()
+                .map(|or_fr| or_fr.global_index)
+                .unwrap_or(0);
+
+            if and_gi > or_gi {
+                let index = self.e + 1;
+
+                self.and_stack[index].e  = self.e;
+                self.and_stack[index].cp = self.cp.clone();
+                self.and_stack[index].global_index = gi;
+
+                self.and_stack.resize(index, num_cells);
+                self.e = index;
+
+                return;
+            }
+        }
+
+        self.and_stack.push(gi, self.e, self.cp.clone(), num_cells);
+        self.e = self.and_stack.len() - 1;
+    }
+
+    fn deallocate(&mut self) {
+        let e = self.e;
+
+        self.cp = self.and_stack[e].cp.clone();
+        self.e  = self.and_stack[e].e;
+
+        self.p += 1;
+    }
+
     pub(super) fn execute_ctrl_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
                                          call_policy: &mut Box<CallPolicy>,
                                          cut_policy:  &mut Box<CutPolicy>,
                                          instr: &ControlInstruction)
     {
         match instr {
-            &ControlInstruction::Allocate(num_cells) => {
-                let gi = self.next_global_index();
-
-                self.p += 1;
-
-                if self.e + 1 < self.and_stack.len() {
-                    let and_gi = self.and_stack[self.e].global_index;
-                    let or_gi = self.or_stack.top()
-                        .map(|or_fr| or_fr.global_index)
-                        .unwrap_or(0);
-
-                    if and_gi > or_gi {
-                        let index = self.e + 1;
-
-                        self.and_stack[index].e  = self.e;
-                        self.and_stack[index].cp = self.cp.clone();
-                        self.and_stack[index].global_index = gi;
-
-                        self.and_stack.resize(index, num_cells);
-
-                        self.e = index;
-
-                        return;
-                    }
-                }
-
-                self.and_stack.push(gi, self.e, self.cp.clone(), num_cells);
-                self.e = self.and_stack.len() - 1;
-            },
-            &ControlInstruction::CallClause(ref ct, arity, _, lco) =>
-                try_or_fail!(self, call_policy.try_call_clause(self, code_dirs, ct, arity, lco)),
+            &ControlInstruction::Allocate(num_cells) =>
+                self.allocate(num_cells),
+            &ControlInstruction::CallClause(ClauseType::CallN, arity, _, lco) =>
+                try_or_fail!(self, call_policy.call_n(self, arity, code_dirs, lco)),
+            &ControlInstruction::CallClause(ClauseType::BuiltIn(ref ct), _, _, lco) =>
+                try_or_fail!(self, call_policy.call_builtin(self, ct, lco)),
+            &ControlInstruction::CallClause(ClauseType::Inlined(ref ct), _, _, lco) =>
+                self.execute_inlined(ct),
+            &ControlInstruction::CallClause(ClauseType::Named(ref name, ref idx), arity, _, lco)
+          | &ControlInstruction::CallClause(ClauseType::Op(ref name, _, ref idx), arity, _, lco) =>
+                try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
+                                                            lco)),
             &ControlInstruction::CheckCpExecute => {
                 let a = self.store(self.deref(self[temp_v!(2)].clone()));
 
                 match a {
                     Addr::Con(Constant::Usize(old_b)) if self.b > old_b + 1 => {
-                        self.p = self.cp.clone();
+                        self.p = CodePtr::Local(self.cp.clone());
                     },
                     _ => {
                         self.num_of_args = 2;
                         self.b0 = self.b;
                         // goto sgc_on_success/2, 382.
-                        self.p = CodePtr::DirEntry(382, clause_name!("builtin"));
+                        self.p = dir_entry!(382, clause_name!("builtin"));
                     }
                 };
             },
-            &ControlInstruction::Deallocate => {
-                let e = self.e;
-
-                self.cp = self.and_stack[e].cp.clone();
-                self.e  = self.and_stack[e].e;
-
-                self.p += 1;
-            },
+            &ControlInstruction::Deallocate => self.deallocate(),
             &ControlInstruction::GetCleanerCall => {
                 let dest = self[temp_v!(1)].clone();
 
@@ -2032,7 +2029,7 @@ impl MachineState {
                 self.fail = true;
             },
             &ControlInstruction::Goto(p, arity, lco) =>
-                self.goto_ptr(CodePtr::DirEntry(p, clause_name!("builtin")), arity, lco),
+                self.goto_ptr(dir_entry!(p, clause_name!("builtin")), arity, lco),
             &ControlInstruction::IsClause(lco, r, ref at) => {
                 let a1 = self[r].clone();
                 let a2 = try_or_fail!(self, self.get_number(at));
@@ -2042,7 +2039,7 @@ impl MachineState {
             },
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
                 if !lco {
-                    self.cp = self.p.clone() + 1;
+                    self.cp.assign_if_local(self.p.clone() + 1);
                 }
 
                 self.num_of_args = arity;
@@ -2050,13 +2047,13 @@ impl MachineState {
                 self.p += offset;
             },
             &ControlInstruction::Proceed =>
-                self.p = self.cp.clone(),
+                self.p = CodePtr::Local(self.cp.clone())
         };
     }
 
     pub(super) fn goto_ptr(&mut self, p: CodePtr, arity: usize, lco:bool) {
         if !lco {
-            self.cp = self.p.clone() + 1;
+            self.cp.assign_if_local(self.p.clone() + 1);
         }
 
         self.num_of_args = arity;
@@ -2169,7 +2166,7 @@ impl MachineState {
         self.s = 0;
         self.tr = 0;
         self.p = CodePtr::default();
-        self.cp = CodePtr::default();
+        self.cp = LocalCodePtr::default();
         self.num_of_args = 0;
 
         self.fail = false;

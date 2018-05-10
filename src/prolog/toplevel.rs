@@ -233,7 +233,7 @@ fn unfold_by_str(mut term: Term, s: &str) -> Vec<Term>
         terms.push(fst);
         term = snd;
     }
-
+    
     terms.push(term);
     terms
 }
@@ -397,10 +397,8 @@ impl RelationWorker {
                 },
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
-            Term::Clause(r, name, mut terms, fixity) =>
-                if let Some(system_ct) = SystemClauseType::from(name.as_str(), terms.len()) {
-                    Ok(QueryTerm::Clause(r, ClauseType::System(system_ct), terms))
-                } else if name.as_str() == ";" {
+            Term::Clause(r, name, mut terms, fixity) =>                
+                if name.as_str() == ";" {
                     if terms.len() == 2 {
                         let term = Term::Clause(r, name.clone(), terms, fixity);
                         let (stub, clauses) = self.fabricate_disjunct(term);

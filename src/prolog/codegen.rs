@@ -254,18 +254,18 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                        -> Result<(), ParserError>
     {
         match ct {
-            InlinedClauseType::CompareNumber(cmp) => {
+            InlinedClauseType::CompareNumber(cmp, ..) => {
                 let (mut lcode, at_1) = self.call_arith_eval(terms[0].as_ref(), 1)?;
                 let (mut rcode, at_2) = self.call_arith_eval(terms[1].as_ref(), 2)?;
 
                 code.append(&mut lcode);
                 code.append(&mut rcode);
-
+                
                 code.push(compare_number_instr!(cmp,
                                                 at_1.unwrap_or(interm!(1)),
                                                 at_2.unwrap_or(interm!(2))));
             },
-            InlinedClauseType::IsAtom =>
+            InlinedClauseType::IsAtom(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::Atom(_)) => {
                         code.push(succeed!());
@@ -278,7 +278,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     }
                 },
-            InlinedClauseType::IsAtomic =>
+            InlinedClauseType::IsAtomic(..) =>
                 match terms[0].as_ref() {
                     &Term::AnonVar | &Term::Clause(..) | &Term::Cons(..) => {
                         code.push(fail!());
@@ -291,7 +291,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(is_atomic!(r));
                     }
                 },
-            InlinedClauseType::IsCompound =>
+            InlinedClauseType::IsCompound(..) =>
                 match terms[0].as_ref() {
                     &Term::Clause(..) | &Term::Cons(..) => {
                         code.push(succeed!());
@@ -304,7 +304,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     }
                 },
-            InlinedClauseType::IsRational =>
+            InlinedClauseType::IsRational(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::Number(Number::Rational(_))) => {
                         code.push(succeed!());
@@ -317,7 +317,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     }
                 },
-            InlinedClauseType::IsFloat =>
+            InlinedClauseType::IsFloat(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::Number(Number::Float(_))) => {
                         code.push(succeed!());
@@ -330,7 +330,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     }
                 },
-            InlinedClauseType::IsString =>
+            InlinedClauseType::IsString(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::String(_)) => {
                         code.push(succeed!());
@@ -343,7 +343,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     }
                 },
-            InlinedClauseType::IsNonVar =>
+            InlinedClauseType::IsNonVar(..) =>
                 match terms[0].as_ref() {
                     &Term::AnonVar => {
                         code.push(fail!());
@@ -356,7 +356,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(succeed!());
                     }
                 },
-            InlinedClauseType::IsInteger =>
+            InlinedClauseType::IsInteger(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::Number(Number::Integer(_))) => {
                         code.push(succeed!());
@@ -369,7 +369,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     },
                 },
-            InlinedClauseType::IsVar =>
+            InlinedClauseType::IsVar(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(..) | &Term::Clause(..) | &Term::Cons(..) => {
                         code.push(fail!());
@@ -416,7 +416,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         } else {
                             Line::Cut(CutInstruction::Cut(perm_v!(1)))
                         }),
-                    &QueryTerm::Clause(_, ClauseType::Is, ref terms) => {
+                    &QueryTerm::Clause(_, ClauseType::BuiltIn(BuiltInClauseType::Is), ref terms) =>
+                    {
                         let (mut acode, at) = self.call_arith_eval(terms[1].as_ref(), 1)?;
                         code.append(&mut acode);
 

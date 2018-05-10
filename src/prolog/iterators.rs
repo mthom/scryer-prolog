@@ -341,7 +341,8 @@ impl<'a> ChunkedIterator<'a>
                     result.push(term),
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::Inlined(_), _)) =>
                     result.push(term),
-                ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::CallN, ref subterms)) => {
+                ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::CallN, ref subterms)) =>
+                {
                     result.push(term);
                     arity = subterms.len() + 1;
                     break;

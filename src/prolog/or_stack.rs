@@ -6,7 +6,7 @@ use std::vec::Vec;
 pub struct Frame {
     pub global_index: usize,
     pub e: usize,
-    pub cp: CodePtr,
+    pub cp: LocalCodePtr,
     pub b: usize,    
     pub bp: CodePtr,
     pub tr: usize,
@@ -18,7 +18,7 @@ pub struct Frame {
 impl Frame {
     fn new(global_index: usize,
            e: usize,
-           cp: CodePtr,
+           cp: LocalCodePtr,
            b: usize,
            bp: CodePtr,
            tr: usize,
@@ -55,7 +55,7 @@ impl OrStack {
     pub fn push(&mut self,
                 global_index: usize,
                 e: usize,
-                cp: CodePtr,
+                cp: LocalCodePtr,
                 b: usize,
                 bp: CodePtr,
                 tr: usize,

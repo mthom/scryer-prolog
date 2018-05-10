@@ -173,10 +173,6 @@ impl fmt::Display for IndexedChoiceInstruction {
 impl fmt::Display for BuiltInInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &BuiltInInstruction::CallInlined(InlinedClauseType::CompareNumber(cmp), ref rs) =>
-                write!(f, "number_test {}, {}, {}", cmp, &rs[0], &rs[1]),
-            &BuiltInInstruction::CallInlined(ict, ref rs) =>
-                write!(f, "call_inlined_{}, {}", ict.name(), &rs[0]),
             &BuiltInInstruction::CleanUpBlock =>
                 write!(f, "clean_up_block"),
             &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
@@ -209,8 +205,6 @@ impl fmt::Display for BuiltInInstruction {
                 write!(f, "install_cleaner"),
             &BuiltInInstruction::InstallNewBlock =>
                 write!(f, "install_new_block"),
-            &BuiltInInstruction::InternalCallN =>
-                write!(f, "internal_call_N"),
             &BuiltInInstruction::RemoveCallPolicyCheck =>
                 write!(f, "remove_call_policy_check"),
             &BuiltInInstruction::RemoveInferenceCounter(r1, r2) =>

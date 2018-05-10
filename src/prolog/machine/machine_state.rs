@@ -209,7 +209,7 @@ pub struct MachineState {
     pub(super) b0: usize,
     pub(super) e: usize,
     pub(super) num_of_args: usize,
-    pub(super) cp: CodePtr,
+    pub(super) cp: LocalCodePtr,
     pub(super) fail: bool,
     pub(crate) heap: Heap,
     pub(super) mode: MachineMode,
@@ -248,10 +248,10 @@ pub(crate) trait CallPolicy: Any {
             IndexPtr::Index(compiled_tl_index) => {
                 let module_name = idx.0.borrow().1.clone();
 
-                machine_st.cp = machine_st.p.clone() + 1;
+                machine_st.cp.assign_if_local(machine_st.p.clone() + 1);
                 machine_st.num_of_args = arity;
                 machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(compiled_tl_index, module_name);
+                machine_st.p  = dir_entry!(compiled_tl_index, module_name);
             }
         }
 
@@ -270,7 +270,7 @@ pub(crate) trait CallPolicy: Any {
 
                 machine_st.num_of_args = arity;
                 machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(compiled_tl_index, module_name);
+                machine_st.p  = dir_entry!(compiled_tl_index, module_name);
             }
         }
 
@@ -400,55 +400,66 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn try_call_clause<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
-                           ct: &ClauseType, arity: usize, lco: bool)
-                           -> CallResult
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
+                  code_dirs: CodeDirs<'a>, lco: bool)
+                  -> CallResult
+    {
+        loop {
+            if let Some((name, mut arity)) = machine_st.setup_call_n(arity) {
+                let user = clause_name!("user");
+
+                if machine_st.fail {
+                    return Ok(());
+                }
+                
+                match ClauseType::from(name.clone(), arity, None) {
+                    ClauseType::CallN => {                        
+                        machine_st.num_of_args = arity;
+                        machine_st.handle_internal_call_n();
+                                                
+                        continue;
+                    },
+                    ClauseType::BuiltIn(built_in) =>
+                        machine_st.setup_built_in_call(built_in, lco),
+                    ClauseType::Inlined(inlined) =>
+                        machine_st.execute_inlined(&inlined),
+                    ClauseType::Op(..) | ClauseType::Named(..) =>
+                        if let Some(idx) = code_dirs.get(name.clone(), arity, user) {
+                            self.context_call(machine_st, name, arity, idx, lco)?;
+                        } else {
+                            return Err(machine_st.existence_error(name, arity));
+                        }
+                };
+            }
+
+            break;
+        }
+
+        Ok(())
+    }
+
+    fn system_call(&mut self, machine_st: &mut MachineState, ct: &SystemClauseType) -> CallResult
     {
         match ct {
-            &ClauseType::AcyclicTerm => {
+            &SystemClauseType::SkipMaxList => {
+                machine_st.skip_max_list()?;
+                machine_st.p += 1;
+
+                Ok(())
+            }
+        }
+    }
+
+    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType, lco: bool)
+                        -> CallResult
+    {
+        match ct {
+            &BuiltInClauseType::AcyclicTerm => {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = machine_st.is_cyclic_term(addr);
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::Arg => {
-                if !lco {
-                    machine_st.cp = machine_st.p.clone() + 1;
-                }
-
-                machine_st.num_of_args = 3;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(166, clause_name!("builtin"));
-
-                Ok(())
-            },
-            &ClauseType::Catch => {
-                if !lco {
-                    machine_st.cp = machine_st.p.clone() + 1;
-                }
-
-                machine_st.num_of_args = 3;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(5, clause_name!("builtin"));
-
-                Ok(())
-            },
-            &ClauseType::CallN =>
-                if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-                    let user = clause_name!("user");
-                    
-                    match ClauseType::from(name.clone(), arity, None) {
-                        ClauseType::Op(..) | ClauseType::Named(..) =>
-                            if let Some(idx) = code_dirs.get(name.clone(), arity, user) {
-                                self.context_call(machine_st, name, arity, idx, lco)
-                            } else {
-                                Err(machine_st.existence_error(name, arity))
-                            },
-                        ct => self.try_call_clause(machine_st, code_dirs, &ct, arity, lco),
-                    }
-                } else {
-                    Ok(())
-                },
-            &ClauseType::Compare => {
+            &BuiltInClauseType::Compare => {
                 let a1 = machine_st[temp_v!(1)].clone();
                 let a2 = machine_st[temp_v!(2)].clone();
                 let a3 = machine_st[temp_v!(3)].clone();
@@ -462,7 +473,7 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.unify(a1, c);
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::CompareTerm(qt) => {
+            &BuiltInClauseType::CompareTerm(qt) => {
                 match qt {
                     CompareTermQT::Equal =>
                         machine_st.fail = machine_st.structural_eq_test(),
@@ -473,12 +484,12 @@ pub(crate) trait CallPolicy: Any {
 
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::CyclicTerm => {
+            &BuiltInClauseType::CyclicTerm => {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = !machine_st.is_cyclic_term(addr);
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::Display => {
+            &BuiltInClauseType::Display => {
                 let output = machine_st.print_term(machine_st[temp_v!(1)].clone(),
                                                    DisplayFormatter {},
                                                    PrinterOutputter::new());
@@ -486,27 +497,27 @@ pub(crate) trait CallPolicy: Any {
                 println!("{}", output.result());
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::DuplicateTerm => {
+            &BuiltInClauseType::DuplicateTerm => {
                 machine_st.duplicate_term();
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::Eq => {
+            &BuiltInClauseType::Eq => {
                 machine_st.fail = machine_st.eq_test();
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::Ground => {
+            &BuiltInClauseType::Ground => {
                 machine_st.fail = machine_st.ground_test();
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::Functor => {
+            &BuiltInClauseType::Functor => {
                 machine_st.try_functor()?;
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::NotEq => {
+            &BuiltInClauseType::NotEq => {
                 machine_st.fail = !machine_st.eq_test();
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::Sort => {
+            &BuiltInClauseType::Sort => {
                 machine_st.check_sort_errors()?;
 
                 let stub = machine_st.functor_stub(clause_name!("sort"), 2);
@@ -522,7 +533,7 @@ pub(crate) trait CallPolicy: Any {
 
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::KeySort => {
+            &BuiltInClauseType::KeySort => {
                 machine_st.check_keysort_errors()?;
 
                 let stub = machine_st.functor_stub(clause_name!("keysort"), 2);
@@ -544,25 +555,7 @@ pub(crate) trait CallPolicy: Any {
 
                 return_from_clause!(lco, machine_st)
             },
-            &ClauseType::Throw => {
-                if !lco {
-                    machine_st.cp = machine_st.p.clone() + 1;
-                }
-
-                machine_st.goto_throw();
-                Ok(())
-            },
-            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
-                self.context_call(machine_st, name.clone(), arity, idx.clone(), lco),
-            &ClauseType::CallWithInferenceLimit => {
-                machine_st.goto_ptr(CodePtr::DirEntry(409, clause_name!("builtin")), 3, lco);
-                Ok(())
-            },
-            &ClauseType::SetupCallCleanup => {
-                machine_st.goto_ptr(CodePtr::DirEntry(310, clause_name!("builtin")), 3, lco);
-                Ok(())
-            },
-            &ClauseType::Is => {
+            &BuiltInClauseType::Is => {
                 let a = machine_st[temp_v!(1)].clone();
                 let result = machine_st.arith_eval_by_metacall(temp_v!(2))?;
 
@@ -571,14 +564,8 @@ pub(crate) trait CallPolicy: Any {
 
                 Ok(())
             },
-            &ClauseType::Inlined(ref inlined) => {
-                machine_st.execute_inlined(inlined, &vec![temp_v!(1), temp_v!(2)]);
-                Ok(())
-            },
-            &ClauseType::System(ref system) => {
-                machine_st.execute_system(system)?;
-                return_from_clause!(lco, machine_st)
-            }
+            &BuiltInClauseType::System(ref ct) =>
+                self.system_call(machine_st, ct),
         }
     }
 }
@@ -680,11 +667,10 @@ impl CallPolicy for CallWithInferenceLimitCallPolicy {
         self.increment()
     }
 
-    fn try_call_clause<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
-                           ct: &ClauseType, arity: usize, lco: bool)
-                           -> CallResult
+    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType, lco: bool)
+                        -> CallResult
     {
-        self.prev_policy.try_call_clause(machine_st, code_dirs, ct, arity, lco)?;
+        self.prev_policy.call_builtin(machine_st, ct, lco)?;
         self.increment()
     }
 }
@@ -757,11 +743,11 @@ impl CutPolicy for SetupCallCleanupCutPolicy {
         machine_st.p += 1;
 
         if !self.out_of_cont_pts() {
-            machine_st.cp = machine_st.p.clone();
+            machine_st.cp.assign_if_local(machine_st.p.clone());
             machine_st.num_of_args = 0;
             machine_st.b0 = machine_st.b;
             // goto_call run_cleaners_without_handling/0, 370.
-            machine_st.p = CodePtr::DirEntry(370, clause_name!("builtin"));
+            machine_st.p = dir_entry!(370, clause_name!("builtin"));
         }
     }
 }

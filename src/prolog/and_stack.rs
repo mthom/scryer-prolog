@@ -7,12 +7,12 @@ use std::vec::Vec;
 pub struct Frame {
     pub global_index: usize,
     pub e: usize,
-    pub cp: CodePtr,
+    pub cp: LocalCodePtr,
     perms: Vec<Addr>
 }
 
 impl Frame {
-    fn new(global_index: usize, fr: usize, e: usize, cp: CodePtr, n: usize) -> Self {
+    fn new(global_index: usize, fr: usize, e: usize, cp: LocalCodePtr, n: usize) -> Self {
         Frame {
             global_index,
             e: e,
@@ -29,7 +29,7 @@ impl AndStack {
         AndStack(Vec::new())
     }
 
-    pub fn push(&mut self, global_index: usize, e: usize, cp: CodePtr, n: usize) {
+    pub fn push(&mut self, global_index: usize, e: usize, cp: LocalCodePtr, n: usize) {
         let len = self.0.len();
         self.0.push(Frame::new(global_index, len, e, cp, n));
     }
