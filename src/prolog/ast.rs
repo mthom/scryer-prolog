@@ -1402,8 +1402,8 @@ impl ControlInstruction {
 #[derive(Clone)]
 pub enum IndexingInstruction {
     SwitchOnTerm(usize, usize, usize, usize),
-    SwitchOnConstant(usize, HashMap<Constant, usize>),
-    SwitchOnStructure(usize, HashMap<(ClauseName, usize), usize>)
+    SwitchOnConstant(usize, Rc<HashMap<Constant, usize>>),
+    SwitchOnStructure(usize, Rc<HashMap<(ClauseName, usize), usize>>)
 }
 
 impl From<IndexingInstruction> for Line {

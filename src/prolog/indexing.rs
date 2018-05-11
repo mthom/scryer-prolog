@@ -2,6 +2,7 @@ use prolog::ast::*;
 
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
+use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 enum IntIndex {
@@ -132,7 +133,7 @@ impl CodeOffsets {
 
         if con_ind.len() > 1 {
             let index = Self::flatten_index(con_ind, prelude.len());
-            let instr = IndexingInstruction::SwitchOnConstant(index.len(), index);
+            let instr = IndexingInstruction::SwitchOnConstant(index.len(), Rc::new(index));
 
             prelude.push_front(Line::from(instr));
 
@@ -152,7 +153,7 @@ impl CodeOffsets {
 
         if str_ind.len() > 1 {
             let index = Self::flatten_index(str_ind, prelude.len());
-            let instr = IndexingInstruction::SwitchOnStructure(index.len(), index);
+            let instr = IndexingInstruction::SwitchOnStructure(index.len(), Rc::new(index));
 
             prelude.push_front(Line::from(instr));
 

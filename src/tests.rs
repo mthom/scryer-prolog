@@ -1123,6 +1123,84 @@ fn test_queries_on_exceptions()
                             ["E = an_error_1", "X = _1"],
                             ["E = an_error_2", "X = _1"]]);
 }
+
+#[test]
+fn test_queries_on_skip_max_list() {
+    let mut wam = Machine::new();
+    load_init_str_and_include(&mut wam, BUILTINS, "builtins");
+
+    // test on proper and empty lists.
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 5, [], Xs).",
+                           [["Xs = []", "N = 0"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 5, [a,b,c], Xs).",
+                           [["Xs = []", "N = 3"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 2, [a,b,c], Xs).",
+                           [["Xs = [c]", "N = 2"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 3, [a,b,c], Xs).",
+                           [["Xs = []", "N = 3"]]);
+
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 0, [], Xs).",
+                           [["Xs = []", "N = 0"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 0, [a,b,c], Xs).",
+                           [["Xs = [a, b, c]", "N = 0"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 0, [a,b,c], Xs).",
+                           [["Xs = [a, b, c]", "N = 0"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 0, [a,b,c], Xs).",
+                           [["Xs = [a, b, c]", "N = 0"]]);
+
+    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(4, 0, [], Xs).");
+    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 0, [a,b,c], Xs).");
+    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(2, 0, [a,b,c], Xs).");
+    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(1, 0, [a,b,c], Xs).");
+
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(0, 5, [], Xs).",
+                           [["Xs = []"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 5, [a,b,c], Xs).",
+                           [["Xs = []"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(2, 2, [a,b,c], Xs).",
+                           [["Xs = [c]"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 3, [a,b,c], Xs).",
+                           [["Xs = []"]]);
+
+    // tests on proper and empty lists with no max.
+    
+    // test on proper and empty lists.
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, -1, [], Xs).",
+                           [["Xs = []", "N = 0"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, -1, [a,b,c], Xs).",
+                           [["Xs = []", "N = 3"]]);
+
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, -1, [], Xs).",
+                           [["Xs = []", "N = 0"]]);
+
+    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(4, -1, [], Xs).");
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, -1, [a,b,c], Xs).",
+                           [["Xs = []"]]);
+    
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(0, -1, [], Xs).",
+                           [["Xs = []"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, -1, [a,b,c], Xs).",
+                           [["Xs = []"]]);
+    
+    // tests on partial lists.
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 4, [a,b,c|X], Xs0).",
+                           [["X = _1", "Xs0 = _1"]]);
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 3, [a,b,c|X], Xs0).",
+                           [["X = _1", "Xs0 = _1"]]);
+    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 2, [a,b,c|X], Xs0).");
+    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 1, [a,b,c|X], Xs0).");
+    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 0, [a,b,c|X], Xs0).");
+        
+    // tests on cyclic lists.
+    assert_prolog_failure!(&mut wam, "?- Xs = [a,b|Xs], '$skip_max_list'(3, 5, X, Xs0).");
+    assert_prolog_failure!(&mut wam, "?- X = [a,b|Y], Y = [c,d|X], '$skip_max_list'(4, 5, X, Xs0).");
+    assert_prolog_failure!(&mut wam, "?- X = [a,b|Y], Y = [c,d|X], '$skip_max_list'(4, 3, X, Xs0).");
+
+    // tests on non lists.
+    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 9, non_list, Xs).",
+                           [["Xs = non_list", "N = 0"]]);
+}
+
 /*
 #[test]
 fn test_queries_on_conditionals()
@@ -1639,81 +1717,5 @@ fn test_queries_on_call_with_inference_limit()
     assert_prolog_success!(&mut wam, "?- call_with_inference_limit(g(X), 1, R), call_with_inference_limit(g(X), 1, R).",
                            [["R = inference_limit_exceeded", "X = _1"]]);
 
-}
-
-#[test]
-fn test_queries_on_skip_max_list() {
-    let mut wam = Machine::new();
-
-    // test on proper and empty lists.
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 5, [], Xs).",
-                           [["Xs = []", "N = 0"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 5, [a,b,c], Xs).",
-                           [["Xs = []", "N = 3"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 2, [a,b,c], Xs).",
-                           [["Xs = [c]", "N = 2"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 3, [a,b,c], Xs).",
-                           [["Xs = []", "N = 3"]]);
-
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 0, [], Xs).",
-                           [["Xs = []", "N = 0"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 0, [a,b,c], Xs).",
-                           [["Xs = [a, b, c]", "N = 0"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 0, [a,b,c], Xs).",
-                           [["Xs = [a, b, c]", "N = 0"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 0, [a,b,c], Xs).",
-                           [["Xs = [a, b, c]", "N = 0"]]);
-
-    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(4, 0, [], Xs).");
-    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 0, [a,b,c], Xs).");
-    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(2, 0, [a,b,c], Xs).");
-    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(1, 0, [a,b,c], Xs).");
-
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(0, 5, [], Xs).",
-                           [["Xs = []"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 5, [a,b,c], Xs).",
-                           [["Xs = []"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(2, 2, [a,b,c], Xs).",
-                           [["Xs = [c]"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 3, [a,b,c], Xs).",
-                           [["Xs = []"]]);
-
-    // tests on proper and empty lists with no max.
-    
-    // test on proper and empty lists.
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, -1, [], Xs).",
-                           [["Xs = []", "N = 0"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, -1, [a,b,c], Xs).",
-                           [["Xs = []", "N = 3"]]);
-
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, -1, [], Xs).",
-                           [["Xs = []", "N = 0"]]);
-
-    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(4, -1, [], Xs).");
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, -1, [a,b,c], Xs).",
-                           [["Xs = []"]]);
-    
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(0, -1, [], Xs).",
-                           [["Xs = []"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, -1, [a,b,c], Xs).",
-                           [["Xs = []"]]);
-    
-    // tests on partial lists.
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 4, [a,b,c|X], Xs0).",
-                           [["X = _1", "Xs0 = _1"]]);
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 3, [a,b,c|X], Xs0).",
-                           [["X = _1", "Xs0 = _1"]]);
-    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 2, [a,b,c|X], Xs0).");
-    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 1, [a,b,c|X], Xs0).");
-    assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 0, [a,b,c|X], Xs0).");
-        
-    // tests on cyclic lists.
-    assert_prolog_failure!(&mut wam, "?- Xs = [a,b|Xs], '$skip_max_list'(3, 5, X, Xs0).");
-    assert_prolog_failure!(&mut wam, "?- X = [a,b|Y], Y = [c,d|X], '$skip_max_list'(4, 5, X, Xs0).");
-    assert_prolog_failure!(&mut wam, "?- X = [a,b|Y], Y = [c,d|X], '$skip_max_list'(4, 3, X, Xs0).");
-
-    // tests on non lists.
-    assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, 9, non_list, Xs).",
-                           [["Xs = non_list", "N = 0"]]);
 }
 */
