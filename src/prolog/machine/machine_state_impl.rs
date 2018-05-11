@@ -1137,7 +1137,7 @@ impl MachineState {
         fail
     }
 
-    fn try_get_arg(&mut self) -> Result<(), MachineError>
+    pub(super) fn try_get_arg(&mut self) -> CallResult
     {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -1407,36 +1407,6 @@ impl MachineState {
                                   instr: &BuiltInInstruction)
     {
         match instr {            
-            &BuiltInInstruction::GetArg(lco) =>
-                try_or_fail!(self, {
-                    let val = self.try_get_arg();
-
-                    if lco {
-                        self.p = CodePtr::Local(self.cp.clone());
-                    } else {
-                        self.p += 1;
-                    }
-
-                    val
-                }),
-            &BuiltInInstruction::InferenceLevel(r1, r2) => { // X1 = R, X2 = B.
-                let a1 = self[r1].clone();
-                let a2 = self.store(self.deref(self[r2].clone()));
-
-                match a2 {
-                    Addr::Con(Constant::Usize(bp)) =>
-                        if self.b <= bp + 1 {
-                            let a2 = Addr::Con(atom!("!", self.atom_tbl));
-                            self.unify(a1, a2);
-                        } else {
-                            let a2 = Addr::Con(atom!("true", self.atom_tbl));
-                            self.unify(a1, a2);
-                        },
-                    _ => self.fail = true
-                };
-
-                self.p += 1;
-            },
             &BuiltInInstruction::InstallCleaner => {
                 let addr = self[temp_v!(1)].clone();
                 let b = self.b;

@@ -171,12 +171,6 @@ impl fmt::Display for BuiltInInstruction {
         match self {
             &BuiltInInstruction::InstallInferenceCounter(r1, r2, r3) =>
                 write!(f, "install_inference_counter {}, {}, {}", r1, r2, r3),
-            &BuiltInInstruction::GetArg(false) =>
-                write!(f, "get_arg_call X1, X2, X3"),
-            &BuiltInInstruction::GetArg(true) =>
-                write!(f, "get_arg_execute X1, X2, X3"),
-            &BuiltInInstruction::InferenceLevel(r1, r2) =>
-                write!(f, "inference_level {}, {}", r1, r2),
             &BuiltInInstruction::InstallCleaner =>
                 write!(f, "install_cleaner"),
             &BuiltInInstruction::RemoveCallPolicyCheck =>

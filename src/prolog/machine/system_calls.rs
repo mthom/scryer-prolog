@@ -3,6 +3,7 @@ use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{ToPrimitive, Zero};
 use prolog::num::bigint::BigInt;
+use prolog::tabled_rc::*;
 
 use std::rc::Rc;
 
@@ -155,6 +156,26 @@ impl MachineState {
     pub(super) fn system_call(&mut self, ct: &SystemClauseType) -> CallResult
     {
         match ct {
+            &SystemClauseType::GetArg =>
+                self.try_get_arg(),
+            &SystemClauseType::InferenceLevel(r1, r2) => {
+                let a1 = self[r1].clone();
+                let a2 = self.store(self.deref(self[r2].clone()));
+
+                match a2 {
+                    Addr::Con(Constant::Usize(bp)) =>
+                        if self.b <= bp + 1 {
+                            let a2 = Addr::Con(atom!("!", self.atom_tbl));
+                            self.unify(a1, a2);
+                        } else {
+                            let a2 = Addr::Con(atom!("true", self.atom_tbl));
+                            self.unify(a1, a2);
+                        },
+                    _ => self.fail = true
+                };
+
+                Ok(())
+            },            
             &SystemClauseType::CleanUpBlock => {
                 let nb = self.store(self.deref(self[temp_v!(1)].clone()));
 

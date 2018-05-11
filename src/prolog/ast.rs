@@ -714,6 +714,8 @@ pub struct Rule {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
+    GetArg,
+    InferenceLevel(RegType, RegType),
     CleanUpBlock,
     EraseBall,
     Fail,
@@ -731,6 +733,8 @@ pub enum SystemClauseType {
 impl SystemClauseType {
     pub fn arity(&self) -> usize {
         match self {
+            &SystemClauseType::GetArg => 3,
+            &SystemClauseType::InferenceLevel(..) => 2,
             &SystemClauseType::CleanUpBlock => 1,
             &SystemClauseType::EraseBall => 0,
             &SystemClauseType::Fail => 0,
@@ -752,6 +756,8 @@ impl SystemClauseType {
     
     pub fn name(&self) -> ClauseName {
         match self {
+            &SystemClauseType::GetArg => clause_name!("$get_arg"),
+            &SystemClauseType::InferenceLevel(..) => clause_name!("$inference_level"),
             &SystemClauseType::CleanUpBlock => clause_name!("$clean_up_block"),
             &SystemClauseType::EraseBall => clause_name!("$erase_ball"),
             &SystemClauseType::Fail => clause_name!("$fail"),
@@ -769,6 +775,8 @@ impl SystemClauseType {
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
+            ("$get_arg", 3) => Some(SystemClauseType::GetArg),
+            ("$inference_level", 2) => Some(SystemClauseType::InferenceLevel(temp_v!(0), temp_v!(0))),
             ("$clean_up_block", 1) => Some(SystemClauseType::CleanUpBlock),
             ("$erase_ball", 0) => Some(SystemClauseType::EraseBall),
             ("$fail", 0) => Some(SystemClauseType::Fail),
@@ -1361,8 +1369,6 @@ pub enum ArithmeticInstruction {
 
 #[derive(Clone)]
 pub enum BuiltInInstruction {
-    GetArg(bool), // last call.
-    InferenceLevel(RegType, RegType),
     InstallCleaner,
     InstallInferenceCounter(RegType, RegType, RegType),
     RemoveCallPolicyCheck,
