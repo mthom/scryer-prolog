@@ -234,8 +234,6 @@ impl Machine {
                 Some(self.code[p].clone()),
             CodePtr::BuiltInClause(built_in, _) =>
                 Some(call_clause!(ClauseType::BuiltIn(built_in), built_in.arity(), 0)),
-            CodePtr::CallN(arity, _) =>
-                Some(call_clause!(ClauseType::CallN, arity, 0))
         }
     }
 

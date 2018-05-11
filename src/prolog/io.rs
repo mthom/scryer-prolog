@@ -139,10 +139,6 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "deallocate"),
             &ControlInstruction::GetCleanerCall =>
                 write!(f, "get_cleaner_call"),
-            &ControlInstruction::Goto(p, arity, false) =>
-                write!(f, "goto_call {}/{}", p, arity),
-            &ControlInstruction::Goto(p, arity, true) =>
-                write!(f, "goto_execute {}/{}", p, arity),
             &ControlInstruction::IsClause(false, r, ref at) =>
                 write!(f, "is_call {}, {}", r, at),
             &ControlInstruction::IsClause(true, r, ref at) =>
@@ -173,56 +169,24 @@ impl fmt::Display for IndexedChoiceInstruction {
 impl fmt::Display for BuiltInInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &BuiltInInstruction::CleanUpBlock =>
-                write!(f, "clean_up_block"),
-            &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
-                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
-            &BuiltInInstruction::DefaultRetryMeElse(o) =>
-                write!(f, "default_retry_me_else {}", o),
-            &BuiltInInstruction::DefaultSetCutPoint(r) =>
-                write!(f, "default_set_cp {}", r),
-            &BuiltInInstruction::DefaultTrustMe =>
-                write!(f, "default_trust_me"),
             &BuiltInInstruction::InstallInferenceCounter(r1, r2, r3) =>
                 write!(f, "install_inference_counter {}, {}, {}", r1, r2, r3),
-            &BuiltInInstruction::EraseBall =>
-                write!(f, "erase_ball"),
-            &BuiltInInstruction::Fail =>
-                write!(f, "false"),
             &BuiltInInstruction::GetArg(false) =>
                 write!(f, "get_arg_call X1, X2, X3"),
             &BuiltInInstruction::GetArg(true) =>
                 write!(f, "get_arg_execute X1, X2, X3"),
-            &BuiltInInstruction::GetBall =>
-                write!(f, "get_ball X1"),
-            &BuiltInInstruction::GetCurrentBlock =>
-                write!(f, "get_current_block X1"),
-            &BuiltInInstruction::GetCutPoint(r) =>
-                write!(f, "get_cp {}", r),
             &BuiltInInstruction::InferenceLevel(r1, r2) =>
                 write!(f, "inference_level {}, {}", r1, r2),
             &BuiltInInstruction::InstallCleaner =>
                 write!(f, "install_cleaner"),
-            &BuiltInInstruction::InstallNewBlock =>
-                write!(f, "install_new_block"),
             &BuiltInInstruction::RemoveCallPolicyCheck =>
                 write!(f, "remove_call_policy_check"),
             &BuiltInInstruction::RemoveInferenceCounter(r1, r2) =>
                 write!(f, "remove_inference_counter {}, {}", r1, r2),            
-            &BuiltInInstruction::ResetBlock =>
-                write!(f, "reset_block"),
             &BuiltInInstruction::RestoreCutPolicy =>
                 write!(f, "restore_cut_point"),
-            &BuiltInInstruction::SetBall =>
-                write!(f, "set_ball"),
             &BuiltInInstruction::SetCutPoint(r) =>
                 write!(f, "set_cp {}", r),
-            &BuiltInInstruction::Succeed =>
-                write!(f, "true"),
-            &BuiltInInstruction::UnwindStack =>
-                write!(f, "unwind_stack"),
-            &BuiltInInstruction::Unify =>
-                write!(f, "unify"),
         }
     }
 }

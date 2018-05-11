@@ -1,10 +1,10 @@
 use prolog::and_stack::*;
 use prolog::ast::*;
 use prolog::copier::*;
+use prolog::heap_print::*;
 use prolog::machine::machine_errors::MachineStub;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
-use prolog::heap_print::*;
 use prolog::tabled_rc::*;
 
 use downcast::Any;
@@ -227,56 +227,6 @@ pub struct MachineState {
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
 pub(crate) trait CallPolicy: Any {
-    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                    arity: usize, idx: CodeIndex, lco: bool)
-                    -> CallResult
-    {
-        if lco {
-            self.try_execute(machine_st, name, arity, idx)
-        } else {
-            self.try_call(machine_st, name, arity, idx)
-        }
-    }
-
-    fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                arity: usize, idx: CodeIndex)
-                -> CallResult
-    {
-        match idx.0.borrow().0 {
-            IndexPtr::Undefined =>
-                return Err(machine_st.existence_error(name, arity)),
-            IndexPtr::Index(compiled_tl_index) => {
-                let module_name = idx.0.borrow().1.clone();
-
-                machine_st.cp.assign_if_local(machine_st.p.clone() + 1);
-                machine_st.num_of_args = arity;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = dir_entry!(compiled_tl_index, module_name);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn try_execute<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                       arity: usize, idx: CodeIndex)
-                       -> CallResult
-    {
-        match idx.0.borrow().0 {
-            IndexPtr::Undefined =>
-                return Err(machine_st.existence_error(name, arity)),
-            IndexPtr::Index(compiled_tl_index) => {
-                let module_name = idx.0.borrow().1.clone();
-
-                machine_st.num_of_args = arity;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = dir_entry!(compiled_tl_index, module_name);
-            }
-        }
-
-        Ok(())
-    }
-
     fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
     {
         let b = machine_st.b - 1;
@@ -400,124 +350,54 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn call_n<'a>(&mut self, machine_st: &mut MachineState, mut arity: usize,
-                  code_dirs: CodeDirs<'a>, lco: bool)
-                  -> CallResult
+    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
+                    idx: CodeIndex, lco: bool)
+                    -> CallResult
     {
-        while let Some((name, inner_arity)) = machine_st.setup_call_n(arity) {
-            let user = clause_name!("user");
+        if lco {
+            self.try_execute(machine_st, name, arity, idx)
+        } else {
+            self.try_call(machine_st, name, arity, idx)
+        }
+    }
 
-            match ClauseType::from(name.clone(), inner_arity, None) {
-                ClauseType::CallN => {
-                    machine_st.handle_internal_call_n(inner_arity);
-                    
-                    if machine_st.fail {
-                        return Ok(());
-                    }
-                    
-                    arity = inner_arity;
-                    continue;
-                },
-                ClauseType::BuiltIn(built_in) =>
-                    machine_st.setup_built_in_call(built_in, lco),
-                ClauseType::Inlined(inlined) =>
-                    machine_st.execute_inlined(&inlined),
-                ClauseType::Op(..) | ClauseType::Named(..) =>
-                    if let Some(idx) = code_dirs.get(name.clone(), inner_arity, user) {
-                        self.context_call(machine_st, name, inner_arity, idx, lco)?;
-                    } else {
-                        return Err(machine_st.existence_error(name, inner_arity));
-                    }
-            };
+    fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                arity: usize, idx: CodeIndex)
+                -> CallResult
+    {
+        match idx.0.borrow().0 {
+            IndexPtr::Undefined =>
+                return Err(machine_st.existence_error(name, arity)),
+            IndexPtr::Index(compiled_tl_index) => {
+                let module_name = idx.0.borrow().1.clone();
 
-            break;
+                machine_st.cp.assign_if_local(machine_st.p.clone() + 1);
+                machine_st.num_of_args = arity;
+                machine_st.b0 = machine_st.b;
+                machine_st.p  = dir_entry!(compiled_tl_index, module_name);
+            }
         }
 
         Ok(())
     }
 
-    fn system_call(&mut self, machine_st: &mut MachineState, ct: &SystemClauseType) -> CallResult
+    fn try_execute<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                       arity: usize, idx: CodeIndex)
+                       -> CallResult
     {
-        match ct {
-            &SystemClauseType::CleanUpBlock => {
-                let nb = machine_st.store(machine_st.deref(machine_st[temp_v!(1)].clone()));
+        match idx.0.borrow().0 {
+            IndexPtr::Undefined =>
+                return Err(machine_st.existence_error(name, arity)),
+            IndexPtr::Index(compiled_tl_index) => {
+                let module_name = idx.0.borrow().1.clone();
 
-                match nb {
-                    Addr::Con(Constant::Usize(nb)) => {
-                        let b = machine_st.b - 1;
-
-                        if nb > 0 && machine_st.or_stack[b].b == nb {
-                            machine_st.b = machine_st.or_stack[nb - 1].b;
-                            machine_st.or_stack.truncate(machine_st.b);
-                        }                        
-                    },
-                    _ => machine_st.fail = true
-                };
-
-                Ok(())
-            },
-            &SystemClauseType::EraseBall => {
-                machine_st.ball.reset();
-                Ok(())
-            },
-            &SystemClauseType::Fail => {
-                machine_st.fail = true;
-                Ok(())
-            },
-            &SystemClauseType::GetBall => {
-                let addr = machine_st.store(machine_st.deref(machine_st[temp_v!(1)].clone()));
-                let h = machine_st.heap.h;
-
-                if machine_st.ball.stub.len() > 0 {
-                    machine_st.copy_and_align_ball_to_heap();
-                } else {
-                    machine_st.fail = true;
-                    return Ok(());
-                }
-
-                let ball = machine_st.heap[h].as_addr(h);
-
-                match addr.as_var() {
-                    Some(r) => machine_st.bind(r, ball),                    
-                    _ => machine_st.fail = true
-                };
-
-                Ok(())
-            },
-            &SystemClauseType::GetCurrentBlock => {
-                let c = Constant::Usize(machine_st.block);
-                let addr = machine_st[temp_v!(1)].clone();
-
-                machine_st.write_constant_to_var(addr, c);
-                Ok(())
-            },
-            &SystemClauseType::InstallNewBlock => {
-                machine_st.block = machine_st.b;
-                
-                let c = Constant::Usize(machine_st.block);
-                let addr = machine_st[temp_v!(1)].clone();
-
-                machine_st.write_constant_to_var(addr, c);
-                Ok(())
-            },
-            &SystemClauseType::ResetBlock => {
-                let addr = machine_st.deref(machine_st[temp_v!(1)].clone());
-                machine_st.reset_block(addr);
-                Ok(())
-            },
-            &SystemClauseType::SetBall => {
-                machine_st.set_ball();
-                Ok(())
-            },
-            &SystemClauseType::SkipMaxList => {
-                machine_st.skip_max_list()?;
-                Ok(())
-            },
-            &SystemClauseType::UnwindStack => {
-                machine_st.unwind_stack();
-                Ok(())
+                machine_st.num_of_args = arity;
+                machine_st.b0 = machine_st.b;
+                machine_st.p  = dir_entry!(compiled_tl_index, module_name);
             }
         }
+
+        Ok(())
     }
 
     fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType, lco: bool)
@@ -619,7 +499,7 @@ pub(crate) trait CallPolicy: Any {
 
                 let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
                 let heap_addr = Addr::HeapCell(machine_st.to_list(key_pairs));
-                
+
                 let r2 = machine_st[temp_v!(2)].clone();
                 machine_st.unify(r2, heap_addr);
 
@@ -634,11 +514,94 @@ pub(crate) trait CallPolicy: Any {
 
                 Ok(())
             },
-            &BuiltInClauseType::System(ref ct) => {
-                self.system_call(machine_st, ct)?;
-                return_from_clause!(lco, machine_st)
-            }
         }
+    }
+
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, mut arity: usize,
+                  code_dirs: CodeDirs<'a>, lco: bool)
+                  -> CallResult
+    {
+        while let Some((name, inner_arity)) = machine_st.setup_call_n(arity) {
+            let user = clause_name!("user");
+
+            match ClauseType::from(name.clone(), inner_arity, None) {
+                ClauseType::CallN => {
+                    machine_st.handle_internal_call_n(inner_arity);
+
+                    if machine_st.fail {
+                        return Ok(());
+                    }
+
+                    arity = inner_arity;
+                    continue;
+                },
+                ClauseType::BuiltIn(built_in) =>
+                    machine_st.setup_built_in_call(built_in),
+                ClauseType::Inlined(inlined) =>
+                    machine_st.execute_inlined(&inlined),
+                ClauseType::Op(..) | ClauseType::Named(..) =>
+                    if let Some(idx) = code_dirs.get(name.clone(), inner_arity, user) {
+                        self.context_call(machine_st, name, inner_arity, idx, lco)?;
+                    } else {
+                        return Err(machine_st.existence_error(name, inner_arity));
+                    },
+                ClauseType::System(ct) =>
+                    return machine_st.system_call(&ct)
+            };
+
+            break;
+        }
+
+        Ok(())
+    }
+}
+
+impl CallPolicy for CallWithInferenceLimitCallPolicy {
+    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                    arity: usize, idx: CodeIndex, lco: bool)
+                    -> CallResult
+    {
+        self.prev_policy.context_call(machine_st, name, arity, idx, lco)?;
+        self.increment()
+    }
+
+    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        self.prev_policy.retry_me_else(machine_st, offset)?;
+        self.increment()
+    }
+
+    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        self.prev_policy.retry(machine_st, offset)?;
+        self.increment()
+    }
+
+    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult
+    {
+        self.prev_policy.trust_me(machine_st)?;
+        self.increment()
+    }
+
+    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        self.prev_policy.trust(machine_st, offset)?;
+        self.increment()
+    }
+
+    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType, lco: bool)
+                        -> CallResult
+    {
+        self.prev_policy.call_builtin(machine_st, ct, lco)?;
+        self.increment()
+    }
+
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize, code_dirs: CodeDirs<'a>,
+                  lco: bool)
+                  -> CallResult
+    {
+        self.prev_policy.call_n(machine_st, arity, code_dirs, lco)?;
+        self.increment()
     }
 }
 
@@ -711,39 +674,6 @@ impl CallWithInferenceLimitCallPolicy {
         let mut new_inner: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
         swap(&mut self.prev_policy, &mut new_inner);
         new_inner
-    }
-}
-
-impl CallPolicy for CallWithInferenceLimitCallPolicy {
-    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
-        self.prev_policy.retry_me_else(machine_st, offset)?;
-        self.increment()
-    }
-
-    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
-        self.prev_policy.retry(machine_st, offset)?;
-        self.increment()
-    }
-
-    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult
-    {
-        self.prev_policy.trust_me(machine_st)?;
-        self.increment()
-    }
-
-    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
-        self.prev_policy.trust(machine_st, offset)?;
-        self.increment()
-    }
-
-    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType, lco: bool)
-                        -> CallResult
-    {
-        self.prev_policy.call_builtin(machine_st, ct, lco)?;
-        self.increment()
     }
 }
 

@@ -19,12 +19,6 @@ macro_rules! atom {
     )
 }
 
-macro_rules! compare_number_instr {
-    ($cmp: expr, $at_1: expr, $at_2: expr) => (
-        Line::BuiltIn(BuiltInInstruction::CompareNumber($cmp, $at_1, $at_2))
-    )
-}
-
 macro_rules! interm {
     ($n: expr) => (
         ArithmeticTerm::Interm($n)
@@ -156,18 +150,6 @@ macro_rules! is_call {
     )
 }
 
-macro_rules! fail {
-    () => (
-        Line::BuiltIn(BuiltInInstruction::Fail)
-    )
-}
-
-macro_rules! succeed {
-    () => (
-        Line::BuiltIn(BuiltInInstruction::Succeed)
-    )
-}
-
 macro_rules! set_cp {
     ($r:expr) => (
         Line::BuiltIn(BuiltInInstruction::SetCutPoint($r))
@@ -190,6 +172,25 @@ macro_rules! rc_atom {
     ($e:expr) => (
         Rc::new(String::from($e))
     )
+}
+
+macro_rules! succeed {
+    () => (
+        call_clause!(ClauseType::System(SystemClauseType::Succeed), 0, 0)
+    )
+}
+
+macro_rules! fail {
+    () => (
+        call_clause!(ClauseType::System(SystemClauseType::Fail), 0, 0)
+    )
+}
+
+macro_rules! compare_number_instr {
+    ($cmp: expr, $at_1: expr, $at_2: expr) => {{
+        let ct = ClauseType::Inlined(InlinedClauseType::CompareNumber($cmp, $at_1, $at_2));
+        call_clause!(ct, 2, 0)
+    }}
 }
 
 macro_rules! jmp_call {
@@ -250,3 +251,4 @@ macro_rules! top_level_code_ptr {
         CodePtr::Local(LocalCodePtr::TopLevel($p, $q_sz))
     )
 }
+

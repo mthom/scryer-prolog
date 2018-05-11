@@ -296,7 +296,7 @@ impl MachineState {
 
     fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, MachineError> {
         match at {
-            &ArithmeticTerm::Reg(r) =>        self.arith_eval_by_metacall(r),
+            &ArithmeticTerm::Reg(r)        => self.arith_eval_by_metacall(r),
             &ArithmeticTerm::Interm(i)     => Ok(self.interms[i-1].clone()),
             &ArithmeticTerm::Number(ref n) => Ok(n.clone()),
         }
@@ -1319,9 +1319,9 @@ impl MachineState {
 
     pub(super) fn execute_inlined(&mut self, inlined: &InlinedClauseType) {
         match inlined {
-            &InlinedClauseType::CompareNumber(cmp, r1, r2) => {
-                let n1 = try_or_fail!(self, self.arith_eval_by_metacall(r1));
-                let n2 = try_or_fail!(self, self.arith_eval_by_metacall(r2));
+            &InlinedClauseType::CompareNumber(cmp, ref at_1, ref at_2) => {
+                let n1 = try_or_fail!(self, self.get_number(at_1));
+                let n2 = try_or_fail!(self, self.get_number(at_2));
 
                 self.compare_numbers(cmp, n1, n2);
             },
@@ -1400,34 +1400,13 @@ impl MachineState {
         }
     }
 
-    pub(super) fn execute_built_in_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
-                                             call_policy: &mut Box<CallPolicy>,
-                                             cut_policy:  &mut Box<CutPolicy>,
-                                             instr: &BuiltInInstruction)
+    pub(super)
+    fn execute_built_in_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
+                                  call_policy: &mut Box<CallPolicy>,
+                                  cut_policy:  &mut Box<CutPolicy>,
+                                  instr: &BuiltInInstruction)
     {
-        match instr {
-            &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) => {
-                let n1 = try_or_fail!(self, self.get_number(at_1));
-                let n2 = try_or_fail!(self, self.get_number(at_2));
-
-                self.compare_numbers(cmp, n1, n2);
-            },
-            &BuiltInInstruction::DefaultRetryMeElse(o) => {
-                let mut call_policy = DefaultCallPolicy {};
-                try_or_fail!(self, call_policy.retry_me_else(self, o));
-            },
-            &BuiltInInstruction::DefaultSetCutPoint(r) => {
-                let mut cut_policy = DefaultCutPolicy {};
-                cut_policy.cut(self, r);
-            },
-            &BuiltInInstruction::DefaultTrustMe => {
-                let mut call_policy = DefaultCallPolicy {};
-                try_or_fail!(self, call_policy.trust_me(self));
-            },
-            &BuiltInInstruction::EraseBall => {
-                self.ball.reset();
-                self.p += 1;
-            },
+        match instr {            
             &BuiltInInstruction::GetArg(lco) =>
                 try_or_fail!(self, {
                     let val = self.try_get_arg();
@@ -1440,40 +1419,6 @@ impl MachineState {
 
                     val
                 }),
-            &BuiltInInstruction::GetCurrentBlock => {
-                let c = Constant::Usize(self.block);
-                let addr = self[temp_v!(1)].clone();
-
-                self.write_constant_to_var(addr, c);
-                self.p += 1;
-            },
-            &BuiltInInstruction::GetBall => {
-                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
-                let h = self.heap.h;
-
-                if self.ball.stub.len() > 0 {
-                    self.copy_and_align_ball_to_heap();
-                } else {
-                    self.fail = true;
-                    return;
-                }
-
-                let ball = self.heap[h].as_addr(h);
-
-                match addr.as_var() {
-                    Some(r) => {
-                        self.bind(r, ball);
-                        self.p += 1;
-                    },
-                    _ => self.fail = true
-                };
-            },
-            &BuiltInInstruction::GetCutPoint(r) => {
-                let c = Constant::Usize(self.b);
-                self[r] = Addr::Con(c);
-
-                self.p += 1;
-            },
             &BuiltInInstruction::InferenceLevel(r1, r2) => { // X1 = R, X2 = B.
                 let a1 = self[r1].clone();
                 let a2 = self.store(self.deref(self[r2].clone()));
@@ -1597,57 +1542,8 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &BuiltInInstruction::SetBall => {
-                self.set_ball();
-                self.p += 1;
-            },
             &BuiltInInstruction::SetCutPoint(r) =>
                 cut_policy.cut(self, r),
-            &BuiltInInstruction::CleanUpBlock => {
-                let nb = self.store(self.deref(self[temp_v!(1)].clone()));
-
-                match nb {
-                    Addr::Con(Constant::Usize(nb)) => {
-                        let b = self.b - 1;
-
-                        if nb > 0 && self.or_stack[b].b == nb {
-                            self.b = self.or_stack[nb - 1].b;
-                            self.or_stack.truncate(self.b);
-                        }
-
-                        self.p += 1;
-                    },
-                    _ => self.fail = true
-                };
-            },
-            &BuiltInInstruction::InstallNewBlock => {
-                self.block = self.b;
-                let c = Constant::Usize(self.block);
-                let addr = self[temp_v!(1)].clone();
-
-                self.write_constant_to_var(addr, c);
-                self.p += 1;
-            },
-            &BuiltInInstruction::ResetBlock => {
-                let addr = self.deref(self[temp_v!(1)].clone());
-                self.reset_block(addr);
-            },
-            &BuiltInInstruction::UnwindStack =>
-                self.unwind_stack(),
-            &BuiltInInstruction::Fail => {
-                self.fail = true;
-                self.p += 1;
-            },
-            &BuiltInInstruction::Succeed => {
-                self.p += 1;
-            },
-            &BuiltInInstruction::Unify => {
-                let a1 = self[temp_v!(1)].clone();
-                let a2 = self[temp_v!(2)].clone();
-
-                self.unify(a1, a2);
-                self.p += 1;
-            },
         };
     }
 
@@ -1920,7 +1816,7 @@ impl MachineState {
         false
     }
 
-    pub(super) fn setup_built_in_call(&mut self, ct: BuiltInClauseType, lco: bool)
+    pub(super) fn setup_built_in_call(&mut self, ct: BuiltInClauseType)
     {        
         self.num_of_args = ct.arity();
         self.b0 = self.b;
@@ -1964,8 +1860,8 @@ impl MachineState {
         self.e  = self.and_stack[e].e;
 
         self.p += 1;
-    }
-
+    }        
+    
     pub(super) fn execute_ctrl_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
                                          call_policy: &mut Box<CallPolicy>,
                                          cut_policy:  &mut Box<CutPolicy>,
@@ -1978,12 +1874,21 @@ impl MachineState {
                 try_or_fail!(self, call_policy.call_n(self, arity, code_dirs, lco)),
             &ControlInstruction::CallClause(ClauseType::BuiltIn(ref ct), _, _, lco) =>
                 try_or_fail!(self, call_policy.call_builtin(self, ct, lco)),
-            &ControlInstruction::CallClause(ClauseType::Inlined(ref ct), _, _, lco) =>
+            &ControlInstruction::CallClause(ClauseType::Inlined(ref ct), ..) =>
                 self.execute_inlined(ct),
             &ControlInstruction::CallClause(ClauseType::Named(ref name, ref idx), arity, _, lco)
           | &ControlInstruction::CallClause(ClauseType::Op(ref name, _, ref idx), arity, _, lco) =>
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
                                                             lco)),
+            &ControlInstruction::CallClause(ClauseType::System(ref ct), arity, _, lco) => {
+                try_or_fail!(self, self.system_call(ct));
+
+                if lco {
+                    self.p = CodePtr::Local(self.cp.clone());
+                } else {
+                    self.p += 1;
+                }
+            },
             &ControlInstruction::CheckCpExecute => {
                 let a = self.store(self.deref(self[temp_v!(2)].clone()));
 
@@ -2025,8 +1930,6 @@ impl MachineState {
 
                 self.fail = true;
             },
-            &ControlInstruction::Goto(p, arity, lco) =>
-                self.goto_ptr(dir_entry!(p, clause_name!("builtin")), arity, lco),
             &ControlInstruction::IsClause(lco, r, ref at) => {
                 let a1 = self[r].clone();
                 let a2 = try_or_fail!(self, self.get_number(at));
@@ -2046,16 +1949,6 @@ impl MachineState {
             &ControlInstruction::Proceed =>
                 self.p = CodePtr::Local(self.cp.clone())
         };
-    }
-
-    pub(super) fn goto_ptr(&mut self, p: CodePtr, arity: usize, lco:bool) {
-        if !lco {
-            self.cp.assign_if_local(self.p.clone() + 1);
-        }
-
-        self.num_of_args = arity;
-        self.b0 = self.b;
-        self.p  = p;
     }
 
     pub(super) fn execute_indexed_choice_instr(&mut self, instr: &IndexedChoiceInstruction,
