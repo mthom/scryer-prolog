@@ -166,20 +166,20 @@ impl fmt::Display for IndexedChoiceInstruction {
     }
 }
 
-impl fmt::Display for BuiltInInstruction {
+impl fmt::Display for PEInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &BuiltInInstruction::InstallInferenceCounter(r1, r2, r3) =>
+            &PEInstruction::InstallInferenceCounter(r1, r2, r3) =>
                 write!(f, "install_inference_counter {}, {}, {}", r1, r2, r3),
-            &BuiltInInstruction::InstallCleaner =>
+            &PEInstruction::InstallCleaner =>
                 write!(f, "install_cleaner"),
-            &BuiltInInstruction::RemoveCallPolicyCheck =>
+            &PEInstruction::RemoveCallPolicyCheck =>
                 write!(f, "remove_call_policy_check"),
-            &BuiltInInstruction::RemoveInferenceCounter(r1, r2) =>
+            &PEInstruction::RemoveInferenceCounter(r1, r2) =>
                 write!(f, "remove_inference_counter {}, {}", r1, r2),            
-            &BuiltInInstruction::RestoreCutPolicy =>
+            &PEInstruction::RestoreCutPolicy =>
                 write!(f, "restore_cut_point"),
-            &BuiltInInstruction::SetCutPoint(r) =>
+            &PEInstruction::SetCutPoint(r) =>
                 write!(f, "set_cp {}", r),
         }
     }
@@ -328,7 +328,7 @@ pub fn print_code(code: &Code) {
                 for fact_instr in fact {
                     println!("{}", fact_instr);
                 },
-            &Line::BuiltIn(ref instr) =>
+            &Line::PolicyExempt(ref instr) =>
                 println!("{}", instr),
             &Line::Cut(ref cut) =>
                 println!("{}", cut),

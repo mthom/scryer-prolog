@@ -1,3 +1,4 @@
+use prolog::builtins::*;
 use prolog::num::bigint::BigInt;
 use prolog::num::{Float, ToPrimitive, Zero};
 use prolog::num::rational::Ratio;
@@ -162,7 +163,7 @@ impl Module {
     pub fn new(module_decl: ModuleDecl) -> Self {
         Module { module_decl,
                  code_dir: ModuleCodeDir::new(),
-                 op_dir: OpDir::new() }
+                 op_dir: default_op_dir() }
     }
 }
 
@@ -1367,8 +1368,9 @@ pub enum ArithmeticInstruction {
     Neg(ArithmeticTerm, usize)
 }
 
+// call and cut policy exempt instructions.
 #[derive(Clone)]
-pub enum BuiltInInstruction {
+pub enum PEInstruction {
     InstallCleaner,
     InstallInferenceCounter(RegType, RegType, RegType),
     RemoveCallPolicyCheck,
@@ -1451,7 +1453,7 @@ pub type CompiledQuery = Vec<QueryInstruction>;
 #[derive(Clone)]
 pub enum Line {
     Arithmetic(ArithmeticInstruction),
-    BuiltIn(BuiltInInstruction),
+    PolicyExempt(PEInstruction),
     Choice(ChoiceInstruction),
     Control(ControlInstruction),
     Cut(CutInstruction),

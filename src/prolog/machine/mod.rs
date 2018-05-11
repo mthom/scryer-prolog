@@ -247,10 +247,10 @@ impl Machine {
         match instr {
             Line::Arithmetic(ref arith_instr) =>
                 self.ms.execute_arith_instr(arith_instr),
-            Line::BuiltIn(ref built_in_instr) => {
+            Line::PolicyExempt(ref built_in_instr) => {
                 let code_dirs = CodeDirs::new(&self.code_dir, &self.modules);
-                self.ms.execute_built_in_instr(code_dirs, &mut self.call_policy,
-                                               &mut self.cut_policy, built_in_instr);
+                self.ms.execute_pe_instr(code_dirs, &mut self.call_policy,
+                                         &mut self.cut_policy, built_in_instr);
             },
             Line::Choice(ref choice_instr) =>
                 self.ms.execute_choice_instr(choice_instr, &mut self.call_policy),

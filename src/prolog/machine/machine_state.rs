@@ -2,7 +2,7 @@ use prolog::and_stack::*;
 use prolog::ast::*;
 use prolog::copier::*;
 use prolog::heap_print::*;
-use prolog::machine::machine_errors::MachineStub;
+use prolog::machine::machine_errors::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
 use prolog::tabled_rc::*;
@@ -546,7 +546,8 @@ pub(crate) trait CallPolicy: Any {
                         return Err(machine_st.existence_error(name, inner_arity));
                     },
                 ClauseType::System(ct) =>
-                    return machine_st.system_call(&ct)
+                    return Err(machine_st.type_error(ValidType::Callable,
+                                                     Addr::Con(Constant::Atom(name))))
             };
 
             break;

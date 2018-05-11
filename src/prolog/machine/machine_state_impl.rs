@@ -1401,13 +1401,11 @@ impl MachineState {
     }
 
     pub(super)
-    fn execute_built_in_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
-                                  call_policy: &mut Box<CallPolicy>,
-                                  cut_policy:  &mut Box<CutPolicy>,
-                                  instr: &BuiltInInstruction)
+    fn execute_pe_instr<'a>(&mut self, code_dirs: CodeDirs<'a>, call_policy: &mut Box<CallPolicy>,
+                            cut_policy:  &mut Box<CutPolicy>, instr: &PEInstruction)
     {
         match instr {            
-            &BuiltInInstruction::InstallCleaner => {
+            &PEInstruction::InstallCleaner => {
                 let addr = self[temp_v!(1)].clone();
                 let b = self.b;
                 let block = self.block;
@@ -1425,7 +1423,7 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &BuiltInInstruction::InstallInferenceCounter(r1, r2, r3) => { // A1 = B, A2 = L
+            &PEInstruction::InstallInferenceCounter(r1, r2, r3) => { // A1 = B, A2 = L
                 let a1 = self.store(self.deref(self[r1].clone()));
                 let a2 = self.store(self.deref(self[r2].clone()));
 
@@ -1454,7 +1452,7 @@ impl MachineState {
                     }
                 };
             },
-            &BuiltInInstruction::RemoveCallPolicyCheck => {
+            &PEInstruction::RemoveCallPolicyCheck => {
                 let restore_default =
                     match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
                         Some(call_policy) => {
@@ -1480,7 +1478,7 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &BuiltInInstruction::RemoveInferenceCounter(r1, r2) => { // A1 = B
+            &PEInstruction::RemoveInferenceCounter(r1, r2) => { // A1 = B
                 match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
                     Some(call_policy) => {
                         let a1 = self.store(self.deref(self[r1].clone()));
@@ -1498,7 +1496,7 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &BuiltInInstruction::RestoreCutPolicy => {
+            &PEInstruction::RestoreCutPolicy => {
                 let restore_default =
                     if let Ok(cut_policy) = cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>() {
                         cut_policy.out_of_cont_pts()
@@ -1512,7 +1510,7 @@ impl MachineState {
 
                 self.p += 1;
             },
-            &BuiltInInstruction::SetCutPoint(r) =>
+            &PEInstruction::SetCutPoint(r) =>
                 cut_policy.cut(self, r),
         };
     }

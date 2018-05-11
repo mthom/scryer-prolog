@@ -152,7 +152,7 @@ macro_rules! is_call {
 
 macro_rules! set_cp {
     ($r:expr) => (
-        Line::BuiltIn(BuiltInInstruction::SetCutPoint($r))
+        Line::PolicyExempt(PEInstruction::SetCutPoint($r))
     )
 }
 

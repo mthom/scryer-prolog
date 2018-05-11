@@ -165,10 +165,10 @@ impl MachineState {
                 match a2 {
                     Addr::Con(Constant::Usize(bp)) =>
                         if self.b <= bp + 1 {
-                            let a2 = Addr::Con(atom!("!", self.atom_tbl));
+                            let a2 = Addr::Con(atom!("!"));
                             self.unify(a1, a2);
                         } else {
-                            let a2 = Addr::Con(atom!("true", self.atom_tbl));
+                            let a2 = Addr::Con(atom!("true"));
                             self.unify(a1, a2);
                         },
                     _ => self.fail = true
