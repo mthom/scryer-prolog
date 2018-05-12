@@ -10,41 +10,41 @@ pub(super) type MachineStub = Vec<HeapCellValue>;
 // from 7.12.2 b) of 13211-1:1995
 #[derive(Clone, Copy)]
 pub enum ValidType {
-    Atom,
-    Atomic,
-    Byte,
+//    Atom,
+//    Atomic,
+//    Byte,
     Callable,
-    Character,
+//    Character,
     Compound,
-    Evaluable,
-    InByte,
-    InCharacter,
+//    Evaluable,
+//    InByte,
+//    InCharacter,
     Integer,
     List,
-    Number,
+//    Number,
     Pair,
-    PredicateIndicator,
-    Variable
+//    PredicateIndicator,
+//    Variable
 }
 
 impl ValidType {
     pub fn as_str(self) -> &'static str {
         match self {
-            ValidType::Atom => "atom",
-            ValidType::Atomic => "atomic",
-            ValidType::Byte => "byte",
+//            ValidType::Atom => "atom",
+//            ValidType::Atomic => "atomic",
+//            ValidType::Byte => "byte",
             ValidType::Callable => "callable",
-            ValidType::Character => "character",
+//            ValidType::Character => "character",
             ValidType::Compound => "compound",
-            ValidType::Evaluable => "evaluable",
-            ValidType::InByte => "in_byte",
-            ValidType::InCharacter => "in_character",
+//            ValidType::Evaluable => "evaluable",
+//            ValidType::InByte => "in_byte",
+//            ValidType::InCharacter => "in_character",
             ValidType::Integer => "integer",
             ValidType::List => "list",
-            ValidType::Number => "number",
+//            ValidType::Number => "number",
             ValidType::Pair => "pair",
-            ValidType::PredicateIndicator => "predicate_indicator",
-            ValidType::Variable => "variable"
+//            ValidType::PredicateIndicator => "predicate_indicator",
+//            ValidType::Variable => "variable"
         }
     }
 }
@@ -52,23 +52,23 @@ impl ValidType {
 // from 7.12.2 f) of 13211-1:1995
 #[derive(Clone, Copy)]
 pub enum RepFlag {
-    Character,
-    CharacterCode,
-    InCharacterCode,
+//    Character,
+//    CharacterCode,
+//    InCharacterCode,
     MaxArity,
-    MaxInteger,
-    MinInteger
+//    MaxInteger,
+//    MinInteger
 }
 
 impl RepFlag {
     pub fn as_str(self) -> &'static str {
         match self {
-            RepFlag::Character => "character",
-            RepFlag::CharacterCode => "character_code",
-            RepFlag::InCharacterCode => "in_character_code",
+//            RepFlag::Character => "character",
+//            RepFlag::CharacterCode => "character_code",
+//            RepFlag::InCharacterCode => "in_character_code",
             RepFlag::MaxArity => "max_arity",
-            RepFlag::MaxInteger => "max_integer",
-            RepFlag::MinInteger => "min_integer"
+//            RepFlag::MaxInteger => "max_integer",
+//            RepFlag::MinInteger => "min_integer"
         }
     }
 }
@@ -76,20 +76,20 @@ impl RepFlag {
 // from 7.12.2 g) of 13211-1:1995
 #[derive(Clone, Copy)]
 pub enum EvalError {
-    FloatOverflow,
-    IntOverflow,
-    Undefined,
-    Underflow,
+//    FloatOverflow,
+//    IntOverflow,
+//    Undefined,
+//    Underflow,
     ZeroDivisor
 }
 
 impl EvalError {
     pub fn as_str(self) -> &'static str {
         match self {
-            EvalError::FloatOverflow => "float_overflow",
-            EvalError::IntOverflow => "int_overflow",
-            EvalError::Undefined => "undefined",
-            EvalError::Underflow => "underflow",
+//            EvalError::FloatOverflow => "float_overflow",
+//            EvalError::IntOverflow => "int_overflow",
+//            EvalError::Undefined => "undefined",
+//            EvalError::Underflow => "underflow",
             EvalError::ZeroDivisor => "zero_divisor"
         }
     }

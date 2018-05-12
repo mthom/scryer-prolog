@@ -49,7 +49,8 @@ impl MachineState {
             hb: 0,
             block: 0,
             ball: Ball::new(),
-            interms: vec![Number::default(); 256]
+            interms: vec![Number::default(); 256],
+            last_call: false
         }
     }
 
@@ -80,16 +81,31 @@ impl MachineState {
     }
 
     pub(super) fn bind(&mut self, r1: Ref, a2: Addr) {
-        let t2 = self.store(a2);
+        let t1 = self.store(r1.as_addr());
+        let t2 = self.store(a2.clone());
 
-        match r1 {
-            Ref::StackCell(fr, sc) =>
-                self.and_stack[fr][sc] = t2,
-            Ref::HeapCell(hc) =>
-                self.heap[hc] = HeapCellValue::Addr(t2)
-        };
+        if t1.is_ref() && (!t2.is_ref() || a2 < r1) {
+            match r1 {
+                Ref::StackCell(fr, sc) =>
+                    self.and_stack[fr][sc] = t2,
+                Ref::HeapCell(h) =>
+                    self.heap[h] = HeapCellValue::Addr(t2)
+            };
 
-        self.trail(r1);
+            self.trail(r1);
+        } else {
+            match a2.as_var() {
+                Some(Ref::StackCell(fr, sc)) => {
+                    self.and_stack[fr][sc] = t1;
+                    self.trail(Ref::StackCell(fr, sc));
+                },
+                Some(Ref::HeapCell(h)) => {
+                    self.heap[h] = HeapCellValue::Addr(t1);
+                    self.trail(Ref::HeapCell(h));
+                },
+                None => {}
+            }
+        }                
     }
 
     pub(super)
@@ -711,9 +727,9 @@ impl MachineState {
                 self.write_constant_to_var(addr, c.clone());
             },
             &FactInstruction::GetList(_, reg) => {
-                let addr = self.deref(self[reg].clone());
+                let addr = self.store(self.deref(self[reg].clone()));
 
-                match self.store(addr.clone()) {
+                match addr {
                     Addr::HeapCell(hc) => {
                         let h = self.heap.h;
 
@@ -955,10 +971,8 @@ impl MachineState {
                     self.registers[arg] = self.heap[h].as_addr(h);
                 }
             },
-            &QueryInstruction::PutValue(norm, arg) => {
-                let addr = self.store(self.deref(self[norm].clone()));
-                self.registers[arg] = self[norm].clone();
-            },
+            &QueryInstruction::PutValue(norm, arg) =>
+                self.registers[arg] = self[norm].clone(),
             &QueryInstruction::PutVariable(norm, arg) => {
                 match norm {
                     RegType::Perm(n) => {
@@ -1724,20 +1738,26 @@ impl MachineState {
         match instr {
             &ControlInstruction::Allocate(num_cells) =>
                 self.allocate(num_cells),
-            &ControlInstruction::CallClause(ClauseType::CallN, arity, _, lco) =>
-                try_or_fail!(self, call_policy.call_n(self, arity, code_dirs, lco)),
-            &ControlInstruction::CallClause(ClauseType::BuiltIn(ref ct), _, _, lco) =>
-                try_or_fail!(self, call_policy.call_builtin(self, ct, lco)),
+            &ControlInstruction::CallClause(ClauseType::CallN, arity, _, lco) => {
+                self.last_call = lco;
+                try_or_fail!(self, call_policy.call_n(self, arity, code_dirs));
+            },
+            &ControlInstruction::CallClause(ClauseType::BuiltIn(ref ct), _, _, lco) => {
+                self.last_call = lco;
+                try_or_fail!(self, call_policy.call_builtin(self, ct));
+            },
             &ControlInstruction::CallClause(ClauseType::Inlined(ref ct), ..) =>
                 self.execute_inlined(ct),
             &ControlInstruction::CallClause(ClauseType::Named(ref name, ref idx), arity, _, lco)
-          | &ControlInstruction::CallClause(ClauseType::Op(ref name, _, ref idx), arity, _, lco) =>
-                try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
-                                                            lco)),
-            &ControlInstruction::CallClause(ClauseType::System(ref ct), arity, _, lco) => {
+          | &ControlInstruction::CallClause(ClauseType::Op(ref name, _, ref idx), arity, _, lco) => {
+                self.last_call = lco;
+                try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone()));
+            },
+            &ControlInstruction::CallClause(ClauseType::System(ref ct), _, _, lco) => {
+                self.last_call = lco;
                 try_or_fail!(self, self.system_call(ct, call_policy, cut_policy));
 
-                if lco {
+                if self.last_call {
                     self.p = CodePtr::Local(self.cp.clone());
                 } else {
                     self.p += 1;
@@ -1785,11 +1805,13 @@ impl MachineState {
                 self.fail = true;
             },
             &ControlInstruction::IsClause(lco, r, ref at) => {
+                self.last_call = lco;
+
                 let a1 = self[r].clone();
                 let a2 = try_or_fail!(self, self.get_number(at));
 
                 self.unify(a1, Addr::Con(Constant::Number(a2)));
-                try_or_fail!(self, return_from_clause!(lco, self));
+                try_or_fail!(self, return_from_clause!(self.last_call, self));
             },
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
                 if !lco {

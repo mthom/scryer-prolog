@@ -222,6 +222,7 @@ pub struct MachineState {
     pub(super) block: usize, // an offset into the OR stack.
     pub(super) ball: Ball,
     pub(super) interms: Vec<Number>, // intermediate numbers.
+    pub(super) last_call: bool
 }
 
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
@@ -323,8 +324,7 @@ pub(crate) trait CallPolicy: Any {
         let b = machine_st.b - 1;
         let n = machine_st.or_stack[b].num_args();
 
-        for i in 1 .. n + 1 {
-            let addr = machine_st.store(machine_st.deref(machine_st.or_stack[b][i].clone()));            
+        for i in 1 .. n + 1 {            
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
@@ -352,10 +352,10 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
-                    idx: CodeIndex, lco: bool)
+                    idx: CodeIndex)
                     -> CallResult
     {
-        if lco {
+        if machine_st.last_call {
             self.try_execute(machine_st, name, arity, idx)
         } else {
             self.try_call(machine_st, name, arity, idx)
@@ -401,14 +401,14 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType, lco: bool)
+    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType)
                         -> CallResult
     {
         match ct {
             &BuiltInClauseType::AcyclicTerm => {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = machine_st.is_cyclic_term(addr);
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Compare => {
                 let a1 = machine_st[temp_v!(1)].clone();
@@ -422,7 +422,7 @@ pub(crate) trait CallPolicy: Any {
                 });
 
                 machine_st.unify(a1, c);
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::CompareTerm(qt) => {
                 match qt {
@@ -433,12 +433,12 @@ pub(crate) trait CallPolicy: Any {
                     _ => machine_st.compare_term(qt)
                 };
 
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::CyclicTerm => {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = !machine_st.is_cyclic_term(addr);
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Display => {
                 let output = machine_st.print_term(machine_st[temp_v!(1)].clone(),
@@ -446,27 +446,27 @@ pub(crate) trait CallPolicy: Any {
                                                    PrinterOutputter::new());
 
                 println!("{}", output.result());
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::DuplicateTerm => {
                 machine_st.duplicate_term();
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Eq => {
                 machine_st.fail = machine_st.eq_test();
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Ground => {
                 machine_st.fail = machine_st.ground_test();
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Functor => {
                 machine_st.try_functor()?;
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::NotEq => {
                 machine_st.fail = !machine_st.eq_test();
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Sort => {
                 machine_st.check_sort_errors()?;
@@ -482,7 +482,7 @@ pub(crate) trait CallPolicy: Any {
                 let r2 = machine_st[temp_v!(2)].clone();
                 machine_st.unify(r2, heap_addr);
 
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::KeySort => {
                 machine_st.check_keysort_errors()?;
@@ -504,22 +504,19 @@ pub(crate) trait CallPolicy: Any {
                 let r2 = machine_st[temp_v!(2)].clone();
                 machine_st.unify(r2, heap_addr);
 
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Is => {
                 let a = machine_st[temp_v!(1)].clone();
                 let result = machine_st.arith_eval_by_metacall(temp_v!(2))?;
 
                 machine_st.unify(a, Addr::Con(Constant::Number(result)));
-                machine_st.p += 1; // TODO: change this!!
-
-                Ok(())
+                return_from_clause!(machine_st.last_call, machine_st)
             },
         }
     }
 
-    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
-                  code_dirs: CodeDirs<'a>, lco: bool)
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize, code_dirs: CodeDirs<'a>)
                   -> CallResult
     {
         if let Some((name, arity)) = machine_st.setup_call_n(arity) {
@@ -541,11 +538,11 @@ pub(crate) trait CallPolicy: Any {
                     machine_st.execute_inlined(&inlined),
                 ClauseType::Op(..) | ClauseType::Named(..) =>
                     if let Some(idx) = code_dirs.get(name.clone(), arity, user) {
-                        self.context_call(machine_st, name, arity, idx, lco)?;
+                        self.context_call(machine_st, name, arity, idx)?;
                     } else {
                         return Err(machine_st.existence_error(name, arity));
                     },
-                ClauseType::System(ct) =>
+                ClauseType::System(_) =>
                     return Err(machine_st.type_error(ValidType::Callable,
                                                      Addr::Con(Constant::Atom(name))))
             };
@@ -557,10 +554,10 @@ pub(crate) trait CallPolicy: Any {
 
 impl CallPolicy for CallWithInferenceLimitCallPolicy {
     fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                    arity: usize, idx: CodeIndex, lco: bool)
+                    arity: usize, idx: CodeIndex)
                     -> CallResult
     {
-        self.prev_policy.context_call(machine_st, name, arity, idx, lco)?;
+        self.prev_policy.context_call(machine_st, name, arity, idx)?;
         self.increment()
     }
 
@@ -588,18 +585,17 @@ impl CallPolicy for CallWithInferenceLimitCallPolicy {
         self.increment()
     }
 
-    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType, lco: bool)
+    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType)
                         -> CallResult
     {
-        self.prev_policy.call_builtin(machine_st, ct, lco)?;
+        self.prev_policy.call_builtin(machine_st, ct)?;
         self.increment()
     }
 
-    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize, code_dirs: CodeDirs<'a>,
-                  lco: bool)
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize, code_dirs: CodeDirs<'a>)
                   -> CallResult
     {
-        self.prev_policy.call_n(machine_st, arity, code_dirs, lco)?;
+        self.prev_policy.call_n(machine_st, arity, code_dirs)?;
         self.increment()
     }
 }

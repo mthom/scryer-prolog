@@ -19,7 +19,7 @@ pub struct CodeGenerator<TermMarker> {
 pub struct ConjunctInfo<'a> {
     pub perm_vs: VariableFixtures<'a>,
     pub num_of_chunks: usize,
-    pub has_deep_cut: bool
+    pub has_deep_cut: bool,
 }
 
 impl<'a> ConjunctInfo<'a>

@@ -134,7 +134,10 @@ macro_rules! is_var {
 macro_rules! call_clause {
     ($ct:expr, $arity:expr, $pvs:expr) => (
         Line::Control(ControlInstruction::CallClause($ct, $arity, $pvs, false))
-    )
+    );
+    ($ct:expr, $arity:expr, $pvs:expr, $lco:expr) => (
+        Line::Control(ControlInstruction::CallClause($ct, $arity, $pvs, $lco))
+    )        
 }
 
 macro_rules! proceed {
@@ -144,9 +147,8 @@ macro_rules! proceed {
 }
 
 macro_rules! is_call {
-    ($r:expr, $at:expr) => (
+    ($r:expr, $at:expr) => (        
         Line::Control(ControlInstruction::IsClause(false, $r, $at))
-
     )
 }
 

@@ -592,21 +592,6 @@ impl InlinedClauseType {
         }
     }
 
-    pub fn arity(&self) -> usize {
-        match self {
-            &InlinedClauseType::CompareNumber(..) => 2,
-            &InlinedClauseType::IsAtom(..) => 1,
-            &InlinedClauseType::IsAtomic(..) => 1,
-            &InlinedClauseType::IsCompound(..) => 1,
-            &InlinedClauseType::IsInteger (..) => 1,
-            &InlinedClauseType::IsRational(..) => 1,
-            &InlinedClauseType::IsString(..) => 1,
-            &InlinedClauseType::IsFloat (..) => 1,
-            &InlinedClauseType::IsNonVar(..) => 1,
-            &InlinedClauseType::IsVar(..) => 1
-        }
-    }
-
     pub fn from(name: &str, arity: usize) -> Option<Self> {
         let r1 = temp_v!(1);
         let r2 = temp_v!(2);
@@ -738,31 +723,6 @@ pub enum SystemClauseType {
 }
 
 impl SystemClauseType {
-    pub fn arity(&self) -> usize {
-        match self {
-            &SystemClauseType::InstallCleaner => 1,
-            &SystemClauseType::InstallInferenceCounter => 3,
-            &SystemClauseType::RemoveCallPolicyCheck => 1,
-            &SystemClauseType::RemoveInferenceCounter => 2,
-            &SystemClauseType::RestoreCutPolicy => 0,
-            &SystemClauseType::SetCutPoint(_) => 1,
-            &SystemClauseType::GetArg => 3,
-            &SystemClauseType::InferenceLevel => 2,
-            &SystemClauseType::CleanUpBlock => 1,
-            &SystemClauseType::EraseBall => 0,
-            &SystemClauseType::Fail => 0,
-            &SystemClauseType::GetBall => 1,
-            &SystemClauseType::GetCurrentBlock => 1,
-            &SystemClauseType::GetCutPoint => 1,
-            &SystemClauseType::InstallNewBlock => 1,
-            &SystemClauseType::ResetBlock => 1,
-            &SystemClauseType::SetBall => 1,
-            &SystemClauseType::SkipMaxList => 4,
-            &SystemClauseType::Succeed => 0,
-            &SystemClauseType::UnwindStack => 0
-        }
-    }
-
     pub fn fixity(&self) -> Option<Fixity> {
         None
     }
@@ -1502,6 +1462,38 @@ pub enum Addr {
     Str(usize)
 }
 
+impl PartialEq<Ref> for Addr {
+    fn eq(&self, r: &Ref) -> bool {
+        self.as_var() == Some(*r)
+    }
+}
+
+// for use in MachineState::bind.
+impl PartialOrd<Ref> for Addr {
+    fn partial_cmp(&self, r: &Ref) -> Option<Ordering> {
+        match self {
+            &Addr::StackCell(fr, sc) =>
+                match *r {
+                    Ref::HeapCell(_) => Some(Ordering::Greater),
+                    Ref::StackCell(fr1, sc1) =>
+                        if fr1 < fr || (fr1 == fr && sc1 < sc) {
+                            Some(Ordering::Greater)
+                        } else if fr1 == fr && sc1 == sc {
+                            Some(Ordering::Equal)
+                        } else {
+                            Some(Ordering::Less)
+                        }                    
+                },
+            &Addr::HeapCell(h) =>
+                match r {
+                    Ref::StackCell(..) => Some(Ordering::Less),
+                    Ref::HeapCell(h1) => h.partial_cmp(h1)
+                },
+            _ => None
+        }
+    }
+}
+
 impl Addr {
     pub fn is_ref(&self) -> bool {
         match self {
@@ -1520,7 +1512,7 @@ impl Addr {
 
     pub fn is_protected(&self, e: usize) -> bool {
         match self {
-            &Addr::StackCell(fr, _) if fr > e => false,
+            &Addr::StackCell(addr, _) if addr >= e => false,
             _ => true
         }
     }
@@ -1565,6 +1557,15 @@ impl From<Ref> for Addr {
 pub enum Ref {
     HeapCell(usize),
     StackCell(usize, usize)
+}
+
+impl Ref {
+    pub fn as_addr(self) -> Addr {
+        match self {
+            Ref::HeapCell(h)       => Addr::HeapCell(h),
+            Ref::StackCell(fr, sc) => Addr::StackCell(fr, sc)
+        }
+    }
 }
 
 #[derive(Clone, PartialEq)]
