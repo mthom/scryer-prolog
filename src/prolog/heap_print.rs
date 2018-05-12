@@ -120,19 +120,15 @@ impl HCValueFormatter for TermFormatter {
             match fixity {
                 Fixity::Post => {
                     state_stack.push(TokenOrRedirect::Atom(ct.name()));
-                    state_stack.push(TokenOrRedirect::Space);
                     state_stack.push(TokenOrRedirect::Redirect);
                 },
                 Fixity::Pre => {
                     state_stack.push(TokenOrRedirect::Redirect);
-                    state_stack.push(TokenOrRedirect::Space);
                     state_stack.push(TokenOrRedirect::Atom(ct.name()));
                 },
                 Fixity::In => {
                     state_stack.push(TokenOrRedirect::Redirect);
-                    state_stack.push(TokenOrRedirect::Space);
                     state_stack.push(TokenOrRedirect::Atom(ct.name()));
-                    state_stack.push(TokenOrRedirect::Space);
                     state_stack.push(TokenOrRedirect::Redirect);
                 }
             }

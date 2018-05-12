@@ -511,7 +511,7 @@ pub(crate) trait CallPolicy: Any {
                 let result = machine_st.arith_eval_by_metacall(temp_v!(2))?;
 
                 machine_st.unify(a, Addr::Con(Constant::Number(result)));
-                machine_st.p += 1;
+                machine_st.p += 1; // TODO: change this!!
 
                 Ok(())
             },

@@ -1711,8 +1711,7 @@ impl Add<usize> for CodePtr {
     fn add(self, rhs: usize) -> Self::Output {
         match self {
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
-            CodePtr::CallN(_, local) | CodePtr::BuiltInClause(_, local) =>
-                CodePtr::Local(local + rhs),
+            CodePtr::CallN(_, local) | CodePtr::BuiltInClause(_, local) => CodePtr::Local(local + rhs),
         }
     }
 }
