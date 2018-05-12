@@ -3,7 +3,6 @@ use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{ToPrimitive, Zero};
 use prolog::num::bigint::BigInt;
-use prolog::tabled_rc::*;
 
 use std::rc::Rc;
 
@@ -153,14 +152,113 @@ impl MachineState {
         Ok(())
     }
             
-    pub(super) fn system_call(&mut self, ct: &SystemClauseType) -> CallResult
+    pub(super) fn system_call(&mut self, ct: &SystemClauseType, call_policy: &mut Box<CallPolicy>,
+                              cut_policy:  &mut Box<CutPolicy>,)
+                              -> CallResult
     {
         match ct {
+            &SystemClauseType::InstallCleaner => {
+                let addr = self[temp_v!(1)].clone();
+                let b = self.b;
+                let block = self.block;
+
+                if cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>().is_err() {
+                    *cut_policy = Box::new(SetupCallCleanupCutPolicy::new());
+                }
+
+                match cut_policy.downcast_mut::<SetupCallCleanupCutPolicy>().ok()
+                {
+                    Some(cut_policy) => cut_policy.push_cont_pt(addr, b, block),
+                    None => panic!("install_cleaner: should have installed \\
+                                    SetupCallCleanupCutPolicy.")
+                };
+            },
+            &SystemClauseType::InstallInferenceCounter => { // A1 = B, A2 = L
+                let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
+                let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
+
+                if call_policy.downcast_ref::<CallWithInferenceLimitCallPolicy>().is_err() {
+                    CallWithInferenceLimitCallPolicy::new_in_place(call_policy);
+                }
+
+                match (a1, a2.clone()) {
+                    (Addr::Con(Constant::Usize(bp)),
+                     Addr::Con(Constant::Number(Number::Integer(n)))) =>
+                        match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
+                            Some(call_policy) => {
+                                let count = call_policy.add_limit(n, bp);
+                                self[temp_v!(3)] = Addr::Con(Constant::Number(Number::Integer(count)));
+                            },
+                            None => panic!("install_inference_counter: should have installed \\
+                                            CallWithInferenceLimitCallPolicy.")
+                        },
+                    _ => {
+                        let stub = self.functor_stub(clause_name!("call_with_inference_limit"), 3);
+                        let type_error = self.error_form(self.type_error(ValidType::Integer, a2),
+                                                         stub);
+                        self.throw_exception(type_error)
+                    }
+                };
+            },
+            &SystemClauseType::RemoveCallPolicyCheck => {
+                let restore_default =
+                    match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
+                        Some(call_policy) => {
+                            let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                            if let Addr::Con(Constant::Usize(bp)) = a1 {
+                                if call_policy.is_empty() && bp == self.b {
+                                    Some(call_policy.into_inner())
+                                } else {
+                                    None
+                                }
+                            } else {
+                                panic!("remove_call_policy_check: expected Usize in A1.");
+                            }
+                        },
+                        None => panic!("remove_call_policy_check: requires \\
+                                        CallWithInferenceLimitCallPolicy.")
+                    };
+
+                if let Some(new_policy) = restore_default {
+                    *call_policy = new_policy;
+                }
+            },
+            &SystemClauseType::RemoveInferenceCounter => {
+                match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
+                    Some(call_policy) => {
+                        let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                        if let Addr::Con(Constant::Usize(bp)) = a1 {
+                            let count = call_policy.remove_limit(bp);
+                            self[temp_v!(2)] = Addr::Con(Constant::Number(Number::Integer(count)));
+                        } else {
+                            panic!("remove_inference_counter: expected Usize in A1.");
+                        }
+                    },
+                    None => panic!("remove_inference_counters: requires \\
+                                    CallWithInferenceLimitCallPolicy.")
+                };
+            },
+            &SystemClauseType::RestoreCutPolicy => {
+                let restore_default =
+                    if let Ok(cut_policy) = cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>() {
+                        cut_policy.out_of_cont_pts()
+                    } else {
+                        false
+                    };
+
+                if restore_default {
+                    *cut_policy = Box::new(DefaultCutPolicy {});
+                }
+            },
+            &SystemClauseType::SetCutPoint(r) =>
+                cut_policy.cut(self, r),
             &SystemClauseType::GetArg =>
-                self.try_get_arg(),
-            &SystemClauseType::InferenceLevel(r1, r2) => {
-                let a1 = self[r1].clone();
-                let a2 = self.store(self.deref(self[r2].clone()));
+                return self.try_get_arg(),
+            &SystemClauseType::InferenceLevel => {
+                let a1 = self[temp_v!(1)].clone();
+                let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
 
                 match a2 {
                     Addr::Con(Constant::Usize(bp)) =>
@@ -173,8 +271,6 @@ impl MachineState {
                         },
                     _ => self.fail = true
                 };
-
-                Ok(())
             },            
             &SystemClauseType::CleanUpBlock => {
                 let nb = self.store(self.deref(self[temp_v!(1)].clone()));
@@ -190,17 +286,9 @@ impl MachineState {
                     },
                     _ => self.fail = true
                 };
-
-                Ok(())
             },
-            &SystemClauseType::EraseBall => {
-                self.ball.reset();
-                Ok(())
-            },
-            &SystemClauseType::Fail => {
-                self.fail = true;
-                Ok(())
-            },
+            &SystemClauseType::EraseBall => self.ball.reset(),
+            &SystemClauseType::Fail => self.fail = true,
             &SystemClauseType::GetBall => {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));
                 let h = self.heap.h;
@@ -218,20 +306,18 @@ impl MachineState {
                     Some(r) => self.bind(r, ball),
                     _ => self.fail = true
                 };
-
-                Ok(())
             },
             &SystemClauseType::GetCurrentBlock => {
                 let c = Constant::Usize(self.block);
                 let addr = self[temp_v!(1)].clone();
 
                 self.write_constant_to_var(addr, c);
-                Ok(())
             },
-            &SystemClauseType::GetCutPoint(r) => {
-                let c = Constant::Usize(self.b);
-                self[r] = Addr::Con(c);
-                Ok(())
+            &SystemClauseType::GetCutPoint => {
+                let a1 = self[temp_v!(1)].clone();
+                let a2 = Addr::Con(Constant::Usize(self.b));
+                
+                self.unify(a1, a2);
             },
             &SystemClauseType::InstallNewBlock => {
                 self.block = self.b;
@@ -240,28 +326,17 @@ impl MachineState {
                 let addr = self[temp_v!(1)].clone();
 
                 self.write_constant_to_var(addr, c);
-                Ok(())
             },
             &SystemClauseType::ResetBlock => {
                 let addr = self.deref(self[temp_v!(1)].clone());
                 self.reset_block(addr);
-                Ok(())
             },
-            &SystemClauseType::SetBall => {
-                self.set_ball();
-                Ok(())
-            },            
-            &SystemClauseType::SkipMaxList => {
-                self.skip_max_list()?;
-                Ok(())
-            },
-            &SystemClauseType::Succeed => {
-                Ok(())
-            },
-            &SystemClauseType::UnwindStack => {
-                self.unwind_stack();
-                Ok(())
-            }
-        }
+            &SystemClauseType::SetBall => self.set_ball(),
+            &SystemClauseType::SkipMaxList => return self.skip_max_list(),
+            &SystemClauseType::Succeed => {},
+            &SystemClauseType::UnwindStack => self.unwind_stack()
+        };
+
+        Ok(())
     }
 }

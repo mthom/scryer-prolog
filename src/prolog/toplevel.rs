@@ -398,27 +398,20 @@ impl RelationWorker {
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
             Term::Clause(r, name, mut terms, fixity) =>                
-                if name.as_str() == ";" {
-                    if terms.len() == 2 {
-                        let term = Term::Clause(r, name.clone(), terms, fixity);
-                        let (stub, clauses) = self.fabricate_disjunct(term);
-
-                        self.queue.push_back(clauses);
-                        Ok(QueryTerm::Jump(stub))
-                    } else {
-                        Err(ParserError::BuiltInArityMismatch(";"))
-                    }
+                if name.as_str() == ";" && terms.len() == 2 {
+                    let term = Term::Clause(r, name.clone(), terms, fixity);
+                    let (stub, clauses) = self.fabricate_disjunct(term);
+                    
+                    self.queue.push_back(clauses);
+                    Ok(QueryTerm::Jump(stub))
                 } else if name.as_str() == "->" && terms.len() == 2 {
-                    if terms.len() == 2 {
-                        let conq = *terms.pop().unwrap();
-                        let prec = *terms.pop().unwrap();
-                        let (stub, clauses) = self.fabricate_if_then(prec, conq);
-
-                        self.queue.push_back(clauses);
-                        Ok(QueryTerm::Jump(stub))
-                    } else {
-                        Err(ParserError::BuiltInArityMismatch("->"))
-                    }
+                    let conq = *terms.pop().unwrap();
+                    let prec = *terms.pop().unwrap();
+                    
+                    let (stub, clauses) = self.fabricate_if_then(prec, conq);
+                    
+                    self.queue.push_back(clauses);
+                    Ok(QueryTerm::Jump(stub))
                 } else {
                     Ok(QueryTerm::Clause(Cell::default(),
                                          ClauseType::from(name, terms.len(), fixity),

@@ -601,19 +601,19 @@ impl InlinedClauseType {
             &InlinedClauseType::IsInteger (..) => 1,
             &InlinedClauseType::IsRational(..) => 1,
             &InlinedClauseType::IsString(..) => 1,
-            &InlinedClauseType::IsFloat (..) => 1, 
+            &InlinedClauseType::IsFloat (..) => 1,
             &InlinedClauseType::IsNonVar(..) => 1,
             &InlinedClauseType::IsVar(..) => 1
         }
     }
-    
+
     pub fn from(name: &str, arity: usize) -> Option<Self> {
         let r1 = temp_v!(1);
         let r2 = temp_v!(2);
 
         let a1 = ArithmeticTerm::Reg(r1);
         let a2 = ArithmeticTerm::Reg(r2);
-        
+
         match (name, arity) {
             (">", 2) =>
                 Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThan, a1, a2)),
@@ -715,14 +715,20 @@ pub struct Rule {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
+    InstallCleaner,
+    InstallInferenceCounter,
+    RemoveCallPolicyCheck,
+    RemoveInferenceCounter,
+    RestoreCutPolicy,
+    SetCutPoint(RegType),
     GetArg,
-    InferenceLevel(RegType, RegType),
+    InferenceLevel,
     CleanUpBlock,
     EraseBall,
     Fail,
     GetBall,
     GetCurrentBlock,
-    GetCutPoint(RegType),
+    GetCutPoint,
     InstallNewBlock,
     ResetBlock,
     SetBall,
@@ -734,14 +740,20 @@ pub enum SystemClauseType {
 impl SystemClauseType {
     pub fn arity(&self) -> usize {
         match self {
+            &SystemClauseType::InstallCleaner => 1,
+            &SystemClauseType::InstallInferenceCounter => 3,
+            &SystemClauseType::RemoveCallPolicyCheck => 1,
+            &SystemClauseType::RemoveInferenceCounter => 2,
+            &SystemClauseType::RestoreCutPolicy => 0,
+            &SystemClauseType::SetCutPoint(_) => 1,
             &SystemClauseType::GetArg => 3,
-            &SystemClauseType::InferenceLevel(..) => 2,
+            &SystemClauseType::InferenceLevel => 2,
             &SystemClauseType::CleanUpBlock => 1,
             &SystemClauseType::EraseBall => 0,
             &SystemClauseType::Fail => 0,
             &SystemClauseType::GetBall => 1,
             &SystemClauseType::GetCurrentBlock => 1,
-            &SystemClauseType::GetCutPoint(_) => 1,
+            &SystemClauseType::GetCutPoint => 1,
             &SystemClauseType::InstallNewBlock => 1,
             &SystemClauseType::ResetBlock => 1,
             &SystemClauseType::SetBall => 1,
@@ -750,20 +762,29 @@ impl SystemClauseType {
             &SystemClauseType::UnwindStack => 0
         }
     }
-    
+
     pub fn fixity(&self) -> Option<Fixity> {
         None
     }
-    
+
     pub fn name(&self) -> ClauseName {
         match self {
+            &SystemClauseType::InstallCleaner => clause_name!("$install_cleaner"),
+            &SystemClauseType::InstallInferenceCounter =>
+                clause_name!("$install_inference_counter"),
+            &SystemClauseType::RemoveCallPolicyCheck =>
+                clause_name!("$remove_call_policy_check"),
+            &SystemClauseType::RemoveInferenceCounter =>
+                clause_name!("$remove_inference_counter"),
+            &SystemClauseType::RestoreCutPolicy => clause_name!("$restore_cut_policy"),
+            &SystemClauseType::SetCutPoint(_) => clause_name!("$set_cp"),
             &SystemClauseType::GetArg => clause_name!("$get_arg"),
-            &SystemClauseType::InferenceLevel(..) => clause_name!("$inference_level"),
+            &SystemClauseType::InferenceLevel => clause_name!("$inference_level"),
             &SystemClauseType::CleanUpBlock => clause_name!("$clean_up_block"),
             &SystemClauseType::EraseBall => clause_name!("$erase_ball"),
             &SystemClauseType::Fail => clause_name!("$fail"),
             &SystemClauseType::GetBall => clause_name!("$get_ball"),
-            &SystemClauseType::GetCutPoint(_) => clause_name!("$get_cp"),
+            &SystemClauseType::GetCutPoint => clause_name!("$get_cp"),
             &SystemClauseType::GetCurrentBlock => clause_name!("$get_current_block"),
             &SystemClauseType::InstallNewBlock => clause_name!("$install_new_block"),
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
@@ -776,14 +797,24 @@ impl SystemClauseType {
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
+            ("$install_cleaner", 1) =>
+                Some(SystemClauseType::InstallCleaner),
+            ("$install_inference_counter", 3) =>
+                Some(SystemClauseType::InstallInferenceCounter),
+            ("$remove_call_policy_check", 1) =>
+                Some(SystemClauseType::RemoveCallPolicyCheck),
+            ("$remove_inference_counter", 1) =>
+                Some(SystemClauseType::RemoveInferenceCounter),
+            ("$restore_cut_policy", 0) => Some(SystemClauseType::RestoreCutPolicy),
+            ("$set_cp", 1) => Some(SystemClauseType::SetCutPoint(temp_v!(1))),
             ("$get_arg", 3) => Some(SystemClauseType::GetArg),
-            ("$inference_level", 2) => Some(SystemClauseType::InferenceLevel(temp_v!(0), temp_v!(0))),
+            ("$inference_level", 2) => Some(SystemClauseType::InferenceLevel),
             ("$clean_up_block", 1) => Some(SystemClauseType::CleanUpBlock),
             ("$erase_ball", 0) => Some(SystemClauseType::EraseBall),
             ("$fail", 0) => Some(SystemClauseType::Fail),
             ("$get_ball", 1) => Some(SystemClauseType::GetBall),
             ("$get_current_block", 1) => Some(SystemClauseType::GetCurrentBlock),
-            ("$get_cp", 1) => Some(SystemClauseType::GetCutPoint(temp_v!(0))),
+            ("$get_cp", 1) => Some(SystemClauseType::GetCutPoint),
             ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
             ("$set_ball", 1) => Some(SystemClauseType::SetBall),
@@ -796,7 +827,7 @@ impl SystemClauseType {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum BuiltInClauseType {
-    AcyclicTerm,    
+    AcyclicTerm,
     Compare,
     CompareTerm(CompareTermQT),
     CyclicTerm,
@@ -812,10 +843,10 @@ pub enum BuiltInClauseType {
 }
 
 #[derive(Clone)]
-pub enum ClauseType {    
+pub enum ClauseType {
     BuiltIn(BuiltInClauseType),
     CallN,
-    Inlined(InlinedClauseType),    
+    Inlined(InlinedClauseType),
     Op(ClauseName, Fixity, CodeIndex),
     Named(ClauseName, CodeIndex),
     System(SystemClauseType)
@@ -898,7 +929,7 @@ impl BuiltInClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &BuiltInClauseType::AcyclicTerm => clause_name!("acyclic_term"),            
+            &BuiltInClauseType::AcyclicTerm => clause_name!("acyclic_term"),
             &BuiltInClauseType::Compare => clause_name!("compare"),
             &BuiltInClauseType::CompareTerm(qt) => clause_name!(qt.name()),
             &BuiltInClauseType::CyclicTerm => clause_name!("cyclic_term"),
@@ -909,14 +940,14 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Ground  => clause_name!("ground"),
             &BuiltInClauseType::Is => clause_name!("is"),
             &BuiltInClauseType::KeySort => clause_name!("keysort"),
-            &BuiltInClauseType::NotEq => clause_name!("\\=="),            
-            &BuiltInClauseType::Sort => clause_name!("sort"),            
+            &BuiltInClauseType::NotEq => clause_name!("\\=="),
+            &BuiltInClauseType::Sort => clause_name!("sort"),
         }
-    }    
+    }
 
     pub fn arity(&self) -> usize {
         match self {
-            &BuiltInClauseType::AcyclicTerm => 1,        
+            &BuiltInClauseType::AcyclicTerm => 1,
             &BuiltInClauseType::Compare => 2,
             &BuiltInClauseType::CompareTerm(_) => 2,
             &BuiltInClauseType::CyclicTerm => 1,
@@ -931,7 +962,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Sort => 2,
         }
     }
-    
+
     pub fn from(name: &str, arity: usize) -> Option<Self> {
         match (name, arity) {
             ("acyclic_term", 1) => Some(BuiltInClauseType::AcyclicTerm),
@@ -970,7 +1001,7 @@ impl ClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &ClauseType::CallN => clause_name!("call"),            
+            &ClauseType::CallN => clause_name!("call"),
             &ClauseType::BuiltIn(built_in) => built_in.name(),
             &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
             &ClauseType::Op(ref name, ..) => name.clone(),
@@ -1371,12 +1402,6 @@ pub enum ArithmeticInstruction {
 // call and cut policy exempt instructions.
 #[derive(Clone)]
 pub enum PEInstruction {
-    InstallCleaner,
-    InstallInferenceCounter(RegType, RegType, RegType),
-    RemoveCallPolicyCheck,
-    RemoveInferenceCounter(RegType, RegType),
-    RestoreCutPolicy,
-    SetCutPoint(RegType),
 }
 
 #[derive(Clone)]
@@ -1385,7 +1410,7 @@ pub enum ControlInstruction {
     CallClause(ClauseType, usize, usize, bool), // name, arity, perm_vars after threshold, last call.
     CheckCpExecute,
     Deallocate,
-    GetCleanerCall,    
+    GetCleanerCall,
     IsClause(bool, RegType, ArithmeticTerm), // last call, register of var, term.
     JmpBy(usize, usize, usize, bool), // arity, global_offset, perm_vars after threshold, last call.
     Proceed
@@ -1453,7 +1478,6 @@ pub type CompiledQuery = Vec<QueryInstruction>;
 #[derive(Clone)]
 pub enum Line {
     Arithmetic(ArithmeticInstruction),
-    PolicyExempt(PEInstruction),
     Choice(ChoiceInstruction),
     Control(ControlInstruction),
     Cut(CutInstruction),
@@ -1590,6 +1614,7 @@ impl From<(usize, ClauseName)> for CodeIndex {
 #[derive(Clone, PartialEq)]
 pub enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
+    CallN(usize, LocalCodePtr), // arity, local.
     Local(LocalCodePtr)
 }
 
@@ -1597,6 +1622,7 @@ impl CodePtr {
     pub fn local(&self) -> LocalCodePtr {
         match self {
             &CodePtr::BuiltInClause(_, ref local)
+          | &CodePtr::CallN(_, ref local)
           | &CodePtr::Local(ref local) => local.clone()
         }
     }
@@ -1618,7 +1644,7 @@ impl LocalCodePtr {
 
     pub fn assign_if_local(&mut self, cp: CodePtr) {
         match cp {
-            CodePtr::Local(local) => *self = local,            
+            CodePtr::Local(local) => *self = local,
             _ => {}
         }
     }
@@ -1627,7 +1653,7 @@ impl LocalCodePtr {
 impl PartialOrd<CodePtr> for CodePtr {
     fn partial_cmp(&self, other: &CodePtr) -> Option<Ordering> {
         match (self, other) {
-            (&CodePtr::Local(ref l1), &CodePtr::Local(ref l2)) => l1.partial_cmp(l2),            
+            (&CodePtr::Local(ref l1), &CodePtr::Local(ref l2)) => l1.partial_cmp(l2),
             _ => Some(Ordering::Greater)
         }
     }
@@ -1664,7 +1690,7 @@ impl Add<usize> for LocalCodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            LocalCodePtr::DirEntry(p, name) => LocalCodePtr::DirEntry(p + rhs, name),
+            LocalCodePtr::DirEntry(p, name) => LocalCodePtr::DirEntry(p + rhs, name),            
             LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs)
         }
     }
@@ -1685,7 +1711,8 @@ impl Add<usize> for CodePtr {
     fn add(self, rhs: usize) -> Self::Output {
         match self {
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
-            CodePtr::BuiltInClause(_, local) => CodePtr::Local(local + rhs),
+            CodePtr::CallN(_, local) | CodePtr::BuiltInClause(_, local) =>
+                CodePtr::Local(local + rhs),
         }
     }
 }

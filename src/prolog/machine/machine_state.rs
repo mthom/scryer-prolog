@@ -324,6 +324,7 @@ pub(crate) trait CallPolicy: Any {
         let n = machine_st.or_stack[b].num_args();
 
         for i in 1 .. n + 1 {
+            let addr = machine_st.store(machine_st.deref(machine_st.or_stack[b][i].clone()));            
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
@@ -517,40 +518,37 @@ pub(crate) trait CallPolicy: Any {
         }
     }
 
-    fn call_n<'a>(&mut self, machine_st: &mut MachineState, mut arity: usize,
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
                   code_dirs: CodeDirs<'a>, lco: bool)
                   -> CallResult
     {
-        while let Some((name, inner_arity)) = machine_st.setup_call_n(arity) {
+        if let Some((name, arity)) = machine_st.setup_call_n(arity) {
             let user = clause_name!("user");
 
-            match ClauseType::from(name.clone(), inner_arity, None) {
+            match ClauseType::from(name.clone(), arity, None) {
                 ClauseType::CallN => {
-                    machine_st.handle_internal_call_n(inner_arity);
+                    machine_st.handle_internal_call_n(arity);
 
                     if machine_st.fail {
                         return Ok(());
                     }
 
-                    arity = inner_arity;
-                    continue;
+                    machine_st.p = CodePtr::CallN(arity, machine_st.p.local());
                 },
                 ClauseType::BuiltIn(built_in) =>
                     machine_st.setup_built_in_call(built_in),
                 ClauseType::Inlined(inlined) =>
                     machine_st.execute_inlined(&inlined),
                 ClauseType::Op(..) | ClauseType::Named(..) =>
-                    if let Some(idx) = code_dirs.get(name.clone(), inner_arity, user) {
-                        self.context_call(machine_st, name, inner_arity, idx, lco)?;
+                    if let Some(idx) = code_dirs.get(name.clone(), arity, user) {
+                        self.context_call(machine_st, name, arity, idx, lco)?;
                     } else {
-                        return Err(machine_st.existence_error(name, inner_arity));
+                        return Err(machine_st.existence_error(name, arity));
                     },
                 ClauseType::System(ct) =>
                     return Err(machine_st.type_error(ValidType::Callable,
                                                      Addr::Con(Constant::Atom(name))))
             };
-
-            break;
         }
 
         Ok(())
@@ -700,8 +698,6 @@ impl CutPolicy for DefaultCutPolicy {
             machine_st.fail = true;
             return;
         }
-
-        machine_st.p += 1;
     }
 }
 
@@ -742,8 +738,6 @@ impl CutPolicy for SetupCallCleanupCutPolicy {
             machine_st.fail = true;
             return;
         }
-
-        machine_st.p += 1;
 
         if !self.out_of_cont_pts() {
             machine_st.cp.assign_if_local(machine_st.p.clone());

@@ -1,6 +1,5 @@
 use prolog::and_stack::*;
 use prolog::ast::*;
-use prolog::builtins::*;
 use prolog::copier::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
@@ -670,7 +669,7 @@ impl MachineState {
             &ArithmeticInstruction::Xor(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
-                
+
                 self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.xor(n1, n2)));
                 self.p += 1;
             },
@@ -956,8 +955,10 @@ impl MachineState {
                     self.registers[arg] = self.heap[h].as_addr(h);
                 }
             },
-            &QueryInstruction::PutValue(norm, arg) =>
-                self.registers[arg] = self[norm].clone(),
+            &QueryInstruction::PutValue(norm, arg) => {
+                let addr = self.store(self.deref(self[norm].clone()));
+                self.registers[arg] = self[norm].clone();
+            },
             &QueryInstruction::PutVariable(norm, arg) => {
                 match norm {
                     RegType::Perm(n) => {
@@ -1400,121 +1401,6 @@ impl MachineState {
         }
     }
 
-    pub(super)
-    fn execute_pe_instr<'a>(&mut self, code_dirs: CodeDirs<'a>, call_policy: &mut Box<CallPolicy>,
-                            cut_policy:  &mut Box<CutPolicy>, instr: &PEInstruction)
-    {
-        match instr {            
-            &PEInstruction::InstallCleaner => {
-                let addr = self[temp_v!(1)].clone();
-                let b = self.b;
-                let block = self.block;
-
-                if cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>().is_err() {
-                    *cut_policy = Box::new(SetupCallCleanupCutPolicy::new());
-                }
-
-                match cut_policy.downcast_mut::<SetupCallCleanupCutPolicy>().ok()
-                {
-                    Some(cut_policy) => cut_policy.push_cont_pt(addr, b, block),
-                    None => panic!("install_cleaner: should have installed \\
-                                    SetupCallCleanupCutPolicy.")
-                };
-
-                self.p += 1;
-            },
-            &PEInstruction::InstallInferenceCounter(r1, r2, r3) => { // A1 = B, A2 = L
-                let a1 = self.store(self.deref(self[r1].clone()));
-                let a2 = self.store(self.deref(self[r2].clone()));
-
-                if call_policy.downcast_ref::<CallWithInferenceLimitCallPolicy>().is_err() {
-                    CallWithInferenceLimitCallPolicy::new_in_place(call_policy);
-                }
-
-                self.p += 1;
-
-                match (a1, a2.clone()) {
-                    (Addr::Con(Constant::Usize(bp)),
-                     Addr::Con(Constant::Number(Number::Integer(n)))) =>
-                        match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
-                            Some(call_policy) => {
-                                let count = call_policy.add_limit(n, bp);
-                                self[r3] = Addr::Con(Constant::Number(Number::Integer(count)));
-                            },
-                            None => panic!("install_inference_counter: should have installed \\
-                                            CallWithInferenceLimitCallPolicy.")
-                        },
-                    _ => {
-                        let stub = self.functor_stub(clause_name!("call_with_inference_limit"), 3);
-                        let type_error = self.error_form(self.type_error(ValidType::Integer, a2),
-                                                         stub);
-                        self.throw_exception(type_error)
-                    }
-                };
-            },
-            &PEInstruction::RemoveCallPolicyCheck => {
-                let restore_default =
-                    match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
-                        Some(call_policy) => {
-                            let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
-
-                            if let Addr::Con(Constant::Usize(bp)) = a1 {
-                                if call_policy.is_empty() && bp == self.b {
-                                    Some(call_policy.into_inner())
-                                } else {
-                                    None
-                                }
-                            } else {
-                                panic!("remove_call_policy_check: expected Usize in A1.");
-                            }
-                        },
-                        None => panic!("remove_call_policy_check: requires \\
-                                        CallWithInferenceLimitCallPolicy.")
-                    };
-
-                if let Some(new_policy) = restore_default {
-                    *call_policy = new_policy;
-                }
-
-                self.p += 1;
-            },
-            &PEInstruction::RemoveInferenceCounter(r1, r2) => { // A1 = B
-                match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
-                    Some(call_policy) => {
-                        let a1 = self.store(self.deref(self[r1].clone()));
-
-                        if let Addr::Con(Constant::Usize(bp)) = a1 {
-                            let count = call_policy.remove_limit(bp);
-                            self[r2] = Addr::Con(Constant::Number(Number::Integer(count)));
-                        } else {
-                            panic!("remove_inference_counter: expected Usize in A1.");
-                        }
-                    },
-                    None => panic!("remove_inference_counters: requires \\
-                                    CallWithInferenceLimitCallPolicy.")
-                };
-
-                self.p += 1;
-            },
-            &PEInstruction::RestoreCutPolicy => {
-                let restore_default =
-                    if let Ok(cut_policy) = cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>() {
-                        cut_policy.out_of_cont_pts()
-                    } else {
-                        false
-                    };
-
-                if restore_default {
-                    *cut_policy = Box::new(DefaultCutPolicy {});
-                }
-
-                self.p += 1;
-            },
-            &PEInstruction::SetCutPoint(r) =>
-                cut_policy.cut(self, r),
-        };
-    }
-
     pub(super) fn try_functor(&mut self) -> Result<(), MachineError> {
         let stub = self.functor_stub(clause_name!("functor"), 3);
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
@@ -1785,7 +1671,7 @@ impl MachineState {
     }
 
     pub(super) fn setup_built_in_call(&mut self, ct: BuiltInClauseType)
-    {        
+    {
         self.num_of_args = ct.arity();
         self.b0 = self.b;
 
@@ -1828,8 +1714,8 @@ impl MachineState {
         self.e  = self.and_stack[e].e;
 
         self.p += 1;
-    }        
-    
+    }
+
     pub(super) fn execute_ctrl_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
                                          call_policy: &mut Box<CallPolicy>,
                                          cut_policy:  &mut Box<CutPolicy>,
@@ -1849,7 +1735,7 @@ impl MachineState {
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
                                                             lco)),
             &ControlInstruction::CallClause(ClauseType::System(ref ct), arity, _, lco) => {
-                try_or_fail!(self, self.system_call(ct));
+                try_or_fail!(self, self.system_call(ct, call_policy, cut_policy));
 
                 if lco {
                     self.p = CodePtr::Local(self.cp.clone());
@@ -2011,8 +1897,10 @@ impl MachineState {
                 self[r] = Addr::Con(Constant::Usize(b0));
                 self.p += 1;
             },
-            &CutInstruction::Cut(r) =>
-                cut_policy.cut(self, r),
+            &CutInstruction::Cut(r) => {
+                cut_policy.cut(self, r);
+                self.p += 1;
+            }
         }
     }
 

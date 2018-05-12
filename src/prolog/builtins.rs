@@ -658,7 +658,7 @@ pub fn default_op_dir() -> OpDir
     op_dir.insert((clause_name!(":-"), Fixity::In),  (XFX, 1200, module_name.clone()));
     op_dir.insert((clause_name!(":-"), Fixity::Pre), (FX, 1200, module_name.clone()));
     op_dir.insert((clause_name!("?-"), Fixity::Pre), (FX, 1200, module_name.clone()));    
-    // op_dir.insert((clause_name!("/"), Fixity::In), (YFX, 400, module_name.clone()));
+    op_dir.insert((clause_name!("/"), Fixity::In), (YFX, 400, module_name.clone()));
     
 /*
     // control operators.

@@ -2,8 +2,9 @@
 
 :- module(builtins, [(=)/2, (+)/2, (*)/2, (-)/2, (/)/2, (/\)/2,
 	(\/)/2, (is)/2, (xor)/2, (div)/2, (//)/2, (rdiv)/2, (<<)/2,
-	(>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2, (-)/1,
-	(>=)/2, (=<)/2, (->)/2, (;)/2, catch/3, throw/1, true/0, false/0]).
+	(>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2,
+	(-)/1, (>=)/2, (=<)/2, (->)/2, (;)/2, (==)/2, catch/3,
+	throw/1, true/0, false/0]).
 
 % arithmetic operators.
 :- op(700, xfx, is).
@@ -30,12 +31,15 @@
 :- op(700, xfx, >=).
 :- op(700, xfx, =<).
 
+% unify.
+:- op(700, xfx, =).
+
 % conditional operators.
 :- op(1050, xfy, ->).
 :- op(1100, xfy, ;).
 
-% unify.
-:- op(700, xfx, =).
+% term comparison.
+:- op(700, xfx, ==).
 
 % unify.
 X = X.
@@ -44,33 +48,32 @@ true.
 
 false :- '$fail'.
 
-% conditions.
-/*
-','(G1, G2) :- get_cp(B), ','(G1, G2, B).
+% control operators.
 
-','(!, ','(G1, G2), B) :- set_cp(B), ','(G1, G2, B).
-','(!, !, B) :- set_cp(B).
-','(!, G, B) :- set_cp(B), G.
+','(G1, G2) :- '$get_cp'(B), ','(G1, G2, B).
+
+','(!, ','(G1, G2), B) :- '$set_cp'(B), ','(G1, G2, B).
+','(!, !, B) :- '$set_cp'(B).
+','(!, G, B) :- '$set_cp'(B), G.
 ','(G, ','(G2, G3), B) :- !, G, ','(G2, G3, B).
-','(G, !, B) :- !, G, set_cp(B).
+','(G, !, B) :- !, G, '$set_cp'(B).
 ','(G1, G2, _) :- G1, G2.
 
-;(G1, G2) :- get_cp(B), ;(G1, G2, B).
+;(G1, G2) :- '$get_cp'(B), ;(G1, G2, B).
 
-;(G1 -> G2, _, B) :- ->(G1, G2, B).
-;(_  -> _ , G, B) :- set_cp(B), G.
-;(!, _, B) :- set_cp(B).
-;(_, !, B) :- set_cp(B).
+;(G1, G4, B) :- compound(G1), G1 = ->(G2, G3), (G2 -> G3 ; '$set_cp'(B), G4).
+;(G1, G2, B) :- G1 == !, '$set_cp'(B), call(G2).
+;(G1, G2, B) :- G2 == !, call(G2), '$set_cp'(B).
 ;(G, _, _) :- G.
 ;(_, G, _) :- G.
 
-G1 -> G2 :- get_cp(B), ->(G1, G2, B).
+G1 -> G2 :- '$get_cp'(B), ->(G1, G2, B).
 
-->(G1, !, B)  :- call(G1), set_cp(B).
-->(G1, G2, B) :- call(G1), set_cp(B), call(G2).
-*/
+->(G1, G2, B) :- G2 == !, call(G1), !, '$set_cp'(B).
+->(G1, G2, B) :- call(G1), '$set_cp'(B), call(G2).
 
-% exceptions.
+% exception handling.
+
 catch(G,C,R) :- '$get_current_block'(Bb), catch(G,C,R,Bb).
 
 catch(G,C,R,Bb) :- '$install_new_block'(NBb), call(G), end_block(Bb, NBb).

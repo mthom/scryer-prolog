@@ -30,9 +30,9 @@ fn prolog_repl() {
     let mut wam = Machine::new();
 
     load_init_str_and_include(&mut wam, BUILTINS, "builtins");
-//    load_init_str(&mut wam, LISTS);
+    load_init_str(&mut wam, LISTS);
     // load_init_str(&mut wam, CONTROL);
-  //  load_init_str(&mut wam, QUEUES);
+    // load_init_str(&mut wam, QUEUES);
 
     loop {
         print!("prolog> ");

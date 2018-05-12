@@ -166,25 +166,6 @@ impl fmt::Display for IndexedChoiceInstruction {
     }
 }
 
-impl fmt::Display for PEInstruction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &PEInstruction::InstallInferenceCounter(r1, r2, r3) =>
-                write!(f, "install_inference_counter {}, {}, {}", r1, r2, r3),
-            &PEInstruction::InstallCleaner =>
-                write!(f, "install_cleaner"),
-            &PEInstruction::RemoveCallPolicyCheck =>
-                write!(f, "remove_call_policy_check"),
-            &PEInstruction::RemoveInferenceCounter(r1, r2) =>
-                write!(f, "remove_inference_counter {}, {}", r1, r2),            
-            &PEInstruction::RestoreCutPolicy =>
-                write!(f, "restore_cut_point"),
-            &PEInstruction::SetCutPoint(r) =>
-                write!(f, "set_cp {}", r),
-        }
-    }
-}
-
 impl fmt::Display for ChoiceInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -328,8 +309,6 @@ pub fn print_code(code: &Code) {
                 for fact_instr in fact {
                     println!("{}", fact_instr);
                 },
-            &Line::PolicyExempt(ref instr) =>
-                println!("{}", instr),
             &Line::Cut(ref cut) =>
                 println!("{}", cut),
             &Line::Choice(ref choice) =>
@@ -537,6 +516,8 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
 
             decl_info.label_clauses(wam.code_size(), &mut wam.code_dir, &mut code);
 
+            print_code(&code);
+            
             if !code.is_empty() {
                 wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
             } else {

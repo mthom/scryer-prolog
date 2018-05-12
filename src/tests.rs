@@ -1201,16 +1201,14 @@ fn test_queries_on_skip_max_list() {
                            [["Xs = non_list", "N = 0"]]);
 }
 
-/*
 #[test]
 fn test_queries_on_conditionals()
 {
     let mut wam = Machine::new();
-
-    submit(&mut wam, "test(A) :- (   A =:= 2 ->
-                                     display(\"A is 2\")
-                                 ;   A =:= 3 ->
-                                     display(\"A is 3\")
+    load_init_str_and_include(&mut wam, BUILTINS, "builtins");
+    
+    submit(&mut wam, "test(A) :- (   A =:= 2 -> display(\"A is 2\")
+                                 ;   A =:= 3 -> display(\"A is 3\")
                                  ;   A = \"not 2 or 3\"
                                  ).");
 
@@ -1268,6 +1266,7 @@ fn test_queries_on_conditionals()
                            [["X = a"], ["X = b"]]);
 }
 
+/*
 #[test]
 fn test_queries_on_builtins()
 {
