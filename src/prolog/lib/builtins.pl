@@ -3,8 +3,8 @@
 :- module(builtins, [(=)/2, (+)/2, (*)/2, (-)/2, (/)/2, (/\)/2,
 	(\/)/2, (is)/2, (xor)/2, (div)/2, (//)/2, (rdiv)/2, (<<)/2,
 	(>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2,
-	(-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (==)/2, (\==)/2,
-	catch/3, throw/1, true/0, false/0, length/2]).
+	(-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2, (==)/2,
+	(\==)/2, catch/3, throw/1, true/0, false/0, length/2]).
 
 % arithmetic operators.
 :- op(700, xfx, is).
@@ -31,8 +31,9 @@
 :- op(700, xfx, >=).
 :- op(700, xfx, =<).
 
-% unify.
+% control.
 :- op(700, xfx, =).
+:- op(900, fy, \+).
 :- op(700, xfx, =..).
 
 % conditional operators.
@@ -42,6 +43,9 @@
 % term comparison.
 :- op(700, xfx, ==).
 :- op(700, xfx, \==).
+
+% the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
+max_arity(63).
 
 % unify.
 X = X.
@@ -74,35 +78,10 @@ G1 -> G2 :- '$get_cp'(B), ->(G1, G2, B).
 ->(G1, G2, B) :- G2 == !, call(G1), !, '$set_cp'(B).
 ->(G1, G2, B) :- call(G1), '$set_cp'(B), call(G2).
 
-/*
-Term =.. List :-
-    atomic(Term), !,
-    List = [Term].
-Term =.. List :-
-    compound(Term), !,
-    ( functor(Term, Name, NArgs) ->
-      List = [Name|Args], '$get_args'(Args, Term, 1, NArgs)
-    ; Term = [_|_] ->
-      List = ['.'|Term] ).
-Term =.. List :-
-    var(Term), !,
-    ( List = [ATerm], atomic(ATerm) ->
-      Term = ATerm
-    ; List = [Name|Args] ->
-      functor(Term, Name, Args)).
-
-'$get_args'(Args, _, _, 0) :-
-    !, Args = [].
-'$get_args'([Arg], Func, N, N) :-
-    !, '$get_arg'(N, Func, Arg).
-'$get_args'([Arg|Args], Func, I0, N) :-
-    '$get_arg'(I0, Func, Arg), I1 is I0 + 1,
-    '$get_args'(Args, Func, I1, N).
-*/
-
 % arg.
 
-/* The old, SWI Prolog-imitative arg/3.
+/* Here is the old, SWI Prolog-imitative arg/3. The new, ISO Prolog
+ * compliant arg/3 is implemented in Rust.
 
 arg(N, Functor, Arg) :- var(N), !, functor(Functor, _, Arity), arg_(N, 1, Arity, Functor, Arg).
 arg(N, Functor, Arg) :- integer(N), !, functor(Functor, _, Arity), '$get_arg'(N, Functor, Arg).
@@ -111,9 +90,52 @@ arg(N, Functor, Arg) :- throw(error(type_error(integer, N), arg/3)).
 arg_(N, N,  N, Functor, Arg)     :- !, '$get_arg'(N, Functor, Arg).
 arg_(N, N,  Arity, Functor, Arg) :- '$get_arg'(N, Functor, Arg).
 arg_(N, N0, Arity, Functor, Arg) :- N0 < Arity, N1 is N0 + 1, arg_(N, N1, Arity, Functor, Arg).
+
 */
 
-% The new, ISO Prolog compliant arg/3 is implemented in Rust.
+% univ.
+
+\+ Goal :- call(Goal), !, false.
+\+ _.
+
+univ_errors(Term, List, N) :-
+    '$skip_max_list'(N, -1, List, R),
+    ( var(R)       -> ( var(Term), throw(error(instantiation_error, (=..)/2))      % 8.5.3.3 a)
+		      ; true )
+    ; R \== []     -> throw(error(type_error(list, List), (=..)/2))                % 8.5.3.3 b)
+    ; List = [H|T] -> ( var(H), var(Term), % R == [] => List is a proper list.
+		        throw(error(instantiation_error, (=..)/2))                 % 8.5.3.3 c)
+		      ; T \== [], nonvar(H), \+ atom(H),
+			throw(error(type_error(atom, H), (=..)/2))                 % 8.5.3.3 d)
+		      ; compound(H), T == [],
+			throw(error(type_error(atomic, H), (=..)/2))               % 8.5.3.3 e)
+		      ; var(Term), max_arity(M), N - 1 > M,
+			throw(error(representation_error(max_arity), (=..)/2))     % 8.5.3.3 g)
+		      ; true )
+    ; var(Term)    -> throw(error(domain_error(non_empty_list, List), (=..)/2))    % 8.5.3.3 f)
+    ; true ).
+
+Term =.. List :- univ_errors(Term, List, N), univ_worker(Term, List, N).
+
+univ_worker(Term, List, _) :- atomic(Term), !, List = [Term].
+univ_worker(Term, [Name|Args], N) :-
+    var(Term), !,
+    Arity is N-1,
+    functor(Term, Name, Arity),
+    '$get_args'(Args, Term, 1, Arity).
+univ_worker(Term, List, _) :-
+    functor(Term, Name, Arity),
+    '$get_args'(Args, Term, 1, Arity),
+    List = [Name|Args].
+
+'$get_args'(Args, _, _, 0) :-
+    !, Args = [].
+'$get_args'([Arg], Func, N, N) :-
+    !, arg(N, Func, Arg).
+'$get_args'([Arg|Args], Func, I0, N) :-
+    arg(I0, Func, Arg),
+    I1 is I0 + 1,
+    '$get_args'(Args, Func, I1, N).
 
 % exceptions.
 

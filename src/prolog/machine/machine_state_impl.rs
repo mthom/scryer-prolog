@@ -1207,12 +1207,15 @@ impl MachineState {
                             },
                             _ => self.fail = true
                         },
-                    Addr::Lis(l) if n == 1 || n == 2 => {
-                        let a3  = self[temp_v!(3)].clone();
-                        let h_a = Addr::HeapCell(l + n - 1);
-                        
-                        self.unify(a3, h_a);
-                    },
+                    Addr::Lis(l) =>
+                        if n == 1 || n == 2 {
+                            let a3  = self[temp_v!(3)].clone();
+                            let h_a = Addr::HeapCell(l + n - 1);
+                            
+                            self.unify(a3, h_a);
+                        } else {
+                            self.fail = true;
+                        },
                     _ => // 8.5.2.3 d)
                         return Err(self.error_form(self.type_error(ValidType::Compound, term),
                                                    stub))
@@ -1525,8 +1528,13 @@ impl MachineState {
                         Addr::Con(_) if arity == 0 =>
                             self.unify(a1, name),
                         Addr::Con(Constant::Atom(name)) => {
-                            let f_a = Addr::Str(self.heap.h);
-                            self.heap.push(HeapCellValue::NamedStr(arity as usize, name, None));
+                            let f_a = if name.as_str() == "." && arity == 2 {
+                                Addr::Lis(self.heap.h)
+                            } else {
+                                let h = self.heap.h;                                
+                                self.heap.push(HeapCellValue::NamedStr(arity as usize, name, None));
+                                Addr::Str(h)
+                            };
 
                             for _ in 0 .. arity {
                                 let h = self.heap.h;
