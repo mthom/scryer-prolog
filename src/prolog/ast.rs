@@ -708,7 +708,6 @@ pub enum SystemClauseType {
     RemoveInferenceCounter,
     RestoreCutPolicy,
     SetCutPoint(RegType),
-    GetArg,
     InferenceLevel,
     CleanUpBlock,
     EraseBall,
@@ -740,7 +739,6 @@ impl SystemClauseType {
                 clause_name!("$remove_inference_counter"),
             &SystemClauseType::RestoreCutPolicy => clause_name!("$restore_cut_policy"),
             &SystemClauseType::SetCutPoint(_) => clause_name!("$set_cp"),
-            &SystemClauseType::GetArg => clause_name!("$get_arg"),
             &SystemClauseType::InferenceLevel => clause_name!("$inference_level"),
             &SystemClauseType::CleanUpBlock => clause_name!("$clean_up_block"),
             &SystemClauseType::EraseBall => clause_name!("$erase_ball"),
@@ -769,7 +767,6 @@ impl SystemClauseType {
                 Some(SystemClauseType::RemoveInferenceCounter),
             ("$restore_cut_policy", 0) => Some(SystemClauseType::RestoreCutPolicy),
             ("$set_cp", 1) => Some(SystemClauseType::SetCutPoint(temp_v!(1))),
-            ("$get_arg", 3) => Some(SystemClauseType::GetArg),
             ("$inference_level", 2) => Some(SystemClauseType::InferenceLevel),
             ("$clean_up_block", 1) => Some(SystemClauseType::CleanUpBlock),
             ("$erase_ball", 0) => Some(SystemClauseType::EraseBall),
@@ -790,6 +787,7 @@ impl SystemClauseType {
 #[derive(Copy, Clone, PartialEq)]
 pub enum BuiltInClauseType {
     AcyclicTerm,
+    Arg,
     Compare,
     CompareTerm(CompareTermQT),
     CyclicTerm,
@@ -892,6 +890,7 @@ impl BuiltInClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &BuiltInClauseType::AcyclicTerm => clause_name!("acyclic_term"),
+            &BuiltInClauseType::Arg => clause_name!("arg"),
             &BuiltInClauseType::Compare => clause_name!("compare"),
             &BuiltInClauseType::CompareTerm(qt) => clause_name!(qt.name()),
             &BuiltInClauseType::CyclicTerm => clause_name!("cyclic_term"),
@@ -910,6 +909,7 @@ impl BuiltInClauseType {
     pub fn arity(&self) -> usize {
         match self {
             &BuiltInClauseType::AcyclicTerm => 1,
+            &BuiltInClauseType::Arg => 3,
             &BuiltInClauseType::Compare => 2,
             &BuiltInClauseType::CompareTerm(_) => 2,
             &BuiltInClauseType::CyclicTerm => 1,
@@ -928,6 +928,7 @@ impl BuiltInClauseType {
     pub fn from(name: &str, arity: usize) -> Option<Self> {
         match (name, arity) {
             ("acyclic_term", 1) => Some(BuiltInClauseType::AcyclicTerm),
+            ("arg", 3) => Some(BuiltInClauseType::Arg),
             ("compare", 3) => Some(BuiltInClauseType::Compare),
             ("cyclic_term", 1) => Some(BuiltInClauseType::CyclicTerm),
             ("@>", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThan)),

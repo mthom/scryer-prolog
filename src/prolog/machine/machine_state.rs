@@ -410,6 +410,10 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.fail = machine_st.is_cyclic_term(addr);
                 return_from_clause!(machine_st.last_call, machine_st)
             },
+            &BuiltInClauseType::Arg => {
+                machine_st.try_arg()?;
+                return_from_clause!(machine_st.last_call, machine_st)
+            },
             &BuiltInClauseType::Compare => {
                 let a1 = machine_st[temp_v!(1)].clone();
                 let a2 = machine_st[temp_v!(2)].clone();

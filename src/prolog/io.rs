@@ -516,8 +516,6 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
 
             decl_info.label_clauses(wam.code_size(), &mut wam.code_dir, &mut code);
 
-            print_code(&code);
-            
             if !code.is_empty() {
                 wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
             } else {

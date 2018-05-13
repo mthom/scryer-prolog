@@ -5,7 +5,7 @@ use prolog::heap_iter::*;
 use prolog::heap_print::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
-use prolog::num::{Integer, ToPrimitive, Zero};
+use prolog::num::{Integer, Signed, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
@@ -1166,31 +1166,62 @@ impl MachineState {
         fail
     }
 
-    pub(super) fn try_get_arg(&mut self) -> CallResult
+    // arg(+N, +Term, ?Arg)
+    pub(super) fn try_arg(&mut self) -> CallResult
     {
-        let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
+        let stub = self.functor_stub(clause_name!("arg"), 3);
+        let n = self.store(self.deref(self[temp_v!(1)].clone()));
 
-        if let Addr::Con(Constant::Number(Number::Integer(i))) = a1 {
-            let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
+        match n {
+            Addr::HeapCell(_) | Addr::StackCell(..) => // 8.5.2.3 a)
+                return Err(self.error_form(self.instantiation_error(), stub)),
+            Addr::Con(Constant::Number(Number::Integer(n))) => {
+                if n.is_negative() {
+                    // 8.5.2.3 e)
+                    let n = Addr::Con(Constant::Number(Number::Integer(n)));
+                    return Err(self.error_form(self.domain_error(DomainError::NotLessThanZero,
+                                                                 n),
+                                               stub));
+                }
+                
+                let n = match n.to_usize() {
+                    Some(n) => n,
+                    None => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                };
 
-            if let Addr::Str(o) = a2 {
-                match self.heap[o].clone() {
-                    HeapCellValue::NamedStr(arity, _, _) =>
-                        match i.to_usize() {
-                            Some(i) if 1 <= i && i <= arity => {
+                let term = self.store(self.deref(self[temp_v!(2)].clone()));
+
+                match term {
+                    Addr::HeapCell(_) | Addr::StackCell(..) => // 8.5.2.3 b)
+                        return Err(self.error_form(self.instantiation_error(), stub)),
+                    Addr::Str(o) =>
+                        match self.heap[o].clone() {
+                            HeapCellValue::NamedStr(arity, _, _) if 1 <= n && n <= arity => {
                                 let a3  = self[temp_v!(3)].clone();
-                                let h_a = Addr::HeapCell(o + i);
-
+                                let h_a = Addr::HeapCell(o + n);
+                                    
                                 self.unify(a3, h_a);
                             },
                             _ => self.fail = true
                         },
-                    _ => self.fail = true
-                };
-            } else {
-                let stub = self.functor_stub(clause_name!("arg"), 3);
-                return Err(self.error_form(self.type_error(ValidType::Compound, a2), stub));
-            }
+                    Addr::Lis(l) if n == 1 || n == 2 => {
+                        let a3  = self[temp_v!(3)].clone();
+                        let h_a = Addr::HeapCell(l + n - 1);
+                        
+                        self.unify(a3, h_a);
+                    },
+                    _ => // 8.5.2.3 d)
+                        return Err(self.error_form(self.type_error(ValidType::Compound, term),
+                                                   stub))
+                }
+                
+                
+            },
+            _ => // 8.5.2.3 c)
+                return Err(self.error_form(self.type_error(ValidType::Integer, n), stub))
         }
 
         Ok(())
@@ -1447,7 +1478,7 @@ impl MachineState {
         self.try_functor_unify_components(name, arity);
     }
 
-    pub(super) fn try_functor(&mut self) -> Result<(), MachineError> {
+    pub(super) fn try_functor(&mut self) -> CallResult {
         let stub = self.functor_stub(clause_name!("functor"), 3);
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 

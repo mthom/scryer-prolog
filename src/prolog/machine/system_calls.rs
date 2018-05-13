@@ -254,8 +254,6 @@ impl MachineState {
             },
             &SystemClauseType::SetCutPoint(r) =>
                 cut_policy.cut(self, r),
-            &SystemClauseType::GetArg =>
-                return self.try_get_arg(),
             &SystemClauseType::InferenceLevel => {
                 let a1 = self[temp_v!(1)].clone();
                 let a2 = self.store(self.deref(self[temp_v!(2)].clone()));

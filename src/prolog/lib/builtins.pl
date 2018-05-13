@@ -4,7 +4,7 @@
 	(\/)/2, (is)/2, (xor)/2, (div)/2, (//)/2, (rdiv)/2, (<<)/2,
 	(>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2,
 	(-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (==)/2, (\==)/2,
-	(=..)/2, arg/3, catch/3, throw/1, true/0, false/0, length/2]).
+	catch/3, throw/1, true/0, false/0, length/2]).
 
 % arithmetic operators.
 :- op(700, xfx, is).
@@ -74,7 +74,48 @@ G1 -> G2 :- '$get_cp'(B), ->(G1, G2, B).
 ->(G1, G2, B) :- G2 == !, call(G1), !, '$set_cp'(B).
 ->(G1, G2, B) :- call(G1), '$set_cp'(B), call(G2).
 
-% exception handling.
+/*
+Term =.. List :-
+    atomic(Term), !,
+    List = [Term].
+Term =.. List :-
+    compound(Term), !,
+    ( functor(Term, Name, NArgs) ->
+      List = [Name|Args], '$get_args'(Args, Term, 1, NArgs)
+    ; Term = [_|_] ->
+      List = ['.'|Term] ).
+Term =.. List :-
+    var(Term), !,
+    ( List = [ATerm], atomic(ATerm) ->
+      Term = ATerm
+    ; List = [Name|Args] ->
+      functor(Term, Name, Args)).
+
+'$get_args'(Args, _, _, 0) :-
+    !, Args = [].
+'$get_args'([Arg], Func, N, N) :-
+    !, '$get_arg'(N, Func, Arg).
+'$get_args'([Arg|Args], Func, I0, N) :-
+    '$get_arg'(I0, Func, Arg), I1 is I0 + 1,
+    '$get_args'(Args, Func, I1, N).
+*/
+
+% arg.
+
+/* The old, SWI Prolog-imitative arg/3.
+
+arg(N, Functor, Arg) :- var(N), !, functor(Functor, _, Arity), arg_(N, 1, Arity, Functor, Arg).
+arg(N, Functor, Arg) :- integer(N), !, functor(Functor, _, Arity), '$get_arg'(N, Functor, Arg).
+arg(N, Functor, Arg) :- throw(error(type_error(integer, N), arg/3)).
+
+arg_(N, N,  N, Functor, Arg)     :- !, '$get_arg'(N, Functor, Arg).
+arg_(N, N,  Arity, Functor, Arg) :- '$get_arg'(N, Functor, Arg).
+arg_(N, N0, Arity, Functor, Arg) :- N0 < Arity, N1 is N0 + 1, arg_(N, N1, Arity, Functor, Arg).
+*/
+
+% The new, ISO Prolog compliant arg/3 is implemented in Rust.
+
+% exceptions.
 
 catch(G,C,R) :- '$get_current_block'(Bb), catch(G,C,R,Bb).
 
@@ -88,16 +129,6 @@ handle_ball(Ball, C, R) :- Ball = C, !, '$erase_ball', call(R).
 handle_ball(_, _, _) :- '$unwind_stack'.
 
 throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
-
-% arg.
-
-arg(N, Functor, Arg) :- var(N), !, functor(Functor, _, Arity), arg_(N, 1, Arity, Functor, Arg).
-arg(N, Functor, Arg) :- integer(N), !, functor(Functor, _, Arity), '$get_arg'(N, Functor, Arg).
-arg(N, Functor, Arg) :- throw(error(type_error(integer, N), arg/3)).
-
-arg_(N, N,  N, Functor, Arg)     :- !, '$get_arg'(N, Functor, Arg).
-arg_(N, N,  Arity, Functor, Arg) :- '$get_arg'(N, Functor, Arg).
-arg_(N, N0, Arity, Functor, Arg) :- N0 < Arity, N1 is N0 + 1, arg_(N, N1, Arity, Functor, Arg).
 
 % length.
 
@@ -127,27 +158,3 @@ length(_, N) :-
 '$length_rundown'([_|Xs], N) :-
     N1 is N-1,
     '$length_rundown'(Xs, N1).
-
-Term =.. List :-
-    atomic(Term), !,
-    List = [Term].
-Term =.. List :-
-    compound(Term), !,
-    ( functor(Term, Name, NArgs) ->
-      List = [Name|Args], '$get_args'(Args, Term, 1, NArgs)
-    ; Term = [_|_] ->
-      List = ['.'|Term] ).
-Term =.. List :-
-    var(Term), !,
-    ( List = [ATerm], atomic(ATerm) ->
-      Term = ATerm
-    ; List = [Name|Args] ->
-      functor(Term, Name, Args)).    
-
-'$get_args'(Args, _, _, 0) :-
-    !, Args = [].
-'$get_args'([Arg], Func, N, N) :-
-    !, '$get_arg'(N, Func, Arg).
-'$get_args'([Arg|Args], Func, I0, N) :-
-    '$get_arg'(I0, Func, Arg), I1 is I0 + 1,
-    '$get_args'(Args, Func, I1, N).
