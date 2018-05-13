@@ -103,10 +103,10 @@ impl MachineState {
     }
 
     pub(super) fn skip_max_list(&mut self) -> Result<(), MachineError> {
-        let max_steps = self.arith_eval_by_metacall(temp_v!(2))?;
+        let max_steps = self.store(self.deref(self[temp_v!(2)].clone()));
 
         match max_steps {
-            Number::Integer(ref max_steps)
+            Addr::Con(Constant::Number(Number::Integer(ref max_steps)))
                 if max_steps.to_isize().map(|i| i >= -1).unwrap_or(false) => {
                     let n = self.store(self.deref(self[temp_v!(1)].clone()));
 

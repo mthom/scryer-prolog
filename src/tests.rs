@@ -550,7 +550,7 @@ fn test_queries_on_lists()
     assert_prolog_failure!(&mut wam, "?- p([Z, W, Y]).");
     assert_prolog_success!(&mut wam, "?- p([Z | W]).", [["Z = _0", "W = [_0]"]]);
     assert_prolog_success!(&mut wam, "?- p([Z | [Z]]).", [["Z = _0"]]);
-    assert_prolog_success!(&mut wam, "?- p([Z | [W]]).", [["Z = _2", "W = _2"]]);
+    assert_prolog_success!(&mut wam, "?- p([Z | [W]]).", [["Z = _0", "W = _0"]]);
     assert_prolog_failure!(&mut wam, "?- p([Z | []]).");
 
     submit(&mut wam, "p([Z]).");
@@ -581,7 +581,7 @@ fn test_queries_on_lists()
     assert_prolog_success!(&mut wam, "?- member([X, Y], [a, [b, c], [b, b], [Z, x], [d, f]]).",
                            [["X = b", "Y = c", "Z = _14"],
                             ["X = b", "Y = b", "Z = _14"],
-                            ["X = _14", "Y = x", "Z = _14"],
+                            ["X = _2", "Y = x", "Z = _2"],
                             ["X = d", "Y = f", "Z = _14"]]);
     assert_prolog_failure!(&mut wam, "?- member([X, Y, Y], [a, [b, c], [b, b], [Z, x], [d, f]]).");
     assert_prolog_failure!(&mut wam, "?- member([X, Y, Z], [a, [b, c], [b, b], [Z, x], [d, f]]).");
@@ -640,12 +640,12 @@ fn test_queries_on_conjuctive_queries() {
     submit(&mut wam, "q([f(g(x))], Z). q([f(g(y))], Y). q([f(g(z))], a).");
 
     assert_prolog_success!(&mut wam, "?- p(X, Y), q(Y, Z).",
-                           [["Z = _10", "X = a", "Y = [f(g(x))]"],
-                            ["Z = _10", "X = a", "Y = [f(g(y))]"],
+                           [["Z = _11", "X = a", "Y = [f(g(x))]"],
+                            ["Z = _11", "X = a", "Y = [f(g(y))]"],
                             ["Z = a", "X = a", "Y = [f(g(z))]"]]);
     assert_prolog_success!(&mut wam, "?- p(X, Y), !, q(Y, Z).",
-                           [["X = a", "Y = [f(g(x))]", "Z = _10"],
-                            ["X = a", "Y = [f(g(y))]", "Z = _10"],
+                           [["X = a", "Y = [f(g(x))]", "Z = _11"],
+                            ["X = a", "Y = [f(g(y))]", "Z = _11"],
                             ["X = a", "Y = [f(g(z))]", "Z = a"]]);
     assert_prolog_success!(&mut wam, "?- p(X, Y), !, q(Y, X).",
                            [["X = a", "Y = [f(g(x))]"],
@@ -670,12 +670,12 @@ fn test_queries_on_conjuctive_queries() {
                             ["Y = [f(g(z))]", "X = [f(g(x))]"],
                             ["Y = [f(g(z))]", "X = [f(g(y))]"]]);
     assert_prolog_success!(&mut wam, "?- p(X, Y), q(Y, X).",
-                           [["Y = [f(g(x))]", "X = s_0_2"],
-                            ["Y = [f(g(y))]", "X = s_0_2"],
+                           [["Y = [f(g(x))]", "X = _10"],
+                            ["Y = [f(g(y))]", "X = _10"],
                             ["Y = [f(g(z))]", "X = a"]]);
     assert_prolog_success!(&mut wam, "?- q(X, Y), p(Y, X).",
-                           [["Y = s_0_1", "X = [f(g(x))]"],
-                            ["Y = s_0_1", "X = [f(g(y))]"],
+                           [["Y = _9", "X = [f(g(x))]"],
+                            ["Y = _9", "X = [f(g(y))]"],
                             ["Y = a"    , "X = [f(g(z))]"]]);
 }
 
