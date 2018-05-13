@@ -164,12 +164,6 @@ macro_rules! integer {
     )
 }
 
-macro_rules! rc_integer {
-    ($e:expr) => (
-        Number::Integer(Rc::new(BigInt::from($e)))
-    )
-}
-
 macro_rules! rc_atom {
     ($e:expr) => (
         Rc::new(String::from($e))

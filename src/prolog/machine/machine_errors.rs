@@ -10,8 +10,8 @@ pub(super) type MachineStub = Vec<HeapCellValue>;
 // from 7.12.2 b) of 13211-1:1995
 #[derive(Clone, Copy)]
 pub enum ValidType {
-//    Atom,
-//    Atomic,
+    Atom,
+    Atomic,
 //    Byte,
     Callable,
 //    Character,
@@ -30,8 +30,8 @@ pub enum ValidType {
 impl ValidType {
     pub fn as_str(self) -> &'static str {
         match self {
-//            ValidType::Atom => "atom",
-//            ValidType::Atomic => "atomic",
+            ValidType::Atom => "atom",
+            ValidType::Atomic => "atomic",
 //            ValidType::Byte => "byte",
             ValidType::Callable => "callable",
 //            ValidType::Character => "character",
@@ -45,6 +45,19 @@ impl ValidType {
             ValidType::Pair => "pair",
 //            ValidType::PredicateIndicator => "predicate_indicator",
 //            ValidType::Variable => "variable"
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum DomainError {
+    NotLessThanZero
+}
+
+impl DomainError {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DomainError::NotLessThanZero => "not_less_than_zero"
         }
     }
 }
@@ -198,6 +211,10 @@ impl MachineState {
         error
     }
 
+    pub(super) fn domain_error(&self, error: DomainError, culprit: Addr) -> MachineError {
+        functor!("domain_error", 2, [heap_atom!(error.as_str()), HeapCellValue::Addr(culprit)])
+    }
+    
     pub(super) fn instantiation_error(&self) -> MachineError {
         functor!("instantiation_error")
     }

@@ -3,8 +3,8 @@
 :- module(builtins, [(=)/2, (+)/2, (*)/2, (-)/2, (/)/2, (/\)/2,
 	(\/)/2, (is)/2, (xor)/2, (div)/2, (//)/2, (rdiv)/2, (<<)/2,
 	(>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2,
-	(-)/1, (>=)/2, (=<)/2, (->)/2, (;)/2, (==)/2, (\==)/2, arg/3,
-	catch/3, throw/1, true/0, false/0, length/2]).
+	(-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (==)/2, (\==)/2,
+	(=..)/2, arg/3, catch/3, throw/1, true/0, false/0, length/2]).
 
 % arithmetic operators.
 :- op(700, xfx, is).
@@ -33,6 +33,7 @@
 
 % unify.
 :- op(700, xfx, =).
+:- op(700, xfx, =..).
 
 % conditional operators.
 :- op(1050, xfy, ->).
@@ -105,14 +106,12 @@ length(Xs, N) :-
     '$skip_max_list'(M, -1, Xs, Xs0),
     (  Xs0 == [] -> N = M
     ;  var(Xs0)  -> '$length_addendum'(Xs0, N, M)).
-    % ;  throw(error(type_error(list, Xs), length/2))).
 length(Xs, N) :-
     integer(N),
     N >= 0, !,
     '$skip_max_list'(M, N, Xs, Xs0),
     (  Xs0 == [] -> N = M
     ;  var(Xs0)  -> R is N-M, '$length_rundown'(Xs0, R)).
-    % ;  throw(error(type_error(list, Xs), length/2))).
 length(_, N) :-
     integer(N), !,
     throw(error(domain_error(not_less_than_zero, N), length/2)).
@@ -128,3 +127,27 @@ length(_, N) :-
 '$length_rundown'([_|Xs], N) :-
     N1 is N-1,
     '$length_rundown'(Xs, N1).
+
+Term =.. List :-
+    atomic(Term), !,
+    List = [Term].
+Term =.. List :-
+    compound(Term), !,
+    ( functor(Term, Name, NArgs) ->
+      List = [Name|Args], '$get_args'(Args, Term, 1, NArgs)
+    ; Term = [_|_] ->
+      List = ['.'|Term] ).
+Term =.. List :-
+    var(Term), !,
+    ( List = [ATerm], atomic(ATerm) ->
+      Term = ATerm
+    ; List = [Name|Args] ->
+      functor(Term, Name, Args)).    
+
+'$get_args'(Args, _, _, 0) :-
+    !, Args = [].
+'$get_args'([Arg], Func, N, N) :-
+    !, '$get_arg'(N, Func, Arg).
+'$get_args'([Arg|Args], Func, I0, N) :-
+    '$get_arg'(I0, Func, Arg), I1 is I0 + 1,
+    '$get_args'(Args, Func, I1, N).

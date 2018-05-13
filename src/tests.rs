@@ -1381,7 +1381,7 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- length(Xs, 0).", [["Xs = []"]]);
     assert_prolog_success!(&mut wam, "?- length([a,b,[a,b,c]], 3).");
     assert_prolog_failure!(&mut wam, "?- length([a,b,[a,b,c]], 2).");
-    assert_prolog_success!(&mut wam, "?- catch(length(a, []), type_error(_, E), true).",
+    assert_prolog_success!(&mut wam, "?- catch(length(a, []), type_error(integer, E), true).",
                            [["E = []"]]);
 
     assert_prolog_success!(&mut wam, "?- duplicate_term([1,2,3], [X,Y,Z]).",

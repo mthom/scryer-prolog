@@ -43,7 +43,7 @@ impl MachineState {
             mode: MachineMode::Write,
             and_stack: AndStack::new(),
             or_stack: OrStack::new(),
-            registers: vec![Addr::HeapCell(0); 64],
+            registers: vec![Addr::HeapCell(0); MAX_ARITY + 1], // self.registers[0] is never used.
             trail: Vec::new(),
             tr: 0,
             hb: 0,
@@ -105,7 +105,7 @@ impl MachineState {
                 },
                 None => {}
             }
-        }                
+        }
     }
 
     pub(super)
@@ -168,6 +168,21 @@ impl MachineState {
                         self.bind(Ref::StackCell(fr, sc), d2),
                     (_, Addr::StackCell(fr, sc)) =>
                         self.bind(Ref::StackCell(fr, sc), d1),
+                    (Addr::Lis(a1), Addr::Str(a2)) | (Addr::Str(a2), Addr::Lis(a1)) => {
+                        if let &HeapCellValue::NamedStr(n2, ref f2, _) = &self.heap[a2] {
+                            if f2.as_str() == "." && n2 == 2 {
+                                pdl.push(Addr::HeapCell(a1));
+                                pdl.push(Addr::HeapCell(a2 + 1));
+
+                                pdl.push(Addr::HeapCell(a1 + 1));
+                                pdl.push(Addr::HeapCell(a2 + 2));
+
+                                continue;
+                            }
+                        }
+
+                        self.fail = true;
+                    },
                     (Addr::Lis(a1), Addr::Lis(a2)) => {
                         pdl.push(Addr::HeapCell(a1));
                         pdl.push(Addr::HeapCell(a2));
@@ -175,11 +190,10 @@ impl MachineState {
                         pdl.push(Addr::HeapCell(a1 + 1));
                         pdl.push(Addr::HeapCell(a2 + 1));
                     },
-                    (Addr::Con(c1), Addr::Con(c2)) => {
+                    (Addr::Con(c1), Addr::Con(c2)) =>
                         if c1 != c2 {
                             self.fail = true;
-                        }
-                    },
+                        },                    
                     (Addr::Str(a1), Addr::Str(a2)) => {
                         let r1 = &self.heap[a1];
                         let r2 = &self.heap[a2];
@@ -1415,69 +1429,91 @@ impl MachineState {
         }
     }
 
+    fn try_functor_unify_components(&mut self, name: Addr, arity: Addr) {
+        let a2 = self[temp_v!(2)].clone();
+        let a3 = self[temp_v!(3)].clone();
+
+        self.unify(a2, name);
+
+        if !self.fail {
+            self.unify(a3, arity);
+        }
+    }
+
+    fn try_functor_compound_case(&mut self, name: ClauseName, arity: usize) {
+        let name  = Addr::Con(Constant::Atom(name));
+        let arity = Addr::Con(integer!(arity));
+
+        self.try_functor_unify_components(name, arity);
+    }
+
     pub(super) fn try_functor(&mut self) -> Result<(), MachineError> {
         let stub = self.functor_stub(clause_name!("functor"), 3);
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
         match a1.clone() {
+            Addr::Con(_) =>
+                self.try_functor_unify_components(a1, Addr::Con(integer!(0))),
             Addr::Str(o) =>
                 match self.heap[o].clone() {
-                    HeapCellValue::NamedStr(arity, name, _) => {
-                        let name  = Addr::Con(Constant::Atom(name)); // A2
-                        let arity = Addr::Con(Constant::Number(rc_integer!(arity)));
-
-                        let a2 = self[temp_v!(2)].clone();
-                        self.unify(a2, name);
-
-                        if !self.fail {
-                            let a3 = self[temp_v!(3)].clone();
-                            self.unify(a3, arity);
-                        }
-                    },
+                    HeapCellValue::NamedStr(arity, name, _) =>
+                        self.try_functor_compound_case(name, arity),
                     _ => self.fail = true
                 },
+            Addr::Lis(_) =>
+                self.try_functor_compound_case(clause_name!("."), 2),
             Addr::HeapCell(_) | Addr::StackCell(_, _) => {
                 let name  = self.store(self.deref(self[temp_v!(2)].clone()));
                 let arity = self.store(self.deref(self[temp_v!(3)].clone()));
 
-                if let Addr::Con(Constant::Atom(name)) = name {
-                    if let Addr::Con(Constant::Number(Number::Integer(arity))) = arity {
-                        let f_a = Addr::Str(self.heap.h);
-                        let arity = match arity.to_usize() {
-                            Some(arity) => arity,
-                            None => {
-                                self.fail = true;
-                                return Ok(());
-                            }
-                        };
-
-                        if arity > 0 {
-                            self.heap.push(HeapCellValue::NamedStr(arity, name, None));
-                        } else {
-                            let c = Constant::Atom(name.clone());
-                            self.heap.push(HeapCellValue::Addr(Addr::Con(c)));
-                        }
-
-                        for _ in 0 .. arity {
-                            let h = self.heap.h;
-                            self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
-                        }
-
-                        self.unify(a1, f_a);
-                    } else {
-                        return Err(self.error_form(self.instantiation_error(), stub));
-                    }
-                } else {
+                if name.is_ref() || arity.is_ref() { // 8.5.1.3 a) & 8.5.1.3 b)
                     return Err(self.error_form(self.instantiation_error(), stub));
                 }
-            },
-            _ => {
-                let a2 = self[temp_v!(2)].clone();
-                self.unify(a1, a2);
 
-                if !self.fail {
-                    let a3 = self[temp_v!(3)].clone();
-                    self.unify(a3, Addr::Con(Constant::Number(rc_integer!(0))));
+                if let Addr::Con(Constant::Number(Number::Integer(arity))) = arity {
+                    let arity = match arity.to_isize() {
+                        Some(arity) => arity,
+                        None => {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    };
+
+                    if arity > MAX_ARITY as isize {
+                        // 8.5.1.3 f)
+                        return Err(self.error_form(self.representation_error(RepFlag::MaxArity),
+                                                   stub));
+                    } else if arity < 0 {
+                        // 8.5.1.3 g)
+                        return Err(self.error_form(self.domain_error(DomainError::NotLessThanZero,
+                                                                     Addr::Con(integer!(arity))),
+                                                   stub));
+                    }
+
+                    match name {
+                        Addr::Con(_) if arity == 0 =>
+                            self.unify(a1, name),
+                        Addr::Con(Constant::Atom(name)) => {
+                            let f_a = Addr::Str(self.heap.h);
+                            self.heap.push(HeapCellValue::NamedStr(arity as usize, name, None));
+
+                            for _ in 0 .. arity {
+                                let h = self.heap.h;
+                                self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+                            }
+
+                            self.unify(a1, f_a);
+                        },
+                        Addr::Con(_) =>
+                            return Err(self.error_form(self.type_error(ValidType::Atom, name),
+                                                       stub)), // 8.5.1.3 e)
+                        _ =>
+                            return Err(self.error_form(self.type_error(ValidType::Atomic, name),
+                                                       stub))  // 8.5.1.3 c)
+                    };
+                } else if !arity.is_ref() {
+                    // 8.5.1.3 d)
+                    return Err(self.error_form(self.type_error(ValidType::Integer, arity), stub));
                 }
             }
         };
