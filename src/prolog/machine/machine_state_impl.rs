@@ -323,7 +323,7 @@ impl MachineState {
         };
     }
 
-    fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, MachineError> {
+    pub(super) fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, MachineError> {
         match at {
             &ArithmeticTerm::Reg(r)        => self.arith_eval_by_metacall(r),
             &ArithmeticTerm::Interm(i)     => Ok(self.interms[i-1].clone()),
@@ -1878,15 +1878,6 @@ impl MachineState {
                 };
 
                 self.fail = true;
-            },
-            &ControlInstruction::IsClause(lco, r, ref at) => {
-                self.last_call = lco;
-
-                let a1 = self[r].clone();
-                let a2 = try_or_fail!(self, self.get_number(at));
-
-                self.unify(a1, Addr::Con(Constant::Number(a2)));
-                try_or_fail!(self, return_from_clause!(self.last_call, self));
             },
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
                 if !lco {

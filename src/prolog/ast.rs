@@ -784,7 +784,7 @@ impl SystemClauseType {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum BuiltInClauseType {
     AcyclicTerm,
     Arg,
@@ -796,7 +796,7 @@ pub enum BuiltInClauseType {
     Eq,
     Functor,
     Ground,
-    Is,
+    Is(RegType, ArithmeticTerm),
     KeySort,
     NotEq,
     Sort,
@@ -881,7 +881,7 @@ impl BuiltInClauseType {
     fn fixity(&self) -> Option<Fixity> {
         match self {
             &BuiltInClauseType::Compare | &BuiltInClauseType::CompareTerm(_)
-          | &BuiltInClauseType::NotEq   | &BuiltInClauseType::Is | &BuiltInClauseType::Eq
+          | &BuiltInClauseType::NotEq   | &BuiltInClauseType::Is(..) | &BuiltInClauseType::Eq
                 => Some(Fixity::In),
             _ => None
         }
@@ -899,7 +899,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Eq => clause_name!("=="),
             &BuiltInClauseType::Functor => clause_name!("functor"),
             &BuiltInClauseType::Ground  => clause_name!("ground"),
-            &BuiltInClauseType::Is => clause_name!("is"),
+            &BuiltInClauseType::Is(..)  => clause_name!("is"),
             &BuiltInClauseType::KeySort => clause_name!("keysort"),
             &BuiltInClauseType::NotEq => clause_name!("\\=="),
             &BuiltInClauseType::Sort => clause_name!("sort"),
@@ -918,7 +918,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Eq => 2,
             &BuiltInClauseType::Functor => 3,
             &BuiltInClauseType::Ground  => 1,
-            &BuiltInClauseType::Is => 2,
+            &BuiltInClauseType::Is(..) => 2,
             &BuiltInClauseType::KeySort => 2,
             &BuiltInClauseType::NotEq => 2,
             &BuiltInClauseType::Sort => 2,
@@ -942,7 +942,7 @@ impl BuiltInClauseType {
             ("==", 2) => Some(BuiltInClauseType::Eq),
             ("functor", 3) => Some(BuiltInClauseType::Functor),
             ("ground", 1) => Some(BuiltInClauseType::Ground),
-            ("is", 2) => Some(BuiltInClauseType::Is),
+            ("is", 2) => Some(BuiltInClauseType::Is(temp_v!(1), ArithmeticTerm::Reg(temp_v!(2)))),
             ("keysort", 2) => Some(BuiltInClauseType::KeySort),
             ("\\==", 2) => Some(BuiltInClauseType::NotEq),
             ("sort", 2) => Some(BuiltInClauseType::Sort),
@@ -965,7 +965,7 @@ impl ClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &ClauseType::CallN => clause_name!("call"),
-            &ClauseType::BuiltIn(built_in) => built_in.name(),
+            &ClauseType::BuiltIn(ref built_in) => built_in.name(),
             &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
             &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
@@ -1374,7 +1374,6 @@ pub enum ControlInstruction {
     CheckCpExecute,
     Deallocate,
     GetCleanerCall,
-    IsClause(bool, RegType, ArithmeticTerm), // last call, register of var, term.
     JmpBy(usize, usize, usize, bool), // arity, global_offset, perm_vars after threshold, last call.
     Proceed
 }
@@ -1384,7 +1383,6 @@ impl ControlInstruction {
         match self {
             &ControlInstruction::CallClause(..)  => true,
             &ControlInstruction::GetCleanerCall => true,
-            &ControlInstruction::IsClause(..) => true,
             &ControlInstruction::JmpBy(..) => true,
             _ => false
         }

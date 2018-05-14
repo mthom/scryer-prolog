@@ -195,7 +195,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         GenContext::Last(chunk_num)
                     }
                 };
-                
+
                 self.update_var_count(chunked_term.post_order_iter());
                 vs.mark_vars_in_chunk(chunked_term.post_order_iter(), lt_arity, term_loc);
             }
@@ -234,8 +234,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         *ctrl = ControlInstruction::CallClause(ct, arity, pvs, true),
                     ControlInstruction::JmpBy(arity, offset, pvs, false) =>
                         *ctrl = ControlInstruction::JmpBy(arity, offset, pvs, true),
-                    ControlInstruction::IsClause(false, r, at) =>
-                        *ctrl = ControlInstruction::IsClause(true, r, at),
                     ControlInstruction::Proceed => {},
                     _ => dealloc_index += 1
                 },
@@ -258,7 +256,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 
                 code.append(&mut lcode);
                 code.append(&mut rcode);
-                
+
                 code.push(compare_number_instr!(cmp,
                                                 at_1.unwrap_or(interm!(1)),
                                                 at_2.unwrap_or(interm!(2))));
@@ -414,7 +412,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         } else {
                             Line::Cut(CutInstruction::Cut(perm_v!(1)))
                         }),
-                    &QueryTerm::Clause(_, ClauseType::BuiltIn(BuiltInClauseType::Is), ref terms) =>
+                    &QueryTerm::Clause(_, ClauseType::BuiltIn(BuiltInClauseType::Is(..)), ref terms)
+                        =>
                     {
                         let (mut acode, at) = self.call_arith_eval(terms[1].as_ref(), 1)?;
                         code.append(&mut acode);

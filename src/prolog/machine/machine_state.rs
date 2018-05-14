@@ -324,7 +324,7 @@ pub(crate) trait CallPolicy: Any {
         let b = machine_st.b - 1;
         let n = machine_st.or_stack[b].num_args();
 
-        for i in 1 .. n + 1 {            
+        for i in 1 .. n + 1 {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
@@ -510,11 +510,11 @@ pub(crate) trait CallPolicy: Any {
 
                 return_from_clause!(machine_st.last_call, machine_st)
             },
-            &BuiltInClauseType::Is => {
-                let a = machine_st[temp_v!(1)].clone();
-                let result = machine_st.arith_eval_by_metacall(temp_v!(2))?;
+            &BuiltInClauseType::Is(r, ref at) => {
+                let a1 = machine_st[r].clone();
+                let a2 = machine_st.get_number(at)?;
 
-                machine_st.unify(a, Addr::Con(Constant::Number(result)));
+                machine_st.unify(a1, Addr::Con(Constant::Number(a2)));
                 return_from_clause!(machine_st.last_call, machine_st)
             },
         }

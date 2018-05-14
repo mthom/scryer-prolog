@@ -147,8 +147,8 @@ macro_rules! proceed {
 }
 
 macro_rules! is_call {
-    ($r:expr, $at:expr) => (        
-        Line::Control(ControlInstruction::IsClause(false, $r, $at))
+    ($r:expr, $at:expr) => (
+        call_clause!(ClauseType::BuiltIn(BuiltInClauseType::Is($r, $at)), 2, 0)
     )
 }
 

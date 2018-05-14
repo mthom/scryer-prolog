@@ -233,7 +233,7 @@ impl Machine {
             CodePtr::Local(LocalCodePtr::DirEntry(p, _)) =>
                 Some(self.code[p].clone()),
             CodePtr::BuiltInClause(built_in, _) =>
-                Some(call_clause!(ClauseType::BuiltIn(built_in), built_in.arity(),
+                Some(call_clause!(ClauseType::BuiltIn(built_in.clone()), built_in.arity(),
                                   0, self.ms.last_call)),
             CodePtr::CallN(arity, _) =>
                 Some(call_clause!(ClauseType::CallN, arity, 0, self.ms.last_call))            
