@@ -157,20 +157,43 @@ impl MachineState {
                               -> CallResult
     {
         match ct {
-            &SystemClauseType::InstallCleaner => {
+            &SystemClauseType::CheckCutPoint => {},
+            &SystemClauseType::GetSCCCleaner => {
+                let dest = self[temp_v!(1)].clone();
+
+                match cut_policy.downcast_mut::<SCCCutPolicy>().ok() {
+                    Some(sgc_policy) =>
+                        if let Some((addr, b_cutoff, prev_block)) = sgc_policy.pop_cont_pt() {
+                            if self.b <= b_cutoff + 1 {
+                                self.block = prev_block;
+
+                                if let Some(r) = dest.as_var() {
+                                    self.bind(r, addr);
+                                    return Ok(());
+                                }
+                            } else {
+                                sgc_policy.push_cont_pt(addr, b_cutoff, prev_block);
+                            }
+                        },
+                    None => panic!("expected SCCCutPolicy trait object.")
+                };
+
+                self.fail = true;                
+            },
+            &SystemClauseType::InstallSCCCleaner => {
                 let addr = self[temp_v!(1)].clone();
                 let b = self.b;
                 let block = self.block;
 
-                if cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>().is_err() {
-                    *cut_policy = Box::new(SetupCallCleanupCutPolicy::new());
+                if cut_policy.downcast_ref::<SCCCutPolicy>().is_err() {
+                    *cut_policy = Box::new(SCCCutPolicy::new());
                 }
 
-                match cut_policy.downcast_mut::<SetupCallCleanupCutPolicy>().ok()
+                match cut_policy.downcast_mut::<SCCCutPolicy>().ok()
                 {
                     Some(cut_policy) => cut_policy.push_cont_pt(addr, b, block),
                     None => panic!("install_cleaner: should have installed \\
-                                    SetupCallCleanupCutPolicy.")
+                                    SCCCutPolicy.")
                 };
             },
             &SystemClauseType::InstallInferenceCounter => { // A1 = B, A2 = L
@@ -242,7 +265,7 @@ impl MachineState {
             },
             &SystemClauseType::RestoreCutPolicy => {
                 let restore_default =
-                    if let Ok(cut_policy) = cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>() {
+                    if let Ok(cut_policy) = cut_policy.downcast_ref::<SCCCutPolicy>() {
                         cut_policy.out_of_cont_pts()
                     } else {
                         false

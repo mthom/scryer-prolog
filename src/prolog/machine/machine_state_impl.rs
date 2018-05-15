@@ -1838,47 +1838,7 @@ impl MachineState {
                     self.p += 1;
                 }
             },
-            &ControlInstruction::CheckCpExecute => {
-                let a = self.store(self.deref(self[temp_v!(2)].clone()));
-
-                match a {
-                    Addr::Con(Constant::Usize(old_b)) if self.b > old_b + 1 => {
-                        self.p = CodePtr::Local(self.cp.clone());
-                    },
-                    _ => {
-                        self.num_of_args = 2;
-                        self.b0 = self.b;
-                        // goto sgc_on_success/2, 382.
-                        self.p = dir_entry!(382, clause_name!("builtin"));
-                    }
-                };
-            },
             &ControlInstruction::Deallocate => self.deallocate(),
-            &ControlInstruction::GetCleanerCall => {
-                let dest = self[temp_v!(1)].clone();
-
-                match cut_policy.downcast_mut::<SetupCallCleanupCutPolicy>().ok() {
-                    Some(sgc_policy) =>
-                        if let Some((addr, b_cutoff, prev_block)) = sgc_policy.pop_cont_pt()
-                        {
-                            self.p += 1;
-
-                            if self.b <= b_cutoff + 1 {
-                                self.block = prev_block;
-
-                                if let Some(r) = dest.as_var() {
-                                    self.bind(r, addr);
-                                    return;
-                                }
-                            } else {
-                                sgc_policy.push_cont_pt(addr, b_cutoff, prev_block);
-                            }
-                        },
-                    None => panic!("expected SetupCallCleanupCutPolicy trait object.")
-                };
-
-                self.fail = true;
-            },
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
                 if !lco {
                     self.cp.assign_if_local(self.p.clone() + 1);

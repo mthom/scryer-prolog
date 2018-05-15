@@ -702,7 +702,9 @@ pub struct Rule {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
-    InstallCleaner,
+    CheckCutPoint,
+    GetSCCCleaner,
+    InstallSCCCleaner,
     InstallInferenceCounter,
     RemoveCallPolicyCheck,
     RemoveInferenceCounter,
@@ -730,7 +732,9 @@ impl SystemClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &SystemClauseType::InstallCleaner => clause_name!("$install_cleaner"),
+            &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
+            &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
+            &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
             &SystemClauseType::InstallInferenceCounter =>
                 clause_name!("$install_inference_counter"),
             &SystemClauseType::RemoveCallPolicyCheck =>
@@ -757,8 +761,10 @@ impl SystemClauseType {
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
-            ("$install_cleaner", 1) =>
-                Some(SystemClauseType::InstallCleaner),
+            ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
+            ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
+            ("$install_scc_cleaner", 1) =>
+                Some(SystemClauseType::InstallSCCCleaner),
             ("$install_inference_counter", 3) =>
                 Some(SystemClauseType::InstallInferenceCounter),
             ("$remove_call_policy_check", 1) =>
@@ -1362,18 +1368,11 @@ pub enum ArithmeticInstruction {
     Neg(ArithmeticTerm, usize)
 }
 
-// call and cut policy exempt instructions.
-#[derive(Clone)]
-pub enum PEInstruction {
-}
-
 #[derive(Clone)]
 pub enum ControlInstruction {
     Allocate(usize), // num_frames.
     CallClause(ClauseType, usize, usize, bool), // name, arity, perm_vars after threshold, last call.
-    CheckCpExecute,
-    Deallocate,
-    GetCleanerCall,
+    Deallocate,    
     JmpBy(usize, usize, usize, bool), // arity, global_offset, perm_vars after threshold, last call.
     Proceed
 }
@@ -1382,7 +1381,6 @@ impl ControlInstruction {
     pub fn is_jump_instr(&self) -> bool {
         match self {
             &ControlInstruction::CallClause(..)  => true,
-            &ControlInstruction::GetCleanerCall => true,
             &ControlInstruction::JmpBy(..) => true,
             _ => false
         }

@@ -701,14 +701,14 @@ impl CutPolicy for DefaultCutPolicy {
     }
 }
 
-pub(crate) struct SetupCallCleanupCutPolicy {
+pub(crate) struct SCCCutPolicy {
     // locations of cleaners, cut points, the previous block
     cont_pts: Vec<(Addr, usize, usize)>
 }
 
-impl SetupCallCleanupCutPolicy {
+impl SCCCutPolicy {
     pub(crate) fn new() -> Self {
-        SetupCallCleanupCutPolicy { cont_pts: vec![] }
+        SCCCutPolicy { cont_pts: vec![] }
     }
 
     pub(crate) fn out_of_cont_pts(&self) -> bool {
@@ -724,7 +724,7 @@ impl SetupCallCleanupCutPolicy {
     }
 }
 
-impl CutPolicy for SetupCallCleanupCutPolicy {
+impl CutPolicy for SCCCutPolicy {
     fn cut(&mut self, machine_st: &mut MachineState, r: RegType) {
         let b = machine_st.b;
 

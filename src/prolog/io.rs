@@ -133,12 +133,8 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "execute {}/{}, {}", ct, arity, pvs),
             &ControlInstruction::CallClause(ref ct, arity, pvs, false) =>
                 write!(f, "call {}/{}, {}", ct, arity, pvs),
-            &ControlInstruction::CheckCpExecute =>
-                write!(f, "check_cp_execute"),
             &ControlInstruction::Deallocate =>
                 write!(f, "deallocate"),
-            &ControlInstruction::GetCleanerCall =>
-                write!(f, "get_cleaner_call"),
             &ControlInstruction::JmpBy(arity, offset, pvs, false) =>
                 write!(f, "jmp_by_call {}/{}, {}", offset, arity, pvs),
             &ControlInstruction::JmpBy(arity, offset, pvs, true) =>
