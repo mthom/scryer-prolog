@@ -1,12 +1,11 @@
 use prolog::and_stack::*;
 use prolog::ast::*;
-use prolog::builtins::*;
 use prolog::copier::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
-use prolog::num::{Integer, ToPrimitive, Zero};
+use prolog::num::{Integer, Signed, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
@@ -38,19 +37,20 @@ impl MachineState {
             b0: 0,
             e: 0,
             num_of_args: 0,
-            cp: CodePtr::default(),
+            cp: LocalCodePtr::default(),
             fail: false,
             heap: Heap::with_capacity(256),
             mode: MachineMode::Write,
             and_stack: AndStack::new(),
             or_stack: OrStack::new(),
-            registers: vec![Addr::HeapCell(0); 64],
+            registers: vec![Addr::HeapCell(0); MAX_ARITY + 1], // self.registers[0] is never used.
             trail: Vec::new(),
             tr: 0,
             hb: 0,
             block: 0,
             ball: Ball::new(),
-            interms: vec![Number::default(); 256]
+            interms: vec![Number::default(); 256],
+            last_call: false
         }
     }
 
@@ -80,17 +80,32 @@ impl MachineState {
         };
     }
 
-    fn bind(&mut self, r1: Ref, a2: Addr) {
-        let t2 = self.store(a2);
+    pub(super) fn bind(&mut self, r1: Ref, a2: Addr) {
+        let t1 = self.store(r1.as_addr());
+        let t2 = self.store(a2.clone());
 
-        match r1 {
-            Ref::StackCell(fr, sc) =>
-                self.and_stack[fr][sc] = t2,
-            Ref::HeapCell(hc) =>
-                self.heap[hc] = HeapCellValue::Addr(t2)
-        };
+        if t1.is_ref() && (!t2.is_ref() || a2 < r1) {
+            match r1 {
+                Ref::StackCell(fr, sc) =>
+                    self.and_stack[fr][sc] = t2,
+                Ref::HeapCell(h) =>
+                    self.heap[h] = HeapCellValue::Addr(t2)
+            };
 
-        self.trail(r1);
+            self.trail(r1);
+        } else {
+            match a2.as_var() {
+                Some(Ref::StackCell(fr, sc)) => {
+                    self.and_stack[fr][sc] = t1;
+                    self.trail(Ref::StackCell(fr, sc));
+                },
+                Some(Ref::HeapCell(h)) => {
+                    self.heap[h] = HeapCellValue::Addr(t1);
+                    self.trail(Ref::HeapCell(h));
+                },
+                None => {}
+            }
+        }
     }
 
     pub(super)
@@ -100,12 +115,12 @@ impl MachineState {
       where Fmt: HCValueFormatter, Outputter: HCValueOutputter
     {
         let orig_len = output.len();
-        
+
         output.begin_new_var();
 
         output.append(var.as_str());
         output.append(" = ");
-        
+
         let printer    = HCPrinter::from_heap_locs(&self, fmt, output, var_dir);
         let mut output = printer.print(addr);
 
@@ -125,7 +140,7 @@ impl MachineState {
         let printer = HCPrinter::from_heap_locs(&self, fmt, output, var_dir);
         printer.print(addr)
     }
-    
+
     pub(super)
     fn print_term<Fmt, Outputter>(&self, addr: Addr, fmt: Fmt, output: Outputter) -> Outputter
       where Fmt: HCValueFormatter, Outputter: HCValueOutputter
@@ -153,6 +168,21 @@ impl MachineState {
                         self.bind(Ref::StackCell(fr, sc), d2),
                     (_, Addr::StackCell(fr, sc)) =>
                         self.bind(Ref::StackCell(fr, sc), d1),
+                    (Addr::Lis(a1), Addr::Str(a2)) | (Addr::Str(a2), Addr::Lis(a1)) => {
+                        if let &HeapCellValue::NamedStr(n2, ref f2, _) = &self.heap[a2] {
+                            if f2.as_str() == "." && n2 == 2 {
+                                pdl.push(Addr::HeapCell(a1));
+                                pdl.push(Addr::HeapCell(a2 + 1));
+
+                                pdl.push(Addr::HeapCell(a1 + 1));
+                                pdl.push(Addr::HeapCell(a2 + 2));
+
+                                continue;
+                            }
+                        }
+
+                        self.fail = true;
+                    },
                     (Addr::Lis(a1), Addr::Lis(a2)) => {
                         pdl.push(Addr::HeapCell(a1));
                         pdl.push(Addr::HeapCell(a2));
@@ -160,11 +190,10 @@ impl MachineState {
                         pdl.push(Addr::HeapCell(a1 + 1));
                         pdl.push(Addr::HeapCell(a2 + 1));
                     },
-                    (Addr::Con(c1), Addr::Con(c2)) => {
+                    (Addr::Con(c1), Addr::Con(c2)) =>
                         if c1 != c2 {
                             self.fail = true;
-                        }
-                    },
+                        },                    
                     (Addr::Str(a1), Addr::Str(a2)) => {
                         let r1 = &self.heap[a1];
                         let r2 = &self.heap[a2];
@@ -273,7 +302,7 @@ impl MachineState {
         }
     }
 
-    fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
+    pub(super) fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
         let addr = self.deref(addr);
 
         match self.store(addr) {
@@ -294,9 +323,9 @@ impl MachineState {
         };
     }
 
-    fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, MachineError> {
+    pub(super) fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, MachineError> {
         match at {
-            &ArithmeticTerm::Reg(r) =>        self.arith_eval_by_metacall(r),
+            &ArithmeticTerm::Reg(r)        => self.arith_eval_by_metacall(r),
             &ArithmeticTerm::Interm(i)     => Ok(self.interms[i-1].clone()),
             &ArithmeticTerm::Number(ref n) => Ok(n.clone()),
         }
@@ -712,9 +741,9 @@ impl MachineState {
                 self.write_constant_to_var(addr, c.clone());
             },
             &FactInstruction::GetList(_, reg) => {
-                let addr = self.deref(self[reg].clone());
+                let addr = self.store(self.deref(self[reg].clone()));
 
-                match self.store(addr.clone()) {
+                match addr {
                     Addr::HeapCell(hc) => {
                         let h = self.heap.h;
 
@@ -1011,10 +1040,9 @@ impl MachineState {
         }
     }
 
-    fn handle_internal_call_n<'a>(&mut self, call_policy: &mut Box<CallPolicy>,
-                                  code_dirs: CodeDirs<'a>)
+    pub(super) fn handle_internal_call_n(&mut self, arity: usize)
     {
-        let arity = self.num_of_args + 1;
+        let arity = arity + 1;
         let pred  = self.registers[1].clone();
 
         for i in 2 .. arity {
@@ -1023,29 +1051,18 @@ impl MachineState {
 
         if arity > 1 {
             self.registers[arity - 1] = pred;
-
-            if let Some((name, arity)) = self.setup_call_n(arity - 1) {
-                if let Some(idx) = code_dirs.get(name.clone(), arity, self.p.module_name()) {
-                    try_or_fail!(self, call_policy.try_execute(self, name, arity, idx));
-                    return;
-                }
-            }
+            return;
         }
 
         self.fail = true;
     }
 
-    pub(super) fn goto_throw(&mut self) {
-        self.num_of_args = 1;
-        self.b0 = self.b;
-        self.p  = CodePtr::DirEntry(59, clause_name!("builtin"));
-    }
+    pub(super) fn set_ball(&mut self) {
+        let addr = self[temp_v!(1)].clone();
+        self.ball.boundary = self.heap.h;
 
-    fn unwind_stack(&mut self) {
-        self.b = self.block;
-        self.or_stack.truncate(self.b);
-
-        self.fail = true;
+        let mut duplicator = DuplicateBallTerm::new(self);
+        duplicator.duplicate_term(addr);
     }
 
     pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
@@ -1063,7 +1080,6 @@ impl MachineState {
                             self.error_form(self.representation_error(RepFlag::MaxArity), stub);
 
                         self.throw_exception(representation_error);
-
                         return None;
                     }
 
@@ -1098,7 +1114,14 @@ impl MachineState {
 
         Some((name, arity + narity - 1))
     }
+    
+    pub(super) fn unwind_stack(&mut self) {
+        self.b = self.block;
+        self.or_stack.truncate(self.b);
 
+        self.fail = true;
+    }
+    
     fn heap_ball_boundary_diff(&self) -> usize {
         if self.ball.boundary > self.heap.h {
             self.ball.boundary - self.heap.h
@@ -1106,10 +1129,10 @@ impl MachineState {
             self.heap.h - self.ball.boundary
         }
     }
-    
+
     pub(super) fn copy_and_align_ball_to_heap(&mut self) -> usize {
         let diff = self.heap_ball_boundary_diff();
-        
+
         for heap_value in self.ball.stub.iter().cloned() {
             self.heap.push(match heap_value {
                 HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
@@ -1143,31 +1166,65 @@ impl MachineState {
         fail
     }
 
-    fn try_get_arg(&mut self) -> Result<(), MachineError>
+    // arg(+N, +Term, ?Arg)
+    pub(super) fn try_arg(&mut self) -> CallResult
     {
-        let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
+        let stub = self.functor_stub(clause_name!("arg"), 3);
+        let n = self.store(self.deref(self[temp_v!(1)].clone()));
 
-        if let Addr::Con(Constant::Number(Number::Integer(i))) = a1 {
-            let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
+        match n {
+            Addr::HeapCell(_) | Addr::StackCell(..) => // 8.5.2.3 a)
+                return Err(self.error_form(self.instantiation_error(), stub)),
+            Addr::Con(Constant::Number(Number::Integer(n))) => {
+                if n.is_negative() {
+                    // 8.5.2.3 e)
+                    let n = Addr::Con(Constant::Number(Number::Integer(n)));
+                    return Err(self.error_form(self.domain_error(DomainError::NotLessThanZero,
+                                                                 n),
+                                               stub));
+                }
+                
+                let n = match n.to_usize() {
+                    Some(n) => n,
+                    None => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                };
 
-            if let Addr::Str(o) = a2 {
-                match self.heap[o].clone() {
-                    HeapCellValue::NamedStr(arity, _, _) =>
-                        match i.to_usize() {
-                            Some(i) if 1 <= i && i <= arity => {
+                let term = self.store(self.deref(self[temp_v!(2)].clone()));
+
+                match term {
+                    Addr::HeapCell(_) | Addr::StackCell(..) => // 8.5.2.3 b)
+                        return Err(self.error_form(self.instantiation_error(), stub)),
+                    Addr::Str(o) =>
+                        match self.heap[o].clone() {
+                            HeapCellValue::NamedStr(arity, _, _) if 1 <= n && n <= arity => {
                                 let a3  = self[temp_v!(3)].clone();
-                                let h_a = Addr::HeapCell(o + i);
-
+                                let h_a = Addr::HeapCell(o + n);
+                                    
                                 self.unify(a3, h_a);
                             },
                             _ => self.fail = true
                         },
-                    _ => self.fail = true
-                };
-            } else {
-                let stub = self.functor_stub(clause_name!("arg"), 3);
-                return Err(self.error_form(self.type_error(ValidType::Compound, a2), stub));
-            }
+                    Addr::Lis(l) =>
+                        if n == 1 || n == 2 {
+                            let a3  = self[temp_v!(3)].clone();
+                            let h_a = Addr::HeapCell(l + n - 1);
+                            
+                            self.unify(a3, h_a);
+                        } else {
+                            self.fail = true;
+                        },
+                    _ => // 8.5.2.3 d)
+                        return Err(self.error_form(self.type_error(ValidType::Compound, term),
+                                                   stub))
+                }
+                
+                
+            },
+            _ => // 8.5.2.3 c)
+                return Err(self.error_form(self.type_error(ValidType::Integer, n), stub))
         }
 
         Ok(())
@@ -1186,7 +1243,7 @@ impl MachineState {
 
         self.p += 1;
     }
-            
+
     pub(super) fn compare_term(&mut self, qt: CompareTermQT) {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
@@ -1316,30 +1373,22 @@ impl MachineState {
         Ordering::Equal
     }
 
-    fn reset_block(&mut self, addr: Addr) {
+    pub(super) fn reset_block(&mut self, addr: Addr) {
         match self.store(addr) {
-            Addr::Con(Constant::Usize(b)) => {
-                self.block = b;
-                self.p += 1;
-            },
+            Addr::Con(Constant::Usize(b)) => self.block = b,
             _ => self.fail = true
         };
     }
 
-    pub(super) fn execute_inlined(&mut self, inlined: &InlinedClauseType, rs: &Vec<RegType>)
-    {
-        let r1 = rs[0].clone();
-
+    pub(super) fn execute_inlined(&mut self, inlined: &InlinedClauseType) {
         match inlined {
-            &InlinedClauseType::CompareNumber(cmp) => {
-                let r2 = rs[1].clone();
-
-                let n1 = try_or_fail!(self, self.arith_eval_by_metacall(r1));
-                let n2 = try_or_fail!(self, self.arith_eval_by_metacall(r2));
+            &InlinedClauseType::CompareNumber(cmp, ref at_1, ref at_2) => {
+                let n1 = try_or_fail!(self, self.get_number(at_1));
+                let n2 = try_or_fail!(self, self.get_number(at_2));
 
                 self.compare_numbers(cmp, n1, n2);
             },
-            &InlinedClauseType::IsAtom => {
+            &InlinedClauseType::IsAtom(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1347,7 +1396,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsAtomic => {
+            &InlinedClauseType::IsAtomic(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1355,7 +1404,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsInteger => {
+            &InlinedClauseType::IsInteger(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1363,7 +1412,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsCompound => {
+            &InlinedClauseType::IsCompound(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1371,7 +1420,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsFloat => {
+            &InlinedClauseType::IsFloat(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1379,7 +1428,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsRational => {
+            &InlinedClauseType::IsRational(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1387,7 +1436,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsString => {
+            &InlinedClauseType::IsString(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1395,7 +1444,7 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
-            &InlinedClauseType::IsNonVar => {
+            &InlinedClauseType::IsNonVar(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1403,7 +1452,7 @@ impl MachineState {
                     _ => self.p += 1
                 };
             },
-            &InlinedClauseType::IsVar => {
+            &InlinedClauseType::IsVar(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
@@ -1414,331 +1463,96 @@ impl MachineState {
         }
     }
 
-    pub(super) fn execute_built_in_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
-                                             call_policy: &mut Box<CallPolicy>,
-                                             cut_policy:  &mut Box<CutPolicy>,
-                                             instr: &BuiltInInstruction)
-    {
-        match instr {
-            &BuiltInInstruction::CallInlined(ref inlined, ref rs) =>
-                self.execute_inlined(inlined, rs),
-            &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) => {
-                let n1 = try_or_fail!(self, self.get_number(at_1));
-                let n2 = try_or_fail!(self, self.get_number(at_2));
+    fn try_functor_unify_components(&mut self, name: Addr, arity: Addr) {
+        let a2 = self[temp_v!(2)].clone();
+        let a3 = self[temp_v!(3)].clone();
 
-                self.compare_numbers(cmp, n1, n2);
-            },
-            &BuiltInInstruction::DefaultRetryMeElse(o) => {
-                let mut call_policy = DefaultCallPolicy {};
-                try_or_fail!(self, call_policy.retry_me_else(self, o));
-            },
-            &BuiltInInstruction::DefaultSetCutPoint(r) => {
-                let mut cut_policy = DefaultCutPolicy {};
-                cut_policy.cut(self, r);
-            },
-            &BuiltInInstruction::DefaultTrustMe => {
-                let mut call_policy = DefaultCallPolicy {};
-                try_or_fail!(self, call_policy.trust_me(self));
-            },
-            &BuiltInInstruction::EraseBall => {
-                self.ball.reset();                
-                self.p += 1;
-            },
-            &BuiltInInstruction::GetArg(lco) =>
-                try_or_fail!(self, {
-                    let val = self.try_get_arg();
+        self.unify(a2, name);
 
-                    if lco {
-                        self.p = self.cp.clone();
-                    } else {
-                        self.p += 1;
-                    }
-
-                    val
-                }),
-            &BuiltInInstruction::GetCurrentBlock => {
-                let c = Constant::Usize(self.block);
-                let addr = self[temp_v!(1)].clone();
-
-                self.write_constant_to_var(addr, c);
-                self.p += 1;
-            },
-            &BuiltInInstruction::GetBall => {
-                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
-                let h = self.heap.h;
-
-                if self.ball.stub.len() > 0 {
-                    self.copy_and_align_ball_to_heap();
-                } else {
-                    self.fail = true;
-                    return;
-                }
-
-                let ball = self.heap[h].as_addr(h);
-
-                match addr.as_var() {
-                    Some(r) => {
-                        self.bind(r, ball);
-                        self.p += 1;
-                    },
-                    _ => self.fail = true
-                };
-            },
-            &BuiltInInstruction::GetCutPoint(r) => {
-                let c = Constant::Usize(self.b);
-                self[r] = Addr::Con(c);
-
-                self.p += 1;
-            },
-            &BuiltInInstruction::InferenceLevel(r1, r2) => { // X1 = R, X2 = B.
-                let a1 = self[r1].clone();
-                let a2 = self.store(self.deref(self[r2].clone()));
-
-                match a2 {
-                    Addr::Con(Constant::Usize(bp)) =>
-                        if self.b <= bp + 1 {
-                            let a2 = Addr::Con(atom!("!", self.atom_tbl));
-                            self.unify(a1, a2);
-                        } else {
-                            let a2 = Addr::Con(atom!("true", self.atom_tbl));
-                            self.unify(a1, a2);
-                        },
-                    _ => self.fail = true
-                };
-
-                self.p += 1;
-            },
-            &BuiltInInstruction::InstallCleaner => {
-                let addr = self[temp_v!(1)].clone();
-                let b = self.b;
-                let block = self.block;
-
-                if cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>().is_err() {
-                    *cut_policy = Box::new(SetupCallCleanupCutPolicy::new());
-                }
-
-                match cut_policy.downcast_mut::<SetupCallCleanupCutPolicy>().ok()
-                {
-                    Some(cut_policy) => cut_policy.push_cont_pt(addr, b, block),
-                    None => panic!("install_cleaner: should have installed \\
-                                    SetupCallCleanupCutPolicy.")
-                };
-
-                self.p += 1;
-            },
-            &BuiltInInstruction::InstallInferenceCounter(r1, r2, r3) => { // A1 = B, A2 = L
-                let a1 = self.store(self.deref(self[r1].clone()));
-                let a2 = self.store(self.deref(self[r2].clone()));
-
-                if call_policy.downcast_ref::<CallWithInferenceLimitCallPolicy>().is_err() {
-                    CallWithInferenceLimitCallPolicy::new_in_place(call_policy);
-                }
-
-                self.p += 1;
-
-                match (a1, a2.clone()) {
-                    (Addr::Con(Constant::Usize(bp)),
-                     Addr::Con(Constant::Number(Number::Integer(n)))) =>
-                        match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
-                            Some(call_policy) => {
-                                let count = call_policy.add_limit(n, bp);
-                                self[r3] = Addr::Con(Constant::Number(Number::Integer(count)));
-                            },
-                            None => panic!("install_inference_counter: should have installed \\
-                                            CallWithInferenceLimitCallPolicy.")
-                        },
-                    _ => {
-                        let stub = self.functor_stub(clause_name!("call_with_inference_limit"), 3);
-                        let type_error = self.error_form(self.type_error(ValidType::Integer, a2),
-                                                         stub);
-                        self.throw_exception(type_error)
-                    }
-                };
-            },
-            &BuiltInInstruction::RemoveCallPolicyCheck => {
-                let restore_default =
-                    match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
-                        Some(call_policy) => {
-                            let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
-
-                            if let Addr::Con(Constant::Usize(bp)) = a1 {
-                                if call_policy.is_empty() && bp == self.b {
-                                    Some(call_policy.into_inner())
-                                } else {
-                                    None
-                                }
-                            } else {
-                                panic!("remove_call_policy_check: expected Usize in A1.");
-                            }
-                        },
-                        None => panic!("remove_call_policy_check: requires \\
-                                        CallWithInferenceLimitCallPolicy.")
-                    };
-
-                if let Some(new_policy) = restore_default {
-                    *call_policy = new_policy;
-                }
-
-                self.p += 1;
-            },
-            &BuiltInInstruction::RemoveInferenceCounter(r1, r2) => { // A1 = B
-                match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
-                    Some(call_policy) => {
-                        let a1 = self.store(self.deref(self[r1].clone()));
-
-                        if let Addr::Con(Constant::Usize(bp)) = a1 {
-                            let count = call_policy.remove_limit(bp);
-                            self[r2] = Addr::Con(Constant::Number(Number::Integer(count)));
-                        } else {
-                            panic!("remove_inference_counter: expected Usize in A1.");
-                        }
-                    },
-                    None => panic!("remove_inference_counters: requires \\
-                                    CallWithInferenceLimitCallPolicy.")
-                };
-
-                self.p += 1;
-            },
-            &BuiltInInstruction::RestoreCutPolicy => {
-                let restore_default =
-                    if let Ok(cut_policy) = cut_policy.downcast_ref::<SetupCallCleanupCutPolicy>() {
-                        cut_policy.out_of_cont_pts()
-                    } else {
-                        false
-                    };
-
-                if restore_default {
-                    *cut_policy = Box::new(DefaultCutPolicy {});
-                }
-
-                self.p += 1;
-            },
-            &BuiltInInstruction::SetBall => {
-                let addr = self[temp_v!(1)].clone();
-                self.ball.boundary = self.heap.h;
-
-                {
-                    let mut duplicator = DuplicateBallTerm::new(self);
-                    duplicator.duplicate_term(addr);
-                };
-                
-                self.p += 1;
-            },
-            &BuiltInInstruction::SetCutPoint(r) =>
-                cut_policy.cut(self, r),
-            &BuiltInInstruction::CleanUpBlock => {
-                let nb = self.store(self.deref(self[temp_v!(1)].clone()));
-
-                match nb {
-                    Addr::Con(Constant::Usize(nb)) => {
-                        let b = self.b - 1;
-
-                        if nb > 0 && self.or_stack[b].b == nb {
-                            self.b = self.or_stack[nb - 1].b;
-                            self.or_stack.truncate(self.b);
-                        }
-
-                        self.p += 1;
-                    },
-                    _ => self.fail = true
-                };
-            },
-            &BuiltInInstruction::InstallNewBlock => {
-                self.block = self.b;
-                let c = Constant::Usize(self.block);
-                let addr = self[temp_v!(1)].clone();
-
-                self.write_constant_to_var(addr, c);
-                self.p += 1;
-            },
-            &BuiltInInstruction::ResetBlock => {
-                let addr = self.deref(self[temp_v!(1)].clone());
-                self.reset_block(addr);
-            },
-            &BuiltInInstruction::UnwindStack =>
-                self.unwind_stack(),
-            &BuiltInInstruction::InternalCallN =>
-                self.handle_internal_call_n(call_policy, code_dirs),
-            &BuiltInInstruction::Fail => {
-                self.fail = true;
-                self.p += 1;
-            },
-            &BuiltInInstruction::Succeed => {
-                self.p += 1;
-            },
-            &BuiltInInstruction::Unify => {
-                let a1 = self[temp_v!(1)].clone();
-                let a2 = self[temp_v!(2)].clone();
-
-                self.unify(a1, a2);
-                self.p += 1;
-            },
-        };
+        if !self.fail {
+            self.unify(a3, arity);
+        }
     }
 
-    pub(super) fn try_functor(&mut self) -> Result<(), MachineError> {
+    fn try_functor_compound_case(&mut self, name: ClauseName, arity: usize) {
+        let name  = Addr::Con(Constant::Atom(name));
+        let arity = Addr::Con(integer!(arity));
+
+        self.try_functor_unify_components(name, arity);
+    }
+
+    pub(super) fn try_functor(&mut self) -> CallResult {
         let stub = self.functor_stub(clause_name!("functor"), 3);
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
         match a1.clone() {
+            Addr::Con(_) =>
+                self.try_functor_unify_components(a1, Addr::Con(integer!(0))),
             Addr::Str(o) =>
                 match self.heap[o].clone() {
-                    HeapCellValue::NamedStr(arity, name, _) => {
-                        let name  = Addr::Con(Constant::Atom(name)); // A2
-                        let arity = Addr::Con(Constant::Number(rc_integer!(arity)));
-
-                        let a2 = self[temp_v!(2)].clone();
-                        self.unify(a2, name);
-
-                        if !self.fail {
-                            let a3 = self[temp_v!(3)].clone();
-                            self.unify(a3, arity);
-                        }
-                    },
+                    HeapCellValue::NamedStr(arity, name, _) =>
+                        self.try_functor_compound_case(name, arity),
                     _ => self.fail = true
                 },
+            Addr::Lis(_) =>
+                self.try_functor_compound_case(clause_name!("."), 2),
             Addr::HeapCell(_) | Addr::StackCell(_, _) => {
                 let name  = self.store(self.deref(self[temp_v!(2)].clone()));
                 let arity = self.store(self.deref(self[temp_v!(3)].clone()));
 
-                if let Addr::Con(Constant::Atom(name)) = name {
-                    if let Addr::Con(Constant::Number(Number::Integer(arity))) = arity {
-                        let f_a = Addr::Str(self.heap.h);
-                        let arity = match arity.to_usize() {
-                            Some(arity) => arity,
-                            None => {
-                                self.fail = true;
-                                return Ok(());
-                            }
-                        };
-
-                        if arity > 0 {
-                            self.heap.push(HeapCellValue::NamedStr(arity, name, None));
-                        } else {
-                            let c = Constant::Atom(name.clone());
-                            self.heap.push(HeapCellValue::Addr(Addr::Con(c)));
-                        }
-
-                        for _ in 0 .. arity {
-                            let h = self.heap.h;
-                            self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
-                        }
-
-                        self.unify(a1, f_a);
-                    } else {
-                        return Err(self.error_form(self.instantiation_error(), stub));
-                    }
-                } else {
+                if name.is_ref() || arity.is_ref() { // 8.5.1.3 a) & 8.5.1.3 b)
                     return Err(self.error_form(self.instantiation_error(), stub));
                 }
-            },
-            _ => {
-                let a2 = self[temp_v!(2)].clone();
-                self.unify(a1, a2);
 
-                if !self.fail {
-                    let a3 = self[temp_v!(3)].clone();
-                    self.unify(a3, Addr::Con(Constant::Number(rc_integer!(0))));
+                if let Addr::Con(Constant::Number(Number::Integer(arity))) = arity {
+                    let arity = match arity.to_isize() {
+                        Some(arity) => arity,
+                        None => {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    };
+
+                    if arity > MAX_ARITY as isize {
+                        // 8.5.1.3 f)
+                        return Err(self.error_form(self.representation_error(RepFlag::MaxArity),
+                                                   stub));
+                    } else if arity < 0 {
+                        // 8.5.1.3 g)
+                        return Err(self.error_form(self.domain_error(DomainError::NotLessThanZero,
+                                                                     Addr::Con(integer!(arity))),
+                                                   stub));
+                    }
+
+                    match name {
+                        Addr::Con(_) if arity == 0 =>
+                            self.unify(a1, name),
+                        Addr::Con(Constant::Atom(name)) => {
+                            let f_a = if name.as_str() == "." && arity == 2 {
+                                Addr::Lis(self.heap.h)
+                            } else {
+                                let h = self.heap.h;                                
+                                self.heap.push(HeapCellValue::NamedStr(arity as usize, name, None));
+                                Addr::Str(h)
+                            };
+
+                            for _ in 0 .. arity {
+                                let h = self.heap.h;
+                                self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+                            }
+
+                            self.unify(a1, f_a);
+                        },
+                        Addr::Con(_) =>
+                            return Err(self.error_form(self.type_error(ValidType::Atom, name),
+                                                       stub)), // 8.5.1.3 e)
+                        _ =>
+                            return Err(self.error_form(self.type_error(ValidType::Atomic, name),
+                                                       stub))  // 8.5.1.3 c)
+                    };
+                } else if !arity.is_ref() {
+                    // 8.5.1.3 d)
+                    return Err(self.error_form(self.type_error(ValidType::Integer, arity), stub));
                 }
             }
         };
@@ -1839,157 +1653,6 @@ impl MachineState {
                 },
             a => Err(self.error_form(self.type_error(ValidType::Pair, a), stub))
         }
-    }
-
-    pub(super) fn detect_cycles_with_max(&self, max_steps: usize, addr: Addr) -> CycleSearchResult
-    {
-        let addr = self.store(self.deref(addr));
-
-        let mut hare = match addr {
-            Addr::Lis(offset) if max_steps > 0 => offset + 1,
-            Addr::Lis(offset) => return CycleSearchResult::UntouchedList(offset),
-            Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
-            _ => return CycleSearchResult::NotList
-        };
-
-        // use Brent's algorithm to detect cycles.
-        let mut tortoise = hare;
-        let mut power = 2;
-        let mut steps = 1;
-
-        loop {
-            if steps == max_steps {
-                return CycleSearchResult::PartialList(steps, hare);
-            }
-
-            match self.heap[hare].clone() {
-                HeapCellValue::Addr(Addr::Lis(l)) => {
-                    hare = l + 1;
-                    steps += 1;
-
-                    if tortoise == hare {
-                        return CycleSearchResult::NotList;
-                    } else if steps == power {
-                        tortoise = hare;
-                        power <<= 1;
-                    }
-                },
-                HeapCellValue::NamedStr(..) =>
-                    return CycleSearchResult::NotList,
-                HeapCellValue::Addr(addr) =>
-                    match self.store(self.deref(addr)) {
-                        Addr::Con(Constant::EmptyList) =>
-                            return CycleSearchResult::ProperList(steps),
-                        Addr::HeapCell(_) | Addr::StackCell(..) =>
-                            return CycleSearchResult::PartialList(steps, hare),
-                        _ =>
-                            return CycleSearchResult::NotList
-                    }
-            }
-        }
-    }
-
-    pub(super) fn detect_cycles(&self, addr: Addr) -> CycleSearchResult
-    {
-        let addr = self.store(self.deref(addr));
-
-        let mut hare = match addr {
-            Addr::Lis(offset) => offset + 1,
-            Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
-            _ => return CycleSearchResult::NotList
-        };
-
-        // use Brent's algorithm to detect cycles.
-        let mut tortoise = hare;
-        let mut power = 2;
-        let mut steps = 1;
-
-        loop {
-            match self.heap[hare].clone() {
-                HeapCellValue::Addr(Addr::Lis(l)) => {
-                    hare = l + 1;
-                    steps += 1;
-
-                    if tortoise == hare {
-                        return CycleSearchResult::NotList;
-                    } else if steps == power {
-                        tortoise = hare;
-                        power <<= 1;
-                    }
-                },
-                HeapCellValue::NamedStr(..) =>
-                    return CycleSearchResult::NotList,
-                HeapCellValue::Addr(addr) =>
-                    match self.store(self.deref(addr)) {
-                        Addr::Con(Constant::EmptyList) =>
-                            return CycleSearchResult::ProperList(steps),
-                        Addr::HeapCell(_) | Addr::StackCell(..) =>
-                            return CycleSearchResult::PartialList(steps, hare),
-                        _ =>
-                            return CycleSearchResult::NotList
-                    }
-            }
-        }
-    }
-
-    fn finalize_skip_max_list(&mut self, n: usize, addr: Addr) {
-        let target_n = self[temp_v!(1)].clone();
-        self.unify(Addr::Con(integer!(n)), target_n);
-
-        if !self.fail {
-            let xs = self[temp_v!(4)].clone();
-            self.unify(addr, xs);
-        }
-    }
-
-    pub(super) fn skip_max_list(&mut self) -> Result<(), MachineError> {
-        let max_steps = self.arith_eval_by_metacall(temp_v!(2))?;
-
-        match max_steps {
-            Number::Integer(ref max_steps)
-                if max_steps.to_isize().map(|i| i >= -1).unwrap_or(false) => {
-                    let n = self.store(self.deref(self[temp_v!(1)].clone()));
-                    
-                    match n {
-                        Addr::Con(Constant::Number(Number::Integer(ref n))) if n.is_zero() => {
-                            let xs0 = self[temp_v!(3)].clone();
-                            let xs  = self[temp_v!(4)].clone();
-
-                            self.unify(xs0, xs);
-                        },
-                        _ => {
-                            let search_result = if let Some(max_steps) = max_steps.to_isize() {
-                                if max_steps == -1 {
-                                    self.detect_cycles(self[temp_v!(3)].clone())
-                                } else {
-                                    self.detect_cycles_with_max(max_steps as usize,
-                                                                self[temp_v!(3)].clone())
-                                }
-                            } else {
-                                self.detect_cycles(self[temp_v!(3)].clone())
-                            };
-
-                            match search_result {
-                                CycleSearchResult::UntouchedList(l) =>
-                                    self.finalize_skip_max_list(0, Addr::Lis(l)),
-                                CycleSearchResult::EmptyList =>
-                                    self.finalize_skip_max_list(0, Addr::Con(Constant::EmptyList)),
-                                CycleSearchResult::PartialList(n, hc) =>
-                                    self.finalize_skip_max_list(n, Addr::HeapCell(hc)),
-                                CycleSearchResult::ProperList(n) =>
-                                    self.finalize_skip_max_list(n, Addr::Con(Constant::EmptyList)),
-                                CycleSearchResult::NotList => {
-                                    let xs0 = self[temp_v!(3)].clone();
-                                    self.finalize_skip_max_list(0, xs0);
-                                }
-                            }
-                        }
-                    }
-                },
-            _ => self.fail = true
-        };
-
-        Ok(())
     }
 
     pub(super) fn duplicate_term(&mut self) {
@@ -2096,103 +1759,89 @@ impl MachineState {
         false
     }
 
+    pub(super) fn setup_built_in_call(&mut self, ct: BuiltInClauseType)
+    {
+        self.num_of_args = ct.arity();
+        self.b0 = self.b;
+
+        self.p = CodePtr::BuiltInClause(ct, self.p.local());
+    }
+
+    pub(super) fn allocate(&mut self, num_cells: usize) {
+        let gi = self.next_global_index();
+
+        self.p += 1;
+
+        if self.e + 1 < self.and_stack.len() {
+            let and_gi = self.and_stack[self.e].global_index;
+            let or_gi = self.or_stack.top()
+                .map(|or_fr| or_fr.global_index)
+                .unwrap_or(0);
+
+            if and_gi > or_gi {
+                let index = self.e + 1;
+
+                self.and_stack[index].e  = self.e;
+                self.and_stack[index].cp = self.cp.clone();
+                self.and_stack[index].global_index = gi;
+
+                self.and_stack.resize(index, num_cells);
+                self.e = index;
+
+                return;
+            }
+        }
+
+        self.and_stack.push(gi, self.e, self.cp.clone(), num_cells);
+        self.e = self.and_stack.len() - 1;
+    }
+
+    fn deallocate(&mut self) {
+        let e = self.e;
+
+        self.cp = self.and_stack[e].cp.clone();
+        self.e  = self.and_stack[e].e;
+
+        self.p += 1;
+    }
+
     pub(super) fn execute_ctrl_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
                                          call_policy: &mut Box<CallPolicy>,
                                          cut_policy:  &mut Box<CutPolicy>,
                                          instr: &ControlInstruction)
     {
         match instr {
-            &ControlInstruction::Allocate(num_cells) => {
-                let gi = self.next_global_index();
+            &ControlInstruction::Allocate(num_cells) =>
+                self.allocate(num_cells),
+            &ControlInstruction::CallClause(ClauseType::CallN, arity, _, lco) => {
+                self.last_call = lco;
+                try_or_fail!(self, call_policy.call_n(self, arity, code_dirs));
+            },
+            &ControlInstruction::CallClause(ClauseType::BuiltIn(ref ct), _, _, lco) => {
+                self.last_call = lco;
+                try_or_fail!(self, call_policy.call_builtin(self, ct));
+            },
+            &ControlInstruction::CallClause(ClauseType::Inlined(ref ct), ..) =>
+                self.execute_inlined(ct),
+            &ControlInstruction::CallClause(ClauseType::Named(ref name, ref idx), arity, _, lco)
+          | &ControlInstruction::CallClause(ClauseType::Op(ref name, _, ref idx), arity, _, lco) => {
+                self.last_call = lco;
+                try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone()));
+            },
+            &ControlInstruction::CallClause(ClauseType::System(ref ct), _, _, lco) => {
+                self.last_call = lco;
+                try_or_fail!(self, self.system_call(ct, call_policy, cut_policy));
 
-                self.p += 1;
-
-                if self.e + 1 < self.and_stack.len() {
-                    let and_gi = self.and_stack[self.e].global_index;
-                    let or_gi = self.or_stack.top()
-                        .map(|or_fr| or_fr.global_index)
-                        .unwrap_or(0);
-
-                    if and_gi > or_gi {
-                        let index = self.e + 1;
-
-                        self.and_stack[index].e  = self.e;
-                        self.and_stack[index].cp = self.cp.clone();
-                        self.and_stack[index].global_index = gi;
-
-                        self.and_stack.resize(index, num_cells);
-
-                        self.e = index;
-
-                        return;
-                    }
+                if self.last_call {
+                    self.p = CodePtr::Local(self.cp.clone());
+                } else {
+                    self.p += 1;
                 }
-
-                self.and_stack.push(gi, self.e, self.cp.clone(), num_cells);
-                self.e = self.and_stack.len() - 1;
             },
-            &ControlInstruction::CallClause(ref ct, arity, _, lco) =>
-                try_or_fail!(self, call_policy.try_call_clause(self, code_dirs, ct, arity, lco)),
-            &ControlInstruction::CheckCpExecute => {
-                let a = self.store(self.deref(self[temp_v!(2)].clone()));
-
-                match a {
-                    Addr::Con(Constant::Usize(old_b)) if self.b > old_b + 1 => {
-                        self.p = self.cp.clone();
-                    },
-                    _ => {
-                        self.num_of_args = 2;
-                        self.b0 = self.b;
-                        // goto sgc_on_success/2, 382.
-                        self.p = CodePtr::DirEntry(382, clause_name!("builtin"));
-                    }
-                };
-            },
-            &ControlInstruction::Deallocate => {
-                let e = self.e;
-
-                self.cp = self.and_stack[e].cp.clone();
-                self.e  = self.and_stack[e].e;
-
-                self.p += 1;
-            },
-            &ControlInstruction::GetCleanerCall => {
-                let dest = self[temp_v!(1)].clone();
-
-                match cut_policy.downcast_mut::<SetupCallCleanupCutPolicy>().ok() {
-                    Some(sgc_policy) =>
-                        if let Some((addr, b_cutoff, prev_block)) = sgc_policy.pop_cont_pt()
-                        {
-                            self.p += 1;
-
-                            if self.b <= b_cutoff + 1 {
-                                self.block = prev_block;
-
-                                if let Some(r) = dest.as_var() {
-                                    self.bind(r, addr);
-                                    return;
-                                }
-                            } else {
-                                sgc_policy.push_cont_pt(addr, b_cutoff, prev_block);
-                            }
-                        },
-                    None => panic!("expected SetupCallCleanupCutPolicy trait object.")
-                };
-
-                self.fail = true;
-            },
-            &ControlInstruction::Goto(p, arity, lco) =>
-                self.goto_ptr(CodePtr::DirEntry(p, clause_name!("builtin")), arity, lco),
-            &ControlInstruction::IsClause(lco, r, ref at) => {
-                let a1 = self[r].clone();
-                let a2 = try_or_fail!(self, self.get_number(at));
-
-                self.unify(a1, Addr::Con(Constant::Number(a2)));
-                try_or_fail!(self, return_from_clause!(lco, self));
-            },
+            &ControlInstruction::Deallocate => self.deallocate(),
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
                 if !lco {
-                    self.cp = self.p.clone() + 1;
+                    self.cp.assign_if_local(self.p.clone() + 1);
                 }
 
                 self.num_of_args = arity;
@@ -2200,18 +1849,8 @@ impl MachineState {
                 self.p += offset;
             },
             &ControlInstruction::Proceed =>
-                self.p = self.cp.clone(),
+                self.p = CodePtr::Local(self.cp.clone())
         };
-    }
-
-    pub(super) fn goto_ptr(&mut self, p: CodePtr, arity: usize, lco:bool) {
-        if !lco {
-            self.cp = self.p.clone() + 1;
-        }
-
-        self.num_of_args = arity;
-        self.b0 = self.b;
-        self.p  = p;
     }
 
     pub(super) fn execute_indexed_choice_instr(&mut self, instr: &IndexedChoiceInstruction,
@@ -2306,8 +1945,17 @@ impl MachineState {
                 self[r] = Addr::Con(Constant::Usize(b0));
                 self.p += 1;
             },
-            &CutInstruction::Cut(r) =>
-                cut_policy.cut(self, r),
+            &CutInstruction::GetLevelAndUnify(r) => {
+                let b0 = Addr::Con(Constant::Usize(self.b0));
+                let a  = self[r].clone();
+
+                self.unify(a, b0);
+                self.p += 1;
+            },
+            &CutInstruction::Cut(r) => {
+                cut_policy.cut(self, r);
+                self.p += 1;
+            }
         }
     }
 
@@ -2319,7 +1967,7 @@ impl MachineState {
         self.s = 0;
         self.tr = 0;
         self.p = CodePtr::default();
-        self.cp = CodePtr::default();
+        self.cp = LocalCodePtr::default();
         self.num_of_args = 0;
 
         self.fail = false;
@@ -2330,7 +1978,7 @@ impl MachineState {
         self.or_stack.clear();
         self.registers = vec![Addr::HeapCell(0); 64];
         self.block = 0;
-        
+
         self.ball.reset();
     }
 }

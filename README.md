@@ -26,11 +26,11 @@ Extend rusty-wam to include the following, among other features:
   associativity and precedence (_done_).
 * Bignum, rational number and floating point arithmetic (_done_).
 * Built-in control operators (`,`, `;`, `->`, etc.) (_done_).
+* A revised, not-terrible module system (_in progress_).
 * Built-in predicates for list processing and top-level declarative
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
-  etc.) (_done_).
-* A rudimentary module system (_done_).
-* Definite Clause Grammars (_in progress_).
+  etc.) (NEEDS REVISION)
+* Definite Clause Grammars
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
   is straightforward with attributed variables.

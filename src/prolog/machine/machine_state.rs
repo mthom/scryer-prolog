@@ -1,10 +1,10 @@
 use prolog::and_stack::*;
 use prolog::ast::*;
 use prolog::copier::*;
-use prolog::machine::machine_errors::MachineStub;
+use prolog::heap_print::*;
+use prolog::machine::machine_errors::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
-use prolog::heap_print::*;
 use prolog::tabled_rc::*;
 
 use downcast::Any;
@@ -17,14 +17,14 @@ use std::rc::Rc;
 
 pub(super) struct Ball {
     pub(super) boundary: usize, // ball.0
-    pub(super) stub: MachineStub, // ball.1    
+    pub(super) stub: MachineStub, // ball.1
 }
 
 impl Ball {
     pub(super) fn new() -> Self {
         Ball { boundary: 0, stub: MachineStub::new() }
     }
-    
+
     pub(super) fn reset(&mut self) {
         self.boundary = 0;
         self.stub.clear();
@@ -209,7 +209,7 @@ pub struct MachineState {
     pub(super) b0: usize,
     pub(super) e: usize,
     pub(super) num_of_args: usize,
-    pub(super) cp: CodePtr,
+    pub(super) cp: LocalCodePtr,
     pub(super) fail: bool,
     pub(crate) heap: Heap,
     pub(super) mode: MachineMode,
@@ -222,61 +222,12 @@ pub struct MachineState {
     pub(super) block: usize, // an offset into the OR stack.
     pub(super) ball: Ball,
     pub(super) interms: Vec<Number>, // intermediate numbers.
+    pub(super) last_call: bool
 }
 
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
 pub(crate) trait CallPolicy: Any {
-    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                    arity: usize, idx: CodeIndex, lco: bool)
-                    -> CallResult
-    {
-        if lco {
-            self.try_execute(machine_st, name, arity, idx)
-        } else {
-            self.try_call(machine_st, name, arity, idx)
-        }
-    }
-
-    fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                arity: usize, idx: CodeIndex)
-                -> CallResult
-    {
-        match idx.0.borrow().0 {
-            IndexPtr::Undefined =>
-                return Err(machine_st.existence_error(name, arity)),
-            IndexPtr::Index(compiled_tl_index) => {
-                let module_name = idx.0.borrow().1.clone();
-
-                machine_st.cp = machine_st.p.clone() + 1;
-                machine_st.num_of_args = arity;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(compiled_tl_index, module_name);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn try_execute<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                       arity: usize, idx: CodeIndex)
-                       -> CallResult
-    {
-        match idx.0.borrow().0 {
-            IndexPtr::Undefined =>
-                return Err(machine_st.existence_error(name, arity)),
-            IndexPtr::Index(compiled_tl_index) => {
-                let module_name = idx.0.borrow().1.clone();
-
-                machine_st.num_of_args = arity;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(compiled_tl_index, module_name);
-            }
-        }
-
-        Ok(())
-    }
-
     fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
     {
         let b = machine_st.b - 1;
@@ -400,49 +351,70 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn try_call_clause<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
-                           ct: &ClauseType, arity: usize, lco: bool)
-                           -> CallResult
+    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
+                    idx: CodeIndex)
+                    -> CallResult
+    {
+        if machine_st.last_call {
+            self.try_execute(machine_st, name, arity, idx)
+        } else {
+            self.try_call(machine_st, name, arity, idx)
+        }
+    }
+
+    fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                arity: usize, idx: CodeIndex)
+                -> CallResult
+    {
+        match idx.0.borrow().0 {
+            IndexPtr::Undefined =>
+                return Err(machine_st.existence_error(name, arity)),
+            IndexPtr::Index(compiled_tl_index) => {
+                let module_name = idx.0.borrow().1.clone();
+
+                machine_st.cp.assign_if_local(machine_st.p.clone() + 1);
+                machine_st.num_of_args = arity;
+                machine_st.b0 = machine_st.b;
+                machine_st.p  = dir_entry!(compiled_tl_index, module_name);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn try_execute<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                       arity: usize, idx: CodeIndex)
+                       -> CallResult
+    {
+        match idx.0.borrow().0 {
+            IndexPtr::Undefined =>
+                return Err(machine_st.existence_error(name, arity)),
+            IndexPtr::Index(compiled_tl_index) => {
+                let module_name = idx.0.borrow().1.clone();
+
+                machine_st.num_of_args = arity;
+                machine_st.b0 = machine_st.b;
+                machine_st.p  = dir_entry!(compiled_tl_index, module_name);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType)
+                        -> CallResult
     {
         match ct {
-            &ClauseType::AcyclicTerm => {
+            &BuiltInClauseType::AcyclicTerm => {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = machine_st.is_cyclic_term(addr);
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::Arg => {
-                if !lco {
-                    machine_st.cp = machine_st.p.clone() + 1;
-                }
-
-                machine_st.num_of_args = 3;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(166, clause_name!("builtin"));
-
-                Ok(())
+            &BuiltInClauseType::Arg => {
+                machine_st.try_arg()?;
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::Catch => {
-                if !lco {
-                    machine_st.cp = machine_st.p.clone() + 1;
-                }
-
-                machine_st.num_of_args = 3;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = CodePtr::DirEntry(5, clause_name!("builtin"));
-
-                Ok(())
-            },
-            &ClauseType::CallN =>
-                if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-                    if let Some(idx) = code_dirs.get(name.clone(), arity, clause_name!("user")) {
-                        self.context_call(machine_st, name, arity, idx, lco)
-                    } else {
-                        Err(machine_st.existence_error(name, arity))
-                    }
-                } else {
-                    Ok(())
-                },
-            &ClauseType::Compare => {
+            &BuiltInClauseType::Compare => {
                 let a1 = machine_st[temp_v!(1)].clone();
                 let a2 = machine_st[temp_v!(2)].clone();
                 let a3 = machine_st[temp_v!(3)].clone();
@@ -454,9 +426,9 @@ pub(crate) trait CallPolicy: Any {
                 });
 
                 machine_st.unify(a1, c);
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::CompareTerm(qt) => {
+            &BuiltInClauseType::CompareTerm(qt) => {
                 match qt {
                     CompareTermQT::Equal =>
                         machine_st.fail = machine_st.structural_eq_test(),
@@ -465,47 +437,47 @@ pub(crate) trait CallPolicy: Any {
                     _ => machine_st.compare_term(qt)
                 };
 
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::CyclicTerm => {
+            &BuiltInClauseType::CyclicTerm => {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = !machine_st.is_cyclic_term(addr);
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::Display => {
+            &BuiltInClauseType::Display => {
                 let output = machine_st.print_term(machine_st[temp_v!(1)].clone(),
                                                    DisplayFormatter {},
                                                    PrinterOutputter::new());
 
                 println!("{}", output.result());
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::DuplicateTerm => {
+            &BuiltInClauseType::DuplicateTerm => {
                 machine_st.duplicate_term();
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::Eq => {
+            &BuiltInClauseType::Eq => {
                 machine_st.fail = machine_st.eq_test();
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::Ground => {
+            &BuiltInClauseType::Ground => {
                 machine_st.fail = machine_st.ground_test();
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::Functor => {
+            &BuiltInClauseType::Functor => {
                 machine_st.try_functor()?;
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::NotEq => {
+            &BuiltInClauseType::NotEq => {
                 machine_st.fail = !machine_st.eq_test();
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::Sort => {
+            &BuiltInClauseType::Sort => {
                 machine_st.check_sort_errors()?;
-                
+
                 let stub = machine_st.functor_stub(clause_name!("sort"), 2);
-                let mut list = machine_st.try_from_list(temp_v!(1), stub)?;                                
-                
+                let mut list = machine_st.try_from_list(temp_v!(1), stub)?;
+
                 list.sort_unstable_by(|a1, a2| machine_st.compare_term_test(a1, a2));
                 machine_st.term_dedup(&mut list);
 
@@ -514,15 +486,15 @@ pub(crate) trait CallPolicy: Any {
                 let r2 = machine_st[temp_v!(2)].clone();
                 machine_st.unify(r2, heap_addr);
 
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::KeySort => {
+            &BuiltInClauseType::KeySort => {
                 machine_st.check_keysort_errors()?;
-                
+
                 let stub = machine_st.functor_stub(clause_name!("keysort"), 2);
                 let mut list = machine_st.try_from_list(temp_v!(1), stub)?;
-                let mut key_pairs = Vec::new();                
-                
+                let mut key_pairs = Vec::new();
+
                 for val in list {
                     let key = machine_st.project_onto_key(val.clone())?;
                     key_pairs.push((key, val.clone()));
@@ -536,46 +508,99 @@ pub(crate) trait CallPolicy: Any {
                 let r2 = machine_st[temp_v!(2)].clone();
                 machine_st.unify(r2, heap_addr);
 
-                return_from_clause!(lco, machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::Throw => {
-                if !lco {
-                    machine_st.cp = machine_st.p.clone() + 1;
-                }
+            &BuiltInClauseType::Is(r, ref at) => {
+                let a1 = machine_st[r].clone();
+                let a2 = machine_st.get_number(at)?;
 
-                machine_st.goto_throw();
-                Ok(())
+                machine_st.unify(a1, Addr::Con(Constant::Number(a2)));
+                return_from_clause!(machine_st.last_call, machine_st)
             },
-            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
-                self.context_call(machine_st, name.clone(), arity, idx.clone(), lco),
-            &ClauseType::CallWithInferenceLimit => {
-                machine_st.goto_ptr(CodePtr::DirEntry(409, clause_name!("builtin")), 3, lco);
-                Ok(())
-            },
-            &ClauseType::SetupCallCleanup => {
-                machine_st.goto_ptr(CodePtr::DirEntry(310, clause_name!("builtin")), 3, lco);
-                Ok(())
-            },
-            &ClauseType::Is => {
-                let a = machine_st[temp_v!(1)].clone();
-                let result = machine_st.arith_eval_by_metacall(temp_v!(2))?;
-
-                machine_st.unify(a, Addr::Con(Constant::Number(result)));
-                machine_st.p += 1;
-
-                Ok(())
-            },
-            &ClauseType::Inlined(ref inlined) => {
-                machine_st.execute_inlined(inlined, &vec![temp_v!(1), temp_v!(2)]);
-                Ok(())
-            },
-            &ClauseType::SkipMaxList => {
-                machine_st.skip_max_list()?;
-                machine_st.p += 1;
-                
-                Ok(())
-            }
         }
+    }
+
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize, code_dirs: CodeDirs<'a>)
+                  -> CallResult
+    {
+        if let Some((name, arity)) = machine_st.setup_call_n(arity) {
+            let user = clause_name!("user");
+
+            match ClauseType::from(name.clone(), arity, None) {
+                ClauseType::CallN => {
+                    machine_st.handle_internal_call_n(arity);
+
+                    if machine_st.fail {
+                        return Ok(());
+                    }
+
+                    machine_st.p = CodePtr::CallN(arity, machine_st.p.local());
+                },
+                ClauseType::BuiltIn(built_in) =>
+                    machine_st.setup_built_in_call(built_in),
+                ClauseType::Inlined(inlined) =>
+                    machine_st.execute_inlined(&inlined),
+                ClauseType::Op(..) | ClauseType::Named(..) =>
+                    if let Some(idx) = code_dirs.get(name.clone(), arity, user) {
+                        self.context_call(machine_st, name, arity, idx)?;
+                    } else {
+                        return Err(machine_st.existence_error(name, arity));
+                    },
+                ClauseType::System(_) =>
+                    return Err(machine_st.type_error(ValidType::Callable,
+                                                     Addr::Con(Constant::Atom(name))))
+            };
+        }
+
+        Ok(())
+    }
+}
+
+impl CallPolicy for CallWithInferenceLimitCallPolicy {
+    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                    arity: usize, idx: CodeIndex)
+                    -> CallResult
+    {
+        self.prev_policy.context_call(machine_st, name, arity, idx)?;
+        self.increment()
+    }
+
+    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        self.prev_policy.retry_me_else(machine_st, offset)?;
+        self.increment()
+    }
+
+    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        self.prev_policy.retry(machine_st, offset)?;
+        self.increment()
+    }
+
+    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult
+    {
+        self.prev_policy.trust_me(machine_st)?;
+        self.increment()
+    }
+
+    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
+    {
+        self.prev_policy.trust(machine_st, offset)?;
+        self.increment()
+    }
+
+    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType)
+                        -> CallResult
+    {
+        self.prev_policy.call_builtin(machine_st, ct)?;
+        self.increment()
+    }
+
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize, code_dirs: CodeDirs<'a>)
+                  -> CallResult
+    {
+        self.prev_policy.call_n(machine_st, arity, code_dirs)?;
+        self.increment()
     }
 }
 
@@ -651,40 +676,6 @@ impl CallWithInferenceLimitCallPolicy {
     }
 }
 
-impl CallPolicy for CallWithInferenceLimitCallPolicy {
-    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
-        self.prev_policy.retry_me_else(machine_st, offset)?;
-        self.increment()
-    }
-
-    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
-        self.prev_policy.retry(machine_st, offset)?;
-        self.increment()
-    }
-
-    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult
-    {
-        self.prev_policy.trust_me(machine_st)?;
-        self.increment()
-    }
-
-    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
-        self.prev_policy.trust(machine_st, offset)?;
-        self.increment()
-    }
-
-    fn try_call_clause<'a>(&mut self, machine_st: &mut MachineState, code_dirs: CodeDirs<'a>,
-                           ct: &ClauseType, arity: usize, lco: bool)
-                           -> CallResult
-    {
-        self.prev_policy.try_call_clause(machine_st, code_dirs, ct, arity, lco)?;
-        self.increment()
-    }
-}
-
 pub(crate) trait CutPolicy: Any {
     fn cut(&mut self, &mut MachineState, RegType);
 }
@@ -707,27 +698,25 @@ impl CutPolicy for DefaultCutPolicy {
             machine_st.fail = true;
             return;
         }
-
-        machine_st.p += 1;
     }
 }
 
-pub(crate) struct SetupCallCleanupCutPolicy {
+pub(crate) struct SCCCutPolicy {
     // locations of cleaners, cut points, the previous block
     cont_pts: Vec<(Addr, usize, usize)>
 }
 
-impl SetupCallCleanupCutPolicy {
+impl SCCCutPolicy {
     pub(crate) fn new() -> Self {
-        SetupCallCleanupCutPolicy { cont_pts: vec![] }
+        SCCCutPolicy { cont_pts: vec![] }
     }
 
     pub(crate) fn out_of_cont_pts(&self) -> bool {
         self.cont_pts.is_empty()
     }
 
-    pub(crate) fn push_cont_pt(&mut self, addr: Addr, b: usize, block: usize) {
-        self.cont_pts.push((addr, b, block));
+    pub(crate) fn push_cont_pt(&mut self, addr: Addr, b: usize, prev_b: usize) {
+        self.cont_pts.push((addr, b, prev_b));
     }
 
     pub(crate) fn pop_cont_pt(&mut self) -> Option<(Addr, usize, usize)> {
@@ -735,12 +724,12 @@ impl SetupCallCleanupCutPolicy {
     }
 }
 
-impl CutPolicy for SetupCallCleanupCutPolicy {
+impl CutPolicy for SCCCutPolicy {
     fn cut(&mut self, machine_st: &mut MachineState, r: RegType) {
         let b = machine_st.b;
 
         if let Addr::Con(Constant::Usize(b0)) = machine_st[r].clone() {
-            if b > b0 {
+            if b > b0 {                
                 machine_st.b = b0;
                 machine_st.tidy_trail();
                 machine_st.or_stack.truncate(machine_st.b);
@@ -748,16 +737,13 @@ impl CutPolicy for SetupCallCleanupCutPolicy {
         } else {
             machine_st.fail = true;
             return;
-        }
-
-        machine_st.p += 1;
-
-        if !self.out_of_cont_pts() {
-            machine_st.cp = machine_st.p.clone();
-            machine_st.num_of_args = 0;
-            machine_st.b0 = machine_st.b;
-            // goto_call run_cleaners_without_handling/0, 370.
-            machine_st.p = CodePtr::DirEntry(370, clause_name!("builtin"));
+        }    
+        
+        if let Some(&(_, b_cutoff, prev_block)) = self.cont_pts.last() {
+            if machine_st.b < b_cutoff {
+                machine_st.block = prev_block;
+                machine_st.unwind_stack();
+            }
         }
     }
 }

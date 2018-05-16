@@ -1,5 +1,4 @@
 use prolog::ast::*;
-use prolog::builtins::*;
 use prolog::machine::machine_state::*;
 use prolog::num::bigint::BigInt;
 
@@ -7,6 +6,107 @@ use std::rc::Rc;
 
 pub(super) type MachineError = Vec<HeapCellValue>;
 pub(super) type MachineStub = Vec<HeapCellValue>;
+
+// from 7.12.2 b) of 13211-1:1995
+#[derive(Clone, Copy)]
+pub enum ValidType {
+    Atom,
+    Atomic,
+//    Byte,
+    Callable,
+//    Character,
+    Compound,
+//    Evaluable,
+//    InByte,
+//    InCharacter,
+    Integer,
+    List,
+//    Number,
+    Pair,
+//    PredicateIndicator,
+//    Variable
+}
+
+impl ValidType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ValidType::Atom => "atom",
+            ValidType::Atomic => "atomic",
+//            ValidType::Byte => "byte",
+            ValidType::Callable => "callable",
+//            ValidType::Character => "character",
+            ValidType::Compound => "compound",
+//            ValidType::Evaluable => "evaluable",
+//            ValidType::InByte => "in_byte",
+//            ValidType::InCharacter => "in_character",
+            ValidType::Integer => "integer",
+            ValidType::List => "list",
+//            ValidType::Number => "number",
+            ValidType::Pair => "pair",
+//            ValidType::PredicateIndicator => "predicate_indicator",
+//            ValidType::Variable => "variable"
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum DomainError {
+    NotLessThanZero
+}
+
+impl DomainError {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DomainError::NotLessThanZero => "not_less_than_zero"
+        }
+    }
+}
+
+// from 7.12.2 f) of 13211-1:1995
+#[derive(Clone, Copy)]
+pub enum RepFlag {
+//    Character,
+//    CharacterCode,
+//    InCharacterCode,
+    MaxArity,
+//    MaxInteger,
+//    MinInteger
+}
+
+impl RepFlag {
+    pub fn as_str(self) -> &'static str {
+        match self {
+//            RepFlag::Character => "character",
+//            RepFlag::CharacterCode => "character_code",
+//            RepFlag::InCharacterCode => "in_character_code",
+            RepFlag::MaxArity => "max_arity",
+//            RepFlag::MaxInteger => "max_integer",
+//            RepFlag::MinInteger => "min_integer"
+        }
+    }
+}
+
+// from 7.12.2 g) of 13211-1:1995
+#[derive(Clone, Copy)]
+pub enum EvalError {
+//    FloatOverflow,
+//    IntOverflow,
+//    Undefined,
+//    Underflow,
+    ZeroDivisor
+}
+
+impl EvalError {
+    pub fn as_str(self) -> &'static str {
+        match self {
+//            EvalError::FloatOverflow => "float_overflow",
+//            EvalError::IntOverflow => "int_overflow",
+//            EvalError::Undefined => "undefined",
+//            EvalError::Underflow => "underflow",
+            EvalError::ZeroDivisor => "zero_divisor"
+        }
+    }
+}
 
 // used by '$skip_max_list'.
 pub(super) enum CycleSearchResult {
@@ -111,6 +211,10 @@ impl MachineState {
         error
     }
 
+    pub(super) fn domain_error(&self, error: DomainError, culprit: Addr) -> MachineError {
+        functor!("domain_error", 2, [heap_atom!(error.as_str()), HeapCellValue::Addr(culprit)])
+    }
+    
     pub(super) fn instantiation_error(&self) -> MachineError {
         functor!("instantiation_error")
     }
@@ -125,7 +229,7 @@ impl MachineState {
         let mut error_form = vec![HeapCellValue::NamedStr(2, clause_name!("error"), None),
                                   HeapCellValue::Addr(Addr::HeapCell(h + 3)),
                                   HeapCellValue::Addr(Addr::HeapCell(h + 3 + err.len()))];
-        
+
         error_form.extend(err.into_iter());
         error_form.extend(src.into_iter());
 
@@ -141,6 +245,8 @@ impl MachineState {
         self.heap.append(err);
 
         self.registers[1] = Addr::HeapCell(h);
-        self.goto_throw();
+
+        self.set_ball();
+        self.unwind_stack();
     }
 }

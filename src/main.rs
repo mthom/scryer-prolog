@@ -1,18 +1,16 @@
 #[macro_use] extern crate downcast;
 extern crate termion;
 
+#[macro_use]
 mod prolog;
 
 use prolog::ast::*;
+use prolog::compile::*;
 use prolog::io::*;
 use prolog::machine::*;
 
 #[cfg(test)]
 mod tests;
-
-pub static LISTS: &str   = include_str!("./prolog/lib/lists.pl");
-pub static CONTROL: &str = include_str!("./prolog/lib/control.pl");
-pub static QUEUES: &str = include_str!("./prolog/lib/queues.pl");
 
 fn parse_and_compile_line(wam: &mut Machine, buffer: &str)
 {
@@ -25,20 +23,8 @@ fn parse_and_compile_line(wam: &mut Machine, buffer: &str)
     }
 }
 
-fn load_init_str(wam: &mut Machine, src_str: &str)
-{
-    match compile_listing(wam, src_str) {
-        EvalSession::Error(_) => panic!("failed to parse batch from string."),
-        _ => {}
-    }
-}
-
 fn prolog_repl() {
     let mut wam = Machine::new();
-
-    load_init_str(&mut wam, LISTS);
-    load_init_str(&mut wam, CONTROL);
-    load_init_str(&mut wam, QUEUES);
 
     loop {
         print!("prolog> ");

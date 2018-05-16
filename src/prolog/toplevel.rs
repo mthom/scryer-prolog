@@ -1,4 +1,5 @@
 use prolog::ast::*;
+use prolog::machine::*;
 use prolog::num::*;
 use prolog::parser::parser::*;
 use prolog::tabled_rc::*;
@@ -233,7 +234,7 @@ fn unfold_by_str(mut term: Term, s: &str) -> Vec<Term>
         terms.push(fst);
         term = snd;
     }
-
+    
     terms.push(term);
     terms
 }
@@ -393,34 +394,30 @@ impl RelationWorker {
                 if name.as_str() == "!" || name.as_str() == "blocked_!" {
                     Ok(QueryTerm::BlockedCut)
                 } else {
-                    Ok(QueryTerm::Clause(r, ClauseType::Named(name, CodeIndex::default()),
-                                         vec![]))
+                    Ok(QueryTerm::Clause(r, ClauseType::from(name, 0, None), vec![]))
                 },
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
-            Term::Clause(r, name, mut terms, fixity) =>
-                if let Some(inlined_ct) = InlinedClauseType::from(name.as_str(), terms.len()) {
-                    Ok(QueryTerm::Clause(r, ClauseType::Inlined(inlined_ct), terms))
-                } else if name.as_str() == ";" {
-                    if terms.len() == 2 {
-                        let term = Term::Clause(r, name.clone(), terms, fixity);
-                        let (stub, clauses) = self.fabricate_disjunct(term);
-
-                        self.queue.push_back(clauses);
-                        Ok(QueryTerm::Jump(stub))
-                    } else {
-                        Err(ParserError::BuiltInArityMismatch(";"))
-                    }
+            Term::Clause(r, name, mut terms, fixity) =>                
+                if name.as_str() == ";" && terms.len() == 2 {
+                    let term = Term::Clause(r, name.clone(), terms, fixity);
+                    let (stub, clauses) = self.fabricate_disjunct(term);
+                    
+                    self.queue.push_back(clauses);
+                    Ok(QueryTerm::Jump(stub))
                 } else if name.as_str() == "->" && terms.len() == 2 {
-                    if terms.len() == 2 {
-                        let conq = *terms.pop().unwrap();
-                        let prec = *terms.pop().unwrap();
-                        let (stub, clauses) = self.fabricate_if_then(prec, conq);
-
-                        self.queue.push_back(clauses);
-                        Ok(QueryTerm::Jump(stub))
+                    let conq = *terms.pop().unwrap();
+                    let prec = *terms.pop().unwrap();
+                    
+                    let (stub, clauses) = self.fabricate_if_then(prec, conq);
+                    
+                    self.queue.push_back(clauses);
+                    Ok(QueryTerm::Jump(stub))
+                } else if name.as_str() == "$get_level" && terms.len() == 1 {
+                    if let Term::Var(_, ref var) = *terms[0] {
+                        Ok(QueryTerm::GetLevelAndUnify(Cell::default(), var.clone()))
                     } else {
-                        Err(ParserError::BuiltInArityMismatch("->"))
+                        Err(ParserError::InadmissibleQueryTerm)
                     }
                 } else {
                     Ok(QueryTerm::Clause(Cell::default(),
@@ -568,7 +565,8 @@ impl<R: Read> TopLevelWorker<R> {
         TopLevelWorker { parser: Parser::new(inner, atom_tbl) }
     }
 
-    pub fn parse_batch(&mut self, op_dir: &mut OpDir) -> Result<Vec<TopLevelPacket>, SessionError>
+    pub fn parse_batch<'a>(&mut self, wam: &Machine, mut indices: MachineCodeIndex<'a>)
+                           -> Result<Vec<TopLevelPacket>, SessionError>
     {
         let mut preds = vec![];
         let mut mod_name = clause_name!("user");
@@ -582,7 +580,7 @@ impl<R: Read> TopLevelWorker<R> {
 
         while !self.parser.eof() {
             self.parser.reset(); // empty the parser stack of token descriptions.
-            let term = self.parser.read_term(&op_dir)?;
+            let term = self.parser.read_term(&indices.op_dir)?;
 
             let mut new_rel_worker = RelationWorker::new();
             let tl = new_rel_worker.try_term_to_tl(term, true)?;
@@ -594,8 +592,12 @@ impl<R: Read> TopLevelWorker<R> {
             rel_worker.absorb(new_rel_worker);
 
             match tl {
+                TopLevel::Declaration(Declaration::UseModule(name)) => 
+                    if let Some(module) = wam.get_module(name) {
+                        indices.use_module(module);
+                    },                
                 TopLevel::Declaration(Declaration::Op(op_decl)) => {
-                    op_decl.submit(mod_name.clone(), op_dir)?;
+                    op_decl.submit(mod_name.clone(), indices.op_dir)?;
                 },
                 TopLevel::Declaration(Declaration::Module(actual_mod)) => {
                     mod_name = actual_mod.name.clone();
@@ -609,7 +611,10 @@ impl<R: Read> TopLevelWorker<R> {
             };
         }
 
-        results.push(deque_to_packet(append_preds(&mut preds), rel_worker.parse_queue()?));
+        if !preds.is_empty() {
+            results.push(deque_to_packet(append_preds(&mut preds), rel_worker.parse_queue()?));
+        }
+        
         Ok(results)
     }
 

@@ -19,7 +19,7 @@ pub struct CodeGenerator<TermMarker> {
 pub struct ConjunctInfo<'a> {
     pub perm_vs: VariableFixtures<'a>,
     pub num_of_chunks: usize,
-    pub has_deep_cut: bool
+    pub has_deep_cut: bool,
 }
 
 impl<'a> ConjunctInfo<'a>
@@ -195,7 +195,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         GenContext::Last(chunk_num)
                     }
                 };
-                
+
                 self.update_var_count(chunked_term.post_order_iter());
                 vs.mark_vars_in_chunk(chunked_term.post_order_iter(), lt_arity, term_loc);
             }
@@ -232,14 +232,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 match ctrl.clone() {
                     ControlInstruction::CallClause(ct, arity, pvs, false) =>
                         *ctrl = ControlInstruction::CallClause(ct, arity, pvs, true),
-                    ControlInstruction::Goto(p, arity, false) =>
-                        *ctrl = ControlInstruction::Goto(p, arity, true),
                     ControlInstruction::JmpBy(arity, offset, pvs, false) =>
                         *ctrl = ControlInstruction::JmpBy(arity, offset, pvs, true),
-                    ControlInstruction::IsClause(false, r, at) =>
-                        *ctrl = ControlInstruction::IsClause(true, r, at),
                     ControlInstruction::Proceed => {},
-                    _ => dealloc_index += 1 // = code.len()
+                    _ => dealloc_index += 1
                 },
             Some(&mut Line::Cut(CutInstruction::Cut(_))) =>
                 dealloc_index += 1,
@@ -249,12 +245,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         dealloc_index
     }
 
-    fn compile_inlined(&mut self, ct: InlinedClauseType, terms: &'a Vec<Box<Term>>,
+    fn compile_inlined(&mut self, ct: &InlinedClauseType, terms: &'a Vec<Box<Term>>,
                        term_loc: GenContext, code: &mut Code)
                        -> Result<(), ParserError>
     {
         match ct {
-            InlinedClauseType::CompareNumber(cmp) => {
+            &InlinedClauseType::CompareNumber(cmp, ..) => {
                 let (mut lcode, at_1) = self.call_arith_eval(terms[0].as_ref(), 1)?;
                 let (mut rcode, at_2) = self.call_arith_eval(terms[1].as_ref(), 2)?;
 
@@ -265,7 +261,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                                                 at_1.unwrap_or(interm!(1)),
                                                 at_2.unwrap_or(interm!(2))));
             },
-            InlinedClauseType::IsAtom =>
+            &InlinedClauseType::IsAtom(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::Atom(_)) => {
                         code.push(succeed!());
@@ -278,7 +274,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     }
                 },
-            InlinedClauseType::IsAtomic =>
+            &InlinedClauseType::IsAtomic(..) =>
                 match terms[0].as_ref() {
                     &Term::AnonVar | &Term::Clause(..) | &Term::Cons(..) => {
                         code.push(fail!());
@@ -291,7 +287,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(is_atomic!(r));
                     }
                 },
-            InlinedClauseType::IsCompound =>
+            &InlinedClauseType::IsCompound(..) =>
                 match terms[0].as_ref() {
                     &Term::Clause(..) | &Term::Cons(..) => {
                         code.push(succeed!());
@@ -304,7 +300,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     }
                 },
-            InlinedClauseType::IsRational =>
+            &InlinedClauseType::IsRational(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::Number(Number::Rational(_))) => {
                         code.push(succeed!());
@@ -317,7 +313,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     }
                 },
-            InlinedClauseType::IsFloat =>
+            &InlinedClauseType::IsFloat(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::Number(Number::Float(_))) => {
                         code.push(succeed!());
@@ -330,7 +326,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     }
                 },
-            InlinedClauseType::IsString =>
+            &InlinedClauseType::IsString(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::String(_)) => {
                         code.push(succeed!());
@@ -343,7 +339,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     }
                 },
-            InlinedClauseType::IsNonVar =>
+            &InlinedClauseType::IsNonVar(..) =>
                 match terms[0].as_ref() {
                     &Term::AnonVar => {
                         code.push(fail!());
@@ -356,7 +352,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(succeed!());
                     }
                 },
-            InlinedClauseType::IsInteger =>
+            &InlinedClauseType::IsInteger(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::Number(Number::Integer(_))) => {
                         code.push(succeed!());
@@ -369,7 +365,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(fail!());
                     },
                 },
-            InlinedClauseType::IsVar =>
+            &InlinedClauseType::IsVar(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(..) | &Term::Clause(..) | &Term::Cons(..) => {
                         code.push(fail!());
@@ -408,6 +404,19 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 };
 
                 match *term {
+                    &QueryTerm::GetLevelAndUnify(ref cell, ref var) => {
+                        let mut target = Vec::new();
+
+                        self.marker.reset_arg(1);
+                        self.marker.mark_var(var.clone(), Level::Shallow, cell,
+                                             term_loc, &mut target);
+
+                        if !target.is_empty() {
+                            code.push(Line::Query(target));
+                        }
+                        
+                        code.push(get_level_and_unify!(cell.get().norm()));
+                    },
                     &QueryTerm::UnblockedCut(ref cell) =>
                         code.push(set_cp!(cell.get().norm())),
                     &QueryTerm::BlockedCut =>
@@ -416,7 +425,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         } else {
                             Line::Cut(CutInstruction::Cut(perm_v!(1)))
                         }),
-                    &QueryTerm::Clause(_, ClauseType::Is, ref terms) => {
+                    &QueryTerm::Clause(_, ClauseType::BuiltIn(BuiltInClauseType::Is(..)), ref terms)
+                        =>
+                    {
                         let (mut acode, at) = self.call_arith_eval(terms[1].as_ref(), 1)?;
                         code.append(&mut acode);
 
@@ -445,7 +456,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                             }
                         }
                     },
-                    &QueryTerm::Clause(_, ClauseType::Inlined(ct), ref terms) =>
+                    &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms) =>
                         try!(self.compile_inlined(ct, terms, term_loc, code)),
                     _ => {
                         let num_perm_vars = if chunk_num == 0 {

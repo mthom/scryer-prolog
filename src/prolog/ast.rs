@@ -21,6 +21,8 @@ pub type Var = String;
 
 pub type Specifier = u32;
 
+pub const MAX_ARITY: usize = 63;
+
 pub const XFX: u32 = 0x0001;
 pub const XFY: u32 = 0x0002;
 pub const YFX: u32 = 0x0004;
@@ -158,11 +160,24 @@ pub struct Module {
     pub op_dir: OpDir
 }
 
+pub fn default_op_dir() -> OpDir {
+    let module_name = clause_name!("builtins");
+    let mut op_dir = OpDir::new();
+
+    op_dir.insert((clause_name!(":-"), Fixity::In),  (XFX, 1200, module_name.clone()));
+    op_dir.insert((clause_name!(":-"), Fixity::Pre), (FX, 1200, module_name.clone()));
+    op_dir.insert((clause_name!("?-"), Fixity::Pre), (FX, 1200, module_name.clone()));
+
+    op_dir
+}
+
+pub static BUILTINS: &str = include_str!("./lib/builtins.pl");
+
 impl Module {
     pub fn new(module_decl: ModuleDecl) -> Self {
         Module { module_decl,
                  code_dir: ModuleCodeDir::new(),
-                 op_dir: OpDir::new() }
+                 op_dir: default_op_dir() }
     }
 }
 
@@ -192,11 +207,13 @@ pub trait SubModuleUser {
     // returns true on successful import.
     fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
         let name = name.defrock_brackets();
+        let mut found_op = false;
 
         {
             let mut insert_op_dir = |fix| {
                 if let Some(op_data) = submodule.op_dir.get(&(name.clone(), fix)) {
                     self.op_dir().insert((name.clone(), fix), op_data.clone());
+                    found_op = true;
                 }
             };
 
@@ -212,7 +229,7 @@ pub trait SubModuleUser {
             self.insert_dir_entry(name, arity, code_data.clone());
             true
         } else {
-            false
+            found_op
         }
     }
 
@@ -463,7 +480,7 @@ pub enum ParserError
 {
     Arithmetic(ArithmeticError),
     BackQuotedString,
-    BuiltInArityMismatch(&'static str),
+    // BuiltInArityMismatch(&'static str),
     UnexpectedChar(char),
     UnexpectedEOF,
     IO(IOError),
@@ -559,59 +576,71 @@ pub enum Term {
     Var(Cell<VarReg>, Rc<Var>)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, PartialEq)]
 pub enum InlinedClauseType {
-    CompareNumber(CompareNumberQT),
-    IsAtom,
-    IsAtomic,
-    IsCompound,
-    IsInteger,
-    IsRational,
-    IsString,
-    IsFloat,
-    IsNonVar,
-    IsVar,
+    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
+    IsAtom(RegType),
+    IsAtomic(RegType),
+    IsCompound(RegType),
+    IsInteger(RegType),
+    IsRational(RegType),
+    IsString(RegType),
+    IsFloat(RegType),
+    IsNonVar(RegType),
+    IsVar(RegType),
 }
 
 impl InlinedClauseType {
     pub fn name(&self) -> &'static str {
         match self {
-            &InlinedClauseType::CompareNumber(qt) => qt.name(),
-            &InlinedClauseType::IsAtom => "atom",
-            &InlinedClauseType::IsAtomic => "atomic",
-            &InlinedClauseType::IsCompound => "compound",
-            &InlinedClauseType::IsInteger  => "integer",
-            &InlinedClauseType::IsRational => "rational",
-            &InlinedClauseType::IsString => "string",
-            &InlinedClauseType::IsFloat  => "float",
-            &InlinedClauseType::IsNonVar => "nonvar",
-            &InlinedClauseType::IsVar => "var"
+            &InlinedClauseType::CompareNumber(qt, ..) => qt.name(),
+            &InlinedClauseType::IsAtom(..) => "atom",
+            &InlinedClauseType::IsAtomic(..) => "atomic",
+            &InlinedClauseType::IsCompound(..) => "compound",
+            &InlinedClauseType::IsInteger (..) => "integer",
+            &InlinedClauseType::IsRational(..) => "rational",
+            &InlinedClauseType::IsString(..) => "string",
+            &InlinedClauseType::IsFloat (..) => "float",
+            &InlinedClauseType::IsNonVar(..) => "nonvar",
+            &InlinedClauseType::IsVar(..) => "var"
         }
     }
 
     pub fn from(name: &str, arity: usize) -> Option<Self> {
+        let r1 = temp_v!(1);
+        let r2 = temp_v!(2);
+
+        let a1 = ArithmeticTerm::Reg(r1);
+        let a2 = ArithmeticTerm::Reg(r2);
+
         match (name, arity) {
-            (">", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThan)),
-            ("<", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThan)),
-            (">=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThanOrEqual)),
-            ("<=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThanOrEqual)),
-            ("=\\=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::NotEqual)),
-            ("=:=", 2) => Some(InlinedClauseType::CompareNumber(CompareNumberQT::Equal)),
-            ("atom", 1) => Some(InlinedClauseType::IsAtom),
-            ("atomic", 1) => Some(InlinedClauseType::IsAtomic),
-            ("compound", 1) => Some(InlinedClauseType::IsCompound),
-            ("integer", 1) => Some(InlinedClauseType::IsInteger),
-            ("rational", 1) => Some(InlinedClauseType::IsRational),
-            ("string", 1) => Some(InlinedClauseType::IsString),
-            ("float", 1) => Some(InlinedClauseType::IsFloat),
-            ("nonvar", 1) => Some(InlinedClauseType::IsNonVar),
-            ("var", 1) => Some(InlinedClauseType::IsVar),
+            (">", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThan, a1, a2)),
+            ("<", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThan, a1, a2)),
+            (">=", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThanOrEqual,a1, a2)),
+            ("=<", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThanOrEqual, a1, a2)),
+            ("=\\=", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::NotEqual, a1, a2)),
+            ("=:=", 2) =>
+                Some(InlinedClauseType::CompareNumber(CompareNumberQT::Equal, a1, a2)),
+            ("atom", 1) => Some(InlinedClauseType::IsAtom(r1)),
+            ("atomic", 1) => Some(InlinedClauseType::IsAtomic(r1)),
+            ("compound", 1) => Some(InlinedClauseType::IsCompound(r1)),
+            ("integer", 1) => Some(InlinedClauseType::IsInteger(r1)),
+            ("rational", 1) => Some(InlinedClauseType::IsRational(r1)),
+            ("string", 1) => Some(InlinedClauseType::IsString(r1)),
+            ("float", 1) => Some(InlinedClauseType::IsFloat(r1)),
+            ("nonvar", 1) => Some(InlinedClauseType::IsNonVar(r1)),
+            ("var", 1) => Some(InlinedClauseType::IsVar(r1)),
             _ => None
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum CompareNumberQT {
     GreaterThan,
     LessThan,
@@ -634,7 +663,7 @@ impl CompareNumberQT {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum CompareTermQT {
     LessThan,
     LessThanOrEqual,
@@ -665,6 +694,7 @@ pub enum QueryTerm {
     Clause(Cell<RegType>, ClauseType, Vec<Box<Term>>),
     BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
     UnblockedCut(Cell<VarReg>),
+    GetLevelAndUnify(Cell<VarReg>, Rc<Var>),
     Jump(JumpStub)
 }
 
@@ -673,7 +703,8 @@ impl QueryTerm {
         match self {
             &QueryTerm::Clause(_, _, ref subterms) => subterms.len(),
             &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => 0,
-            &QueryTerm::Jump(ref vars) => vars.len()
+            &QueryTerm::Jump(ref vars) => vars.len(),
+            &QueryTerm::GetLevelAndUnify(..) => 1,
         }
     }
 }
@@ -683,13 +714,100 @@ pub struct Rule {
     pub clauses: Vec<QueryTerm>
 }
 
-#[derive(Clone)]
-pub enum ClauseType {
+#[derive(Copy, Clone, PartialEq)]
+pub enum SystemClauseType {
+    CheckCutPoint,
+    GetSCCCleaner,
+    InstallSCCCleaner,
+    InstallInferenceCounter,
+    RemoveCallPolicyCheck,
+    RemoveInferenceCounter,
+    RestoreCutPolicy,
+    SetCutPoint(RegType),
+    InferenceLevel,
+    CleanUpBlock,
+    EraseBall,
+    Fail,
+    GetBall,
+    GetCurrentBlock,
+    GetCutPoint,
+    InstallNewBlock,
+    ResetBlock,
+    SetBall,
+    SkipMaxList,
+    Succeed,
+    UnwindStack
+}
+
+impl SystemClauseType {
+    pub fn fixity(&self) -> Option<Fixity> {
+        None
+    }
+
+    pub fn name(&self) -> ClauseName {
+        match self {
+            &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
+            &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
+            &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
+            &SystemClauseType::InstallInferenceCounter =>
+                clause_name!("$install_inference_counter"),
+            &SystemClauseType::RemoveCallPolicyCheck =>
+                clause_name!("$remove_call_policy_check"),
+            &SystemClauseType::RemoveInferenceCounter =>
+                clause_name!("$remove_inference_counter"),
+            &SystemClauseType::RestoreCutPolicy => clause_name!("$restore_cut_policy"),
+            &SystemClauseType::SetCutPoint(_) => clause_name!("$set_cp"),
+            &SystemClauseType::InferenceLevel => clause_name!("$inference_level"),
+            &SystemClauseType::CleanUpBlock => clause_name!("$clean_up_block"),
+            &SystemClauseType::EraseBall => clause_name!("$erase_ball"),
+            &SystemClauseType::Fail => clause_name!("$fail"),
+            &SystemClauseType::GetBall => clause_name!("$get_ball"),
+            &SystemClauseType::GetCutPoint => clause_name!("$get_cp"),
+            &SystemClauseType::GetCurrentBlock => clause_name!("$get_current_block"),
+            &SystemClauseType::InstallNewBlock => clause_name!("$install_new_block"),
+            &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
+            &SystemClauseType::SetBall => clause_name!("$set_ball"),
+            &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
+            &SystemClauseType::Succeed => clause_name!("$succeed"),
+            &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
+        }
+    }
+
+    pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
+        match (name, arity) {
+            ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
+            ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
+            ("$install_scc_cleaner", 2) =>
+                Some(SystemClauseType::InstallSCCCleaner),
+            ("$install_inference_counter", 3) =>
+                Some(SystemClauseType::InstallInferenceCounter),
+            ("$remove_call_policy_check", 1) =>
+                Some(SystemClauseType::RemoveCallPolicyCheck),
+            ("$remove_inference_counter", 1) =>
+                Some(SystemClauseType::RemoveInferenceCounter),
+            ("$restore_cut_policy", 0) => Some(SystemClauseType::RestoreCutPolicy),
+            ("$set_cp", 1) => Some(SystemClauseType::SetCutPoint(temp_v!(1))),
+            ("$inference_level", 2) => Some(SystemClauseType::InferenceLevel),
+            ("$clean_up_block", 1) => Some(SystemClauseType::CleanUpBlock),
+            ("$erase_ball", 0) => Some(SystemClauseType::EraseBall),
+            ("$fail", 0) => Some(SystemClauseType::Fail),
+            ("$get_ball", 1) => Some(SystemClauseType::GetBall),
+            ("$get_current_block", 1) => Some(SystemClauseType::GetCurrentBlock),
+            ("$get_cp", 1) => Some(SystemClauseType::GetCutPoint),
+            ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
+            ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
+            ("$set_ball", 1) => Some(SystemClauseType::SetBall),
+            ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
+            ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
+            _ => None
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum BuiltInClauseType {
     AcyclicTerm,
     Arg,
-    CallN,
-    CallWithInferenceLimit,
-    Catch,
     Compare,
     CompareTerm(CompareTermQT),
     CyclicTerm,
@@ -698,16 +816,20 @@ pub enum ClauseType {
     Eq,
     Functor,
     Ground,
-    Inlined(InlinedClauseType),
-    Is,
+    Is(RegType, ArithmeticTerm),
     KeySort,
     NotEq,
+    Sort,
+}
+
+#[derive(Clone)]
+pub enum ClauseType {
+    BuiltIn(BuiltInClauseType),
+    CallN,
+    Inlined(InlinedClauseType),
     Op(ClauseName, Fixity, CodeIndex),
     Named(ClauseName, CodeIndex),
-    SetupCallCleanup,
-    SkipMaxList,
-    Sort,
-    Throw,
+    System(SystemClauseType)
 }
 
 #[derive(Clone)]
@@ -775,78 +897,122 @@ impl ClauseName {
     }
 }
 
-impl ClauseType {
-    pub fn fixity(&self) -> Option<Fixity> {
+impl BuiltInClauseType {
+    fn fixity(&self) -> Option<Fixity> {
         match self {
-            &ClauseType::Compare | &ClauseType::CompareTerm(_)
-          | &ClauseType::Inlined(InlinedClauseType::CompareNumber(_))
-          | &ClauseType::NotEq | &ClauseType::Is | &ClauseType::Eq => Some(Fixity::In),
-            &ClauseType::Op(_, fixity, _) => Some(fixity),
+            &BuiltInClauseType::Compare | &BuiltInClauseType::CompareTerm(_)
+          | &BuiltInClauseType::NotEq   | &BuiltInClauseType::Is(..) | &BuiltInClauseType::Eq
+                => Some(Fixity::In),
             _ => None
         }
     }
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &ClauseType::AcyclicTerm => clause_name!("acyclic_term"),
-            &ClauseType::Arg => clause_name!("arg"),
+            &BuiltInClauseType::AcyclicTerm => clause_name!("acyclic_term"),
+            &BuiltInClauseType::Arg => clause_name!("arg"),
+            &BuiltInClauseType::Compare => clause_name!("compare"),
+            &BuiltInClauseType::CompareTerm(qt) => clause_name!(qt.name()),
+            &BuiltInClauseType::CyclicTerm => clause_name!("cyclic_term"),
+            &BuiltInClauseType::Display => clause_name!("display"),
+            &BuiltInClauseType::DuplicateTerm => clause_name!("duplicate_term"),
+            &BuiltInClauseType::Eq => clause_name!("=="),
+            &BuiltInClauseType::Functor => clause_name!("functor"),
+            &BuiltInClauseType::Ground  => clause_name!("ground"),
+            &BuiltInClauseType::Is(..)  => clause_name!("is"),
+            &BuiltInClauseType::KeySort => clause_name!("keysort"),
+            &BuiltInClauseType::NotEq => clause_name!("\\=="),
+            &BuiltInClauseType::Sort => clause_name!("sort"),
+        }
+    }
+
+    pub fn arity(&self) -> usize {
+        match self {
+            &BuiltInClauseType::AcyclicTerm => 1,
+            &BuiltInClauseType::Arg => 3,
+            &BuiltInClauseType::Compare => 2,
+            &BuiltInClauseType::CompareTerm(_) => 2,
+            &BuiltInClauseType::CyclicTerm => 1,
+            &BuiltInClauseType::Display => 1,
+            &BuiltInClauseType::DuplicateTerm => 2,
+            &BuiltInClauseType::Eq => 2,
+            &BuiltInClauseType::Functor => 3,
+            &BuiltInClauseType::Ground  => 1,
+            &BuiltInClauseType::Is(..) => 2,
+            &BuiltInClauseType::KeySort => 2,
+            &BuiltInClauseType::NotEq => 2,
+            &BuiltInClauseType::Sort => 2,
+        }
+    }
+
+    pub fn from(name: &str, arity: usize) -> Option<Self> {
+        match (name, arity) {
+            ("acyclic_term", 1) => Some(BuiltInClauseType::AcyclicTerm),
+            ("arg", 3) => Some(BuiltInClauseType::Arg),
+            ("compare", 3) => Some(BuiltInClauseType::Compare),
+            ("cyclic_term", 1) => Some(BuiltInClauseType::CyclicTerm),
+            ("@>", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThan)),
+            ("@<", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::LessThan)),
+            ("@>=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual)),
+            ("@=<", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::LessThanOrEqual)),
+            ("\\=@=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::NotEqual)),
+            ("=@=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::Equal)),
+            ("display", 1) => Some(BuiltInClauseType::Display),
+            ("duplicate_term", 2) => Some(BuiltInClauseType::DuplicateTerm),
+            ("==", 2) => Some(BuiltInClauseType::Eq),
+            ("functor", 3) => Some(BuiltInClauseType::Functor),
+            ("ground", 1) => Some(BuiltInClauseType::Ground),
+            ("is", 2) => Some(BuiltInClauseType::Is(temp_v!(1), ArithmeticTerm::Reg(temp_v!(2)))),
+            ("keysort", 2) => Some(BuiltInClauseType::KeySort),
+            ("\\==", 2) => Some(BuiltInClauseType::NotEq),
+            ("sort", 2) => Some(BuiltInClauseType::Sort),
+            _ => None
+        }
+    }
+}
+
+impl ClauseType {
+    pub fn fixity(&self) -> Option<Fixity> {
+        match self {
+            &ClauseType::BuiltIn(ref built_in) => built_in.fixity(),
+            &ClauseType::Inlined(InlinedClauseType::CompareNumber(..)) => Some(Fixity::In),
+            &ClauseType::Op(_, fixity, _) => Some(fixity),
+            &ClauseType::System(ref system) => system.fixity(),
+            _ => None
+        }
+    }
+
+    pub fn name(&self) -> ClauseName {
+        match self {
             &ClauseType::CallN => clause_name!("call"),
-            &ClauseType::CallWithInferenceLimit => clause_name!("call_with_inference_limit"),
-            &ClauseType::Catch => clause_name!("catch"),
-            &ClauseType::Compare => clause_name!("compare"),
-            &ClauseType::CompareTerm(qt) => clause_name!(qt.name()),
-            &ClauseType::CyclicTerm => clause_name!("cyclic_term"),
-            &ClauseType::Display => clause_name!("display"),
-            &ClauseType::DuplicateTerm => clause_name!("duplicate_term"),
-            &ClauseType::Eq => clause_name!("=="),
-            &ClauseType::Functor => clause_name!("functor"),
-            &ClauseType::Ground  => clause_name!("ground"),
-            &ClauseType::Inlined(inlined) => clause_name!(inlined.name()),
-            &ClauseType::Is => clause_name!("is"),
-            &ClauseType::KeySort => clause_name!("keysort"),
-            &ClauseType::NotEq => clause_name!("\\=="),
+            &ClauseType::BuiltIn(ref built_in) => built_in.name(),
+            &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
             &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
-            &ClauseType::SetupCallCleanup => clause_name!("setup_call_cleanup"),
-            &ClauseType::SkipMaxList => clause_name!("$skip_max_list"),
-            &ClauseType::Sort => clause_name!("sort"),
-            &ClauseType::Throw => clause_name!("throw")
+            &ClauseType::System(ref system) => system.name(),
         }
     }
 
     pub fn from(name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
-        match (name.as_str(), arity) {
-            ("acyclic_term", 1) => ClauseType::AcyclicTerm,
-            ("arg", 3)   => ClauseType::Arg,
-            ("call", _)  => ClauseType::CallN,
-            ("call_with_inference_limit", 3) => ClauseType::CallWithInferenceLimit,
-            ("catch", 3) => ClauseType::Catch,
-            ("compare", 3) => ClauseType::Compare,
-            ("cyclic_term", 1) => ClauseType::CyclicTerm,
-            ("@>", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThan),
-            ("@<", 2) => ClauseType::CompareTerm(CompareTermQT::LessThan),
-            ("@>=", 2) => ClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual),
-            ("@<=", 2) => ClauseType::CompareTerm(CompareTermQT::LessThanOrEqual),
-            ("\\=@=", 2) => ClauseType::CompareTerm(CompareTermQT::NotEqual),
-            ("=@=", 2) => ClauseType::CompareTerm(CompareTermQT::Equal),
-            ("display", 1) => ClauseType::Display,
-            ("duplicate_term", 2) => ClauseType::DuplicateTerm,
-            ("==", 2) => ClauseType::Eq,
-            ("functor", 3) => ClauseType::Functor,
-            ("ground", 1) => ClauseType::Ground,
-            ("is", 2) => ClauseType::Is,
-            ("keysort", 2) => ClauseType::KeySort,
-            ("\\==", 2) => ClauseType::NotEq,
-            ("setup_call_cleanup", 3) => ClauseType::SetupCallCleanup,
-            ("$skip_max_list", 4) => ClauseType::SkipMaxList,
-            ("sort", 2) => ClauseType::Sort,
-            ("throw", 1) => ClauseType::Throw,
-            _ => if let Some(fixity) = fixity {
-                ClauseType::Op(name, fixity, CodeIndex::default())
-            } else {
-                ClauseType::Named(name, CodeIndex::default())
-            }
-        }
+        InlinedClauseType::from(name.as_str(), arity)
+            .map(ClauseType::Inlined)
+            .unwrap_or_else(|| {
+                BuiltInClauseType::from(name.as_str(), arity)
+                    .map(ClauseType::BuiltIn)
+                    .unwrap_or_else(|| {
+                        SystemClauseType::from(name.as_str(), arity)
+                            .map(ClauseType::System)
+                            .unwrap_or_else(|| {
+                                if let Some(fixity) = fixity {
+                                    ClauseType::Op(name, fixity, CodeIndex::default())
+                                } else if name.as_str() == "call" {
+                                    ClauseType::CallN
+                                } else {
+                                    ClauseType::Named(name, CodeIndex::default())
+                                }
+                            })
+                    })
+            })
     }
 }
 
@@ -877,18 +1043,22 @@ impl<'a> TermRef<'a> {
     }
 }
 
+#[derive(Clone)]
 pub enum ChoiceInstruction {
     RetryMeElse(usize),
     TrustMe,
     TryMeElse(usize)
 }
 
+#[derive(Clone)]
 pub enum CutInstruction {
     Cut(RegType),
     GetLevel(RegType),
+    GetLevelAndUnify(RegType),
     NeckCut
 }
 
+#[derive(Clone)]
 pub enum IndexedChoiceInstruction {
     Retry(usize),
     Trust(usize),
@@ -1177,7 +1347,7 @@ impl Neg for Number {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum ArithmeticTerm {
     Reg(RegType),
     Interm(usize),
@@ -1194,6 +1364,7 @@ impl ArithmeticTerm {
     }
 }
 
+#[derive(Clone)]
 pub enum ArithmeticInstruction {
     Add(ArithmeticTerm, ArithmeticTerm, usize),
     Sub(ArithmeticTerm, ArithmeticTerm, usize),
@@ -1212,44 +1383,11 @@ pub enum ArithmeticInstruction {
     Neg(ArithmeticTerm, usize)
 }
 
-pub enum BuiltInInstruction {
-    CallInlined(InlinedClauseType, Vec<RegType>),
-    CleanUpBlock,
-    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
-    DefaultRetryMeElse(usize),
-    DefaultSetCutPoint(RegType),
-    DefaultTrustMe,
-    EraseBall,
-    Fail,
-    GetArg(bool), // last call.
-    GetBall,
-    GetCurrentBlock,
-    GetCutPoint(RegType),
-    InferenceLevel(RegType, RegType),
-    InstallCleaner,
-    InstallInferenceCounter(RegType, RegType, RegType),
-    InstallNewBlock,
-    InternalCallN,
-    RemoveCallPolicyCheck,
-    RemoveInferenceCounter(RegType, RegType),
-    ResetBlock,
-    RestoreCutPolicy,
-    SetBall,
-    SetCutPoint(RegType),    
-    Succeed,
-    Unify,
-    UnwindStack
-}
-
 #[derive(Clone)]
 pub enum ControlInstruction {
     Allocate(usize), // num_frames.
     CallClause(ClauseType, usize, usize, bool), // name, arity, perm_vars after threshold, last call.
-    CheckCpExecute,
     Deallocate,
-    GetCleanerCall,
-    Goto(usize, usize, bool),  // p, arity, last call.
-    IsClause(bool, RegType, ArithmeticTerm), // last call, register of var, term.
     JmpBy(usize, usize, usize, bool), // arity, global_offset, perm_vars after threshold, last call.
     Proceed
 }
@@ -1258,19 +1396,17 @@ impl ControlInstruction {
     pub fn is_jump_instr(&self) -> bool {
         match self {
             &ControlInstruction::CallClause(..)  => true,
-            &ControlInstruction::GetCleanerCall => true,
-            &ControlInstruction::Goto(..) => true,
-            &ControlInstruction::IsClause(..) => true,
             &ControlInstruction::JmpBy(..) => true,
             _ => false
         }
     }
 }
 
+#[derive(Clone)]
 pub enum IndexingInstruction {
     SwitchOnTerm(usize, usize, usize, usize),
-    SwitchOnConstant(usize, HashMap<Constant, usize>),
-    SwitchOnStructure(usize, HashMap<(ClauseName, usize), usize>)
+    SwitchOnConstant(usize, Rc<HashMap<Constant, usize>>),
+    SwitchOnStructure(usize, Rc<HashMap<(ClauseName, usize), usize>>)
 }
 
 impl From<IndexingInstruction> for Line {
@@ -1279,6 +1415,7 @@ impl From<IndexingInstruction> for Line {
     }
 }
 
+#[derive(Clone)]
 pub enum FactInstruction {
     GetConstant(Level, Constant, RegType),
     GetList(Level, RegType),
@@ -1292,6 +1429,7 @@ pub enum FactInstruction {
     UnifyVoid(usize)
 }
 
+#[derive(Clone)]
 pub enum QueryInstruction {
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
@@ -1311,9 +1449,9 @@ pub type CompiledFact = Vec<FactInstruction>;
 
 pub type CompiledQuery = Vec<QueryInstruction>;
 
+#[derive(Clone)]
 pub enum Line {
     Arithmetic(ArithmeticInstruction),
-    BuiltIn(BuiltInInstruction),
     Choice(ChoiceInstruction),
     Control(ControlInstruction),
     Cut(CutInstruction),
@@ -1338,6 +1476,38 @@ pub enum Addr {
     Str(usize)
 }
 
+impl PartialEq<Ref> for Addr {
+    fn eq(&self, r: &Ref) -> bool {
+        self.as_var() == Some(*r)
+    }
+}
+
+// for use in MachineState::bind.
+impl PartialOrd<Ref> for Addr {
+    fn partial_cmp(&self, r: &Ref) -> Option<Ordering> {
+        match self {
+            &Addr::StackCell(fr, sc) =>
+                match *r {
+                    Ref::HeapCell(_) => Some(Ordering::Greater),
+                    Ref::StackCell(fr1, sc1) =>
+                        if fr1 < fr || (fr1 == fr && sc1 < sc) {
+                            Some(Ordering::Greater)
+                        } else if fr1 == fr && sc1 == sc {
+                            Some(Ordering::Equal)
+                        } else {
+                            Some(Ordering::Less)
+                        }
+                },
+            &Addr::HeapCell(h) =>
+                match r {
+                    Ref::StackCell(..) => Some(Ordering::Less),
+                    Ref::HeapCell(h1) => h.partial_cmp(h1)
+                },
+            _ => None
+        }
+    }
+}
+
 impl Addr {
     pub fn is_ref(&self) -> bool {
         match self {
@@ -1356,7 +1526,7 @@ impl Addr {
 
     pub fn is_protected(&self, e: usize) -> bool {
         match self {
-            &Addr::StackCell(fr, _) if fr > e => false,
+            &Addr::StackCell(addr, _) if addr >= e => false,
             _ => true
         }
     }
@@ -1401,6 +1571,15 @@ impl From<Ref> for Addr {
 pub enum Ref {
     HeapCell(usize),
     StackCell(usize, usize)
+}
+
+impl Ref {
+    pub fn as_addr(self) -> Addr {
+        match self {
+            Ref::HeapCell(h)       => Addr::HeapCell(h),
+            Ref::StackCell(fr, sc) => Addr::StackCell(fr, sc)
+        }
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -1449,15 +1628,32 @@ impl From<(usize, ClauseName)> for CodeIndex {
 
 #[derive(Clone, PartialEq)]
 pub enum CodePtr {
+    BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
+    CallN(usize, LocalCodePtr), // arity, local.
+    Local(LocalCodePtr)
+}
+
+impl CodePtr {
+    pub fn local(&self) -> LocalCodePtr {
+        match self {
+            &CodePtr::BuiltInClause(_, ref local)
+          | &CodePtr::CallN(_, ref local)
+          | &CodePtr::Local(ref local) => local.clone()
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum LocalCodePtr {
     DirEntry(usize, ClauseName), // offset, resident module name.
     TopLevel(usize, usize) // chunk_num, offset.
 }
 
-impl CodePtr {
-    pub fn module_name(&self) -> ClauseName {
-        match self {
-            &CodePtr::DirEntry(_, ref name) => name.clone(),
-            _ => ClauseName::BuiltIn("user")
+impl LocalCodePtr {
+    pub fn assign_if_local(&mut self, cp: CodePtr) {
+        match cp {
+            CodePtr::Local(local) => *self = local,
+            _ => {}
         }
     }
 }
@@ -1465,11 +1661,20 @@ impl CodePtr {
 impl PartialOrd<CodePtr> for CodePtr {
     fn partial_cmp(&self, other: &CodePtr) -> Option<Ordering> {
         match (self, other) {
-            (&CodePtr::DirEntry(p1, _), &CodePtr::DirEntry(p2, _)) =>
+            (&CodePtr::Local(ref l1), &CodePtr::Local(ref l2)) => l1.partial_cmp(l2),
+            _ => Some(Ordering::Greater)
+        }
+    }
+}
+
+impl PartialOrd<LocalCodePtr> for LocalCodePtr {
+    fn partial_cmp(&self, other: &LocalCodePtr) -> Option<Ordering> {
+        match (self, other) {
+            (&LocalCodePtr::DirEntry(p1, _), &LocalCodePtr::DirEntry(p2, _)) =>
                 p1.partial_cmp(&p2),
-            (&CodePtr::DirEntry(..), &CodePtr::TopLevel(_, _)) =>
+            (&LocalCodePtr::DirEntry(..), &LocalCodePtr::TopLevel(_, _)) =>
                 Some(Ordering::Less),
-            (&CodePtr::TopLevel(_, p1), &CodePtr::TopLevel(_, ref p2)) =>
+            (&LocalCodePtr::TopLevel(_, p1), &LocalCodePtr::TopLevel(_, ref p2)) =>
                 p1.partial_cmp(p2),
             _ => Some(Ordering::Greater)
         }
@@ -1478,7 +1683,33 @@ impl PartialOrd<CodePtr> for CodePtr {
 
 impl Default for CodePtr {
     fn default() -> Self {
-        CodePtr::TopLevel(0, 0)
+        CodePtr::Local(LocalCodePtr::default())
+    }
+}
+
+impl Default for LocalCodePtr {
+    fn default() -> Self {
+        LocalCodePtr::TopLevel(0, 0)
+    }
+}
+
+impl Add<usize> for LocalCodePtr {
+    type Output = LocalCodePtr;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        match self {
+            LocalCodePtr::DirEntry(p, name) => LocalCodePtr::DirEntry(p + rhs, name),
+            LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs)
+        }
+    }
+}
+
+impl AddAssign<usize> for LocalCodePtr {
+    fn add_assign(&mut self, rhs: usize) {
+        match self {
+            &mut LocalCodePtr::DirEntry(ref mut p, _) |
+            &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs
+        }
     }
 }
 
@@ -1487,8 +1718,8 @@ impl Add<usize> for CodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            CodePtr::DirEntry(p, name) => CodePtr::DirEntry(p + rhs, name),
-            CodePtr::TopLevel(cn, p) => CodePtr::TopLevel(cn, p + rhs)
+            CodePtr::Local(local) => CodePtr::Local(local + rhs),
+            CodePtr::CallN(_, local) | CodePtr::BuiltInClause(_, local) => CodePtr::Local(local + rhs),
         }
     }
 }
@@ -1496,8 +1727,8 @@ impl Add<usize> for CodePtr {
 impl AddAssign<usize> for CodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut CodePtr::DirEntry(ref mut p, _) |
-            &mut CodePtr::TopLevel(_, ref mut p) => *p += rhs
+            &mut CodePtr::Local(ref mut local) => *local += rhs,
+            _ => *self = CodePtr::Local(self.local() + rhs)
         }
     }
 }

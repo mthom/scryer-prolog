@@ -16,7 +16,7 @@ pub enum TokenOrRedirect {
     OpenList(Rc<Cell<bool>>),
     CloseList(Rc<Cell<bool>>),
     HeadTailSeparator,
-    Space
+//    Space
 }
 
 pub trait HCValueFormatter {
@@ -119,19 +119,15 @@ impl HCValueFormatter for TermFormatter {
             match fixity {
                 Fixity::Post => {
                     state_stack.push(TokenOrRedirect::Atom(ct.name()));
-                    state_stack.push(TokenOrRedirect::Space);
                     state_stack.push(TokenOrRedirect::Redirect);
                 },
                 Fixity::Pre => {
                     state_stack.push(TokenOrRedirect::Redirect);
-                    state_stack.push(TokenOrRedirect::Space);
                     state_stack.push(TokenOrRedirect::Atom(ct.name()));
                 },
                 Fixity::In => {
                     state_stack.push(TokenOrRedirect::Redirect);
-                    state_stack.push(TokenOrRedirect::Space);
                     state_stack.push(TokenOrRedirect::Atom(ct.name()));
-                    state_stack.push(TokenOrRedirect::Space);
                     state_stack.push(TokenOrRedirect::Redirect);
                 }
             }
@@ -285,8 +281,8 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         loop {
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
-                    TokenOrRedirect::Space =>
-                        self.outputter.append(" "),
+//                    TokenOrRedirect::Space =>
+//                        self.outputter.append(" "),
                     TokenOrRedirect::Atom(atom) =>
                         self.outputter.append(atom.as_str()),
                     TokenOrRedirect::Redirect =>

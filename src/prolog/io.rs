@@ -1,10 +1,6 @@
 use prolog::ast::*;
-use prolog::builtins::*;
-use prolog::codegen::*;
-use prolog::debray_allocator::*;
 use prolog::heap_print::*;
 use prolog::machine::*;
-use prolog::toplevel::*;
 
 use termion::raw::IntoRawMode;
 use termion::input::TermRead;
@@ -133,20 +129,8 @@ impl fmt::Display for ControlInstruction {
                 write!(f, "execute {}/{}, {}", ct, arity, pvs),
             &ControlInstruction::CallClause(ref ct, arity, pvs, false) =>
                 write!(f, "call {}/{}, {}", ct, arity, pvs),
-            &ControlInstruction::CheckCpExecute =>
-                write!(f, "check_cp_execute"),
             &ControlInstruction::Deallocate =>
                 write!(f, "deallocate"),
-            &ControlInstruction::GetCleanerCall =>
-                write!(f, "get_cleaner_call"),
-            &ControlInstruction::Goto(p, arity, false) =>
-                write!(f, "goto_call {}/{}", p, arity),
-            &ControlInstruction::Goto(p, arity, true) =>
-                write!(f, "goto_execute {}/{}", p, arity),
-            &ControlInstruction::IsClause(false, r, ref at) =>
-                write!(f, "is_call {}, {}", r, at),
-            &ControlInstruction::IsClause(true, r, ref at) =>
-                write!(f, "is_execute {}, {}", r, at),
             &ControlInstruction::JmpBy(arity, offset, pvs, false) =>
                 write!(f, "jmp_by_call {}/{}, {}", offset, arity, pvs),
             &ControlInstruction::JmpBy(arity, offset, pvs, true) =>
@@ -166,69 +150,6 @@ impl fmt::Display for IndexedChoiceInstruction {
                 write!(f, "retry {}", offset),
             &IndexedChoiceInstruction::Trust(offset) =>
                 write!(f, "trust {}", offset)
-        }
-    }
-}
-
-impl fmt::Display for BuiltInInstruction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &BuiltInInstruction::CallInlined(InlinedClauseType::CompareNumber(cmp), ref rs) =>
-                write!(f, "number_test {}, {}, {}", cmp, &rs[0], &rs[1]),
-            &BuiltInInstruction::CallInlined(ict, ref rs) =>
-                write!(f, "call_inlined_{}, {}", ict.name(), &rs[0]),
-            &BuiltInInstruction::CleanUpBlock =>
-                write!(f, "clean_up_block"),
-            &BuiltInInstruction::CompareNumber(cmp, ref at_1, ref at_2) =>
-                write!(f, "number_test {}, {}, {} ", cmp, at_1, at_2),
-            &BuiltInInstruction::DefaultRetryMeElse(o) =>
-                write!(f, "default_retry_me_else {}", o),
-            &BuiltInInstruction::DefaultSetCutPoint(r) =>
-                write!(f, "default_set_cp {}", r),
-            &BuiltInInstruction::DefaultTrustMe =>
-                write!(f, "default_trust_me"),
-            &BuiltInInstruction::InstallInferenceCounter(r1, r2, r3) =>
-                write!(f, "install_inference_counter {}, {}, {}", r1, r2, r3),
-            &BuiltInInstruction::EraseBall =>
-                write!(f, "erase_ball"),
-            &BuiltInInstruction::Fail =>
-                write!(f, "false"),
-            &BuiltInInstruction::GetArg(false) =>
-                write!(f, "get_arg_call X1, X2, X3"),
-            &BuiltInInstruction::GetArg(true) =>
-                write!(f, "get_arg_execute X1, X2, X3"),
-            &BuiltInInstruction::GetBall =>
-                write!(f, "get_ball X1"),
-            &BuiltInInstruction::GetCurrentBlock =>
-                write!(f, "get_current_block X1"),
-            &BuiltInInstruction::GetCutPoint(r) =>
-                write!(f, "get_cp {}", r),
-            &BuiltInInstruction::InferenceLevel(r1, r2) =>
-                write!(f, "inference_level {}, {}", r1, r2),
-            &BuiltInInstruction::InstallCleaner =>
-                write!(f, "install_cleaner"),
-            &BuiltInInstruction::InstallNewBlock =>
-                write!(f, "install_new_block"),
-            &BuiltInInstruction::InternalCallN =>
-                write!(f, "internal_call_N"),
-            &BuiltInInstruction::RemoveCallPolicyCheck =>
-                write!(f, "remove_call_policy_check"),
-            &BuiltInInstruction::RemoveInferenceCounter(r1, r2) =>
-                write!(f, "remove_inference_counter {}, {}", r1, r2),            
-            &BuiltInInstruction::ResetBlock =>
-                write!(f, "reset_block"),
-            &BuiltInInstruction::RestoreCutPolicy =>
-                write!(f, "restore_cut_point"),
-            &BuiltInInstruction::SetBall =>
-                write!(f, "set_ball"),
-            &BuiltInInstruction::SetCutPoint(r) =>
-                write!(f, "set_cp {}", r),
-            &BuiltInInstruction::Succeed =>
-                write!(f, "true"),
-            &BuiltInInstruction::UnwindStack =>
-                write!(f, "unwind_stack"),
-            &BuiltInInstruction::Unify =>
-                write!(f, "unify"),
         }
     }
 }
@@ -330,7 +251,9 @@ impl fmt::Display for CutInstruction {
             &CutInstruction::NeckCut =>
                 write!(f, "neck_cut"),
             &CutInstruction::GetLevel(r) =>
-                write!(f, "get_level {}", r)
+                write!(f, "get_level {}", r),
+            &CutInstruction::GetLevelAndUnify(r) =>
+                write!(f, "get_level_and_unify {}", r)
         }
     }
 }
@@ -364,42 +287,6 @@ impl fmt::Display for RegType {
             &RegType::Temp(val) => write!(f, "X{}", val)
         }
     }
-}
-
-#[allow(dead_code)]
-pub fn print_code(code: &Code) {
-    for clause in code {
-        match clause {
-            &Line::Arithmetic(ref arith) =>
-                println!("{}", arith),
-            &Line::Fact(ref fact) =>
-                for fact_instr in fact {
-                    println!("{}", fact_instr);
-                },
-            &Line::BuiltIn(ref instr) =>
-                println!("{}", instr),
-            &Line::Cut(ref cut) =>
-                println!("{}", cut),
-            &Line::Choice(ref choice) =>
-                println!("{}", choice),
-            &Line::Control(ref control) =>
-                println!("{}", control),
-            &Line::IndexedChoice(ref choice) =>
-                println!("{}", choice),
-            &Line::Indexing(ref indexing) =>
-                println!("{}", indexing),
-            &Line::Query(ref query) =>
-                for query_instr in query {
-                    println!("{}", query_instr);
-                }
-        }
-    }
-}
-
-pub fn parse_code(wam: &Machine, buffer: &str) -> Result<TopLevelPacket, ParserError>
-{
-    let mut worker = TopLevelWorker::new(buffer.as_bytes(), wam.atom_tbl());
-    worker.parse_code(&wam.op_dir)
 }
 
 pub enum Input {
@@ -439,279 +326,6 @@ pub fn read() -> Input {
         "clear" => Input::Clear,
         _       => Input::Line(buffer)
     }
-}
-
-pub(crate) trait TLInfo {
-    fn update_entry_index(&self, &ClauseName, usize, CodeIndex, &mut CodeIndex, usize);
-
-    // give the correct CodePtr offsets to CallClause's whose types are
-    // Named and Op. Enable late binding by setting to the default.
-    fn label_clauses(&self, code_size: usize, code_dir: &mut CodeDir, code: &mut Code)
-    {
-        for line in code.iter_mut() {
-            if let &mut Line::Control(ControlInstruction::CallClause(ref mut ct, a1, ..)) = line {
-                match ct {
-                    &mut ClauseType::Named(ref n1, ref mut cp)
-                  | &mut ClauseType::Op(ref n1, _, ref mut cp) => {
-                      let entry = code_dir.entry((n1.clone(), a1)).or_insert(CodeIndex::default());
-                      self.update_entry_index(n1, a1, entry.clone(), cp, code_size);
-                  },
-                    _ => {}
-                }
-            }
-        }
-    }
-}
-
-struct DeclInfo { name: ClauseName, arity: usize, module_name: ClauseName }
-
-impl TLInfo for DeclInfo {
-    fn update_entry_index(&self, n1: &ClauseName, a1: usize, entry: CodeIndex,
-                          cp: &mut CodeIndex, code_size: usize)
-    {
-        let (name, arity) = (self.name.clone(), self.arity);
-        
-        {
-            let mut entry = entry.0.borrow_mut();
-            
-            if entry.0 == IndexPtr::Undefined {
-                if &name == n1 && arity == a1 {                
-                    entry.0 = IndexPtr::Index(code_size);
-                }
-            }
-
-            entry.1 = self.module_name.clone();
-        }
-        
-        *cp = entry;
-    }
-}
-
-struct QueryInfo {}
-
-impl TLInfo for QueryInfo {
-    fn update_entry_index(&self, _: &ClauseName, _: usize, entry: CodeIndex,
-                          cp: &mut CodeIndex, _: usize)
-    {
-        *cp = entry;
-    }
-}
-
-// throw errors if declaration or query found.
-fn compile_relation(tl: &TopLevel) -> Result<Code, ParserError>
-{
-    let mut cg = CodeGenerator::<DebrayAllocator>::new();
-
-    match tl {
-        &TopLevel::Declaration(_) | &TopLevel::Query(_) =>
-            Err(ParserError::ExpectedRel),
-        &TopLevel::Predicate(ref clauses) =>
-            cg.compile_predicate(&clauses.0),
-        &TopLevel::Fact(ref fact) =>
-            Ok(cg.compile_fact(fact)),
-        &TopLevel::Rule(ref rule) =>
-            cg.compile_rule(rule)
-    }
-}
-
-// set first jmp_by_call or jmp_by_index instruction to code.len() -
-// idx, where idx is the place it occurs. It only does this to the
-// *first* uninitialized jmp index it encounters, then returns.
-fn set_first_index(code: &mut Code)
-{
-    let code_len = code.len();
-
-    for (idx, line) in code.iter_mut().enumerate() {
-        match line {
-            &mut Line::Control(ControlInstruction::JmpBy(_, ref mut offset, ..)) if *offset == 0 => {
-                *offset = code_len - idx;
-                break;
-            },
-            _ => {}
-        };
-    }
-}
-
-fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>) -> Result<(), ParserError>
-{
-    for tl in queue.iter() {
-        set_first_index(code);
-        code.append(&mut compile_relation(tl)?);
-    }
-
-    Ok(())
-}
-
-fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, code_size: usize,
-                 code_dir: &mut CodeDir)
-                 -> Result<(Code, AllocVarDict), ParserError>
-{
-    let mut cg = CodeGenerator::<DebrayAllocator>::new();
-    let mut code = try!(cg.compile_query(&terms));
-
-    compile_appendix(&mut code, queue)?;
-
-    let query_info = QueryInfo {};
-    query_info.label_clauses(code_size, code_dir, &mut code);
-
-    Ok((code, cg.take_vars()))
-}
-
-fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSession
-{
-    match tl {
-        TopLevel::Declaration(Declaration::Op(op_decl)) => {
-            try_eval_session!(op_decl.submit(clause_name!("user"), &mut wam.op_dir));
-            EvalSession::EntrySuccess
-        },
-        TopLevel::Declaration(Declaration::UseModule(name)) =>
-            wam.use_module_in_toplevel(name),
-        TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)) =>
-            wam.use_qualified_module_in_toplevel(name, exports),
-        TopLevel::Declaration(_) =>
-            EvalSession::from(ParserError::InvalidModuleDecl),
-        _ => {
-            let name = try_eval_session!(if let Some(name) = tl.name() {
-                Ok(name)
-            } else {
-                Err(SessionError::NamelessEntry)
-            });
-
-            let mut code = try_eval_session!(compile_relation(&tl));
-            try_eval_session!(compile_appendix(&mut code, queue));
-
-            let decl_info = DeclInfo { name: name.clone(), arity: tl.arity(),
-                                       module_name: clause_name!("user") };
-
-            decl_info.label_clauses(wam.code_size(), &mut wam.code_dir, &mut code);
-
-            if !code.is_empty() {
-                wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
-            } else {
-                EvalSession::from(SessionError::ImpermissibleEntry(String::from("no code generated.")))
-            }
-        }
-    }
-}
-
-pub fn compile_packet(wam: &mut Machine, tl: TopLevelPacket) -> EvalSession
-{
-    match tl {
-        TopLevelPacket::Query(terms, queue) =>
-            match compile_query(terms, queue, wam.code_size(), &mut wam.code_dir) {
-                Ok((mut code, vars)) => wam.submit_query(code, vars),
-                Err(e) => EvalSession::from(e)
-            },
-        TopLevelPacket::Decl(tl, queue) =>
-            compile_decl(wam, tl, queue)
-    }
-}
-
-pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
-{
-    fn get_module_name(module: &Option<Module>) -> ClauseName {
-        match module {
-            &Some(ref module) => module.module_decl.name.clone(),
-            _ => ClauseName::BuiltIn("user")
-        }
-    }
-
-    let mut module: Option<Module> = None;
-    let (mut code_dir, mut op_dir) = build_code_and_op_dirs();
-
-    let mut code = Vec::new();
-
-    let mut worker = TopLevelWorker::new(src_str.as_bytes(), wam.atom_tbl());
-    let tls = try_eval_session!(worker.parse_batch(&mut op_dir));
-
-    for tl in tls {
-        match tl {
-            TopLevelPacket::Query(..) =>
-                return EvalSession::from(ParserError::ExpectedRel),
-            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::Module(module_decl)), _) =>
-                if module.is_none() {
-                    let (builtin_code_dir, builtin_op_dir) = build_code_and_op_dirs();
-
-                    code_dir.extend(builtin_code_dir.into_iter());
-                    op_dir.extend(builtin_op_dir.into_iter());
-
-                    module = Some(Module::new(module_decl));
-                } else {
-                    return EvalSession::from(ParserError::InvalidModuleDecl);
-                },
-            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseModule(name)), _) => {
-                if let Some(ref submodule) = wam.get_module(name.clone()) {
-                    if let Some(ref mut module) = module {
-                        let mut code_index = machine_code_index!(&mut code_dir, &mut op_dir);
-                        
-                        module.use_module(submodule);
-                        code_index.use_module(submodule);
-                        
-                        continue;
-                    }
-                } else {
-                    return EvalSession::from(SessionError::ModuleNotFound);
-                }
-                
-                wam.use_module_in_toplevel(name);
-            },
-            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)), _) => {
-                if let Some(ref submodule) = wam.get_module(name.clone()) {
-                    if let Some(ref mut module) = module {
-                        let mut code_index = machine_code_index!(&mut code_dir, &mut op_dir);
-                        
-                        module.use_qualified_module(submodule, &exports);
-                        code_index.use_qualified_module(submodule, &exports);
-                        
-                        continue;
-                    }
-                } else {
-                    return EvalSession::from(SessionError::ModuleNotFound);
-                }
-
-                wam.use_qualified_module_in_toplevel(name, exports);
-            },
-            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::Op(..)), _) => {},
-            TopLevelPacket::Decl(decl, queue) => {
-                let p = code.len() + wam.code_size();
-                let mut decl_code = try_eval_session!(compile_relation(&decl));
-
-                try_eval_session!(compile_appendix(&mut decl_code, queue));
-
-                let name = try_eval_session!(if let Some(name) = decl.name() {
-                    Ok(name)
-                } else {
-                    Err(SessionError::NamelessEntry)
-                });
-
-                let module_name = get_module_name(&module);
-                let decl_info = DeclInfo { name, arity: decl.arity(),
-                                           module_name: module_name.clone() };
-
-                {
-                    let idx = code_dir.entry((decl_info.name.clone(), decl_info.arity))
-                        .or_insert(CodeIndex::default());
-                
-                    set_code_index!(idx, IndexPtr::Index(p), module_name);
-                }
-                
-                decl_info.label_clauses(p, &mut code_dir, &mut decl_code);
-                code.extend(decl_code.into_iter());
-            }
-        }
-    }
-
-    if let Some(mut module) = module {
-        module.code_dir.extend(as_module_code_dir(code_dir));
-        module.op_dir.extend(op_dir.into_iter());
-
-        wam.add_module(module, code);
-    } else {
-        wam.add_batched_code(code, code_dir);
-        wam.add_batched_ops(op_dir);
-    }
-
-    EvalSession::EntrySuccess
 }
 
 fn error_string(e: &String) -> String {
