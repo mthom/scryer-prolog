@@ -129,8 +129,6 @@ The following predicates are built-in to rusty-wam.
 * `atomic/1`
 * `between/3`
 * `call/1..62`
-* `call_cleanup/2`
-* `call_with_inference_limit/3`
 * `catch/3`
 * `compare/3`
 * `compound/1`
@@ -154,7 +152,6 @@ The following predicates are built-in to rusty-wam.
 * `repeat/0`
 * `reverse/2`
 * `select/3`
-* `setup_call_cleanup/3`
 * `sort/2`
 * `string/1`
 * `throw/1`
