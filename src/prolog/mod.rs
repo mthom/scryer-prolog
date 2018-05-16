@@ -9,8 +9,8 @@ pub mod ast;
 #[macro_use]
 pub mod allocator;
 pub mod toplevel;
+pub mod compile;
 pub mod arithmetic;
-pub mod builtins;
 pub mod codegen;
 pub mod copier;
 pub mod debray_allocator;

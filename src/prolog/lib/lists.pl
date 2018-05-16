@@ -1,7 +1,36 @@
+:- use_module(library(builtins)).
+
 :- module(lists, [member/2, select/3, append/3, memberchk/2,
-		  reverse/2, maplist/2, maplist/3, maplist/4,
-		  maplist/5, maplist/6, maplist/7, maplist/8,
-		  maplist/9]).
+		  reverse/2, length/2, maplist/2, maplist/3,
+		  maplist/4, maplist/5, maplist/6, maplist/7,
+		  maplist/8, maplist/9]).
+
+length(Xs, N) :-
+    var(N), !,
+    '$skip_max_list'(M, -1, Xs, Xs0),
+    (  Xs0 == [] -> N = M
+    ;  var(Xs0)  -> length_addendum(Xs0, N, M)).
+length(Xs, N) :-
+    integer(N),
+    N >= 0, !,
+    '$skip_max_list'(M, N, Xs, Xs0),
+    (  Xs0 == [] -> N = M
+    ;  var(Xs0)  -> R is N-M, length_rundown(Xs0, R)).
+length(_, N) :-
+    integer(N), !,
+    throw(error(domain_error(not_less_than_zero, N), length/2)).
+length(_, N) :-
+    throw(error(type_error(integer, N), length/2)).
+
+length_addendum([], N, N).
+length_addendum([_|Xs], N, M) :-
+    M1 is M + 1,
+    length_addendum(Xs, N, M1).
+
+length_rundown([], 0) :- !.
+length_rundown([_|Xs], N) :-
+    N1 is N-1,
+    length_rundown(Xs, N1).
 
 member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).

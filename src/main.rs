@@ -5,15 +5,12 @@ extern crate termion;
 mod prolog;
 
 use prolog::ast::*;
+use prolog::compile::*;
 use prolog::io::*;
 use prolog::machine::*;
 
 #[cfg(test)]
 mod tests;
-
-pub static LISTS: &str   = include_str!("./prolog/lib/lists.pl");
-pub static CONTROL: &str = include_str!("./prolog/lib/control.pl");
-pub static QUEUES: &str = include_str!("./prolog/lib/queues.pl");
 
 fn parse_and_compile_line(wam: &mut Machine, buffer: &str)
 {
@@ -28,11 +25,6 @@ fn parse_and_compile_line(wam: &mut Machine, buffer: &str)
 
 fn prolog_repl() {
     let mut wam = Machine::new();
-
-    load_init_str_and_include(&mut wam, BUILTINS, "builtins");
-    load_init_str(&mut wam, LISTS);
-    // load_init_str(&mut wam, CONTROL);
-    // load_init_str(&mut wam, QUEUES);
 
     loop {
         print!("prolog> ");

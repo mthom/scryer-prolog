@@ -17,7 +17,7 @@ pub enum TokenOrRedirect {
     OpenList(Rc<Cell<bool>>),
     CloseList(Rc<Cell<bool>>),
     HeadTailSeparator,
-    Space
+//    Space
 }
 
 pub trait HCValueFormatter {
@@ -283,8 +283,8 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         loop {
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
-                    TokenOrRedirect::Space =>
-                        self.outputter.append(" "),
+//                    TokenOrRedirect::Space =>
+//                        self.outputter.append(" "),
                     TokenOrRedirect::Atom(atom) =>
                         self.outputter.append(atom.as_str()),
                     TokenOrRedirect::Redirect =>

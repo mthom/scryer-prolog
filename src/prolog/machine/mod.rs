@@ -1,5 +1,5 @@
 use prolog::ast::*;
-use prolog::builtins::*;
+use prolog::compile::*;
 use prolog::heap_print::*;
 use prolog::tabled_rc::*;
 
@@ -17,9 +17,9 @@ use std::mem::swap;
 use std::ops::Index;
 use std::rc::Rc;
 
-pub(super) struct MachineCodeIndex<'a> {
-    pub(super) code_dir: &'a mut CodeDir,
-    pub(super) op_dir: &'a mut OpDir,
+pub struct MachineCodeIndex<'a> {
+    pub code_dir: &'a mut CodeDir,
+    pub op_dir: &'a mut OpDir,
 }
 
 pub struct Machine {
@@ -66,24 +66,33 @@ impl<'a> SubModuleUser for MachineCodeIndex<'a> {
         self.code_dir.insert((name, arity), CodeIndex::from(idx));
     }
 }
+    
+static LISTS: &str   = include_str!("../lib/lists.pl");
+static CONTROL: &str = include_str!("../lib/control.pl");
+static QUEUES: &str  = include_str!("../lib/queues.pl");
 
 impl Machine {
     pub fn new() -> Self {
-        let atom_tbl = Rc::new(RefCell::new(HashSet::new()));
-        let op_dir = default_op_dir(); //TODO: change to the builtins module once it's done.
-        //let (code, code_dir, op_dir) = default_build();
-
-        Machine {
-            ms: MachineState::new(atom_tbl),
+        let mut wam = Machine {
+            ms: MachineState::new(Rc::new(RefCell::new(HashSet::new()))),
             call_policy: Box::new(DefaultCallPolicy {}),
             cut_policy: Box::new(DefaultCutPolicy {}),
             code: Code::new(),
             code_dir: CodeDir::new(),
             term_dir: TermDir::new(),
-            op_dir,
+            op_dir: default_op_dir(),
             modules: HashMap::new(),
             cached_query: None
-        }
+        };
+
+        compile_listing(&mut wam, BUILTINS);
+        wam.use_module_in_toplevel(clause_name!("builtins"));
+
+        compile_listing(&mut wam, LISTS);
+        compile_listing(&mut wam, CONTROL);
+        compile_listing(&mut wam, QUEUES);
+        
+        wam
     }
 
     fn remove_module(&mut self, module_name: ClauseName) {

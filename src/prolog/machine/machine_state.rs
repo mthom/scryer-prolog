@@ -715,8 +715,8 @@ impl SCCCutPolicy {
         self.cont_pts.is_empty()
     }
 
-    pub(crate) fn push_cont_pt(&mut self, addr: Addr, b: usize, block: usize) {
-        self.cont_pts.push((addr, b, block));
+    pub(crate) fn push_cont_pt(&mut self, addr: Addr, b: usize, prev_b: usize) {
+        self.cont_pts.push((addr, b, prev_b));
     }
 
     pub(crate) fn pop_cont_pt(&mut self) -> Option<(Addr, usize, usize)> {
@@ -729,7 +729,7 @@ impl CutPolicy for SCCCutPolicy {
         let b = machine_st.b;
 
         if let Addr::Con(Constant::Usize(b0)) = machine_st[r].clone() {
-            if b > b0 {
+            if b > b0 {                
                 machine_st.b = b0;
                 machine_st.tidy_trail();
                 machine_st.or_stack.truncate(machine_st.b);
@@ -737,14 +737,13 @@ impl CutPolicy for SCCCutPolicy {
         } else {
             machine_st.fail = true;
             return;
-        }
-
-        if !self.out_of_cont_pts() {
-            machine_st.cp.assign_if_local(machine_st.p.clone());
-            machine_st.num_of_args = 0;
-            machine_st.b0 = machine_st.b;
-            // goto_call run_cleaners_without_handling/0, 370.
-            machine_st.p = dir_entry!(370, clause_name!("builtin"));
+        }    
+        
+        if let Some(&(_, b_cutoff, prev_block)) = self.cont_pts.last() {
+            if machine_st.b < b_cutoff {
+                machine_st.block = prev_block;
+                machine_st.unwind_stack();
+            }
         }
     }
 }

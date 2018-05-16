@@ -151,39 +151,57 @@ impl MachineState {
 
         Ok(())
     }
-            
-    pub(super) fn system_call(&mut self, ct: &SystemClauseType, call_policy: &mut Box<CallPolicy>,
+
+    fn install_new_block(&mut self, r: RegType) -> usize {
+        self.block = self.b;
+
+        let c = Constant::Usize(self.block);
+        let addr = self[r].clone();
+
+        self.write_constant_to_var(addr, c);
+        self.block
+    }
+
+    pub(super) fn system_call(&mut self, ct: &SystemClauseType,
+                              call_policy: &mut Box<CallPolicy>,
                               cut_policy:  &mut Box<CutPolicy>,)
                               -> CallResult
     {
         match ct {
-            &SystemClauseType::CheckCutPoint => {},
+            &SystemClauseType::CheckCutPoint => {
+                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                match addr {
+                    Addr::Con(Constant::Usize(old_b)) if self.b <= old_b + 2 => {},
+                    _ => self.fail = true
+                };
+            },
             &SystemClauseType::GetSCCCleaner => {
                 let dest = self[temp_v!(1)].clone();
 
                 match cut_policy.downcast_mut::<SCCCutPolicy>().ok() {
                     Some(sgc_policy) =>
-                        if let Some((addr, b_cutoff, prev_block)) = sgc_policy.pop_cont_pt() {
+                        if let Some((addr, b_cutoff, prev_b)) = sgc_policy.pop_cont_pt() {
                             if self.b <= b_cutoff + 1 {
-                                self.block = prev_block;
+                                self.block = prev_b;
 
                                 if let Some(r) = dest.as_var() {
-                                    self.bind(r, addr);
+                                    self.bind(r, addr.clone());
                                     return Ok(());
                                 }
                             } else {
-                                sgc_policy.push_cont_pt(addr, b_cutoff, prev_block);
+                                sgc_policy.push_cont_pt(addr, b_cutoff, prev_b);
                             }
                         },
                     None => panic!("expected SCCCutPolicy trait object.")
                 };
 
-                self.fail = true;                
+                self.fail = true;
             },
             &SystemClauseType::InstallSCCCleaner => {
                 let addr = self[temp_v!(1)].clone();
                 let b = self.b;
-                let block = self.block;
+                let prev_block = self.block;
 
                 if cut_policy.downcast_ref::<SCCCutPolicy>().is_err() {
                     *cut_policy = Box::new(SCCCutPolicy::new());
@@ -191,7 +209,10 @@ impl MachineState {
 
                 match cut_policy.downcast_mut::<SCCCutPolicy>().ok()
                 {
-                    Some(cut_policy) => cut_policy.push_cont_pt(addr, b, block),
+                    Some(cut_policy) => {
+                        self.install_new_block(temp_v!(2));
+                        cut_policy.push_cont_pt(addr, b, prev_block);
+                    },
                     None => panic!("install_cleaner: should have installed \\
                                     SCCCutPolicy.")
                 };
@@ -292,7 +313,7 @@ impl MachineState {
                         },
                     _ => self.fail = true
                 };
-            },            
+            },
             &SystemClauseType::CleanUpBlock => {
                 let nb = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -337,16 +358,11 @@ impl MachineState {
             &SystemClauseType::GetCutPoint => {
                 let a1 = self[temp_v!(1)].clone();
                 let a2 = Addr::Con(Constant::Usize(self.b));
-                
+
                 self.unify(a1, a2);
             },
             &SystemClauseType::InstallNewBlock => {
-                self.block = self.b;
-
-                let c = Constant::Usize(self.block);
-                let addr = self[temp_v!(1)].clone();
-
-                self.write_constant_to_var(addr, c);
+                self.install_new_block(temp_v!(1));
             },
             &SystemClauseType::ResetBlock => {
                 let addr = self.deref(self[temp_v!(1)].clone());

@@ -404,6 +404,19 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 };
 
                 match *term {
+                    &QueryTerm::GetLevelAndUnify(ref cell, ref var) => {
+                        let mut target = Vec::new();
+
+                        self.marker.reset_arg(1);
+                        self.marker.mark_var(var.clone(), Level::Shallow, cell,
+                                             term_loc, &mut target);
+
+                        if !target.is_empty() {
+                            code.push(Line::Query(target));
+                        }
+                        
+                        code.push(get_level_and_unify!(cell.get().norm()));
+                    },
                     &QueryTerm::UnblockedCut(ref cell) =>
                         code.push(set_cp!(cell.get().norm())),
                     &QueryTerm::BlockedCut =>

@@ -1065,13 +1065,6 @@ impl MachineState {
         duplicator.duplicate_term(addr);
     }
 
-    pub(super) fn unwind_stack(&mut self) {
-        self.b = self.block;
-        self.or_stack.truncate(self.b);
-
-        self.fail = true;
-    }
-
     pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
     {
         let stub = self.functor_stub(clause_name!("call"), arity + 1);
@@ -1121,7 +1114,14 @@ impl MachineState {
 
         Some((name, arity + narity - 1))
     }
+    
+    pub(super) fn unwind_stack(&mut self) {
+        self.b = self.block;
+        self.or_stack.truncate(self.b);
 
+        self.fail = true;
+    }
+    
     fn heap_ball_boundary_diff(&self) -> usize {
         if self.ball.boundary > self.heap.h {
             self.ball.boundary - self.heap.h
@@ -1943,6 +1943,13 @@ impl MachineState {
                 let b0 = self.b0;
 
                 self[r] = Addr::Con(Constant::Usize(b0));
+                self.p += 1;
+            },
+            &CutInstruction::GetLevelAndUnify(r) => {
+                let b0 = Addr::Con(Constant::Usize(self.b0));
+                let a  = self[r].clone();
+
+                self.unify(a, b0);
                 self.p += 1;
             },
             &CutInstruction::Cut(r) => {

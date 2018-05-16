@@ -1,4 +1,5 @@
 use prolog::ast::*;
+use prolog::machine::*;
 use prolog::num::*;
 use prolog::parser::parser::*;
 use prolog::tabled_rc::*;
@@ -412,6 +413,12 @@ impl RelationWorker {
                     
                     self.queue.push_back(clauses);
                     Ok(QueryTerm::Jump(stub))
+                } else if name.as_str() == "$get_level" && terms.len() == 1 {
+                    if let Term::Var(_, ref var) = *terms[0] {
+                        Ok(QueryTerm::GetLevelAndUnify(Cell::default(), var.clone()))
+                    } else {
+                        Err(ParserError::InadmissibleQueryTerm)
+                    }
                 } else {
                     Ok(QueryTerm::Clause(Cell::default(),
                                          ClauseType::from(name, terms.len(), fixity),
@@ -558,7 +565,8 @@ impl<R: Read> TopLevelWorker<R> {
         TopLevelWorker { parser: Parser::new(inner, atom_tbl) }
     }
 
-    pub fn parse_batch(&mut self, op_dir: &mut OpDir) -> Result<Vec<TopLevelPacket>, SessionError>
+    pub fn parse_batch<'a>(&mut self, wam: &Machine, mut indices: MachineCodeIndex<'a>)
+                           -> Result<Vec<TopLevelPacket>, SessionError>
     {
         let mut preds = vec![];
         let mut mod_name = clause_name!("user");
@@ -572,7 +580,7 @@ impl<R: Read> TopLevelWorker<R> {
 
         while !self.parser.eof() {
             self.parser.reset(); // empty the parser stack of token descriptions.
-            let term = self.parser.read_term(&op_dir)?;
+            let term = self.parser.read_term(&indices.op_dir)?;
 
             let mut new_rel_worker = RelationWorker::new();
             let tl = new_rel_worker.try_term_to_tl(term, true)?;
@@ -584,8 +592,12 @@ impl<R: Read> TopLevelWorker<R> {
             rel_worker.absorb(new_rel_worker);
 
             match tl {
+                TopLevel::Declaration(Declaration::UseModule(name)) => 
+                    if let Some(module) = wam.get_module(name) {
+                        indices.use_module(module);
+                    },                
                 TopLevel::Declaration(Declaration::Op(op_decl)) => {
-                    op_decl.submit(mod_name.clone(), op_dir)?;
+                    op_decl.submit(mod_name.clone(), indices.op_dir)?;
                 },
                 TopLevel::Declaration(Declaration::Module(actual_mod)) => {
                     mod_name = actual_mod.name.clone();

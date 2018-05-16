@@ -1,4 +1,3 @@
-use prolog::builtins::*;
 use prolog::num::bigint::BigInt;
 use prolog::num::{Float, ToPrimitive, Zero};
 use prolog::num::rational::Ratio;
@@ -160,6 +159,19 @@ pub struct Module {
     pub code_dir: ModuleCodeDir,
     pub op_dir: OpDir
 }
+
+pub fn default_op_dir() -> OpDir {
+    let module_name = clause_name!("builtins");
+    let mut op_dir = OpDir::new();
+
+    op_dir.insert((clause_name!(":-"), Fixity::In),  (XFX, 1200, module_name.clone()));
+    op_dir.insert((clause_name!(":-"), Fixity::Pre), (FX, 1200, module_name.clone()));
+    op_dir.insert((clause_name!("?-"), Fixity::Pre), (FX, 1200, module_name.clone()));
+
+    op_dir
+}
+
+pub static BUILTINS: &str = include_str!("./lib/builtins.pl");
 
 impl Module {
     pub fn new(module_decl: ModuleDecl) -> Self {
@@ -468,7 +480,7 @@ pub enum ParserError
 {
     Arithmetic(ArithmeticError),
     BackQuotedString,
-    BuiltInArityMismatch(&'static str),
+    // BuiltInArityMismatch(&'static str),
     UnexpectedChar(char),
     UnexpectedEOF,
     IO(IOError),
@@ -682,6 +694,7 @@ pub enum QueryTerm {
     Clause(Cell<RegType>, ClauseType, Vec<Box<Term>>),
     BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
     UnblockedCut(Cell<VarReg>),
+    GetLevelAndUnify(Cell<VarReg>, Rc<Var>),
     Jump(JumpStub)
 }
 
@@ -690,7 +703,8 @@ impl QueryTerm {
         match self {
             &QueryTerm::Clause(_, _, ref subterms) => subterms.len(),
             &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => 0,
-            &QueryTerm::Jump(ref vars) => vars.len()
+            &QueryTerm::Jump(ref vars) => vars.len(),
+            &QueryTerm::GetLevelAndUnify(..) => 1,
         }
     }
 }
@@ -763,7 +777,7 @@ impl SystemClauseType {
         match (name, arity) {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
-            ("$install_scc_cleaner", 1) =>
+            ("$install_scc_cleaner", 2) =>
                 Some(SystemClauseType::InstallSCCCleaner),
             ("$install_inference_counter", 3) =>
                 Some(SystemClauseType::InstallInferenceCounter),
@@ -940,7 +954,7 @@ impl BuiltInClauseType {
             ("@>", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThan)),
             ("@<", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::LessThan)),
             ("@>=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual)),
-            ("@<=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::LessThanOrEqual)),
+            ("@=<", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::LessThanOrEqual)),
             ("\\=@=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::NotEqual)),
             ("=@=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::Equal)),
             ("display", 1) => Some(BuiltInClauseType::Display),
@@ -1040,6 +1054,7 @@ pub enum ChoiceInstruction {
 pub enum CutInstruction {
     Cut(RegType),
     GetLevel(RegType),
+    GetLevelAndUnify(RegType),
     NeckCut
 }
 
@@ -1372,7 +1387,7 @@ pub enum ArithmeticInstruction {
 pub enum ControlInstruction {
     Allocate(usize), // num_frames.
     CallClause(ClauseType, usize, usize, bool), // name, arity, perm_vars after threshold, last call.
-    Deallocate,    
+    Deallocate,
     JmpBy(usize, usize, usize, bool), // arity, global_offset, perm_vars after threshold, last call.
     Proceed
 }
@@ -1481,7 +1496,7 @@ impl PartialOrd<Ref> for Addr {
                             Some(Ordering::Equal)
                         } else {
                             Some(Ordering::Less)
-                        }                    
+                        }
                 },
             &Addr::HeapCell(h) =>
                 match r {
@@ -1635,13 +1650,6 @@ pub enum LocalCodePtr {
 }
 
 impl LocalCodePtr {
-    pub fn module_name(&self) -> ClauseName {
-        match self {
-            &LocalCodePtr::DirEntry(_, ref name) => name.clone(),
-            _ => ClauseName::BuiltIn("user")
-        }
-    }
-
     pub fn assign_if_local(&mut self, cp: CodePtr) {
         match cp {
             CodePtr::Local(local) => *self = local,
@@ -1690,7 +1698,7 @@ impl Add<usize> for LocalCodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            LocalCodePtr::DirEntry(p, name) => LocalCodePtr::DirEntry(p + rhs, name),            
+            LocalCodePtr::DirEntry(p, name) => LocalCodePtr::DirEntry(p + rhs, name),
             LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs)
         }
     }

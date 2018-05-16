@@ -248,3 +248,8 @@ macro_rules! top_level_code_ptr {
     )
 }
 
+macro_rules! get_level_and_unify {
+    ($r: expr) => (
+        Line::Cut(CutInstruction::GetLevelAndUnify($r))
+    )
+}

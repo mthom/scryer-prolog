@@ -57,6 +57,10 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Var(Level::Root, cell, rc_atom!("!"));
                 QueryIterator { state_stack: vec![state] }
             },
+            &QueryTerm::GetLevelAndUnify(ref cell, ref var) => {
+                let state = TermIterState::Var(Level::Root, cell, var.clone());
+                QueryIterator { state_stack: vec![state] }
+            },
             &QueryTerm::Jump(ref vars) => {
                 let state_stack = vars.iter().rev().map(|t| {
                     TermIterState::subterm_to_state(Level::Shallow, t)
@@ -336,6 +340,11 @@ impl<'a> ChunkedIterator<'a>
                     if self.chunk_num > 0 {
                         self.deep_cut_encountered = true;
                     }
+                },
+                ChunkedTerm::BodyTerm(&QueryTerm::GetLevelAndUnify(..)) => {
+                    result.push(term);
+                    arity = 1;
+                    break;
                 },
                 ChunkedTerm::BodyTerm(&QueryTerm::UnblockedCut(..)) =>
                     result.push(term),

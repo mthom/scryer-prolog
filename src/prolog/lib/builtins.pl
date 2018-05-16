@@ -4,7 +4,8 @@
 	(\/)/2, (is)/2, (xor)/2, (div)/2, (//)/2, (rdiv)/2, (<<)/2,
 	(>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2,
 	(-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2, (==)/2,
-	(\==)/2, catch/3, throw/1, true/0, false/0, length/2]).
+	(\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2, (\=@=)/2,
+	catch/3, throw/1, true/0, false/0]).
 
 % arithmetic operators.
 :- op(700, xfx, is).
@@ -43,6 +44,12 @@
 % term comparison.
 :- op(700, xfx, ==).
 :- op(700, xfx, \==).
+:- op(700, xfx, @=<).
+:- op(700, xfx, @>=).
+:- op(700, xfx, @<).
+:- op(700, xfx, @>).
+:- op(700, xfx, =@=).
+:- op(700, xfx, \=@=).
 
 % the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
 max_arity(63).
@@ -137,6 +144,39 @@ univ_worker(Term, List, _) :-
     I1 is I0 + 1,
     '$get_args'(Args, Func, I1, N).
 
+% setup_call_cleanup.
+
+/* past work on setup_call_cleanup.
+
+setup_call_cleanup(S, G, C) :-
+    S, !, '$get_current_block'(Bb),
+    ( var(C) -> throw(error(instantiation_error, setup_call_cleanup/3))
+    ; scc_helper(C, G, Bb) ).
+
+scc_helper(C, G, Bb) :-
+    '$get_level'(Cp), '$install_scc_cleaner'(C, NBb), call(G),
+    ( '$check_cp'(Cp) -> '$reset_block'(Bb), run_cleaners_without_handling(Cp)
+    ; true
+    ; '$reset_block'(NBb), '$fail').
+scc_helper(_, _, Bb) :-
+    '$reset_block'(Bb), '$get_ball'(Ball),
+    run_cleaners_with_handling, throw(Ball).
+scc_helper(_, _, _) :-
+    run_cleaners_without_handling(Cp), false.
+
+run_cleaners_with_handling :-
+    '$get_scc_cleaner'(C), catch(C, _, true), !,
+    run_cleaners_with_handling.
+run_cleaners_with_handling :-
+    '$restore_cut_policy'.
+
+run_cleaners_without_handling(Cp) :-
+    '$get_scc_cleaner'(C), C, !, run_cleaners_without_handling(Cp).
+run_cleaners_without_handling(Cp) :-
+    '$set_cp'(Cp), '$restore_cut_policy'.
+
+*/
+
 % exceptions.
 
 catch(G,C,R) :- '$get_current_block'(Bb), catch(G,C,R,Bb).
@@ -151,32 +191,3 @@ handle_ball(Ball, C, R) :- Ball = C, !, '$erase_ball', call(R).
 handle_ball(_, _, _) :- '$unwind_stack'.
 
 throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
-
-% length.
-
-length(Xs, N) :-
-    var(N), !,
-    '$skip_max_list'(M, -1, Xs, Xs0),
-    (  Xs0 == [] -> N = M
-    ;  var(Xs0)  -> '$length_addendum'(Xs0, N, M)).
-length(Xs, N) :-
-    integer(N),
-    N >= 0, !,
-    '$skip_max_list'(M, N, Xs, Xs0),
-    (  Xs0 == [] -> N = M
-    ;  var(Xs0)  -> R is N-M, '$length_rundown'(Xs0, R)).
-length(_, N) :-
-    integer(N), !,
-    throw(error(domain_error(not_less_than_zero, N), length/2)).
-length(_, N) :-
-    throw(error(type_error(integer, N), length/2)).
-
-'$length_addendum'([], N, N).
-'$length_addendum'([_|Xs], N, M) :-
-    M1 is M + 1,
-    '$length_addendum'(Xs, N, M1).
-
-'$length_rundown'([], 0) :- !.
-'$length_rundown'([_|Xs], N) :-
-    N1 is N-1,
-    '$length_rundown'(Xs, N1).
