@@ -552,7 +552,11 @@ impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Constant::Atom(ref atom) =>
-                write!(f, "{}", atom),
+                if atom.as_str().chars().any(|c| ".$'\" ".contains(c)) {
+                    write!(f, "'{}'", atom.as_str())
+                } else {
+                    write!(f, "{}", atom.as_str())
+                },
             &Constant::Char(c) =>
                 write!(f, "'{}'", c as u8),
             &Constant::EmptyList =>
