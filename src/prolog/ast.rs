@@ -1504,8 +1504,8 @@ impl PartialOrd<Ref> for Addr {
                 },
             &Addr::HeapCell(h) =>
                 match r {
-                    Ref::StackCell(..) => Some(Ordering::Less),
-                    Ref::HeapCell(h1) => h.partial_cmp(h1)
+                    &Ref::StackCell(..) => Some(Ordering::Less),
+                    &Ref::HeapCell(h1) => h.partial_cmp(&h1)
                 },
             _ => None
         }
