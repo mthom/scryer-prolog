@@ -106,8 +106,8 @@ impl MachineState {
         let max_steps = self.store(self.deref(self[temp_v!(2)].clone()));
 
         match max_steps {
-            Addr::Con(Constant::Number(Number::Integer(ref max_steps)))
-                if max_steps.to_isize().map(|i| i >= -1).unwrap_or(false) => {
+            Addr::Con(Constant::Number(Number::Integer(ref max_steps))) =>
+                if max_steps.to_isize().map(|i| i >= -1).unwrap_or(false) {
                     let n = self.store(self.deref(self[temp_v!(1)].clone()));
 
                     match n {
@@ -145,8 +145,13 @@ impl MachineState {
                             }
                         }
                     }
+                } else {
+                    self.fail = true;
                 },
-            _ => self.fail = true
+            _ => {
+                let stub = self.functor_stub(clause_name!("$skip_max_list"), 4);
+                return Err(self.error_form(self.instantiation_error(), stub));
+            }
         };
 
         Ok(())
