@@ -102,7 +102,7 @@ impl MachineState {
         }
     }
 
-    pub(super) fn skip_max_list(&mut self) -> Result<(), MachineError> {
+    pub(super) fn skip_max_list(&mut self) -> CallResult {
         let max_steps = self.store(self.deref(self[temp_v!(2)].clone()));
 
         match max_steps {
@@ -149,8 +149,8 @@ impl MachineState {
                     self.fail = true;
                 },
             _ => {
-                let stub = self.functor_stub(clause_name!("$skip_max_list"), 4);
-                return Err(self.error_form(self.instantiation_error(), stub));
+                let stub = MachineError::functor_stub(clause_name!("$skip_max_list"), 4);
+                return Err(self.error_form(MachineError::instantiation_error(), stub));
             }
         };
 
@@ -242,8 +242,8 @@ impl MachineState {
                                             CallWithInferenceLimitCallPolicy.")
                         },
                     _ => {
-                        let stub = self.functor_stub(clause_name!("call_with_inference_limit"), 3);
-                        let type_error = self.error_form(self.type_error(ValidType::Integer, a2),
+                        let stub = MachineError::functor_stub(clause_name!("call_with_inference_limit"), 3);
+                        let type_error = self.error_form(MachineError::type_error(ValidType::Integer, a2),
                                                          stub);
                         self.throw_exception(type_error)
                     }

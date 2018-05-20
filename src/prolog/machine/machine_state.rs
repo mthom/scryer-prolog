@@ -365,10 +365,15 @@ pub(crate) trait CallPolicy: Any {
     fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
                 arity: usize, idx: CodeIndex)
                 -> CallResult
-    {
+    {                
         match idx.0.borrow().0 {
-            IndexPtr::Undefined =>
-                return Err(machine_st.existence_error(name, arity)),
+            IndexPtr::Undefined => {
+                let stub = MachineError::functor_stub(name.clone(), arity);
+                let h = machine_st.heap.h;
+                
+                return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
+                                                 stub));
+            },
             IndexPtr::Index(compiled_tl_index) => {
                 let module_name = idx.0.borrow().1.clone();
 
@@ -387,8 +392,13 @@ pub(crate) trait CallPolicy: Any {
                        -> CallResult
     {
         match idx.0.borrow().0 {
-            IndexPtr::Undefined =>
-                return Err(machine_st.existence_error(name, arity)),
+            IndexPtr::Undefined => {
+                let stub = MachineError::functor_stub(name.clone(), arity);
+                let h = machine_st.heap.h;
+                
+                return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
+                                                 stub));
+            },
             IndexPtr::Index(compiled_tl_index) => {
                 let module_name = idx.0.borrow().1.clone();
 
@@ -475,7 +485,7 @@ pub(crate) trait CallPolicy: Any {
             &BuiltInClauseType::Sort => {
                 machine_st.check_sort_errors()?;
 
-                let stub = machine_st.functor_stub(clause_name!("sort"), 2);
+                let stub = MachineError::functor_stub(clause_name!("sort"), 2);
                 let mut list = machine_st.try_from_list(temp_v!(1), stub)?;
 
                 list.sort_unstable_by(|a1, a2| machine_st.compare_term_test(a1, a2));
@@ -491,7 +501,7 @@ pub(crate) trait CallPolicy: Any {
             &BuiltInClauseType::KeySort => {
                 machine_st.check_keysort_errors()?;
 
-                let stub = machine_st.functor_stub(clause_name!("keysort"), 2);
+                let stub = MachineError::functor_stub(clause_name!("keysort"), 2);
                 let mut list = machine_st.try_from_list(temp_v!(1), stub)?;
                 let mut key_pairs = Vec::new();
 
@@ -544,11 +554,19 @@ pub(crate) trait CallPolicy: Any {
                     if let Some(idx) = code_dirs.get(name.clone(), arity, user) {
                         self.context_call(machine_st, name, arity, idx)?;
                     } else {
-                        return Err(machine_st.existence_error(name, arity));
+                        let h = machine_st.heap.h;
+                        let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
+                        return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
+                                                         stub));
                     },
-                ClauseType::System(_) =>
-                    return Err(machine_st.type_error(ValidType::Callable,
-                                                     Addr::Con(Constant::Atom(name))))
+                ClauseType::System(_) => {
+                    let name = Addr::Con(Constant::Atom(name));
+                    let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
+                    
+                    return Err(machine_st.error_form(MachineError::type_error(ValidType::Callable,
+                                                                              name),
+                                                     stub));
+                }
             };
         }
 

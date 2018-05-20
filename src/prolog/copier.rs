@@ -61,6 +61,7 @@ pub(crate) trait CopierTarget
                             }
 
                             list_redirect.insert(a, self.threshold());
+                            
                             self[scan] = HeapCellValue::Addr(Addr::Lis(self.threshold()));
 
                             let hcv = self[a].clone();

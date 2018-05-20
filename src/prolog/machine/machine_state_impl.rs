@@ -323,7 +323,7 @@ impl MachineState {
         };
     }
 
-    pub(super) fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, MachineError> {
+    pub(super) fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, MachineStub> {
         match at {
             &ArithmeticTerm::Reg(r)        => self.arith_eval_by_metacall(r),
             &ArithmeticTerm::Interm(i)     => Ok(self.interms[i-1].clone()),
@@ -332,7 +332,7 @@ impl MachineState {
     }
 
     fn get_rational(&self, at: &ArithmeticTerm, caller: &MachineStub)
-                    -> Result<Rc<Ratio<BigInt>>, MachineError>
+                    -> Result<Rc<Ratio<BigInt>>, MachineStub>
     {
         let n = self.get_number(at)?;
 
@@ -342,7 +342,7 @@ impl MachineState {
                 if let Some(r) = Ratio::from_float(fl.into_inner()) {
                     Ok(Rc::new(r))
                 } else {
-                    Err(self.error_form(self.instantiation_error(), caller.clone()))
+                    Err(self.error_form(MachineError::instantiation_error(), caller.clone()))
                 },
             Number::Integer(bi) =>
                 Ok(Rc::new(Ratio::from_integer((*bi).clone())))
@@ -361,11 +361,11 @@ impl MachineState {
         Rc::new(BigInt::from_signed_bytes_le(&f(&u_n1, &u_n2).to_bytes_le()))
     }
 
-    pub(super) fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, MachineError>
+    pub(super) fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, MachineStub>
     {
         let a = self[r].clone();
 
-        let caller = self.functor_stub(clause_name!("(is)"), 2);
+        let caller = MachineError::functor_stub(clause_name!("(is)"), 2);
         let mut interms: Vec<Number> = Vec::with_capacity(64);
 
         for heap_val in self.post_order_iter(a) {
@@ -395,7 +395,8 @@ impl MachineState {
                         "xor" => interms.push(Number::Integer(self.xor(a1, a2)?)),
                         "mod" => interms.push(Number::Integer(self.modulus(a1, a2)?)),
                         "rem" => interms.push(Number::Integer(self.remainder(a1, a2)?)),
-                        _     => return Err(self.error_form(self.instantiation_error(), caller))
+                        _     => return Err(self.error_form(MachineError::instantiation_error(),
+                                                            caller))
                     }
                 },
                 HeapCellValue::NamedStr(1, name, Some(Fixity::Pre)) => {
@@ -403,13 +404,14 @@ impl MachineState {
 
                     match name.as_str() {
                         "-" => interms.push(- a1),
-                         _  => return Err(self.error_form(self.instantiation_error(), caller))
+                        _   => return Err(self.error_form(MachineError::instantiation_error(),
+                                                          caller))
                     }
                 },
                 HeapCellValue::Addr(Addr::Con(Constant::Number(n))) =>
                     interms.push(n),
                 _ =>
-                    return Err(self.error_form(self.instantiation_error(), caller))
+                    return Err(self.error_form(MachineError::instantiation_error(), caller))
             }
         };
 
@@ -417,75 +419,75 @@ impl MachineState {
     }
 
     fn rdiv(&self, r1: Rc<Ratio<BigInt>>, r2: Rc<Ratio<BigInt>>)
-            -> Result<Rc<Ratio<BigInt>>, MachineError>
+            -> Result<Rc<Ratio<BigInt>>, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(rdiv)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(rdiv)"), 2);
 
         if *r2 == Ratio::zero() {
-            Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor), stub))
+            Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
         } else {
             Ok(Rc::new(&*r1 / &*r2))
         }
     }
 
-    fn fidiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
+    fn fidiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(div)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(div)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor), stub))
+                    Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
                 } else {
                     Ok(Rc::new(n1.div_floor(&n2)))
                 },
             (Number::Integer(_), n2) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n2))),
                                     stub)),
             (n1, _) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n1))),
                                     stub))
         }
     }
 
-    fn idiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
+    fn idiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(//)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(//)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor), stub))
+                    Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
                 } else {
                     Ok(Rc::new(&*n1 / &*n2))
                 },
             (Number::Integer(_), n2) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n2))),
                                     stub)),
             (n1, _) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n1))),
                                     stub))
         }
     }
 
-    fn div(&self, n1: Number, n2: Number) -> Result<Number, MachineError>
+    fn div(&self, n1: Number, n2: Number) -> Result<Number, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(/)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(/)"), 2);
 
         if n2.is_zero() {
-            Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor), stub))
+            Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
         } else {
             Ok(n1 / n2)
         }
     }
 
-    fn shr(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
+    fn shr(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(>>)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(>>)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
@@ -494,19 +496,19 @@ impl MachineState {
                     _        => Ok(Rc::new(&*n1 >> usize::max_value()))
                 },
             (Number::Integer(_), n2) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n2))),
                                     stub)),
             (n1, _) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n1))),
                                     stub))
         }
     }
 
-    fn shl(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
+    fn shl(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(<<)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(<<)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
@@ -515,110 +517,112 @@ impl MachineState {
                     _        => Ok(Rc::new(&*n1 << usize::max_value()))
                 },
             (Number::Integer(_), n2) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n2))),
                                     stub)),
             (n1, _) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n1))),
                                     stub))
         }
     }
 
-    fn xor(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
+    fn xor(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(xor)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(xor)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 ^ u_n2)),
             (Number::Integer(_), n2) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n2))),
                                     stub)),
             (n1, _) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n1))),
                                     stub))
         }
     }
 
-    fn and(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
+    fn and(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(/\\)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(/\\)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
             (Number::Integer(_), n2) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n2))),
                                     stub)),
             (n1, _) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
                                                     Addr::Con(Constant::Number(n1))),
                                     stub))
         }
     }
 
-    fn modulus(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
+    fn modulus(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(mod)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(mod)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor), stub))
+                    Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor),
+                                        stub))
                 } else {
                     Ok(Rc::new(n1.mod_floor(&n2)))
                 },
             (Number::Integer(_), n2) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n2))),
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
+                                                             Addr::Con(Constant::Number(n2))),
                                     stub)),
             (n1, _) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n1))),
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
+                                                             Addr::Con(Constant::Number(n1))),
                                     stub))
         }
     }
 
-    fn remainder(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
+    fn remainder(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(rem)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(rem)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 if *n2 == BigInt::zero() {
-                    Err(self.error_form(self.evaluation_error(EvalError::ZeroDivisor), stub))
+                    Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor),
+                                        stub))
                 } else {
                     Ok(Rc::new(&*n1 % &*n2))
                 },
             (Number::Integer(_), n2) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n2))),
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
+                                                             Addr::Con(Constant::Number(n2))),
                                     stub)),
             (n1, _) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n1))),
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
+                                                             Addr::Con(Constant::Number(n1))),
                                     stub))
         }
     }
 
-    fn or(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineError>
+    fn or(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
-        let stub = self.functor_stub(clause_name!("(\\/)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("(\\/)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
             (Number::Integer(_), n2) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n2))),
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
+                                                             Addr::Con(Constant::Number(n2))),
                                     stub)),
             (n1, _) =>
-                Err(self.error_form(self.type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n1))),
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
+                                                             Addr::Con(Constant::Number(n1))),
                                     stub))
         }
     }
@@ -647,7 +651,7 @@ impl MachineState {
                 self.p += 1;
             },
             &ArithmeticInstruction::RDiv(ref a1, ref a2, t) => {
-                let stub = self.functor_stub(clause_name!("(rdiv)"), 2);
+                let stub = MachineError::functor_stub(clause_name!("(rdiv)"), 2);
 
                 let r1 = try_or_fail!(self, self.get_rational(a1, &stub));
                 let r2 = try_or_fail!(self, self.get_rational(a2, &stub));
@@ -1067,7 +1071,7 @@ impl MachineState {
 
     pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
     {
-        let stub = self.functor_stub(clause_name!("call"), arity + 1);
+        let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
         let addr = self.store(self.deref(self.registers[arity].clone()));
 
         let (name, narity) = match addr {
@@ -1077,7 +1081,7 @@ impl MachineState {
                 if let HeapCellValue::NamedStr(narity, name, _) = result {
                     if narity + arity > 63 {
                         let representation_error =
-                            self.error_form(self.representation_error(RepFlag::MaxArity), stub);
+                            self.error_form(MachineError::representation_error(RepFlag::MaxArity), stub);
 
                         self.throw_exception(representation_error);
                         return None;
@@ -1099,13 +1103,13 @@ impl MachineState {
             },
             Addr::Con(Constant::Atom(name)) => (name, 0),
             Addr::HeapCell(_) | Addr::StackCell(_, _) => {
-                let instantiation_error = self.error_form(self.instantiation_error(), stub);
+                let instantiation_error = self.error_form(MachineError::instantiation_error(), stub);
                 self.throw_exception(instantiation_error);
 
                 return None;
             },
             _ => {
-                let type_error = self.error_form(self.type_error(ValidType::Callable, addr), stub);
+                let type_error = self.error_form(MachineError::type_error(ValidType::Callable, addr), stub);
                 self.throw_exception(type_error);
 
                 return None;
@@ -1169,19 +1173,19 @@ impl MachineState {
     // arg(+N, +Term, ?Arg)
     pub(super) fn try_arg(&mut self) -> CallResult
     {
-        let stub = self.functor_stub(clause_name!("arg"), 3);
+        let stub = MachineError::functor_stub(clause_name!("arg"), 3);
         let n = self.store(self.deref(self[temp_v!(1)].clone()));
 
         match n {
             Addr::HeapCell(_) | Addr::StackCell(..) => // 8.5.2.3 a)
-                return Err(self.error_form(self.instantiation_error(), stub)),
+                return Err(self.error_form(MachineError::instantiation_error(), stub)),
             Addr::Con(Constant::Number(Number::Integer(n))) => {
                 if n.is_negative() {
                     // 8.5.2.3 e)
                     let n = Addr::Con(Constant::Number(Number::Integer(n)));
-                    return Err(self.error_form(self.domain_error(DomainError::NotLessThanZero,
-                                                                 n),
-                                               stub));
+                    let dom_err = MachineError::domain_error(DomainError::NotLessThanZero, n);
+                    
+                    return Err(self.error_form(dom_err, stub));
                 }
                 
                 let n = match n.to_usize() {
@@ -1196,7 +1200,7 @@ impl MachineState {
 
                 match term {
                     Addr::HeapCell(_) | Addr::StackCell(..) => // 8.5.2.3 b)
-                        return Err(self.error_form(self.instantiation_error(), stub)),
+                        return Err(self.error_form(MachineError::instantiation_error(), stub)),
                     Addr::Str(o) =>
                         match self.heap[o].clone() {
                             HeapCellValue::NamedStr(arity, _, _) if 1 <= n && n <= arity => {
@@ -1217,14 +1221,14 @@ impl MachineState {
                             self.fail = true;
                         },
                     _ => // 8.5.2.3 d)
-                        return Err(self.error_form(self.type_error(ValidType::Compound, term),
+                        return Err(self.error_form(MachineError::type_error(ValidType::Compound, term),
                                                    stub))
                 }
                 
                 
             },
             _ => // 8.5.2.3 c)
-                return Err(self.error_form(self.type_error(ValidType::Integer, n), stub))
+                return Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
         }
 
         Ok(())
@@ -1482,7 +1486,7 @@ impl MachineState {
     }
 
     pub(super) fn try_functor(&mut self) -> CallResult {
-        let stub = self.functor_stub(clause_name!("functor"), 3);
+        let stub = MachineError::functor_stub(clause_name!("functor"), 3);
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
         match a1.clone() {
@@ -1501,7 +1505,7 @@ impl MachineState {
                 let arity = self.store(self.deref(self[temp_v!(3)].clone()));
 
                 if name.is_ref() || arity.is_ref() { // 8.5.1.3 a) & 8.5.1.3 b)
-                    return Err(self.error_form(self.instantiation_error(), stub));
+                    return Err(self.error_form(MachineError::instantiation_error(), stub));
                 }
 
                 if let Addr::Con(Constant::Number(Number::Integer(arity))) = arity {
@@ -1514,14 +1518,14 @@ impl MachineState {
                     };
 
                     if arity > MAX_ARITY as isize {
+                        let rep_err = MachineError::representation_error(RepFlag::MaxArity);
                         // 8.5.1.3 f)
-                        return Err(self.error_form(self.representation_error(RepFlag::MaxArity),
-                                                   stub));
+                        return Err(self.error_form(rep_err, stub));
                     } else if arity < 0 {
                         // 8.5.1.3 g)
-                        return Err(self.error_form(self.domain_error(DomainError::NotLessThanZero,
-                                                                     Addr::Con(integer!(arity))),
-                                                   stub));
+                        let dom_err = MachineError::domain_error(DomainError::NotLessThanZero,
+                                                                 Addr::Con(integer!(arity)));
+                        return Err(self.error_form(dom_err, stub));
                     }
 
                     match name {
@@ -1544,15 +1548,15 @@ impl MachineState {
                             self.unify(a1, f_a);
                         },
                         Addr::Con(_) =>
-                            return Err(self.error_form(self.type_error(ValidType::Atom, name),
+                            return Err(self.error_form(MachineError::type_error(ValidType::Atom, name),
                                                        stub)), // 8.5.1.3 e)
                         _ =>
-                            return Err(self.error_form(self.type_error(ValidType::Atomic, name),
+                            return Err(self.error_form(MachineError::type_error(ValidType::Atomic, name),
                                                        stub))  // 8.5.1.3 c)
                     };
                 } else if !arity.is_ref() {
                     // 8.5.1.3 d)
-                    return Err(self.error_form(self.type_error(ValidType::Integer, arity), stub));
+                    return Err(self.error_form(MachineError::type_error(ValidType::Integer, arity), stub));
                 }
             }
         };
@@ -1591,7 +1595,7 @@ impl MachineState {
     }
 
     pub(super) fn try_from_list(&self, r: RegType, caller: MachineStub)
-                                -> Result<Vec<Addr>, MachineError>
+                                -> Result<Vec<Addr>, MachineStub>
     {
         let a1 = self.store(self.deref(self[r].clone()));
 
@@ -1613,13 +1617,13 @@ impl MachineState {
                                 Addr::Con(Constant::EmptyList) =>
                                     break,
                                 Addr::HeapCell(_) | Addr::StackCell(..) =>
-                                    return Err(self.error_form(self.instantiation_error(), caller)),
+                                    return Err(self.error_form(MachineError::instantiation_error(), caller)),
                                 _ =>
-                                    return Err(self.error_form(self.type_error(ValidType::List, a1),
+                                    return Err(self.error_form(MachineError::type_error(ValidType::List, a1),
                                                                caller))
                             },
                         _ =>
-                            return Err(self.error_form(self.type_error(ValidType::List, a1),
+                            return Err(self.error_form(MachineError::type_error(ValidType::List, a1),
                                                        caller))
                     };
                 }
@@ -1627,31 +1631,31 @@ impl MachineState {
                 Ok(result)
             },
             Addr::HeapCell(_) | Addr::StackCell(..) =>
-                Err(self.error_form(self.instantiation_error(), caller)),
+                Err(self.error_form(MachineError::instantiation_error(), caller)),
             Addr::Con(Constant::EmptyList) =>
                 Ok(vec![]),
             _ =>
-                Err(self.error_form(self.type_error(ValidType::List, a1), caller))
+                Err(self.error_form(MachineError::type_error(ValidType::List, a1), caller))
         }
     }
 
     // see 8.4.4.3 of Draft Technical Corrigendum 2 for an error guide.
-    pub(super) fn project_onto_key(&self, a: Addr) -> Result<Addr, MachineError> {
-        let stub = self.functor_stub(clause_name!("keysort"), 2);
+    pub(super) fn project_onto_key(&self, a: Addr) -> Result<Addr, MachineStub> {
+        let stub = MachineError::functor_stub(clause_name!("keysort"), 2);
 
         match self.store(self.deref(a)) {
             Addr::HeapCell(_) | Addr::StackCell(..) =>
-                Err(self.error_form(self.instantiation_error(), stub)),
+                Err(self.error_form(MachineError::instantiation_error(), stub)),
             Addr::Str(s) =>
                 match self.heap[s].clone() {
                     HeapCellValue::NamedStr(2, ref name, Some(Fixity::In))
                         if *name == clause_name!("-") =>
                            Ok(Addr::HeapCell(s+1)),
-                    _ => Err(self.error_form(self.type_error(ValidType::Pair,
+                    _ => Err(self.error_form(MachineError::type_error(ValidType::Pair,
                                                              self.heap[s].as_addr(s)),
                                              stub))
                 },
-            a => Err(self.error_form(self.type_error(ValidType::Pair, a), stub))
+            a => Err(self.error_form(MachineError::type_error(ValidType::Pair, a), stub))
         }
     }
 
