@@ -57,7 +57,10 @@ impl<'a> SubModuleUser for MachineCodeIndex<'a> {
 
     fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
         if let Some(ref mut code_idx) = self.code_dir.get_mut(&(name.clone(), arity)) {
-            println!("warning: overwriting {}/{}", &name, arity);
+            if !code_idx.is_undefined() {
+                println!("warning: overwriting {}/{}", &name, arity);
+            }
+            
             set_code_index!(code_idx, idx.0, idx.1);
 
             return;

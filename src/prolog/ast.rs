@@ -1609,6 +1609,18 @@ pub enum IndexPtr {
 #[derive(Clone)]
 pub struct CodeIndex(pub Rc<RefCell<(IndexPtr, ClauseName)>>);
 
+impl CodeIndex {
+    pub fn is_undefined(&self) -> bool {
+        let index_ptr = self.0.borrow().0;
+        
+        if let IndexPtr::Undefined = index_ptr {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ModuleCodeIndex(pub IndexPtr, pub ClauseName);
 

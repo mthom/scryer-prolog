@@ -148,9 +148,14 @@ impl MachineState {
                 } else {
                     self.fail = true;
                 },
-            _ => {
+            Addr::HeapCell(_) | Addr::StackCell(..) => {
                 let stub = MachineError::functor_stub(clause_name!("$skip_max_list"), 4);
                 return Err(self.error_form(MachineError::instantiation_error(), stub));
+            },
+            addr => {
+                let stub = MachineError::functor_stub(clause_name!("$skip_max_list"), 4);
+                return Err(self.error_form(MachineError::type_error(ValidType::Integer, addr),
+                                           stub));
             }
         };
 
