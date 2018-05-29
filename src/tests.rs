@@ -36,6 +36,10 @@ impl HCValueOutputter for TestOutputter {
         self.focus += focus;
     }
 
+    fn push_char(&mut self, c: char) {
+        self.focus.push(c);
+    }
+
     fn begin_new_var(&mut self) {
         if !self.focus.is_empty() {
             let mut focus = String::new();

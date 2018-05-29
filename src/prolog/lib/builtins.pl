@@ -7,15 +7,6 @@
 	(\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2, (\=@=)/2,
 	catch/3, throw/1, true/0, false/0]).
 
-','(G1, G2) :- '$get_cp'(B), ','(G1, G2, B).
-
-','(!, ','(G1, G2), B) :- '$set_cp'(B), ','(G1, G2, B).
-','(!, !, B) :- '$set_cp'(B).
-','(!, G, B) :- '$set_cp'(B), G.
-','(G, ','(G2, G3), B) :- !, G, ','(G2, G3, B).
-','(G, !, B) :- !, G, '$set_cp'(B).
-','(G1, G2, _) :- G1, G2.
-
 % arithmetic operators.
 :- op(700, xfx, is).
 :- op(500, yfx, +).
@@ -72,6 +63,15 @@ false :- '$fail'.
 
 % control operators.
 
+','(G1, G2) :- '$get_cp'(B), ','(G1, G2, B).
+
+','(!, ','(G1, G2), B) :- '$set_cp'(B), ','(G1, G2, B).
+','(!, !, B) :- '$set_cp'(B).
+','(!, G, B) :- '$set_cp'(B), G.
+','(G, ','(G2, G3), B) :- !, G, ','(G2, G3, B).
+','(G, !, B) :- !, G, '$set_cp'(B).
+','(G1, G2, _) :- G1, G2.
+
 ;(G1, G2) :- '$get_cp'(B), ;(G1, G2, B).
 
 ;(G1, G4, B) :- compound(G1), G1 = ->(G2, G3), (G2 -> G3 ; '$set_cp'(B), G4).
@@ -87,8 +87,8 @@ G1 -> G2 :- '$get_cp'(B), ->(G1, G2, B).
 
 % arg.
 
-/* Here is the old, SWI Prolog-imitative arg/3. The new, ISO Prolog
- * compliant arg/3 is implemented in Rust.
+/* Here is the old, SWI Prolog-imitative arg/3. It has been superseded by an ISO Prolog
+ * compliant arg/3 implemented in Rust.
 
 arg(N, Functor, Arg) :- var(N), !, functor(Functor, _, Arity), arg_(N, 1, Arity, Functor, Arg).
 arg(N, Functor, Arg) :- integer(N), !, functor(Functor, _, Arity), '$get_arg'(N, Functor, Arg).

@@ -46,6 +46,7 @@ pub trait HCValueOutputter {
     type Output;
 
     fn new() -> Self;
+    fn push_char(&mut self, char);
     fn append(&mut self, &str);
     fn begin_new_var(&mut self);
     fn result(self) -> Self::Output;
@@ -69,6 +70,10 @@ impl HCValueOutputter for PrinterOutputter {
         self.contents += contents;
     }
 
+    fn push_char(&mut self, c: char) {
+        self.contents.push(c);
+    }
+    
     fn begin_new_var(&mut self) {
         if self.contents.len() != 0 {
             self.contents += ", ";
@@ -233,12 +238,17 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         match c {
             Constant::Char(c) if c == '\n' =>
                 self.outputter.append("'\\n'"),
-//            Constant::Char(c) if c == '\f' =>
-//                self.outputter.append("\\f"),
+            //            Constant::Char(c) if c == '\f' =>
+            //                self.outputter.append("\\f"),
             Constant::Char(c) if c == '\r' =>
                 self.outputter.append("'\\r'"),
             Constant::Char(c) if c == '\t' =>
                 self.outputter.append("'\\t'"),
+            Constant::Char(c) => {
+                self.outputter.append("'");
+                self.outputter.push_char(c);
+                self.outputter.append("'");
+            },
 //            Constant::Char(c) if c == '\b' =>
 //                self.outputter.append("\\b"),
 //            Constant::Char(c) if c == '\\a' =>
