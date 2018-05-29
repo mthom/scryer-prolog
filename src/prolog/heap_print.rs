@@ -238,23 +238,23 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         match c {
             Constant::Char(c) if c == '\n' =>
                 self.outputter.append("'\\n'"),
-            //            Constant::Char(c) if c == '\f' =>
-            //                self.outputter.append("\\f"),
             Constant::Char(c) if c == '\r' =>
                 self.outputter.append("'\\r'"),
             Constant::Char(c) if c == '\t' =>
                 self.outputter.append("'\\t'"),
+//          Constant::Char(c) if c == '\f' =>
+//              self.outputter.append("\\f"),            
+//          Constant::Char(c) if c == '\b' =>
+//              self.outputter.append("\\b"),
+//          Constant::Char(c) if c == '\\a' =>
+//              self.outputter.append("\a"),
+//          Constant::Char(c) if c == '\\v' =>
+//              self.outputter.append("\\v"),            
             Constant::Char(c) => {
                 self.outputter.append("'");
                 self.outputter.push_char(c);
                 self.outputter.append("'");
             },
-//            Constant::Char(c) if c == '\b' =>
-//                self.outputter.append("\\b"),
-//            Constant::Char(c) if c == '\\a' =>
-//                self.outputter.append("\a"),
-//            Constant::Char(c) if c == '\\v' =>
-//                self.outputter.append("\\v"),
             _ =>
                 self.outputter.append(format!("{}", c).as_str())
         }
