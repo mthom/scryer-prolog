@@ -18,6 +18,29 @@ impl fmt::Display for IndexPtr {
     }
 }
 
+impl fmt::Display for Constant {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Constant::Atom(ref atom) =>
+                if atom.as_str().chars().any(|c| ".$'\" ".contains(c)) {
+                    write!(f, "'{}'", atom.as_str())
+                } else {
+                    write!(f, "{}", atom.as_str())
+                },
+            &Constant::Char(c) =>
+                write!(f, "'{}'", c as u8),
+            &Constant::EmptyList =>
+                write!(f, "[]"),
+            &Constant::Number(ref n) =>
+                write!(f, "{}", n),
+            &Constant::String(ref s) =>
+                write!(f, "\"{}\"", s),
+            &Constant::Usize(integer) =>
+                write!(f, "u{}", integer)
+        }
+    }
+}
+
 impl fmt::Display for ClauseName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.as_str())

@@ -166,7 +166,8 @@ pub fn default_op_dir() -> OpDir {
 
     op_dir.insert((clause_name!(":-"), Fixity::In),  (XFX, 1200, module_name.clone()));
     op_dir.insert((clause_name!(":-"), Fixity::Pre), (FX, 1200, module_name.clone()));
-    op_dir.insert((clause_name!("?-"), Fixity::Pre), (FX, 1200, module_name.clone()));
+    op_dir.insert((clause_name!("?-"), Fixity::Pre), (FX, 1200, module_name.clone()));    
+    op_dir.insert((clause_name!(","),  Fixity::In), (XFY, 1000, module_name.clone()));
 
     op_dir
 }
@@ -544,29 +545,6 @@ impl Constant {
         match self {
             Constant::Number(Number::Integer(b)) => Some(b),
             _ => None
-        }
-    }
-}
-
-impl fmt::Display for Constant {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Constant::Atom(ref atom) =>
-                if atom.as_str().chars().any(|c| ".$'\" ".contains(c)) {
-                    write!(f, "'{}'", atom.as_str())
-                } else {
-                    write!(f, "{}", atom.as_str())
-                },
-            &Constant::Char(c) =>
-                write!(f, "'{}'", c as u8),
-            &Constant::EmptyList =>
-                write!(f, "[]"),
-            &Constant::Number(ref n) =>
-                write!(f, "{}", n),
-            &Constant::String(ref s) =>
-                write!(f, "\"{}\"", s),
-            &Constant::Usize(integer) =>
-                write!(f, "u{}", integer)
         }
     }
 }

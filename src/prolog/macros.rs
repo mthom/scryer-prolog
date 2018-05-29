@@ -1,4 +1,7 @@
 macro_rules! clause_name {
+    ($name: expr, $tbl: expr) => (
+        ClauseName::User(TabledRc::new($name, $tbl.clone()))
+    ) ;
     ($name: expr) => (
         ClauseName::BuiltIn($name)
     )
