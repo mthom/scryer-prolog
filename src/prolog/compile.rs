@@ -88,10 +88,16 @@ impl TLInfo for QueryInfo {
     }
 }
 
-pub fn parse_code(wam: &Machine, buffer: &str) -> Result<TopLevelPacket, ParserError>
+pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, ParserError>
 {
-    let mut worker = TopLevelWorker::new(buffer.as_bytes(), wam.atom_tbl());
-    worker.parse_code(&wam.op_dir)
+    let atom_tbl = wam.atom_tbl();    
+    let index = MachineCodeIndex {
+        code_dir: &mut wam.code_dir,
+        op_dir: &mut wam.op_dir
+    };
+    
+    let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, index);
+    worker.parse_code()
 }
 
 // throw errors if declaration or query found.
@@ -220,13 +226,11 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
 
     let mut code = Vec::new();
 
-    let mut worker = TopLevelWorker::new(src_str.as_bytes(), wam.atom_tbl());
-
     let tls = {
-        let indices = MachineCodeIndex { code_dir: &mut code_dir,
-                                         op_dir: &mut op_dir };
-
-        try_eval_session!(worker.parse_batch(&wam, indices))
+        let indices = MachineCodeIndex { code_dir: &mut code_dir, op_dir: &mut op_dir };    
+        let mut worker = TopLevelWorker::new(src_str.as_bytes(), wam.atom_tbl(), indices);
+        
+        try_eval_session!(worker.parse_batch(&wam))
     };
 
     for tl in tls {
@@ -255,7 +259,8 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
 
                 wam.use_module_in_toplevel(name);
             },
-            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)), _)
+            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)),
+                                 _)
                 =>
             {
                 if let Some(ref submodule) = wam.get_module(name.clone()) {

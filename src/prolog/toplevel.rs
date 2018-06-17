@@ -5,7 +5,7 @@ use prolog::parser::parser::*;
 use prolog::tabled_rc::*;
 
 use std::collections::{HashSet, VecDeque};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::io::Read;
 use std::mem;
 use std::rc::Rc;
@@ -164,7 +164,7 @@ fn is_consistent(tl: &TopLevel, clauses: &Vec<PredicateClause>) -> bool
     }
 }
 
-pub fn deque_to_packet(head: TopLevel, deque: VecDeque<TopLevel>) -> TopLevelPacket
+fn deque_to_packet(head: TopLevel, deque: VecDeque<TopLevel>) -> TopLevelPacket
 {
     match head {
         TopLevel::Query(query) => TopLevelPacket::Query(query, Vec::from(deque)),
@@ -172,7 +172,7 @@ pub fn deque_to_packet(head: TopLevel, deque: VecDeque<TopLevel>) -> TopLevelPac
     }
 }
 
-pub fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError>
+fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError>
 {
     let mut clauses: Vec<PredicateClause> = vec![];
 
@@ -210,6 +210,11 @@ pub fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserErr
     } else {
         Ok(TopLevel::Predicate(Predicate(clauses)))
     }
+}
+
+fn append_preds(preds: &mut Vec<PredicateClause>) -> TopLevel {
+    let preds = mem::replace(preds, vec![]);
+    TopLevel::Predicate(Predicate(preds))
 }
 
 fn unfold_by_str_once(term: &mut Term, s: &str) -> Option<(Term, Term)>
@@ -507,8 +512,7 @@ impl RelationWorker {
         }
     }
 
-
-    pub fn try_term_to_tl(&mut self, term: Term, blocks_cuts: bool) -> Result<TopLevel, ParserError>
+    fn try_term_to_tl(&mut self, term: Term, blocks_cuts: bool) -> Result<TopLevel, ParserError>
     {
         match term {
             Term::Clause(r, name, mut terms, fixity) =>
@@ -556,31 +560,51 @@ impl RelationWorker {
     }
 }
 
-pub struct TopLevelWorker<R> where R: Read {
-    pub parser: Parser<R>
+pub struct TopLevelWorker<'a, R> where R: Read {
+    pub parser: Parser<R>,
+    indices: MachineCodeIndex<'a>
 }
 
-impl<R: Read> TopLevelWorker<R> {
-    pub fn new(inner: R, atom_tbl: TabledData<Atom>) -> Self {
-        TopLevelWorker { parser: Parser::new(inner, atom_tbl) }
+impl<'a, R: Read> TopLevelWorker<'a, R> {
+    pub fn new(inner: R, atom_tbl: TabledData<Atom>, indices: MachineCodeIndex<'a>) -> Self {
+        TopLevelWorker { parser: Parser::new(inner, atom_tbl), indices }
     }
 
-    pub fn parse_batch<'a>(&mut self, wam: &Machine, mut indices: MachineCodeIndex<'a>)
-                           -> Result<Vec<TopLevelPacket>, SessionError>
+    fn add_predicate(&mut self, name: ClauseName, mod_name: ClauseName, tl: TopLevel)
+                     -> Vec<PredicateClause>
     {
-        let mut preds = vec![];
-        let mut mod_name = clause_name!("user");
-        let mut results = vec![];
-        let mut rel_worker = RelationWorker::new();
-
-        fn append_preds(preds: &mut Vec<PredicateClause>) -> TopLevel {
-            let preds = mem::replace(preds, vec![]);
-            TopLevel::Predicate(Predicate(preds))
+        let add_name = move |arity| {
+            let idx = CodeIndex(Rc::new(RefCell::new((IndexPtr::Undefined, mod_name))));
+            self.indices.code_dir.insert((name, arity), idx);
+        };
+        
+        match tl {
+            TopLevel::Rule(rule) => {
+                add_name(rule.head.1.len());
+                vec![PredicateClause::Rule(rule)]
+            },
+            TopLevel::Fact(fact) => {
+                add_name(fact.arity());
+                vec![PredicateClause::Fact(fact)]
+            },
+            TopLevel::Predicate(preds) => {
+                add_name(preds.0.len());
+                preds.0
+            },
+            _ => vec![]
         }
+    }
+    
+    pub fn parse_batch(&mut self, wam: &Machine) -> Result<Vec<TopLevelPacket>, SessionError>
+    {
+        let mut preds      = vec![];
+        let mut results    = vec![];
+        let mut mod_name   = clause_name!("user");        
+        let mut rel_worker = RelationWorker::new();
 
         while !self.parser.eof() {
             self.parser.reset(); // empty the parser stack of token descriptions.
-            let term = self.parser.read_term(&indices.op_dir)?;
+            let term = self.parser.read_term(&self.indices.op_dir)?;
 
             let mut new_rel_worker = RelationWorker::new();
             let tl = new_rel_worker.try_term_to_tl(term, true)?;
@@ -590,24 +614,27 @@ impl<R: Read> TopLevelWorker<R> {
             }
 
             rel_worker.absorb(new_rel_worker);
-
+            
             match tl {
                 TopLevel::Declaration(Declaration::UseModule(name)) => 
                     if let Some(module) = wam.get_module(name) {
-                        indices.use_module(module);
+                        self.indices.use_module(module);
                     },                
                 TopLevel::Declaration(Declaration::Op(op_decl)) => {
-                    op_decl.submit(mod_name.clone(), indices.op_dir)?;
+                    op_decl.submit(mod_name.clone(), self.indices.op_dir)?;
                 },
                 TopLevel::Declaration(Declaration::Module(actual_mod)) => {
-                    mod_name = actual_mod.name.clone();
+                    mod_name = actual_mod.name.clone();                    
                     let tl = TopLevel::Declaration(Declaration::Module(actual_mod));
                     results.push(TopLevelPacket::Decl(tl, vec![]));
                 },
                 TopLevel::Declaration(decl) => {
                     results.push(TopLevelPacket::Decl(TopLevel::Declaration(decl), vec![]));
                 },
-                tl => preds.extend(tl.as_predicate().ok().unwrap().clauses().into_iter())
+                tl => match tl.name() {
+                    Some(name) => preds.extend(self.add_predicate(name, mod_name.clone(), tl)),
+                    _ => return Err(SessionError::NamelessEntry)
+                }
             };
         }
 
@@ -618,11 +645,11 @@ impl<R: Read> TopLevelWorker<R> {
         Ok(results)
     }
 
-    pub fn parse_code(&mut self, op_dir: &OpDir) -> Result<TopLevelPacket, ParserError>
+    pub fn parse_code(&mut self) -> Result<TopLevelPacket, ParserError>
     {
         let mut rel_worker = RelationWorker::new();
 
-        let terms   = self.parser.read(op_dir)?;
+        let terms   = self.parser.read(self.indices.op_dir)?;
         let mut tls = rel_worker.try_terms_to_tls(terms, true)?;
         let results = rel_worker.parse_queue()?;
 
