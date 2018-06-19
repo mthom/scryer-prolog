@@ -239,7 +239,7 @@ fn unfold_by_str(mut term: Term, s: &str) -> Vec<Term>
         terms.push(fst);
         term = snd;
     }
-    
+
     terms.push(term);
     terms
 }
@@ -403,19 +403,19 @@ impl RelationWorker {
                 },
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
-            Term::Clause(r, name, mut terms, fixity) =>                
+            Term::Clause(r, name, mut terms, fixity) =>
                 if name.as_str() == ";" && terms.len() == 2 {
                     let term = Term::Clause(r, name.clone(), terms, fixity);
                     let (stub, clauses) = self.fabricate_disjunct(term);
-                    
+
                     self.queue.push_back(clauses);
                     Ok(QueryTerm::Jump(stub))
                 } else if name.as_str() == "->" && terms.len() == 2 {
                     let conq = *terms.pop().unwrap();
                     let prec = *terms.pop().unwrap();
-                    
+
                     let (stub, clauses) = self.fabricate_if_then(prec, conq);
-                    
+
                     self.queue.push_back(clauses);
                     Ok(QueryTerm::Jump(stub))
                 } else if name.as_str() == "$get_level" && terms.len() == 1 {
@@ -570,56 +570,51 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         TopLevelWorker { parser: Parser::new(inner, atom_tbl), indices }
     }
 
-    fn add_predicate(&mut self, name: ClauseName, mod_name: ClauseName, tl: TopLevel)
-                     -> Vec<PredicateClause>
-    {
-        let add_name = move |arity| {
+    fn add_name(&mut self, pred: &PredicateClause, mod_name: ClauseName) -> Option<ClauseName> {
+        pred.name().and_then(move |name| {
             let idx = CodeIndex(Rc::new(RefCell::new((IndexPtr::Undefined, mod_name))));
-            self.indices.code_dir.insert((name, arity), idx);
-        };
-        
+            self.indices.code_dir.insert((name.clone(), pred.arity()), idx);
+            
+            Some(name)
+        })
+    }
+
+    fn add_predicate(&mut self, tl: TopLevel) -> Vec<PredicateClause>
+    {
         match tl {
-            TopLevel::Rule(rule) => {
-                add_name(rule.head.1.len());
-                vec![PredicateClause::Rule(rule)]
-            },
-            TopLevel::Fact(fact) => {
-                add_name(fact.arity());
-                vec![PredicateClause::Fact(fact)]
-            },
-            TopLevel::Predicate(preds) => {
-                add_name(preds.0.len());
-                preds.0
-            },
+            TopLevel::Rule(rule) => vec![PredicateClause::Rule(rule)],
+            TopLevel::Fact(fact) => vec![PredicateClause::Fact(fact)],
+            TopLevel::Predicate(preds) => preds.0,
             _ => vec![]
         }
     }
-    
+
     pub fn parse_batch(&mut self, wam: &Machine) -> Result<Vec<TopLevelPacket>, SessionError>
     {
         let mut preds      = vec![];
         let mut results    = vec![];
-        let mut mod_name   = clause_name!("user");        
+        let mut mod_name   = clause_name!("user");
         let mut rel_worker = RelationWorker::new();
 
         while !self.parser.eof() {
             self.parser.reset(); // empty the parser stack of token descriptions.
             let term = self.parser.read_term(&self.indices.op_dir)?;
 
-            let mut new_rel_worker = RelationWorker::new();
+            let mut new_rel_worker = RelationWorker::new(); //wam, mod_name.clone());
             let tl = new_rel_worker.try_term_to_tl(term, true)?;
 
-            if !is_consistent(&tl, &preds) {
+            if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.
+                preds.first().map(|pred| self.add_name(pred, mod_name.clone()));
                 results.push(deque_to_packet(append_preds(&mut preds), rel_worker.parse_queue()?));
             }
 
             rel_worker.absorb(new_rel_worker);
-            
+
             match tl {
-                TopLevel::Declaration(Declaration::UseModule(name)) => 
+                TopLevel::Declaration(Declaration::UseModule(name)) =>
                     if let Some(module) = wam.get_module(name) {
                         self.indices.use_module(module);
-                    },                
+                    },
                 TopLevel::Declaration(Declaration::Op(op_decl)) => {
                     op_decl.submit(mod_name.clone(), self.indices.op_dir)?;
                 },
@@ -631,9 +626,10 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
                 TopLevel::Declaration(decl) => {
                     results.push(TopLevelPacket::Decl(TopLevel::Declaration(decl), vec![]));
                 },
-                tl => match tl.name() {
-                    Some(name) => preds.extend(self.add_predicate(name, mod_name.clone(), tl)),
-                    _ => return Err(SessionError::NamelessEntry)
+                tl => if tl.name().is_some() {
+                    preds.extend(self.add_predicate(tl))
+                } else {
+                    return Err(SessionError::NamelessEntry)
                 }
             };
         }
@@ -641,13 +637,13 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         if !preds.is_empty() {
             results.push(deque_to_packet(append_preds(&mut preds), rel_worker.parse_queue()?));
         }
-        
+
         Ok(results)
     }
 
     pub fn parse_code(&mut self) -> Result<TopLevelPacket, ParserError>
     {
-        let mut rel_worker = RelationWorker::new();
+        let mut rel_worker = RelationWorker::new(); //wam, clause_name!("user"));
 
         let terms   = self.parser.read(self.indices.op_dir)?;
         let mut tls = rel_worker.try_terms_to_tls(terms, true)?;
@@ -656,6 +652,13 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         let tl = merge_clauses(&mut tls)?;
 
         if tls.is_empty() {
+            /*
+            match tl.name() {
+                Some(name) => self.add_name(name, tl.arity(), clause_name!("user")),
+                _ => {}
+            };
+             */
+
             Ok(deque_to_packet(tl, results))
         } else {
             Err(ParserError::InconsistentEntry)

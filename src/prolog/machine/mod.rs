@@ -20,6 +20,7 @@ use std::rc::Rc;
 pub struct MachineCodeIndex<'a> {
     pub code_dir: &'a mut CodeDir,
     pub op_dir: &'a mut OpDir,
+//  pub modules: &'a ModuleDir // &'a HashMap<ClauseName, Module>
 }
 
 pub struct Machine {
@@ -30,7 +31,7 @@ pub struct Machine {
     pub(super) code_dir: CodeDir,
     pub(super) op_dir: OpDir,
     term_dir: TermDir,
-    modules: HashMap<ClauseName, Module>,
+    modules: ModuleDir, // HashMap<ClauseName, Module>,
     cached_query: Option<Code>
 }
 

@@ -147,6 +147,8 @@ pub type CodeDir = HashMap<PredicateKey, CodeIndex>;
 
 pub type TermDir = HashMap<PredicateKey, Predicate>;
 
+pub type ModuleDir = HashMap<ClauseName, Module>;
+
 pub type PredicateKey = (ClauseName, usize); // name, arity.
 
 pub struct ModuleDecl {
@@ -586,7 +588,7 @@ impl InlinedClauseType {
             &InlinedClauseType::IsVar(..) => "var"
         }
     }
-
+    
     pub fn from(name: &str, arity: usize) -> Option<Self> {
         let r1 = temp_v!(1);
         let r2 = temp_v!(2);
@@ -974,6 +976,18 @@ impl ClauseType {
         }
     }
 
+    /*
+    pub fn lookup(wam: &Machine, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
+        match ClauseType::from(name, arity, fixity) {
+            ClauseType::Named(name, default_idx) => {
+                
+            },
+            ClauseType::Op(name, fixity, default_idx) => {
+            },
+            ct => ct
+        }
+    }
+    */    
     pub fn from(name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
         InlinedClauseType::from(name.as_str(), arity)
             .map(ClauseType::Inlined)
