@@ -20,7 +20,29 @@ use std::rc::Rc;
 pub struct MachineCodeIndex<'a> {
     pub code_dir: &'a mut CodeDir,
     pub op_dir: &'a mut OpDir,
-//  pub modules: &'a ModuleDir // &'a HashMap<ClauseName, Module>
+    pub modules: &'a ModuleDir
+}
+
+impl ClauseType {
+    pub(super)
+    fn lookup(indices: &mut MachineCodeIndex, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self
+    {
+        match ClauseType::from(name, arity, fixity) {
+            ClauseType::Named(name, _) => {
+                let idx = indices.code_dir.entry((name.clone(), arity))
+                    .or_insert(CodeIndex::default());
+
+                ClauseType::Named(name, idx.clone())
+            },
+            ClauseType::Op(name, fixity, _) => {
+                let idx = indices.code_dir.entry((name.clone(), arity))
+                    .or_insert(CodeIndex::default());
+
+                ClauseType::Op(name, fixity, idx.clone())
+            },
+            ct => ct
+        }
+    }
 }
 
 pub struct Machine {
@@ -31,7 +53,7 @@ pub struct Machine {
     pub(super) code_dir: CodeDir,
     pub(super) op_dir: OpDir,
     term_dir: TermDir,
-    modules: ModuleDir, // HashMap<ClauseName, Module>,
+    pub(super) modules: ModuleDir,
     cached_query: Option<Code>
 }
 
@@ -61,7 +83,7 @@ impl<'a> SubModuleUser for MachineCodeIndex<'a> {
             if !code_idx.is_undefined() {
                 println!("warning: overwriting {}/{}", &name, arity);
             }
-            
+
             set_code_index!(code_idx, idx.0, idx.1);
 
             return;
@@ -70,7 +92,7 @@ impl<'a> SubModuleUser for MachineCodeIndex<'a> {
         self.code_dir.insert((name, arity), CodeIndex::from(idx));
     }
 }
-    
+
 static LISTS: &str   = include_str!("../lib/lists.pl");
 static CONTROL: &str = include_str!("../lib/control.pl");
 static QUEUES: &str  = include_str!("../lib/queues.pl");
@@ -95,7 +117,7 @@ impl Machine {
         compile_listing(&mut wam, LISTS);
         compile_listing(&mut wam, CONTROL);
         compile_listing(&mut wam, QUEUES);
-        
+
         wam
     }
 
@@ -154,33 +176,39 @@ impl Machine {
         self.ms.atom_tbl.clone()
     }
 
-    pub fn use_qualified_module_in_toplevel(&mut self, name: ClauseName, exports: Vec<PredicateKey>)
-                                            -> EvalSession
+    pub fn use_qualified_module_in_toplevel(&mut self, name: ClauseName, exports: Vec<PredicateKey>) -> EvalSession
     {
         self.remove_module(name.clone());
 
-        match self.modules.get_mut(&name) {
-            Some(ref mut module) => {
-                let mut indices = MachineCodeIndex { code_dir: &mut self.code_dir,
-                                                     op_dir: &mut self.op_dir };
+        if let Some(mut module) = self.modules.remove(&name) {
+            let result = {
+                let mut indices = machine_code_index!(&mut self.code_dir, &mut self.op_dir,
+                                                      &self.modules);
+                indices.use_qualified_module(&mut module, &exports)
+            };
 
-                indices.use_qualified_module(module, &exports)
-            },
-            None => EvalSession::from(SessionError::ModuleNotFound)
+            self.modules.insert(name, module);
+            result
+        } else {
+            EvalSession::from(SessionError::ModuleNotFound)
         }
     }
 
-    pub fn use_module_in_toplevel(&mut self, name: ClauseName) -> EvalSession {
+    pub fn use_module_in_toplevel(&mut self, name: ClauseName) -> EvalSession
+    {
         self.remove_module(name.clone());
 
-        match self.modules.get_mut(&name) {
-            Some(ref mut module) => {
-                let mut indices = MachineCodeIndex { code_dir: &mut self.code_dir,
-                                                     op_dir: &mut self.op_dir };
+        if let Some(mut module) = self.modules.remove(&name) {
+            let result = {
+                let mut indices = machine_code_index!(&mut self.code_dir, &mut self.op_dir,
+                                                      &self.modules);
+                indices.use_module(&mut module)
+            };
 
-                indices.use_module(module)
-            },
-            None => EvalSession::from(SessionError::ModuleNotFound)
+            self.modules.insert(name, module);
+            result
+        } else {
+            EvalSession::from(SessionError::ModuleNotFound)
         }
     }
 
@@ -207,9 +235,11 @@ impl Machine {
     {
         match self.code_dir.get(&(name.clone(), arity)) {
             Some(&CodeIndex (ref idx)) if idx.borrow().1 != clause_name!("user") =>
+                if !(&CodeIndex(idx.clone())).is_undefined() {
                     return EvalSession::from(SessionError::ImpermissibleEntry(format!("{}/{}",
-                                                                                   name,
-                                                                                   arity))),
+                                                                                      name,
+                                                                                      arity)))
+                },
             _ => {}
         };
 
@@ -249,7 +279,7 @@ impl Machine {
                 Some(call_clause!(ClauseType::BuiltIn(built_in.clone()), built_in.arity(),
                                   0, self.ms.last_call)),
             CodePtr::CallN(arity, _) =>
-                Some(call_clause!(ClauseType::CallN, arity, 0, self.ms.last_call))            
+                Some(call_clause!(ClauseType::CallN, arity, 0, self.ms.last_call))
         }
     }
 
