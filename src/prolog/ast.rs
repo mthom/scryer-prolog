@@ -167,8 +167,8 @@ pub fn default_op_dir() -> OpDir {
     let mut op_dir = OpDir::new();
 
     op_dir.insert((clause_name!(":-"), Fixity::In),  (XFX, 1200, module_name.clone()));
-    op_dir.insert((clause_name!(":-"), Fixity::Pre), (FX, 1200, module_name.clone()));
-    op_dir.insert((clause_name!("?-"), Fixity::Pre), (FX, 1200, module_name.clone()));    
+    op_dir.insert((clause_name!(":-"), Fixity::Pre), (FX,  1200, module_name.clone()));
+    op_dir.insert((clause_name!("?-"), Fixity::Pre), (FX,  1200, module_name.clone()));
 
     op_dir
 }
@@ -588,7 +588,7 @@ impl InlinedClauseType {
             &InlinedClauseType::IsVar(..) => "var"
         }
     }
-    
+
     pub fn from(name: &str, arity: usize) -> Option<Self> {
         let r1 = temp_v!(1);
         let r2 = temp_v!(2);
@@ -976,18 +976,6 @@ impl ClauseType {
         }
     }
 
-    /*
-    pub fn lookup(wam: &Machine, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
-        match ClauseType::from(name, arity, fixity) {
-            ClauseType::Named(name, default_idx) => {
-                
-            },
-            ClauseType::Op(name, fixity, default_idx) => {
-            },
-            ct => ct
-        }
-    }
-    */    
     pub fn from(name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
         InlinedClauseType::from(name.as_str(), arity)
             .map(ClauseType::Inlined)
@@ -1603,7 +1591,7 @@ pub struct CodeIndex(pub Rc<RefCell<(IndexPtr, ClauseName)>>);
 impl CodeIndex {
     pub fn is_undefined(&self) -> bool {
         let index_ptr = self.0.borrow().0;
-        
+
         if let IndexPtr::Undefined = index_ptr {
             true
         } else {

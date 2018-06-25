@@ -5,7 +5,7 @@ use prolog::parser::parser::*;
 use prolog::tabled_rc::*;
 
 use std::collections::{HashSet, VecDeque};
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::io::Read;
 use std::mem;
 use std::rc::Rc;
@@ -392,14 +392,15 @@ impl RelationWorker {
         self.fabricate_rule(fold_by_str(prec_seq, body_term, comma_sym))
     }
 
-    fn to_query_term(&mut self, term: Term) -> Result<QueryTerm, ParserError>
+    fn to_query_term(&mut self, indices: &mut MachineCodeIndex, term: Term) -> Result<QueryTerm, ParserError>
     {
         match term {
             Term::Constant(r, Constant::Atom(name)) =>
                 if name.as_str() == "!" || name.as_str() == "blocked_!" {
                     Ok(QueryTerm::BlockedCut)
                 } else {
-                    Ok(QueryTerm::Clause(r, ClauseType::from(name, 0, None), vec![]))
+                    let ct = ClauseType::lookup(indices, name, 0, None);
+                    Ok(QueryTerm::Clause(r, ct, vec![]))
                 },
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
@@ -425,9 +426,8 @@ impl RelationWorker {
                         Err(ParserError::InadmissibleQueryTerm)
                     }
                 } else {
-                    Ok(QueryTerm::Clause(Cell::default(),
-                                         ClauseType::from(name, terms.len(), fixity),
-                                         terms))
+                    let ct = ClauseType::lookup(indices, name, terms.len(), fixity);
+                    Ok(QueryTerm::Clause(Cell::default(), ct, terms))
                 },
             Term::Var(_, _) =>
                 Ok(QueryTerm::Clause(Cell::default(), ClauseType::CallN, vec![Box::new(term)])),
@@ -460,7 +460,7 @@ impl RelationWorker {
         }
     }
 
-    fn setup_query(&mut self, terms: Vec<Box<Term>>, blocks_cuts: bool)
+    fn setup_query(&mut self, idx: &mut MachineCodeIndex, terms: Vec<Box<Term>>, blocks_cuts: bool)
                    -> Result<Vec<QueryTerm>, ParserError>
     {
         let mut query_terms = vec![];
@@ -488,18 +488,18 @@ impl RelationWorker {
                     mark_cut_variable(&mut subterm);
                 }
 
-                query_terms.push(try!(self.to_query_term(subterm)));
+                query_terms.push(try!(self.to_query_term(idx, subterm)));
             }
         }
 
         Ok(query_terms)
     }
 
-    fn setup_rule(&mut self, mut terms: Vec<Box<Term>>, blocks_cuts: bool)
+    fn setup_rule(&mut self, idx: &mut MachineCodeIndex, mut terms: Vec<Box<Term>>, blocks_cuts: bool)
                   -> Result<Rule, ParserError>
     {
         let post_head_terms = terms.drain(1..).collect();
-        let mut query_terms = try!(self.setup_query(post_head_terms, blocks_cuts));
+        let mut query_terms = try!(self.setup_query(idx, post_head_terms, blocks_cuts));
         let clauses = query_terms.drain(1 ..).collect();
         let qt = query_terms.pop().unwrap();
 
@@ -512,14 +512,15 @@ impl RelationWorker {
         }
     }
 
-    fn try_term_to_tl(&mut self, term: Term, blocks_cuts: bool) -> Result<TopLevel, ParserError>
+    fn try_term_to_tl(&mut self, idx: &mut MachineCodeIndex, term: Term, blocks_cuts: bool)
+                      -> Result<TopLevel, ParserError>
     {
         match term {
             Term::Clause(r, name, mut terms, fixity) =>
                 if name.as_str() == "?-" {
-                    Ok(TopLevel::Query(try!(self.setup_query(terms, blocks_cuts))))
+                    Ok(TopLevel::Query(try!(self.setup_query(idx, terms, blocks_cuts))))
                 } else if name.as_str() == ":-" && terms.len() > 1 {
-                    Ok(TopLevel::Rule(try!(self.setup_rule(terms, blocks_cuts))))
+                    Ok(TopLevel::Rule(try!(self.setup_rule(idx, terms, blocks_cuts))))
                 } else if name.as_str() == ":-" && terms.len() == 1 {
                     let term = *terms.pop().unwrap();
                     Ok(TopLevel::Declaration(try!(setup_declaration(term))))
@@ -530,25 +531,25 @@ impl RelationWorker {
         }
     }
 
-    fn try_terms_to_tls<Iter>(&mut self, terms: Iter, blocks_cuts: bool)
+    fn try_terms_to_tls<Iter>(&mut self, idx: &mut MachineCodeIndex, terms: Iter, blocks_cuts: bool)
                               -> Result<VecDeque<TopLevel>, ParserError>
         where Iter: IntoIterator<Item=Term>
     {
         let mut results = VecDeque::new();
 
         for term in terms.into_iter() {
-            results.push_back(self.try_term_to_tl(term, blocks_cuts)?);
+            results.push_back(self.try_term_to_tl(idx, term, blocks_cuts)?);
         }
 
         Ok(results)
     }
 
-    fn parse_queue(&mut self) -> Result<VecDeque<TopLevel>, ParserError>
+    fn parse_queue(&mut self, idx: &mut MachineCodeIndex) -> Result<VecDeque<TopLevel>, ParserError>
     {
         let mut queue = VecDeque::new();
 
         while let Some(terms) = self.queue.pop_front() {
-            let clauses = merge_clauses(&mut self.try_terms_to_tls(terms, false)?)?;
+            let clauses = merge_clauses(&mut self.try_terms_to_tls(idx, terms, false)?)?;
             queue.push_back(clauses);
         }
 
@@ -570,15 +571,6 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         TopLevelWorker { parser: Parser::new(inner, atom_tbl), indices }
     }
 
-    fn add_name(&mut self, pred: &PredicateClause, mod_name: ClauseName) -> Option<ClauseName> {
-        pred.name().and_then(move |name| {
-            let idx = CodeIndex(Rc::new(RefCell::new((IndexPtr::Undefined, mod_name))));
-            self.indices.code_dir.insert((name.clone(), pred.arity()), idx);
-            
-            Some(name)
-        })
-    }
-
     fn add_predicate(&mut self, tl: TopLevel) -> Vec<PredicateClause>
     {
         match tl {
@@ -589,7 +581,7 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         }
     }
 
-    pub fn parse_batch(&mut self, wam: &Machine) -> Result<Vec<TopLevelPacket>, SessionError>
+    pub fn parse_batch(&mut self) -> Result<Vec<TopLevelPacket>, SessionError>
     {
         let mut preds      = vec![];
         let mut results    = vec![];
@@ -600,26 +592,26 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
             self.parser.reset(); // empty the parser stack of token descriptions.
             let term = self.parser.read_term(&self.indices.op_dir)?;
 
-            let mut new_rel_worker = RelationWorker::new(); //wam, mod_name.clone());
-            let tl = new_rel_worker.try_term_to_tl(term, true)?;
+            let mut new_rel_worker = RelationWorker::new();
+            let tl = new_rel_worker.try_term_to_tl(&mut self.indices, term, true)?;
 
             if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.
-                preds.first().map(|pred| self.add_name(pred, mod_name.clone()));
-                results.push(deque_to_packet(append_preds(&mut preds), rel_worker.parse_queue()?));
+                let result_queue = rel_worker.parse_queue(&mut self.indices)?;
+                results.push(deque_to_packet(append_preds(&mut preds), result_queue));
             }
 
             rel_worker.absorb(new_rel_worker);
 
             match tl {
                 TopLevel::Declaration(Declaration::UseModule(name)) =>
-                    if let Some(module) = wam.get_module(name) {
+                    if let Some(module) = self.indices.modules.get(&name) {
                         self.indices.use_module(module);
                     },
                 TopLevel::Declaration(Declaration::Op(op_decl)) => {
                     op_decl.submit(mod_name.clone(), self.indices.op_dir)?;
                 },
                 TopLevel::Declaration(Declaration::Module(actual_mod)) => {
-                    mod_name = actual_mod.name.clone();                    
+                    mod_name = actual_mod.name.clone();
                     let tl = TopLevel::Declaration(Declaration::Module(actual_mod));
                     results.push(TopLevelPacket::Decl(tl, vec![]));
                 },
@@ -635,7 +627,8 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         }
 
         if !preds.is_empty() {
-            results.push(deque_to_packet(append_preds(&mut preds), rel_worker.parse_queue()?));
+            results.push(deque_to_packet(append_preds(&mut preds),
+                                         rel_worker.parse_queue(&mut self.indices)?));
         }
 
         Ok(results)
@@ -643,11 +636,11 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
 
     pub fn parse_code(&mut self) -> Result<TopLevelPacket, ParserError>
     {
-        let mut rel_worker = RelationWorker::new(); //wam, clause_name!("user"));
+        let mut rel_worker = RelationWorker::new();
 
         let terms   = self.parser.read(self.indices.op_dir)?;
-        let mut tls = rel_worker.try_terms_to_tls(terms, true)?;
-        let results = rel_worker.parse_queue()?;
+        let mut tls = rel_worker.try_terms_to_tls(&mut self.indices, terms, true)?;
+        let results = rel_worker.parse_queue(&mut self.indices)?;
 
         let tl = merge_clauses(&mut tls)?;
 

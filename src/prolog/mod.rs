@@ -9,6 +9,7 @@ pub mod ast;
 #[macro_use]
 pub mod allocator;
 pub mod toplevel;
+pub mod machine;
 pub mod compile;
 pub mod arithmetic;
 pub mod codegen;
@@ -20,7 +21,6 @@ pub mod heap_print;
 pub mod indexing;
 pub mod io;
 pub mod iterators;
-pub mod machine;
 pub mod or_stack;
 #[macro_use]
 pub mod parser;

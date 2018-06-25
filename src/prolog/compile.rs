@@ -32,70 +32,15 @@ fn print_code(code: &Code) {
     }
 }
 
-pub(crate) trait TLInfo {
-    fn update_entry_index(&self, &ClauseName, usize, CodeIndex, &mut CodeIndex, usize);
-
-    // give the correct CodePtr offsets to CallClause's whose types are
-    // Named and Op. Enable late binding by setting to the default.
-    fn label_clauses(&self, code_size: usize, code_dir: &mut CodeDir, code: &mut Code)
-    {
-        for line in code.iter_mut() {
-            if let &mut Line::Control(ControlInstruction::CallClause(ref mut ct, a1, ..)) = line {
-                match ct {
-                    &mut ClauseType::Named(ref n1, ref mut cp)
-                  | &mut ClauseType::Op(ref n1, _, ref mut cp) => {
-                      let entry = code_dir.entry((n1.clone(), a1)).or_insert(CodeIndex::default());
-                      self.update_entry_index(n1, a1, entry.clone(), cp, code_size);
-                  },
-                    _ => {}
-                }
-            }
-        }
-    }
-}
-
-struct DeclInfo { name: ClauseName, arity: usize, module_name: ClauseName }
-
-impl TLInfo for DeclInfo {
-    fn update_entry_index(&self, n1: &ClauseName, a1: usize, entry: CodeIndex,
-                          cp: &mut CodeIndex, code_size: usize)
-    {
-        let (name, arity) = (self.name.clone(), self.arity);
-
-        {
-            let mut entry = entry.0.borrow_mut();
-
-            if entry.0 == IndexPtr::Undefined {
-                if &name == n1 && arity == a1 {
-                    entry.0 = IndexPtr::Index(code_size);
-                }
-            }
-
-            entry.1 = self.module_name.clone();
-        }
-
-        *cp = entry;
-    }
-}
-
-struct QueryInfo {}
-
-impl TLInfo for QueryInfo {
-    fn update_entry_index(&self, _: &ClauseName, _: usize, entry: CodeIndex,
-                          cp: &mut CodeIndex, _: usize)
-    {
-        *cp = entry;
-    }
-}
-
 pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, ParserError>
 {
-    let atom_tbl = wam.atom_tbl();    
+    let atom_tbl = wam.atom_tbl();
     let index = MachineCodeIndex {
         code_dir: &mut wam.code_dir,
-        op_dir: &mut wam.op_dir
+        op_dir: &mut wam.op_dir,
+        modules: &wam.modules
     };
-    
+
     let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, index);
     worker.parse_code()
 }
@@ -145,17 +90,12 @@ fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>) -> Result<(), ParserE
     Ok(())
 }
 
-fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, code_size: usize,
-                 code_dir: &mut CodeDir)
-                 -> Result<(Code, AllocVarDict), ParserError>
+fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>) -> Result<(Code, AllocVarDict), ParserError>
 {
     let mut cg = CodeGenerator::<DebrayAllocator>::new();
     let mut code = try!(cg.compile_query(&terms));
 
     compile_appendix(&mut code, queue)?;
-
-    let query_info = QueryInfo {};
-    query_info.label_clauses(code_size, code_dir, &mut code);
 
     Ok((code, cg.take_vars()))
 }
@@ -183,11 +123,6 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
             let mut code = try_eval_session!(compile_relation(&tl));
             try_eval_session!(compile_appendix(&mut code, queue));
 
-            let decl_info = DeclInfo { name: name.clone(), arity: tl.arity(),
-                                       module_name: clause_name!("user") };
-
-            decl_info.label_clauses(wam.code_size(), &mut wam.code_dir, &mut code);
-
             if !code.is_empty() {
                 wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
             } else {
@@ -201,7 +136,7 @@ pub fn compile_packet(wam: &mut Machine, tl: TopLevelPacket) -> EvalSession
 {
     match tl {
         TopLevelPacket::Query(terms, queue) =>
-            match compile_query(terms, queue, wam.code_size(), &mut wam.code_dir) {
+            match compile_query(terms, queue) { //, &mut wam.code_dir) { //wam.code_size(), &mut wam.code_dir) {
                 Ok((mut code, vars)) => wam.submit_query(code, vars),
                 Err(e) => EvalSession::from(e)
             },
@@ -227,10 +162,10 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
     let mut code = Vec::new();
 
     let tls = {
-        let indices = MachineCodeIndex { code_dir: &mut code_dir, op_dir: &mut op_dir };    
+        let indices = machine_code_index!(&mut code_dir, &mut op_dir, &wam.modules);
         let mut worker = TopLevelWorker::new(src_str.as_bytes(), wam.atom_tbl(), indices);
-        
-        try_eval_session!(worker.parse_batch(&wam))
+
+        try_eval_session!(worker.parse_batch())
     };
 
     for tl in tls {
@@ -246,7 +181,7 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
             TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseModule(name)), _) => {
                 if let Some(ref submodule) = wam.get_module(name.clone()) {
                     if let Some(ref mut module) = module {
-                        let mut code_index = machine_code_index!(&mut code_dir, &mut op_dir);
+                        let mut code_index = machine_code_index!(&mut code_dir, &mut op_dir, &wam.modules);
 
                         module.use_module(submodule);
                         code_index.use_module(submodule);
@@ -259,13 +194,12 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
 
                 wam.use_module_in_toplevel(name);
             },
-            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)),
-                                 _)
+            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)), _)
                 =>
             {
                 if let Some(ref submodule) = wam.get_module(name.clone()) {
                     if let Some(ref mut module) = module {
-                        let mut code_index = machine_code_index!(&mut code_dir, &mut op_dir);
+                        let mut code_index = machine_code_index!(&mut code_dir, &mut op_dir, &wam.modules);
 
                         module.use_qualified_module(submodule, &exports);
                         code_index.use_qualified_module(submodule, &exports);
@@ -291,18 +225,10 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
                     Err(SessionError::NamelessEntry)
                 });
 
-                let module_name = get_module_name(&module);
-                let decl_info = DeclInfo { name, arity: decl.arity(),
-                                           module_name: module_name.clone() };
-
-                {
-                    let idx = code_dir.entry((decl_info.name.clone(), decl_info.arity))
-                        .or_insert(CodeIndex::default());
-
-                    set_code_index!(idx, IndexPtr::Index(p), module_name);
+                if let Some(ref mut idx) = code_dir.get_mut(&(name, decl.arity())) {
+                    set_code_index!(idx, IndexPtr::Index(p), get_module_name(&module));
                 }
 
-                decl_info.label_clauses(p, &mut code_dir, &mut decl_code);
                 code.extend(decl_code.into_iter());
             }
         }
