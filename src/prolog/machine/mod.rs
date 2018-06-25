@@ -23,19 +23,19 @@ pub struct MachineCodeIndex<'a> {
     pub modules: &'a ModuleDir
 }
 
-impl ClauseType {
+impl<'a> MachineCodeIndex<'a> {
     pub(super)
-    fn lookup(indices: &mut MachineCodeIndex, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self
+    fn lookup(&mut self, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> ClauseType
     {
         match ClauseType::from(name, arity, fixity) {
             ClauseType::Named(name, _) => {
-                let idx = indices.code_dir.entry((name.clone(), arity))
+                let idx = self.code_dir.entry((name.clone(), arity))
                     .or_insert(CodeIndex::default());
 
                 ClauseType::Named(name, idx.clone())
             },
             ClauseType::Op(name, fixity, _) => {
-                let idx = indices.code_dir.entry((name.clone(), arity))
+                let idx = self.code_dir.entry((name.clone(), arity))
                     .or_insert(CodeIndex::default());
 
                 ClauseType::Op(name, fixity, idx.clone())

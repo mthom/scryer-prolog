@@ -295,12 +295,13 @@ pub enum TopLevelPacket {
 }
 
 struct RelationWorker {
-    queue: VecDeque<VecDeque<Term>>
+    queue: VecDeque<VecDeque<Term>>,
+    source_mod: ClauseName
 }
 
 impl RelationWorker {
-    fn new() -> Self {
-        RelationWorker { queue: VecDeque::new() }
+    fn new(source_mod: ClauseName) -> Self {
+        RelationWorker { queue: VecDeque::new(), source_mod }
     }
 
     fn compute_head(&self, term: &Term) -> Vec<Term>
@@ -399,7 +400,7 @@ impl RelationWorker {
                 if name.as_str() == "!" || name.as_str() == "blocked_!" {
                     Ok(QueryTerm::BlockedCut)
                 } else {
-                    let ct = ClauseType::lookup(indices, name, 0, None);
+                    let ct = indices.lookup(name, 0, None);
                     Ok(QueryTerm::Clause(r, ct, vec![]))
                 },
             Term::Var(_, ref v) if v.as_str() == "!" =>
@@ -426,7 +427,7 @@ impl RelationWorker {
                         Err(ParserError::InadmissibleQueryTerm)
                     }
                 } else {
-                    let ct = ClauseType::lookup(indices, name, terms.len(), fixity);
+                    let ct = indices.lookup(name, terms.len(), fixity);
                     Ok(QueryTerm::Clause(Cell::default(), ct, terms))
                 },
             Term::Var(_, _) =>
@@ -581,18 +582,18 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         }
     }
 
-    pub fn parse_batch(&mut self) -> Result<Vec<TopLevelPacket>, SessionError>
+    pub fn parse_batch(&mut self, source_mod: ClauseName) -> Result<Vec<TopLevelPacket>, SessionError>
     {
         let mut preds      = vec![];
         let mut results    = vec![];
         let mut mod_name   = clause_name!("user");
-        let mut rel_worker = RelationWorker::new();
+        let mut rel_worker = RelationWorker::new(source_mod.clone());
 
         while !self.parser.eof() {
             self.parser.reset(); // empty the parser stack of token descriptions.
             let term = self.parser.read_term(&self.indices.op_dir)?;
 
-            let mut new_rel_worker = RelationWorker::new();
+            let mut new_rel_worker = RelationWorker::new(source_mod.clone());
             let tl = new_rel_worker.try_term_to_tl(&mut self.indices, term, true)?;
 
             if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.
@@ -634,9 +635,9 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         Ok(results)
     }
 
-    pub fn parse_code(&mut self) -> Result<TopLevelPacket, ParserError>
+    pub fn parse_code(&mut self, source_mod: ClauseName) -> Result<TopLevelPacket, ParserError>
     {
-        let mut rel_worker = RelationWorker::new();
+        let mut rel_worker = RelationWorker::new(source_mod);
 
         let terms   = self.parser.read(self.indices.op_dir)?;
         let mut tls = rel_worker.try_terms_to_tls(&mut self.indices, terms, true)?;

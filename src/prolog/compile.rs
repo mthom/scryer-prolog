@@ -42,7 +42,7 @@ pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, Par
     };
 
     let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, index);
-    worker.parse_code()
+    worker.parse_code(clause_name!("user"))
 }
 
 // throw errors if declaration or query found.
@@ -165,7 +165,7 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
         let indices = machine_code_index!(&mut code_dir, &mut op_dir, &wam.modules);
         let mut worker = TopLevelWorker::new(src_str.as_bytes(), wam.atom_tbl(), indices);
 
-        try_eval_session!(worker.parse_batch())
+        try_eval_session!(worker.parse_batch(clause_name!("user")))
     };
 
     for tl in tls {
