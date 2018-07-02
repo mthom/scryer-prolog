@@ -20,7 +20,7 @@ use std::rc::Rc;
 pub struct MachineCodeIndex<'a> {
     pub code_dir: &'a mut CodeDir,
     pub op_dir: &'a mut OpDir,
-    pub modules: &'a ModuleDir
+//    pub modules: &'a ModuleDir
 }
 
 impl<'a> MachineCodeIndex<'a> {
@@ -111,12 +111,13 @@ impl Machine {
             cached_query: None
         };
 
-        compile_listing(&mut wam, BUILTINS);
-        wam.use_module_in_toplevel(clause_name!("builtins"));
+        compile_listing(&mut wam, BUILTINS);        
 
         compile_listing(&mut wam, LISTS);
         compile_listing(&mut wam, CONTROL);
         compile_listing(&mut wam, QUEUES);
+
+        wam.use_module_in_toplevel(clause_name!("builtins"));
 
         wam
     }
@@ -182,8 +183,8 @@ impl Machine {
 
         if let Some(mut module) = self.modules.remove(&name) {
             let result = {
-                let mut indices = machine_code_index!(&mut self.code_dir, &mut self.op_dir,
-                                                      &self.modules);
+                let mut indices = machine_code_index!(&mut self.code_dir, &mut self.op_dir);
+                                                      //&self.modules);
                 indices.use_qualified_module(&mut module, &exports)
             };
 
@@ -200,8 +201,8 @@ impl Machine {
 
         if let Some(mut module) = self.modules.remove(&name) {
             let result = {
-                let mut indices = machine_code_index!(&mut self.code_dir, &mut self.op_dir,
-                                                      &self.modules);
+                let mut indices = machine_code_index!(&mut self.code_dir, &mut self.op_dir);
+                                                      //&self.modules);
                 indices.use_module(&mut module)
             };
 

@@ -1270,7 +1270,9 @@ fn test_queries_on_conditionals()
 fn test_queries_on_builtins()
 {
     let mut wam = Machine::new();
+    
     wam.use_module_in_toplevel(clause_name!("lists"));
+    wam.use_module_in_toplevel(clause_name!("control"));
     
     assert_prolog_failure!(&mut wam, "?- atom(X).");
     assert_prolog_success!(&mut wam, "?- atom(a).");
@@ -1333,8 +1335,8 @@ fn test_queries_on_builtins()
 
     assert_prolog_success!(&mut wam, "?- X is 3, call(integer, X).");
     assert_prolog_failure!(&mut wam, "?- X is 3 + 3.5, call(integer, X).");
-//    assert_prolog_success!(&mut wam, "?- X is 3 + 3.5, \\+ call(integer, X).");
-//    assert_prolog_success!(&mut wam, "?- X is 3 + 3.5, \\+ integer(X).");
+    assert_prolog_success!(&mut wam, "?- X is 3 + 3.5, \\+ call(integer, X).");
+    assert_prolog_success!(&mut wam, "?- X is 3 + 3.5, \\+ integer(X).");
 
     assert_prolog_success!(&mut wam, "?- Func =.. [atom].", [["Func = atom"]]);
     assert_prolog_success!(&mut wam, "?- Func =.. [\"sdf\"].", [["Func = \"sdf\""]]);

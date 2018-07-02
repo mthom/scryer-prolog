@@ -4,6 +4,9 @@ use prolog::codegen::*;
 use prolog::machine::*;
 use prolog::toplevel::*;
 
+use std::collections::{HashMap, VecDeque};
+use std::mem;
+
 #[allow(dead_code)]
 fn print_code(code: &Code) {
     for clause in code {
@@ -38,11 +41,11 @@ pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, Par
     let index = MachineCodeIndex {
         code_dir: &mut wam.code_dir,
         op_dir: &mut wam.op_dir,
-        modules: &wam.modules
+        //modules: &wam.modules
     };
 
     let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, index);
-    worker.parse_code(clause_name!("user"))
+    worker.parse_code()
 }
 
 // throw errors if declaration or query found.
@@ -145,104 +148,121 @@ pub fn compile_packet(wam: &mut Machine, tl: TopLevelPacket) -> EvalSession
     }
 }
 
-pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession
-{
-    fn get_module_name(module: &Option<Module>) -> ClauseName {
-        match module {
-            &Some(ref module) => module.module_decl.name.clone(),
-            _ => ClauseName::BuiltIn("user")
+pub struct ListingCompiler<'a> {
+    wam: &'a mut Machine,
+    module: Option<Module>
+}
+
+impl<'a> ListingCompiler<'a> {
+    pub fn new(wam: &'a mut Machine) -> Self {
+        ListingCompiler { wam, module: None }
+    }
+
+    fn get_module_name(&self) -> ClauseName {
+        self.module.as_ref()
+            .map(|module| module.module_decl.name.clone())
+            .unwrap_or(ClauseName::BuiltIn("user"))
+    }
+
+    fn gen_code(&mut self, decls: Vec<(Predicate, VecDeque<TopLevel>)>, code_dir: &mut CodeDir)
+                -> Result<Code, SessionError>
+    {
+        let mut code = vec![];
+
+        for (decl, queue) in decls {
+            let (name, arity) = decl.0.first().and_then(|cl| {
+                let arity = cl.arity();
+                cl.name().map(|name| (name, arity))
+            }).ok_or(SessionError::NamelessEntry)?;
+
+            let p = code.len() + self.wam.code_size();
+            let mut decl_code = compile_relation(&TopLevel::Predicate(decl))?;
+
+            compile_appendix(&mut decl_code, Vec::from(queue))?;
+
+            let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());            
+            set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
+
+            code.extend(decl_code.into_iter());
+        }
+
+        Ok(code)
+    }
+
+    fn add_code(self, code: Code, indices: MachineCodeIndex) {
+        let code_dir = mem::replace(indices.code_dir, HashMap::new());
+        let op_dir   = mem::replace(indices.op_dir, HashMap::new());
+
+        if let Some(mut module) = self.module {
+            module.code_dir.extend(as_module_code_dir(code_dir));
+            module.op_dir.extend(op_dir.into_iter());
+
+            self.wam.add_module(module, code);
+        } else {
+            self.wam.add_batched_code(code, code_dir);
+            self.wam.add_batched_ops(op_dir);
         }
     }
 
-    let mut module: Option<Module> = None;
+}
 
-    let mut code_dir = CodeDir::new();
-    let mut op_dir   = default_op_dir();
+fn use_module(module: &mut Option<Module>, submodule: &Module, indices: &mut MachineCodeIndex)
+{
+    indices.use_module(submodule);
 
-    let mut code = Vec::new();
+    if let &mut Some(ref mut module) = module {
+        module.use_module(submodule);
+    }
 
-    let tls = {
-        let indices = machine_code_index!(&mut code_dir, &mut op_dir, &wam.modules);
-        let mut worker = TopLevelWorker::new(src_str.as_bytes(), wam.atom_tbl(), indices);
+    // self.wam.use_module_in_toplevel(name);
+}
 
-        try_eval_session!(worker.parse_batch(clause_name!("user")))
-    };
+fn use_qualified_module(module: &mut Option<Module>, submodule: &Module, exports: &Vec<PredicateKey>,
+                        indices: &mut MachineCodeIndex)
+{
+    indices.use_qualified_module(submodule, exports);
 
-    for tl in tls {
-        match tl {
-            TopLevelPacket::Query(..) =>
-                return EvalSession::from(ParserError::ExpectedRel),
-            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::Module(module_decl)), _) =>
-                if module.is_none() {
-                    module = Some(Module::new(module_decl));
+    if let &mut Some(ref mut module) = module {
+        module.use_qualified_module(submodule, exports);
+    }
+
+    // self.wam.use_qualified_module_in_toplevel(name, exports);
+}
+
+pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession {
+    let mut indices = machine_code_index!(&mut CodeDir::new(), &mut default_op_dir());
+
+    let mut worker   = TopLevelBatchWorker::new(src_str.as_bytes(), wam.atom_tbl());
+    let mut compiler = ListingCompiler::new(wam);
+
+    while let Some(decl) = try_eval_session!(worker.consume(&mut indices)) {
+        match decl {
+            Declaration::Op(op_decl) =>
+                try_eval_session!(op_decl.submit(compiler.get_module_name(), &mut indices.op_dir)),
+            Declaration::UseModule(name) =>
+                if let Some(ref submodule) = compiler.wam.get_module(name.clone()) {
+                    use_module(&mut compiler.module, submodule, &mut indices);
+                } else {
+                    return EvalSession::from(SessionError::ModuleNotFound);
+                },
+            Declaration::UseQualifiedModule(name, exports) =>
+                if let Some(ref submodule) = compiler.wam.get_module(name.clone()) {
+                    use_qualified_module(&mut compiler.module, submodule, &exports, &mut indices);
+                } else {
+                    return EvalSession::from(SessionError::ModuleNotFound);
+                },
+            Declaration::Module(module_decl) =>
+                if compiler.module.is_none() {
+                    worker.source_mod = module_decl.name.clone();
+                    compiler.module = Some(Module::new(module_decl));
                 } else {
                     return EvalSession::from(ParserError::InvalidModuleDecl);
-                },
-            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseModule(name)), _) => {
-                if let Some(ref submodule) = wam.get_module(name.clone()) {
-                    if let Some(ref mut module) = module {
-                        let mut code_index = machine_code_index!(&mut code_dir, &mut op_dir, &wam.modules);
-
-                        module.use_module(submodule);
-                        code_index.use_module(submodule);
-
-                        continue;
-                    }
-                } else {
-                    return EvalSession::from(SessionError::ModuleNotFound);
                 }
-
-                wam.use_module_in_toplevel(name);
-            },
-            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)), _)
-                =>
-            {
-                if let Some(ref submodule) = wam.get_module(name.clone()) {
-                    if let Some(ref mut module) = module {
-                        let mut code_index = machine_code_index!(&mut code_dir, &mut op_dir, &wam.modules);
-
-                        module.use_qualified_module(submodule, &exports);
-                        code_index.use_qualified_module(submodule, &exports);
-
-                        continue;
-                    }
-                } else {
-                    return EvalSession::from(SessionError::ModuleNotFound);
-                }
-
-                wam.use_qualified_module_in_toplevel(name, exports);
-            },
-            TopLevelPacket::Decl(TopLevel::Declaration(Declaration::Op(..)), _) => {},
-            TopLevelPacket::Decl(decl, queue) => {
-                let p = code.len() + wam.code_size();
-                let mut decl_code = try_eval_session!(compile_relation(&decl));
-
-                try_eval_session!(compile_appendix(&mut decl_code, queue));
-
-                let name = try_eval_session!(if let Some(name) = decl.name() {
-                    Ok(name)
-                } else {
-                    Err(SessionError::NamelessEntry)
-                });
-
-                if let Some(ref mut idx) = code_dir.get_mut(&(name, decl.arity())) {
-                    set_code_index!(idx, IndexPtr::Index(p), get_module_name(&module));
-                }
-
-                code.extend(decl_code.into_iter());
-            }
         }
     }
 
-    if let Some(mut module) = module {
-        module.code_dir.extend(as_module_code_dir(code_dir));
-        module.op_dir.extend(op_dir.into_iter());
-
-        wam.add_module(module, code);
-    } else {
-        wam.add_batched_code(code, code_dir);
-        wam.add_batched_ops(op_dir);
-    }
+    let code = try_eval_session!(compiler.gen_code(worker.results, &mut indices.code_dir));
+    compiler.add_code(code, indices);
 
     EvalSession::EntrySuccess
 }

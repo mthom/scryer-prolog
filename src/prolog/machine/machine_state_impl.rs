@@ -1235,14 +1235,16 @@ impl MachineState {
     }
 
     fn compare_numbers(&mut self, cmp: CompareNumberQT, n1: Number, n2: Number) {
+        let ordering = n1.cmp(&n2);
+        
         self.fail = match cmp {
-            CompareNumberQT::GreaterThan if !(n1.gt(n2)) => true,
-            CompareNumberQT::GreaterThanOrEqual if !(n1.gte(n2)) => true,
-            CompareNumberQT::LessThan if !(n1.lt(n2)) => true,
-            CompareNumberQT::LessThanOrEqual if !(n1.lte(n2)) => true,
-            CompareNumberQT::NotEqual if !(n1.ne(n2)) => true,
-            CompareNumberQT::Equal if !(n1.eq(n2)) => true,
-            _ => false
+            CompareNumberQT::GreaterThan if ordering == Ordering::Greater => false,
+            CompareNumberQT::GreaterThanOrEqual if ordering != Ordering::Less => false,
+            CompareNumberQT::LessThan if ordering == Ordering::Less => false,
+            CompareNumberQT::LessThanOrEqual if ordering != Ordering::Greater => false,
+            CompareNumberQT::NotEqual if ordering != Ordering::Equal => false,
+            CompareNumberQT::Equal if ordering == Ordering::Equal => false,
+            _ => true
         };
 
         self.p += 1;

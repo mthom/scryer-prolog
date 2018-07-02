@@ -212,9 +212,8 @@ fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError>
     }
 }
 
-fn append_preds(preds: &mut Vec<PredicateClause>) -> TopLevel {
-    let preds = mem::replace(preds, vec![]);
-    TopLevel::Predicate(Predicate(preds))
+fn append_preds(preds: &mut Vec<PredicateClause>) -> Predicate {
+    Predicate(mem::replace(preds, vec![]))
 }
 
 fn unfold_by_str_once(term: &mut Term, s: &str) -> Option<(Term, Term)>
@@ -295,13 +294,12 @@ pub enum TopLevelPacket {
 }
 
 struct RelationWorker {
-    queue: VecDeque<VecDeque<Term>>,
-    source_mod: ClauseName
+    queue: VecDeque<VecDeque<Term>>
 }
 
 impl RelationWorker {
-    fn new(source_mod: ClauseName) -> Self {
-        RelationWorker { queue: VecDeque::new(), source_mod }
+    fn new() -> Self {
+        RelationWorker { queue: VecDeque::new() }
     }
 
     fn compute_head(&self, term: &Term) -> Vec<Term>
@@ -393,7 +391,8 @@ impl RelationWorker {
         self.fabricate_rule(fold_by_str(prec_seq, body_term, comma_sym))
     }
 
-    fn to_query_term(&mut self, indices: &mut MachineCodeIndex, term: Term) -> Result<QueryTerm, ParserError>
+    fn to_query_term(&mut self, indices: &mut MachineCodeIndex, term: Term)
+                     -> Result<QueryTerm, ParserError>
     {
         match term {
             Term::Constant(r, Constant::Atom(name)) =>
@@ -562,7 +561,7 @@ impl RelationWorker {
     }
 }
 
-pub struct TopLevelWorker<'a, R> where R: Read {
+pub struct TopLevelWorker<'a, R: Read> {
     pub parser: Parser<R>,
     indices: MachineCodeIndex<'a>
 }
@@ -572,72 +571,9 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         TopLevelWorker { parser: Parser::new(inner, atom_tbl), indices }
     }
 
-    fn add_predicate(&mut self, tl: TopLevel) -> Vec<PredicateClause>
+    pub fn parse_code(&mut self) -> Result<TopLevelPacket, ParserError>
     {
-        match tl {
-            TopLevel::Rule(rule) => vec![PredicateClause::Rule(rule)],
-            TopLevel::Fact(fact) => vec![PredicateClause::Fact(fact)],
-            TopLevel::Predicate(preds) => preds.0,
-            _ => vec![]
-        }
-    }
-
-    pub fn parse_batch(&mut self, source_mod: ClauseName) -> Result<Vec<TopLevelPacket>, SessionError>
-    {
-        let mut preds      = vec![];
-        let mut results    = vec![];
-        let mut mod_name   = clause_name!("user");
-        let mut rel_worker = RelationWorker::new(source_mod.clone());
-
-        while !self.parser.eof() {
-            self.parser.reset(); // empty the parser stack of token descriptions.
-            let term = self.parser.read_term(&self.indices.op_dir)?;
-
-            let mut new_rel_worker = RelationWorker::new(source_mod.clone());
-            let tl = new_rel_worker.try_term_to_tl(&mut self.indices, term, true)?;
-
-            if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.
-                let result_queue = rel_worker.parse_queue(&mut self.indices)?;
-                results.push(deque_to_packet(append_preds(&mut preds), result_queue));
-            }
-
-            rel_worker.absorb(new_rel_worker);
-
-            match tl {
-                TopLevel::Declaration(Declaration::UseModule(name)) =>
-                    if let Some(module) = self.indices.modules.get(&name) {
-                        self.indices.use_module(module);
-                    },
-                TopLevel::Declaration(Declaration::Op(op_decl)) => {
-                    op_decl.submit(mod_name.clone(), self.indices.op_dir)?;
-                },
-                TopLevel::Declaration(Declaration::Module(actual_mod)) => {
-                    mod_name = actual_mod.name.clone();
-                    let tl = TopLevel::Declaration(Declaration::Module(actual_mod));
-                    results.push(TopLevelPacket::Decl(tl, vec![]));
-                },
-                TopLevel::Declaration(decl) => {
-                    results.push(TopLevelPacket::Decl(TopLevel::Declaration(decl), vec![]));
-                },
-                tl => if tl.name().is_some() {
-                    preds.extend(self.add_predicate(tl))
-                } else {
-                    return Err(SessionError::NamelessEntry)
-                }
-            };
-        }
-
-        if !preds.is_empty() {
-            results.push(deque_to_packet(append_preds(&mut preds),
-                                         rel_worker.parse_queue(&mut self.indices)?));
-        }
-
-        Ok(results)
-    }
-
-    pub fn parse_code(&mut self, source_mod: ClauseName) -> Result<TopLevelPacket, ParserError>
-    {
-        let mut rel_worker = RelationWorker::new(source_mod);
+        let mut rel_worker = RelationWorker::new();
 
         let terms   = self.parser.read(self.indices.op_dir)?;
         let mut tls = rel_worker.try_terms_to_tls(&mut self.indices, terms, true)?;
@@ -657,5 +593,57 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         } else {
             Err(ParserError::InconsistentEntry)
         }
+    }
+}
+
+pub struct TopLevelBatchWorker<R: Read> {
+    parser: Parser<R>,
+    rel_worker: RelationWorker,
+    pub source_mod: ClauseName,
+    pub results: Vec<(Predicate, VecDeque<TopLevel>)>
+}
+
+impl<R: Read> TopLevelBatchWorker<R> {
+    pub fn new(inner: R, atom_tbl: TabledData<Atom>) -> Self {
+        TopLevelBatchWorker { parser: Parser::new(inner, atom_tbl),
+                              rel_worker: RelationWorker::new(),
+                              source_mod: clause_name!("user"),
+                              results: vec![] }
+    }
+
+    pub
+    fn consume(&mut self, indices: &mut MachineCodeIndex) -> Result<Option<Declaration>, SessionError>
+    {
+        let mut preds = vec![];
+
+        while !self.parser.eof() {
+            self.parser.reset(); // empty the parser stack of token descriptions.
+
+            let mut new_rel_worker = RelationWorker::new();
+            let term = self.parser.read_term(&indices.op_dir)?;
+            let tl = new_rel_worker.try_term_to_tl(indices, term, true)?;
+
+            if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.
+                let result_queue = self.rel_worker.parse_queue(indices)?;
+                self.results.push((append_preds(&mut preds), result_queue));
+            }
+
+            self.rel_worker.absorb(new_rel_worker);
+
+            match tl {
+                TopLevel::Fact(fact) => preds.push(PredicateClause::Fact(fact)),
+                TopLevel::Rule(rule) => preds.push(PredicateClause::Rule(rule)),
+                TopLevel::Predicate(pred) => preds.extend(pred.0),
+                TopLevel::Declaration(decl) => return Ok(Some(decl)),
+                TopLevel::Query(_) => return Err(SessionError::NamelessEntry)
+            }
+        }
+
+        if !preds.is_empty() {
+            let result_queue = self.rel_worker.parse_queue(indices)?;
+            self.results.push((append_preds(&mut preds), result_queue));
+        }
+
+        Ok(None)
     }
 }

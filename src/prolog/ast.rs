@@ -810,8 +810,8 @@ pub enum ClauseType {
     BuiltIn(BuiltInClauseType),
     CallN,
     Inlined(InlinedClauseType),
-    Op(ClauseName, Fixity, CodeIndex),
     Named(ClauseName, CodeIndex),
+    Op(ClauseName, Fixity, CodeIndex),    
     System(SystemClauseType)
 }
 
@@ -1119,54 +1119,6 @@ impl Number {
             &Number::Float(fl)       => fl.into_inner().is_zero(),
             &Number::Integer(ref bi) => bi.is_zero(),
             &Number::Rational(ref r) => r.is_zero()
-        }
-    }
-
-    pub fn gt(self, n2: Number) -> bool {
-        match NumberPair::from(self, n2) {
-            NumberPair::Integer(n1, n2) => n1 > n2,
-            NumberPair::Float(n1, n2) => n1 > n2,
-            NumberPair::Rational(n1, n2) => n1 > n2
-        }
-    }
-
-    pub fn gte(self, n2: Number) -> bool {
-        match NumberPair::from(self, n2) {
-            NumberPair::Integer(n1, n2) => n1 >= n2,
-            NumberPair::Float(n1, n2) => n1 >= n2,
-            NumberPair::Rational(n1, n2) => n1 >= n2
-        }
-    }
-
-    pub fn lt(self, n2: Number) -> bool {
-        match NumberPair::from(self, n2) {
-            NumberPair::Integer(n1, n2) => n1 < n2,
-            NumberPair::Float(n1, n2) => n1 < n2,
-            NumberPair::Rational(n1, n2) => n1 < n2
-        }
-    }
-
-    pub fn lte(self, n2: Number) -> bool {
-        match NumberPair::from(self, n2) {
-            NumberPair::Integer(n1, n2) => n1 <= n2,
-            NumberPair::Float(n1, n2) => n1 <= n2,
-            NumberPair::Rational(n1, n2) => n1 <= n2
-        }
-    }
-
-    pub fn ne(self, n2: Number) -> bool {
-        match NumberPair::from(self, n2) {
-            NumberPair::Integer(n1, n2) => n1 != n2,
-            NumberPair::Float(n1, n2) => n1 != n2,
-            NumberPair::Rational(n1, n2) => n1 != n2
-        }
-    }
-
-    pub fn eq(self, n2: Number) -> bool {
-        match NumberPair::from(self, n2) {
-            NumberPair::Integer(n1, n2) => n1 == n2,
-            NumberPair::Float(n1, n2) => n1 == n2,
-            NumberPair::Rational(n1, n2) => n1 == n2
         }
     }
 }
