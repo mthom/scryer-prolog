@@ -111,11 +111,12 @@ impl Machine {
             cached_query: None
         };
 
-        compile_listing(&mut wam, BUILTINS);        
+        let indices = machine_code_index!(&mut CodeDir::new(), &mut default_op_dir());
+        compile_listing(&mut wam, BUILTINS, indices);
 
-        compile_listing(&mut wam, LISTS);
-        compile_listing(&mut wam, CONTROL);
-        compile_listing(&mut wam, QUEUES);
+        compile_user_module(&mut wam, LISTS);
+        compile_user_module(&mut wam, CONTROL);
+        compile_user_module(&mut wam, QUEUES);
 
         wam.use_module_in_toplevel(clause_name!("builtins"));
 

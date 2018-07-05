@@ -1,5 +1,3 @@
-:- use_module(library(builtins)).
-
 :- module(queues, [queue/1, queue/2, queue_head/3, queue_head_list/3,
 		   queue_last/3, queue_last_list/3, list_queue/2,
 		   queue_length/2]).

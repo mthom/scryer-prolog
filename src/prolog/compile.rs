@@ -180,7 +180,7 @@ impl<'a> ListingCompiler<'a> {
 
             compile_appendix(&mut decl_code, Vec::from(queue))?;
 
-            let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());            
+            let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
 
             code.extend(decl_code.into_iter());
@@ -193,7 +193,7 @@ impl<'a> ListingCompiler<'a> {
         let code_dir = mem::replace(indices.code_dir, HashMap::new());
         let op_dir   = mem::replace(indices.op_dir, HashMap::new());
 
-        if let Some(mut module) = self.module {
+        if let Some(mut module) = self.module {            
             module.code_dir.extend(as_module_code_dir(code_dir));
             module.op_dir.extend(op_dir.into_iter());
 
@@ -213,8 +213,6 @@ fn use_module(module: &mut Option<Module>, submodule: &Module, indices: &mut Mac
     if let &mut Some(ref mut module) = module {
         module.use_module(submodule);
     }
-
-    // self.wam.use_module_in_toplevel(name);
 }
 
 fn use_qualified_module(module: &mut Option<Module>, submodule: &Module, exports: &Vec<PredicateKey>,
@@ -225,13 +223,11 @@ fn use_qualified_module(module: &mut Option<Module>, submodule: &Module, exports
     if let &mut Some(ref mut module) = module {
         module.use_qualified_module(submodule, exports);
     }
-
-    // self.wam.use_qualified_module_in_toplevel(name, exports);
 }
 
-pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession {
-    let mut indices = machine_code_index!(&mut CodeDir::new(), &mut default_op_dir());
-
+pub
+fn compile_listing(wam: &mut Machine, src_str: &str, mut indices: MachineCodeIndex) -> EvalSession
+{
     let mut worker   = TopLevelBatchWorker::new(src_str.as_bytes(), wam.atom_tbl());
     let mut compiler = ListingCompiler::new(wam);
 
@@ -265,4 +261,16 @@ pub fn compile_listing(wam: &mut Machine, src_str: &str) -> EvalSession {
     compiler.add_code(code, indices);
 
     EvalSession::EntrySuccess
+}
+
+pub fn compile_user_module(wam: &mut Machine, src_str: &str) -> EvalSession {
+    let mut indices  = machine_code_index!(&mut CodeDir::new(), &mut default_op_dir());
+
+    if let Some(ref builtins) = wam.modules.get(&clause_name!("builtins")) {
+        indices.use_module(builtins);        
+    } else {
+        return EvalSession::from(SessionError::ModuleNotFound);        
+    }
+
+    compile_listing(wam, src_str, indices)
 }

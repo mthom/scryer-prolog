@@ -1,5 +1,3 @@
-:- use_module(library(builtins)).
-
 :- module(control, [(\=)/2, (\+)/1, between/3, once/1, repeat/0]).
 
 :- op(900, fy, \+).

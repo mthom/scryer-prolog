@@ -1,5 +1,3 @@
-:- use_module(library(builtins)).
-
 :- module(lists, [member/2, select/3, append/3, memberchk/2,
 		  reverse/2, length/2, maplist/2, maplist/3,
 		  maplist/4, maplist/5, maplist/6, maplist/7,
