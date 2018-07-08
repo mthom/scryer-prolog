@@ -35,6 +35,22 @@ impl MachineError {
         MachineError { stub, from: ErrorProvenance::Received }
     }
 
+    pub(super)
+    fn module_resolution_error(h: usize, mod_name: ClauseName, name: ClauseName, arity: usize) -> Self
+    {
+        let mod_name = HeapCellValue::Addr(Addr::Con(Constant::Atom(mod_name)));
+        let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name)));
+        
+        let mut stub = functor!("evaluation_error", 1, [HeapCellValue::Addr(Addr::HeapCell(h + 2))]);
+        
+        stub.append(&mut functor!("/", 2, [HeapCellValue::Addr(Addr::HeapCell(h + 2 + 3)),
+                                           heap_integer!(arity)],
+                                  Fixity::In));
+        stub.append(&mut functor!(":", 2, [mod_name, name], Fixity::In));
+
+        MachineError { stub, from: ErrorProvenance::Constructed }
+    }
+    
     pub(super) fn existence_error(h: usize, name: ClauseName, arity: usize) -> Self {
         let mut stub = functor!("existence_error", 2, [heap_atom!("procedure"), heap_str!(3 + h)]);
         stub.append(&mut Self::functor_stub(name, arity));

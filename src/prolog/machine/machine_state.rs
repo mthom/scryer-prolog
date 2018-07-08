@@ -33,7 +33,7 @@ impl Ball {
 
 pub(crate) struct CodeDirs<'a> {
     code_dir: &'a CodeDir,
-    modules: &'a HashMap<ClauseName, Module>
+    modules: &'a ModuleDir
 }
 
 impl<'a> CodeDirs<'a> {
@@ -225,6 +225,21 @@ pub struct MachineState {
     pub(super) last_call: bool
 }
 
+fn call_at_index(machine_st: &mut MachineState, module_name: ClauseName, arity: usize, idx: usize)
+{
+    machine_st.cp.assign_if_local(machine_st.p.clone() + 1);
+    machine_st.num_of_args = arity;
+    machine_st.b0 = machine_st.b;
+    machine_st.p  = dir_entry!(idx, module_name);
+}
+
+fn execute_at_index(machine_st: &mut MachineState, module_name: ClauseName, arity: usize, idx: usize)
+{
+    machine_st.num_of_args = arity;
+    machine_st.b0 = machine_st.b;
+    machine_st.p  = dir_entry!(idx, module_name);
+}
+
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
 pub(crate) trait CallPolicy: Any {
@@ -352,35 +367,46 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
-                    idx: CodeIndex)
+                    idx: CodeIndex, code_dirs: CodeDirs)
                     -> CallResult
     {
         if machine_st.last_call {
-            self.try_execute(machine_st, name, arity, idx)
+            self.try_execute(machine_st, name, arity, idx, code_dirs)
         } else {
-            self.try_call(machine_st, name, arity, idx)
+            self.try_call(machine_st, name, arity, idx, code_dirs)
         }
     }
 
-    fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                arity: usize, idx: CodeIndex)
+    fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
+                idx: CodeIndex, code_dirs: CodeDirs)
                 -> CallResult
-    {                
+    {
         match idx.0.borrow().0 {
+            IndexPtr::Module => {
+                let stub = MachineError::functor_stub(name.clone(), arity);
+                let module_name = idx.0.borrow().1.clone();
+                let h = machine_st.heap.h;
+
+                if let Some(ref idx) = code_dirs.get(name.clone(), arity, module_name.clone()) {
+                    if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
+                        call_at_index(machine_st, module_name, arity, compiled_tl_index);
+                        return Ok(());
+                    }
+                }
+
+                let err = MachineError::module_resolution_error(h, module_name, name, arity);
+                return Err(machine_st.error_form(err, stub));
+            },
             IndexPtr::Undefined => {
                 let stub = MachineError::functor_stub(name.clone(), arity);
                 let h = machine_st.heap.h;
-                
+
                 return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
                                                  stub));
             },
             IndexPtr::Index(compiled_tl_index) => {
                 let module_name = idx.0.borrow().1.clone();
-
-                machine_st.cp.assign_if_local(machine_st.p.clone() + 1);
-                machine_st.num_of_args = arity;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = dir_entry!(compiled_tl_index, module_name);
+                call_at_index(machine_st, module_name, arity, compiled_tl_index)
             }
         }
 
@@ -388,23 +414,35 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn try_execute<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                       arity: usize, idx: CodeIndex)
+                       arity: usize, idx: CodeIndex, code_dirs: CodeDirs)
                        -> CallResult
     {
         match idx.0.borrow().0 {
+            IndexPtr::Module => {
+                let stub = MachineError::functor_stub(name.clone(), arity);
+                let module_name = idx.0.borrow().1.clone();
+                let h = machine_st.heap.h;
+
+                if let Some(ref idx) = code_dirs.get(name.clone(), arity, module_name.clone()) {
+                    if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
+                        execute_at_index(machine_st, module_name, arity, compiled_tl_index);
+                        return Ok(());
+                    }
+                }
+
+                let err = MachineError::module_resolution_error(h, module_name, name, arity);
+                return Err(machine_st.error_form(err, stub));
+            },
             IndexPtr::Undefined => {
                 let stub = MachineError::functor_stub(name.clone(), arity);
                 let h = machine_st.heap.h;
-                
+
                 return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
                                                  stub));
             },
             IndexPtr::Index(compiled_tl_index) => {
                 let module_name = idx.0.borrow().1.clone();
-
-                machine_st.num_of_args = arity;
-                machine_st.b0 = machine_st.b;
-                machine_st.p  = dir_entry!(compiled_tl_index, module_name);
+                execute_at_index(machine_st, module_name, arity, compiled_tl_index);
             }
         }
 
@@ -552,7 +590,7 @@ pub(crate) trait CallPolicy: Any {
                     machine_st.execute_inlined(&inlined),
                 ClauseType::Op(..) | ClauseType::Named(..) =>
                     if let Some(idx) = code_dirs.get(name.clone(), arity, user) {
-                        self.context_call(machine_st, name, arity, idx)?;
+                        self.context_call(machine_st, name, arity, idx, code_dirs)?;
                     } else {
                         let h = machine_st.heap.h;
                         let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
@@ -562,7 +600,7 @@ pub(crate) trait CallPolicy: Any {
                 ClauseType::System(_) => {
                     let name = Addr::Con(Constant::Atom(name));
                     let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
-                    
+
                     return Err(machine_st.error_form(MachineError::type_error(ValidType::Callable,
                                                                               name),
                                                      stub));
@@ -576,10 +614,10 @@ pub(crate) trait CallPolicy: Any {
 
 impl CallPolicy for CallWithInferenceLimitCallPolicy {
     fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                    arity: usize, idx: CodeIndex)
+                    arity: usize, idx: CodeIndex, code_dirs: CodeDirs)
                     -> CallResult
     {
-        self.prev_policy.context_call(machine_st, name, arity, idx)?;
+        self.prev_policy.context_call(machine_st, name, arity, idx, code_dirs)?;
         self.increment()
     }
 
@@ -747,7 +785,7 @@ impl CutPolicy for SCCCutPolicy {
         let b = machine_st.b;
 
         if let Addr::Con(Constant::Usize(b0)) = machine_st[r].clone() {
-            if b > b0 {                
+            if b > b0 {
                 machine_st.b = b0;
                 machine_st.tidy_trail();
                 machine_st.or_stack.truncate(machine_st.b);
@@ -755,8 +793,8 @@ impl CutPolicy for SCCCutPolicy {
         } else {
             machine_st.fail = true;
             return;
-        }    
-        
+        }
+
         if let Some(&(_, b_cutoff, prev_block)) = self.cont_pts.last() {
             if machine_st.b < b_cutoff {
                 machine_st.block = prev_block;

@@ -5,7 +5,7 @@
 	(>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2,
 	(-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2, (==)/2,
 	(\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2, (\=@=)/2,
-	catch/3, throw/1, true/0, false/0]).
+	(:)/2, catch/3, throw/1, true/0, false/0]).
 
 % arithmetic operators.
 :- op(700, xfx, is).
@@ -50,6 +50,9 @@
 :- op(700, xfx, @>).
 :- op(700, xfx, =@=).
 :- op(700, xfx, \=@=).
+
+% module resolution operator.
+:- op(600, xfy, :).
 
 % the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
 max_arity(63).

@@ -17,13 +17,12 @@ use std::mem::swap;
 use std::ops::Index;
 use std::rc::Rc;
 
-pub struct MachineCodeIndex<'a> {
-    pub code_dir: &'a mut CodeDir,
-    pub op_dir: &'a mut OpDir,
-//    pub modules: &'a ModuleDir
+pub struct MachineCodeIndices<'a> {
+    pub(super) code_dir: &'a mut CodeDir,
+    pub(super) op_dir: &'a mut OpDir,
 }
 
-impl<'a> MachineCodeIndex<'a> {
+impl<'a> MachineCodeIndices<'a> {
     pub(super)
     fn lookup(&mut self, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> ClauseType
     {
@@ -73,7 +72,7 @@ impl Index<LocalCodePtr> for Machine {
     }
 }
 
-impl<'a> SubModuleUser for MachineCodeIndex<'a> {
+impl<'a> SubModuleUser for MachineCodeIndices<'a> {
     fn op_dir(&mut self) -> &mut OpDir {
         self.op_dir
     }
@@ -111,7 +110,7 @@ impl Machine {
             cached_query: None
         };
 
-        let indices = machine_code_index!(&mut CodeDir::new(), &mut default_op_dir());
+        let indices = machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir());
         compile_listing(&mut wam, BUILTINS, indices);
 
         compile_user_module(&mut wam, LISTS);
@@ -178,14 +177,14 @@ impl Machine {
         self.ms.atom_tbl.clone()
     }
 
-    pub fn use_qualified_module_in_toplevel(&mut self, name: ClauseName, exports: Vec<PredicateKey>) -> EvalSession
+    pub fn use_qualified_module_in_toplevel(&mut self, name: ClauseName, exports: Vec<PredicateKey>)
+                                            -> EvalSession
     {
         self.remove_module(name.clone());
 
         if let Some(mut module) = self.modules.remove(&name) {
             let result = {
-                let mut indices = machine_code_index!(&mut self.code_dir, &mut self.op_dir);
-                                                      //&self.modules);
+                let mut indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir);
                 indices.use_qualified_module(&mut module, &exports)
             };
 
@@ -202,8 +201,7 @@ impl Machine {
 
         if let Some(mut module) = self.modules.remove(&name) {
             let result = {
-                let mut indices = machine_code_index!(&mut self.code_dir, &mut self.op_dir);
-                                                      //&self.modules);
+                let mut indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir);
                 indices.use_module(&mut module)
             };
 

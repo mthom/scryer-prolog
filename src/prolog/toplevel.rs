@@ -5,7 +5,7 @@ use prolog::parser::parser::*;
 use prolog::tabled_rc::*;
 
 use std::collections::{HashSet, VecDeque};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::io::Read;
 use std::mem;
 use std::rc::Rc;
@@ -288,6 +288,17 @@ fn mark_cut_variables(terms: &mut Vec<Term>) -> bool {
     found_cut_var
 }
 
+fn module_resolution_call(mod_name: Term, body: Term) -> Result<QueryTerm, ParserError> {
+    if let Term::Constant(_, Constant::Atom(mod_name)) = mod_name {
+        if let Term::Clause(_, name, terms, _) = body {
+            let idx = CodeIndex(Rc::new(RefCell::new((IndexPtr::Module, mod_name))));
+            return Ok(QueryTerm::Clause(Cell::default(), ClauseType::Named(name, idx), terms));
+        }
+    }
+
+    Err(ParserError::InvalidModuleResolution)
+}
+
 pub enum TopLevelPacket {
     Query(Vec<QueryTerm>, Vec<TopLevel>),
     Decl(TopLevel, Vec<TopLevel>)
@@ -391,7 +402,7 @@ impl RelationWorker {
         self.fabricate_rule(fold_by_str(prec_seq, body_term, comma_sym))
     }
 
-    fn to_query_term(&mut self, indices: &mut MachineCodeIndex, term: Term)
+    fn to_query_term(&mut self, indices: &mut MachineCodeIndices, term: Term)
                      -> Result<QueryTerm, ParserError>
     {
         match term {
@@ -411,6 +422,11 @@ impl RelationWorker {
 
                     self.queue.push_back(clauses);
                     Ok(QueryTerm::Jump(stub))
+                } else if name.as_str() == ":" && terms.len() == 2 {
+                    let callee   = *terms.pop().unwrap();
+                    let mod_name = *terms.pop().unwrap();
+                    
+                    module_resolution_call(mod_name, callee)
                 } else if name.as_str() == "->" && terms.len() == 2 {
                     let conq = *terms.pop().unwrap();
                     let prec = *terms.pop().unwrap();
@@ -460,7 +476,7 @@ impl RelationWorker {
         }
     }
 
-    fn setup_query(&mut self, idx: &mut MachineCodeIndex, terms: Vec<Box<Term>>, blocks_cuts: bool)
+    fn setup_query(&mut self, idx: &mut MachineCodeIndices, terms: Vec<Box<Term>>, blocks_cuts: bool)
                    -> Result<Vec<QueryTerm>, ParserError>
     {
         let mut query_terms = vec![];
@@ -495,7 +511,7 @@ impl RelationWorker {
         Ok(query_terms)
     }
 
-    fn setup_rule(&mut self, idx: &mut MachineCodeIndex, mut terms: Vec<Box<Term>>, blocks_cuts: bool)
+    fn setup_rule(&mut self, idx: &mut MachineCodeIndices, mut terms: Vec<Box<Term>>, blocks_cuts: bool)
                   -> Result<Rule, ParserError>
     {
         let post_head_terms = terms.drain(1..).collect();
@@ -512,7 +528,7 @@ impl RelationWorker {
         }
     }
 
-    fn try_term_to_tl(&mut self, idx: &mut MachineCodeIndex, term: Term, blocks_cuts: bool)
+    fn try_term_to_tl(&mut self, idx: &mut MachineCodeIndices, term: Term, blocks_cuts: bool)
                       -> Result<TopLevel, ParserError>
     {
         match term {
@@ -531,7 +547,7 @@ impl RelationWorker {
         }
     }
 
-    fn try_terms_to_tls<Iter>(&mut self, idx: &mut MachineCodeIndex, terms: Iter, blocks_cuts: bool)
+    fn try_terms_to_tls<Iter>(&mut self, idx: &mut MachineCodeIndices, terms: Iter, blocks_cuts: bool)
                               -> Result<VecDeque<TopLevel>, ParserError>
         where Iter: IntoIterator<Item=Term>
     {
@@ -544,7 +560,7 @@ impl RelationWorker {
         Ok(results)
     }
 
-    fn parse_queue(&mut self, idx: &mut MachineCodeIndex) -> Result<VecDeque<TopLevel>, ParserError>
+    fn parse_queue(&mut self, idx: &mut MachineCodeIndices) -> Result<VecDeque<TopLevel>, ParserError>
     {
         let mut queue = VecDeque::new();
 
@@ -563,11 +579,11 @@ impl RelationWorker {
 
 pub struct TopLevelWorker<'a, R: Read> {
     pub parser: Parser<R>,
-    indices: MachineCodeIndex<'a>
+    indices: MachineCodeIndices<'a>
 }
 
 impl<'a, R: Read> TopLevelWorker<'a, R> {
-    pub fn new(inner: R, atom_tbl: TabledData<Atom>, indices: MachineCodeIndex<'a>) -> Self {
+    pub fn new(inner: R, atom_tbl: TabledData<Atom>, indices: MachineCodeIndices<'a>) -> Self {
         TopLevelWorker { parser: Parser::new(inner, atom_tbl), indices }
     }
 
@@ -612,7 +628,7 @@ impl<R: Read> TopLevelBatchWorker<R> {
     }
 
     pub
-    fn consume(&mut self, indices: &mut MachineCodeIndex) -> Result<Option<Declaration>, SessionError>
+    fn consume(&mut self, indices: &mut MachineCodeIndices) -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
 

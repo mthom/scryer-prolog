@@ -108,6 +108,7 @@ The following predicates are built-in to rusty-wam.
     * `is/2` works for `(+)/2`, `(-)/{1,2}`, `(*)/2`, `(//)/2`, `(div)/2`, `(/)/2`, `(rdiv)/2`,
       `(xor)/2`, `(rem)/2`, `(mod)/2`, `(/\)/2`, `(\/)/2`, `(>>)/2`, `(<<)/2`.
     * Comparison operators: `>`, `<`, `=<`, `>=`, `=:=`, `=\=`.
+* `(:)/2`
 * `(@>)/2`
 * `(@>=)/2`
 * `(@=<)/2`
@@ -278,3 +279,12 @@ prolog> :- use_module(library(lists), [member/2]).
 
 A qualified `use_module` can be used to remove imports from the
 toplevel by calling it with an empty import list.
+
+The `(:)/2` operator is used to resolve calls to predicates
+not within the current working namespace:
+
+```
+prolog> ?- lists:member(X, Xs).
+```
+
+This is a debugging kludge. Mostly.

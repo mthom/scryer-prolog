@@ -233,9 +233,9 @@ macro_rules! set_code_index {
     }}
 }
 
-macro_rules! machine_code_index {
+macro_rules! machine_code_indices {
     ($code_dir:expr, $op_dir:expr) => ( //, $modules:expr) => (
-        MachineCodeIndex { code_dir: $code_dir, op_dir: $op_dir } //, modules: $modules }
+        MachineCodeIndices { code_dir: $code_dir, op_dir: $op_dir } //, modules: $modules }
     )
 }
 

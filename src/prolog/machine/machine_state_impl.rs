@@ -1832,7 +1832,8 @@ impl MachineState {
             &ControlInstruction::CallClause(ClauseType::Named(ref name, ref idx), arity, _, lco)
           | &ControlInstruction::CallClause(ClauseType::Op(ref name, _, ref idx), arity, _, lco) => {
                 self.last_call = lco;
-                try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone()));
+                try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
+                                                            code_dirs));
             },
             &ControlInstruction::CallClause(ClauseType::System(ref ct), _, _, lco) => {
                 self.last_call = lco;

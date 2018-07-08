@@ -495,6 +495,7 @@ pub enum ParserError
     InvalidModuleExport,
     InvalidRuleHead,
     InvalidUseModuleDecl,
+    InvalidModuleResolution,
     MissingQuote,
     ParseBigInt,
     ParseFloat,
@@ -860,7 +861,7 @@ impl ClauseName {
             &ClauseName::User(ref name) => name.as_ref()
         }
     }
-
+    
     pub fn defrock_brackets(self) -> Self {
         fn defrock_brackets(s: &str) -> &str {
             if s.starts_with('(') && s.ends_with(')') {
@@ -1532,9 +1533,11 @@ impl HeapCellValue {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy,PartialEq)]
 pub enum IndexPtr {
-    Undefined, Index(usize)
+    Undefined, Index(usize),
+    Module // This is a resolved module call. The module
+    // targeted is in the wrapping CodeIndex, and the name is in the ClauseType.
 }
 
 #[derive(Clone)]
@@ -1542,7 +1545,7 @@ pub struct CodeIndex(pub Rc<RefCell<(IndexPtr, ClauseName)>>);
 
 impl CodeIndex {
     pub fn is_undefined(&self) -> bool {
-        let index_ptr = self.0.borrow().0;
+        let index_ptr = &self.0.borrow().0;
 
         if let IndexPtr::Undefined = index_ptr {
             true

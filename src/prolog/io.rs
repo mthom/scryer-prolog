@@ -12,8 +12,12 @@ use std::fmt;
 impl fmt::Display for IndexPtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &IndexPtr::Undefined => write!(f, "undefined"),
-            &IndexPtr::Index(i)  => write!(f, "{}", i)
+            &IndexPtr::Module =>
+                write!(f, ""),
+            &IndexPtr::Undefined =>
+                write!(f, "undefined"),
+            &IndexPtr::Index(i)  =>
+                write!(f, "{}", i)
         }
     }
 }
