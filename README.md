@@ -280,11 +280,9 @@ prolog> :- use_module(library(lists), [member/2]).
 A qualified `use_module` can be used to remove imports from the
 toplevel by calling it with an empty import list.
 
-The `(:)/2` operator is used to resolve calls to predicates
-not within the current working namespace:
+The `(:)/2` operator resolves calls to predicates that might not be
+imported to the current working namespace:
 
 ```
 prolog> ?- lists:member(X, Xs).
 ```
-
-This is a debugging kludge. Mostly.

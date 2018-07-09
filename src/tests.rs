@@ -1267,6 +1267,37 @@ fn test_queries_on_conditionals()
 }
 
 #[test]
+fn test_queries_on_modules()
+{
+    let mut wam = Machine::new();
+
+    wam.use_module_in_toplevel(clause_name!("lists"));
+
+    compile_user_module(&mut wam, "
+:- module(my_lists, [local_member/2, reverse/2]).
+:- use_module(library(lists), [member/2]).
+
+local_member(X, Xs) :- member(X, Xs).
+
+reverse(Xs, Ys) :- lists:reverse(Xs, Ys).
+");
+    
+    assert_prolog_success!(&mut wam, "?- my_lists:local_member(1, [1,2,3]).");
+    assert_prolog_success!(&mut wam, "?- my_lists:reverse([a,b,c], [c,b,a]).");
+    
+    compile_user_module(&mut wam, "
+:- use_module(library(my_lists), [local_member/2]).
+:- module(my_lists_2, [local_member/2]).
+");
+
+    assert_prolog_success!(&mut wam, "?- my_lists_2:local_member(1, [1,2,3]).");
+    assert_prolog_success!(&mut wam, "?- catch(local_member(X, Xs), error(E, _), true).",
+                           [["X = _1", "E = existence_error(procedure, local_member/2)", "Xs = _2"]]);
+
+    
+}
+
+#[test]
 fn test_queries_on_builtins()
 {
     let mut wam = Machine::new();

@@ -138,7 +138,7 @@ pub fn compile_packet(wam: &mut Machine, tl: TopLevelPacket) -> EvalSession
 {
     match tl {
         TopLevelPacket::Query(terms, queue) =>
-            match compile_query(terms, queue) { //, &mut wam.code_dir) { //wam.code_size(), &mut wam.code_dir) {
+            match compile_query(terms, queue) {
                 Ok((mut code, vars)) => wam.submit_query(code, vars),
                 Err(e) => EvalSession::from(e)
             },
