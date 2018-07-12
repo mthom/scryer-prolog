@@ -425,7 +425,7 @@ impl RelationWorker {
                 } else if name.as_str() == ":" && terms.len() == 2 {
                     let callee   = *terms.pop().unwrap();
                     let mod_name = *terms.pop().unwrap();
-                    
+
                     module_resolution_call(mod_name, callee)
                 } else if name.as_str() == "->" && terms.len() == 2 {
                     let conq = *terms.pop().unwrap();
@@ -598,13 +598,6 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
         let tl = merge_clauses(&mut tls)?;
 
         if tls.is_empty() {
-            /*
-            match tl.name() {
-                Some(name) => self.add_name(name, tl.arity(), clause_name!("user")),
-                _ => {}
-            };
-             */
-
             Ok(deque_to_packet(tl, results))
         } else {
             Err(ParserError::InconsistentEntry)
