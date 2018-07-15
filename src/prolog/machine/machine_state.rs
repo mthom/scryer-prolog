@@ -492,7 +492,7 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.fail = !machine_st.is_cyclic_term(addr);
                 return_from_clause!(machine_st.last_call, machine_st)
             },
-            &BuiltInClauseType::Display => {
+            &BuiltInClauseType::Writeq => {
                 let output = machine_st.print_term(machine_st[temp_v!(1)].clone(),
                                                    DisplayFormatter {},
                                                    PrinterOutputter::new());

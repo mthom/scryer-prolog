@@ -1207,8 +1207,8 @@ fn test_queries_on_conditionals()
 {
     let mut wam = Machine::new();
     
-    submit(&mut wam, "test(A) :- (   A =:= 2 -> display(\"A is 2\")
-                                 ;   A =:= 3 -> display(\"A is 3\")
+    submit(&mut wam, "test(A) :- (   A =:= 2 -> writeq(\"A is 2\")
+                                 ;   A =:= 3 -> writeq(\"A is 3\")
                                  ;   A = \"not 2 or 3\"
                                  ).");
 
@@ -1551,9 +1551,9 @@ fn test_queries_on_builtins()
                            [["G = 2", "B = 3"]]);
 
     /*
-    assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),display(S+G>B)), B=3, !), 100, R).",
+    assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 100, R).",
                            [["G = 2", "B = 3", "R = !", "S = 1"]]);
-    assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),display(S+G>B)), B=3, !), 10, R).",
+    assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 10, R).",
                            [["S = _1", "G = _4", "B = _14", "R = inference_limit_exceeded"]]);
    */
 }
@@ -1582,32 +1582,32 @@ fn test_queries_on_setup_call_cleanup()
                            [["S = 1", "G = 2", "C = 3"]]);
     assert_prolog_success!(&mut wam, "?- setup_call_cleanup((S=1;S=2), G=3, C=4).",
                            [["S = 1", "G = 3", "C = 4"]]);
-    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(S=1, G=2, display(S+G)).",
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(S=1, G=2, writeq(S+G)).",
                            [["S = 1", "G = 2"]]);
-    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(S=1, (G=2;G=3), display(S+G)).",
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(S=1, (G=2;G=3), writeq(S+G)).",
                            [["S = 1", "G = 2"],
                             ["S = 1", "G = 3"]]);
-    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(S=1, G=2, display(S+G>A+B)), A=3, B=4.",
+    assert_prolog_success!(&mut wam, "?- setup_call_cleanup(S=1, G=2, writeq(S+G>A+B)), A=3, B=4.",
                            [["S = 1", "G = 2", "A = 3", "B = 4"]]);
     assert_prolog_success!(&mut wam,
-                           "?- catch(setup_call_cleanup(S=1, (G=2;G=3,throw(x)), display(S+G)), E, true).",
+                           "?- catch(setup_call_cleanup(S=1, (G=2;G=3,throw(x)), writeq(S+G)), E, true).",
                            [["S = 1", "G = 2", "E = _26"], ["G = _4", "E = x", "S = _1"]]);
     assert_prolog_success!(&mut wam,
-                           "?- setup_call_cleanup(S=1, (G=2;G=3),display(S+G>B)), B=4, !.",
+                           "?- setup_call_cleanup(S=1, (G=2;G=3),writeq(S+G>B)), B=4, !.",
                            [["S = 1", "B = 4", "G = 2"]]);
     assert_prolog_success!(&mut wam,
-                           "?- setup_call_cleanup(S=1,G=2,display(S+G>B)),B=3,!.",
+                           "?- setup_call_cleanup(S=1,G=2,writeq(S+G>B)),B=3,!.",
                            [["S = 1", "G = 2", "B = 3"]]);
     assert_prolog_success!(&mut wam,
-                           "?- setup_call_cleanup(S=1,(G=2;false),display(S+G>B)),B=3,!.",
+                           "?- setup_call_cleanup(S=1,(G=2;false),writeq(S+G>B)),B=3,!.",
                            [["S = 1", "G = 2", "B = 3"]]);
     assert_prolog_success!(&mut wam,
-                           "?- setup_call_cleanup(S=1,(G=2;S=2),display(S+G>B)), B=3, !.",
+                           "?- setup_call_cleanup(S=1,(G=2;S=2),writeq(S+G>B)), B=3, !.",
                            [["S = 1", "B = 3", "G = 2"]]);
     assert_prolog_failure!(&mut wam,
-                           "?- setup_call_cleanup(S=1,(G=2;G=3), display(S+G>B)), B=4, !, throw(x).");
+                           "?- setup_call_cleanup(S=1,(G=2;G=3), writeq(S+G>B)), B=4, !, throw(x).");
     assert_prolog_success!(&mut wam,
-                           "?- setup_call_cleanup(true, (X=1;X=2), display(a)), setup_call_cleanup(true,(Y=1;Y=2),display(b)), !.",
+                           "?- setup_call_cleanup(true, (X=1;X=2), writeq(a)), setup_call_cleanup(true,(Y=1;Y=2),writeq(b)), !.",
                            [["Y = 1", "X = 1"]]);
     assert_prolog_success!(&mut wam, "?- catch(setup_call_cleanup(true,throw(goal),throw(cl)), Pat, true).",
                            [["Pat = goal"]]);
