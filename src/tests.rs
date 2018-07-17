@@ -1607,7 +1607,7 @@ fn test_queries_on_setup_call_cleanup()
     assert_prolog_failure!(&mut wam,
                            "?- setup_call_cleanup(S=1,(G=2;G=3), writeq(S+G>B)), B=4, !, throw(x).");
     assert_prolog_success!(&mut wam,
-                           "?- setup_call_cleanup(true, (X=1;X=2), writeq(a)), setup_call_cleanup(true,(Y=1;Y=2),writeq(b)), !.",
+"?- setup_call_cleanup(true, (X=1;X=2), writeq(a)), setup_call_cleanup(true,(Y=1;Y=2),writeq(b)), !.",
                            [["Y = 1", "X = 1"]]);
     assert_prolog_success!(&mut wam, "?- catch(setup_call_cleanup(true,throw(goal),throw(cl)), Pat, true).",
                            [["Pat = goal"]]);

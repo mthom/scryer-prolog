@@ -1,6 +1,7 @@
 use prolog::ast::*;
 use prolog::heap_iter::*;
 use prolog::machine::machine_state::MachineState;
+use prolog::ordered_float::OrderedFloat;
 
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -233,9 +234,26 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             }
         })
     }
+    
+    fn print_atom(&mut self, atom: &ClauseName) {
+        let non_quoted_token = |c| {
+            graphic_token_char!(c) || alpha_numeric_char!(c)
+        };
 
+        match atom.as_str() {
+            ";" | "!" => self.outputter.append(atom.as_str()),
+            s => if s.chars().all(non_quoted_token) {
+                self.outputter.append(atom.as_str());
+            } else {
+                self.outputter.append(&("'".to_owned() + atom.as_str() + "'"));
+            }
+        }
+    }
+    
     fn print_constant(&mut self, c: Constant) {
         match c {
+            Constant::Atom(ref atom) =>
+                self.print_atom(atom),
             Constant::Char(c) if c == '\n' =>
                 self.outputter.append("'\\n'"),
             Constant::Char(c) if c == '\r' =>
@@ -255,8 +273,23 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 self.outputter.push_char(c);
                 self.outputter.append("'");
             },
-            _ =>
-                self.outputter.append(format!("{}", c).as_str())
+            Constant::EmptyList =>
+                self.outputter.append("[]"),
+            Constant::Number(Number::Float(fl)) =>
+                if &fl == &OrderedFloat(0f64) {
+                    self.outputter.append("0");
+                } else {
+                    self.outputter.append(&format!("{}", fl));
+                },
+            Constant::Number(n) =>
+                self.outputter.append(&format!("{}", n)),
+            Constant::String(s) => {
+                self.outputter.append("\"");
+                self.outputter.append(s.as_str());
+                self.outputter.append("\"");
+            },
+            Constant::Usize(i) =>
+                self.outputter.append(&format!("u{}", i))
         }
     }
     

@@ -23,32 +23,25 @@ impl fmt::Display for IndexPtr {
     }
 }
 
+impl fmt::Display for ClauseName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fn print_atom(f: &mut fmt::Formatter, atom: &ClauseName) -> fmt::Result {
-            let non_quoted_token = |c| {
-                graphic_token_char!(c) || alpha_numeric_char!(c)
-            };
-
-            match atom.as_str() {
-                ";" | "!" => write!(f, "{}", atom.as_str()),
-                s => if s.chars().all(non_quoted_token) {
-                    write!(f, "{}", atom.as_str())
-                } else {
-                    write!(f, "{}", "'".to_owned() + atom.as_str() + "'")
-                }
-            }
-        }
-
         match self {
             &Constant::Atom(ref atom) =>
-                print_atom(f, atom),
+                if atom.as_str().chars().any(|c| "`.$'\" ".contains(c)) {
+                    write!(f, "'{}'", atom.as_str())
+                } else {
+                    write!(f, "{}", atom.as_str())
+                },
             &Constant::Char(c) =>
                 write!(f, "'{}'", c as u8),
             &Constant::EmptyList =>
                 write!(f, "[]"),
-            &Constant::Number(Number::Float(ref fl)) if fl == &OrderedFloat(0f64) =>
-                write!(f, "0"),
             &Constant::Number(ref n) =>
                 write!(f, "{}", n),
             &Constant::String(ref s) =>
@@ -56,12 +49,6 @@ impl fmt::Display for Constant {
             &Constant::Usize(integer) =>
                 write!(f, "u{}", integer)
         }
-    }
-}
-
-impl fmt::Display for ClauseName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.as_str())
     }
 }
 

@@ -134,7 +134,6 @@ The following predicates are built-in to rusty-wam.
 * `compare/3`
 * `compound/1`
 * `cyclic_term/1`
-* `display/1`
 * `duplicate_term/2`
 * `false/0`
 * `float/1`
@@ -158,6 +157,7 @@ The following predicates are built-in to rusty-wam.
 * `throw/1`
 * `true/0`
 * `var/1`
+* `writeq/1`
 
 ## Tutorial
 To enter a multi-clause predicate, the brackets ":{" and "}:" are used
