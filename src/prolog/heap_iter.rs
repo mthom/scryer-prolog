@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::vec::Vec;
 
 pub struct HCPreOrderIterator<'a> {
-    machine_st: &'a MachineState,
+    pub(crate) machine_st: &'a MachineState,
     state_stack: Vec<Addr>
 }
 

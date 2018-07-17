@@ -494,7 +494,7 @@ pub(crate) trait CallPolicy: Any {
             },
             &BuiltInClauseType::Writeq => {
                 let output = machine_st.print_term(machine_st[temp_v!(1)].clone(),
-                                                   DisplayFormatter {},
+                                                   WriteqFormatter {},
                                                    PrinterOutputter::new());
 
                 println!("{}", output.result());

@@ -1,7 +1,6 @@
 use prolog::ast::*;
 use prolog::heap_print::*;
 use prolog::machine::*;
-use prolog::ordered_float::OrderedFloat;
 
 use termion::raw::IntoRawMode;
 use termion::input::TermRead;

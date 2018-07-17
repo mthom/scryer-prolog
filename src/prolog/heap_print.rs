@@ -1,4 +1,5 @@
 use prolog::ast::*;
+use prolog::num::*;
 use prolog::heap_iter::*;
 use prolog::machine::machine_state::MachineState;
 use prolog::ordered_float::OrderedFloat;
@@ -10,6 +11,7 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub enum TokenOrRedirect {
     Atom(ClauseName),
+    NumberedVar(String),
     Redirect,
     Open,
     Close,
@@ -40,7 +42,7 @@ pub trait HCValueFormatter {
 
     // this can be overloaded to handle special cases, falling back on the default of
     // format_struct when convenient.
-    fn format_clause(&self, usize, ClauseType, &mut Vec<TokenOrRedirect>);
+    fn format_clause(&self, &mut HCPreOrderIterator, usize, ClauseType, &mut Vec<TokenOrRedirect>);
 }
 
 pub trait HCValueOutputter {
@@ -99,44 +101,81 @@ impl HCValueOutputter for PrinterOutputter {
 }
 
 // the 'classic' display corresponding to the display predicate.
-pub struct DisplayFormatter {}
+pub struct WriteqFormatter {}
 
-impl HCValueFormatter for DisplayFormatter {
-    fn format_clause(&self, arity: usize, ct: ClauseType, state_stack: &mut Vec<TokenOrRedirect>)
-    {
-        if ct.fixity().is_some() {
-            let mut new_name = String::from("'");
-            new_name += ct.name().as_str();
-            new_name += "'";
+fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
+    arity == 1 && if let &ClauseType::Named(ref name, _) = ct {
+        name.as_str() == "$VAR"
+    } else {
+        false
+    }
+}
 
-            self.format_struct(arity, ct.name(), state_stack);
-        } else {
-            self.format_struct(arity, ct.name(), state_stack);
+fn print_op(ct: ClauseType, fixity: Fixity, state_stack: &mut Vec<TokenOrRedirect>) {
+    match fixity {
+        Fixity::Post => {
+            state_stack.push(TokenOrRedirect::Atom(ct.name()));
+            state_stack.push(TokenOrRedirect::Redirect);
+        },
+        Fixity::Pre => {
+            state_stack.push(TokenOrRedirect::Redirect);
+            state_stack.push(TokenOrRedirect::Atom(ct.name()));
+        },
+        Fixity::In => {
+            state_stack.push(TokenOrRedirect::Redirect);
+            state_stack.push(TokenOrRedirect::Atom(ct.name()));
+            state_stack.push(TokenOrRedirect::Redirect);
         }
+    }    
+}
+
+impl HCValueFormatter for WriteqFormatter {
+    fn format_clause(&self, iter: &mut HCPreOrderIterator, arity: usize,
+                     ct: ClauseType, state_stack: &mut Vec<TokenOrRedirect>)
+    {
+        static CHAR_CODES: [char; 26] = ['A','B','C','D','E','F','G','H','I','J',
+                                         'K','L','M','N','O','P','Q','R','S','T',
+                                         'U','V','W','X','Y','Z'];
+
+        if let Some(fixity) = ct.fixity() {
+            return print_op(ct, fixity, state_stack);
+        } else if is_numbered_var(&ct, arity) {
+            let addr = iter.stack().last().cloned().unwrap();
+
+            // 7.10.4
+            match iter.machine_st.store(iter.machine_st.deref(addr)) {
+                Addr::Con(Constant::Number(Number::Integer(n))) => {
+                    iter.stack().pop();
+                    
+                    let i = n.mod_floor(&BigInt::from(26)).to_usize().unwrap();
+                    let j = n.div_floor(&BigInt::from(26));
+
+                    let mut result = if j.is_zero() {
+                        CHAR_CODES[i].to_string()
+                    } else {
+                        format!("{}{}", CHAR_CODES[i], j)
+                    };
+                    
+                    state_stack.push(TokenOrRedirect::NumberedVar(result));
+                    
+                    return;
+                }
+                _ => {}
+            };           
+        }
+        
+        self.format_struct(arity, ct.name(), state_stack);        
     }
 }
 
 pub struct TermFormatter {}
 
 impl HCValueFormatter for TermFormatter {
-    fn format_clause(&self, arity: usize, ct: ClauseType, state_stack: &mut Vec<TokenOrRedirect>)
+    fn format_clause(&self, _: &mut HCPreOrderIterator, arity: usize, ct: ClauseType,
+                     state_stack: &mut Vec<TokenOrRedirect>)
     {
         if let Some(fixity) = ct.fixity() {
-            match fixity {
-                Fixity::Post => {
-                    state_stack.push(TokenOrRedirect::Atom(ct.name()));
-                    state_stack.push(TokenOrRedirect::Redirect);
-                },
-                Fixity::Pre => {
-                    state_stack.push(TokenOrRedirect::Redirect);
-                    state_stack.push(TokenOrRedirect::Atom(ct.name()));
-                },
-                Fixity::In => {
-                    state_stack.push(TokenOrRedirect::Redirect);
-                    state_stack.push(TokenOrRedirect::Atom(ct.name()));
-                    state_stack.push(TokenOrRedirect::Redirect);
-                }
-            }
+            print_op(ct, fixity, state_stack);
         } else {
             self.format_struct(arity, ct.name(), state_stack);
         }
@@ -303,7 +342,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         match heap_val {
             HeapCellValue::NamedStr(arity, name, fixity) => {
                 let ct = ClauseType::from(name, arity, fixity);
-                self.formatter.format_clause(arity, ct, &mut self.state_stack)
+                self.formatter.format_clause(iter, arity, ct, &mut self.state_stack)
             },
             HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
                 if !self.at_cdr("") {
@@ -349,6 +388,8 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
 //                        self.outputter.append(" "),
                     TokenOrRedirect::Atom(atom) =>
                         self.outputter.append(atom.as_str()),
+                    TokenOrRedirect::NumberedVar(num_var) =>
+                        self.outputter.append(num_var.as_str()),
                     TokenOrRedirect::Redirect =>
                         self.handle_heap_term(&mut iter),
                     TokenOrRedirect::Close =>
