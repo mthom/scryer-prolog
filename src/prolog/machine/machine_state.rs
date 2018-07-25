@@ -5,12 +5,12 @@ use prolog::heap_print::*;
 use prolog::machine::machine_errors::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
+use prolog::read::*;
 use prolog::tabled_rc::*;
 
 use downcast::Any;
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
@@ -32,13 +32,14 @@ impl Ball {
 }
 
 pub(crate) struct CodeDirs<'a> {
-    code_dir: &'a CodeDir,
-    modules: &'a ModuleDir
+    pub code_dir: &'a CodeDir,
+    pub op_dir: &'a OpDir,
+    pub modules: &'a ModuleDir
 }
 
 impl<'a> CodeDirs<'a> {
-    pub(super) fn new(code_dir: &'a CodeDir, modules: &'a HashMap<ClauseName, Module>) -> Self {
-        CodeDirs { code_dir, modules }
+    pub(super) fn new(code_dir: &'a CodeDir, op_dir: &'a OpDir, modules: &'a ModuleDir) -> Self {
+        CodeDirs { code_dir, op_dir, modules }
     }
 
     pub(super) fn get(&self, name: ClauseName, arity: usize, in_mod: ClauseName) -> Option<CodeIndex>
@@ -202,7 +203,7 @@ pub(super) enum MachineMode {
 }
 
 pub struct MachineState {
-    pub(super) atom_tbl: TabledData<Atom>,
+    pub(crate) atom_tbl: TabledData<Atom>,
     pub(super) s: usize,
     pub(super) p: CodePtr,
     pub(super) b: usize,
@@ -449,7 +450,8 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType)
+    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
+                        code_dirs: CodeDirs<'a>)
                         -> CallResult
     {
         match ct {
@@ -491,6 +493,19 @@ pub(crate) trait CallPolicy: Any {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = !machine_st.is_cyclic_term(addr);
                 return_from_clause!(machine_st.last_call, machine_st)
+            },
+            &BuiltInClauseType::Read => {
+                let mut reader = Reader::new(machine_st);
+
+                match reader.read_stdin(code_dirs.op_dir) {
+                    Ok(offset) => {
+                        let addr = reader.machine_st[temp_v!(1)].clone();
+                        reader.machine_st.unify(addr, Addr::HeapCell(offset));
+                    },
+                    Err(err) => println!("{:?}", err)
+                };
+
+                return_from_clause!(reader.machine_st.last_call, reader.machine_st)
             },
             &BuiltInClauseType::Writeq => {
                 let output = machine_st.print_term(machine_st[temp_v!(1)].clone(),
@@ -645,10 +660,11 @@ impl CallPolicy for CallWithInferenceLimitCallPolicy {
         self.increment()
     }
 
-    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType)
+    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
+                        code_dirs: CodeDirs<'a>)
                         -> CallResult
     {
-        self.prev_policy.call_builtin(machine_st, ct)?;
+        self.prev_policy.call_builtin(machine_st, ct, code_dirs)?;
         self.increment()
     }
 

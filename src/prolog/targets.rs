@@ -32,7 +32,7 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
     type Iterator = FactIterator<'a>;
 
     fn iter(term: &'a Term) -> Self::Iterator {
-        term.breadth_first_iter()
+        term.breadth_first_iter(false) // do not iterate over the root clause if one exists.
     }
 
     fn to_constant(lvl: Level, constant: Constant, reg: RegType) -> Self {

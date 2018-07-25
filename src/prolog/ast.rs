@@ -803,6 +803,7 @@ pub enum BuiltInClauseType {
     Is(RegType, ArithmeticTerm),
     KeySort,
     NotEq,
+    Read,
     Sort,
 }
 
@@ -906,6 +907,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Is(..)  => clause_name!("is"),
             &BuiltInClauseType::KeySort => clause_name!("keysort"),
             &BuiltInClauseType::NotEq => clause_name!("\\=="),
+            &BuiltInClauseType::Read => clause_name!("read"),
             &BuiltInClauseType::Sort => clause_name!("sort"),
         }
     }
@@ -925,6 +927,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Is(..) => 2,
             &BuiltInClauseType::KeySort => 2,
             &BuiltInClauseType::NotEq => 2,
+            &BuiltInClauseType::Read => 1,
             &BuiltInClauseType::Sort => 2,
         }
     }
@@ -950,6 +953,7 @@ impl BuiltInClauseType {
             ("keysort", 2) => Some(BuiltInClauseType::KeySort),
             ("\\==", 2) => Some(BuiltInClauseType::NotEq),
             ("sort", 2) => Some(BuiltInClauseType::Sort),
+            ("read", 1) => Some(BuiltInClauseType::Read),
             _ => None
         }
     }
@@ -1015,7 +1019,7 @@ pub enum TermRef<'a> {
     Var(Level, &'a Cell<VarReg>, Rc<Var>)
 }
 
-impl<'a> TermRef<'a> {
+impl<'a> TermRef<'a> {    
     pub fn level(self) -> Level {
         match self {
             TermRef::AnonVar(lvl)
@@ -1796,7 +1800,7 @@ impl<'a> TermIterState<'a> {
             &Term::Constant(ref cell, ref constant) =>
                 TermIterState::Constant(lvl, cell, constant),
             &Term::Var(ref cell, ref var) =>
-                TermIterState::Var(lvl, cell, (*var).clone())
+                TermIterState::Var(lvl, cell, var.clone())
         }
     }
 }

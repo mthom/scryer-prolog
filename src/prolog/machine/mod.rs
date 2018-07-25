@@ -298,7 +298,8 @@ impl Machine {
             Line::Cut(ref cut_instr) =>
                 self.ms.execute_cut_instr(cut_instr, &mut self.cut_policy),
             Line::Control(ref control_instr) => {
-                let code_dirs = CodeDirs::new(&self.code_dir, &self.modules);
+                let code_dirs = CodeDirs::new(&self.code_dir, &self.op_dir,
+                                              &self.modules);
                 self.ms.execute_ctrl_instr(code_dirs, &mut self.call_policy,
                                            &mut self.cut_policy, control_instr)
             },

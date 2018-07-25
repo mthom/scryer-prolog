@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::vec::Vec;
 
 pub struct QueryIterator<'a> {
-    state_stack: Vec<TermIterState<'a>>
+    state_stack: Vec<TermIterState<'a>>,
 }
 
 impl<'a> QueryIterator<'a> {
@@ -120,6 +120,7 @@ impl<'a> Iterator for QueryIterator<'a> {
 
 pub struct FactIterator<'a> {
     state_queue: VecDeque<TermIterState<'a>>,
+    iterable_root: bool
 }
 
 impl<'a> FactIterator<'a> {
@@ -132,10 +133,10 @@ impl<'a> FactIterator<'a> {
             .map(|bt| TermIterState::subterm_to_state(Level::Shallow, bt.as_ref()))
             .collect();
 
-        FactIterator { state_queue }
+        FactIterator { state_queue, iterable_root: false }
     }
 
-    fn new(term: &'a Term) -> Self {
+    fn new(term: &'a Term, iterable_root: bool) -> Self {
         let states = match term {
             &Term::AnonVar =>
                 vec![TermIterState::AnonVar(Level::Root)],
@@ -151,7 +152,7 @@ impl<'a> FactIterator<'a> {
                 vec![TermIterState::Var(Level::Root, cell, var.clone())]
         };
 
-        FactIterator { state_queue: VecDeque::from(states) }
+        FactIterator { state_queue: VecDeque::from(states), iterable_root }
     }
 }
 
@@ -169,7 +170,7 @@ impl<'a> Iterator for FactIterator<'a> {
                     }
 
                     match lvl {
-                        Level::Root => continue,
+                        Level::Root if !self.iterable_root => continue,
                         _ => return Some(TermRef::Clause(lvl, cell, ct, child_terms))
                     };
                 },
@@ -196,8 +197,8 @@ impl Term {
         QueryIterator::from_term(self)
     }
 
-    pub fn breadth_first_iter(&self) -> FactIterator {
-        FactIterator::new(self)
+    pub fn breadth_first_iter(&self, iterable_root: bool) -> FactIterator {
+        FactIterator::new(self, iterable_root)
     }
 }
 

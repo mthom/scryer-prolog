@@ -1825,7 +1825,7 @@ impl MachineState {
             },
             &ControlInstruction::CallClause(ClauseType::BuiltIn(ref ct), _, _, lco) => {
                 self.last_call = lco;
-                try_or_fail!(self, call_policy.call_builtin(self, ct));
+                try_or_fail!(self, call_policy.call_builtin(self, ct, code_dirs));
             },
             &ControlInstruction::CallClause(ClauseType::Inlined(ref ct), ..) =>
                 self.execute_inlined(ct),

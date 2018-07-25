@@ -31,7 +31,7 @@ impl<'a> ArithInstructionIterator<'a> {
             &Term::Cons(_, _, _) =>
                 return Err(ArithmeticError::InvalidTerm),
             &Term::Var(ref cell, ref var) =>
-                TermIterState::Var(Level::Shallow, cell, (*var).clone())
+                TermIterState::Var(Level::Shallow, cell, var.clone())
         };
 
         Ok(ArithInstructionIterator { state_stack: vec![state] })
