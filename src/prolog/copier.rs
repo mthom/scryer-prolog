@@ -1,13 +1,12 @@
 use prolog::and_stack::*;
 use prolog::ast::*;
 
-use std::collections::HashMap;
 use std::ops::IndexMut;
 
 type Trail = Vec<(Ref, HeapCellValue)>;
 
 pub(crate) struct RedirectInfo {
-    trail: Trail    
+    trail: Trail
 }
 
 pub(crate) trait CopierTarget
@@ -40,11 +39,6 @@ pub(crate) trait CopierTarget
         let mut scan = self.source();
         let old_h = self.threshold();
 
-        // Lists have a compressed representation as structures,
-        // removing the need for NamedStr, so we use a redirection
-        // table for copying lists.
-        let mut list_redirect = HashMap::new();
-
         self.push(HeapCellValue::Addr(addr));
 
         while scan < self.threshold() {
@@ -54,21 +48,25 @@ pub(crate) trait CopierTarget
                 HeapCellValue::Addr(a) =>
                     match a.clone() {
                         Addr::Lis(a) => {
-                            if let Some(idx) = list_redirect.get(&a) {
-                                self[scan] = HeapCellValue::Addr(Addr::Lis(*idx));
-                                scan += 1;
-                                continue;
+                            if let HeapCellValue::Addr(Addr::Lis(b)) = self[a].clone() {
+                                if b >= old_h {
+                                    self[scan] = HeapCellValue::Addr(Addr::Lis(b));
+                                    scan += 1;
+                                    continue;
+                                }
                             }
 
-                            list_redirect.insert(a, self.threshold());
-                            
-                            self[scan] = HeapCellValue::Addr(Addr::Lis(self.threshold()));
+                            let threshold = self.threshold();
+                            self[scan] = HeapCellValue::Addr(Addr::Lis(threshold));
 
                             let hcv = self[a].clone();
                             self.push(hcv);
 
                             let hcv = self[a+1].clone();
                             self.push(hcv);
+
+                            trail.push((Ref::HeapCell(a), self[a].clone()));
+                            self[a] = HeapCellValue::Addr(Addr::Lis(threshold));
 
                             scan += 1;
                         },
