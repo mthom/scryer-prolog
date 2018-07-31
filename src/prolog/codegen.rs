@@ -494,6 +494,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         // add a proceed to bookend any trailing cuts.
         match toc {
             &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => code.push(proceed!()),
+            &QueryTerm::Clause(_, ClauseType::Inlined(..), _) => code.push(proceed!()),
             _ => {}
         };
 
