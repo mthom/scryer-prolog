@@ -813,7 +813,7 @@ pub enum ClauseType {
     CallN,
     Inlined(InlinedClauseType),
     Named(ClauseName, CodeIndex),
-    Op(ClauseName, Fixity, CodeIndex),    
+    Op(ClauseName, Fixity, CodeIndex),
     System(SystemClauseType)
 }
 
@@ -862,7 +862,7 @@ impl ClauseName {
             &ClauseName::User(ref name) => name.as_ref()
         }
     }
-    
+
     pub fn defrock_brackets(self) -> Self {
         fn defrock_brackets(s: &str) -> &str {
             if s.starts_with('(') && s.ends_with(')') {
@@ -1019,7 +1019,7 @@ pub enum TermRef<'a> {
     Var(Level, &'a Cell<VarReg>, Rc<Var>)
 }
 
-impl<'a> TermRef<'a> {    
+impl<'a> TermRef<'a> {
     pub fn level(self) -> Level {
         match self {
             TermRef::AnonVar(lvl)
@@ -1600,7 +1600,10 @@ impl CodePtr {
 #[derive(Clone, PartialEq)]
 pub enum LocalCodePtr {
     DirEntry(usize, ClauseName), // offset, resident module name.
-    TopLevel(usize, usize) // chunk_num, offset.
+    TopLevel(usize, usize), // chunk_num, offset.
+    // DynamicModuleCall(ClauseName, ClauseName, usize)
+    // module name, predicate name and arity.
+    // used for internal, dynamic module calls.
 }
 
 impl LocalCodePtr {
