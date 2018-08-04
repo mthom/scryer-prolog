@@ -700,7 +700,7 @@ pub struct Rule {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
-    CheckCutPoint,
+    CheckCutPoint,    
     GetSCCCleaner,
     InstallSCCCleaner,
     InstallInferenceCounter,
@@ -718,6 +718,7 @@ pub enum SystemClauseType {
     InstallNewBlock,
     ResetBlock,
     SetBall,
+    SetCutPointByDefault(RegType),
     SkipMaxList,
     Succeed,
     UnwindStack
@@ -739,7 +740,7 @@ impl SystemClauseType {
                 clause_name!("$remove_call_policy_check"),
             &SystemClauseType::RemoveInferenceCounter =>
                 clause_name!("$remove_inference_counter"),
-            &SystemClauseType::RestoreCutPolicy => clause_name!("$restore_cut_policy"),
+            &SystemClauseType::RestoreCutPolicy => clause_name!("$restore_cut_policy"),            
             &SystemClauseType::SetCutPoint(_) => clause_name!("$set_cp"),
             &SystemClauseType::InferenceLevel => clause_name!("$inference_level"),
             &SystemClauseType::CleanUpBlock => clause_name!("$clean_up_block"),
@@ -751,6 +752,7 @@ impl SystemClauseType {
             &SystemClauseType::InstallNewBlock => clause_name!("$install_new_block"),
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
             &SystemClauseType::SetBall => clause_name!("$set_ball"),
+            &SystemClauseType::SetCutPointByDefault(_) => clause_name!("$set_cp_by_default"),
             &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
@@ -781,6 +783,7 @@ impl SystemClauseType {
             ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
             ("$set_ball", 1) => Some(SystemClauseType::SetBall),
+            ("$set_cp_by_default", 1) => Some(SystemClauseType::SetCutPointByDefault(temp_v!(1))),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             _ => None
@@ -1561,6 +1564,15 @@ impl CodeIndex {
 
 #[derive(Clone)]
 pub struct ModuleCodeIndex(pub IndexPtr, pub ClauseName);
+
+impl ModuleCodeIndex {
+    pub fn local(&self) -> Option<usize> {
+        match self.0 {
+            IndexPtr::Index(i) => Some(i),
+            _ => None
+        }
+    }
+}
 
 impl From<ModuleCodeIndex> for CodeIndex {
     fn from(value: ModuleCodeIndex) -> Self {

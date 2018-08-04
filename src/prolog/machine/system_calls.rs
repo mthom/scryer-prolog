@@ -172,7 +172,16 @@ impl MachineState {
         self.block
     }
 
+    fn set_p(&mut self) {
+        if self.last_call {
+            self.p = CodePtr::Local(self.cp.clone());
+        } else {
+            self.p += 1;
+        }        
+    }
+    
     pub(super) fn system_call(&mut self, ct: &SystemClauseType,
+                              code_dirs: CodeDirs,
                               call_policy: &mut Box<CallPolicy>,
                               cut_policy:  &mut Box<CutPolicy>,)
                               -> CallResult
@@ -197,6 +206,8 @@ impl MachineState {
 
                                 if let Some(r) = dest.as_var() {
                                     self.bind(r, addr.clone());
+                                    self.set_p();
+                                    
                                     return Ok(());
                                 }
                             } else {
@@ -214,7 +225,8 @@ impl MachineState {
                 let prev_block = self.block;
 
                 if cut_policy.downcast_ref::<SCCCutPolicy>().is_err() {
-                    *cut_policy = Box::new(SCCCutPolicy::new());
+                    let (r_c_w_h, r_c_wo_h) = code_dirs.get_cleaner_sites();
+                    *cut_policy = Box::new(SCCCutPolicy::new(r_c_w_h, r_c_wo_h));
                 }
 
                 match cut_policy.downcast_mut::<SCCCutPolicy>().ok()
@@ -306,8 +318,13 @@ impl MachineState {
                     *cut_policy = Box::new(DefaultCutPolicy {});
                 }
             },
-            &SystemClauseType::SetCutPoint(r) =>
-                cut_policy.cut(self, r),
+            &SystemClauseType::SetCutPoint(r) => if cut_policy.cut(self, r) {
+                return Ok(());
+            },
+            &SystemClauseType::SetCutPointByDefault(r) => {
+                let mut cut_policy = DefaultCutPolicy {};
+                cut_policy.cut(self, r);
+            },
             &SystemClauseType::InferenceLevel => {
                 let a1 = self[temp_v!(1)].clone();
                 let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
@@ -379,10 +396,14 @@ impl MachineState {
                 self.reset_block(addr);
             },
             &SystemClauseType::SetBall => self.set_ball(),
-            &SystemClauseType::SkipMaxList => return self.skip_max_list(),
+            &SystemClauseType::SkipMaxList => if let Err(err) = self.skip_max_list() {
+                return Err(err);
+            },
             &SystemClauseType::Succeed => {},
             &SystemClauseType::UnwindStack => self.unwind_stack()
         };
+
+        self.set_p();
 
         Ok(())
     }

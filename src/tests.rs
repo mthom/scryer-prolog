@@ -1558,12 +1558,10 @@ fn test_queries_on_builtins()
    */
 }
 
-/*
 #[test]
 fn test_queries_on_setup_call_cleanup()
 {
     let mut wam = Machine::new();
-    load_init_str_and_include(&mut wam, BUILTINS, "builtins");
     
     // Test examples from the ISO Prolog page for setup_call_catch.
     assert_prolog_failure!(&mut wam, "?- setup_call_cleanup(false, _, _).");
@@ -1606,15 +1604,21 @@ fn test_queries_on_setup_call_cleanup()
                            [["S = 1", "B = 3", "G = 2"]]);
     assert_prolog_failure!(&mut wam,
                            "?- setup_call_cleanup(S=1,(G=2;G=3), writeq(S+G>B)), B=4, !, throw(x).");
+
+    assert_prolog_success!(&mut wam,
+                           "?- catch(setup_call_cleanup(true,throw(goal),throw(cl)), Pat, true).",
+                           [["Pat = goal"]]);
+    assert_prolog_success!(&mut wam,
+                           "?- catch(( setup_call_cleanup(true,(G=1;G=2),throw(cl)), throw(cont)), Pat, true).",
+                           [["Pat = cont", "G = _1"]]);
+    
+    // fails here.
     assert_prolog_success!(&mut wam,
 "?- setup_call_cleanup(true, (X=1;X=2), writeq(a)), setup_call_cleanup(true,(Y=1;Y=2),writeq(b)), !.",
-                           [["Y = 1", "X = 1"]]);
-    assert_prolog_success!(&mut wam, "?- catch(setup_call_cleanup(true,throw(goal),throw(cl)), Pat, true).",
-                           [["Pat = goal"]]);
-    assert_prolog_success!(&mut wam, "?- catch(( setup_call_cleanup(true,(G=1;G=2),throw(cl)), throw(cont)), Pat, true).",
-                           [["Pat = cont", "G = _1"]]);
+                           [["Y = 1", "X = 1"]]);    
 }
 
+/*
 #[test]
 fn test_queries_on_call_with_inference_limit()
 {

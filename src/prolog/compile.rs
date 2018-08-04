@@ -98,7 +98,7 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>) -> Result<(Code, A
     let mut code = try!(cg.compile_query(&terms));
 
     compile_appendix(&mut code, queue)?;
-
+    
     Ok((code, cg.take_vars()))
 }
 
@@ -202,7 +202,6 @@ impl<'a> ListingCompiler<'a> {
             self.wam.add_batched_ops(op_dir);
         }
     }
-
 }
 
 fn use_module(module: &mut Option<Module>, submodule: &Module, indices: &mut MachineCodeIndices)

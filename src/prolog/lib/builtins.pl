@@ -5,7 +5,7 @@
 	(>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2,
 	(-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2, (==)/2,
 	(\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2, (\=@=)/2,
-	(:)/2, catch/3, throw/1, true/0, false/0]).
+	(:)/2, catch/3, setup_call_cleanup/3, throw/1, true/0, false/0]).
 
 % arithmetic operators.
 :- op(700, xfx, is).
@@ -149,10 +149,8 @@ univ_worker(Term, List, _) :-
 
 % setup_call_cleanup.
 
-/* past work on setup_call_cleanup.
-
-setup_call_cleanup(S, G, C) :-
-    S, !, '$get_current_block'(Bb),
+setup_call_cleanup(S, G, C) :- '$get_cp'(B),
+    S, '$set_cp_by_default'(B), '$get_current_block'(Bb),
     ( var(C) -> throw(error(instantiation_error, setup_call_cleanup/3))
     ; scc_helper(C, G, Bb) ).
 
@@ -168,17 +166,16 @@ scc_helper(_, _, _) :-
     run_cleaners_without_handling(Cp), false.
 
 run_cleaners_with_handling :-
-    '$get_scc_cleaner'(C), catch(C, _, true), !,
+    '$get_scc_cleaner'(C), '$get_level'(B), catch(C, _, true), '$set_cp_by_default'(B),
     run_cleaners_with_handling.
 run_cleaners_with_handling :-
     '$restore_cut_policy'.
 
 run_cleaners_without_handling(Cp) :-
-    '$get_scc_cleaner'(C), C, !, run_cleaners_without_handling(Cp).
+    '$get_scc_cleaner'(C), '$get_level'(B), C, '$set_cp_by_default'(B),
+    run_cleaners_without_handling(Cp).
 run_cleaners_without_handling(Cp) :-
-    '$set_cp'(Cp), '$restore_cut_policy'.
-
-*/
+    '$set_cp_by_default'(Cp), '$restore_cut_policy'.
 
 % exceptions.
 
@@ -190,7 +187,7 @@ catch(G,C,R,Bb) :- '$reset_block'(Bb), '$get_ball'(Ball), handle_ball(Ball, C, R
 end_block(Bb, NBb) :- '$clean_up_block'(NBb), '$reset_block'(Bb).
 end_block(Bb, NBb) :- '$reset_block'(NBb), '$fail'.
 
-handle_ball(Ball, C, R) :- Ball = C, !, '$erase_ball', call(R).
+handle_ball(Ball, C, R) :- Ball = C, '$get_level'(B), '$set_cp_by_default'(B), '$erase_ball', call(R).
 handle_ball(_, _, _) :- '$unwind_stack'.
 
 throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.

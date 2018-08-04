@@ -29,7 +29,7 @@ Extend rusty-wam to include the following, among other features:
 * A revised, not-terrible module system (_done, I think_).
 * Built-in predicates for list processing and top-level declarative
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
-  etc.) (NEEDS REVISION)
+  etc.) (_IN REVISION_)
 * Definite Clause Grammars
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
@@ -130,6 +130,7 @@ The following predicates are built-in to rusty-wam.
 * `atomic/1`
 * `between/3`
 * `call/1..62`
+* `call_cleanup/2`
 * `catch/3`
 * `compare/3`
 * `compound/1`
@@ -153,6 +154,7 @@ The following predicates are built-in to rusty-wam.
 * `repeat/0`
 * `reverse/2`
 * `select/3`
+* `setup_call_cleanup/3`
 * `sort/2`
 * `string/1`
 * `throw/1`

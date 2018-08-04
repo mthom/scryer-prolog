@@ -193,7 +193,7 @@ impl MachineState {
                     (Addr::Con(c1), Addr::Con(c2)) =>
                         if c1 != c2 {
                             self.fail = true;
-                        },                    
+                        },
                     (Addr::Str(a1), Addr::Str(a2)) => {
                         let r1 = &self.heap[a1];
                         let r2 = &self.heap[a2];
@@ -1118,14 +1118,14 @@ impl MachineState {
 
         Some((name, arity + narity - 1))
     }
-    
+
     pub(super) fn unwind_stack(&mut self) {
         self.b = self.block;
         self.or_stack.truncate(self.b);
 
         self.fail = true;
     }
-    
+
     fn heap_ball_boundary_diff(&self) -> usize {
         if self.ball.boundary > self.heap.h {
             self.ball.boundary - self.heap.h
@@ -1184,10 +1184,10 @@ impl MachineState {
                     // 8.5.2.3 e)
                     let n = Addr::Con(Constant::Number(Number::Integer(n)));
                     let dom_err = MachineError::domain_error(DomainError::NotLessThanZero, n);
-                    
+
                     return Err(self.error_form(dom_err, stub));
                 }
-                
+
                 let n = match n.to_usize() {
                     Some(n) => n,
                     None => {
@@ -1206,7 +1206,7 @@ impl MachineState {
                             HeapCellValue::NamedStr(arity, _, _) if 1 <= n && n <= arity => {
                                 let a3  = self[temp_v!(3)].clone();
                                 let h_a = Addr::HeapCell(o + n);
-                                    
+
                                 self.unify(a3, h_a);
                             },
                             _ => self.fail = true
@@ -1215,7 +1215,7 @@ impl MachineState {
                         if n == 1 || n == 2 {
                             let a3  = self[temp_v!(3)].clone();
                             let h_a = Addr::HeapCell(l + n - 1);
-                            
+
                             self.unify(a3, h_a);
                         } else {
                             self.fail = true;
@@ -1224,8 +1224,8 @@ impl MachineState {
                         return Err(self.error_form(MachineError::type_error(ValidType::Compound, term),
                                                    stub))
                 }
-                
-                
+
+
             },
             _ => // 8.5.2.3 c)
                 return Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
@@ -1236,7 +1236,7 @@ impl MachineState {
 
     fn compare_numbers(&mut self, cmp: CompareNumberQT, n1: Number, n2: Number) {
         let ordering = n1.cmp(&n2);
-        
+
         self.fail = match cmp {
             CompareNumberQT::GreaterThan if ordering == Ordering::Greater => false,
             CompareNumberQT::GreaterThanOrEqual if ordering != Ordering::Less => false,
@@ -1537,7 +1537,7 @@ impl MachineState {
                             let f_a = if name.as_str() == "." && arity == 2 {
                                 Addr::Lis(self.heap.h)
                             } else {
-                                let h = self.heap.h;                                
+                                let h = self.heap.h;
                                 self.heap.push(HeapCellValue::NamedStr(arity as usize, name, None));
                                 Addr::Str(h)
                             };
@@ -1837,13 +1837,7 @@ impl MachineState {
             },
             &ControlInstruction::CallClause(ClauseType::System(ref ct), _, _, lco) => {
                 self.last_call = lco;
-                try_or_fail!(self, self.system_call(ct, call_policy, cut_policy));
-
-                if self.last_call {
-                    self.p = CodePtr::Local(self.cp.clone());
-                } else {
-                    self.p += 1;
-                }
+                try_or_fail!(self, self.system_call(ct, code_dirs, call_policy, cut_policy));
             },
             &ControlInstruction::Deallocate => self.deallocate(),
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
@@ -1959,8 +1953,7 @@ impl MachineState {
                 self.unify(a, b0);
                 self.p += 1;
             },
-            &CutInstruction::Cut(r) => {
-                cut_policy.cut(self, r);
+            &CutInstruction::Cut(r) => if !cut_policy.cut(self, r) {
                 self.p += 1;
             }
         }

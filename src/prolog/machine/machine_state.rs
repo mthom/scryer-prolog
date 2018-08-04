@@ -54,6 +54,30 @@ impl<'a> CodeDirs<'a> {
                 }
         }
     }
+
+    fn get_internal(&self, name: ClauseName, arity: usize, in_mod: ClauseName) -> Option<ModuleCodeIndex> {
+        self.modules.get(&in_mod)
+            .and_then(|ref module| module.code_dir.get(&(name, arity)))
+            .cloned()
+    }
+    
+    pub(super) fn get_cleaner_sites(&self) -> (usize, usize) {
+        let r_w_h  = clause_name!("run_cleaners_with_handling");
+        let r_wo_h = clause_name!("run_cleaners_without_handling");
+
+        let builtins = clause_name!("builtins");
+
+        let r_w_h  = self.get_internal(r_w_h, 0, builtins.clone()).and_then(|item| item.local());
+        let r_wo_h = self.get_internal(r_wo_h, 1, builtins).and_then(|item| item.local());
+
+        if let Some(r_w_h) = r_w_h {
+            if let Some(r_wo_h) = r_wo_h {
+                return (r_w_h, r_wo_h);
+            }
+        }
+
+        return (0, 0);
+    }
 }
 
 pub(super) struct DuplicateTerm<'a> {
@@ -502,7 +526,10 @@ pub(crate) trait CallPolicy: Any {
                         let addr = reader.machine_st[temp_v!(1)].clone();
                         reader.machine_st.unify(addr, Addr::HeapCell(offset));
                     },
-                    Err(err) => println!("{:?}", err)
+                    Err(err) => {
+                        println!("{:?}", err);
+                        reader.machine_st.fail = true;
+                    }
                 };
 
                 return_from_clause!(reader.machine_st.last_call, reader.machine_st)
@@ -749,7 +776,8 @@ impl CallWithInferenceLimitCallPolicy {
 }
 
 pub(crate) trait CutPolicy: Any {
-    fn cut(&mut self, &mut MachineState, RegType);
+    // returns true iff we fail or cut redirected the MachineState's p itself
+    fn cut(&mut self, &mut MachineState, RegType) -> bool;
 }
 
 downcast!(CutPolicy);
@@ -757,7 +785,7 @@ downcast!(CutPolicy);
 pub(crate) struct DefaultCutPolicy {}
 
 impl CutPolicy for DefaultCutPolicy {
-    fn cut(&mut self, machine_st: &mut MachineState, r: RegType) {
+    fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool {
         let b = machine_st.b;
 
         if let Addr::Con(Constant::Usize(b0)) = machine_st[r].clone() {
@@ -768,19 +796,23 @@ impl CutPolicy for DefaultCutPolicy {
             }
         } else {
             machine_st.fail = true;
-            return;
+            return true;
         }
+
+        false
     }
 }
 
 pub(crate) struct SCCCutPolicy {
     // locations of cleaners, cut points, the previous block
-    cont_pts: Vec<(Addr, usize, usize)>
+    cont_pts: Vec<(Addr, usize, usize)>,
+    r_c_w_h:  usize,
+    r_c_wo_h: usize
 }
 
 impl SCCCutPolicy {
-    pub(crate) fn new() -> Self {
-        SCCCutPolicy { cont_pts: vec![] }
+    pub(crate) fn new(r_c_w_h: usize, r_c_wo_h: usize) -> Self {
+        SCCCutPolicy { cont_pts: vec![], r_c_w_h, r_c_wo_h }
     }
 
     pub(crate) fn out_of_cont_pts(&self) -> bool {
@@ -794,10 +826,34 @@ impl SCCCutPolicy {
     pub(crate) fn pop_cont_pt(&mut self) -> Option<(Addr, usize, usize)> {
         self.cont_pts.pop()
     }
+
+    fn run_cleaners(&self, machine_st: &mut MachineState) -> bool {
+        if let Some(&(_, b_cutoff, prev_block)) = self.cont_pts.last() {
+            if machine_st.b < b_cutoff {
+                let builtins = clause_name!("builtins");
+                let (idx, arity) = if machine_st.block < prev_block {
+                    (self.r_c_w_h, 0)
+                } else {
+                    machine_st[temp_v!(1)] = Addr::Con(Constant::Usize(b_cutoff));
+                    (self.r_c_wo_h, 1)
+                };
+
+                if machine_st.last_call {
+                    execute_at_index(machine_st, builtins, arity, idx);
+                } else {
+                    call_at_index(machine_st, builtins, arity, idx);
+                }
+
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 impl CutPolicy for SCCCutPolicy {
-    fn cut(&mut self, machine_st: &mut MachineState, r: RegType) {
+    fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool {
         let b = machine_st.b;
 
         if let Addr::Con(Constant::Usize(b0)) = machine_st[r].clone() {
@@ -808,14 +864,9 @@ impl CutPolicy for SCCCutPolicy {
             }
         } else {
             machine_st.fail = true;
-            return;
+            return true;
         }
 
-        if let Some(&(_, b_cutoff, prev_block)) = self.cont_pts.last() {
-            if machine_st.b < b_cutoff {
-                machine_st.block = prev_block;
-                machine_st.unwind_stack();
-            }
-        }
+        self.run_cleaners(machine_st)            
     }
 }
