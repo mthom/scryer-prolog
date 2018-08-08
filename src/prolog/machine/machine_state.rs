@@ -744,7 +744,7 @@ impl CallPolicy for DefaultCallPolicy {}
 
 pub(crate) struct CWILCallPolicy {
     pub(crate) prev_policy: Box<CallPolicy>,
-    pub(crate) count:  BigUint,
+    count:  BigUint,
     limits: Vec<(BigUint, usize)>,
     inference_limit_exceeded: bool
 }
