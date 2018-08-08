@@ -700,7 +700,9 @@ pub struct Rule {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
-    CheckCutPoint,    
+    CallWithDefaultPolicy,
+    CheckCutPoint,
+    GetBValue,
     GetSCCCleaner,
     InstallSCCCleaner,
     InstallInferenceCounter,
@@ -731,7 +733,9 @@ impl SystemClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
+            &SystemClauseType::CallWithDefaultPolicy => clause_name!("$call_with_default_policy"),
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
+            &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
             &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
             &SystemClauseType::InstallInferenceCounter =>
@@ -740,7 +744,7 @@ impl SystemClauseType {
                 clause_name!("$remove_call_policy_check"),
             &SystemClauseType::RemoveInferenceCounter =>
                 clause_name!("$remove_inference_counter"),
-            &SystemClauseType::RestoreCutPolicy => clause_name!("$restore_cut_policy"),            
+            &SystemClauseType::RestoreCutPolicy => clause_name!("$restore_cut_policy"),
             &SystemClauseType::SetCutPoint(_) => clause_name!("$set_cp"),
             &SystemClauseType::InferenceLevel => clause_name!("$inference_level"),
             &SystemClauseType::CleanUpBlock => clause_name!("$clean_up_block"),
@@ -761,7 +765,9 @@ impl SystemClauseType {
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
+            ("$call_with_default_policy", 1) => Some(SystemClauseType::CallWithDefaultPolicy),
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
+            ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
             ("$install_scc_cleaner", 2) =>
                 Some(SystemClauseType::InstallSCCCleaner),
@@ -769,7 +775,7 @@ impl SystemClauseType {
                 Some(SystemClauseType::InstallInferenceCounter),
             ("$remove_call_policy_check", 1) =>
                 Some(SystemClauseType::RemoveCallPolicyCheck),
-            ("$remove_inference_counter", 1) =>
+            ("$remove_inference_counter", 2) =>
                 Some(SystemClauseType::RemoveInferenceCounter),
             ("$restore_cut_policy", 0) => Some(SystemClauseType::RestoreCutPolicy),
             ("$set_cp", 1) => Some(SystemClauseType::SetCutPoint(temp_v!(1))),
@@ -1613,9 +1619,6 @@ impl CodePtr {
 pub enum LocalCodePtr {
     DirEntry(usize, ClauseName), // offset, resident module name.
     TopLevel(usize, usize), // chunk_num, offset.
-    // DynamicModuleCall(ClauseName, ClauseName, usize)
-    // module name, predicate name and arity.
-    // used for internal, dynamic module calls.
 }
 
 impl LocalCodePtr {

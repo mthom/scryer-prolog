@@ -10,6 +10,7 @@ use prolog::tabled_rc::*;
 
 use downcast::Any;
 
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
@@ -31,6 +32,7 @@ impl Ball {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct CodeDirs<'a> {
     pub code_dir: &'a CodeDir,
     pub op_dir: &'a OpDir,
@@ -60,7 +62,7 @@ impl<'a> CodeDirs<'a> {
             .and_then(|ref module| module.code_dir.get(&(name, arity)))
             .cloned()
     }
-    
+
     pub(super) fn get_cleaner_sites(&self) -> (usize, usize) {
         let r_w_h  = clause_name!("run_cleaners_with_handling");
         let r_wo_h = clause_name!("run_cleaners_without_handling");
@@ -77,6 +79,33 @@ impl<'a> CodeDirs<'a> {
         }
 
         return (0, 0);
+    }
+}
+
+pub trait CodeDirsAdapter<'a> {
+    fn get_code_index(&self, PredicateKey, ClauseName) -> Option<CodeIndex>;
+    fn get_op(&self, OpDirKey) -> Option<(Specifier, usize, ClauseName)>;
+}
+
+impl<'a> CodeDirsAdapter<'a> for CodeDirs<'a> {
+    fn get_code_index(&self, key: PredicateKey, module: ClauseName) -> Option<CodeIndex> {
+        self.get(key.0, key.1, module)
+    }
+
+    fn get_op(&self, key: OpDirKey) -> Option<(Specifier, usize, ClauseName)> {
+        self.op_dir.get(&key).cloned()
+    }
+}
+
+impl<'a> CodeDirsAdapter<'a> for &'a Module {
+    fn get_code_index(&self, key: PredicateKey, _: ClauseName) -> Option<CodeIndex> {
+        self.code_dir.get(&key)
+            .cloned()
+            .map(|ModuleCodeIndex(ptr, module)| CodeIndex(Rc::new(RefCell::new((ptr, module)))))
+    }
+
+    fn get_op(&self, key: OpDirKey) -> Option<(Specifier, usize, ClauseName)> {
+        self.op_dir.get(&key).cloned()
     }
 }
 
@@ -391,9 +420,9 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
-                    idx: CodeIndex, code_dirs: CodeDirs)
-                    -> CallResult
+    fn context_call<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
+                        idx: CodeIndex, code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+                        -> CallResult
     {
         if machine_st.last_call {
             self.try_execute(machine_st, name, arity, idx, code_dirs)
@@ -402,9 +431,9 @@ pub(crate) trait CallPolicy: Any {
         }
     }
 
-    fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
-                idx: CodeIndex, code_dirs: CodeDirs)
-                -> CallResult
+    fn try_call<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
+                    idx: CodeIndex, code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+                    -> CallResult
     {
         match idx.0.borrow().0 {
             IndexPtr::Module => {
@@ -412,7 +441,8 @@ pub(crate) trait CallPolicy: Any {
                 let module_name = idx.0.borrow().1.clone();
                 let h = machine_st.heap.h;
 
-                if let Some(ref idx) = code_dirs.get(name.clone(), arity, module_name.clone()) {
+                if let Some(ref idx) = code_dirs.get_code_index((name.clone(), arity), module_name.clone())
+                {
                     if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
                         call_at_index(machine_st, module_name, arity, compiled_tl_index);
                         return Ok(());
@@ -439,7 +469,7 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn try_execute<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                       arity: usize, idx: CodeIndex, code_dirs: CodeDirs)
+                       arity: usize, idx: CodeIndex, code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
                        -> CallResult
     {
         match idx.0.borrow().0 {
@@ -448,7 +478,8 @@ pub(crate) trait CallPolicy: Any {
                 let module_name = idx.0.borrow().1.clone();
                 let h = machine_st.heap.h;
 
-                if let Some(ref idx) = code_dirs.get(name.clone(), arity, module_name.clone()) {
+                if let Some(ref idx) = code_dirs.get_code_index((name.clone(), arity), module_name.clone())
+                {
                     if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
                         execute_at_index(machine_st, module_name, arity, compiled_tl_index);
                         return Ok(());
@@ -610,7 +641,8 @@ pub(crate) trait CallPolicy: Any {
         }
     }
 
-    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize, code_dirs: CodeDirs<'a>)
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
+                  code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
                   -> CallResult
     {
         if let Some((name, arity)) = machine_st.setup_call_n(arity) {
@@ -631,7 +663,7 @@ pub(crate) trait CallPolicy: Any {
                 ClauseType::Inlined(inlined) =>
                     machine_st.execute_inlined(&inlined),
                 ClauseType::Op(..) | ClauseType::Named(..) =>
-                    if let Some(idx) = code_dirs.get(name.clone(), arity, user) {
+                    if let Some(idx) = code_dirs.get_code_index((name.clone(), arity), user) {
                         self.context_call(machine_st, name, arity, idx, code_dirs)?;
                     } else {
                         let h = machine_st.heap.h;
@@ -654,37 +686,37 @@ pub(crate) trait CallPolicy: Any {
     }
 }
 
-impl CallPolicy for CallWithInferenceLimitCallPolicy {
-    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                    arity: usize, idx: CodeIndex, code_dirs: CodeDirs)
-                    -> CallResult
+impl CallPolicy for CWILCallPolicy {
+    fn context_call<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                        arity: usize, idx: CodeIndex, code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+                        -> CallResult
     {
         self.prev_policy.context_call(machine_st, name, arity, idx, code_dirs)?;
-        self.increment()
+        self.increment(machine_st)
     }
 
     fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
     {
         self.prev_policy.retry_me_else(machine_st, offset)?;
-        self.increment()
+        self.increment(machine_st)
     }
 
     fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
     {
         self.prev_policy.retry(machine_st, offset)?;
-        self.increment()
+        self.increment(machine_st)
     }
 
     fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult
     {
         self.prev_policy.trust_me(machine_st)?;
-        self.increment()
+        self.increment(machine_st)
     }
 
     fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
     {
         self.prev_policy.trust(machine_st, offset)?;
-        self.increment()
+        self.increment(machine_st)
     }
 
     fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
@@ -692,14 +724,15 @@ impl CallPolicy for CallWithInferenceLimitCallPolicy {
                         -> CallResult
     {
         self.prev_policy.call_builtin(machine_st, ct, code_dirs)?;
-        self.increment()
+        self.increment(machine_st)
     }
 
-    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize, code_dirs: CodeDirs<'a>)
+    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
+                  code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
                   -> CallResult
     {
         self.prev_policy.call_n(machine_st, arity, code_dirs)?;
-        self.increment()
+        self.increment(machine_st)
     }
 }
 
@@ -709,27 +742,34 @@ pub(crate) struct DefaultCallPolicy {}
 
 impl CallPolicy for DefaultCallPolicy {}
 
-pub(crate) struct CallWithInferenceLimitCallPolicy {
+pub(crate) struct CWILCallPolicy {
     pub(crate) prev_policy: Box<CallPolicy>,
-    count:  BigUint,
-    limits: Vec<(BigUint, usize)>
+    pub(crate) count:  BigUint,
+    limits: Vec<(BigUint, usize)>,
+    inference_limit_exceeded: bool
 }
 
-impl CallWithInferenceLimitCallPolicy {
+impl CWILCallPolicy {
     pub(crate) fn new_in_place(policy: &mut Box<CallPolicy>)
     {
         let mut prev_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
         swap(&mut prev_policy, policy);
 
-        let new_policy = CallWithInferenceLimitCallPolicy { prev_policy,
-                                                            count:  BigUint::zero(),
-                                                            limits: vec![] };
+        let new_policy = CWILCallPolicy { prev_policy,
+                                          count:  BigUint::zero(),
+                                          limits: vec![],
+                                          inference_limit_exceeded: false };
         *policy = Box::new(new_policy);
     }
 
-    fn increment(&mut self) -> CallResult {
+    fn increment(&mut self, machine_st: &MachineState) -> CallResult {
+        if self.inference_limit_exceeded || machine_st.ball.stub.len() > 0 {
+            return Ok(());
+        }
+
         if let Some(&(ref limit, bp)) = self.limits.last() {
             if self.count == *limit {
+                self.inference_limit_exceeded = true;
                 return Err(functor!("inference_limit_exceeded", 1,
                                     [HeapCellValue::Addr(Addr::Con(Constant::Usize(bp)))]));
             } else {
@@ -782,24 +822,34 @@ pub(crate) trait CutPolicy: Any {
 
 downcast!(CutPolicy);
 
+fn cut_body(machine_st: &mut MachineState, addr: Addr) -> bool {
+    let b = machine_st.b;
+
+    if let Addr::Con(Constant::Usize(b0)) = addr {
+        if b > b0 {
+            machine_st.b = b0;
+            machine_st.tidy_trail();
+            machine_st.or_stack.truncate(machine_st.b);
+        }
+    } else {
+        machine_st.fail = true;
+        return true;
+    }
+
+    false
+}
+
 pub(crate) struct DefaultCutPolicy {}
+
+pub(super) fn deref_cut(machine_st: &mut MachineState, r: RegType) {
+    let addr = machine_st.store(machine_st.deref(machine_st[r].clone()));
+    cut_body(machine_st, addr);
+}
 
 impl CutPolicy for DefaultCutPolicy {
     fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool {
-        let b = machine_st.b;
-
-        if let Addr::Con(Constant::Usize(b0)) = machine_st[r].clone() {
-            if b > b0 {
-                machine_st.b = b0;
-                machine_st.tidy_trail();
-                machine_st.or_stack.truncate(machine_st.b);
-            }
-        } else {
-            machine_st.fail = true;
-            return true;
-        }
-
-        false
+        let addr = machine_st[r].clone();
+        cut_body(machine_st, addr)
     }
 }
 
@@ -867,6 +917,6 @@ impl CutPolicy for SCCCutPolicy {
             return true;
         }
 
-        self.run_cleaners(machine_st)            
+        self.run_cleaners(machine_st)
     }
 }

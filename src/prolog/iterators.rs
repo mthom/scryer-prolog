@@ -343,6 +343,8 @@ impl<'a> ChunkedIterator<'a>
                     }
                 },
                 ChunkedTerm::BodyTerm(&QueryTerm::GetLevelAndUnify(..)) => {
+                    self.deep_cut_encountered = true;
+                    
                     result.push(term);
                     arity = 1;
                     break;

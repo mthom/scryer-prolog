@@ -1821,7 +1821,7 @@ impl MachineState {
                 self.allocate(num_cells),
             &ControlInstruction::CallClause(ClauseType::CallN, arity, _, lco) => {
                 self.last_call = lco;
-                try_or_fail!(self, call_policy.call_n(self, arity, code_dirs));
+                try_or_fail!(self, call_policy.call_n(self, arity, Box::new(code_dirs)));
             },
             &ControlInstruction::CallClause(ClauseType::BuiltIn(ref ct), _, _, lco) => {
                 self.last_call = lco;
@@ -1833,7 +1833,7 @@ impl MachineState {
           | &ControlInstruction::CallClause(ClauseType::Op(ref name, _, ref idx), arity, _, lco) => {
                 self.last_call = lco;
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
-                                                            code_dirs));
+                                                            Box::new(code_dirs)));
             },
             &ControlInstruction::CallClause(ClauseType::System(ref ct), _, _, lco) => {
                 self.last_call = lco;
@@ -1947,7 +1947,8 @@ impl MachineState {
                 self.p += 1;
             },
             &CutInstruction::GetLevelAndUnify(r) => {
-                let b0 = Addr::Con(Constant::Usize(self.b0));
+                // let b0 = Addr::Con(Constant::Usize(self.b0));
+                let b0 = self[perm_v!(1)].clone();
                 let a  = self[r].clone();
 
                 self.unify(a, b0);

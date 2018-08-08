@@ -2,7 +2,7 @@ use prolog::ast::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{ToPrimitive, Zero};
-use prolog::num::bigint::BigInt;
+use prolog::num::bigint::{BigInt};
 
 use std::rc::Rc;
 
@@ -177,16 +177,24 @@ impl MachineState {
             self.p = CodePtr::Local(self.cp.clone());
         } else {
             self.p += 1;
-        }        
+        }
     }
-    
-    pub(super) fn system_call(&mut self, ct: &SystemClauseType,
-                              code_dirs: CodeDirs,
-                              call_policy: &mut Box<CallPolicy>,
-                              cut_policy:  &mut Box<CutPolicy>,)
-                              -> CallResult
+
+    pub(super) fn system_call<'a>(&mut self, ct: &SystemClauseType,
+                                  code_dirs: CodeDirs<'a>,
+                                  call_policy: &mut Box<CallPolicy>,
+                                  cut_policy:  &mut Box<CutPolicy>,)
+                                  -> CallResult
     {
         match ct {
+            // this system call is only to be used within the builtins module.
+            // TODO: in the future I'd like to use serde to serialize/deserialize builtins
+            // and thereby avoid this kludge, but for now it's ok.
+            &SystemClauseType::CallWithDefaultPolicy =>
+                if let Some(builtins) = code_dirs.modules.get(&clause_name!("builtins")) {
+                    let mut call_policy = DefaultCallPolicy {};
+                    return call_policy.call_n(self, 1, Box::new(builtins));
+                },
             &SystemClauseType::CheckCutPoint => {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -207,7 +215,7 @@ impl MachineState {
                                 if let Some(r) = dest.as_var() {
                                     self.bind(r, addr.clone());
                                     self.set_p();
-                                    
+
                                     return Ok(());
                                 }
                             } else {
@@ -243,20 +251,24 @@ impl MachineState {
                 let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
                 let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
 
-                if call_policy.downcast_ref::<CallWithInferenceLimitCallPolicy>().is_err() {
-                    CallWithInferenceLimitCallPolicy::new_in_place(call_policy);
+                if call_policy.downcast_ref::<CWILCallPolicy>().is_err() {
+                    CWILCallPolicy::new_in_place(call_policy);
                 }
 
                 match (a1, a2.clone()) {
                     (Addr::Con(Constant::Usize(bp)),
                      Addr::Con(Constant::Number(Number::Integer(n)))) =>
-                        match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
+                        match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
                             Some(call_policy) => {
                                 let count = call_policy.add_limit(n, bp);
-                                self[temp_v!(3)] = Addr::Con(Constant::Number(Number::Integer(count)));
+                                let count = Addr::Con(Constant::Number(Number::Integer(count)));
+
+                                let a3 = self[temp_v!(3)].clone();
+
+                                self.unify(a3, count);
                             },
                             None => panic!("install_inference_counter: should have installed \\
-                                            CallWithInferenceLimitCallPolicy.")
+                                            CWILCallPolicy.")
                         },
                     _ => {
                         let stub = MachineError::functor_stub(clause_name!("call_with_inference_limit"), 3);
@@ -268,7 +280,7 @@ impl MachineState {
             },
             &SystemClauseType::RemoveCallPolicyCheck => {
                 let restore_default =
-                    match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
+                    match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
                         Some(call_policy) => {
                             let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -283,29 +295,32 @@ impl MachineState {
                             }
                         },
                         None => panic!("remove_call_policy_check: requires \\
-                                        CallWithInferenceLimitCallPolicy.")
+                                        CWILCallPolicy.")
                     };
 
                 if let Some(new_policy) = restore_default {
                     *call_policy = new_policy;
                 }
             },
-            &SystemClauseType::RemoveInferenceCounter => {
-                match call_policy.downcast_mut::<CallWithInferenceLimitCallPolicy>().ok() {
+            &SystemClauseType::RemoveInferenceCounter =>
+                match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
                     Some(call_policy) => {
                         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
                         if let Addr::Con(Constant::Usize(bp)) = a1 {
                             let count = call_policy.remove_limit(bp);
-                            self[temp_v!(2)] = Addr::Con(Constant::Number(Number::Integer(count)));
+                            let count = Addr::Con(Constant::Number(Number::Integer(count)));
+
+                            let a2 = self[temp_v!(2)].clone();
+
+                            self.unify(a2, count);
                         } else {
                             panic!("remove_inference_counter: expected Usize in A1.");
                         }
                     },
-                    None => panic!("remove_inference_counters: requires \\
-                                    CallWithInferenceLimitCallPolicy.")
-                };
-            },
+                    None => panic!("remove_inference_counter: requires \\
+                                    CWILCallPolicy.")
+                },
             &SystemClauseType::RestoreCutPolicy => {
                 let restore_default =
                     if let Ok(cut_policy) = cut_policy.downcast_ref::<SCCCutPolicy>() {
@@ -321,10 +336,8 @@ impl MachineState {
             &SystemClauseType::SetCutPoint(r) => if cut_policy.cut(self, r) {
                 return Ok(());
             },
-            &SystemClauseType::SetCutPointByDefault(r) => {
-                let mut cut_policy = DefaultCutPolicy {};
-                cut_policy.cut(self, r);
-            },
+            &SystemClauseType::SetCutPointByDefault(r) =>
+                deref_cut(self, r),
             &SystemClauseType::InferenceLevel => {
                 let a1 = self[temp_v!(1)].clone();
                 let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
@@ -382,9 +395,15 @@ impl MachineState {
 
                 self.write_constant_to_var(addr, c);
             },
-            &SystemClauseType::GetCutPoint => {
+            &SystemClauseType::GetBValue => {
                 let a1 = self[temp_v!(1)].clone();
                 let a2 = Addr::Con(Constant::Usize(self.b));
+
+                self.unify(a1, a2);
+            },
+            &SystemClauseType::GetCutPoint => {
+                let a1 = self[temp_v!(1)].clone();
+                let a2 = Addr::Con(Constant::Usize(self.b0));
 
                 self.unify(a1, a2);
             },

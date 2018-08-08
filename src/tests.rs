@@ -1618,7 +1618,6 @@ fn test_queries_on_setup_call_cleanup()
                            [["Y = 1", "X = 1"]]);    
 }
 
-/*
 #[test]
 fn test_queries_on_call_with_inference_limit()
 {
@@ -1739,4 +1738,3 @@ fn test_queries_on_call_with_inference_limit()
                            [["R = inference_limit_exceeded", "X = _1"]]);
 
 }
-*/
