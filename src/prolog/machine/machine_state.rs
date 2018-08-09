@@ -85,6 +85,7 @@ impl<'a> CodeDirs<'a> {
 pub trait CodeDirsAdapter<'a> {
     fn get_code_index(&self, PredicateKey, ClauseName) -> Option<CodeIndex>;
     fn get_op(&self, OpDirKey) -> Option<(Specifier, usize, ClauseName)>;
+    fn op_dir(&self) -> &OpDir;
 }
 
 impl<'a> CodeDirsAdapter<'a> for CodeDirs<'a> {
@@ -94,6 +95,10 @@ impl<'a> CodeDirsAdapter<'a> for CodeDirs<'a> {
 
     fn get_op(&self, key: OpDirKey) -> Option<(Specifier, usize, ClauseName)> {
         self.op_dir.get(&key).cloned()
+    }
+
+    fn op_dir(&self) -> &OpDir {
+        &self.op_dir
     }
 }
 
@@ -106,6 +111,10 @@ impl<'a> CodeDirsAdapter<'a> for &'a Module {
 
     fn get_op(&self, key: OpDirKey) -> Option<(Specifier, usize, ClauseName)> {
         self.op_dir.get(&key).cloned()
+    }
+
+    fn op_dir(&self) -> &OpDir {
+        &self.op_dir
     }
 }
 
@@ -506,7 +515,7 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
-                        code_dirs: CodeDirs<'a>)
+                        code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
                         -> CallResult
     {
         match ct {
@@ -552,7 +561,7 @@ pub(crate) trait CallPolicy: Any {
             &BuiltInClauseType::Read => {
                 let mut reader = Reader::new(machine_st);
 
-                match reader.read_stdin(code_dirs.op_dir) {
+                match reader.read_stdin(code_dirs.op_dir()) {
                     Ok(offset) => {
                         let addr = reader.machine_st[temp_v!(1)].clone();
                         reader.machine_st.unify(addr, Addr::HeapCell(offset));
@@ -658,8 +667,10 @@ pub(crate) trait CallPolicy: Any {
 
                     machine_st.p = CodePtr::CallN(arity, machine_st.p.local());
                 },
-                ClauseType::BuiltIn(built_in) =>
-                    machine_st.setup_built_in_call(built_in),
+                ClauseType::BuiltIn(built_in) => {
+                    machine_st.setup_built_in_call(built_in.clone());
+                    self.call_builtin(machine_st, &built_in, code_dirs)?;
+                },
                 ClauseType::Inlined(inlined) =>
                     machine_st.execute_inlined(&inlined),
                 ClauseType::Op(..) | ClauseType::Named(..) =>
@@ -720,7 +731,7 @@ impl CallPolicy for CWILCallPolicy {
     }
 
     fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
-                        code_dirs: CodeDirs<'a>)
+                        code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
                         -> CallResult
     {
         self.prev_policy.call_builtin(machine_st, ct, code_dirs)?;

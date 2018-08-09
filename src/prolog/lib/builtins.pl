@@ -8,6 +8,11 @@
 	(:)/2, call_with_inference_limit/3, catch/3,
 	setup_call_cleanup/3, throw/1, true/0, false/0]).
 
+/* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
+   and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
+   instructions are unchanged. */
+:- op(700, fx, non_counted_backtracking).
+
 % arithmetic operators.
 :- op(700, xfx, is).
 :- op(500, yfx, +).
@@ -67,8 +72,9 @@ false :- '$fail'.
 
 % control operators.
 
-','(G1, G2) :- '$get_cp'(B), ','(G1, G2, B).
+','(G1, G2) :- '$get_b_value'(B), ','(G1, G2, B).
 
+:- non_counted_backtracking (,)/3.
 ','(!, ','(G1, G2), B) :- '$set_cp'(B), ','(G1, G2, B).
 ','(!, !, B) :- '$set_cp'(B).
 ','(!, G, B) :- '$set_cp'(B), G.
@@ -76,16 +82,18 @@ false :- '$fail'.
 ','(G, !, B) :- !, G, '$set_cp'(B).
 ','(G1, G2, _) :- G1, G2.
 
-;(G1, G2) :- '$get_cp'(B), ;(G1, G2, B).
+;(G1, G2) :- '$get_b_value'(B), ;(G1, G2, B).
 
+:- non_counted_backtracking (;)/3.
 ;(G1, G4, B) :- compound(G1), G1 = ->(G2, G3), (G2 -> G3 ; '$set_cp'(B), G4).
 ;(G1, G2, B) :- G1 == !, '$set_cp'(B), call(G2).
 ;(G1, G2, B) :- G2 == !, call(G2), '$set_cp'(B).
 ;(G, _, _) :- G.
 ;(_, G, _) :- G.
 
-G1 -> G2 :- '$get_cp'(B), ->(G1, G2, B).
+G1 -> G2 :- '$get_b_value'(B), ->(G1, G2, B).
 
+:- non_counted_backtracking (->)/3.
 ->(G1, G2, B) :- G2 == !, call(G1), !, '$set_cp'(B).
 ->(G1, G2, B) :- call(G1), '$set_cp'(B), call(G2).
 
@@ -152,29 +160,39 @@ univ_worker(Term, List, _) :-
 
 setup_call_cleanup(S, G, C) :- '$get_b_value'(B),
     S, '$set_cp_by_default'(B), '$get_current_block'(Bb),
-    ( var(C) -> throw(error(instantiation_error, setup_call_cleanup/3))
-    ; scc_helper(C, G, Bb) ).
+    ( '$call_with_default_policy'(var(C)) -> throw(error(instantiation_error, setup_call_cleanup/3))
+    ; '$call_with_default_policy'(scc_helper(C, G, Bb)) ).
 
+:- non_counted_backtracking scc_helper/3.
 scc_helper(C, G, Bb) :-
     '$get_cp'(Cp), '$install_scc_cleaner'(C, NBb), call(G),
-    ( '$check_cp'(Cp) -> '$reset_block'(Bb), run_cleaners_without_handling(Cp)
-    ; true
+    ( '$check_cp'(Cp) -> '$reset_block'(Bb),
+			 '$call_with_default_policy'(run_cleaners_without_handling(Cp))
+    ; '$call_with_default_policy'(true)
     ; '$reset_block'(NBb), '$fail').
 scc_helper(_, _, Bb) :-
     '$reset_block'(Bb), '$get_ball'(Ball),
-    run_cleaners_with_handling, throw(Ball).
+    '$call_with_default_policy'(run_cleaners_with_handling),
+    '$erase_ball',
+    '$call_with_default_policy'(throw(Ball)).
 scc_helper(_, _, _) :-
-    '$get_cp'(Cp), run_cleaners_without_handling(Cp), '$fail'.
+    '$get_cp'(Cp),
+    '$call_with_default_policy'(run_cleaners_without_handling(Cp)),
+    '$fail'.
 
+:- non_counted_backtracking run_cleaners_with_handling/0.
 run_cleaners_with_handling :-
-    '$get_scc_cleaner'(C), '$get_level'(B), catch(C, _, true), '$set_cp_by_default'(B),
-    run_cleaners_with_handling.
+    '$get_scc_cleaner'(C), '$get_level'(B),
+    '$call_with_default_policy'(catch(C, _, true)),
+    '$set_cp_by_default'(B),
+    '$call_with_default_policy'(run_cleaners_with_handling).
 run_cleaners_with_handling :-
     '$restore_cut_policy'.
 
+:- non_counted_backtracking run_cleaners_without_handling/1.
 run_cleaners_without_handling(Cp) :-
     '$get_scc_cleaner'(C), '$get_level'(B), C, '$set_cp_by_default'(B),
-    run_cleaners_without_handling(Cp).
+    '$call_with_default_policy'(run_cleaners_without_handling(Cp)).
 run_cleaners_without_handling(Cp) :-
     '$set_cp_by_default'(Cp), '$restore_cut_policy'.
 
@@ -186,6 +204,7 @@ call_with_inference_limit(G, L, R) :-
     '$call_with_default_policy'(call_with_inference_limit(G, L, R, Bb, B)),
     '$remove_call_policy_check'(B).
 
+:- non_counted_backtracking call_with_inference_limit/5.
 call_with_inference_limit(G, L, R, Bb, B) :-
     '$install_new_block'(NBb),
     '$install_inference_counter'(B, L, Count0),
@@ -199,8 +218,10 @@ call_with_inference_limit(_, _, R, Bb, B) :-
     '$remove_inference_counter'(B, _),
     ( '$get_ball'(Ball), '$get_level'(Cp), '$set_cp_by_default'(Cp)
     ; '$remove_call_policy_check'(B), '$fail' ),
+    '$erase_ball',
     '$call_with_default_policy'(handle_ile(B, Ball, R)).
 
+:- non_counted_backtracking end_block/4.
 end_block(_, Bb, NBb, L) :-
     '$clean_up_block'(NBb),
     '$reset_block'(Bb).
@@ -209,19 +230,30 @@ end_block(B, Bb, NBb, L) :-
     '$reset_block'(NBb),
     '$fail'.
 
+:- non_counted_backtracking handle_ile/3.
 handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :- !.
-handle_ile(B, _, _) :- '$remove_call_policy_check'(B), '$unwind_stack'. % throw(E).
+handle_ile(B, E, _) :-
+    '$remove_call_policy_check'(B),
+    '$call_with_default_policy'(throw(E)).
 
 % exceptions.
 
-catch(G,C,R) :- '$get_current_block'(Bb), catch(G,C,R,Bb).
+catch(G,C,R) :- '$get_current_block'(Bb), '$call_with_default_policy'(catch(G,C,R,Bb)).
 
-catch(G,C,R,Bb) :- '$install_new_block'(NBb), call(G), end_block(Bb, NBb).
-catch(G,C,R,Bb) :- '$reset_block'(Bb), '$get_ball'(Ball), handle_ball(Ball, C, R).
+:- non_counted_backtracking catch/4.
+catch(G,C,R,Bb) :-
+    '$install_new_block'(NBb), call(G),
+    '$call_with_default_policy'(end_block(Bb, NBb)).
+catch(G,C,R,Bb) :-
+    '$reset_block'(Bb),
+    '$get_ball'(Ball),
+    '$call_with_default_policy'(handle_ball(Ball, C, R)).
 
+:- non_counted_backtracking end_block/2.
 end_block(Bb, NBb) :- '$clean_up_block'(NBb), '$reset_block'(Bb).
 end_block(Bb, NBb) :- '$reset_block'(NBb), '$fail'.
 
+:- non_counted_backtracking handle_ball/3.
 handle_ball(C, C, R) :- !, '$erase_ball', call(R).
 handle_ball(_, _, _) :- '$unwind_stack'.
 

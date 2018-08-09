@@ -1519,7 +1519,7 @@ fn test_queries_on_builtins()
     
     assert_prolog_failure!(&mut wam, "?- Pairs = [a-a|Pairs], keysort(Pairs, _).");
     assert_prolog_success!(&mut wam, "?- Pairs = [a-a|Pairs], catch(keysort(Pairs, _), error(E, _), true).",
-                           [["E = type_error(list, [a-a | _22])", "Pairs = [a-a | Pairs]"]]);
+                           [["E = type_error(list, [a-a | _26])", "Pairs = [a-a | Pairs]"]]);
     
     assert_prolog_success!(&mut wam, "?- keysort([], L).",
                            [["L = []"]]);
@@ -1528,9 +1528,9 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- catch(keysort([],[a|a]),error(Pat, _),true).",
                            [["Pat = type_error(list, [a | a])"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort(_, _), error(E, _), true).",
-                           [["E = type_error(list, _13)"]]);
+                           [["E = type_error(list, _17)"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a-1], [_|b]), error(E, _), true).",
-                           [["E = type_error(list, [_24 | b])"]]);
+                           [["E = type_error(list, [_28 | b])"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a-1], [a-b,c-d,a]), error(E, _), true).",
                            [["E = type_error(pair, a)"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a], [a-b]), error(E, _), true).",
@@ -1543,19 +1543,17 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- sort([], L).",
                            [["L = []"]]);
     assert_prolog_success!(&mut wam, "?- catch(sort(_, []), error(E, _), true).",
-                           [["E = type_error(list, _13)"]]);
+                           [["E = type_error(list, _17)"]]);
     assert_prolog_success!(&mut wam, "?- catch(sort([a,b,c], not_a_list), error(E, _), true).",
                            [["E = type_error(list, not_a_list)"]]);
     
     assert_prolog_success!(&mut wam, "?- call(((G = 2 ; fail), B=3, !)).",
                            [["G = 2", "B = 3"]]);
-
-    /*
+    
     assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 100, R).",
                            [["G = 2", "B = 3", "R = !", "S = 1"]]);
     assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 10, R).",
                            [["S = _1", "G = _4", "B = _14", "R = inference_limit_exceeded"]]);
-   */
 }
 
 #[test]

@@ -183,11 +183,15 @@ impl fmt::Display for IndexedChoiceInstruction {
 
 impl fmt::Display for ChoiceInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
+        match self {            
             &ChoiceInstruction::TryMeElse(offset) =>
                 write!(f, "try_me_else {}", offset),
+            &ChoiceInstruction::DefaultRetryMeElse(offset) =>
+                write!(f, "retry_me_else_by_default {}", offset),
             &ChoiceInstruction::RetryMeElse(offset) =>
                 write!(f, "retry_me_else {}", offset),
+            &ChoiceInstruction::DefaultTrustMe =>
+                write!(f, "trust_me_by_default"),
             &ChoiceInstruction::TrustMe =>
                 write!(f, "trust_me")
         }

@@ -1825,7 +1825,7 @@ impl MachineState {
             },
             &ControlInstruction::CallClause(ClauseType::BuiltIn(ref ct), _, _, lco) => {
                 self.last_call = lco;
-                try_or_fail!(self, call_policy.call_builtin(self, ct, code_dirs));
+                try_or_fail!(self, call_policy.call_builtin(self, ct, Box::new(code_dirs)));
             },
             &ControlInstruction::CallClause(ClauseType::Inlined(ref ct), ..) =>
                 self.execute_inlined(ct),
@@ -1892,7 +1892,7 @@ impl MachineState {
     pub(super) fn execute_choice_instr(&mut self, instr: &ChoiceInstruction,
                                        call_policy: &mut Box<CallPolicy>)
     {
-        match instr {
+        match instr {            
             &ChoiceInstruction::TryMeElse(offset) => {
                 let n = self.num_of_args;
                 let gi = self.next_global_index();
@@ -1916,6 +1916,14 @@ impl MachineState {
 
                 self.hb = self.heap.h;
                 self.p += 1;
+            },
+            &ChoiceInstruction::DefaultRetryMeElse(offset) => {
+                let mut call_policy = DefaultCallPolicy {};
+                try_or_fail!(self, call_policy.retry_me_else(self, offset))
+            },
+            &ChoiceInstruction::DefaultTrustMe => {
+                let mut call_policy = DefaultCallPolicy {};
+                try_or_fail!(self, call_policy.trust_me(self))
             },
             &ChoiceInstruction::RetryMeElse(offset) =>
                 try_or_fail!(self, call_policy.retry_me_else(self, offset)),

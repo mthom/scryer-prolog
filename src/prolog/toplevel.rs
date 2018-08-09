@@ -139,7 +139,7 @@ fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, 
 fn setup_declaration(term: Term) -> Result<Declaration, ParserError>
 {
     match term {
-        Term::Clause(_, name, terms, _) =>
+        Term::Clause(_, name, mut terms, _) =>
             if name.as_str() == "op" && terms.len() == 3 {
                 Ok(Declaration::Op(setup_op_decl(terms)?))
             } else if name.as_str() == "module" && terms.len() == 2 {
@@ -149,6 +149,9 @@ fn setup_declaration(term: Term) -> Result<Declaration, ParserError>
             } else if name.as_str() == "use_module" && terms.len() == 2 {
                 let (name, exports) = setup_qualified_import(terms)?;
                 Ok(Declaration::UseQualifiedModule(name, exports))
+            } else if name.as_str() == "non_counted_backtracking" && terms.len() == 1 {
+                let (name, arity) = setup_predicate_export(*terms.pop().unwrap())?;
+                Ok(Declaration::NonCountedBacktracking(name, arity))
             } else {
                 Err(ParserError::InconsistentEntry)
             },

@@ -4,7 +4,7 @@ use prolog::codegen::*;
 use prolog::machine::*;
 use prolog::toplevel::*;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::mem;
 
 #[allow(dead_code)]
@@ -48,9 +48,9 @@ pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, Par
 }
 
 // throw errors if declaration or query found.
-fn compile_relation(tl: &TopLevel) -> Result<Code, ParserError>
+fn compile_relation(tl: &TopLevel, non_counted_bt: bool) -> Result<Code, ParserError>
 {
-    let mut cg = CodeGenerator::<DebrayAllocator>::new();
+    let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt);
 
     match tl {
         &TopLevel::Declaration(_) | &TopLevel::Query(_) =>
@@ -82,11 +82,11 @@ fn set_first_index(code: &mut Code)
     }
 }
 
-fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>) -> Result<(), ParserError>
+fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>, non_counted_bt: bool) -> Result<(), ParserError>
 {
     for tl in queue.iter() {
         set_first_index(code);
-        code.append(&mut compile_relation(tl)?);
+        code.append(&mut compile_relation(tl, non_counted_bt)?);
     }
 
     Ok(())
@@ -94,10 +94,10 @@ fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>) -> Result<(), ParserE
 
 fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>) -> Result<(Code, AllocVarDict), ParserError>
 {
-    let mut cg = CodeGenerator::<DebrayAllocator>::new();
+    let mut cg = CodeGenerator::<DebrayAllocator>::new(false); // count backtracking inferences.
     let mut code = try!(cg.compile_query(&terms));
 
-    compile_appendix(&mut code, queue)?;
+    compile_appendix(&mut code, queue, false)?;
     
     Ok((code, cg.take_vars()))
 }
@@ -122,8 +122,8 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
                 Err(SessionError::NamelessEntry)
             });
 
-            let mut code = try_eval_session!(compile_relation(&tl));
-            try_eval_session!(compile_appendix(&mut code, queue));
+            let mut code = try_eval_session!(compile_relation(&tl, false));
+            try_eval_session!(compile_appendix(&mut code, queue, false));
 
             if !code.is_empty() {
                 wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
@@ -149,12 +149,15 @@ pub fn compile_packet(wam: &mut Machine, tl: TopLevelPacket) -> EvalSession
 
 pub struct ListingCompiler<'a> {
     wam: &'a mut Machine,
+    non_counted_bt_preds: HashSet<PredicateKey>,
     module: Option<Module>
 }
 
 impl<'a> ListingCompiler<'a> {
     pub fn new(wam: &'a mut Machine) -> Self {
-        ListingCompiler { wam, module: None }
+        ListingCompiler { wam,
+                          module: None,
+                          non_counted_bt_preds: HashSet::new() }
     }
 
     fn get_module_name(&self) -> ClauseName {
@@ -174,13 +177,19 @@ impl<'a> ListingCompiler<'a> {
                 cl.name().map(|name| (name, arity))
             }).ok_or(SessionError::NamelessEntry)?;
 
+            let non_counted_bt = self.non_counted_bt_preds.contains(&(name.clone(), arity));
+
             let p = code.len() + self.wam.code_size();
-            let mut decl_code = compile_relation(&TopLevel::Predicate(decl))?;
+            let mut decl_code = compile_relation(&TopLevel::Predicate(decl), non_counted_bt)?;
 
-            compile_appendix(&mut decl_code, Vec::from(queue))?;
+            compile_appendix(&mut decl_code, Vec::from(queue), non_counted_bt)?;
 
+//            println!("\n{}/{}:\n", name.as_str(), arity);
+            
             let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
+
+//            print_code(&decl_code);
 
             code.extend(decl_code.into_iter());
         }
@@ -201,6 +210,10 @@ impl<'a> ListingCompiler<'a> {
             self.wam.add_batched_code(code, code_dir);
             self.wam.add_batched_ops(op_dir);
         }
+    }
+
+    fn add_non_counted_bt_flag(&mut self, name: ClauseName, arity: usize) {
+        self.non_counted_bt_preds.insert((name, arity));
     }
 }
 
@@ -231,6 +244,8 @@ fn compile_listing(wam: &mut Machine, src_str: &str, mut indices: MachineCodeInd
 
     while let Some(decl) = try_eval_session!(worker.consume(&mut indices)) {
         match decl {
+            Declaration::NonCountedBacktracking(name, arity) =>
+                compiler.add_non_counted_bt_flag(name, arity),            
             Declaration::Op(op_decl) =>
                 try_eval_session!(op_decl.submit(compiler.get_module_name(), &mut indices.op_dir)),
             Declaration::UseModule(name) =>

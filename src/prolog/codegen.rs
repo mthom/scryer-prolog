@@ -13,7 +13,8 @@ use std::vec::Vec;
 
 pub struct CodeGenerator<TermMarker> {
     marker: TermMarker,
-    var_count: HashMap<Rc<Var>, usize>
+    var_count: HashMap<Rc<Var>, usize>,
+    non_counted_bt: bool
 }
 
 pub struct ConjunctInfo<'a> {
@@ -43,9 +44,10 @@ impl<'a> ConjunctInfo<'a>
 
 impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 {
-    pub fn new() -> Self {
+    pub fn new(non_counted_bt: bool) -> Self {
         CodeGenerator { marker:  Allocator::new(),
-                        var_count: HashMap::new() }
+                        var_count: HashMap::new(),
+                        non_counted_bt }
     }
 
     pub fn take_vars(self) -> AllocVarDict {
@@ -671,6 +673,22 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         subseqs
     }
 
+    fn trust_me(&self) -> ChoiceInstruction {
+        if self.non_counted_bt {
+            ChoiceInstruction::DefaultTrustMe
+        } else {
+            ChoiceInstruction::TrustMe
+        }
+    }
+
+    fn retry_me_else(&self, offset: usize) -> ChoiceInstruction {
+        if self.non_counted_bt {
+            ChoiceInstruction::DefaultRetryMeElse(offset)
+        } else {
+            ChoiceInstruction::RetryMeElse(offset)
+        }
+    }
+    
     fn compile_pred_subseq<'b: 'a>(&mut self, clauses: &'b [PredicateClause])
                                    -> Result<Code, ParserError>
     {
@@ -692,8 +710,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
             if num_clauses > 1 {
                 let choice = match i {
                     0 => ChoiceInstruction::TryMeElse(clause_code.len() + 1),
-                    _ if i == num_clauses - 1 => ChoiceInstruction::TrustMe,
-                    _ => ChoiceInstruction::RetryMeElse(clause_code.len() + 1)
+                    _ if i == num_clauses - 1 => self.trust_me(),
+                    _ => self.retry_me_else(clause_code.len() + 1)
                 };
 
                 code_body.push(Line::Choice(choice));
@@ -726,8 +744,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
             if multi_seq {
                 let choice = match l {
                     0 => ChoiceInstruction::TryMeElse(code_segment.len() + 1),
-                    _ if r == clauses.len() => ChoiceInstruction::TrustMe,
-                    _ => ChoiceInstruction::RetryMeElse(code_segment.len() + 1)
+                    _ if r == clauses.len() => self.trust_me(),
+                    _ => self.retry_me_else(code_segment.len() + 1)
                 };
 
                 code.push(Line::Choice(choice));

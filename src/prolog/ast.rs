@@ -262,6 +262,7 @@ pub trait SubModuleUser {
 }
 
 pub enum Declaration {
+    NonCountedBacktracking(ClauseName, usize), // name, arity
     Module(ModuleDecl),
     Op(OpDecl),
     UseModule(ClauseName),
@@ -538,7 +539,7 @@ pub enum Constant {
 impl Constant {
     pub fn to_atom(self) -> Option<ClauseName> {
         match self {
-            Constant::Atom(a) => Some(a),
+            Constant::Atom(a) => Some(a.defrock_brackets()),
             _ => None
         }
     }
@@ -1042,6 +1043,8 @@ impl<'a> TermRef<'a> {
 
 #[derive(Clone)]
 pub enum ChoiceInstruction {
+    DefaultRetryMeElse(usize),
+    DefaultTrustMe,
     RetryMeElse(usize),
     TrustMe,
     TryMeElse(usize)
