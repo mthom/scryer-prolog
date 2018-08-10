@@ -481,7 +481,10 @@ impl Machine {
     pub fn heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter) -> Outputter
        where Outputter: HCValueOutputter
     {
-        for (var, addr) in var_dir {
+        let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = var_dir.iter().collect();
+        sorted_vars.sort_by_key(|ref v| v.0);
+        
+        for (var, addr) in sorted_vars {
             let fmt = TermFormatter {};
             output = self.ms.print_var_eq(var.clone(), addr.clone(), var_dir, fmt, output);
         }
