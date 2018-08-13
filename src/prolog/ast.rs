@@ -709,7 +709,6 @@ pub struct Rule {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
-    CallWithDefaultPolicy,
     CheckCutPoint,
     GetBValue,
     GetSCCCleaner,
@@ -742,7 +741,6 @@ impl SystemClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &SystemClauseType::CallWithDefaultPolicy => clause_name!("$call_with_default_policy"),
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
@@ -774,7 +772,6 @@ impl SystemClauseType {
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
-            ("$call_with_default_policy", 1) => Some(SystemClauseType::CallWithDefaultPolicy),
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),

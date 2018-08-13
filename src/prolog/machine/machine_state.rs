@@ -429,8 +429,8 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn context_call<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
-                        idx: CodeIndex, code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
+                        idx: CodeIndex, code_dirs: CodeDirs)
                         -> CallResult
     {
         if machine_st.last_call {
@@ -441,7 +441,7 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn try_call<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
-                    idx: CodeIndex, code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+                    idx: CodeIndex, code_dirs: CodeDirs)
                     -> CallResult
     {
         match idx.0.borrow().0 {
@@ -478,7 +478,7 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn try_execute<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                       arity: usize, idx: CodeIndex, code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+                       arity: usize, idx: CodeIndex, code_dirs: CodeDirs)
                        -> CallResult
     {
         match idx.0.borrow().0 {
@@ -515,7 +515,7 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
-                        code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+                        code_dirs: CodeDirs)
                         -> CallResult
     {
         match ct {
@@ -651,7 +651,7 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
-                  code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+                  code_dirs: CodeDirs)
                   -> CallResult
     {
         if let Some((name, arity)) = machine_st.setup_call_n(arity) {
@@ -699,7 +699,7 @@ pub(crate) trait CallPolicy: Any {
 
 impl CallPolicy for CWILCallPolicy {
     fn context_call<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                        arity: usize, idx: CodeIndex, code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+                        arity: usize, idx: CodeIndex, code_dirs: CodeDirs)
                         -> CallResult
     {
         self.prev_policy.context_call(machine_st, name, arity, idx, code_dirs)?;
@@ -731,7 +731,7 @@ impl CallPolicy for CWILCallPolicy {
     }
 
     fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
-                        code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+                        code_dirs: CodeDirs)
                         -> CallResult
     {
         self.prev_policy.call_builtin(machine_st, ct, code_dirs)?;
@@ -739,7 +739,7 @@ impl CallPolicy for CWILCallPolicy {
     }
 
     fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
-                  code_dirs: Box<CodeDirsAdapter<'a> + 'a>)
+                  code_dirs: CodeDirs)
                   -> CallResult
     {
         self.prev_policy.call_n(machine_st, arity, code_dirs)?;

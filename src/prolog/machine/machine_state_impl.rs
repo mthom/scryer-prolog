@@ -1830,14 +1830,14 @@ impl MachineState {
                 
         match ct {
             &ClauseType::BuiltIn(ref ct) =>
-                try_or_fail!(self, call_policy.call_builtin(self, ct, Box::new(code_dirs))),
+                try_or_fail!(self, call_policy.call_builtin(self, ct, code_dirs)),
             &ClauseType::CallN =>
-                try_or_fail!(self, call_policy.call_n(self, arity, Box::new(code_dirs))),
+                try_or_fail!(self, call_policy.call_n(self, arity, code_dirs)),
             &ClauseType::Inlined(ref ct) =>
                 self.execute_inlined(ct),
             &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
-                                                            Box::new(code_dirs))),
+                                                            code_dirs)),
             &ClauseType::System(ref ct) =>
                 try_or_fail!(self, self.system_call(ct, code_dirs, call_policy, cut_policy))                
         };

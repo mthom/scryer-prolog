@@ -187,14 +187,6 @@ impl MachineState {
                                   -> CallResult
     {
         match ct {
-            // this system call is only to be used within the builtins module.
-            // TODO: in the future I'd like to use serde to serialize/deserialize builtins
-            // and thereby avoid this kludge, but for now it's ok.
-            &SystemClauseType::CallWithDefaultPolicy =>
-                if let Some(builtins) = code_dirs.modules.get(&clause_name!("builtins")) {
-                    let mut call_policy = DefaultCallPolicy {};
-                    return call_policy.call_n(self, 1, Box::new(builtins));
-                },
             &SystemClauseType::CheckCutPoint => {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));
 
