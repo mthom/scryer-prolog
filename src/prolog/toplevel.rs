@@ -295,7 +295,8 @@ fn module_resolution_call(mod_name: Term, body: Term) -> Result<QueryTerm, Parse
     if let Term::Constant(_, Constant::Atom(mod_name)) = mod_name {
         if let Term::Clause(_, name, terms, _) = body {
             let idx = CodeIndex(Rc::new(RefCell::new((IndexPtr::Module, mod_name))));
-            return Ok(QueryTerm::Clause(Cell::default(), ClauseType::Named(name, idx), terms));
+            return Ok(QueryTerm::Clause(Cell::default(), ClauseType::Named(name, idx), terms,
+                                        false));
         }
     }
 
@@ -414,7 +415,7 @@ impl RelationWorker {
                     Ok(QueryTerm::BlockedCut)
                 } else {
                     let ct = indices.lookup(name, 0, None);
-                    Ok(QueryTerm::Clause(r, ct, vec![]))
+                    Ok(QueryTerm::Clause(r, ct, vec![], false))
                 },
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
@@ -446,10 +447,11 @@ impl RelationWorker {
                     }
                 } else {
                     let ct = indices.lookup(name, terms.len(), fixity);
-                    Ok(QueryTerm::Clause(Cell::default(), ct, terms))
+                    Ok(QueryTerm::Clause(Cell::default(), ct, terms, false))
                 },
-            Term::Var(_, _) =>
-                Ok(QueryTerm::Clause(Cell::default(), ClauseType::CallN, vec![Box::new(term)])),
+            Term::Var(..) =>
+                Ok(QueryTerm::Clause(Cell::default(), ClauseType::CallN, vec![Box::new(term)],
+                                     false)),
             _ =>
                 Err(ParserError::InadmissibleQueryTerm)
         }
@@ -476,6 +478,24 @@ impl RelationWorker {
 
         while let Some(term) = terms_seq.pop() {
             queue.push_front(Box::new(term));
+        }
+    }
+
+    fn pre_query_term(&mut self, idx: &mut MachineCodeIndices, term: Term)
+                      -> Result<QueryTerm, ParserError>
+    {
+        match term {
+            Term::Clause(r, name, mut subterms, fixity) =>
+                if subterms.len() == 1 && name.as_str() == "$call_with_default_policy" {
+                    self.to_query_term(idx, *subterms.pop().unwrap())
+                        .map(|mut query_term| {
+                            query_term.set_default_caller();
+                            query_term
+                        })
+                } else {
+                    self.to_query_term(idx, Term::Clause(r, name, subterms, fixity))
+                },
+            _ => self.to_query_term(idx, term)
         }
     }
 
@@ -507,7 +527,7 @@ impl RelationWorker {
                     mark_cut_variable(&mut subterm);
                 }
 
-                query_terms.push(try!(self.to_query_term(idx, subterm)));
+                query_terms.push(self.pre_query_term(idx, subterm)?);
             }
         }
 

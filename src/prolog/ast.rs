@@ -676,7 +676,8 @@ impl CompareTermQT {
 pub type JumpStub = Vec<Term>;
 
 pub enum QueryTerm {
-    Clause(Cell<RegType>, ClauseType, Vec<Box<Term>>),
+    // register, clause type, subterms, use default call policy.
+    Clause(Cell<RegType>, ClauseType, Vec<Box<Term>>, bool),
     BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
     UnblockedCut(Cell<VarReg>),
     GetLevelAndUnify(Cell<VarReg>, Rc<Var>),
@@ -684,9 +685,16 @@ pub enum QueryTerm {
 }
 
 impl QueryTerm {
+    pub fn set_default_caller(&mut self) {
+        match self {
+            &mut QueryTerm::Clause(_, _, _, ref mut use_default_cp) => *use_default_cp = true,
+            _ => {}
+        };
+    }
+    
     pub fn arity(&self) -> usize {
         match self {
-            &QueryTerm::Clause(_, _, ref subterms) => subterms.len(),
+            &QueryTerm::Clause(_, _, ref subterms, ..) => subterms.len(),
             &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => 0,
             &QueryTerm::Jump(ref vars) => vars.len(),
             &QueryTerm::GetLevelAndUnify(..) => 1,
@@ -1338,7 +1346,8 @@ pub enum ArithmeticInstruction {
 #[derive(Clone)]
 pub enum ControlInstruction {
     Allocate(usize), // num_frames.
-    CallClause(ClauseType, usize, usize, bool), // name, arity, perm_vars after threshold, last call.
+    // name, arity, perm_vars after threshold, last call, use default call policy.
+    CallClause(ClauseType, usize, usize, bool, bool),
     Deallocate,
     JmpBy(usize, usize, usize, bool), // arity, global_offset, perm_vars after threshold, last call.
     Proceed

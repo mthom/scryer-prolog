@@ -136,10 +136,19 @@ macro_rules! is_var {
 
 macro_rules! call_clause {
     ($ct:expr, $arity:expr, $pvs:expr) => (
-        Line::Control(ControlInstruction::CallClause($ct, $arity, $pvs, false))
+        Line::Control(ControlInstruction::CallClause($ct, $arity, $pvs, false, false))
     );
     ($ct:expr, $arity:expr, $pvs:expr, $lco:expr) => (
-        Line::Control(ControlInstruction::CallClause($ct, $arity, $pvs, $lco))
+        Line::Control(ControlInstruction::CallClause($ct, $arity, $pvs, $lco, false))
+    )
+}
+
+macro_rules! call_clause_by_default {
+    ($ct:expr, $arity:expr, $pvs:expr) => (
+        Line::Control(ControlInstruction::CallClause($ct, $arity, $pvs, false, true))
+    );
+    ($ct:expr, $arity:expr, $pvs:expr, $lco:expr) => (
+        Line::Control(ControlInstruction::CallClause($ct, $arity, $pvs, $lco, true))
     )
 }
 
@@ -152,6 +161,12 @@ macro_rules! proceed {
 macro_rules! is_call {
     ($r:expr, $at:expr) => (
         call_clause!(ClauseType::BuiltIn(BuiltInClauseType::Is($r, $at)), 2, 0)
+    )
+}
+
+macro_rules! is_call_by_default {
+    ($r:expr, $at:expr) => (
+        call_clause_by_default!(ClauseType::BuiltIn(BuiltInClauseType::Is($r, $at)), 2, 0)
     )
 }
 

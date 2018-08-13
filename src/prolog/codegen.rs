@@ -219,7 +219,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         match qt {
             &QueryTerm::Jump(ref vars) =>
                 code.push(jmp_call!(vars.len(), 0, pvs)),
-            &QueryTerm::Clause(_, ref ct, ref terms) =>
+            &QueryTerm::Clause(_, ref ct, ref terms, true) =>
+                code.push(call_clause_by_default!(ct.clone(), terms.len(), pvs)),
+            &QueryTerm::Clause(_, ref ct, ref terms, false) =>
                 code.push(call_clause!(ct.clone(), terms.len(), pvs)),
             _ => {}
         }
@@ -232,8 +234,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         match code.last_mut() {
             Some(&mut Line::Control(ref mut ctrl)) =>
                 match ctrl.clone() {
-                    ControlInstruction::CallClause(ct, arity, pvs, false) =>
-                        *ctrl = ControlInstruction::CallClause(ct, arity, pvs, true),
+                    ControlInstruction::CallClause(ct, arity, pvs, false, use_default_cp) =>
+                        *ctrl = ControlInstruction::CallClause(ct, arity, pvs, true, use_default_cp),
                     ControlInstruction::JmpBy(arity, offset, pvs, false) =>
                         *ctrl = ControlInstruction::JmpBy(arity, offset, pvs, true),
                     ControlInstruction::Proceed => {},
@@ -416,7 +418,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         if !target.is_empty() {
                             code.push(Line::Query(target));
                         }
-                        
+
                         code.push(get_level_and_unify!(cell.get().norm()));
                     },
                     &QueryTerm::UnblockedCut(ref cell) =>
@@ -427,7 +429,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         } else {
                             Line::Cut(CutInstruction::Cut(perm_v!(1)))
                         }),
-                    &QueryTerm::Clause(_, ClauseType::BuiltIn(BuiltInClauseType::Is(..)), ref terms)
+                    &QueryTerm::Clause(_, ClauseType::BuiltIn(BuiltInClauseType::Is(..)),
+                                       ref terms, use_default_call_policy)
                         =>
                     {
                         let (mut acode, at) = self.call_arith_eval(terms[1].as_ref(), 1)?;
@@ -445,20 +448,29 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                                     code.push(Line::Query(target));
                                 }
 
-                                code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
+                                if use_default_call_policy {
+                                    code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))));
+                                } else {
+                                    code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
+                                }
                             },
                             &Term::Constant(_, ref c @ Constant::Number(_)) => {
                                 code.push(query![put_constant!(Level::Shallow,
                                                                c.clone(),
                                                                temp_v!(1))]);
-                                code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
+
+                                if use_default_call_policy {
+                                    code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))));
+                                } else {
+                                    code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
+                                }
                             },
                             _ => {
                                 code.push(fail!());
                             }
                         }
                     },
-                    &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms) =>
+                    &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms, _) =>
                         try!(self.compile_inlined(ct, terms, term_loc, code)),
                     _ => {
                         let num_perm_vars = if chunk_num == 0 {
@@ -496,7 +508,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         // add a proceed to bookend any trailing cuts.
         match toc {
             &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => code.push(proceed!()),
-            &QueryTerm::Clause(_, ClauseType::Inlined(..), _) => code.push(proceed!()),
+            &QueryTerm::Clause(_, ClauseType::Inlined(..), ..) => code.push(proceed!()),
             _ => {}
         };
 
@@ -688,7 +700,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
             ChoiceInstruction::RetryMeElse(offset)
         }
     }
-    
+
     fn compile_pred_subseq<'b: 'a>(&mut self, clauses: &'b [PredicateClause])
                                    -> Result<Code, ParserError>
     {

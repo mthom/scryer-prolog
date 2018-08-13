@@ -152,10 +152,14 @@ impl fmt::Display for ControlInstruction {
         match self {
             &ControlInstruction::Allocate(num_cells) =>
                 write!(f, "allocate {}", num_cells),
-            &ControlInstruction::CallClause(ref ct, arity, pvs, true) =>
+            &ControlInstruction::CallClause(ref ct, arity, pvs, true, true) =>
+                write!(f, "call_with_default_policy {}/{}, {}", ct, arity, pvs),
+            &ControlInstruction::CallClause(ref ct, arity, pvs, false, true) =>
+                write!(f, "execute_with_default_policy {}/{}, {}", ct, arity, pvs),
+            &ControlInstruction::CallClause(ref ct, arity, pvs, true, false) =>
                 write!(f, "execute {}/{}, {}", ct, arity, pvs),
-            &ControlInstruction::CallClause(ref ct, arity, pvs, false) =>
-                write!(f, "call {}/{}, {}", ct, arity, pvs),
+            &ControlInstruction::CallClause(ref ct, arity, pvs, false, false) =>
+                write!(f, "call {}/{}, {}", ct, arity, pvs),            
             &ControlInstruction::Deallocate =>
                 write!(f, "deallocate"),
             &ControlInstruction::JmpBy(arity, offset, pvs, false) =>

@@ -1811,6 +1811,38 @@ impl MachineState {
         self.p += 1;
     }
 
+    fn handle_call_clause<'a>(&mut self, code_dirs: CodeDirs<'a>,
+                              call_policy: &mut Box<CallPolicy>,
+                              cut_policy:  &mut Box<CutPolicy>,
+                              ct: &ClauseType,
+                              arity: usize,
+                              lco: bool,
+                              use_default_cp: bool)
+    {
+        let mut default_call_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
+        let call_policy = if use_default_cp {           
+            &mut default_call_policy
+        } else {
+            call_policy
+        };
+
+        self.last_call = lco;
+                
+        match ct {
+            &ClauseType::BuiltIn(ref ct) =>
+                try_or_fail!(self, call_policy.call_builtin(self, ct, Box::new(code_dirs))),
+            &ClauseType::CallN =>
+                try_or_fail!(self, call_policy.call_n(self, arity, Box::new(code_dirs))),
+            &ClauseType::Inlined(ref ct) =>
+                self.execute_inlined(ct),
+            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
+                try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
+                                                            Box::new(code_dirs))),
+            &ClauseType::System(ref ct) =>
+                try_or_fail!(self, self.system_call(ct, code_dirs, call_policy, cut_policy))                
+        };
+    }
+
     pub(super) fn execute_ctrl_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
                                          call_policy: &mut Box<CallPolicy>,
                                          cut_policy:  &mut Box<CutPolicy>,
@@ -1819,26 +1851,9 @@ impl MachineState {
         match instr {
             &ControlInstruction::Allocate(num_cells) =>
                 self.allocate(num_cells),
-            &ControlInstruction::CallClause(ClauseType::CallN, arity, _, lco) => {
-                self.last_call = lco;
-                try_or_fail!(self, call_policy.call_n(self, arity, Box::new(code_dirs)));
-            },
-            &ControlInstruction::CallClause(ClauseType::BuiltIn(ref ct), _, _, lco) => {
-                self.last_call = lco;
-                try_or_fail!(self, call_policy.call_builtin(self, ct, Box::new(code_dirs)));
-            },
-            &ControlInstruction::CallClause(ClauseType::Inlined(ref ct), ..) =>
-                self.execute_inlined(ct),
-            &ControlInstruction::CallClause(ClauseType::Named(ref name, ref idx), arity, _, lco)
-          | &ControlInstruction::CallClause(ClauseType::Op(ref name, _, ref idx), arity, _, lco) => {
-                self.last_call = lco;
-                try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
-                                                            Box::new(code_dirs)));
-            },
-            &ControlInstruction::CallClause(ClauseType::System(ref ct), _, _, lco) => {
-                self.last_call = lco;
-                try_or_fail!(self, self.system_call(ct, code_dirs, call_policy, cut_policy));
-            },
+            &ControlInstruction::CallClause(ref ct, arity, _, lco, use_default_cp) =>
+                self.handle_call_clause(code_dirs, call_policy, cut_policy, ct, arity, lco,
+                                        use_default_cp),            
             &ControlInstruction::Deallocate => self.deallocate(),
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
                 if !lco {
