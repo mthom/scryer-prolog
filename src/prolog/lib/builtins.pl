@@ -6,6 +6,7 @@
 	(-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2, (==)/2,
 	(\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2, (\=@=)/2,
 	(:)/2, call_with_inference_limit/3, catch/3,
+	current_prolog_flag/2, set_prolog_flag/2,
 	setup_call_cleanup/3, throw/1, true/0, false/0]).
 
 /* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
@@ -69,6 +70,53 @@ X = X.
 true.
 
 false :- '$fail'.
+
+% flags.
+
+current_prolog_flag(Flag, false) :- Flag == bounded, !.
+current_prolog_flag(bounded, false).
+current_prolog_flag(Flag, down) :- Flag == integer_rounding_function, !.
+current_prolog_flag(integer_rounding_function, down).
+current_prolog_flag(Flag, Value) :- Flag == double_quotes, !, '$get_double_quotes'(Value).
+current_prolog_flag(double_quotes, Value) :- '$get_double_quotes'(Value).
+current_prolog_flag(Flag, _) :- Flag == max_integer, !, '$fail'.
+current_prolog_flag(Flag, _) :- Flag == min_integer, !, '$fail'.
+current_prolog_flag(Flag, _) :-
+    atom(Flag),
+    throw(error(domain_error(prolog_flag, Flag), current_prolog_flag/2)). % 8.17.2.3 b
+current_prolog_flag(Flag, _) :-
+    nonvar(Flag),
+    throw(error(type_error(atom, Flag), current_prolog_flag/2)). % 8.17.2.3 a
+
+set_prolog_flag(Flag, Value) :-
+    (var(Flag) ; var(Value)),
+    throw(error(instantiation_error, set_prolog_flag/2)). % 8.17.1.3 a, b
+set_prolog_flag(bounded, false) :- !. % 7.11.1.1
+set_prolog_flag(bounded, true)  :- !, '$fail'. % 7.11.1.1
+set_prolog_flag(bounded, Value) :-
+    throw(error(domain_error(flag_value, bounded + Value), set_prolog_flag/2)). % 8.17.1.3 e
+set_prolog_flag(max_integer, Value) :- integer(Value), !, '$fail'. % 7.11.1.2
+set_prolog_flag(max_integer, Value) :-
+    throw(error(domain_error(flag_value, max_integer + Value), set_prolog_flag/2)). % 8.17.1.3 e
+set_prolog_flag(min_integer, Value) :- integer(Value), !, '$fail'. % 7.11.1.3
+set_prolog_flag(min_integer, Value) :-
+    throw(error(domain_error(flag_value, min_integer + Value), set_prolog_flag/2)). % 8.17.1.3 e
+set_prolog_flag(integer_rounding_function, down) :- !. % 7.11.1.4
+set_prolog_flag(integer_rounding_function, Value) :-
+    throw(error(domain_error(flag_value, integer_rounding_function + Value),
+		set_prolog_flag/2)). % 8.17.1.3 e
+set_prolog_flag(double_quotes, chars) :-
+    !, '$set_double_quotes'(chars). % 7.11.2.5, list of one-char atoms.
+set_prolog_flag(double_quotes, atom) :-
+    !, '$set_double_quotes'(atom). % 7.11.2.5, list of one-char atoms.
+set_prolog_flag(double_quotes, Value) :-
+    throw(error(domain_error(flag_value, double_quotes + Value),
+		set_prolog_flag/2)). % 8.17.1.3 e
+set_prolog_flag(Flag, _) :-
+    atom(Flag),
+    throw(error(domain_error(prolog_flag, Flag), set_prolog_flag/2)). % 8.17.1.3 d
+set_prolog_flag(Flag, _) :-
+    throw(error(type_error(atom, Flag), set_prolog_flag/2)). % 8.17.1.3 c
 
 % control operators.
 

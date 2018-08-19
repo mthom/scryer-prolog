@@ -50,7 +50,8 @@ impl MachineState {
             block: 0,
             ball: Ball::new(),
             interms: vec![Number::default(); 256],
-            last_call: false
+            last_call: false,
+            flags: MachineFlags::default()
         }
     }
 

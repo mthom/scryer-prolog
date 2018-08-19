@@ -264,6 +264,28 @@ pub(super) enum MachineMode {
     Write
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum DoubleQuotes {
+    Atom, Chars, // Codes
+}
+
+impl Default for DoubleQuotes {
+    fn default() -> Self {
+        DoubleQuotes::Chars
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct MachineFlags {
+    pub(super) double_quotes: DoubleQuotes
+}
+
+impl Default for MachineFlags {
+    fn default() -> Self {
+        MachineFlags { double_quotes: DoubleQuotes::default() }
+    }
+}
+
 pub struct MachineState {
     pub(crate) atom_tbl: TabledData<Atom>,
     pub(super) s: usize,
@@ -285,7 +307,8 @@ pub struct MachineState {
     pub(super) block: usize, // an offset into the OR stack.
     pub(super) ball: Ball,
     pub(super) interms: Vec<Number>, // intermediate numbers.
-    pub(super) last_call: bool
+    pub(super) last_call: bool,
+    pub(super) flags: MachineFlags
 }
 
 fn call_at_index(machine_st: &mut MachineState, module_name: ClauseName, arity: usize, idx: usize)

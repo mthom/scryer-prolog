@@ -195,6 +195,16 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &SystemClauseType::GetDoubleQuotes => {
+                let a1 = self[temp_v!(1)].clone();
+                
+                match self.flags.double_quotes {
+                    DoubleQuotes::Chars =>
+                        self.unify(a1, Addr::Con(atom!("chars"))),
+                    DoubleQuotes::Atom =>
+                        self.unify(a1, Addr::Con(atom!("atom")))
+                }
+            },
             &SystemClauseType::GetSCCCleaner => {
                 let dest = self[temp_v!(1)].clone();
 
@@ -330,6 +340,14 @@ impl MachineState {
             },
             &SystemClauseType::SetCutPointByDefault(r) =>
                 deref_cut(self, r),
+            &SystemClauseType::SetDoubleQuotes =>
+                match self[temp_v!(1)].clone() {
+                    Addr::Con(Constant::Atom(ref atom)) if atom.as_str() == "chars" =>
+                        self.flags.double_quotes = DoubleQuotes::Chars,
+                    Addr::Con(Constant::Atom(ref atom)) if atom.as_str() == "atom" =>
+                        self.flags.double_quotes = DoubleQuotes::Atom,
+                    _ => self.fail = true
+                },
             &SystemClauseType::InferenceLevel => {
                 let a1 = self[temp_v!(1)].clone();
                 let a2 = self.store(self.deref(self[temp_v!(2)].clone()));

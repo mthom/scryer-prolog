@@ -531,7 +531,7 @@ pub enum Constant {
     Atom(ClauseName),
     Char(char),
     Number(Number),
-    String(Rc<String>),
+    String(TabledRc<String>),
     Usize(usize),
     EmptyList
 }
@@ -725,10 +725,12 @@ pub enum SystemClauseType {
     GetBall,
     GetCurrentBlock,
     GetCutPoint,
+    GetDoubleQuotes,
     InstallNewBlock,
     ResetBlock,
     SetBall,
     SetCutPointByDefault(RegType),
+    SetDoubleQuotes,
     SkipMaxList,
     Succeed,
     UnwindStack
@@ -743,6 +745,7 @@ impl SystemClauseType {
         match self {
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
+            &SystemClauseType::GetDoubleQuotes => clause_name!("$get_double_quotes"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
             &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
             &SystemClauseType::InstallInferenceCounter =>
@@ -764,6 +767,7 @@ impl SystemClauseType {
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
             &SystemClauseType::SetBall => clause_name!("$set_ball"),
             &SystemClauseType::SetCutPointByDefault(_) => clause_name!("$set_cp_by_default"),
+            &SystemClauseType::SetDoubleQuotes => clause_name!("$set_double_quotes"),
             &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
@@ -774,6 +778,7 @@ impl SystemClauseType {
         match (name, arity) {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
+            ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
             ("$install_scc_cleaner", 2) =>
                 Some(SystemClauseType::InstallSCCCleaner),
@@ -796,6 +801,7 @@ impl SystemClauseType {
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
             ("$set_ball", 1) => Some(SystemClauseType::SetBall),
             ("$set_cp_by_default", 1) => Some(SystemClauseType::SetCutPointByDefault(temp_v!(1))),
+            ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             _ => None
