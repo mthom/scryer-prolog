@@ -33,7 +33,10 @@ impl<'a> Reader<'a> {
         let stdin = stdin();
         stdin.read_line(&mut buffer).unwrap();
 
-        let mut parser = Parser::new(buffer.as_bytes(), self.machine_st.atom_tbl.clone());
+        let atom_tbl = self.machine_st.atom_tbl.clone();
+        let string_tbl = self.machine_st.string_tbl.clone();
+        
+        let mut parser = Parser::new(buffer.as_bytes(), atom_tbl, string_tbl);
         Ok(self.write_term_to_heap(parser.read_term(op_dir)?))
     }
 

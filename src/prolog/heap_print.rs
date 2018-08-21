@@ -324,7 +324,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 self.outputter.append(&format!("{}", n)),
             Constant::String(s) => {
                 self.outputter.append("\"");
-                self.outputter.append(s.as_str());
+                self.outputter.append(s.borrow().as_str());
                 self.outputter.append("\"");
             },
             Constant::Usize(i) =>

@@ -3,7 +3,6 @@ use prolog::tabled_rc::*;
 use std::cell::{Ref, RefCell};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
-use std::ops::{Index, RangeTo};
 
 #[derive(PartialOrd, PartialEq, Ord, Eq)]
 pub struct StringListWrapper(RefCell<String>);

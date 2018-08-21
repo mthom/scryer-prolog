@@ -1,6 +1,7 @@
 use prolog::ast::*;
 use prolog::compile::*;
 use prolog::heap_print::*;
+use prolog::string_list::StringListWrapper;
 use prolog::tabled_rc::*;
 
 mod machine_errors;
@@ -11,8 +12,7 @@ mod system_calls;
 
 use prolog::machine::machine_state::*;
 
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::mem::swap;
 use std::ops::Index;
 use std::rc::Rc;
@@ -99,7 +99,7 @@ static QUEUES: &str  = include_str!("../lib/queues.pl");
 impl Machine {
     pub fn new() -> Self {
         let mut wam = Machine {
-            ms: MachineState::new(Rc::new(RefCell::new(HashSet::new()))),
+            ms: MachineState::new(),
             call_policy: Box::new(DefaultCallPolicy {}),
             cut_policy: Box::new(DefaultCutPolicy {}),
             code: Code::new(),
@@ -177,6 +177,10 @@ impl Machine {
         self.ms.atom_tbl.clone()
     }
 
+    pub fn string_tbl(&self) -> TabledData<StringListWrapper> {
+        self.ms.string_tbl.clone()
+    }
+    
     pub fn use_qualified_module_in_toplevel(&mut self, name: ClauseName, exports: Vec<PredicateKey>)
                                             -> EvalSession
     {

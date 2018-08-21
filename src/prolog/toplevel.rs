@@ -2,6 +2,7 @@ use prolog::ast::*;
 use prolog::machine::*;
 use prolog::num::*;
 use prolog::parser::parser::*;
+use prolog::string_list::*;
 use prolog::tabled_rc::*;
 
 use std::collections::{HashSet, VecDeque};
@@ -606,8 +607,11 @@ pub struct TopLevelWorker<'a, R: Read> {
 }
 
 impl<'a, R: Read> TopLevelWorker<'a, R> {
-    pub fn new(inner: R, atom_tbl: TabledData<Atom>, indices: MachineCodeIndices<'a>) -> Self {
-        TopLevelWorker { parser: Parser::new(inner, atom_tbl), indices }
+    pub fn new(inner: R, atom_tbl: TabledData<Atom>, string_tbl: TabledData<StringListWrapper>,
+               indices: MachineCodeIndices<'a>)
+               -> Self
+    {
+        TopLevelWorker { parser: Parser::new(inner, atom_tbl, string_tbl), indices }
     }
 
     pub fn parse_code(&mut self) -> Result<TopLevelPacket, ParserError>
@@ -636,8 +640,10 @@ pub struct TopLevelBatchWorker<R: Read> {
 }
 
 impl<R: Read> TopLevelBatchWorker<R> {
-    pub fn new(inner: R, atom_tbl: TabledData<Atom>) -> Self {
-        TopLevelBatchWorker { parser: Parser::new(inner, atom_tbl),
+    pub fn new(inner: R, atom_tbl: TabledData<Atom>, string_tbl: TabledData<StringListWrapper>)
+               -> Self
+    {
+        TopLevelBatchWorker { parser: Parser::new(inner, atom_tbl, string_tbl),
                               rel_worker: RelationWorker::new(),
                               source_mod: clause_name!("user"),
                               results: vec![] }

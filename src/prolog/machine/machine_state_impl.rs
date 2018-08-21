@@ -9,8 +9,8 @@ use prolog::num::{Integer, Signed, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
-use prolog::tabled_rc::*;
 
+use std::cell::RefCell;
 use std::cmp::{max, Ordering};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -28,9 +28,10 @@ macro_rules! try_or_fail {
 }
 
 impl MachineState {
-    pub(super) fn new(atom_tbl: TabledData<Atom>) -> MachineState {
+    pub(super) fn new() -> Self {
         MachineState {
-            atom_tbl,
+            atom_tbl: Rc::new(RefCell::new(HashSet::new())),
+            string_tbl: Rc::new(RefCell::new(HashSet::new())),
             s: 0,
             p: CodePtr::default(),
             b: 0,

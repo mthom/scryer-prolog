@@ -6,6 +6,7 @@ use prolog::machine::machine_errors::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
 use prolog::read::*;
+use prolog::string_list::*;
 use prolog::tabled_rc::*;
 
 use downcast::Any;
@@ -288,6 +289,7 @@ impl Default for MachineFlags {
 
 pub struct MachineState {
     pub(crate) atom_tbl: TabledData<Atom>,
+    pub(crate) string_tbl: TabledData<StringListWrapper>,
     pub(super) s: usize,
     pub(super) p: CodePtr,
     pub(super) b: usize,

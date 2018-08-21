@@ -44,7 +44,7 @@ impl fmt::Display for Constant {
             &Constant::Number(ref n) =>
                 write!(f, "{}", n),
             &Constant::String(ref s) =>
-                write!(f, "\"{}\"", s),
+                write!(f, "\"{}\"", s.borrow()),
             &Constant::Usize(integer) =>
                 write!(f, "u{}", integer)
         }

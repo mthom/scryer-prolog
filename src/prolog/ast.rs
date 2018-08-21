@@ -2,6 +2,7 @@ use prolog::num::bigint::BigInt;
 use prolog::num::{Float, ToPrimitive, Zero};
 use prolog::num::rational::Ratio;
 use prolog::ordered_float::*;
+use prolog::string_list::*;
 use prolog::tabled_rc::*;
 
 use std::cell::{Cell, RefCell};
@@ -531,7 +532,7 @@ pub enum Constant {
     Atom(ClauseName),
     Char(char),
     Number(Number),
-    String(TabledRc<String>),
+    String(StringList),
     Usize(usize),
     EmptyList
 }

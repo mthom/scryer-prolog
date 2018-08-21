@@ -38,12 +38,14 @@ fn print_code(code: &Code) {
 pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, ParserError>
 {
     let atom_tbl = wam.atom_tbl();
+    let string_tbl = wam.string_tbl();
+    
     let index = MachineCodeIndices {
         code_dir: &mut wam.code_dir,
         op_dir: &mut wam.op_dir,
     };
 
-    let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, index);
+    let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, string_tbl, index);
     worker.parse_code()
 }
 
@@ -239,7 +241,7 @@ fn use_qualified_module(module: &mut Option<Module>, submodule: &Module, exports
 pub
 fn compile_listing(wam: &mut Machine, src_str: &str, mut indices: MachineCodeIndices) -> EvalSession
 {
-    let mut worker   = TopLevelBatchWorker::new(src_str.as_bytes(), wam.atom_tbl());
+    let mut worker   = TopLevelBatchWorker::new(src_str.as_bytes(), wam.atom_tbl(), wam.string_tbl());
     let mut compiler = ListingCompiler::new(wam);
 
     while let Some(decl) = try_eval_session!(worker.consume(&mut indices)) {
