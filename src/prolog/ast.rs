@@ -897,8 +897,7 @@ impl ClauseName {
             ClauseName::BuiltIn(s) =>
                 ClauseName::BuiltIn(defrock_brackets(s)),
             ClauseName::User(s) =>
-                ClauseName::User(tabled_rc!(defrock_brackets(s.as_str()).to_owned(),
-                                            s.atom_tbl()))
+                ClauseName::User(tabled_rc!(defrock_brackets(s.as_str()).to_owned(), s.table()))
         }
     }
 }

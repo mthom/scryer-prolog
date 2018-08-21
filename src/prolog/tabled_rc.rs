@@ -8,10 +8,17 @@ use std::rc::Rc;
 
 pub type TabledData<T> = Rc<RefCell<HashSet<Rc<T>>>>;
 
-#[derive(Clone)]
 pub struct TabledRc<T: Hash + Eq> {
     atom: Rc<T>,
     table: TabledData<T>
+}
+
+// this Clone instance is manually defined to prevent the compiler
+// from complaining when deriving Clone for StringList.
+impl<T: Hash + Eq> Clone for TabledRc<T> {
+    fn clone(&self) -> Self {
+        TabledRc { atom: self.atom.clone(), table: self.table().clone() }
+    }
 }
 
 impl<T: Ord + Hash + Eq> PartialOrd for TabledRc<T> {
@@ -55,7 +62,7 @@ impl<T: Hash + Eq> TabledRc<T> {
         TabledRc { atom, table }
     }
 
-    pub fn atom_tbl(&self) -> TabledData<T> {
+    pub fn table(&self) -> TabledData<T> {
         self.table.clone()
     }
 }

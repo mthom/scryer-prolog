@@ -27,3 +27,4 @@ pub mod heap_print;
 pub mod targets;
 pub mod tabled_rc;
 pub mod read;
+pub mod string_list;
