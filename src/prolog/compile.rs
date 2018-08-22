@@ -2,6 +2,7 @@ use prolog::ast::*;
 use prolog::debray_allocator::*;
 use prolog::codegen::*;
 use prolog::machine::*;
+use prolog::machine::machine_state::MachineFlags;
 use prolog::toplevel::*;
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -39,20 +40,22 @@ pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, Par
 {
     let atom_tbl = wam.atom_tbl();
     let string_tbl = wam.string_tbl();
+    let flags = wam.machine_flags();
     
     let index = MachineCodeIndices {
         code_dir: &mut wam.code_dir,
         op_dir: &mut wam.op_dir,
     };
-
-    let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, string_tbl, index);
+        
+    let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, string_tbl,
+                                         flags, index);
     worker.parse_code()
 }
 
 // throw errors if declaration or query found.
-fn compile_relation(tl: &TopLevel, non_counted_bt: bool) -> Result<Code, ParserError>
+fn compile_relation(tl: &TopLevel, non_counted_bt: bool, flags: MachineFlags) -> Result<Code, ParserError>
 {
-    let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt);
+    let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt, flags);
 
     match tl {
         &TopLevel::Declaration(_) | &TopLevel::Query(_) =>
@@ -84,22 +87,25 @@ fn set_first_index(code: &mut Code)
     }
 }
 
-fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>, non_counted_bt: bool) -> Result<(), ParserError>
+fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>, non_counted_bt: bool, flags: MachineFlags)
+                    -> Result<(), ParserError>
 {
     for tl in queue.iter() {
         set_first_index(code);
-        code.append(&mut compile_relation(tl, non_counted_bt)?);
+        code.append(&mut compile_relation(tl, non_counted_bt, flags)?);
     }
 
     Ok(())
 }
 
-fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>) -> Result<(Code, AllocVarDict), ParserError>
+fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlags)
+                 -> Result<(Code, AllocVarDict), ParserError>
 {
-    let mut cg = CodeGenerator::<DebrayAllocator>::new(false); // count backtracking inferences.
+    // count backtracking inferences.
+    let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags); 
     let mut code = try!(cg.compile_query(&terms));
 
-    compile_appendix(&mut code, queue, false)?;
+    compile_appendix(&mut code, queue, false, flags)?;
     
     Ok((code, cg.take_vars()))
 }
@@ -124,8 +130,8 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
                 Err(SessionError::NamelessEntry)
             });
 
-            let mut code = try_eval_session!(compile_relation(&tl, false));
-            try_eval_session!(compile_appendix(&mut code, queue, false));
+            let mut code = try_eval_session!(compile_relation(&tl, false, wam.machine_flags()));
+            try_eval_session!(compile_appendix(&mut code, queue, false, wam.machine_flags()));
 
             if !code.is_empty() {
                 wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
@@ -140,7 +146,7 @@ pub fn compile_packet(wam: &mut Machine, tl: TopLevelPacket) -> EvalSession
 {
     match tl {
         TopLevelPacket::Query(terms, queue) =>
-            match compile_query(terms, queue) {
+            match compile_query(terms, queue, wam.machine_flags()) {
                 Ok((mut code, vars)) => wam.submit_query(code, vars),
                 Err(e) => EvalSession::from(e)
             },
@@ -182,16 +188,14 @@ impl<'a> ListingCompiler<'a> {
             let non_counted_bt = self.non_counted_bt_preds.contains(&(name.clone(), arity));
 
             let p = code.len() + self.wam.code_size();
-            let mut decl_code = compile_relation(&TopLevel::Predicate(decl), non_counted_bt)?;
+            let mut decl_code = compile_relation(&TopLevel::Predicate(decl), non_counted_bt,
+                                                 self.wam.machine_flags())?;
 
-            compile_appendix(&mut decl_code, Vec::from(queue), non_counted_bt)?;
-
-//            println!("\n{}/{}:\n", name.as_str(), arity);
+            compile_appendix(&mut decl_code, Vec::from(queue), non_counted_bt,
+                             self.wam.machine_flags())?;
             
             let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
-
-//            print_code(&decl_code);
 
             code.extend(decl_code.into_iter());
         }
@@ -241,7 +245,8 @@ fn use_qualified_module(module: &mut Option<Module>, submodule: &Module, exports
 pub
 fn compile_listing(wam: &mut Machine, src_str: &str, mut indices: MachineCodeIndices) -> EvalSession
 {
-    let mut worker   = TopLevelBatchWorker::new(src_str.as_bytes(), wam.atom_tbl(), wam.string_tbl());
+    let mut worker   = TopLevelBatchWorker::new(src_str.as_bytes(), wam.atom_tbl(), wam.string_tbl(),
+                                                wam.machine_flags());
     let mut compiler = ListingCompiler::new(wam);
 
     while let Some(decl) = try_eval_session!(worker.consume(&mut indices)) {

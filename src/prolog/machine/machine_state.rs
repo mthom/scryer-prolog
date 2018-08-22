@@ -266,8 +266,18 @@ pub(super) enum MachineMode {
 }
 
 #[derive(Clone, Copy)]
-pub(super) enum DoubleQuotes {
+pub enum DoubleQuotes {
     Atom, Chars, // Codes
+}
+
+impl DoubleQuotes {
+    pub fn is_chars(self) -> bool {
+        if let DoubleQuotes::Chars = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl Default for DoubleQuotes {
@@ -277,8 +287,8 @@ impl Default for DoubleQuotes {
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct MachineFlags {
-    pub(super) double_quotes: DoubleQuotes
+pub struct MachineFlags {
+    pub double_quotes: DoubleQuotes
 }
 
 impl Default for MachineFlags {

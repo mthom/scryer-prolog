@@ -1357,7 +1357,7 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- functor(Func, f, 4).", [["Func = f(_2, _3, _4, _5)"]]);
 
     assert_prolog_success!(&mut wam, "?- catch(functor(F, \"sdf\", 3), error(E, _), true).",
-                           [["E = type_error(atom, \"sdf\")", "F = _1"]]);
+                           [["E = type_error(atom, [s, d, f])", "F = _1"]]);
     assert_prolog_success!(&mut wam, "?- catch(functor(Func, F, 3), error(E, _), true).",
                            [["E = instantiation_error", "Func = _1", "F = _2"]]);
     assert_prolog_success!(&mut wam, "?- catch(functor(Func, f, N), error(E, _), true).",
@@ -1370,7 +1370,7 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- X is 3 + 3.5, \\+ integer(X).");
 
     assert_prolog_success!(&mut wam, "?- Func =.. [atom].", [["Func = atom"]]);
-    assert_prolog_success!(&mut wam, "?- Func =.. [\"sdf\"].", [["Func = \"sdf\""]]);
+    assert_prolog_success!(&mut wam, "?- Func =.. [\"sdf\"].", [["Func = [s, d, f]"]]);
     assert_prolog_success!(&mut wam, "?- Func =.. [1].", [["Func = 1"]]);
     assert_prolog_success!(&mut wam, "?- catch(Func =.. [1,2], error(type_error(atom, 1), _), true).");
     assert_prolog_success!(&mut wam, "?- f(1,2,3) =.. List.", [["List = [f, 1, 2, 3]"]]);

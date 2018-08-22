@@ -122,6 +122,11 @@ impl Machine {
         wam
     }
 
+    #[inline]
+    pub fn machine_flags(&self) -> MachineFlags {
+        self.ms.flags
+    }
+    
     fn remove_module(&mut self, module_name: ClauseName) {
         let iter = if let Some(submodule) = self.modules.get(&module_name) {
             submodule.module_decl.exports.iter().cloned()

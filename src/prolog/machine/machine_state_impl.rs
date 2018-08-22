@@ -56,6 +56,11 @@ impl MachineState {
         }
     }
 
+    #[inline]
+    pub fn machine_flags(&self) -> MachineFlags {
+        self.flags
+    }
+    
     fn next_global_index(&self) -> usize {
         max(if self.and_stack.len() > 0 { self.and_stack[self.e].global_index } else { 0 },
             if self.b > 0 { self.or_stack[self.b - 1].global_index } else { 0 }) + 1
@@ -185,6 +190,30 @@ impl MachineState {
 
                         self.fail = true;
                     },
+                    (Addr::Con(Constant::Char(c)), Addr::Con(Constant::Atom(atom)))
+                  | (Addr::Con(Constant::Atom(atom)), Addr::Con(Constant::Char(c))) => {
+                      let s = atom.as_str();
+                      if c.len_utf8() != s.len() || Some(c) != s.chars().next() {
+                          self.fail = true;
+                      }
+                    },
+                    (Addr::Lis(a1), Addr::Con(Constant::String(ref s)))
+                  | (Addr::Con(Constant::String(ref s)), Addr::Lis(a1))
+                        if self.flags.double_quotes.is_chars() =>
+                            if let Some(c) = s.head() {                                
+                                pdl.push(Addr::Con(Constant::String(s.tail())));
+                                pdl.push(Addr::HeapCell(a1 + 1));
+                                
+                                pdl.push(Addr::Con(Constant::Char(c)));
+                                pdl.push(Addr::HeapCell(a1));
+                            } else {
+                                self.fail = true;
+                            },                        
+                    (Addr::Con(Constant::EmptyList), Addr::Con(Constant::String(ref s)))
+                  | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
+                        if self.flags.double_quotes.is_chars() => {
+                            self.fail = !s.is_empty();
+                        },
                     (Addr::Lis(a1), Addr::Lis(a2)) => {
                         pdl.push(Addr::HeapCell(a1));
                         pdl.push(Addr::HeapCell(a2));
@@ -750,6 +779,20 @@ impl MachineState {
                 let addr = self.store(self.deref(self[reg].clone()));
 
                 match addr {
+                    Addr::Con(Constant::String(ref s))
+                        if self.flags.double_quotes.is_chars() => {
+                            if let Some(c) = s.head() {
+                                let h = self.heap.h;
+                                
+                                self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Char(c))));
+                                self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(s.tail()))));
+
+                                self.s = h;
+                                self.mode = MachineMode::Read;
+                            } else {
+                                self.fail = true;
+                            }
+                        },
                     Addr::HeapCell(hc) => {
                         let h = self.heap.h;
 
@@ -907,6 +950,7 @@ impl MachineState {
 
                 let offset = match addr {
                     Addr::HeapCell(_) | Addr::StackCell(_, _) => v,
+                    Addr::Con(Constant::String(_)) if self.flags.double_quotes.is_chars() => l,
                     Addr::Con(_) => c,
                     Addr::Lis(_) => l,
                     Addr::Str(_) => s
@@ -1400,7 +1444,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Atom(_)) => self.p += 1,
+                    Addr::Con(Constant::Atom(_)) | Addr::Con(Constant::Char(_)) => self.p += 1,
                     _ => self.fail = true
                 };
             },

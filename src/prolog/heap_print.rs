@@ -1,8 +1,9 @@
 use prolog::ast::*;
 use prolog::num::*;
 use prolog::heap_iter::*;
-use prolog::machine::machine_state::MachineState;
+use prolog::machine::machine_state::{DoubleQuotes, MachineState};
 use prolog::ordered_float::OrderedFloat;
+use prolog::string_list::*;
 
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -11,6 +12,7 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub enum TokenOrRedirect {
     Atom(ClauseName),
+    Char(char),
     NumberedVar(String),
     Redirect,
     Open,
@@ -19,7 +21,6 @@ pub enum TokenOrRedirect {
     OpenList(Rc<Cell<bool>>),
     CloseList(Rc<Cell<bool>>),
     HeadTailSeparator,
-//    Space
 }
 
 pub trait HCValueFormatter {
@@ -201,6 +202,10 @@ fn reverse_heap_locs<'a>(machine_st: &'a MachineState, heap_locs: &'a HeapVarDic
     }).collect()
 }
 
+fn non_quoted_token(c: char) -> bool {
+    graphic_token_char!(c) || alpha_numeric_char!(c)
+}
+
 impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     HCPrinter<'a, Formatter, Outputter>
 {
@@ -275,17 +280,43 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     }
     
     fn print_atom(&mut self, atom: &ClauseName) {
-        let non_quoted_token = |c| {
-            graphic_token_char!(c) || alpha_numeric_char!(c)
-        };
-
         match atom.as_str() {
             ";" | "!" => self.outputter.append(atom.as_str()),
             s => if s.chars().all(non_quoted_token) {
                 self.outputter.append(atom.as_str());
             } else {
-                self.outputter.append(&("'".to_owned() + atom.as_str() + "'"));
+                self.outputter.push_char('\'');
+                self.outputter.append(atom.as_str());
+                self.outputter.push_char('\'');
             }
+        }
+    }
+
+    fn expand_char_list(&mut self, s: StringList) {
+        let cell = Rc::new(Cell::new(true));        
+        let cursor = s.cursor();
+
+        self.state_stack.push(TokenOrRedirect::CloseList(cell.clone()));
+
+        if !s.is_empty() {
+            for c in s.borrow()[cursor ..].chars().rev() {            
+                self.state_stack.push(TokenOrRedirect::Char(c));
+                self.state_stack.push(TokenOrRedirect::Comma);
+            }
+
+            self.state_stack.pop();
+        }
+        
+        self.state_stack.push(TokenOrRedirect::OpenList(cell));
+    }
+
+    fn print_char(&mut self, c: char) {
+        if non_quoted_token(c) {
+            self.outputter.push_char(c);                    
+        } else {
+            self.outputter.push_char('\'');
+            self.outputter.push_char(c);
+            self.outputter.push_char('\'');
         }
     }
     
@@ -307,11 +338,8 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
 //              self.outputter.append("\a"),
 //          Constant::Char(c) if c == '\\v' =>
 //              self.outputter.append("\\v"),            
-            Constant::Char(c) => {
-                self.outputter.append("'");
-                self.outputter.push_char(c);
-                self.outputter.append("'");
-            },
+            Constant::Char(c) =>
+                self.print_char(c),
             Constant::EmptyList =>
                 self.outputter.append("[]"),
             Constant::Number(Number::Float(fl)) =>
@@ -322,11 +350,14 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 },
             Constant::Number(n) =>
                 self.outputter.append(&format!("{}", n)),
-            Constant::String(s) => {
-                self.outputter.append("\"");
-                self.outputter.append(s.borrow().as_str());
-                self.outputter.append("\"");
-            },
+            Constant::String(s) =>
+                if let DoubleQuotes::Chars = self.machine_st.machine_flags().double_quotes {
+                    self.expand_char_list(s);
+                } else { // for now, == DoubleQuotes::Atom
+                    self.outputter.append("\"");
+                    self.outputter.append(s.borrow().as_str());
+                    self.outputter.append("\"");
+                },            
             Constant::Usize(i) =>
                 self.outputter.append(&format!("u{}", i))
         }
@@ -384,10 +415,10 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         loop {
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
-//                    TokenOrRedirect::Space =>
-//                        self.outputter.append(" "),
                     TokenOrRedirect::Atom(atom) =>
                         self.outputter.append(atom.as_str()),
+                    TokenOrRedirect::Char(c) =>
+                        self.print_char(c),
                     TokenOrRedirect::NumberedVar(num_var) =>
                         self.outputter.append(num_var.as_str()),
                     TokenOrRedirect::Redirect =>

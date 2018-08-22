@@ -18,7 +18,7 @@ impl Hash for StringListWrapper {
 pub struct StringList {
     body: TabledRc<StringListWrapper>,
     cursor: usize, // use this to generate a chars() iterator on the fly,
-                   // and skip over the first cursor chars. 
+                   // and skip over the first cursor chars.
     expandable: bool
 }
 
@@ -64,16 +64,31 @@ impl StringList {
     }
 
     #[inline]
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }
+
+    #[inline]
+    pub fn head(&self) -> Option<char> {
+        self.borrow()[self.cursor ..].chars().next()
+    }
+
+    #[inline]
     pub fn tail(&self) -> Self {
         let mut new_string_list = self.clone();
-        
-        if let Some(c) = self.borrow()[self.cursor ..].chars().next() {        
+
+        if let Some(c) = self.head() {
             new_string_list.cursor += c.len_utf8();
         }
-        
+
         new_string_list
     }
 
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.borrow().len() == self.cursor
+    }
+    
     #[inline]
     pub fn borrow(&self) -> Ref<String> {
         self.body.0.borrow()

@@ -877,7 +877,7 @@ impl<'a> From<&'a TabledRc<Atom>> for ClauseName {
     }
 }
 
-impl ClauseName {
+impl ClauseName {    
     pub fn as_str(&self) -> &str {
         match self {
             &ClauseName::BuiltIn(s) => s,

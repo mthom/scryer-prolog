@@ -4,6 +4,7 @@ use prolog::ast::*;
 use prolog::fixtures::*;
 use prolog::indexing::*;
 use prolog::iterators::*;
+use prolog::machine::machine_state::MachineFlags;
 use prolog::targets::*;
 
 use std::cell::Cell;
@@ -12,6 +13,7 @@ use std::rc::Rc;
 use std::vec::Vec;
 
 pub struct CodeGenerator<TermMarker> {
+    flags: MachineFlags,
     marker: TermMarker,
     var_count: HashMap<Rc<Var>, usize>,
     non_counted_bt: bool
@@ -44,10 +46,11 @@ impl<'a> ConjunctInfo<'a>
 
 impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 {
-    pub fn new(non_counted_bt: bool) -> Self {
+    pub fn new(non_counted_bt: bool, flags: MachineFlags) -> Self {
         CodeGenerator { marker:  Allocator::new(),
                         var_count: HashMap::new(),
-                        non_counted_bt }
+                        non_counted_bt,
+                        flags }
     }
 
     pub fn take_vars(self) -> AllocVarDict {
@@ -705,7 +708,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                                    -> Result<Code, ParserError>
     {
         let mut code_body = Vec::new();
-        let mut code_offsets = CodeOffsets::new();
+        let mut code_offsets = CodeOffsets::new(self.flags);
 
         let num_clauses  = clauses.len();
 

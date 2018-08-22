@@ -1,4 +1,5 @@
 use prolog::ast::*;
+use prolog::machine::machine_state::MachineFlags;
 
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
@@ -10,14 +11,16 @@ enum IntIndex {
 }
 
 pub struct CodeOffsets {
+    flags: MachineFlags,
     pub constants:  HashMap<Constant, ThirdLevelIndex>,
     pub lists: ThirdLevelIndex,
     pub structures: HashMap<(ClauseName, usize), ThirdLevelIndex>
 }
 
 impl CodeOffsets {
-    pub fn new() -> Self {
+    pub fn new(flags: MachineFlags) -> Self {
         CodeOffsets {
+            flags,
             constants: HashMap::new(),
             lists: Vec::new(),
             structures: HashMap::new()
@@ -56,6 +59,11 @@ impl CodeOffsets {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
             },
+            &Term::Constant(_, Constant::String(_))
+                if self.flags.double_quotes.is_chars() => { // strings are lists in this case.
+                    let is_initial_index = self.lists.is_empty();
+                    self.lists.push(Self::add_index(is_initial_index, index));
+                },
             &Term::Constant(_, ref constant) => {
                 let code = self.constants.entry(constant.clone())
                                .or_insert(Vec::new());

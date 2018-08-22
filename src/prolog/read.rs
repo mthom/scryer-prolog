@@ -35,8 +35,9 @@ impl<'a> Reader<'a> {
 
         let atom_tbl = self.machine_st.atom_tbl.clone();
         let string_tbl = self.machine_st.string_tbl.clone();
+        let flags = self.machine_st.machine_flags();
         
-        let mut parser = Parser::new(buffer.as_bytes(), atom_tbl, string_tbl);
+        let mut parser = Parser::new(buffer.as_bytes(), atom_tbl, string_tbl, flags);
         Ok(self.write_term_to_heap(parser.read_term(op_dir)?))
     }
 
