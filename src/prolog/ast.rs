@@ -1575,7 +1575,7 @@ impl CodeIndex {
     pub fn is_undefined(&self) -> bool {
         let index_ptr = &self.0.borrow().0;
 
-        if let IndexPtr::Undefined = index_ptr {
+        if let &IndexPtr::Undefined = index_ptr {
             true
         } else {
             false
