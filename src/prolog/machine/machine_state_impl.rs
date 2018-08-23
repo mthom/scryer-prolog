@@ -1324,6 +1324,37 @@ impl MachineState {
 
         for (v1, v2) in iter {
             match (v1, v2) {
+                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Con(Constant::String(_))))
+              | (HeapCellValue::Addr(Addr::Con(Constant::String(_))), HeapCellValue::Addr(Addr::Lis(_)))
+                    if self.flags.double_quotes.is_chars() => {},
+                (HeapCellValue::Addr(Addr::Con(Constant::EmptyList)),
+                 HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
+                    if self.flags.double_quotes.is_chars() => if s.is_empty() {
+                        return Ordering::Equal;
+                    } else {
+                        return Ordering::Greater;
+                    },
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(atom))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Char(c)))) =>
+                    return if atom.as_str().chars().count() == 1 {
+                        atom.as_str().chars().next().cmp(&Some(c))
+                    } else {
+                        Ordering::Greater
+                    },
+                (HeapCellValue::Addr(Addr::Con(Constant::Char(c))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Atom(atom)))) =>
+                    return if atom.as_str().chars().count() == 1 {
+                        Some(c).cmp(&atom.as_str().chars().next())
+                    } else {
+                        Ordering::Less
+                    },
+                (HeapCellValue::Addr(Addr::Con(Constant::String(ref s))),
+                 HeapCellValue::Addr(Addr::Con(Constant::EmptyList))) 
+                    if self.flags.double_quotes.is_chars() => if s.is_empty() {
+                        return Ordering::Equal;
+                    } else {
+                        return Ordering::Less;
+                    },
                 (HeapCellValue::Addr(Addr::HeapCell(hc1)),
                  HeapCellValue::Addr(Addr::HeapCell(hc2))) =>
                     if hc1 != hc2 {
@@ -1413,7 +1444,7 @@ impl MachineState {
                         return Ordering::Less;
                     } else {
                         return n.as_str().cmp(".");
-                    },
+                    },                
                 (HeapCellValue::NamedStr(..), _) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Lis(_)), _) =>
@@ -1724,33 +1755,6 @@ impl MachineState {
     }
 
     // returns true on failure.
-    pub(super) fn eq_test(&self) -> bool
-    {
-        let a1 = self[temp_v!(1)].clone();
-        let a2 = self[temp_v!(2)].clone();
-
-        let iter = self.zipped_acyclic_pre_order_iter(a1, a2);
-
-        for (v1, v2) in iter {
-            match (v1, v2) {
-                (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
-                    if ar1 != ar2 || n1 != n2 {
-                        return true;
-                    },
-                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
-                    continue,
-                (HeapCellValue::Addr(a1), HeapCellValue::Addr(a2)) =>
-                    if a1 != a2 {
-                        return true;
-                    },
-                _ => return true
-            }
-        }
-
-        false
-    }
-
-    // returns true on failure.
     pub(super) fn structural_eq_test(&self) -> bool
     {
         let a1 = self[temp_v!(1)].clone();
@@ -1762,6 +1766,30 @@ impl MachineState {
 
         for (v1, v2) in iter {
             match (v1, v2) {
+                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
+              | (HeapCellValue::Addr(Addr::Con(Constant::String(ref s))), HeapCellValue::Addr(Addr::Lis(_)))
+                    if self.flags.double_quotes.is_chars() => if s.is_empty() {
+                        return true;
+                    },
+                (HeapCellValue::Addr(Addr::Con(Constant::String(ref s))),
+                 HeapCellValue::Addr(Addr::Con(Constant::EmptyList)))
+              | (HeapCellValue::Addr(Addr::Con(Constant::EmptyList)),
+                 HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
+                    if self.flags.double_quotes.is_chars() => if !s.is_empty() {
+                        return true;
+                    },
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(atom))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Char(c))))
+              | (HeapCellValue::Addr(Addr::Con(Constant::Char(c))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Atom(atom)))) => {
+                  if atom.as_str().chars().count() == 1 {
+                      if Some(c) == atom.as_str().chars().next() {
+                          continue;
+                      }
+                  }
+                  
+                  return true;
+                },
                 (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
                     if ar1 != ar2 || n1 != n2 {
                         return true;

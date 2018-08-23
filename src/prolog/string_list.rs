@@ -24,7 +24,8 @@ pub struct StringList {
 
 impl Hash for StringList {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.borrow().hash(state)
+        let h = self.borrow().hash(state);
+        (h, self.cursor, self.expandable).hash(state);
     }
 }
 
@@ -61,11 +62,6 @@ impl StringList {
             body,
             expandable
         }
-    }
-
-    #[inline]
-    pub fn cursor(&self) -> usize {
-        self.cursor
     }
 
     #[inline]

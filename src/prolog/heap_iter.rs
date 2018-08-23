@@ -39,17 +39,28 @@ impl<'a> HCPreOrderIterator<'a> {
     {
         let da = self.machine_st.store(self.machine_st.deref(addr));
 
-        match &da {
-            &Addr::Con(_) => da,
-            &Addr::Lis(a) => {
+        match da {
+            Addr::Con(Constant::String(ref s))
+                if self.machine_st.machine_flags().double_quotes.is_chars() => {
+                    if let Some(c) = s.head() {
+                        let tail = s.tail();
+                    
+                        self.state_stack.push(Addr::Con(Constant::String(tail)));
+                        self.state_stack.push(Addr::Con(Constant::Char(c)));
+                    }
+
+                    Addr::Con(Constant::String(s.clone()))
+                },
+            Addr::Con(_) => da,
+            Addr::Lis(a) => {
                 self.state_stack.push(Addr::HeapCell(a + 1));
                 self.state_stack.push(Addr::HeapCell(a));
 
                 da
             },
-            &Addr::HeapCell(_) | &Addr::StackCell(_, _) =>
+            Addr::HeapCell(_) | Addr::StackCell(_, _) =>
                 da,
-            &Addr::Str(s) =>
+            Addr::Str(s) =>
                 self.follow_heap(s) // record terms of structure.
         }
     }

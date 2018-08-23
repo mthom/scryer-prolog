@@ -622,7 +622,15 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Eq => {
-                machine_st.fail = machine_st.eq_test();
+                let a1 = machine_st[temp_v!(1)].clone();
+                let a2 = machine_st[temp_v!(2)].clone();
+
+                machine_st.fail = if let Ordering::Equal = machine_st.compare_term_test(&a1, &a2) {
+                    false
+                } else {
+                    true
+                };
+
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Ground => {
@@ -634,7 +642,15 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::NotEq => {
-                machine_st.fail = !machine_st.eq_test();
+                let a1 = machine_st[temp_v!(1)].clone();
+                let a2 = machine_st[temp_v!(2)].clone();
+
+                machine_st.fail = if let Ordering::Equal = machine_st.compare_term_test(&a1, &a2) {
+                    true
+                } else {
+                    false
+                };
+                
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Sort => {

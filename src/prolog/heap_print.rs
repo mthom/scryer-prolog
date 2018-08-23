@@ -1,9 +1,8 @@
 use prolog::ast::*;
 use prolog::num::*;
 use prolog::heap_iter::*;
-use prolog::machine::machine_state::{DoubleQuotes, MachineState};
+use prolog::machine::machine_state::MachineState;
 use prolog::ordered_float::OrderedFloat;
-use prolog::string_list::*;
 
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -12,7 +11,6 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub enum TokenOrRedirect {
     Atom(ClauseName),
-    Char(char),
     NumberedVar(String),
     Redirect,
     Open,
@@ -292,24 +290,6 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         }
     }
 
-    fn expand_char_list(&mut self, s: StringList) {
-        let cell = Rc::new(Cell::new(true));        
-        let cursor = s.cursor();
-
-        self.state_stack.push(TokenOrRedirect::CloseList(cell.clone()));
-
-        if !s.is_empty() {
-            for c in s.borrow()[cursor ..].chars().rev() {            
-                self.state_stack.push(TokenOrRedirect::Char(c));
-                self.state_stack.push(TokenOrRedirect::Comma);
-            }
-
-            self.state_stack.pop();
-        }
-        
-        self.state_stack.push(TokenOrRedirect::OpenList(cell));
-    }
-
     fn print_char(&mut self, c: char) {
         if non_quoted_token(c) {
             self.outputter.push_char(c);                    
@@ -351,8 +331,13 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             Constant::Number(n) =>
                 self.outputter.append(&format!("{}", n)),
             Constant::String(s) =>
-                if let DoubleQuotes::Chars = self.machine_st.machine_flags().double_quotes {
-                    self.expand_char_list(s);
+                if self.machine_st.machine_flags().double_quotes.is_chars() {
+                    if !s.is_empty() {
+                        self.push_list();
+                    } else if !self.at_cdr("") {
+                        self.outputter.append("[]");
+                    }
+                    // self.expand_char_list(s);
                 } else { // for now, == DoubleQuotes::Atom
                     self.outputter.append("\"");
                     self.outputter.append(s.borrow().as_str());
@@ -361,6 +346,18 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             Constant::Usize(i) =>
                 self.outputter.append(&format!("u{}", i))
         }
+    }
+
+    fn push_list(&mut self) {
+        let cell = Rc::new(Cell::new(true));
+
+        self.state_stack.push(TokenOrRedirect::CloseList(cell.clone()));
+
+        self.state_stack.push(TokenOrRedirect::Redirect);
+        self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
+        self.state_stack.push(TokenOrRedirect::Redirect);
+
+        self.state_stack.push(TokenOrRedirect::OpenList(cell));        
     }
     
     fn handle_heap_term(&mut self, iter: &mut HCPreOrderIterator)
@@ -381,17 +378,8 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 },
             HeapCellValue::Addr(Addr::Con(c)) =>
                 self.print_constant(c),
-            HeapCellValue::Addr(Addr::Lis(_)) => {
-                let cell = Rc::new(Cell::new(true));
-
-                self.state_stack.push(TokenOrRedirect::CloseList(cell.clone()));
-
-                self.state_stack.push(TokenOrRedirect::Redirect);
-                self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
-                self.state_stack.push(TokenOrRedirect::Redirect);
-
-                self.state_stack.push(TokenOrRedirect::OpenList(cell));
-            },
+            HeapCellValue::Addr(Addr::Lis(_)) =>
+                self.push_list(),
             HeapCellValue::Addr(addr) => self.print_offset(addr)
         }
     }
@@ -417,8 +405,6 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 match loc_data {
                     TokenOrRedirect::Atom(atom) =>
                         self.outputter.append(atom.as_str()),
-                    TokenOrRedirect::Char(c) =>
-                        self.print_char(c),
                     TokenOrRedirect::NumberedVar(num_var) =>
                         self.outputter.append(num_var.as_str()),
                     TokenOrRedirect::Redirect =>
