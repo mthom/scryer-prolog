@@ -527,7 +527,7 @@ pub enum Fixity {
     In, Post, Pre
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Hash)]
 pub enum Constant {
     Atom(ClauseName),
     Char(char),
@@ -536,6 +536,37 @@ pub enum Constant {
     Usize(usize),
     EmptyList
 }
+
+impl PartialEq for Constant {
+    fn eq(&self, other: &Constant) -> bool {
+        match (self, other) {
+            (&Constant::Atom(ref atom), &Constant::Char(c))
+          | (&Constant::Char(c), &Constant::Atom(ref atom)) => {
+              let s = atom.as_str();
+              if c.len_utf8() != s.len() || Some(c) != s.chars().next() {
+                  false
+              } else {
+                  true
+              }
+            },
+            (&Constant::Atom(ref a1), &Constant::Atom(ref a2)) =>
+                a1.as_str() == a2.as_str(),
+            (&Constant::Char(c1), &Constant::Char(c2)) =>
+                c1 == c2,
+            (&Constant::Number(ref n1), &Constant::Number(ref n2)) =>
+                n1 == n2,
+            (&Constant::String(ref s1), &Constant::String(ref s2)) =>
+                s1 == s2,                      
+            (&Constant::EmptyList, &Constant::EmptyList) =>
+                true,
+            (&Constant::Usize(u1), &Constant::Usize(u2)) =>
+                u1 == u2,
+            _ => false
+        }
+    }
+}
+
+impl Eq for Constant {}
 
 impl Constant {
     pub fn to_atom(self) -> Option<ClauseName> {

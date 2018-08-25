@@ -190,13 +190,6 @@ impl MachineState {
 
                         self.fail = true;
                     },
-                    (Addr::Con(Constant::Char(c)), Addr::Con(Constant::Atom(atom)))
-                  | (Addr::Con(Constant::Atom(atom)), Addr::Con(Constant::Char(c))) => {
-                      let s = atom.as_str();
-                      if c.len_utf8() != s.len() || Some(c) != s.chars().next() {
-                          self.fail = true;
-                      }
-                    },
                     (Addr::Lis(a1), Addr::Con(Constant::String(ref s)))
                   | (Addr::Con(Constant::String(ref s)), Addr::Lis(a1))
                         if self.flags.double_quotes.is_chars() =>
@@ -208,7 +201,7 @@ impl MachineState {
                                 pdl.push(Addr::HeapCell(a1));
                             } else {
                                 self.fail = true;
-                            },                        
+                            },                   
                     (Addr::Con(Constant::EmptyList), Addr::Con(Constant::String(ref s)))
                   | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
                         if self.flags.double_quotes.is_chars() => {
@@ -221,7 +214,7 @@ impl MachineState {
                         pdl.push(Addr::HeapCell(a1 + 1));
                         pdl.push(Addr::HeapCell(a2 + 1));
                     },
-                    (Addr::Con(c1), Addr::Con(c2)) =>
+                    (Addr::Con(ref c1), Addr::Con(ref c2)) => 
                         if c1 != c2 {
                             self.fail = true;
                         },
