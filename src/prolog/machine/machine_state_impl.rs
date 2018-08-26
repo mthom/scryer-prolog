@@ -337,7 +337,15 @@ impl MachineState {
             Addr::StackCell(fr, sc) => {
                 self.and_stack[fr][sc] = Addr::Con(c.clone());
                 self.trail(Ref::StackCell(fr, sc));
-            },
+            },            
+            Addr::Con(Constant::String(s)) =>            
+                self.fail = match c {
+                    Constant::EmptyList
+                      if self.flags.double_quotes.is_chars() =>
+                        !s.is_empty(),
+                    Constant::String(s2) => s != s2,
+                    _ => true
+                },
             Addr::Con(c1) => {
                 if c1 != c {
                     self.fail = true;
@@ -1770,19 +1778,7 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
                     if self.flags.double_quotes.is_chars() => if !s.is_empty() {
                         return true;
-                    },
-                (HeapCellValue::Addr(Addr::Con(Constant::Atom(atom))),
-                 HeapCellValue::Addr(Addr::Con(Constant::Char(c))))
-              | (HeapCellValue::Addr(Addr::Con(Constant::Char(c))),
-                 HeapCellValue::Addr(Addr::Con(Constant::Atom(atom)))) => {
-                  if atom.as_str().chars().count() == 1 {
-                      if Some(c) == atom.as_str().chars().next() {
-                          continue;
-                      }
-                  }
-                  
-                  return true;
-                },
+                    },                
                 (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
                     if ar1 != ar2 || n1 != n2 {
                         return true;
