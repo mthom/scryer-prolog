@@ -58,6 +58,11 @@ impl MachineError {
         MachineError { stub, from: ErrorProvenance::Constructed }
     }
 
+    pub(super) fn syntax_error(error: SyntaxError) -> Self {
+        let stub = functor!("syntax_error", 1, [heap_atom!(error.as_str())]);
+        MachineError { stub, from: ErrorProvenance::Received }
+    }
+    
     pub(super) fn domain_error(error: DomainError, culprit: Addr) -> Self {
         let stub = functor!("domain_error", 2, [heap_atom!(error.as_str()),
                                                 HeapCellValue::Addr(culprit)]);
@@ -131,6 +136,19 @@ impl ValidType {
             ValidType::Pair => "pair",
 //            ValidType::PredicateIndicator => "predicate_indicator",
 //            ValidType::Variable => "variable"
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum SyntaxError {
+    ImpDepAtom
+}
+
+impl SyntaxError {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SyntaxError::ImpDepAtom => "imp_dep_atom"
         }
     }
 }
