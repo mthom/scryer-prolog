@@ -46,7 +46,7 @@ impl Ord for StringList {
 impl PartialEq for StringList {
     fn eq(&self, other: &Self) -> bool
     {
-        self.body == other.body
+        self.body == other.body && self.cursor == other.cursor && self.expandable == other.expandable
     }
 }
 

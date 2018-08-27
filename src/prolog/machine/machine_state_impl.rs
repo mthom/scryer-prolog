@@ -214,6 +214,24 @@ impl MachineState {
                         pdl.push(Addr::HeapCell(a1 + 1));
                         pdl.push(Addr::HeapCell(a2 + 1));
                     },
+                    (Addr::Con(Constant::String(ref s1)), Addr::Con(Constant::String(ref s2))) => {
+                        if let Some(c1) = s1.head() {
+                            if let Some(c2) = s2.head() {
+                                if c1 == c2 {
+                                    pdl.push(Addr::Con(Constant::String(s1.tail())));
+                                    pdl.push(Addr::Con(Constant::String(s2.tail())));
+                                    
+                                    continue;
+                                }
+                            }
+                        } else {
+                            if s2.head().is_none() {
+                                continue;
+                            }
+                        }
+
+                        self.fail = true;
+                    },
                     (Addr::Con(ref c1), Addr::Con(ref c2)) => 
                         if c1 != c2 {
                             self.fail = true;
