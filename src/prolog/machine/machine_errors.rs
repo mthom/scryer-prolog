@@ -148,7 +148,7 @@ pub enum SyntaxError {
 impl SyntaxError {
     pub fn as_str(&self) -> &'static str {
         match self {
-            SyntaxError::ImpDepAtom => "imp_dep_atom"
+            &SyntaxError::ImpDepAtom => "imp_dep_atom"
         }
     }
 }
