@@ -941,7 +941,7 @@ fn test_queries_on_call_n()
 fn test_queries_on_arithmetic()
 {
     let mut wam = Machine::new();
-    
+
     assert_prolog_success!(&mut wam, "?- X is 1, X is X.", [["X = 1"]]);
     assert_prolog_failure!(&mut wam, "?- X is 1, X is X + 1.");
     assert_prolog_success!(&mut wam, "?- X is 1, X is X + 0.", [["X = 1"]]);
@@ -1025,7 +1025,7 @@ fn test_queries_on_arithmetic()
 fn test_queries_on_exceptions()
 {
     let mut wam = Machine::new();
-    
+
     submit(&mut wam, "f(a). f(_) :- throw(stuff).");
     submit(&mut wam, "handle(stuff).");
 
@@ -1164,7 +1164,7 @@ fn test_queries_on_skip_max_list() {
                            [["Xs = []"]]);
 
     // tests on proper and empty lists with no max.
-    
+
     // test on proper and empty lists.
     assert_prolog_success!(&mut wam, "?- '$skip_max_list'(N, -1, [], Xs).",
                            [["Xs = []", "N = 0"]]);
@@ -1177,12 +1177,12 @@ fn test_queries_on_skip_max_list() {
     assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(4, -1, [], Xs).");
     assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, -1, [a,b,c], Xs).",
                            [["Xs = []"]]);
-    
+
     assert_prolog_success!(&mut wam, "?- '$skip_max_list'(0, -1, [], Xs).",
                            [["Xs = []"]]);
     assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, -1, [a,b,c], Xs).",
                            [["Xs = []"]]);
-    
+
     // tests on partial lists.
     assert_prolog_success!(&mut wam, "?- '$skip_max_list'(3, 4, [a,b,c|X], Xs0).",
                            [["X = _1", "Xs0 = _1"]]);
@@ -1191,7 +1191,7 @@ fn test_queries_on_skip_max_list() {
     assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 2, [a,b,c|X], Xs0).");
     assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 1, [a,b,c|X], Xs0).");
     assert_prolog_failure!(&mut wam, "?- '$skip_max_list'(3, 0, [a,b,c|X], Xs0).");
-        
+
     // tests on cyclic lists.
     assert_prolog_failure!(&mut wam, "?- Xs = [a,b|Xs], '$skip_max_list'(3, 5, X, Xs0).");
     assert_prolog_failure!(&mut wam, "?- X = [a,b|Y], Y = [c,d|X], '$skip_max_list'(4, 5, X, Xs0).");
@@ -1206,7 +1206,7 @@ fn test_queries_on_skip_max_list() {
 fn test_queries_on_conditionals()
 {
     let mut wam = Machine::new();
-    
+
     submit(&mut wam, "test(A) :- (   A =:= 2 -> writeq(\"A is 2\")
                                  ;   A =:= 3 -> writeq(\"A is 3\")
                                  ;   A = \"not 2 or 3\"
@@ -1281,10 +1281,10 @@ local_member(X, Xs) :- member(X, Xs).
 
 reverse(Xs, Ys) :- lists:reverse(Xs, Ys).
 ");
-    
+
     assert_prolog_success!(&mut wam, "?- my_lists:local_member(1, [1,2,3]).");
     assert_prolog_success!(&mut wam, "?- my_lists:reverse([a,b,c], [c,b,a]).");
-    
+
     compile_user_module(&mut wam, "
 :- use_module(library(my_lists), [local_member/2]).
 :- module(my_lists_2, [local_member/2]).
@@ -1294,17 +1294,17 @@ reverse(Xs, Ys) :- lists:reverse(Xs, Ys).
     assert_prolog_success!(&mut wam, "?- catch(local_member(X, Xs), error(E, _), true).",
                            [["X = _1", "E = existence_error(procedure, local_member/2)", "Xs = _2"]]);
 
-    
+
 }
 
 #[test]
 fn test_queries_on_builtins()
 {
     let mut wam = Machine::new();
-    
+
     wam.use_module_in_toplevel(clause_name!("lists"));
     wam.use_module_in_toplevel(clause_name!("control"));
-    
+
     assert_prolog_failure!(&mut wam, "?- atom(X).");
     assert_prolog_success!(&mut wam, "?- atom(a).");
     assert_prolog_failure!(&mut wam, "?- atom(\"string\").");
@@ -1335,7 +1335,7 @@ fn test_queries_on_builtins()
 
     assert_prolog_success!(&mut wam, "?- catch(arg(N, f, Arg), error(E, _), true).",
                            [["E = instantiation_error", "Arg = _3", "N = _1"]]);
-    
+
     assert_prolog_failure!(&mut wam, "?- arg(N, f(arg, arg, arg), not_arg).");
     assert_prolog_failure!(&mut wam, "?- arg(1, f(arg, not_arg, not_arg), not_arg).");
     assert_prolog_success!(&mut wam, "?- arg(2, f(arg, not_arg, not_arg), not_arg).");
@@ -1390,7 +1390,7 @@ fn test_queries_on_builtins()
                                        ["N = 5", "Xs = [_4, _8, _12, _16, _20]"]],
                                       6);
 
-    assert_prolog_success!(&mut wam, "?- length(Xs, 3).", [["Xs = [_4, _8, _12]"]]);    
+    assert_prolog_success!(&mut wam, "?- length(Xs, 3).", [["Xs = [_4, _8, _12]"]]);
     assert_prolog_success!(&mut wam, "?- length([], N).", [["N = 0"]]);
     assert_prolog_success!(&mut wam, "?- length(Xs, 0).", [["Xs = []"]]);
     assert_prolog_success!(&mut wam, "?- length([a,b,[a,b,c]], 3).");
@@ -1412,7 +1412,7 @@ fn test_queries_on_builtins()
                            [["Y = f(g(X, Y))", "X = g(X, f(X))", "Z = g(Z, f(Z))"]]);
     assert_prolog_success!(&mut wam, "?- X = g(X, Y), Y = f(X), duplicate_term(Y, V).",
                            [["Y = f(g(X, Y))", "X = g(X, f(X))", "V = f(g(_9, V))"]]);
-    
+
     assert_prolog_success!(&mut wam, "?- float(3.14159269).");
     assert_prolog_failure!(&mut wam, "?- float(3).");
     assert_prolog_failure!(&mut wam, "?- float(\"sdfsa\").");
@@ -1516,11 +1516,11 @@ fn test_queries_on_builtins()
                            [["Sorted = [1-a, 1-z, 1-a, 2-99, 2-44, 3-f(_7)]"]]);
     assert_prolog_success!(&mut wam, "?- keysort([X-1,1-1],[2-1,1-1]).",
                            [["X = 2"]]);
-    
+
     assert_prolog_failure!(&mut wam, "?- Pairs = [a-a|Pairs], keysort(Pairs, _).");
     assert_prolog_success!(&mut wam, "?- Pairs = [a-a|Pairs], catch(keysort(Pairs, _), error(E, _), true).",
                            [["E = type_error(list, [a-a | _22])", "Pairs = [a-a | Pairs]"]]);
-    
+
     assert_prolog_success!(&mut wam, "?- keysort([], L).",
                            [["L = []"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a|_], _), error(E, _), true).",
@@ -1546,10 +1546,10 @@ fn test_queries_on_builtins()
                            [["E = type_error(list, _13)"]]);
     assert_prolog_success!(&mut wam, "?- catch(sort([a,b,c], not_a_list), error(E, _), true).",
                            [["E = type_error(list, not_a_list)"]]);
-    
+
     assert_prolog_success!(&mut wam, "?- call(((G = 2 ; fail), B=3, !)).",
                            [["G = 2", "B = 3"]]);
-    
+
     assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 100, R).",
                            [["G = 2", "B = 3", "R = !", "S = 1"]]);
     assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 10, R).",
@@ -1560,7 +1560,7 @@ fn test_queries_on_builtins()
 fn test_queries_on_setup_call_cleanup()
 {
     let mut wam = Machine::new();
-    
+
     // Test examples from the ISO Prolog page for setup_call_catch.
     assert_prolog_failure!(&mut wam, "?- setup_call_cleanup(false, _, _).");
     assert_prolog_success!(&mut wam, "?- catch(setup_call_cleanup(true, throw(unthrown), _), error(instantiation_error, _), true).");
@@ -1609,11 +1609,11 @@ fn test_queries_on_setup_call_cleanup()
     assert_prolog_success!(&mut wam,
                            "?- catch(( setup_call_cleanup(true,(G=1;G=2),throw(cl)), throw(cont)), Pat, true).",
                            [["Pat = cont", "G = _1"]]);
-    
+
     // fails here.
     assert_prolog_success!(&mut wam,
 "?- setup_call_cleanup(true, (X=1;X=2), writeq(a)), setup_call_cleanup(true,(Y=1;Y=2),writeq(b)), !.",
-                           [["Y = 1", "X = 1"]]);    
+                           [["Y = 1", "X = 1"]]);
 }
 
 #[test]
@@ -1734,5 +1734,56 @@ fn test_queries_on_call_with_inference_limit()
                            [["R = !", "X = 6"]]);
     assert_prolog_success!(&mut wam, "?- call_with_inference_limit(g(X), 1, R), call_with_inference_limit(g(X), 1, R).",
                            [["R = inference_limit_exceeded", "X = _1"]]);
+}
 
+#[test]
+fn test_queries_on_string_lists()
+{
+    let mut wam = Machine::new();
+
+    // double_quotes is chars by default.
+    assert_prolog_success!(&mut wam, "?- \"\" == [].");
+    assert_prolog_failure!(&mut wam, "?- \"abc\" == [].");
+    assert_prolog_success!(&mut wam, "?- \"abc\" == ['a', 'b', 'c'].");
+    assert_prolog_success!(&mut wam, "?- \"abc\" == ['a', 'b', c].");
+    assert_prolog_success!(&mut wam, "?- \"abc\" == ['a', b, 'c'].");
+    assert_prolog_success!(&mut wam, "?- \"abc\" == [a, 'b', 'c'].");
+    assert_prolog_success!(&mut wam, "?- \"abc\" == [a, 'b', c].");
+    assert_prolog_success!(&mut wam, "?- \"koen\" == [k, o, e, n].");
+    assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o, e, n].");
+    assert_prolog_success!(&mut wam, "?- \"koen\" =@= [k, o, e, n].");
+    assert_prolog_success!(&mut wam, "?- \"koen\" =@= \"koen\".");
+    assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o | X].",
+                           [["X = [e, n]"]]);
+    assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o | X], X = \"en\".",
+                           [["X = [e, n]"]]);
+    assert_prolog_failure!(&mut wam, "?- \"koen\" = [k, o | X], X == \"en\".");
+    assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o | X], X =@= \"en\".",
+                           [["X = [e, n]"]]);
+
+    submit(&mut wam, "matcher([a,b,c|X], ['d','e','f'|X]).");
+
+    assert_prolog_success!(&mut wam, "?- matcher(\"abcdef\", \"defdef\").");
+    assert_prolog_failure!(&mut wam, "?- matcher(\"abcdef\", \"defdff\").");
+
+    assert_prolog_success!(&mut wam, "?- matcher([X, Y, Z | W], [A, B, C | W]).",
+                           [["A = d", "B = e", "C = f", "W = _1", "X = a", "Y = b", "Z = c"]]);
+    assert_prolog_failure!(&mut wam, "?- matcher([X, Y, Z | W], [X, B, C | W]).");
+
+    submit(&mut wam, "matcher([a,b,c|X], X).");
+
+    assert_prolog_success!(&mut wam, "?- matcher(\"abcdef\", X), X = [d,e,f|Y], Y == [], X = \"def\".",
+                           [["X = [d, e, f]", "Y = []"]]);
+    assert_prolog_failure!(&mut wam, "?- matcher(\"abcdef\", X), X = [d,e,f|Y], Y == [], X == \"def\".");
+    assert_prolog_success!(&mut wam, "?- X = ['a', 'b', 'c' | \"def\"].",
+                           [["X = [a, b, c, d, e, f]"]]);
+
+    assert_prolog_success!(&mut wam, "?- X = [a,b,c|\"abc\"].",
+                           [["X = [a, b, c, a, b, c]"]]);
+
+    submit(&mut wam, "?- set_prolog_flag(double_quotes, atom).");
+
+    assert_prolog_success!(&mut wam, "?- matcher(X, Y).",
+                          [["X = [a, b, c | _1]", "Y = _1"]]);
+    assert_prolog_failure!(&mut wam, "?- matcher(\"abcdef\", Y).");
 }

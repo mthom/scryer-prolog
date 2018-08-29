@@ -31,8 +31,10 @@ Extend rusty-wam to include the following, among other features:
   control (`setup_call_control/3`, `call_with_inference_limit/3`,
   etc.) (_done_)
 * Default representation of strings as list of chars, using a packed
-  internal representation (_in progress_).
-* `term_expansion/2` and `goal_expansion/2`.
+  internal representation (_done_).
+  ** Implement a representation of 'partial strings' as difference lists
+  of characters (_in progress_).
+* `term_expansion/2` and `goal_expansion/2` (_in progress_).
 * Definite Clause Grammars.
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.

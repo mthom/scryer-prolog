@@ -1785,10 +1785,33 @@ impl MachineState {
 
         for (v1, v2) in iter {
             match (v1, v2) {
-                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
-              | (HeapCellValue::Addr(Addr::Con(Constant::String(ref s))), HeapCellValue::Addr(Addr::Lis(_)))
+                (HeapCellValue::Addr(Addr::Lis(l)), HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
+              | (HeapCellValue::Addr(Addr::Con(Constant::String(ref s))), HeapCellValue::Addr(Addr::Lis(l)))
                     if self.flags.double_quotes.is_chars() => if s.is_empty() {
                         return true;
+                    } else {
+                        if let HeapCellValue::Addr(Addr::Con(constant)) = self.heap[l].clone() {
+                            if let Some(c) = s.head() {
+                                // checks equality on atoms, too.
+                                if constant == Constant::Char(c) {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        return true;
+                    },                
+               (HeapCellValue::Addr(Addr::Con(Constant::String(ref s1))),
+                HeapCellValue::Addr(Addr::Con(Constant::String(ref s2)))) =>
+                    match s1.head() {
+                        Some(c1) => if let Some(c2) = s2.head() {
+                            if c1 != c2 {
+                                return true;
+                            }
+                        } else {
+                            return true;
+                        },
+                        None => return !s2.is_empty()
                     },
                 (HeapCellValue::Addr(Addr::Con(Constant::String(ref s))),
                  HeapCellValue::Addr(Addr::Con(Constant::EmptyList)))
