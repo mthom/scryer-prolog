@@ -32,7 +32,7 @@ Extend rusty-wam to include the following, among other features:
   etc.) (_done_)
 * Default representation of strings as list of chars, using a packed
   internal representation (_done_).
-    - Implement a representation of 'partial strings' as difference lists
+    - A representation of 'partial strings' as difference lists
       of characters (_in progress_).
 * `term_expansion/2` and `goal_expansion/2` (_in progress_).
 * Definite Clause Grammars.
