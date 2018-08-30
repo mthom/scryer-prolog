@@ -46,6 +46,12 @@ macro_rules! heap_integer {
     )
 }
 
+macro_rules! heap_char {
+    ($c:expr) => (
+        HeapCellValue::Addr(Addr::Con(Constant::Char($c)))
+    )
+}
+
 macro_rules! heap_atom {
     ($name:expr) => (
         HeapCellValue::Addr(Addr::Con(atom!($name)))
@@ -59,12 +65,15 @@ macro_rules! functor {
     ($name:expr) => (
         vec![ heap_atom!($name) ]
     );
+    ($name:expr, $len:expr) => (
+        vec![ HeapCellValue::NamedStr($len, clause_name!($name), None) ]
+    );
     ($name:expr, $len:expr, [$($args:expr),*]) => (
         vec![ HeapCellValue::NamedStr($len, clause_name!($name), None), $($args),* ]
     );
     ($name:expr, $len:expr, [$($args:expr),*], $fix: expr) => (
         vec![ HeapCellValue::NamedStr($len, clause_name!($name), Some($fix)), $($args),* ]
-    )
+    );    
 }
 
 macro_rules! temp_v {

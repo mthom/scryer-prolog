@@ -601,10 +601,10 @@ pub(crate) trait CallPolicy: Any {
                         let addr = reader.machine_st[temp_v!(1)].clone();
                         reader.machine_st.unify(addr, Addr::HeapCell(offset));
                     },
-                    Err(_) => {
-                        // 8.14.1.3 k)-l)
+                    Err(e) => {
+                        let h    = reader.machine_st.heap.h;
                         let stub = MachineError::functor_stub(clause_name!("read"), 1);
-                        let err  = MachineError::syntax_error(SyntaxError::ImpDepAtom);
+                        let err  = MachineError::syntax_error(h, e);
                         let err  = reader.machine_st.error_form(err, stub);
                         
                         return Err(err);
