@@ -65,6 +65,11 @@ impl StringList {
     }
 
     #[inline]
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }        
+    
+    #[inline]
     pub fn head(&self) -> Option<char> {
         self.borrow()[self.cursor ..].chars().next()
     }

@@ -339,8 +339,10 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                     }
                     // self.expand_char_list(s);
                 } else { // for now, == DoubleQuotes::Atom
+                    let borrowed_str = s.borrow();
+                    
                     self.outputter.append("\"");
-                    self.outputter.append(s.borrow().as_str());
+                    self.outputter.append(&borrowed_str[s.cursor() ..]);
                     self.outputter.append("\"");
                 },            
             Constant::Usize(i) =>

@@ -1786,4 +1786,9 @@ fn test_queries_on_string_lists()
     assert_prolog_success!(&mut wam, "?- matcher(X, Y).",
                           [["X = [a, b, c | _1]", "Y = _1"]]);
     assert_prolog_failure!(&mut wam, "?- matcher(\"abcdef\", Y).");
+
+    submit(&mut wam, "?- set_prolog_flag(double_quotes, chars).");
+    
+    assert_prolog_success!(&mut wam, "?- X = \"abc\", X = ['a' | Y], set_prolog_flag(double_quotes, atom).",
+                           [["X = \"abc\"", "Y = \"bc\""]]);
 }

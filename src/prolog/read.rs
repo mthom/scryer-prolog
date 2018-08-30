@@ -49,7 +49,7 @@ impl<'a> Reader<'a> {
             };
         }
     }
-
+    
     fn push_stub_addr(&mut self) {
         let h = self.machine_st.heap.h;
         self.machine_st.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
