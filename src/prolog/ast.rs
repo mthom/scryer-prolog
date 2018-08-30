@@ -499,6 +499,7 @@ pub enum ParserError
     InvalidUseModuleDecl,
     InvalidModuleResolution,
     MissingQuote,
+    NonPrologChar,
     ParseBigInt,
     ParseFloat,
     Utf8Conversion(Utf8Error)

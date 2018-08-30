@@ -31,14 +31,19 @@ impl<'a> Reader<'a> {
         let mut buffer = String::new();
 
         let stdin = stdin();
-        stdin.read_line(&mut buffer).unwrap();
-
-        let atom_tbl = self.machine_st.atom_tbl.clone();
-        let string_tbl = self.machine_st.string_tbl.clone();
         let flags = self.machine_st.machine_flags();
-        
-        let mut parser = Parser::new(buffer.as_bytes(), atom_tbl, string_tbl, flags);
-        Ok(self.write_term_to_heap(parser.read_term(op_dir)?))
+
+        loop {
+            stdin.read_line(&mut buffer).unwrap();
+            let mut parser = Parser::new(buffer.as_bytes(), self.machine_st.atom_tbl.clone(),
+                                         self.machine_st.string_tbl.clone(), flags);
+
+            match parser.read_term(op_dir) {
+                Err(ParserError::UnexpectedEOF) => continue,
+                Err(e) => return Err(e),
+                Ok(term) => return Ok(self.write_term_to_heap(term))
+            };
+        }
     }
 
     fn push_stub_addr(&mut self) {
@@ -66,7 +71,7 @@ impl<'a> Reader<'a> {
             let h = self.machine_st.heap.h;
 
             match &term {
-                &TermRef::Cons(lvl, ..) => {                    
+                &TermRef::Cons(lvl, ..) => {
                     queue.push_back((2, h+1));
                     self.machine_st.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
 
@@ -105,12 +110,12 @@ impl<'a> Reader<'a> {
                         } else {
                             var_dict.insert(var.clone(), Addr::HeapCell(site_h));
                         }
-                        
+
                         if arity > 1 {
                             queue.push_front((arity - 1, site_h + 1));
                         }
                     }
-                        
+
                     continue;
                 },
                 _ => {}
