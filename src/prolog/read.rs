@@ -34,7 +34,11 @@ impl<'a> Reader<'a> {
         let flags = self.machine_st.machine_flags();
 
         loop {
-            stdin.read_line(&mut buffer).unwrap();
+            let mut append_buf = String::new();            
+            stdin.read_line(&mut append_buf).unwrap();
+
+            buffer += append_buf.as_str();
+            
             let mut parser = Parser::new(buffer.as_bytes(), self.machine_st.atom_tbl.clone(),
                                          self.machine_st.string_tbl.clone(), flags);
 
