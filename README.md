@@ -28,7 +28,7 @@ Extend rusty-wam to include the following, among other features:
 * Built-in control operators (`,`, `;`, `->`, etc.) (_done_).
 * A revised, not-terrible module system (_done, I think_).
 * Built-in predicates for list processing and top-level declarative
-  control (`setup_call_control/3`, `call_with_inference_limit/3`,
+  control (`setup_call_cleanup/3`, `call_with_inference_limit/3`,
   etc.) (_done_)
 * Default representation of strings as list of chars, using a packed
   internal representation (_done_).
