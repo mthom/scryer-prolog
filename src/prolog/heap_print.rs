@@ -279,6 +279,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     
     fn print_atom(&mut self, atom: &ClauseName) {
         match atom.as_str() {
+            "" => self.outputter.append("''"),
             ";" | "!" => self.outputter.append(atom.as_str()),
             s => if s.chars().all(non_quoted_token) {
                 self.outputter.append(atom.as_str());
@@ -301,7 +302,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     }
     
     fn print_constant(&mut self, c: Constant) {
-        match c {
+        match c {            
             Constant::Atom(ref atom) =>
                 self.print_atom(atom),
             Constant::Char(c) if c == '\n' =>
@@ -406,7 +407,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
                     TokenOrRedirect::Atom(atom) =>
-                        self.outputter.append(atom.as_str()),
+                        self.print_atom(&atom),
                     TokenOrRedirect::NumberedVar(num_var) =>
                         self.outputter.append(num_var.as_str()),
                     TokenOrRedirect::Redirect =>
