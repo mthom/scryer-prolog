@@ -60,7 +60,7 @@ impl MachineState {
     pub fn machine_flags(&self) -> MachineFlags {
         self.flags
     }
-    
+
     fn next_global_index(&self) -> usize {
         max(if self.and_stack.len() > 0 { self.and_stack[self.e].global_index } else { 0 },
             if self.b > 0 { self.or_stack[self.b - 1].global_index } else { 0 }) + 1
@@ -193,15 +193,15 @@ impl MachineState {
                     (Addr::Lis(a1), Addr::Con(Constant::String(ref s)))
                   | (Addr::Con(Constant::String(ref s)), Addr::Lis(a1))
                         if self.flags.double_quotes.is_chars() =>
-                            if let Some(c) = s.head() {                                
+                            if let Some(c) = s.head() {
                                 pdl.push(Addr::Con(Constant::String(s.tail())));
                                 pdl.push(Addr::HeapCell(a1 + 1));
-                                
+
                                 pdl.push(Addr::Con(Constant::Char(c)));
                                 pdl.push(Addr::HeapCell(a1));
                             } else {
                                 self.fail = true;
-                            },                   
+                            },
                     (Addr::Con(Constant::EmptyList), Addr::Con(Constant::String(ref s)))
                   | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
                         if self.flags.double_quotes.is_chars() => {
@@ -220,7 +220,7 @@ impl MachineState {
                                 if c1 == c2 {
                                     pdl.push(Addr::Con(Constant::String(s1.tail())));
                                     pdl.push(Addr::Con(Constant::String(s2.tail())));
-                                    
+
                                     continue;
                                 }
                             }
@@ -232,7 +232,7 @@ impl MachineState {
 
                         self.fail = true;
                     },
-                    (Addr::Con(ref c1), Addr::Con(ref c2)) => 
+                    (Addr::Con(ref c1), Addr::Con(ref c2)) =>
                         if c1 != c2 {
                             self.fail = true;
                         },
@@ -355,8 +355,8 @@ impl MachineState {
             Addr::StackCell(fr, sc) => {
                 self.and_stack[fr][sc] = Addr::Con(c.clone());
                 self.trail(Ref::StackCell(fr, sc));
-            },            
-            Addr::Con(Constant::String(s)) =>            
+            },
+            Addr::Con(Constant::String(s)) =>
                 self.fail = match c {
                     Constant::EmptyList
                       if self.flags.double_quotes.is_chars() =>
@@ -429,6 +429,7 @@ impl MachineState {
                         "-" => interms.push(a1 - a2),
                         "*" => interms.push(a1 * a2),
                         "/" => interms.push(self.div(a1, a2)?),
+                        "^" => interms.push(self.pow(a1, a2)?),
                         "rdiv" => {
                             let r1 = self.get_rational(&ArithmeticTerm::Number(a1), &caller)?;
                             let r2 = self.get_rational(&ArithmeticTerm::Number(a2), &caller)?;
@@ -532,6 +533,18 @@ impl MachineState {
             Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
         } else {
             Ok(n1 / n2)
+        }
+    }
+
+    fn pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub>
+    {
+        match n1.pow(n2) {
+            Ok(result) => Ok(result),
+            Err(_) => {
+                let stub = MachineError::functor_stub(clause_name!("^"), 2);
+                Err(self.error_form(MachineError::evaluation_error(EvalError::NoRoots),
+                                    stub))
+            }
         }
     }
 
@@ -678,7 +691,7 @@ impl MachineState {
     }
 
     pub(super) fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
-        match instr {
+        match instr {            
             &ArithmeticInstruction::Add(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
@@ -698,6 +711,13 @@ impl MachineState {
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
                 self.interms[t - 1] = n1 * n2;
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Pow(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                self.interms[t - 1] = try_or_fail!(self, self.pow(n1, n2));
                 self.p += 1;
             },
             &ArithmeticInstruction::RDiv(ref a1, ref a2, t) => {
@@ -721,6 +741,12 @@ impl MachineState {
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
                 self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.idiv(n1, n2)));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Abs(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = n1.abs();
                 self.p += 1;
             },
             &ArithmeticInstruction::Neg(ref a1, t) => {
@@ -802,7 +828,7 @@ impl MachineState {
                         if self.flags.double_quotes.is_chars() => {
                             if let Some(c) = s.head() {
                                 let h = self.heap.h;
-                                
+
                                 self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Char(c))));
                                 self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(s.tail()))));
 
@@ -1368,7 +1394,7 @@ impl MachineState {
                         Ordering::Less
                     },
                 (HeapCellValue::Addr(Addr::Con(Constant::String(ref s))),
-                 HeapCellValue::Addr(Addr::Con(Constant::EmptyList))) 
+                 HeapCellValue::Addr(Addr::Con(Constant::EmptyList)))
                     if self.flags.double_quotes.is_chars() => if s.is_empty() {
                         return Ordering::Equal;
                     } else {
@@ -1463,7 +1489,7 @@ impl MachineState {
                         return Ordering::Less;
                     } else {
                         return n.as_str().cmp(".");
-                    },                
+                    },
                 (HeapCellValue::NamedStr(..), _) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Lis(_)), _) =>
@@ -1800,7 +1826,7 @@ impl MachineState {
                         }
 
                         return true;
-                    },                
+                    },
                (HeapCellValue::Addr(Addr::Con(Constant::String(ref s1))),
                 HeapCellValue::Addr(Addr::Con(Constant::String(ref s2)))) =>
                     match s1.head() {
@@ -1819,7 +1845,7 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
                     if self.flags.double_quotes.is_chars() => if !s.is_empty() {
                         return true;
-                    },                
+                    },
                 (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
                     if ar1 != ar2 || n1 != n2 {
                         return true;
@@ -1924,14 +1950,14 @@ impl MachineState {
                               use_default_cp: bool)
     {
         let mut default_call_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
-        let call_policy = if use_default_cp {           
+        let call_policy = if use_default_cp {
             &mut default_call_policy
         } else {
             call_policy
         };
 
         self.last_call = lco;
-                
+
         match ct {
             &ClauseType::BuiltIn(ref ct) =>
                 try_or_fail!(self, call_policy.call_builtin(self, ct, code_dirs)),
@@ -1943,7 +1969,7 @@ impl MachineState {
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
                                                             code_dirs)),
             &ClauseType::System(ref ct) =>
-                try_or_fail!(self, self.system_call(ct, code_dirs, call_policy, cut_policy))                
+                try_or_fail!(self, self.system_call(ct, code_dirs, call_policy, cut_policy))
         };
     }
 
@@ -1957,7 +1983,7 @@ impl MachineState {
                 self.allocate(num_cells),
             &ControlInstruction::CallClause(ref ct, arity, _, lco, use_default_cp) =>
                 self.handle_call_clause(code_dirs, call_policy, cut_policy, ct, arity, lco,
-                                        use_default_cp),            
+                                        use_default_cp),
             &ControlInstruction::Deallocate => self.deallocate(),
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
                 if !lco {
@@ -2011,7 +2037,7 @@ impl MachineState {
     pub(super) fn execute_choice_instr(&mut self, instr: &ChoiceInstruction,
                                        call_policy: &mut Box<CallPolicy>)
     {
-        match instr {            
+        match instr {
             &ChoiceInstruction::TryMeElse(offset) => {
                 let n = self.num_of_args;
                 let gi = self.next_global_index();

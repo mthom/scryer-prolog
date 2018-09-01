@@ -1,6 +1,6 @@
-use prolog::num::bigint::BigInt;
-use prolog::num::{Float, ToPrimitive, Zero};
-use prolog::num::rational::Ratio;
+use prolog::num::bigint::{BigInt, BigUint};
+use prolog::num::{Float, Integer, One, Signed, ToPrimitive, Zero};
+use prolog::num::rational::{BigRational, Ratio};
 use prolog::ordered_float::*;
 use prolog::string_list::*;
 use prolog::tabled_rc::*;
@@ -11,7 +11,7 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::Error as IOError;
-use std::ops::{Add, AddAssign, Div, Index, IndexMut, Sub, Mul, Neg};
+use std::ops::{Add, AddAssign, Div, Index, IndexMut, Sub, Mul, MulAssign, Neg};
 use std::rc::Rc;
 use std::str::Utf8Error;
 use std::vec::Vec;
@@ -476,6 +476,7 @@ pub enum ArithmeticError {
     InvalidAtom,
     InvalidOp,
     InvalidTerm,
+    NoRoots,
     UninstantiatedVar
 }
 
@@ -557,7 +558,7 @@ impl PartialEq for Constant {
             (&Constant::Number(ref n1), &Constant::Number(ref n2)) =>
                 n1 == n2,
             (&Constant::String(ref s1), &Constant::String(ref s2)) =>
-                s1 == s2,                      
+                s1 == s2,
             (&Constant::EmptyList, &Constant::EmptyList) =>
                 true,
             (&Constant::Usize(u1), &Constant::Usize(u2)) =>
@@ -724,7 +725,7 @@ impl QueryTerm {
             _ => {}
         };
     }
-    
+
     pub fn arity(&self) -> usize {
         match self {
             &QueryTerm::Clause(_, _, ref subterms, ..) => subterms.len(),
@@ -909,7 +910,7 @@ impl<'a> From<&'a TabledRc<Atom>> for ClauseName {
     }
 }
 
-impl ClauseName {    
+impl ClauseName {
     pub fn as_str(&self) -> &str {
         match self {
             &ClauseName::BuiltIn(s) => s,
@@ -1173,12 +1174,150 @@ impl Default for Number {
     }
 }
 
+fn binary_pow<T>(mut n: T, mut power: BigUint) -> T
+    where T: Clone + Mul + One,
+    for<'a> T: MulAssign<&'a T>
+{
+    if power.is_zero() {
+        return T::one();
+    }
+
+    let mut oddand = T::one();
+    let one = BigUint::one();
+
+    while power > one {
+        if power.is_odd() {
+            oddand *= &n;
+        }
+
+        n = n.clone() * n;
+        power >>= 1;
+    }
+
+    n * oddand
+}
+
+fn rational_pow(r1: BigRational, r2: BigRational) -> Result<BigRational, ArithmeticError>
+{
+    #[inline]
+    fn to_unsigned(n: &BigInt) -> Result<BigUint, ArithmeticError> {
+        n.abs().to_biguint().ok_or(ArithmeticError::NoRoots)
+    };
+
+    #[inline]
+    fn to_big_rational(n: BigUint) -> BigRational {
+        BigRational::from_integer(BigInt::from(n))
+    };
+
+    let r2 = r2.reduced(); // so that gcd(numer, denom) = 1
+    let n = to_unsigned(r2.denom())?;
+
+    if n == BigUint::one() {
+        return if r2.is_positive() {
+            Ok(binary_pow(r1, to_unsigned(&r2.numer())?))
+        } else if r2.is_negative() {
+            Ok(binary_pow(r1, to_unsigned(&r2.numer())?).recip())
+        } else {
+            Ok(BigRational::one())
+        };
+    }
+
+    if (n.is_even() && r1.is_negative()) || (r2.is_negative() && r1.is_zero()) {
+        return Err(ArithmeticError::NoRoots);
+    }
+
+    let sgn = r1.signum();
+    let r1 = r1 * &sgn; // set r1 to its absolute value.
+
+    let epsilon = BigRational::new_raw(BigInt::one(), BigInt::from(10000));
+    let n1      = n.clone() - BigUint::one(); // n -1
+
+    // 1 + r1 / (n-1) is a good initial point.
+    let mut x_i = BigRational::one() + r1.clone() / to_big_rational(n1.clone());
+    let mut x_i_n1 = binary_pow(x_i.clone(), n1.clone()); // x_i^{n-1}
+    let mut delta_x_i = BigRational::one();
+
+    while delta_x_i.abs() > epsilon {
+        x_i = x_i.reduced();
+        x_i_n1 = x_i_n1.reduced();
+
+        let r_quot = r1.clone() / &x_i_n1; // r1 / x_i^{n-1}
+        let r_n    = to_big_rational(n.clone());
+
+        delta_x_i = ( r_quot - &x_i ) / &r_n;
+
+        x_i += &delta_x_i;
+        x_i_n1 = binary_pow(x_i.clone(), n1.clone());
+    }
+
+    if r2.is_positive() {
+        Ok(binary_pow(sgn * x_i, to_unsigned(r2.numer())?))
+    } else {
+        Ok(binary_pow(sgn * x_i, to_unsigned(r2.numer())?).recip())
+    }
+}
+
+fn pow_float(f1: f64, f2: f64) -> Result<Number, ArithmeticError> {
+    let result = OrderedFloat(f1.powf(f2));
+
+    if result.is_finite() {
+        Ok(Number::Float(result))
+    } else {
+        Err(ArithmeticError::NoRoots)
+    }
+}
+
+fn rational_to_f64(r: &BigRational) -> Option<f64> {
+    match (r.numer().to_f64(), r.denom().to_f64()) {
+        (Some(ref f1), Some(ref f2)) if f2.is_normal() => Some(*f1 / *f2),
+        _ => None
+    }
+}
+
 impl Number {
+    pub fn pow(self, other: Number) -> Result<Self, ArithmeticError> {
+        match NumberPair::from(self, other) {
+            NumberPair::Integer(n1, n2) =>
+                if let Some(n2) = n2.to_biguint() {
+                    Ok(Number::Integer(Rc::new(binary_pow((*n1).clone(), n2))))
+                } else if n1.is_zero() {
+                    Err(ArithmeticError::NoRoots)
+                } else {
+                    let r1 = Ratio::new(BigInt::one(), (*n1).clone());
+                    let n2 = n2.abs().to_biguint().unwrap();
+
+                    Ok(Number::Rational(Rc::new(binary_pow(r1, n2))))
+                },
+            NumberPair::Float(n1, n2) =>
+                pow_float(n1.into_inner(), n2.into_inner()),
+            NumberPair::Rational(r1, r2) => {
+                if let (Some(f1), Some(f2)) = (rational_to_f64(&r1), rational_to_f64(&r2)) {                    
+                    if let Ok(result) = pow_float(f1, f2) {
+                        return Ok(result);
+                    }
+                }
+                
+                let root = rational_pow((*r1).clone(), (*r2).clone())?;
+                Ok(Number::Rational(Rc::new(root)))
+            }                    
+        }
+    }
+
+    #[inline]
     pub fn is_zero(&self) -> bool {
         match self {
             &Number::Float(fl)       => fl.into_inner().is_zero(),
             &Number::Integer(ref bi) => bi.is_zero(),
             &Number::Rational(ref r) => r.is_zero()
+        }
+    }
+
+    #[inline]
+    pub fn abs(&self) -> Self {
+        match self {
+            &Number::Float(ref fl)   => Number::Float(OrderedFloat(fl.into_inner().abs())),
+            &Number::Integer(ref n)  => Number::Integer(Rc::new((*n).clone().abs())),
+            &Number::Rational(ref r) => Number::Rational(Rc::new((*r).clone().abs()))
         }
     }
 }
@@ -1364,6 +1503,7 @@ pub enum ArithmeticInstruction {
     Add(ArithmeticTerm, ArithmeticTerm, usize),
     Sub(ArithmeticTerm, ArithmeticTerm, usize),
     Mul(ArithmeticTerm, ArithmeticTerm, usize),
+    Pow(ArithmeticTerm, ArithmeticTerm, usize),
     IDiv(ArithmeticTerm, ArithmeticTerm, usize),
     FIDiv(ArithmeticTerm, ArithmeticTerm, usize),
     RDiv(ArithmeticTerm, ArithmeticTerm, usize),
@@ -1375,7 +1515,8 @@ pub enum ArithmeticInstruction {
     Or(ArithmeticTerm, ArithmeticTerm, usize),
     Mod(ArithmeticTerm, ArithmeticTerm, usize),
     Rem(ArithmeticTerm, ArithmeticTerm, usize),
-    Neg(ArithmeticTerm, usize)
+    Abs(ArithmeticTerm, usize),
+    Neg(ArithmeticTerm, usize),
 }
 
 #[derive(Clone)]

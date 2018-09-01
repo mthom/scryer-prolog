@@ -244,12 +244,16 @@ impl fmt::Display for ArithmeticTerm {
 impl fmt::Display for ArithmeticInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &ArithmeticInstruction::Abs(ref a1, ref t) =>
+                write!(f, "abs {}, @{}", a1, t),
             &ArithmeticInstruction::Add(ref a1, ref a2, ref t) =>
                 write!(f, "add {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Sub(ref a1, ref a2, ref t) =>
                 write!(f, "sub {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Mul(ref a1, ref a2, ref t) =>
                 write!(f, "mul {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::Pow(ref a1, ref a2, ref t) =>
+                write!(f, "pow {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Div(ref a1, ref a2, ref t) =>
                 write!(f, "div {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::IDiv(ref a1, ref a2, ref t) =>

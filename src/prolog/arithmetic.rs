@@ -105,6 +105,7 @@ impl<'a> ArithmeticEvaluator<'a>
                        -> Result<ArithmeticInstruction, ArithmeticError>
     {
         match name.as_str() {
+            "abs" => Ok(ArithmeticInstruction::Abs(a1, t)),
             "-" => Ok(ArithmeticInstruction::Neg(a1, t)),
              _  => Err(ArithmeticError::InvalidOp)
         }
@@ -121,6 +122,7 @@ impl<'a> ArithmeticEvaluator<'a>
             "div"  => Ok(ArithmeticInstruction::FIDiv(a1, a2, t)),
             "rdiv" => Ok(ArithmeticInstruction::RDiv(a1, a2, t)),
             "*"    => Ok(ArithmeticInstruction::Mul(a1, a2, t)),
+            "^"    => Ok(ArithmeticInstruction::Pow(a1, a2, t)),
             ">>"   => Ok(ArithmeticInstruction::Shr(a1, a2, t)),
             "<<"   => Ok(ArithmeticInstruction::Shl(a1, a2, t)),
             "/\\"  => Ok(ArithmeticInstruction::And(a1, a2, t)),

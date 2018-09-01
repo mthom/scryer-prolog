@@ -4,9 +4,9 @@ version = "0.7.9"
 authors = ["Mark Thom"]
 
 [dependencies]
+downcast = "0.9.1"
 num = "0.2"
 ordered-float = "0.5.0"
-downcast = "0.9.1"
 
 [dependencies.termion]
 version = "1.4.0"
