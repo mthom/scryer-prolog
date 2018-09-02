@@ -1,8 +1,9 @@
 use prolog::tabled_rc::*;
 
-use std::cell::{Ref, RefCell};
+use std::cell::{Cell, Ref, RefCell};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 
 #[derive(PartialOrd, PartialEq, Ord, Eq)]
 pub struct StringListWrapper(RefCell<String>);
@@ -19,33 +20,29 @@ pub struct StringList {
     body: TabledRc<StringListWrapper>,
     cursor: usize, // use this to generate a chars() iterator on the fly,
                    // and skip over the first cursor chars.
-    expandable: bool
+    expandable: Rc<Cell<bool>>
 }
 
 impl Hash for StringList {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        let h = self.borrow().hash(state);
-        (h, self.cursor, self.expandable).hash(state);
+        (self.borrow().as_str(), self.cursor, self.expandable.get()).hash(state);
     }
 }
 
 impl PartialOrd for StringList {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering>
-    {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.body.cmp(&other.body))
     }
 }
 
 impl Ord for StringList {
-    fn cmp(&self, other: &Self) -> Ordering
-    {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.body.cmp(&other.body)
     }
 }
 
 impl PartialEq for StringList {
-    fn eq(&self, other: &Self) -> bool
-    {
+    fn eq(&self, other: &Self) -> bool {
         self.body == other.body && self.cursor == other.cursor && self.expandable == other.expandable
     }
 }
@@ -60,7 +57,7 @@ impl StringList {
         StringList {
             cursor: 0,
             body,
-            expandable
+            expandable: Rc::new(Cell::new(expandable))
         }
     }
 
