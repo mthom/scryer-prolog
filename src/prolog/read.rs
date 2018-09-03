@@ -34,13 +34,12 @@ impl<'a> Reader<'a> {
         let flags = self.machine_st.machine_flags();
 
         loop {
-            let mut append_buf = String::new();            
+            let mut append_buf = String::new();
             stdin.read_line(&mut append_buf).unwrap();
 
             buffer += append_buf.as_str();
-            
-            let mut parser = Parser::new(buffer.as_bytes(), self.machine_st.atom_tbl.clone(),
-                                         self.machine_st.string_tbl.clone(), flags);
+
+            let mut parser = Parser::new(buffer.as_bytes(), self.machine_st.atom_tbl.clone(), flags);
 
             match parser.read_term(op_dir) {
                 Err(ParserError::UnexpectedEOF) => continue,
@@ -49,7 +48,7 @@ impl<'a> Reader<'a> {
             };
         }
     }
-    
+
     fn push_stub_addr(&mut self) {
         let h = self.machine_st.heap.h;
         self.machine_st.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));

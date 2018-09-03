@@ -32,7 +32,6 @@ impl MachineState {
     pub(super) fn new() -> Self {
         MachineState {
             atom_tbl: Rc::new(RefCell::new(HashSet::new())),
-            string_tbl: Rc::new(RefCell::new(HashSet::new())),
             s: 0,
             p: CodePtr::default(),
             b: 0,
@@ -1420,6 +1419,33 @@ impl MachineState {
         };
     }
 
+    // returns true on failure.
+    pub(super) fn eq_test(&self) -> bool
+    {
+        let a1 = self[temp_v!(1)].clone();
+        let a2 = self[temp_v!(2)].clone();
+
+        let iter = self.zipped_acyclic_pre_order_iter(a1, a2);
+
+        for (v1, v2) in iter {
+            match (v1, v2) {
+                (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
+                    if ar1 != ar2 || n1 != n2 {
+                        return true;
+                    },
+                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
+                    continue,
+                (HeapCellValue::Addr(a1), HeapCellValue::Addr(a2)) =>
+                    if a1 != a2 {
+                        return true;
+                    },
+                _ => return true
+            }
+        }
+
+        false
+    }
+    
     pub(super) fn compare_term_test(&self, a1: &Addr, a2: &Addr) -> Ordering {
         let iter = self.zipped_acyclic_pre_order_iter(a1.clone(), a2.clone());
 
@@ -1500,10 +1526,8 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::Con(Constant::Number(_)))) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::String(s1))),
-                 HeapCellValue::Addr(Addr::Con(Constant::String(s2)))) =>
-                    if s1 != s2 {
-                        return s1.cmp(&s2);
-                    },
+                 HeapCellValue::Addr(Addr::Con(Constant::String(s2)))) =>                    
+                    return s1.cmp(&s2),
                 (HeapCellValue::Addr(Addr::Con(Constant::String(_))), _) =>
                     return Ordering::Less,
                 (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),

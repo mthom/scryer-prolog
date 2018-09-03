@@ -1811,14 +1811,20 @@ fn test_queries_on_string_lists()
     let mut wam = Machine::new();
 
     // double_quotes is chars by default.
-    assert_prolog_success!(&mut wam, "?- \"\" == [].");
+    assert_prolog_success!(&mut wam, "?- \"\" =@= [].");
+    assert_prolog_failure!(&mut wam, "?- \"\" == [].");
     assert_prolog_failure!(&mut wam, "?- \"abc\" == [].");
-    assert_prolog_success!(&mut wam, "?- \"abc\" == ['a', 'b', 'c'].");
-    assert_prolog_success!(&mut wam, "?- \"abc\" == ['a', 'b', c].");
-    assert_prolog_success!(&mut wam, "?- \"abc\" == ['a', b, 'c'].");
-    assert_prolog_success!(&mut wam, "?- \"abc\" == [a, 'b', 'c'].");
-    assert_prolog_success!(&mut wam, "?- \"abc\" == [a, 'b', c].");
-    assert_prolog_success!(&mut wam, "?- \"koen\" == [k, o, e, n].");
+    assert_prolog_success!(&mut wam, "?- \"abc\" =@= ['a', 'b', 'c'].");
+    assert_prolog_success!(&mut wam, "?- \"abc\" =@= ['a', 'b', c].");
+    assert_prolog_success!(&mut wam, "?- \"abc\" =@= ['a', b, 'c'].");
+    assert_prolog_success!(&mut wam, "?- \"abc\" =@= [a, 'b', 'c'].");
+    assert_prolog_success!(&mut wam, "?- \"abc\" =@= [a, 'b', c].");
+    assert_prolog_failure!(&mut wam, "?- \"abc\" == ['a', 'b', 'c'].");
+    assert_prolog_failure!(&mut wam, "?- \"abc\" == ['a', 'b', c].");
+    assert_prolog_failure!(&mut wam, "?- \"abc\" == ['a', b, 'c'].");
+    assert_prolog_failure!(&mut wam, "?- \"abc\" == [a, 'b', 'c'].");
+    assert_prolog_failure!(&mut wam, "?- \"abc\" == [a, 'b', c].");
+    assert_prolog_failure!(&mut wam, "?- \"koen\" == [k, o, e, n].");
     assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o, e, n].");
     assert_prolog_success!(&mut wam, "?- \"koen\" =@= [k, o, e, n].");
     assert_prolog_success!(&mut wam, "?- \"koen\" =@= \"koen\".");
@@ -1826,11 +1832,16 @@ fn test_queries_on_string_lists()
                            [["X = [e, n]"]]);
     assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o | X], X = \"en\".",
                            [["X = [e, n]"]]);
-    assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o | X], X == \"en\".",
-                           [["X = [e, n]"]]);
+    assert_prolog_failure!(&mut wam, "?- \"koen\" = [k, o | X], X == \"en\".");
     assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o | X], X =@= \"en\".",
                            [["X = [e, n]"]]);
 
+    assert_prolog_failure!(&mut wam, "?- X = \"abc\", Y = \"abc\", X == Y.");
+    assert_prolog_failure!(&mut wam, "?- partial_string(\"abc\", X), partial_string(\"abc\", Y), X == Y.");
+
+    assert_prolog_success!(&mut wam, "?- X = \"abc\", Y = \"abc\", X =@= Y.");
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), partial_string(\"abc\", Y), X =@= Y.");
+    
     submit(&mut wam, "matcher([a,b,c|X], ['d','e','f'|X]).");
 
     assert_prolog_success!(&mut wam, "?- matcher(\"abcdef\", \"defdef\").");
@@ -1842,9 +1853,9 @@ fn test_queries_on_string_lists()
 
     submit(&mut wam, "matcher([a,b,c|X], X).");
 
-    assert_prolog_success!(&mut wam, "?- matcher(\"abcdef\", X), X = [d,e,f|Y], Y == [], X = \"def\".",
+    assert_prolog_success!(&mut wam, "?- matcher(\"abcdef\", X), X = [d,e,f|Y], Y =@= [], X = \"def\".",
                            [["X = [d, e, f]", "Y = []"]]);
-    assert_prolog_success!(&mut wam, "?- matcher(\"abcdef\", X), X = [d,e,f|Y], Y == [], X == \"def\".",
+    assert_prolog_success!(&mut wam, "?- matcher(\"abcdef\", X), X = [d,e,f|Y], Y =@= [], X =@= \"def\".",
                            [["X = [d, e, f]", "Y = []"]]);
     assert_prolog_success!(&mut wam, "?- X = ['a', 'b', 'c' | \"def\"].",
                            [["X = [a, b, c, d, e, f]"]]);

@@ -1,7 +1,6 @@
 use prolog::ast::*;
 use prolog::compile::*;
 use prolog::heap_print::*;
-use prolog::string_list::StringListWrapper;
 use prolog::tabled_rc::*;
 
 mod machine_errors;
@@ -174,16 +173,14 @@ impl Machine {
         }
     }
 
+    #[inline]
     pub fn failed(&self) -> bool {
         self.ms.fail
     }
 
+    #[inline]
     pub fn atom_tbl(&self) -> TabledData<Atom> {
         self.ms.atom_tbl.clone()
-    }
-
-    pub fn string_tbl(&self) -> TabledData<StringListWrapper> {
-        self.ms.string_tbl.clone()
     }
     
     pub fn use_qualified_module_in_toplevel(&mut self, name: ClauseName, exports: Vec<PredicateKey>)
