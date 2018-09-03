@@ -1881,6 +1881,9 @@ fn test_queries_on_string_lists()
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X).",
                            [["X = [a, b, c | _]"]]);
 
+    assert_prolog_failure!(&mut wam, "?- partial_string(\"abc\", X), partial_string(\"abc\", Y), matcher(X, V),
+                                         matcher(Y, Z), V = Z.");
+
     submit(&mut wam, "matcher([a, b, c | X], X).");
 
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y).",

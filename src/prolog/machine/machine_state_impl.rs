@@ -254,7 +254,7 @@ impl MachineState {
 
                                         return true;
                                     }
-                                } else if s2.is_expandable() {                                
+                                } else if s2.is_expandable() {
                                     pdl.push(Addr::Con(Constant::String(s2.push_char(c1))));
                                     pdl.push(Addr::Con(Constant::String(s1.tail())));
 
@@ -264,12 +264,12 @@ impl MachineState {
                                 if let Some(c) = s2.head() {
                                     pdl.push(Addr::Con(Constant::String(s1.push_char(c))));
                                     pdl.push(Addr::Con(Constant::String(s2.tail())));
-                                } else if !s2.is_expandable() {
+                                } else if s2.is_expandable() {
+                                    return s1 == s2;
+                                } else {
                                     s1.set_non_expandable();
-                                }/*else {
-                                 //TODO: unify the tails of s1 and s2? I guess?
-                                }*/
-                                
+                                }
+
                                 return true;
                             } else if s2.head().is_none() {
                                 s2.set_non_expandable();
@@ -1445,7 +1445,7 @@ impl MachineState {
 
         false
     }
-    
+
     pub(super) fn compare_term_test(&self, a1: &Addr, a2: &Addr) -> Ordering {
         let iter = self.zipped_acyclic_pre_order_iter(a1.clone(), a2.clone());
 
@@ -1526,7 +1526,7 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::Con(Constant::Number(_)))) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::String(s1))),
-                 HeapCellValue::Addr(Addr::Con(Constant::String(s2)))) =>                    
+                 HeapCellValue::Addr(Addr::Con(Constant::String(s2)))) =>
                     return s1.cmp(&s2),
                 (HeapCellValue::Addr(Addr::Con(Constant::String(_))), _) =>
                     return Ordering::Less,
