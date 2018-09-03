@@ -44,7 +44,7 @@ impl<'a> HCPreOrderIterator<'a> {
                 if self.machine_st.machine_flags().double_quotes.is_chars() => {
                     if let Some(c) = s.head() {
                         let tail = s.tail();
-                    
+
                         self.state_stack.push(Addr::Con(Constant::String(tail)));
                         self.state_stack.push(Addr::Con(Constant::Char(c)));
                     }
@@ -136,8 +136,7 @@ impl MachineState {
         HCPostOrderIterator::new(HCPreOrderIterator::new(self, a))
     }
 
-    pub fn acyclic_pre_order_iter<'a>(&'a self, a: Addr)
-                                      -> HCAcyclicIterator<HCPreOrderIterator<'a>>
+    pub fn acyclic_pre_order_iter<'a>(&'a self, a: Addr) -> HCAcyclicIterator<HCPreOrderIterator<'a>>
     {
         HCAcyclicIterator::new(HCPreOrderIterator::new(self, a))
     }
@@ -182,6 +181,7 @@ where HCIter: Iterator<Item=HeapCellValue> + MutStackHCIterator
             if !self.seen.contains(&addr) {
                 self.iter.stack().push(addr.clone());
                 self.seen.insert(addr);
+
                 break;
             }
         }

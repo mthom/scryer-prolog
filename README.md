@@ -33,7 +33,7 @@ Extend rusty-wam to include the following, among other features:
 * Default representation of strings as list of chars, using a packed
   internal representation (_done_).
     - A representation of 'partial strings' as difference lists
-      of characters (_in progress_).
+      of characters (_done_).
 * `term_expansion/2` and `goal_expansion/2` (_in progress_).
 * Definite Clause Grammars.
 * Attributed variables using the SICStus Prolog interface and
@@ -148,6 +148,7 @@ The following predicates are built-in to rusty-wam.
 * `ground/1`
 * `integer/1`
 * `is_list/1`
+* `is_partial_string/1`
 * `keysort/2`
 * `length/2`
 * `maplist/2..9`
@@ -155,6 +156,7 @@ The following predicates are built-in to rusty-wam.
 * `memberchk/2`
 * `nonvar/1`
 * `once/1`
+* `partial_string/2`
 * `rational/1`
 * `read/1`
 * `repeat/0`
@@ -251,6 +253,25 @@ true.
 ```
 
 New operators can be defined using the `op` declaration.
+
+### Partial strings
+
+rusty-wam has two specialized, non-ISO builtin predicates for handling
+so-called "partial strings". Partial strings imitate difference lists
+of characters, but are much more space efficient. This efficiency
+comes at the cost of full generality -- you cannot unify the tail
+variables of two distinct partial strings, because their buffers will
+always be distinct.
+
+If `X` is a free variable, the query
+
+`?- partial_string("abc", X), X = [a, b, c | Y], is_partial_string(X),
+is_partial_string(Y).`
+
+will succeed. Further, if `Y` a free variable, unifying `Y` against
+another string, "def" in this case, produces the equations
+
+`X = [a, b, c, d, e, f], Y = [d, e, f].`
 
 ### Modules
 

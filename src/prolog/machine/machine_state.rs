@@ -553,7 +553,7 @@ pub(crate) trait CallPolicy: Any {
                         code_dirs: CodeDirs)
                         -> CallResult
     {
-        match ct {
+        match ct {            
             &BuiltInClauseType::AcyclicTerm => {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = machine_st.is_cyclic_term(addr);
@@ -655,6 +655,19 @@ pub(crate) trait CallPolicy: Any {
                     false
                 };
                 
+                return_from_clause!(machine_st.last_call, machine_st)
+            },
+            &BuiltInClauseType::PartialString => {
+                let a1 = machine_st[temp_v!(1)].clone();
+                let a2 = machine_st[temp_v!(2)].clone();
+
+                if let Addr::Con(Constant::String(s)) = a1 {
+                    s.set_expandable();
+                    machine_st.write_constant_to_var(a2, Constant::String(s));
+                } else {
+                    machine_st.fail = true;
+                }
+
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Sort => {

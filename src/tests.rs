@@ -1020,7 +1020,7 @@ fn test_queries_on_arithmetic()
     assert_prolog_success!(&mut wam, "?- f(5, 33).");
     assert_prolog_failure!(&mut wam, "?- f(5, 32).");
 
-    // exponentiation.    
+    // exponentiation.
 
     // the ~ operators tests whether |X - Y| <= 1/10000...
     // or whatever degree of approximation used by Newton's method in rational_pow.
@@ -1078,8 +1078,8 @@ fn test_queries_on_arithmetic()
     assert_prolog_success!(&mut wam, "?- X is (1 rdiv 3) ^ 0.5, Y is X ^ 2, 1 rdiv 3 ~ Y.");
 
     assert_prolog_success!(&mut wam, "?- X is (-5) ^ (-1 rdiv 3), Y is X ^ 3, Y ~ -1 rdiv 5.");
-    assert_prolog_failure!(&mut wam, "?- X is (-5) ^ (-1 rdiv 3), Y is X ^ 3, Y ~ 1 rdiv 5.");    
-    
+    assert_prolog_failure!(&mut wam, "?- X is (-5) ^ (-1 rdiv 3), Y is X ^ 3, Y ~ 1 rdiv 5.");
+
     assert_prolog_success!(&mut wam, "?- X is (0 rdiv 5) ^ 5.",
                            [["X = 0"]]);
     assert_prolog_success!(&mut wam, "?- X is (-0 rdiv 5) ^ 5.",
@@ -1826,7 +1826,8 @@ fn test_queries_on_string_lists()
                            [["X = [e, n]"]]);
     assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o | X], X = \"en\".",
                            [["X = [e, n]"]]);
-    assert_prolog_failure!(&mut wam, "?- \"koen\" = [k, o | X], X == \"en\".");
+    assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o | X], X == \"en\".",
+                           [["X = [e, n]"]]);
     assert_prolog_success!(&mut wam, "?- \"koen\" = [k, o | X], X =@= \"en\".",
                            [["X = [e, n]"]]);
 
@@ -1843,7 +1844,8 @@ fn test_queries_on_string_lists()
 
     assert_prolog_success!(&mut wam, "?- matcher(\"abcdef\", X), X = [d,e,f|Y], Y == [], X = \"def\".",
                            [["X = [d, e, f]", "Y = []"]]);
-    assert_prolog_failure!(&mut wam, "?- matcher(\"abcdef\", X), X = [d,e,f|Y], Y == [], X == \"def\".");
+    assert_prolog_success!(&mut wam, "?- matcher(\"abcdef\", X), X = [d,e,f|Y], Y == [], X == \"def\".",
+                           [["X = [d, e, f]", "Y = []"]]);
     assert_prolog_success!(&mut wam, "?- X = ['a', 'b', 'c' | \"def\"].",
                            [["X = [a, b, c, d, e, f]"]]);
 
@@ -1860,4 +1862,43 @@ fn test_queries_on_string_lists()
 
     assert_prolog_success!(&mut wam, "?- X = \"abc\", X = ['a' | Y], set_prolog_flag(double_quotes, atom).",
                            [["X = \"abc\"", "Y = \"bc\""]]);
+
+    // partial strings.
+    submit(&mut wam, "?- set_prolog_flag(double_quotes, chars).");
+
+    assert_prolog_failure!(&mut wam, "?- Y = 5, partial_string(\"abc\", Y).");
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X).",
+                           [["X = [a, b, c | _]"]]);
+
+    submit(&mut wam, "matcher([a, b, c | X], X).");
+
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y).",
+                           [["X = [a, b, c | _]", "Y = _"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), Y = \"def\".",
+                           [["X = [a, b, c, d, e, f]", "Y = [d, e, f]"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), \"def\" = Y.",
+                           [["X = [a, b, c, d, e, f]", "Y = [d, e, f]"]]);
+
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), partial_string(\"def\", Y),
+                                         Y = \"defghijkl\".",
+                           [["X = [a, b, c, d, e, f, g, h, i, j, k, l]",
+                             "Y = [d, e, f, g, h, i, j, k, l]"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), partial_string(\"def\", Y),
+                                         \"defghijkl\" = Y.",
+                           [["X = [a, b, c, d, e, f, g, h, i, j, k, l]",
+                             "Y = [d, e, f, g, h, i, j, k, l]"]]);
+
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G].",
+                           [["X = [a, b, c, d, e, f | _]", "Y = [d, e, f | _]", "G = _"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), [d, e, f | G] = Y.",
+                           [["X = [a, b, c, d, e, f | _]", "Y = [d, e, f | _]", "G = _"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G],
+                                         G = \"ghi\".",
+                           [["X = [a, b, c, d, e, f, g, h, i]", "Y = [d, e, f, g, h, i]", "G = [g, h, i]"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G],
+                                         is_partial_string(Y), G = \"ghi\".",
+                           [["X = [a, b, c, d, e, f, g, h, i]", "Y = [d, e, f, g, h, i]", "G = [g, h, i]"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G],
+                                         is_partial_string(Y), is_partial_string(G), G = \"ghi\".",
+                           [["X = [a, b, c, d, e, f, g, h, i]", "Y = [d, e, f, g, h, i]", "G = [g, h, i]"]]);
 }

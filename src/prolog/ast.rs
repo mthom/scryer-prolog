@@ -545,11 +545,7 @@ impl PartialEq for Constant {
             (&Constant::Atom(ref atom), &Constant::Char(c))
           | (&Constant::Char(c), &Constant::Atom(ref atom)) => {
               let s = atom.as_str();
-              if c.len_utf8() != s.len() || Some(c) != s.chars().next() {
-                  false
-              } else {
-                  true
-              }
+              c.len_utf8() == s.len() && Some(c) == s.chars().next()
             },
             (&Constant::Atom(ref a1), &Constant::Atom(ref a2)) =>
                 a1.as_str() == a2.as_str(),
@@ -597,7 +593,7 @@ pub enum Term {
 
 #[derive(Clone, PartialEq)]
 pub enum InlinedClauseType {
-    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
+    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),    
     IsAtom(RegType),
     IsAtomic(RegType),
     IsCompound(RegType),
@@ -606,7 +602,8 @@ pub enum InlinedClauseType {
     IsString(RegType),
     IsFloat(RegType),
     IsNonVar(RegType),
-    IsVar(RegType),
+    IsPartialString(RegType),
+    IsVar(RegType)
 }
 
 impl InlinedClauseType {
@@ -621,7 +618,8 @@ impl InlinedClauseType {
             &InlinedClauseType::IsString(..) => "string",
             &InlinedClauseType::IsFloat (..) => "float",
             &InlinedClauseType::IsNonVar(..) => "nonvar",
-            &InlinedClauseType::IsVar(..) => "var"
+            &InlinedClauseType::IsPartialString(..) => "partial_string",
+            &InlinedClauseType::IsVar(..) => "var",            
         }
     }
 
@@ -654,6 +652,7 @@ impl InlinedClauseType {
             ("float", 1) => Some(InlinedClauseType::IsFloat(r1)),
             ("nonvar", 1) => Some(InlinedClauseType::IsNonVar(r1)),
             ("var", 1) => Some(InlinedClauseType::IsVar(r1)),
+            ("is_partial_string", 1) => Some(InlinedClauseType::IsPartialString(r1)),
             _ => None
         }
     }
@@ -846,7 +845,7 @@ impl SystemClauseType {
 #[derive(Clone, PartialEq)]
 pub enum BuiltInClauseType {
     AcyclicTerm,
-    Arg,
+    Arg,    
     Compare,
     CompareTerm(CompareTermQT),
     CyclicTerm,
@@ -858,6 +857,7 @@ pub enum BuiltInClauseType {
     Is(RegType, ArithmeticTerm),
     KeySort,
     NotEq,
+    PartialString,
     Read,
     Sort,
 }
@@ -963,6 +963,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::NotEq => clause_name!("\\=="),
             &BuiltInClauseType::Read => clause_name!("read"),
             &BuiltInClauseType::Sort => clause_name!("sort"),
+            &BuiltInClauseType::PartialString => clause_name!("partial_string")
         }
     }
 
@@ -983,6 +984,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::NotEq => 2,
             &BuiltInClauseType::Read => 1,
             &BuiltInClauseType::Sort => 2,
+            &BuiltInClauseType::PartialString => 1,
         }
     }
 
@@ -1007,7 +1009,7 @@ impl BuiltInClauseType {
             ("keysort", 2) => Some(BuiltInClauseType::KeySort),
             ("\\==", 2) => Some(BuiltInClauseType::NotEq),
             ("sort", 2) => Some(BuiltInClauseType::Sort),
-            ("read", 1) => Some(BuiltInClauseType::Read),
+            ("read", 1) => Some(BuiltInClauseType::Read),            
             _ => None
         }
     }
@@ -1291,15 +1293,15 @@ impl Number {
             NumberPair::Float(n1, n2) =>
                 pow_float(n1.into_inner(), n2.into_inner()),
             NumberPair::Rational(r1, r2) => {
-                if let (Some(f1), Some(f2)) = (rational_to_f64(&r1), rational_to_f64(&r2)) {                    
+                if let (Some(f1), Some(f2)) = (rational_to_f64(&r1), rational_to_f64(&r2)) {
                     if let Ok(result) = pow_float(f1, f2) {
                         return Ok(result);
                     }
                 }
-                
+
                 let root = rational_pow((*r1).clone(), (*r2).clone())?;
                 Ok(Number::Rational(Rc::new(root)))
-            }                    
+            }
         }
     }
 

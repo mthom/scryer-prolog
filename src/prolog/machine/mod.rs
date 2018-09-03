@@ -408,7 +408,7 @@ impl Machine {
         while self.ms.p < end_ptr {
             if let CodePtr::Local(LocalCodePtr::TopLevel(mut cn, p)) = self.ms.p {
                 match &self[LocalCodePtr::TopLevel(cn, p)] {
-                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
+                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {                        
                         self.record_var_places(cn, alloc_locs, heap_locs);
                         cn += 1;
                     },

@@ -335,10 +335,13 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 if self.machine_st.machine_flags().double_quotes.is_chars() {
                     if !s.is_empty() {
                         self.push_list();
+                    } else if s.is_expandable() {
+                        if !self.at_cdr(" | _") {
+                            self.outputter.push_char('_');
+                        }
                     } else if !self.at_cdr("") {
                         self.outputter.append("[]");
                     }
-                    // self.expand_char_list(s);
                 } else { // for now, == DoubleQuotes::Atom
                     let borrowed_str = s.borrow();
                     

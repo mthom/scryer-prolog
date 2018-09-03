@@ -51,8 +51,6 @@ impl<'a> QueryIterator<'a> {
                 let state = TermIterState::Clause(Level::Root, 0, cell, ct.clone(), terms);
                 QueryIterator { state_stack: vec![state] }
             },
-            &QueryTerm::BlockedCut =>
-                QueryIterator { state_stack: vec![] },
             &QueryTerm::UnblockedCut(ref cell) => {
                 let state = TermIterState::Var(Level::Root, cell, rc_atom!("!"));
                 QueryIterator { state_stack: vec![state] }
@@ -67,7 +65,9 @@ impl<'a> QueryIterator<'a> {
                 }).collect();
 
                 QueryIterator { state_stack }
-            }
+            },            
+            &QueryTerm::BlockedCut =>
+                QueryIterator { state_stack: vec![] },
         }
     }
 }
@@ -353,8 +353,7 @@ impl<'a> ChunkedIterator<'a>
                     result.push(term),
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::Inlined(_), ..)) =>
                     result.push(term),
-                ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::CallN, ref subterms, _)) =>
-                {
+                ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::CallN, ref subterms, _)) => {
                     result.push(term);
                     arity = subterms.len() + 1;
                     break;

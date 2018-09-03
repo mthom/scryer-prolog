@@ -73,7 +73,7 @@ macro_rules! functor {
     );
     ($name:expr, $len:expr, [$($args:expr),*], $fix: expr) => (
         vec![ HeapCellValue::NamedStr($len, clause_name!($name), Some($fix)), $($args),* ]
-    );    
+    );
 }
 
 macro_rules! temp_v {
@@ -140,6 +140,12 @@ macro_rules! is_string {
 macro_rules! is_var {
     ($r:expr) => (
         call_clause!(ClauseType::Inlined(InlinedClauseType::IsVar($r)), 1, 0)
+    )
+}
+
+macro_rules! is_partial_string {
+    ($r:expr) => (
+        call_clause!(ClauseType::Inlined(InlinedClauseType::IsPartialString($r)), 1, 0)
     )
 }
 

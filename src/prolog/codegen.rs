@@ -71,7 +71,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         *self.var_count.get(var).unwrap()
     }
 
-    fn mark_non_callable(&mut self, name: Rc<Atom>, arity: usize, term_loc: GenContext,
+    fn mark_non_callable(&mut self, name: Rc<Var>, arity: usize, term_loc: GenContext,
                          vr: &'a Cell<VarReg>, code: &mut Code)
                          -> RegType
     {
@@ -133,8 +133,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         };
     }
 
-    fn compile_target<Target, Iter>(&mut self, iter: Iter, term_loc: GenContext, is_exposed: bool)
-                                    -> Vec<Target>
+    fn compile_target<Target, Iter>(&mut self, iter: Iter, term_loc: GenContext, is_exposed: bool) -> Vec<Target>
         where Target: CompilationTarget<'a>, Iter: Iterator<Item=TermRef<'a>>
     {
         let mut target = Vec::new();
@@ -385,6 +384,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
                         code.push(is_var!(r));
                     }
+                },
+            &InlinedClauseType::IsPartialString(..) =>
+                match terms[0].as_ref() {
+                    &Term::Var(ref vr, ref name) => {
+                        let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
+                        code.push(is_partial_string!(r));
+                    },
+                    _ => code.push(fail!())
                 }
         }
 
@@ -401,10 +408,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                    code: &mut Code, is_exposed: bool)
                    -> Result<(), ParserError>
     {
-        for (chunk_num, _, terms) in iter.rule_body_iter()
-        {
-            for (i, term) in terms.iter().enumerate()
-            {
+        for (chunk_num, _, terms) in iter.rule_body_iter() {
+            for (i, term) in terms.iter().enumerate() {
                 let term_loc = if i + 1 < terms.len() {
                     GenContext::Mid(chunk_num)
                 } else {
@@ -473,7 +478,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                                 code.push(fail!());
                             }
                         }
-                    },
+                    },                    
                     &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms, _) =>
                         try!(self.compile_inlined(ct, terms, term_loc, code)),
                     _ => {
@@ -512,7 +517,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         // add a proceed to bookend any trailing cuts.
         match toc {
             &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => code.push(proceed!()),
-            &QueryTerm::Clause(_, ClauseType::Inlined(..), ..) => code.push(proceed!()),
+            &QueryTerm::Clause(_, ClauseType::Inlined(..), ..) => code.push(proceed!()),            
             _ => {}
         };
 

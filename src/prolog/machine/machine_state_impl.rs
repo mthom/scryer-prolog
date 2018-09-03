@@ -9,6 +9,7 @@ use prolog::num::{Integer, Signed, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
+use prolog::string_list::StringList;
 
 use std::cell::RefCell;
 use std::cmp::{max, Ordering};
@@ -190,21 +191,51 @@ impl MachineState {
 
                         self.fail = true;
                     },
-                    (Addr::Lis(a1), Addr::Con(Constant::String(ref s)))
-                  | (Addr::Con(Constant::String(ref s)), Addr::Lis(a1))
-                        if self.flags.double_quotes.is_chars() =>
+                    (Addr::Lis(a1), Addr::Con(Constant::String(ref mut s)))
+                  | (Addr::Con(Constant::String(ref mut s)), Addr::Lis(a1))
+                        if self.flags.double_quotes.is_chars() => {
                             if let Some(c) = s.head() {
                                 pdl.push(Addr::Con(Constant::String(s.tail())));
                                 pdl.push(Addr::HeapCell(a1 + 1));
 
                                 pdl.push(Addr::Con(Constant::Char(c)));
                                 pdl.push(Addr::HeapCell(a1));
-                            } else {
-                                self.fail = true;
-                            },
+
+                                continue;
+                            } else if s.is_expandable() {
+                                let mut stepper = |c| {
+                                    let new_s = s.push_char(c);
+
+                                    pdl.push(Addr::HeapCell(a1 + 1));
+                                    pdl.push(Addr::Con(Constant::String(new_s)));
+                                };
+
+                                match self.heap[a1].clone() {
+                                    HeapCellValue::Addr(Addr::Con(Constant::Char(c))) => {
+                                        stepper(c);
+                                        continue;
+                                    },
+                                    HeapCellValue::Addr(Addr::Con(Constant::Atom(ref a))) =>
+                                        if let Some(c) = a.as_str().chars().next() {
+                                            if c.len_utf8() == a.as_str().len() {
+                                                stepper(c);
+                                                continue;
+                                            }
+                                        },
+                                    _ => {}
+                                };
+                            }
+
+                            self.fail = true;
+                        },
                     (Addr::Con(Constant::EmptyList), Addr::Con(Constant::String(ref s)))
                   | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
                         if self.flags.double_quotes.is_chars() => {
+                            if s.is_expandable() && s.is_empty() {
+                                s.set_non_expandable();
+                                continue;
+                            }
+
                             self.fail = !s.is_empty();
                         },
                     (Addr::Lis(a1), Addr::Lis(a2)) => {
@@ -214,23 +245,42 @@ impl MachineState {
                         pdl.push(Addr::HeapCell(a1 + 1));
                         pdl.push(Addr::HeapCell(a2 + 1));
                     },
-                    (Addr::Con(Constant::String(ref s1)), Addr::Con(Constant::String(ref s2))) => {
-                        if let Some(c1) = s1.head() {
-                            if let Some(c2) = s2.head() {
-                                if c1 == c2 {
+                    (Addr::Con(Constant::String(ref mut s1)), Addr::Con(Constant::String(ref mut s2))) => {
+                        let mut stepper = |s1: &mut StringList, s2: &mut StringList| -> bool {
+                            if let Some(c1) = s1.head() {
+                                if let Some(c2) = s2.head() {
+                                    if c1 == c2 {
+                                        pdl.push(Addr::Con(Constant::String(s1.tail())));
+                                        pdl.push(Addr::Con(Constant::String(s2.tail())));
+
+                                        return true;
+                                    }
+                                } else if s2.is_expandable() {                                
+                                    pdl.push(Addr::Con(Constant::String(s2.push_char(c1))));
                                     pdl.push(Addr::Con(Constant::String(s1.tail())));
-                                    pdl.push(Addr::Con(Constant::String(s2.tail())));
 
-                                    continue;
+                                    return true;
                                 }
+                            } else if s1.is_expandable() {
+                                if let Some(c) = s2.head() {
+                                    pdl.push(Addr::Con(Constant::String(s1.push_char(c))));
+                                    pdl.push(Addr::Con(Constant::String(s2.tail())));
+                                } else if !s2.is_expandable() {
+                                    s1.set_non_expandable();
+                                }/*else {
+                                 //TODO: unify the tails of s1 and s2? I guess?
+                                }*/
+                                
+                                return true;
+                            } else if s2.head().is_none() {
+                                s2.set_non_expandable();
+                                return true;
                             }
-                        } else {
-                            if s2.head().is_none() {
-                                continue;
-                            }
-                        }
 
-                        self.fail = true;
+                            false
+                        };
+
+                        self.fail = !(stepper(s1, s2) || stepper(s2, s1));
                     },
                     (Addr::Con(ref c1), Addr::Con(ref c2)) =>
                         if c1 != c2 {
@@ -345,9 +395,7 @@ impl MachineState {
     }
 
     pub(super) fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
-        let addr = self.deref(addr);
-
-        match self.store(addr) {
+        match self.store(self.deref(addr)) {
             Addr::HeapCell(hc) => {
                 self.heap[hc] = HeapCellValue::Addr(Addr::Con(c.clone()));
                 self.trail(Ref::HeapCell(hc));
@@ -356,12 +404,15 @@ impl MachineState {
                 self.and_stack[fr][sc] = Addr::Con(c.clone());
                 self.trail(Ref::StackCell(fr, sc));
             },
-            Addr::Con(Constant::String(s)) =>
+            Addr::Con(Constant::String(ref mut s)) =>
                 self.fail = match c {
-                    Constant::EmptyList
-                      if self.flags.double_quotes.is_chars() =>
+                    Constant::EmptyList if self.flags.double_quotes.is_chars() =>
                         !s.is_empty(),
-                    Constant::String(s2) => s != s2,
+                    Constant::String(ref s2) if s.is_empty() && s.is_expandable() => {
+                        s.append(s2);
+                        false
+                    },
+                    Constant::String(s2) => *s != s2,
                     _ => true
                 },
             Addr::Con(c1) => {
@@ -691,7 +742,7 @@ impl MachineState {
     }
 
     pub(super) fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
-        match instr {            
+        match instr {
             &ArithmeticInstruction::Add(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
@@ -826,11 +877,16 @@ impl MachineState {
                 match addr {
                     Addr::Con(Constant::String(ref s))
                         if self.flags.double_quotes.is_chars() => {
-                            if let Some(c) = s.head() {
-                                let h = self.heap.h;
+                            let h = self.heap.h;
 
+                            if let Some(c) = s.head() {
                                 self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Char(c))));
                                 self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(s.tail()))));
+
+                                self.s = h;
+                                self.mode = MachineMode::Read;
+                            } else if s.is_expandable() {
+                                self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(s.clone()))));
 
                                 self.s = h;
                                 self.mode = MachineMode::Read;
@@ -1588,6 +1644,14 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &InlinedClauseType::IsPartialString(r1) => {
+                let d = self.store(self.deref(self[r1].clone()));
+
+                match d {
+                    Addr::Con(Constant::String(ref s)) if s.is_expandable() => self.p += 1,
+                    _ => self.fail = true
+                };
+            }
         }
     }
 

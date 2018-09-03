@@ -41,12 +41,12 @@ pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, Par
     let atom_tbl = wam.atom_tbl();
     let string_tbl = wam.string_tbl();
     let flags = wam.machine_flags();
-    
+
     let index = MachineCodeIndices {
         code_dir: &mut wam.code_dir,
         op_dir: &mut wam.op_dir,
     };
-        
+
     let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, string_tbl,
                                          flags, index);
     worker.parse_code()
@@ -102,11 +102,11 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
                  -> Result<(Code, AllocVarDict), ParserError>
 {
     // count backtracking inferences.
-    let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags); 
+    let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
     let mut code = try!(cg.compile_query(&terms));
 
     compile_appendix(&mut code, queue, false, flags)?;
-    
+
     Ok((code, cg.take_vars()))
 }
 
@@ -193,7 +193,7 @@ impl<'a> ListingCompiler<'a> {
 
             compile_appendix(&mut decl_code, Vec::from(queue), non_counted_bt,
                              self.wam.machine_flags())?;
-            
+
             let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
 
@@ -252,7 +252,7 @@ fn compile_listing(wam: &mut Machine, src_str: &str, mut indices: MachineCodeInd
     while let Some(decl) = try_eval_session!(worker.consume(&mut indices)) {
         match decl {
             Declaration::NonCountedBacktracking(name, arity) =>
-                compiler.add_non_counted_bt_flag(name, arity),            
+                compiler.add_non_counted_bt_flag(name, arity),
             Declaration::Op(op_decl) =>
                 try_eval_session!(op_decl.submit(compiler.get_module_name(), &mut indices.op_dir)),
             Declaration::UseModule(name) =>

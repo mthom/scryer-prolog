@@ -408,8 +408,7 @@ impl RelationWorker {
         self.fabricate_rule(fold_by_str(prec_seq, body_term, comma_sym))
     }
 
-    fn to_query_term(&mut self, indices: &mut MachineCodeIndices, term: Term)
-                     -> Result<QueryTerm, ParserError>
+    fn to_query_term(&mut self, indices: &mut MachineCodeIndices, term: Term) -> Result<QueryTerm, ParserError>
     {
         match term {
             Term::Constant(r, Constant::Atom(name)) =>
@@ -422,40 +421,53 @@ impl RelationWorker {
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
             Term::Clause(r, name, mut terms, fixity) =>
-                if name.as_str() == ";" && terms.len() == 2 {
-                    let term = Term::Clause(r, name.clone(), terms, fixity);
-                    let (stub, clauses) = self.fabricate_disjunct(term);
+                match (name.as_str(), terms.len()) {
+                    (";", 2) => {
+                        let term = Term::Clause(r, name.clone(), terms, fixity);
+                        let (stub, clauses) = self.fabricate_disjunct(term);
 
-                    self.queue.push_back(clauses);
-                    Ok(QueryTerm::Jump(stub))
-                } else if name.as_str() == ":" && terms.len() == 2 {
-                    let callee   = *terms.pop().unwrap();
-                    let mod_name = *terms.pop().unwrap();
+                        self.queue.push_back(clauses);
+                        Ok(QueryTerm::Jump(stub))
+                    },
+                    (":", 2) => {
+                        let callee   = *terms.pop().unwrap();
+                        let mod_name = *terms.pop().unwrap();
 
-                    module_resolution_call(mod_name, callee)
-                } else if name.as_str() == "->" && terms.len() == 2 {
-                    let conq = *terms.pop().unwrap();
-                    let prec = *terms.pop().unwrap();
+                        module_resolution_call(mod_name, callee)
+                    },
+                    ("->", 2) => {
+                        let conq = *terms.pop().unwrap();
+                        let prec = *terms.pop().unwrap();
 
-                    let (stub, clauses) = self.fabricate_if_then(prec, conq);
+                        let (stub, clauses) = self.fabricate_if_then(prec, conq);
 
-                    self.queue.push_back(clauses);
-                    Ok(QueryTerm::Jump(stub))
-                } else if name.as_str() == "$get_level" && terms.len() == 1 {
-                    if let Term::Var(_, ref var) = *terms[0] {
-                        Ok(QueryTerm::GetLevelAndUnify(Cell::default(), var.clone()))
-                    } else {
+                        self.queue.push_back(clauses);
+                        Ok(QueryTerm::Jump(stub))
+                    },
+                    ("$get_level", 1) =>
+                        if let Term::Var(_, ref var) = *terms[0] {
+                            Ok(QueryTerm::GetLevelAndUnify(Cell::default(), var.clone()))
+                        } else {
+                            Err(ParserError::InadmissibleQueryTerm)
+                        },
+                    ("partial_string", 2) => {
+                        if let Term::Constant(_, Constant::String(_)) = *terms[0].clone() {
+                            if let Term::Var(..) = *terms[1].clone() {
+                                let ct = ClauseType::BuiltIn(BuiltInClauseType::PartialString);
+                                return Ok(QueryTerm::Clause(Cell::default(), ct, terms, false));
+                            }
+                        }
+
                         Err(ParserError::InadmissibleQueryTerm)
+                    },
+                    _ => {
+                        let ct = indices.lookup(name, terms.len(), fixity);
+                        Ok(QueryTerm::Clause(Cell::default(), ct, terms, false))
                     }
-                } else {
-                    let ct = indices.lookup(name, terms.len(), fixity);
-                    Ok(QueryTerm::Clause(Cell::default(), ct, terms, false))
                 },
             Term::Var(..) =>
-                Ok(QueryTerm::Clause(Cell::default(), ClauseType::CallN, vec![Box::new(term)],
-                                     false)),
-            _ =>
-                Err(ParserError::InadmissibleQueryTerm)
+                Ok(QueryTerm::Clause(Cell::default(), ClauseType::CallN, vec![Box::new(term)], false)),
+            _ => Err(ParserError::InadmissibleQueryTerm)
         }
     }
 

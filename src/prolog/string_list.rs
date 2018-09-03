@@ -37,13 +37,19 @@ impl PartialOrd for StringList {
 
 impl Ord for StringList {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.body.cmp(&other.body)
+        if self.expandable.get() && !self.expandable.get() {
+            Ordering::Greater
+        } else if !self.expandable.get() && self.expandable.get() {
+            Ordering::Less
+        } else {
+            self.borrow()[self.cursor ..].cmp(&other.borrow()[other.cursor ..])
+        }
     }
 }
 
 impl PartialEq for StringList {
     fn eq(&self, other: &Self) -> bool {
-        self.body == other.body && self.cursor == other.cursor && self.expandable == other.expandable
+        self.borrow()[self.cursor ..] == other.borrow()[other.cursor ..] && self.expandable == other.expandable
     }
 }
 
@@ -61,6 +67,41 @@ impl StringList {
         }
     }
 
+    #[inline]
+    pub fn is_expandable(&self) -> bool {
+        self.expandable.get()
+    }
+
+    #[inline]
+    pub fn set_expandable(&self) {
+        self.expandable.set(true);
+    }
+    
+    #[inline]
+    pub fn set_non_expandable(&self) {
+        self.expandable.set(false);
+    }
+    
+    #[inline]
+    pub fn push_char(&mut self, c: char) -> Self {
+        if self.expandable.get() {
+            self.body.0.borrow_mut().push(c);
+
+            let mut new_string_list = self.clone();
+            new_string_list.cursor += c.len_utf8();
+
+            new_string_list
+        } else {
+            self.clone()
+        }
+    }
+
+    #[inline]
+    pub fn append(&mut self, s: &StringList) {
+        self.body.0.borrow_mut().extend(s.borrow()[s.cursor ..].chars());
+        self.expandable.set(s.expandable.get());
+    }
+    
     #[inline]
     pub fn cursor(&self) -> usize {
         self.cursor
