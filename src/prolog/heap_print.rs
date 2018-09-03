@@ -296,23 +296,16 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     }
 
     fn print_char(&mut self, c: char) {
-        if c == '\n' {
-            self.outputter.append("\\n");
-        } else if c == '\r' {
-            self.outputter.append("\\r");
-        } else if c == '\t' {
-            self.outputter.append("\\t");
-        } else if c == '\u{0b}' { // UTF-8 vertical tab
-            self.outputter.append("\\v");
-        } else if c == '\u{0c}' { // UTF-8 form feed
-            self.outputter.append("\\f");            
-        } else if c == '\u{08}' { // UTF-8 backspace
-            self.outputter.append("\\b");
-        } else if c == '\u{07}' { // UTF-8 alert
-            self.outputter.append("\\a");
-        } else {
-            self.outputter.push_char(c);
-        }
+        match c {
+            '\n' => self.outputter.append("\\n"),
+            '\r' => self.outputter.append("\\r"),
+            '\t' => self.outputter.append("\\t"),
+            '\u{0b}' => self.outputter.append("\\v"), // UTF-8 vertical tab
+            '\u{0c}' => self.outputter.append("\\f"), // UTF-8 form feed
+            '\u{08}' => self.outputter.append("\\b"), // UTF-8 backspace
+            '\u{07}' => self.outputter.append("\\a"), // UTF-8 alert
+            _ => self.outputter.push_char(c)
+        };
     }
     
     fn print_constant(&mut self, c: Constant) {
