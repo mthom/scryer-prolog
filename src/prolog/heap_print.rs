@@ -143,7 +143,7 @@ impl HCValueFormatter for WriteqFormatter {
 
             // 7.10.4
             match iter.machine_st.store(iter.machine_st.deref(addr)) {
-                Addr::Con(Constant::Number(Number::Integer(n))) => {
+                Addr::Con(Constant::Number(Number::Integer(ref n))) if !n.is_negative() => {
                     iter.stack().pop();
                     
                     let i = n.mod_floor(&BigInt::from(26)).to_usize().unwrap();
@@ -285,42 +285,47 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 self.outputter.append(atom.as_str());
             } else {
                 self.outputter.push_char('\'');
-                self.outputter.append(atom.as_str());
+
+                for c in atom.as_str().chars() {
+                    self.print_char(c);
+                }
+                
                 self.outputter.push_char('\'');
             }
         }
     }
 
     fn print_char(&mut self, c: char) {
-        if non_quoted_token(c) {
-            self.outputter.push_char(c);                    
+        if c == '\n' {
+            self.outputter.append("\\n");
+        } else if c == '\r' {
+            self.outputter.append("\\r");
+        } else if c == '\t' {
+            self.outputter.append("\\t");
+        } else if c == '\u{0b}' { // UTF-8 vertical tab
+            self.outputter.append("\\v");
+        } else if c == '\u{0c}' { // UTF-8 form feed
+            self.outputter.append("\\f");            
+        } else if c == '\u{08}' { // UTF-8 backspace
+            self.outputter.append("\\b");
+        } else if c == '\u{07}' { // UTF-8 alert
+            self.outputter.append("\\a");
         } else {
-            self.outputter.push_char('\'');
             self.outputter.push_char(c);
-            self.outputter.push_char('\'');
         }
     }
     
     fn print_constant(&mut self, c: Constant) {
         match c {            
             Constant::Atom(ref atom) =>
-                self.print_atom(atom),
-            Constant::Char(c) if c == '\n' =>
-                self.outputter.append("'\\n'"),
-            Constant::Char(c) if c == '\r' =>
-                self.outputter.append("'\\r'"),
-            Constant::Char(c) if c == '\t' =>
-                self.outputter.append("'\\t'"),
-//          Constant::Char(c) if c == '\f' =>
-//              self.outputter.append("\\f"),            
-//          Constant::Char(c) if c == '\b' =>
-//              self.outputter.append("\\b"),
-//          Constant::Char(c) if c == '\\a' =>
-//              self.outputter.append("\a"),
-//          Constant::Char(c) if c == '\\v' =>
-//              self.outputter.append("\\v"),            
-            Constant::Char(c) =>
+                self.print_atom(atom),            
+            Constant::Char(c) if non_quoted_token(c) =>
                 self.print_char(c),
+            Constant::Char(c) => {
+                self.outputter.push_char('\'');
+                self.print_char(c);
+                self.outputter.push_char('\'');
+            },
             Constant::EmptyList =>
                 self.outputter.append("[]"),
             Constant::Number(Number::Float(fl)) =>

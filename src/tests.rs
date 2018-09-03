@@ -1622,7 +1622,20 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 100, R).",
                            [["G = 2", "B = 3", "R = !", "S = 1"]]);
     assert_prolog_success!(&mut wam, "?- call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 10, R).",
-                           [["S = _1", "G = _4", "B = _14", "R = inference_limit_exceeded"]]);
+                           [["S = _1", "G = _4", "B = _14", "R = inference_limit_exceeded"]]);    
+    
+    assert_prolog_success!(&mut wam, "?- X = '\\n'.",
+                           [["X = '\\n'"]]);
+    assert_prolog_success!(&mut wam, "?- X = '\\b'.",
+                           [["X = '\\b'"]]);    
+    assert_prolog_success!(&mut wam, "?- X = '\\v'.",
+                           [["X = '\\v'"]]);
+    assert_prolog_success!(&mut wam, "?- X = '\\a'.",
+                           [["X = '\\a'"]]);
+    assert_prolog_success!(&mut wam, "?- X = '\\f'.",
+                           [["X = '\\f'"]]);
+    assert_prolog_success!(&mut wam, "?- X = '\\b\\r\\f\\t\\n'.",
+                           [["X = '\\b\\r\\f\\t\\n'"]]);
 }
 
 #[test]
