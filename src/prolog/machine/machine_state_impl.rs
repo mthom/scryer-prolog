@@ -481,7 +481,7 @@ impl MachineState {
                         "-" => interms.push(a1 - a2),
                         "*" => interms.push(a1 * a2),
                         "/" => interms.push(self.div(a1, a2)?),
-                        "^" => interms.push(self.pow(a1, a2)?),
+                        "**" => interms.push(self.pow(a1, a2)?),
                         "rdiv" => {
                             let r1 = self.get_rational(&ArithmeticTerm::Number(a1), &caller)?;
                             let r2 = self.get_rational(&ArithmeticTerm::Number(a2), &caller)?;
@@ -593,7 +593,7 @@ impl MachineState {
         match n1.pow(n2) {
             Ok(result) => Ok(result),
             Err(_) => {
-                let stub = MachineError::functor_stub(clause_name!("^"), 2);
+                let stub = MachineError::functor_stub(clause_name!("**"), 2);
                 Err(self.error_form(MachineError::evaluation_error(EvalError::NoRoots),
                                     stub))
             }

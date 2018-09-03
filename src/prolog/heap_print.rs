@@ -6,12 +6,14 @@ use prolog::ordered_float::OrderedFloat;
 
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
+use std::iter::once;
 use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum TokenOrRedirect {
     Atom(ClauseName),
-    NumberedVar(String),
+    Op(ClauseName),
+    NumberedVar(String),    
     Redirect,
     Open,
     Close,
@@ -113,16 +115,16 @@ fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
 fn print_op(ct: ClauseType, fixity: Fixity, state_stack: &mut Vec<TokenOrRedirect>) {
     match fixity {
         Fixity::Post => {
-            state_stack.push(TokenOrRedirect::Atom(ct.name()));
+            state_stack.push(TokenOrRedirect::Op(ct.name()));
             state_stack.push(TokenOrRedirect::Redirect);
         },
         Fixity::Pre => {
             state_stack.push(TokenOrRedirect::Redirect);
-            state_stack.push(TokenOrRedirect::Atom(ct.name()));
+            state_stack.push(TokenOrRedirect::Op(ct.name()));
         },
         Fixity::In => {
             state_stack.push(TokenOrRedirect::Redirect);
-            state_stack.push(TokenOrRedirect::Atom(ct.name()));
+            state_stack.push(TokenOrRedirect::Op(ct.name()));
             state_stack.push(TokenOrRedirect::Redirect);
         }
     }    
@@ -200,8 +202,53 @@ fn reverse_heap_locs<'a>(machine_st: &'a MachineState, heap_locs: &'a HeapVarDic
     }).collect()
 }
 
-fn non_quoted_token(c: char) -> bool {
-    graphic_token_char!(c) || alpha_numeric_char!(c)
+fn non_quoted_graphic_token<Iter: Iterator<Item=char>>(mut iter: Iter, c: char) -> bool {
+    if c == '/' {
+        return match iter.next() {
+            None => true,
+            Some('*') => false, // if we start with comment token, we must quote.
+            Some(c) => if graphic_token_char!(c) {
+                iter.all(|c| graphic_token_char!(c))
+            } else {
+                false
+            }
+        }
+    } else if c == '.' {
+        return match iter.next() {
+            None => false,
+            Some(c) => if graphic_token_char!(c) {
+                iter.all(|c| graphic_token_char!(c))
+            } else {
+                false
+            }
+        }
+    } else {
+        iter.all(|c| graphic_token_char!(c))
+    }        
+}
+
+fn non_quoted_token<Iter: Iterator<Item=char>>(mut iter: Iter) -> bool {
+    if let Some(c) = iter.next() {
+        if small_letter_char!(c) {
+            iter.all(|c| alpha_numeric_char!(c))
+        } else if graphic_token_char!(c) {
+            non_quoted_graphic_token(iter, c)
+        } else if semicolon_char!(c) {
+            iter.next().is_none()
+        } else if cut_char!(c) {
+            iter.next().is_none()
+        } else if solo_char!(c) {
+            !iter.next().is_none()        
+        } else if c == '[' {
+            (iter.next() == Some(']') && iter.next().is_none())
+        } else if c == '{' {
+            (iter.next() == Some('}') && iter.next().is_none())
+        } else {
+            false
+        }
+    } else {
+        false
+    }
 }
 
 impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
@@ -277,11 +324,11 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         })
     }
     
-    fn print_atom(&mut self, atom: &ClauseName) {
+    fn print_atom(&mut self, atom: &ClauseName, is_op: bool) {
         match atom.as_str() {
             "" => self.outputter.append("''"),
             ";" | "!" => self.outputter.append(atom.as_str()),
-            s => if s.chars().all(non_quoted_token) {
+            s => if is_op || non_quoted_token(s.chars()) {
                 self.outputter.append(atom.as_str());
             } else {
                 self.outputter.push_char('\'');
@@ -311,8 +358,8 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     fn print_constant(&mut self, c: Constant) {
         match c {            
             Constant::Atom(ref atom) =>
-                self.print_atom(atom),            
-            Constant::Char(c) if non_quoted_token(c) =>
+                self.print_atom(atom, false),
+            Constant::Char(c) if non_quoted_token(once(c)) =>
                 self.print_char(c),
             Constant::Char(c) => {
                 self.outputter.push_char('\'');
@@ -408,7 +455,9 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
                     TokenOrRedirect::Atom(atom) =>
-                        self.print_atom(&atom),
+                        self.print_atom(&atom, false),
+                    TokenOrRedirect::Op(atom) =>
+                        self.print_atom(&atom, true),
                     TokenOrRedirect::NumberedVar(num_var) =>
                         self.outputter.append(num_var.as_str()),
                     TokenOrRedirect::Redirect =>

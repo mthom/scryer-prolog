@@ -1027,66 +1027,66 @@ fn test_queries_on_arithmetic()
     submit(&mut wam, ":- op(900, xfx, ~).");
     submit(&mut wam, "X ~ Y :- abs(X - Y) =< 1 rdiv 10000.");
 
-    assert_prolog_success!(&mut wam, "?- X is 3 ^ 3.",
+    assert_prolog_success!(&mut wam, "?- X is 3 ** 3.",
                            [["X = 27"]]);
-    assert_prolog_success!(&mut wam, "?- X is 3 ^ 0.",
+    assert_prolog_success!(&mut wam, "?- X is 3 ** 0.",
                            [["X = 1"]]);
-    assert_prolog_success!(&mut wam, "?- X is 3 ^ -0.",
+    assert_prolog_success!(&mut wam, "?- X is 3 ** -0.",
                            [["X = 1"]]);
-    assert_prolog_success!(&mut wam, "?- X is 3 ^ 1.",
+    assert_prolog_success!(&mut wam, "?- X is 3 ** 1.",
                            [["X = 3"]]);
-    assert_prolog_success!(&mut wam, "?- X is 3 ^ -3.",
+    assert_prolog_success!(&mut wam, "?- X is 3 ** -3.",
                            [["X = 1/27"]]);
-    assert_prolog_success!(&mut wam, "?- X is (-3) ^ 3.",
+    assert_prolog_success!(&mut wam, "?- X is (-3) ** 3.",
                            [["X = -27"]]);
-    assert_prolog_success!(&mut wam, "?- X is (-3) ^ 3.",
+    assert_prolog_success!(&mut wam, "?- X is (-3) ** 3.",
                            [["X = -27"]]);
-    assert_prolog_success!(&mut wam, "?- X is (-3) ^ 0.",
+    assert_prolog_success!(&mut wam, "?- X is (-3) ** 0.",
                            [["X = 1"]]);
-    assert_prolog_success!(&mut wam, "?- X is (-3) ^ -0.",
+    assert_prolog_success!(&mut wam, "?- X is (-3) ** -0.",
                            [["X = 1"]]);
-    assert_prolog_success!(&mut wam, "?- X is (-3) ^ 1.",
+    assert_prolog_success!(&mut wam, "?- X is (-3) ** 1.",
                            [["X = -3"]]);
-    assert_prolog_success!(&mut wam, "?- X is (-3) ^ -3.",
+    assert_prolog_success!(&mut wam, "?- X is (-3) ** -3.",
                            [["X = -1/27"]]);
-    assert_prolog_success!(&mut wam, "?- X is (1 rdiv 27) ^ -3, X ~ 19683.");
-    assert_prolog_success!(&mut wam, "?- X is (-1 rdiv 27) ^ -3, X ~ -19683.");
+    assert_prolog_success!(&mut wam, "?- X is (1 rdiv 27) ** -3, X ~ 19683.");
+    assert_prolog_success!(&mut wam, "?- X is (-1 rdiv 27) ** -3, X ~ -19683.");
 
-    assert_prolog_success!(&mut wam, "?- X is 0.0 ^ 0.",
+    assert_prolog_success!(&mut wam, "?- X is 0.0 ** 0.",
                            [["X = 1"]]);
-    assert_prolog_success!(&mut wam, "?- catch(_ is 0.0 ^ -2342, error(E, _), true).",
+    assert_prolog_success!(&mut wam, "?- catch(_ is 0.0 ** -2342, error(E, _), true).",
                            [["E = evaluation_error(no_roots)"]]);
-    assert_prolog_success!(&mut wam, "?- X is 0.0 ^ 2342.",
+    assert_prolog_success!(&mut wam, "?- X is 0.0 ** 2342.",
                            [["X = 0"]]);
 
-    assert_prolog_success!(&mut wam, "?- catch(_ is (-3) ^ (1 rdiv 2), error(E, _), true).",
+    assert_prolog_success!(&mut wam, "?- catch(_ is (-3) ** (1 rdiv 2), error(E, _), true).",
                            [["E = evaluation_error(no_roots)"]]);
-    assert_prolog_success!(&mut wam, "?- catch(_ is (-3/2) ^ (1 rdiv 2), error(E, _), true).",
+    assert_prolog_success!(&mut wam, "?- catch(_ is (-3/2) ** (1 rdiv 2), error(E, _), true).",
                            [["E = evaluation_error(no_roots)"]]);
-    assert_prolog_success!(&mut wam, "?- catch(_ is (-3 rdiv 2) ^ (1 rdiv 4), error(E, _), true).",
+    assert_prolog_success!(&mut wam, "?- catch(_ is (-3 rdiv 2) ** (1 rdiv 4), error(E, _), true).",
                            [["E = evaluation_error(no_roots)"]]);
-    assert_prolog_success!(&mut wam, "?- catch(_ is (-3 rdiv 2) ^ (-1 rdiv 4), error(E, _), true).",
+    assert_prolog_success!(&mut wam, "?- catch(_ is (-3 rdiv 2) ** (-1 rdiv 4), error(E, _), true).",
                            [["E = evaluation_error(no_roots)"]]);
-    assert_prolog_success!(&mut wam, "?- catch(_ is 0 ^ (-5 rdiv 4), error(E, _), true).",
+    assert_prolog_success!(&mut wam, "?- catch(_ is 0 ** (-5 rdiv 4), error(E, _), true).",
                            [["E = evaluation_error(no_roots)"]]);
 
-    assert_prolog_success!(&mut wam, "?- X is 3 ^ (1 rdiv 3), Y is X ^ 3, Y ~ 3.");
-    assert_prolog_success!(&mut wam, "?- X is (-3) ^ (1 rdiv 3), Y is X ^ 3, Y ~ -3.");
-    assert_prolog_failure!(&mut wam, "?- X is (-5) ^ (1 rdiv 3), Y is X ^ 3, Y ~ -3.");
-    assert_prolog_failure!(&mut wam, "?- X is 5 ^ (1 rdiv 3), Y is X ^ 3, Y ~ 3.");
-    assert_prolog_failure!(&mut wam, "?- X is (1 rdiv 3) ^ 0.5, Y is X ^ 2, X ~ Y.");
-    assert_prolog_success!(&mut wam, "?- X is (1 rdiv 3) ^ 0.5, Y is X ^ 2, 1 rdiv 3 ~ Y.");
+    assert_prolog_success!(&mut wam, "?- X is 3 ** (1 rdiv 3), Y is X ** 3, Y ~ 3.");
+    assert_prolog_success!(&mut wam, "?- X is (-3) ** (1 rdiv 3), Y is X ** 3, Y ~ -3.");
+    assert_prolog_failure!(&mut wam, "?- X is (-5) ** (1 rdiv 3), Y is X ** 3, Y ~ -3.");
+    assert_prolog_failure!(&mut wam, "?- X is 5 ** (1 rdiv 3), Y is X ** 3, Y ~ 3.");
+    assert_prolog_failure!(&mut wam, "?- X is (1 rdiv 3) ** 0.5, Y is X ** 2, X ~ Y.");
+    assert_prolog_success!(&mut wam, "?- X is (1 rdiv 3) ** 0.5, Y is X ** 2, 1 rdiv 3 ~ Y.");
 
-    assert_prolog_success!(&mut wam, "?- X is (-5) ^ (-1 rdiv 3), Y is X ^ 3, Y ~ -1 rdiv 5.");
-    assert_prolog_failure!(&mut wam, "?- X is (-5) ^ (-1 rdiv 3), Y is X ^ 3, Y ~ 1 rdiv 5.");
+    assert_prolog_success!(&mut wam, "?- X is (-5) ** (-1 rdiv 3), Y is X ** 3, Y ~ -1 rdiv 5.");
+    assert_prolog_failure!(&mut wam, "?- X is (-5) ** (-1 rdiv 3), Y is X ** 3, Y ~ 1 rdiv 5.");
 
-    assert_prolog_success!(&mut wam, "?- X is (0 rdiv 5) ^ 5.",
+    assert_prolog_success!(&mut wam, "?- X is (0 rdiv 5) ** 5.",
                            [["X = 0"]]);
-    assert_prolog_success!(&mut wam, "?- X is (-0 rdiv 5) ^ 5.",
+    assert_prolog_success!(&mut wam, "?- X is (-0 rdiv 5) ** 5.",
                            [["X = 0"]]);
-    assert_prolog_success!(&mut wam, "?- X is (0 rdiv 5) ^ 0.",
+    assert_prolog_success!(&mut wam, "?- X is (0 rdiv 5) ** 0.",
                            [["X = 1"]]);
-    assert_prolog_success!(&mut wam, "?- catch(_ is (0 rdiv 0) ^ 5, error(E, _), true).",
+    assert_prolog_success!(&mut wam, "?- catch(_ is (0 rdiv 0) ** 5, error(E, _), true).",
                            [["E = evaluation_error(zero_divisor)"]]);
 }
 
