@@ -131,7 +131,9 @@ impl MachineState {
         let printer    = HCPrinter::from_heap_locs(&self, fmt, output, var_dir);
         let mut output = printer.print(addr);
 
-        if output.ends_with(var.as_str()) {
+        let bad_ending = format!("= {}", &var);
+        
+        if output.ends_with(&bad_ending) {
             output.truncate(orig_len);
         }
 

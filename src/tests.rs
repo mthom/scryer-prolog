@@ -1928,4 +1928,10 @@ fn test_queries_on_string_lists()
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G],
                                          is_partial_string(Y), is_partial_string(G), G = \"ghi\".",
                            [["X = [a, b, c, d, e, f, g, h, i]", "Y = [d, e, f, g, h, i]", "G = [g, h, i]"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), partial_string(\"ababc\", Y), Y = [a,b|Z],
+                                         X =@= Z.",
+                           [["X = [a, b, c | _]", "Y = [a, b, a, b, c | _]", "Z = [a, b, c | _]"]]);
+    assert_prolog_failure!(&mut wam, "?- partial_string(\"abc\", X), partial_string(\"ababc\", Y), Y = [a,b|Z],
+                                         X == Z.");
+
 }
