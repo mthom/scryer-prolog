@@ -93,7 +93,8 @@ $> cargo install rusty-wam
 ```
 
 cargo will download and install the libraries rusty-wam uses
-automatically.
+automatically. You can find the `rusty-wam` executable in
+`~/.cargo/bin`.
 
 Note on compatibility: rusty-wam should work on Linux, Mac OS X, and
 FreeBSD. Windows support hinges on the Termion library working in
