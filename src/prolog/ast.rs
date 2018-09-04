@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 #[derive(Clone, PartialEq)]
 pub enum InlinedClauseType {
-    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),    
+    CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
     IsAtom(RegType),
     IsAtomic(RegType),
     IsCompound(RegType),
@@ -34,7 +34,7 @@ impl InlinedClauseType {
             &InlinedClauseType::IsFloat (..) => "float",
             &InlinedClauseType::IsNonVar(..) => "nonvar",
             &InlinedClauseType::IsPartialString(..) => "partial_string",
-            &InlinedClauseType::IsVar(..) => "var",            
+            &InlinedClauseType::IsVar(..) => "var",
         }
     }
 
@@ -317,7 +317,7 @@ impl SystemClauseType {
 #[derive(Clone, PartialEq)]
 pub enum BuiltInClauseType {
     AcyclicTerm,
-    Arg,    
+    Arg,
     Compare,
     CompareTerm(CompareTermQT),
     CyclicTerm,
@@ -417,7 +417,7 @@ impl BuiltInClauseType {
             ("keysort", 2) => Some(BuiltInClauseType::KeySort),
             ("\\==", 2) => Some(BuiltInClauseType::NotEq),
             ("sort", 2) => Some(BuiltInClauseType::Sort),
-            ("read", 1) => Some(BuiltInClauseType::Read),            
+            ("read", 1) => Some(BuiltInClauseType::Read),
             _ => None
         }
     }

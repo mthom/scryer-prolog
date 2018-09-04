@@ -85,18 +85,15 @@ strings.
 
 First, install the latest stable version of
 [Rust](https://www.rust-lang.org/en-US/install.html) using your
-preferred method. Then clone the rusty-wam repo and build it with
-cargo, like so:
+preferred method. Then install the latest rusty-wam with cargo,
+like so:
 
 ```
-$> git clone https://github.com/mthom/rusty-wam --recursive
-$> cd rusty-wam
-$> cargo build
+$> cargo install rusty-wam
 ```
 
 cargo will download and install the libraries rusty-wam uses
-automatically.  rusty-wam can be run with the command `cargo run`, and
-likewise tests can be run with `cargo test`.
+automatically.
 
 Note on compatibility: rusty-wam should work on Linux, Mac OS X, and
 FreeBSD. Windows support hinges on the Termion library working in
