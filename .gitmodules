@@ -1,4 +1,0 @@
-[submodule "src/prolog/parser"]
-	path = src/prolog/parser
-	url = http://github.com/mthom/prolog-parser
-	branch = rusty-wam_branch

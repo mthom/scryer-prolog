@@ -1,6 +1,9 @@
+use prolog_parser::ast::*;
+use prolog_parser::parser::*;
+
 use prolog::ast::*;
+use prolog::iterators::*;
 use prolog::machine::machine_state::*;
-use prolog::parser::parser::*;
 
 use std::collections::VecDeque;
 use std::io::stdin;
@@ -70,7 +73,7 @@ impl<'a> Reader<'a> {
         let mut queue = SubtermDeque::new();
         let mut var_dict = HeapVarDict::new();
 
-        for term in term.breadth_first_iter(true) {
+        for term in breadth_first_iter(&term, true) {
             let h = self.machine_st.heap.h;
 
             match &term {

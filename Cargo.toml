@@ -1,12 +1,16 @@
 [package]
 name = "rusty-wam"
 version = "0.7.9"
-authors = ["Mark Thom"]
+authors = ["Mark Thom <markjordanthom@gmail.com>"]
+repository = "https://github.com/mthom/rusty-wam"
+description = "The Warren Abstract Machine in Rust."
+license = "BSD-3-Clause"
 
 [dependencies]
 downcast = "0.9.1"
 num = "0.2"
 ordered-float = "0.5.0"
+prolog_parser = "0.7.9"
 
 [dependencies.termion]
 version = "1.4.0"

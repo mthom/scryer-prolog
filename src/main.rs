@@ -1,10 +1,11 @@
 #[macro_use] extern crate downcast;
+#[macro_use] extern crate prolog_parser;
 extern crate termion;
 
-#[macro_use]
+use prolog::ast::*;
+
 mod prolog;
 
-use prolog::ast::*;
 use prolog::compile::*;
 use prolog::io::*;
 use prolog::machine::*;

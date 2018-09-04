@@ -1,6 +1,6 @@
-use prolog::ast::*;
-use prolog::machine::machine_state::MachineFlags;
+use prolog_parser::ast::*;
 
+use prolog::ast::*;
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::rc::Rc;

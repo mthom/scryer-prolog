@@ -1,9 +1,11 @@
+use prolog_parser::ast::*;
+use prolog_parser::parser::*;
+use prolog_parser::tabled_rc::*;
+
 use prolog::ast::*;
+use prolog::iterators::*;
 use prolog::machine::*;
-use prolog::machine::machine_state::MachineFlags;
 use prolog::num::*;
-use prolog::parser::parser::*;
-use prolog::tabled_rc::*;
 
 use std::collections::{HashSet, VecDeque};
 use std::cell::{Cell, RefCell};
@@ -322,7 +324,7 @@ impl RelationWorker {
     {
         let mut vars = HashSet::new();
 
-        for term in term.post_order_iter() {
+        for term in post_order_iter(term) {
             if let TermRef::Var(_, _, v) = term {
                 vars.insert(v.clone());
             }

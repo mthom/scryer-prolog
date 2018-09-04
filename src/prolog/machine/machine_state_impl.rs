@@ -1,5 +1,8 @@
-use prolog::and_stack::*;
+use prolog_parser::ast::*;
+use prolog_parser::string_list::StringList;
+
 use prolog::ast::*;
+use prolog::and_stack::*;
 use prolog::copier::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
@@ -9,7 +12,6 @@ use prolog::num::{Integer, Signed, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
-use prolog::string_list::StringList;
 
 use std::cell::RefCell;
 use std::cmp::{max, Ordering};

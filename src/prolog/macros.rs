@@ -1,27 +1,3 @@
-macro_rules! clause_name {
-    ($name: expr, $tbl: expr) => (
-        ClauseName::User(TabledRc::new($name, $tbl.clone()))
-    ) ;
-    ($name: expr) => (
-        ClauseName::BuiltIn($name)
-    )
-}
-
-macro_rules! tabled_rc {
-    ($e:expr, $tbl:expr) => (
-        TabledRc::new(String::from($e), $tbl.clone())
-    )
-}
-
-macro_rules! atom {
-    ($e:expr, $tbl:expr) => (
-        Constant::Atom(ClauseName::User(tabled_rc!($e, $tbl)))
-    );
-    ($e:expr) => (
-        Constant::Atom(clause_name!($e))
-    )
-}
-
 macro_rules! interm {
     ($n: expr) => (
         ArithmeticTerm::Interm($n)
@@ -74,18 +50,6 @@ macro_rules! functor {
     ($name:expr, $len:expr, [$($args:expr),*], $fix: expr) => (
         vec![ HeapCellValue::NamedStr($len, clause_name!($name), Some($fix)), $($args),* ]
     );
-}
-
-macro_rules! temp_v {
-    ($x:expr) => (
-        RegType::Temp($x)
-    )
-}
-
-macro_rules! perm_v {
-    ($x:expr) => (
-        RegType::Perm($x)
-    )
 }
 
 macro_rules! is_atom {
@@ -188,18 +152,6 @@ macro_rules! is_call_by_default {
 macro_rules! set_cp {
     ($r:expr) => (
         call_clause!(ClauseType::System(SystemClauseType::SetCutPoint($r)), 1, 0)
-    )
-}
-
-macro_rules! integer {
-    ($i:expr) => (
-        Constant::Number(Number::Integer(Rc::new(BigInt::from($i))))
-    )
-}
-
-macro_rules! rc_atom {
-    ($e:expr) => (
-        Rc::new(String::from($e))
     )
 }
 

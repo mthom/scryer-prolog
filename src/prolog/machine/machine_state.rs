@@ -1,12 +1,14 @@
-use prolog::and_stack::*;
+use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::*;
+
 use prolog::ast::*;
+use prolog::and_stack::*;
 use prolog::copier::*;
 use prolog::heap_print::*;
 use prolog::machine::machine_errors::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
 use prolog::read::*;
-use prolog::tabled_rc::*;
 
 use downcast::Any;
 
@@ -262,38 +264,6 @@ impl IndexMut<RegType> for MachineState {
 pub(super) enum MachineMode {
     Read,
     Write
-}
-
-#[derive(Clone, Copy)]
-pub enum DoubleQuotes {
-    Atom, Chars, // Codes
-}
-
-impl DoubleQuotes {
-    pub fn is_chars(self) -> bool {
-        if let DoubleQuotes::Chars = self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-impl Default for DoubleQuotes {
-    fn default() -> Self {
-        DoubleQuotes::Chars
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct MachineFlags {
-    pub double_quotes: DoubleQuotes
-}
-
-impl Default for MachineFlags {
-    fn default() -> Self {
-        MachineFlags { double_quotes: DoubleQuotes::default() }
-    }
 }
 
 pub struct MachineState {

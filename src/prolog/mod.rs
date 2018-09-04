@@ -1,13 +1,11 @@
 extern crate num;
 extern crate ordered_float;
+extern crate prolog_parser;
 
+#[macro_use] pub mod ast;
 pub mod and_stack;
-#[macro_use]
-pub mod macros;
-#[macro_use]
-pub mod ast;
-#[macro_use]
-pub mod allocator;
+#[macro_use] pub mod macros;
+#[macro_use] pub mod allocator;
 pub mod toplevel;
 pub mod machine;
 pub mod compile;
@@ -21,10 +19,6 @@ pub mod indexing;
 pub mod io;
 pub mod iterators;
 pub mod or_stack;
-#[macro_use]
-pub mod parser;
 pub mod heap_print;
 pub mod targets;
-pub mod tabled_rc;
 pub mod read;
-pub mod string_list;

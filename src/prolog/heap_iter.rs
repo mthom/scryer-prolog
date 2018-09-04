@@ -1,5 +1,7 @@
+use prolog_parser::ast::*;
+
 use prolog::ast::*;
-use prolog::machine::machine_state::MachineState;
+use prolog::machine::machine_state::*;
 
 use std::collections::HashSet;
 use std::vec::Vec;

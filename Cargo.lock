@@ -85,6 +85,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "prolog_parser"
+version = "0.7.9"
+dependencies = [
+ "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ordered-float 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.1.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -104,6 +112,7 @@ dependencies = [
  "downcast 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ordered-float 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "prolog_parser 0.7.9",
  "termion 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

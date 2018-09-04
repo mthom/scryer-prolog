@@ -1,3 +1,5 @@
+use prolog_parser::ast::*;
+
 use prolog::ast::*;
 use prolog::heap_print::*;
 use prolog::compile::*;

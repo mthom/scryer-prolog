@@ -1,5 +1,7 @@
-use prolog::allocator::*;
+use prolog_parser::ast::*;
+
 use prolog::ast::*;
+use prolog::allocator::*;
 use prolog::targets::*;
 
 use std::cell::Cell;

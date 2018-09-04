@@ -1,3 +1,5 @@
+use prolog_parser::ast::*;
+
 use prolog::ast::*;
 use prolog::iterators::*;
 
@@ -32,7 +34,7 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
     type Iterator = FactIterator<'a>;
 
     fn iter(term: &'a Term) -> Self::Iterator {
-        term.breadth_first_iter(false) // do not iterate over the root clause if one exists.
+        breadth_first_iter(term, false) // do not iterate over the root clause if one exists.
     }
 
     fn to_constant(lvl: Level, constant: Constant, reg: RegType) -> Self {
@@ -99,7 +101,7 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
     type Iterator = QueryIterator<'a>;
 
     fn iter(term: &'a Term) -> Self::Iterator {
-        term.post_order_iter()
+        post_order_iter(term)
     }
 
     fn to_structure(ct: ClauseType, arity: usize, r: RegType) -> Self

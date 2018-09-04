@@ -1,10 +1,11 @@
+use prolog_parser::ast::*;
+
+use prolog::ast::*;
 use prolog::allocator::*;
 use prolog::arithmetic::*;
-use prolog::ast::*;
 use prolog::fixtures::*;
 use prolog::indexing::*;
 use prolog::iterators::*;
-use prolog::machine::machine_state::MachineFlags;
 use prolog::targets::*;
 
 use std::cell::Cell;
@@ -596,10 +597,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 
     pub fn compile_fact<'b: 'a>(&mut self, term: &'b Term) -> Code
     {
-        self.update_var_count(term.post_order_iter());
+        self.update_var_count(post_order_iter(term));
 
         let mut vs = VariableFixtures::new();
-        vs.mark_vars_in_chunk(term.post_order_iter(), term.arity(), GenContext::Head);
+        vs.mark_vars_in_chunk(post_order_iter(term), term.arity(), GenContext::Head);
 
         vs.populate_restricting_sets();
         self.marker.drain_var_data(vs);
@@ -628,7 +629,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
     {
         self.marker.reset_arg(term.arity());
 
-        let iter  = term.post_order_iter();
+        let iter  = query_term_post_order_iter(term);
         let query = self.compile_target(iter, term_loc, is_exposed);
 
         if !query.is_empty() {

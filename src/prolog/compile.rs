@@ -1,8 +1,9 @@
+use prolog_parser::ast::*;
+
 use prolog::ast::*;
 use prolog::debray_allocator::*;
 use prolog::codegen::*;
 use prolog::machine::*;
-use prolog::machine::machine_state::MachineFlags;
 use prolog::toplevel::*;
 
 use std::collections::{HashMap, HashSet, VecDeque};

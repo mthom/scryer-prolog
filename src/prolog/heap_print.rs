@@ -1,7 +1,9 @@
+use prolog_parser::ast::*;
+
 use prolog::ast::*;
+use prolog::machine::machine_state::*;
 use prolog::num::*;
 use prolog::heap_iter::*;
-use prolog::machine::machine_state::MachineState;
 use prolog::ordered_float::OrderedFloat;
 
 use std::cell::Cell;

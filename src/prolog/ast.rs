@@ -1,595 +1,10 @@
-use prolog::num::bigint::{BigInt, BigUint};
-use prolog::num::{Float, Integer, One, Signed, ToPrimitive, Zero};
-use prolog::num::rational::{BigRational, Ratio};
-use prolog::ordered_float::*;
-use prolog::string_list::*;
-use prolog::tabled_rc::*;
+use prolog_parser::ast::*;
 
 use std::cell::{Cell, RefCell};
-use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, VecDeque};
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::io::Error as IOError;
-use std::ops::{Add, AddAssign, Div, Index, IndexMut, Sub, Mul, MulAssign, Neg};
+use std::cmp::Ordering;
+use std::ops::{Add, AddAssign, Index, IndexMut, Sub};
 use std::rc::Rc;
-use std::str::Utf8Error;
-use std::vec::Vec;
-
-pub type Atom = String;
-
-pub type Var = String;
-
-pub type Specifier = u32;
-
-pub const MAX_ARITY: usize = 63;
-
-pub const XFX: u32 = 0x0001;
-pub const XFY: u32 = 0x0002;
-pub const YFX: u32 = 0x0004;
-pub const XF: u32  = 0x0010;
-pub const YF: u32  = 0x0020;
-pub const FX: u32  = 0x0040;
-pub const FY: u32  = 0x0080;
-pub const DELIMITER: u32 = 0x0100;
-pub const TERM: u32  = 0x1000;
-pub const LTERM: u32 = 0x3000;
-
-macro_rules! is_term {
-    ($x:expr) => ( ($x & TERM) != 0 )
-}
-
-macro_rules! is_lterm {
-    ($x:expr) => ( ($x & LTERM) != 0 )
-}
-
-macro_rules! is_op {
-    ($x:expr) => ( $x & (XF | YF | FX | FY | XFX | XFY | YFX) != 0 )
-}
-
-macro_rules! is_postfix {
-    ($x:expr) => ( $x & (XF | YF) != 0 )
-}
-
-macro_rules! is_infix {
-    ($x:expr) => ( ($x & (XFX | XFY | YFX)) != 0 )
-}
-
-macro_rules! is_xfx {
-    ($x:expr) => ( ($x & XFX) != 0 )
-}
-
-macro_rules! is_xfy {
-    ($x:expr) => ( ($x & XFY) != 0 )
-}
-
-macro_rules! is_yfx {
-    ($x:expr) => ( ($x & YFX) != 0 )
-}
-
-macro_rules! is_yf {
-    ($x:expr) => ( ($x & YF) != 0 )
-}
-
-macro_rules! is_xf {
-    ($x:expr) => ( ($x & XF) != 0 )
-}
-
-macro_rules! is_fx {
-    ($x:expr) => ( ($x & FX) != 0 )
-}
-
-macro_rules! is_fy {
-    ($x:expr) => ( ($x & FY) != 0 )
-}
-
-macro_rules! prefix {
-    ($x:expr) => ($x & (FX | FY))
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum GenContext {
-    Head, Mid(usize), Last(usize) // Mid & Last: chunk_num
-}
-
-impl GenContext {
-    pub fn chunk_num(self) -> usize {
-        match self {
-            GenContext::Head => 0,
-            GenContext::Mid(cn) | GenContext::Last(cn) => cn
-        }
-    }
-}
-
-pub struct Predicate(pub Vec<PredicateClause>);
-
-impl Predicate {
-    pub fn clauses(self) -> Vec<PredicateClause> {
-        self.0
-    }
-}
-
-pub enum PredicateClause {
-    Fact(Term),
-    Rule(Rule)
-}
-
-impl PredicateClause {
-    pub fn first_arg(&self) -> Option<&Term> {
-        match self {
-            &PredicateClause::Fact(ref term) => term.first_arg(),
-            &PredicateClause::Rule(ref rule) => rule.head.1.first().map(|bt| bt.as_ref()),
-        }
-    }
-
-    pub fn arity(&self) -> usize {
-        match self {
-            &PredicateClause::Fact(ref term) => term.arity(),
-            &PredicateClause::Rule(ref rule) => rule.head.1.len()
-        }
-    }
-
-    pub fn name(&self) -> Option<ClauseName> {
-        match self {
-            &PredicateClause::Fact(ref term) => term.name(),
-            &PredicateClause::Rule(ref rule) => Some(rule.head.0.clone()),
-        }
-    }
-}
-
-pub type OpDirKey = (ClauseName, Fixity);
-
-// name and fixity -> operator type and precedence.
-pub type OpDir = HashMap<OpDirKey, (Specifier, usize, ClauseName)>;
-
-pub type ModuleCodeDir = HashMap<PredicateKey, ModuleCodeIndex>;
-
-pub type CodeDir = HashMap<PredicateKey, CodeIndex>;
-
-pub type TermDir = HashMap<PredicateKey, Predicate>;
-
-pub type ModuleDir = HashMap<ClauseName, Module>;
-
-pub type PredicateKey = (ClauseName, usize); // name, arity.
-
-pub struct ModuleDecl {
-    pub name: ClauseName,
-    pub exports: Vec<PredicateKey>
-}
-
-pub struct Module {
-    pub module_decl: ModuleDecl,
-    pub code_dir: ModuleCodeDir,
-    pub op_dir: OpDir
-}
-
-pub fn default_op_dir() -> OpDir {
-    let module_name = clause_name!("builtins");
-    let mut op_dir = OpDir::new();
-
-    op_dir.insert((clause_name!(":-"), Fixity::In),  (XFX, 1200, module_name.clone()));
-    op_dir.insert((clause_name!(":-"), Fixity::Pre), (FX,  1200, module_name.clone()));
-    op_dir.insert((clause_name!("?-"), Fixity::Pre), (FX,  1200, module_name.clone()));
-
-    op_dir
-}
-
-pub static BUILTINS: &str = include_str!("./lib/builtins.pl");
-
-impl Module {
-    pub fn new(module_decl: ModuleDecl) -> Self {
-        Module { module_decl,
-                 code_dir: ModuleCodeDir::new(),
-                 op_dir: default_op_dir() }
-    }
-}
-
-pub fn as_module_code_dir(code_dir: CodeDir) -> ModuleCodeDir {
-    code_dir.into_iter()
-        .map(|(k, code_idx)| {
-            let (idx, module_name) = code_idx.0.borrow().clone();
-            (k, ModuleCodeIndex(idx, module_name))
-        })
-        .collect()
-}
-
-impl SubModuleUser for Module {
-    fn op_dir(&mut self) -> &mut OpDir {
-        &mut self.op_dir
-    }
-
-    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
-        self.code_dir.insert((name, arity), idx);
-    }
-}
-
-pub trait SubModuleUser {
-    fn op_dir(&mut self) -> &mut OpDir;
-    fn insert_dir_entry(&mut self, ClauseName, usize, ModuleCodeIndex);
-
-    // returns true on successful import.
-    fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
-        let name = name.defrock_brackets();
-        let mut found_op = false;
-
-        {
-            let mut insert_op_dir = |fix| {
-                if let Some(op_data) = submodule.op_dir.get(&(name.clone(), fix)) {
-                    self.op_dir().insert((name.clone(), fix), op_data.clone());
-                    found_op = true;
-                }
-            };
-
-            if arity == 1 {
-                insert_op_dir(Fixity::Pre);
-                insert_op_dir(Fixity::Post);
-            } else if arity == 2 {
-                insert_op_dir(Fixity::In);
-            }
-        }
-
-        if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
-            self.insert_dir_entry(name, arity, code_data.clone());
-            true
-        } else {
-            found_op
-        }
-    }
-
-    fn use_qualified_module(&mut self, submodule: &Module, exports: &Vec<PredicateKey>) -> EvalSession
-    {
-        for (name, arity) in exports.iter().cloned() {
-            if !submodule.module_decl.exports.contains(&(name.clone(), arity)) {
-                continue;
-            }
-
-            if !self.import_decl(name, arity, submodule) {
-                return EvalSession::from(SessionError::ModuleDoesNotContainExport);
-            }
-        }
-
-        EvalSession::EntrySuccess
-    }
-
-    fn use_module(&mut self, submodule: &Module) -> EvalSession {
-        for (name, arity) in submodule.module_decl.exports.iter().cloned() {
-            if !self.import_decl(name, arity, submodule) {
-                return EvalSession::from(SessionError::ModuleDoesNotContainExport);
-            }
-        }
-
-        EvalSession::EntrySuccess
-    }
-}
-
-pub enum Declaration {
-    NonCountedBacktracking(ClauseName, usize), // name, arity
-    Module(ModuleDecl),
-    Op(OpDecl),
-    UseModule(ClauseName),
-    UseQualifiedModule(ClauseName, Vec<PredicateKey>)
-}
-
-pub enum TopLevel {
-    Declaration(Declaration),
-    Fact(Term),
-    Predicate(Predicate),
-    Query(Vec<QueryTerm>),
-    Rule(Rule)
-}
-
-impl TopLevel {
-    pub fn name(&self) -> Option<ClauseName> {
-        match self {
-            &TopLevel::Declaration(_) => None,
-            &TopLevel::Fact(ref term) => term.name(),
-            &TopLevel::Predicate(ref clauses) =>
-                clauses.0.first().and_then(|ref term| term.name()),
-            &TopLevel::Query(_) => None,
-            &TopLevel::Rule(Rule { ref head, .. }) =>
-                Some(head.0.clone())
-        }
-    }
-
-    pub fn arity(&self) -> usize {
-        match self {
-            &TopLevel::Declaration(_) => 0,
-            &TopLevel::Fact(ref term) => term.arity(),
-            &TopLevel::Predicate(ref clauses) =>
-                clauses.0.first().map(|t| t.arity()).unwrap_or(0),
-            &TopLevel::Query(_) => 0,
-            &TopLevel::Rule(Rule { ref head, .. }) => head.1.len()
-        }
-    }
-
-    pub fn as_predicate(self) -> Result<Predicate, TopLevel> {
-        match self {
-            TopLevel::Fact(term) => Ok(Predicate(vec![PredicateClause::Fact(term)])),
-            TopLevel::Rule(rule) => Ok(Predicate(vec![PredicateClause::Rule(rule)])),
-            TopLevel::Predicate(pred) => Ok(pred),
-            _ => Err(self)
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum Level {
-    Deep, Root, Shallow
-}
-
-impl Level {
-    pub fn child_level(self) -> Level {
-        match self {
-            Level::Root => Level::Shallow,
-            _ => Level::Deep
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum RegType {
-    Perm(usize),
-    Temp(usize)
-}
-
-impl Default for RegType {
-    fn default() -> Self {
-        RegType::Temp(0)
-    }
-}
-
-impl RegType {
-    pub fn reg_num(self) -> usize {
-        match self {
-            RegType::Perm(reg_num) | RegType::Temp(reg_num) => reg_num
-        }
-    }
-
-    pub fn is_perm(self) -> bool {
-        match self {
-            RegType::Perm(_) => true,
-            _ => false
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Clone, Copy)]
-pub enum VarReg {
-    ArgAndNorm(RegType, usize),
-    Norm(RegType)
-}
-
-impl VarReg {
-    pub fn norm(self) -> RegType {
-        match self {
-            VarReg::ArgAndNorm(reg, _) | VarReg::Norm(reg) => reg
-        }
-    }
-}
-
-impl Default for VarReg {
-    fn default() -> Self {
-        VarReg::Norm(RegType::default())
-    }
-}
-
-// labeled with chunk numbers.
-pub enum VarStatus {
-    Perm(usize), Temp(usize, TempVarData) // Perm(chunk_num) | Temp(chunk_num, _)
-}
-
-pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
-
-// Perm: 0 initially, a stack register once processed.
-// Temp: labeled with chunk_num and temp offset (unassigned if 0).
-pub enum VarData {
-    Perm(usize), Temp(usize, usize, TempVarData)
-}
-
-pub struct TempVarData {
-    pub last_term_arity: usize,
-    pub use_set: OccurrenceSet,
-    pub no_use_set: BTreeSet<usize>,
-    pub conflict_set: BTreeSet<usize>
-}
-
-pub type HeapVarDict  = HashMap<Rc<Var>, Addr>;
-pub type AllocVarDict = HashMap<Rc<Var>, VarData>;
-
-pub enum SessionError {
-    ImpermissibleEntry(String),
-    ModuleDoesNotContainExport,
-    ModuleNotFound,
-    NamelessEntry,
-    OpIsInfixAndPostFix,
-    ParserError(ParserError),
-    QueryFailure,
-    QueryFailureWithException(String)
-}
-
-pub enum EvalSession {
-    EntrySuccess,
-    Error(SessionError),
-    InitialQuerySuccess(AllocVarDict, HeapVarDict),
-    SubsequentQuerySuccess,
-}
-
-impl From<SessionError> for EvalSession {
-    fn from(err: SessionError) -> Self {
-        EvalSession::Error(err)
-    }
-}
-
-impl From<ParserError> for SessionError {
-    fn from(err: ParserError) -> Self {
-        SessionError::ParserError(err)
-    }
-}
-
-impl From<ParserError> for EvalSession {
-    fn from(err: ParserError) -> Self {
-        EvalSession::from(SessionError::ParserError(err))
-    }
-}
-
-pub struct OpDecl(pub usize, pub Specifier, pub ClauseName);
-
-impl OpDecl {
-    pub fn submit(&self, module: ClauseName, op_dir: &mut OpDir) -> Result<(), SessionError>
-    {
-        let (prec, spec, name) = (self.0, self.1, self.2.clone());
-
-        if is_infix!(spec) {
-            match op_dir.get(&(name.clone(), Fixity::Post)) {
-                Some(_) => return Err(SessionError::OpIsInfixAndPostFix),
-                _ => {}
-            };
-        }
-
-        if is_postfix!(spec) {
-            match op_dir.get(&(name.clone(), Fixity::In)) {
-                Some(_) => return Err(SessionError::OpIsInfixAndPostFix),
-                _ => {}
-            };
-        }
-
-        if prec > 0 {
-            match spec {
-                XFY | XFX | YFX => op_dir.insert((name.clone(), Fixity::In),
-                                                 (spec, prec, module.clone())),
-                XF | YF => op_dir.insert((name.clone(), Fixity::Post), (spec, prec, module.clone())),
-                FX | FY => op_dir.insert((name.clone(), Fixity::Pre), (spec, prec, module.clone())),
-                _ => None
-            };
-        } else {
-            op_dir.remove(&(name.clone(), Fixity::Pre));
-            op_dir.remove(&(name.clone(), Fixity::In));
-            op_dir.remove(&(name.clone(), Fixity::Post));
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ArithmeticError {
-    InvalidAtom,
-    InvalidOp,
-    InvalidTerm,
-    NoRoots,
-    UninstantiatedVar
-}
-
-#[derive(Debug)]
-pub enum ParserError
-{
-    Arithmetic(ArithmeticError),
-    BackQuotedString,
-    // BuiltInArityMismatch(&'static str),
-    UnexpectedChar(char),
-    UnexpectedEOF,
-    IO(IOError),
-    ExpectedRel,
-    InadmissibleFact,
-    InadmissibleQueryTerm,
-    IncompleteReduction,
-    InconsistentEntry,
-    InvalidModuleDecl,
-    InvalidModuleExport,
-    InvalidRuleHead,
-    InvalidUseModuleDecl,
-    InvalidModuleResolution,
-    MissingQuote,
-    NonPrologChar,
-    ParseBigInt,
-    ParseFloat,
-    Utf8Conversion(Utf8Error)
-}
-
-impl From<ArithmeticError> for ParserError {
-    fn from(err: ArithmeticError) -> ParserError {
-        ParserError::Arithmetic(err)
-    }
-}
-
-impl From<IOError> for ParserError {
-    fn from(err: IOError) -> ParserError {
-        ParserError::IO(err)
-    }
-}
-
-impl From<Utf8Error> for ParserError {
-    fn from(err: Utf8Error) -> ParserError {
-        ParserError::Utf8Conversion(err)
-    }
-}
-
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
-pub enum Fixity {
-    In, Post, Pre
-}
-
-#[derive(Clone, Hash)]
-pub enum Constant {
-    Atom(ClauseName),
-    Char(char),
-    Number(Number),
-    String(StringList),
-    Usize(usize),
-    EmptyList
-}
-
-impl PartialEq for Constant {
-    fn eq(&self, other: &Constant) -> bool {
-        match (self, other) {
-            (&Constant::Atom(ref atom), &Constant::Char(c))
-          | (&Constant::Char(c), &Constant::Atom(ref atom)) => {
-              let s = atom.as_str();
-              c.len_utf8() == s.len() && Some(c) == s.chars().next()
-            },
-            (&Constant::Atom(ref a1), &Constant::Atom(ref a2)) =>
-                a1.as_str() == a2.as_str(),
-            (&Constant::Char(c1), &Constant::Char(c2)) =>
-                c1 == c2,
-            (&Constant::Number(ref n1), &Constant::Number(ref n2)) =>
-                n1 == n2,
-            (&Constant::String(ref s1), &Constant::String(ref s2)) =>
-                s1 == s2,
-            (&Constant::EmptyList, &Constant::EmptyList) =>
-                true,
-            (&Constant::Usize(u1), &Constant::Usize(u2)) =>
-                u1 == u2,
-            _ => false
-        }
-    }
-}
-
-impl Eq for Constant {}
-
-impl Constant {
-    pub fn to_atom(self) -> Option<ClauseName> {
-        match self {
-            Constant::Atom(a) => Some(a.defrock_brackets()),
-            _ => None
-        }
-    }
-
-    pub fn to_integer(self) -> Option<Rc<BigInt>> {
-        match self {
-            Constant::Number(Number::Integer(b)) => Some(b),
-            _ => None
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Clone)]
-pub enum Term {
-    AnonVar,
-    Clause(Cell<RegType>, ClauseName, Vec<Box<Term>>, Option<Fixity>),
-    Cons(Cell<RegType>, Box<Term>, Box<Term>),
-    Constant(Cell<RegType>, Constant),
-    Var(Cell<VarReg>, Rc<Var>)
-}
 
 #[derive(Clone, PartialEq)]
 pub enum InlinedClauseType {
@@ -740,6 +155,63 @@ pub struct Rule {
     pub clauses: Vec<QueryTerm>
 }
 
+pub struct Predicate(pub Vec<PredicateClause>);
+
+impl Predicate {
+    pub fn clauses(self) -> Vec<PredicateClause> {
+        self.0
+    }
+}
+
+pub enum PredicateClause {
+    Fact(Term),
+    Rule(Rule)
+}
+
+impl PredicateClause {
+    pub fn first_arg(&self) -> Option<&Term> {
+        match self {
+            &PredicateClause::Fact(ref term) => term.first_arg(),
+            &PredicateClause::Rule(ref rule) => rule.head.1.first().map(|bt| bt.as_ref()),
+        }
+    }
+
+    pub fn arity(&self) -> usize {
+        match self {
+            &PredicateClause::Fact(ref term) => term.arity(),
+            &PredicateClause::Rule(ref rule) => rule.head.1.len()
+        }
+    }
+
+    pub fn name(&self) -> Option<ClauseName> {
+        match self {
+            &PredicateClause::Fact(ref term) => term.name(),
+            &PredicateClause::Rule(ref rule) => Some(rule.head.0.clone()),
+        }
+    }
+}
+
+pub type ModuleCodeDir = HashMap<PredicateKey, ModuleCodeIndex>;
+
+pub type CodeDir = HashMap<PredicateKey, CodeIndex>;
+
+pub type TermDir = HashMap<PredicateKey, Predicate>;
+
+pub type ModuleDir = HashMap<ClauseName, Module>;
+
+pub type PredicateKey = (ClauseName, usize); // name, arity.
+
+pub struct ModuleDecl {
+    pub name: ClauseName,
+    pub exports: Vec<PredicateKey>
+}
+
+pub struct Module {
+    pub module_decl: ModuleDecl,
+    pub code_dir: ModuleCodeDir,
+    pub op_dir: OpDir
+}
+
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
     CheckCutPoint,
@@ -870,70 +342,6 @@ pub enum ClauseType {
     Named(ClauseName, CodeIndex),
     Op(ClauseName, Fixity, CodeIndex),
     System(SystemClauseType)
-}
-
-#[derive(Clone)]
-pub enum ClauseName {
-    BuiltIn(&'static str),
-    User(TabledRc<Atom>)
-}
-
-impl Hash for ClauseName {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (*self.as_str()).hash(state)
-    }
-}
-
-impl PartialEq for ClauseName {
-    fn eq(&self, other: &ClauseName) -> bool {
-        *self.as_str() == *other.as_str()
-    }
-}
-
-impl Eq for ClauseName {}
-
-impl Ord for ClauseName {
-    fn cmp(&self, other: &ClauseName) -> Ordering {
-        (*self.as_str()).cmp(other.as_str())
-    }
-}
-
-impl PartialOrd for ClauseName {
-    fn partial_cmp(&self, other: &ClauseName) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<'a> From<&'a TabledRc<Atom>> for ClauseName {
-    fn from(name: &'a TabledRc<Atom>) -> ClauseName {
-        ClauseName::User(name.clone())
-    }
-}
-
-impl ClauseName {
-    pub fn as_str(&self) -> &str {
-        match self {
-            &ClauseName::BuiltIn(s) => s,
-            &ClauseName::User(ref name) => name.as_ref()
-        }
-    }
-
-    pub fn defrock_brackets(self) -> Self {
-        fn defrock_brackets(s: &str) -> &str {
-            if s.starts_with('(') && s.ends_with(')') {
-                &s[1 .. s.len() - 1]
-            } else {
-                s
-            }
-        }
-
-        match self {
-            ClauseName::BuiltIn(s) =>
-                ClauseName::BuiltIn(defrock_brackets(s)),
-            ClauseName::User(s) =>
-                ClauseName::User(tabled_rc!(defrock_brackets(s.as_str()).to_owned(), s.table()))
-        }
-    }
 }
 
 impl BuiltInClauseType {
@@ -1067,27 +475,6 @@ impl From<InlinedClauseType> for ClauseType {
 }
 
 #[derive(Clone)]
-pub enum TermRef<'a> {
-    AnonVar(Level),
-    Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
-    Constant(Level, &'a Cell<RegType>, &'a Constant),
-    Clause(Level, &'a Cell<RegType>, ClauseType, &'a Vec<Box<Term>>),
-    Var(Level, &'a Cell<VarReg>, Rc<Var>)
-}
-
-impl<'a> TermRef<'a> {
-    pub fn level(self) -> Level {
-        match self {
-            TermRef::AnonVar(lvl)
-          | TermRef::Cons(lvl, ..)
-          | TermRef::Constant(lvl, ..)
-          | TermRef::Var(lvl, ..)
-          | TermRef::Clause(lvl, ..) => lvl
-        }
-    }
-}
-
-#[derive(Clone)]
 pub enum ChoiceInstruction {
     DefaultRetryMeElse(usize),
     DefaultTrustMe,
@@ -1126,363 +513,6 @@ impl IndexedChoiceInstruction {
         }
     }
 }
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub enum Number {
-    Float(OrderedFloat<f64>),
-    Integer(Rc<BigInt>),
-    Rational(Rc<Ratio<BigInt>>)
-}
-
-impl PartialOrd for Number {
-    fn partial_cmp(&self, other: &Number) -> Option<Ordering> {
-        match NumberPair::from(self.clone(), other.clone()) {
-            NumberPair::Integer(n1, n2) =>
-                Some(n1.cmp(&n2)),
-            NumberPair::Float(n1, n2) =>
-                Some(n1.cmp(&n2)),
-            NumberPair::Rational(n1, n2) =>
-                Some(n1.cmp(&n2))
-        }
-    }
-}
-
-impl Ord for Number {
-    fn cmp(&self, other: &Number) -> Ordering {
-        match NumberPair::from(self.clone(), other.clone()) {
-            NumberPair::Integer(n1, n2) =>
-                n1.cmp(&n2),
-            NumberPair::Float(n1, n2) =>
-                n1.cmp(&n2),
-            NumberPair::Rational(n1, n2) =>
-                n1.cmp(&n2)
-        }
-    }
-}
-
-impl fmt::Display for Number {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Number::Float(fl) => write!(f, "{}", fl),
-            &Number::Integer(ref bi) => write!(f, "{}", bi),
-            &Number::Rational(ref r) => write!(f, "{}", r)
-        }
-    }
-}
-
-impl Default for Number {
-    fn default() -> Self {
-        Number::Float(OrderedFloat(0f64))
-    }
-}
-
-fn binary_pow<T>(mut n: T, mut power: BigUint) -> T
-    where T: Clone + Mul + One,
-    for<'a> T: MulAssign<&'a T>
-{
-    if power.is_zero() {
-        return T::one();
-    }
-
-    let mut oddand = T::one();
-    let one = BigUint::one();
-
-    while power > one {
-        if power.is_odd() {
-            oddand *= &n;
-        }
-
-        n = n.clone() * n;
-        power >>= 1;
-    }
-
-    n * oddand
-}
-
-fn rational_pow(r1: BigRational, r2: BigRational) -> Result<BigRational, ArithmeticError>
-{
-    #[inline]
-    fn to_unsigned(n: &BigInt) -> Result<BigUint, ArithmeticError> {
-        n.abs().to_biguint().ok_or(ArithmeticError::NoRoots)
-    };
-
-    #[inline]
-    fn to_big_rational(n: BigUint) -> BigRational {
-        BigRational::from_integer(BigInt::from(n))
-    };
-
-    let r2 = r2.reduced(); // so that gcd(numer, denom) = 1
-    let n = to_unsigned(r2.denom())?;
-
-    if n == BigUint::one() {
-        return if r2.is_positive() {
-            Ok(binary_pow(r1, to_unsigned(&r2.numer())?))
-        } else if r2.is_negative() {
-            Ok(binary_pow(r1, to_unsigned(&r2.numer())?).recip())
-        } else {
-            Ok(BigRational::one())
-        };
-    }
-
-    if (n.is_even() && r1.is_negative()) || (r2.is_negative() && r1.is_zero()) {
-        return Err(ArithmeticError::NoRoots);
-    }
-
-    let sgn = r1.signum();
-    let r1 = r1 * &sgn; // set r1 to its absolute value.
-
-    let epsilon = BigRational::new_raw(BigInt::one(), BigInt::from(10000));
-    let n1      = n.clone() - BigUint::one(); // n -1
-
-    // 1 + r1 / (n-1) is a good initial point.
-    let mut x_i = BigRational::one() + r1.clone() / to_big_rational(n1.clone());
-    let mut x_i_n1 = binary_pow(x_i.clone(), n1.clone()); // x_i^{n-1}
-    let mut delta_x_i = BigRational::one();
-
-    while delta_x_i.abs() > epsilon {
-        x_i = x_i.reduced();
-        x_i_n1 = x_i_n1.reduced();
-
-        let r_quot = r1.clone() / &x_i_n1; // r1 / x_i^{n-1}
-        let r_n    = to_big_rational(n.clone());
-
-        delta_x_i = ( r_quot - &x_i ) / &r_n;
-
-        x_i += &delta_x_i;
-        x_i_n1 = binary_pow(x_i.clone(), n1.clone());
-    }
-
-    if r2.is_positive() {
-        Ok(binary_pow(sgn * x_i, to_unsigned(r2.numer())?))
-    } else {
-        Ok(binary_pow(sgn * x_i, to_unsigned(r2.numer())?).recip())
-    }
-}
-
-fn pow_float(f1: f64, f2: f64) -> Result<Number, ArithmeticError> {
-    let result = OrderedFloat(f1.powf(f2));
-
-    if result.is_finite() {
-        Ok(Number::Float(result))
-    } else {
-        Err(ArithmeticError::NoRoots)
-    }
-}
-
-fn rational_to_f64(r: &BigRational) -> Option<f64> {
-    match (r.numer().to_f64(), r.denom().to_f64()) {
-        (Some(ref f1), Some(ref f2)) if f2.is_normal() => Some(*f1 / *f2),
-        _ => None
-    }
-}
-
-impl Number {
-    pub fn pow(self, other: Number) -> Result<Self, ArithmeticError> {
-        match NumberPair::from(self, other) {
-            NumberPair::Integer(n1, n2) =>
-                if let Some(n2) = n2.to_biguint() {
-                    Ok(Number::Integer(Rc::new(binary_pow((*n1).clone(), n2))))
-                } else if n1.is_zero() {
-                    Err(ArithmeticError::NoRoots)
-                } else {
-                    let r1 = Ratio::new(BigInt::one(), (*n1).clone());
-                    let n2 = n2.abs().to_biguint().unwrap();
-
-                    Ok(Number::Rational(Rc::new(binary_pow(r1, n2))))
-                },
-            NumberPair::Float(n1, n2) =>
-                pow_float(n1.into_inner(), n2.into_inner()),
-            NumberPair::Rational(r1, r2) => {
-                if let (Some(f1), Some(f2)) = (rational_to_f64(&r1), rational_to_f64(&r2)) {
-                    if let Ok(result) = pow_float(f1, f2) {
-                        return Ok(result);
-                    }
-                }
-
-                let root = rational_pow((*r1).clone(), (*r2).clone())?;
-                Ok(Number::Rational(Rc::new(root)))
-            }
-        }
-    }
-
-    #[inline]
-    pub fn is_zero(&self) -> bool {
-        match self {
-            &Number::Float(fl)       => fl.into_inner().is_zero(),
-            &Number::Integer(ref bi) => bi.is_zero(),
-            &Number::Rational(ref r) => r.is_zero()
-        }
-    }
-
-    #[inline]
-    pub fn abs(&self) -> Self {
-        match self {
-            &Number::Float(ref fl)   => Number::Float(OrderedFloat(fl.into_inner().abs())),
-            &Number::Integer(ref n)  => Number::Integer(Rc::new((*n).clone().abs())),
-            &Number::Rational(ref r) => Number::Rational(Rc::new((*r).clone().abs()))
-        }
-    }
-}
-
-pub enum NumberPair {
-    Float(OrderedFloat<f64>, OrderedFloat<f64>),
-    Integer(Rc<BigInt>, Rc<BigInt>),
-    Rational(Rc<Ratio<BigInt>>, Rc<Ratio<BigInt>>)
-}
-
-impl NumberPair {
-    fn flip(self) -> NumberPair {
-        match self {
-            NumberPair::Float(f1, f2)    => NumberPair::Float(f2, f1),
-            NumberPair::Integer(n1, n2)  => NumberPair::Integer(n2, n1),
-            NumberPair::Rational(r1, r2) => NumberPair::Rational(r2, r1)
-        }
-    }
-
-    fn integer_float_pair(n1: Rc<BigInt>, n2: OrderedFloat<f64>) -> NumberPair {
-        match n1.to_f64() {
-            Some(f1) => NumberPair::Float(OrderedFloat(f1), n2),
-            None => if let Some(r) = Ratio::from_float(n2.into_inner()) {
-                NumberPair::Rational(Rc::new(Ratio::from_integer((*n1).clone())),
-                                     Rc::new(r))
-            } else if n2.into_inner().is_sign_positive() {
-                NumberPair::Float(OrderedFloat(f64::infinity()),
-                                  OrderedFloat(f64::infinity()))
-            } else {
-                NumberPair::Float(OrderedFloat(f64::neg_infinity()),
-                                  OrderedFloat(f64::neg_infinity()))
-            }
-        }
-    }
-
-    fn float_rational_pair(n1: OrderedFloat<f64>, n2: Rc<Ratio<BigInt>>) -> NumberPair {
-        match (n2.numer().to_f64(), n2.denom().to_f64()) {
-            (Some(num), Some(denom)) =>
-                NumberPair::Float(n1, OrderedFloat(num / denom)),
-            _ => if let Some(r) = Ratio::from_float(n1.into_inner()) {
-                NumberPair::Rational(Rc::new(r), n2)
-            } else if n1.into_inner().is_sign_positive() {
-                NumberPair::Float(OrderedFloat(f64::infinity()),
-                                  OrderedFloat(f64::infinity()))
-            } else {
-                NumberPair::Float(OrderedFloat(f64::neg_infinity()),
-                                  OrderedFloat(f64::neg_infinity()))
-            }
-        }
-    }
-
-    pub fn from(n1: Number, n2: Number) -> NumberPair
-    {
-        match (n1, n2) {
-            (Number::Integer(n1), Number::Integer(n2)) =>
-                NumberPair::Integer(n1, n2),
-            (Number::Float(n1), Number::Float(n2)) =>
-                NumberPair::Float(n1, n2),
-            (Number::Rational(n1), Number::Rational(n2)) =>
-                NumberPair::Rational(n1, n2),
-            (Number::Integer(n1), Number::Float(n2)) =>
-                Self::integer_float_pair(n1, n2),
-            (Number::Float(n1), Number::Integer(n2)) =>
-                Self::integer_float_pair(n2, n1).flip(),
-            (Number::Float(n1), Number::Rational(n2)) =>
-                Self::float_rational_pair(n1, n2),
-            (Number::Rational(n1), Number::Float(n2)) =>
-                Self::float_rational_pair(n2, n1).flip(),
-            (Number::Rational(n1), Number::Integer(n2)) =>
-                NumberPair::Rational(n1, Rc::new(Ratio::from_integer((*n2).clone()))),
-            (Number::Integer(n1), Number::Rational(n2)) =>
-                NumberPair::Rational(Rc::new(Ratio::from_integer((*n1).clone())), n2)
-        }
-    }
-}
-
-impl Add<Number> for Number {
-    type Output = Number;
-
-    fn add(self, rhs: Number) -> Self::Output {
-        match NumberPair::from(self, rhs) {
-            NumberPair::Float(f1, f2) =>
-                Number::Float(OrderedFloat(f1.into_inner() + f2.into_inner())),
-            NumberPair::Integer(n1, n2) =>
-                Number::Integer(Rc::new(&*n1 + &*n2)),
-            NumberPair::Rational(r1, r2) =>
-                Number::Rational(Rc::new(&*r1 + &*r2))
-        }
-    }
-}
-
-impl Sub<Number> for Number {
-    type Output = Number;
-
-    fn sub(self, rhs: Number) -> Self::Output {
-        match NumberPair::from(self, rhs) {
-            NumberPair::Float(f1, f2) =>
-                Number::Float(OrderedFloat(f1.into_inner() - f2.into_inner())),
-            NumberPair::Integer(n1, n2) =>
-                Number::Integer(Rc::new(&*n1 - &*n2)),
-            NumberPair::Rational(r1, r2) =>
-                Number::Rational(Rc::new(&*r1 - &*r2))
-        }
-    }
-}
-
-impl Mul<Number> for Number {
-    type Output = Number;
-
-    fn mul(self, rhs: Number) -> Self::Output {
-        match NumberPair::from(self, rhs) {
-            NumberPair::Float(f1, f2) =>
-                Number::Float(OrderedFloat(f1.into_inner() * f2.into_inner())),
-            NumberPair::Integer(n1, n2) =>
-                Number::Integer(Rc::new(&*n1 * &*n2)),
-            NumberPair::Rational(r1, r2) =>
-                Number::Rational(Rc::new(&*r1 * &*r2))
-        }
-    }
-}
-
-impl Div<Number> for Number {
-    type Output = Number;
-
-    fn div(self, rhs: Number) -> Self::Output {
-        match NumberPair::from(self, rhs) {
-            NumberPair::Float(f1, f2) =>
-                Number::Float(OrderedFloat(f1.into_inner() / f2.into_inner())),
-            NumberPair::Integer(n1, n2) =>
-                match n1.to_f64() {
-                    Some(f1) => if let Some(f2) = n2.to_f64() {
-                        Number::Float(OrderedFloat(f1 / f2))
-                    } else {
-                        let r1 = Ratio::from_integer((*n1).clone());
-                        let r2 = Ratio::from_integer((*n2).clone());
-
-                        Number::Rational(Rc::new(r1 / r2))
-                    },
-                    None => {
-                        let r1 = Ratio::from_integer((*n1).clone());
-                        let r2 = Ratio::from_integer((*n2).clone());
-
-                        Number::Rational(Rc::new(r1 / r2))
-                    },
-                },
-            NumberPair::Rational(r1, r2) =>
-                Number::Rational(Rc::new(&*r1 / &*r2))
-        }
-    }
-}
-
-impl Neg for Number {
-    type Output = Number;
-
-    fn neg(self) -> Self::Output {
-        match self {
-            Number::Integer(n) => Number::Integer(Rc::new(-&*n)),
-            Number::Float(f) => Number::Float(OrderedFloat(-1.0 * f.into_inner())),
-            Number::Rational(r) => Number::Rational(Rc::new(- &*r))
-        }
-    }
-}
-
 #[derive(Clone, PartialEq)]
 pub enum ArithmeticTerm {
     Reg(RegType),
@@ -1948,38 +978,6 @@ impl IndexMut<usize> for Heap {
 
 pub type Registers = Vec<Addr>;
 
-impl Term {
-    pub fn to_constant(self) -> Option<Constant> {
-        match self {
-            Term::Constant(_, c) => Some(c),
-            _ => None
-        }
-    }
-
-    pub fn first_arg(&self) -> Option<&Term> {
-        match self {
-            &Term::Clause(_, _, ref terms, _) =>
-                terms.first().map(|bt| bt.as_ref()),
-            _ => None
-        }
-    }
-
-    pub fn name(&self) -> Option<ClauseName> {
-        match self {
-            &Term::Constant(_, Constant::Atom(ref atom))
-          | &Term::Clause(_, ref atom, ..) => Some(atom.clone()),
-            _ => None
-        }
-    }
-
-    pub fn arity(&self) -> usize {
-        match self {
-            &Term::Clause(_, _, ref child_terms, ..) => child_terms.len(),
-            _ => 0
-        }
-    }
-}
-
 pub enum TermIterState<'a> {
     AnonVar(Level),
     Constant(Level, &'a Cell<RegType>, &'a Constant),
@@ -2010,5 +1008,296 @@ impl<'a> TermIterState<'a> {
             &Term::Var(ref cell, ref var) =>
                 TermIterState::Var(lvl, cell, var.clone())
         }
+    }
+}
+
+impl Module {
+    pub fn new(module_decl: ModuleDecl) -> Self {
+        Module { module_decl,
+                 code_dir: ModuleCodeDir::new(),
+                 op_dir: default_op_dir() }
+    }
+}
+
+pub fn as_module_code_dir(code_dir: CodeDir) -> ModuleCodeDir {
+    code_dir.into_iter()
+        .map(|(k, code_idx)| {
+            let (idx, module_name) = code_idx.0.borrow().clone();
+            (k, ModuleCodeIndex(idx, module_name))
+        })
+        .collect()
+}
+
+impl SubModuleUser for Module {
+    fn op_dir(&mut self) -> &mut OpDir {
+        &mut self.op_dir
+    }
+
+    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
+        self.code_dir.insert((name, arity), idx);
+    }
+}
+
+pub trait SubModuleUser {
+    fn op_dir(&mut self) -> &mut OpDir;
+    fn insert_dir_entry(&mut self, ClauseName, usize, ModuleCodeIndex);
+
+    // returns true on successful import.
+    fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
+        let name = name.defrock_brackets();
+        let mut found_op = false;
+
+        {
+            let mut insert_op_dir = |fix| {
+                if let Some(op_data) = submodule.op_dir.get(&(name.clone(), fix)) {
+                    self.op_dir().insert((name.clone(), fix), op_data.clone());
+                    found_op = true;
+                }
+            };
+
+            if arity == 1 {
+                insert_op_dir(Fixity::Pre);
+                insert_op_dir(Fixity::Post);
+            } else if arity == 2 {
+                insert_op_dir(Fixity::In);
+            }
+        }
+
+        if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
+            self.insert_dir_entry(name, arity, code_data.clone());
+            true
+        } else {
+            found_op
+        }
+    }
+
+    fn use_qualified_module(&mut self, submodule: &Module, exports: &Vec<PredicateKey>) -> EvalSession
+    {
+        for (name, arity) in exports.iter().cloned() {
+            if !submodule.module_decl.exports.contains(&(name.clone(), arity)) {
+                continue;
+            }
+
+            if !self.import_decl(name, arity, submodule) {
+                return EvalSession::from(SessionError::ModuleDoesNotContainExport);
+            }
+        }
+
+        EvalSession::EntrySuccess
+    }
+
+    fn use_module(&mut self, submodule: &Module) -> EvalSession {
+        for (name, arity) in submodule.module_decl.exports.iter().cloned() {
+            if !self.import_decl(name, arity, submodule) {
+                return EvalSession::from(SessionError::ModuleDoesNotContainExport);
+            }
+        }
+
+        EvalSession::EntrySuccess
+    }
+}
+
+pub enum Declaration {
+    NonCountedBacktracking(ClauseName, usize), // name, arity
+    Module(ModuleDecl),
+    Op(OpDecl),
+    UseModule(ClauseName),
+    UseQualifiedModule(ClauseName, Vec<PredicateKey>)
+}
+
+pub enum TopLevel {
+    Declaration(Declaration),
+    Fact(Term),
+    Predicate(Predicate),
+    Query(Vec<QueryTerm>),
+    Rule(Rule)
+}
+
+impl TopLevel {
+    pub fn name(&self) -> Option<ClauseName> {
+        match self {
+            &TopLevel::Declaration(_) => None,
+            &TopLevel::Fact(ref term) => term.name(),
+            &TopLevel::Predicate(ref clauses) =>
+                clauses.0.first().and_then(|ref term| term.name()),
+            &TopLevel::Query(_) => None,
+            &TopLevel::Rule(Rule { ref head, .. }) =>
+                Some(head.0.clone())
+        }
+    }
+
+    pub fn arity(&self) -> usize {
+        match self {
+            &TopLevel::Declaration(_) => 0,
+            &TopLevel::Fact(ref term) => term.arity(),
+            &TopLevel::Predicate(ref clauses) =>
+                clauses.0.first().map(|t| t.arity()).unwrap_or(0),
+            &TopLevel::Query(_) => 0,
+            &TopLevel::Rule(Rule { ref head, .. }) => head.1.len()
+        }
+    }
+
+    pub fn as_predicate(self) -> Result<Predicate, TopLevel> {
+        match self {
+            TopLevel::Fact(term) => Ok(Predicate(vec![PredicateClause::Fact(term)])),
+            TopLevel::Rule(rule) => Ok(Predicate(vec![PredicateClause::Rule(rule)])),
+            TopLevel::Predicate(pred) => Ok(pred),
+            _ => Err(self)
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum Level {
+    Deep, Root, Shallow
+}
+
+impl Level {
+    pub fn child_level(self) -> Level {
+        match self {
+            Level::Root => Level::Shallow,
+            _ => Level::Deep
+        }
+    }
+}
+
+// labeled with chunk numbers.
+pub enum VarStatus {
+    Perm(usize), Temp(usize, TempVarData) // Perm(chunk_num) | Temp(chunk_num, _)
+}
+
+pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
+
+// Perm: 0 initially, a stack register once processed.
+// Temp: labeled with chunk_num and temp offset (unassigned if 0).
+pub enum VarData {
+    Perm(usize), Temp(usize, usize, TempVarData)
+}
+
+impl VarData {
+    pub fn as_reg_type(&self) -> RegType {
+        match self {
+            &VarData::Temp(_, r, _) => RegType::Temp(r),
+            &VarData::Perm(r) => RegType::Perm(r)
+        }
+    }
+}
+
+pub struct TempVarData {
+    pub last_term_arity: usize,
+    pub use_set: OccurrenceSet,
+    pub no_use_set: BTreeSet<usize>,
+    pub conflict_set: BTreeSet<usize>
+}
+
+impl TempVarData {
+    pub fn new(last_term_arity: usize) -> Self {
+        TempVarData {
+            last_term_arity: last_term_arity,
+            use_set: BTreeSet::new(),
+            no_use_set: BTreeSet::new(),
+            conflict_set: BTreeSet::new()
+        }
+    }
+
+    pub fn uses_reg(&self, reg: usize) -> bool {
+        for &(_, nreg) in self.use_set.iter() {
+            if reg == nreg {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    pub fn populate_conflict_set(&mut self) {
+        if self.last_term_arity > 0 {
+            let arity = self.last_term_arity;
+            let mut conflict_set : BTreeSet<usize> = (1..arity).collect();
+
+            for &(_, reg) in self.use_set.iter() {
+                conflict_set.remove(&reg);
+            }
+
+            self.conflict_set = conflict_set;
+        }
+    }
+}
+
+pub type HeapVarDict  = HashMap<Rc<Var>, Addr>;
+pub type AllocVarDict = HashMap<Rc<Var>, VarData>;
+
+pub enum SessionError {
+    ImpermissibleEntry(String),
+    ModuleDoesNotContainExport,
+    ModuleNotFound,
+    NamelessEntry,
+    OpIsInfixAndPostFix,
+    ParserError(ParserError),
+    QueryFailure,
+    QueryFailureWithException(String)
+}
+
+pub enum EvalSession {
+    EntrySuccess,
+    Error(SessionError),
+    InitialQuerySuccess(AllocVarDict, HeapVarDict),
+    SubsequentQuerySuccess,
+}
+
+impl From<SessionError> for EvalSession {
+    fn from(err: SessionError) -> Self {
+        EvalSession::Error(err)
+    }
+}
+
+impl From<ParserError> for SessionError {
+    fn from(err: ParserError) -> Self {
+        SessionError::ParserError(err)
+    }
+}
+
+impl From<ParserError> for EvalSession {
+    fn from(err: ParserError) -> Self {
+        EvalSession::from(SessionError::ParserError(err))
+    }
+}
+
+pub struct OpDecl(pub usize, pub Specifier, pub ClauseName);
+
+impl OpDecl {
+    pub fn submit(&self, module: ClauseName, op_dir: &mut OpDir) -> Result<(), SessionError>
+    {
+        let (prec, spec, name) = (self.0, self.1, self.2.clone());
+
+        if is_infix!(spec) {
+            match op_dir.get(&(name.clone(), Fixity::Post)) {
+                Some(_) => return Err(SessionError::OpIsInfixAndPostFix),
+                _ => {}
+            };
+        }
+
+        if is_postfix!(spec) {
+            match op_dir.get(&(name.clone(), Fixity::In)) {
+                Some(_) => return Err(SessionError::OpIsInfixAndPostFix),
+                _ => {}
+            };
+        }
+
+        if prec > 0 {
+            match spec {
+                XFY | XFX | YFX => op_dir.insert((name.clone(), Fixity::In),
+                                                 (spec, prec, module.clone())),
+                XF | YF => op_dir.insert((name.clone(), Fixity::Post), (spec, prec, module.clone())),
+                FX | FY => op_dir.insert((name.clone(), Fixity::Pre), (spec, prec, module.clone())),
+                _ => None
+            };
+        } else {
+            op_dir.remove(&(name.clone(), Fixity::Pre));
+            op_dir.remove(&(name.clone(), Fixity::In));
+            op_dir.remove(&(name.clone(), Fixity::Post));
+        }
+
+        Ok(())
     }
 }

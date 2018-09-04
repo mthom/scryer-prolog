@@ -1,12 +1,14 @@
+use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::*;
+
 use prolog::ast::*;
 use prolog::compile::*;
 use prolog::heap_print::*;
-use prolog::tabled_rc::*;
 
 mod machine_errors;
 pub(super) mod machine_state;
-#[macro_use]
-mod machine_state_impl;
+
+#[macro_use] mod machine_state_impl;
 mod system_calls;
 
 use prolog::machine::machine_state::*;
@@ -15,6 +17,8 @@ use std::collections::HashMap;
 use std::mem::swap;
 use std::ops::Index;
 use std::rc::Rc;
+
+static BUILTINS: &str = include_str!("../lib/builtins.pl");
 
 pub struct MachineCodeIndices<'a> {
     pub(super) code_dir: &'a mut CodeDir,

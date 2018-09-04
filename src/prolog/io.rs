@@ -9,6 +9,10 @@ use termion::event::Key;
 use std::io::{Write, stdin, stdout};
 use std::fmt;
 
+fn error_string(e: &String) -> String {
+    format!("error: exception thrown: {}", e)
+}
+
 impl fmt::Display for IndexPtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -18,35 +22,6 @@ impl fmt::Display for IndexPtr {
                 write!(f, "undefined"),
             &IndexPtr::Index(i)  =>
                 write!(f, "{}", i)
-        }
-    }
-}
-
-impl fmt::Display for ClauseName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
-impl fmt::Display for Constant {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Constant::Atom(ref atom) =>
-                if atom.as_str().chars().any(|c| "`.$'\" ".contains(c)) {
-                    write!(f, "'{}'", atom.as_str())
-                } else {
-                    write!(f, "{}", atom.as_str())
-                },
-            &Constant::Char(c) =>
-                write!(f, "'{}'", c as u8),
-            &Constant::EmptyList =>
-                write!(f, "[]"),
-            &Constant::Number(ref n) =>
-                write!(f, "{}", n),
-            &Constant::String(ref s) =>
-                write!(f, "\"{}\"", s.borrow()),
-            &Constant::Usize(integer) =>
-                write!(f, "u{}", integer)
         }
     }
 }
@@ -306,28 +281,6 @@ impl fmt::Display for Level {
     }
 }
 
-impl fmt::Display for VarReg {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &VarReg::Norm(RegType::Perm(reg)) => write!(f, "Y{}", reg),
-            &VarReg::Norm(RegType::Temp(reg)) => write!(f, "X{}", reg),
-            &VarReg::ArgAndNorm(RegType::Perm(reg), arg) =>
-                write!(f, "Y{} A{}", reg, arg),
-            &VarReg::ArgAndNorm(RegType::Temp(reg), arg) =>
-                write!(f, "X{} A{}", reg, arg)
-        }
-    }
-}
-
-impl fmt::Display for RegType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &RegType::Perm(val) => write!(f, "Y{}", val),
-            &RegType::Temp(val) => write!(f, "X{}", val)
-        }
-    }
-}
-
 pub enum Input {
     Quit,
     Clear,
@@ -365,10 +318,6 @@ pub fn read() -> Input {
         "clear" => Input::Clear,
         _       => Input::Line(buffer)
     }
-}
-
-fn error_string(e: &String) -> String {
-    format!("error: exception thrown: {}", e)
 }
 
 pub fn print(wam: &mut Machine, result: EvalSession) {

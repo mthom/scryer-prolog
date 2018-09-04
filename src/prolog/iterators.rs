@@ -1,9 +1,32 @@
-use prolog::ast::*;
+use prolog_parser::ast::*;
 
+use prolog::ast::*;
+use std::cell::Cell;
 use std::collections::VecDeque;
 use std::iter::*;
 use std::rc::Rc;
 use std::vec::Vec;
+
+#[derive(Clone)]
+pub enum TermRef<'a> {
+    AnonVar(Level),
+    Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
+    Constant(Level, &'a Cell<RegType>, &'a Constant),
+    Clause(Level, &'a Cell<RegType>, ClauseType, &'a Vec<Box<Term>>),
+    Var(Level, &'a Cell<VarReg>, Rc<Var>)
+}
+
+impl<'a> TermRef<'a> {
+    pub fn level(self) -> Level {
+        match self {
+            TermRef::AnonVar(lvl)
+          | TermRef::Cons(lvl, ..)
+          | TermRef::Constant(lvl, ..)
+          | TermRef::Var(lvl, ..)
+          | TermRef::Clause(lvl, ..) => lvl
+        }
+    }
+}
 
 pub struct QueryIterator<'a> {
     state_stack: Vec<TermIterState<'a>>,
@@ -192,14 +215,12 @@ impl<'a> Iterator for FactIterator<'a> {
     }
 }
 
-impl Term {
-    pub fn post_order_iter(&self) -> QueryIterator {
-        QueryIterator::from_term(self)
-    }
+pub fn post_order_iter(term: &Term) -> QueryIterator {
+    QueryIterator::from_term(term)
+}
 
-    pub fn breadth_first_iter(&self, iterable_root: bool) -> FactIterator {
-        FactIterator::new(self, iterable_root)
-    }
+pub fn breadth_first_iter(term: &Term, iterable_root: bool) -> FactIterator {
+    FactIterator::new(term, iterable_root)
 }
 
 pub enum ChunkedTerm<'a> {
@@ -207,10 +228,8 @@ pub enum ChunkedTerm<'a> {
     BodyTerm(&'a QueryTerm)
 }
 
-impl QueryTerm {
-    pub fn post_order_iter<'a>(&'a self) -> QueryIterator<'a> {
-        QueryIterator::new(self)
-    }
+pub fn query_term_post_order_iter<'a>(query_term: &'a QueryTerm) -> QueryIterator<'a> {
+    QueryIterator::new(query_term)
 }
 
 impl<'a> ChunkedTerm<'a> {

@@ -1,5 +1,6 @@
-use prolog::ast::*;
+use prolog_parser::ast::*;
 
+use prolog::ast::*;
 use std::cell::Cell;
 use std::cmp::{min, max};
 use std::rc::Rc;

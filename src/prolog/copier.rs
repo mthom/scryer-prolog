@@ -1,5 +1,5 @@
-use prolog::and_stack::*;
 use prolog::ast::*;
+use prolog::and_stack::*;
 
 use std::ops::IndexMut;
 
