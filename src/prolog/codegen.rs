@@ -1,6 +1,6 @@
 use prolog_parser::ast::*;
 
-use prolog::ast::*;
+use prolog::instructions::*;
 use prolog::allocator::*;
 use prolog::arithmetic::*;
 use prolog::fixtures::*;

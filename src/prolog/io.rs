@@ -1,4 +1,4 @@
-use prolog::ast::*;
+use prolog::instructions::*;
 use prolog::heap_print::*;
 use prolog::machine::*;
 

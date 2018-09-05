@@ -2,7 +2,7 @@
 #[macro_use] extern crate prolog_parser;
 extern crate termion;
 
-use prolog::ast::*;
+use prolog::instructions::*;
 
 mod prolog;
 

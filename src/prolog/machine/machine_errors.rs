@@ -1,6 +1,6 @@
 use prolog_parser::ast::*;
 
-use prolog::ast::*;
+use prolog::instructions::*;
 use prolog::machine::machine_state::*;
 use prolog::num::bigint::BigInt;
 

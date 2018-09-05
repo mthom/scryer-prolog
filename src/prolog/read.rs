@@ -1,7 +1,7 @@
 use prolog_parser::ast::*;
 use prolog_parser::parser::*;
 
-use prolog::ast::*;
+use prolog::instructions::*;
 use prolog::iterators::*;
 use prolog::machine::machine_state::*;
 

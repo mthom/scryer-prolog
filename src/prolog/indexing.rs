@@ -1,6 +1,6 @@
 use prolog_parser::ast::*;
 
-use prolog::ast::*;
+use prolog::instructions::*;
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::rc::Rc;
@@ -217,7 +217,6 @@ impl CodeOffsets {
             IntIndex::Internal(_) => prelude_len - lst_offset + 1
         }
     }
-
     
     pub fn add_indices(self, code: &mut Code, mut code_body: Code)
     {

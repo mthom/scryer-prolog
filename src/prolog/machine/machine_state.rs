@@ -1,7 +1,7 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::ast::*;
+use prolog::instructions::*;
 use prolog::and_stack::*;
 use prolog::copier::*;
 use prolog::heap_print::*;

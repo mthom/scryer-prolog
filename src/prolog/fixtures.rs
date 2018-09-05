@@ -1,8 +1,8 @@
 use prolog_parser::ast::*;
 
+use prolog::instructions::*;
 use prolog::iterators::*;
 
-use prolog::ast::*;
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap};
 use std::collections::btree_map::{IntoIter, IterMut, Values};

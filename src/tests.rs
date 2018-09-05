@@ -1,7 +1,7 @@
 use prolog_parser::ast::*;
 
-use prolog::ast::*;
 use prolog::heap_print::*;
+use prolog::instructions::*;
 use prolog::compile::*;
 use prolog::machine::*;
 
@@ -1936,4 +1936,7 @@ fn test_queries_on_string_lists()
     assert_prolog_failure!(&mut wam, "?- partial_string(\"abc\", X), partial_string(\"ababc\", Y), Y = [a,b|Z],
                                          X == Z.");
 
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), X @> \"abc\".");
+    assert_prolog_failure!(&mut wam, "?- partial_string(\"abc\", X), X \\=@= \"abc\".");
+    assert_prolog_failure!(&mut wam, "?- partial_string(\"abc\", X), X @< \"abc\".");
 }

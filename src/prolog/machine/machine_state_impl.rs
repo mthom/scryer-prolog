@@ -1,7 +1,7 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::StringList;
 
-use prolog::ast::*;
+use prolog::instructions::*;
 use prolog::and_stack::*;
 use prolog::copier::*;
 use prolog::heap_iter::*;
@@ -1528,10 +1528,22 @@ impl MachineState {
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::String(_))),
                  HeapCellValue::Addr(Addr::Con(Constant::Number(_)))) =>
-                    return Ordering::Greater,
+                    return Ordering::Greater,                
                 (HeapCellValue::Addr(Addr::Con(Constant::String(s1))),
                  HeapCellValue::Addr(Addr::Con(Constant::String(s2)))) =>
-                    return s1.cmp(&s2),
+                    return if s1.is_expandable() {
+                        if s2.is_expandable() {
+                            s1.cmp(&s2)
+                        } else {
+                            Ordering::Greater
+                        }
+                    } else {
+                        if s2.is_expandable() {
+                            Ordering::Less
+                        } else {
+                            s1.cmp(&s2)
+                        }
+                    },
                 (HeapCellValue::Addr(Addr::Con(Constant::String(_))), _) =>
                     return Ordering::Less,
                 (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),

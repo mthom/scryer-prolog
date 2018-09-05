@@ -1,6 +1,6 @@
 use prolog_parser::ast::*;
 
-use prolog::ast::*;
+use prolog::instructions::*;
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::iter::*;

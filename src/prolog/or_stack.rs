@@ -1,4 +1,4 @@
-use prolog::ast::*;
+use prolog::instructions::*;
 
 use std::ops::{Index, IndexMut};
 use std::vec::Vec;
