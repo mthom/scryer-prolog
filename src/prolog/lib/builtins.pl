@@ -128,31 +128,34 @@ comma_errors(G1, G2, B) :- var(G1), throw(error(instantiation_error, (,)/2)).
 comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 
 :- non_counted_backtracking (,)/3.
-','(!, CF, B) :- '$set_cp'(B), compound(CF),
-		 '$call_with_default_policy'(CF =.. [',', G1, G2]),
+','(!, CF, B) :- compound(CF),
+		 '$call_with_default_policy'(CF = ','(G1, G2)),
+		 '$set_cp'(B),
 		 '$call_with_default_policy'(comma_errors(G1, G2, B)).
 ','(!, Atom, B) :- Atom == !, '$set_cp'(B).
 ','(!, G, B)  :- '$set_cp'(B), G.
 ','(G, CF, B) :- compound(CF),
-		 '$call_with_default_policy'(CF =.. [',', G1, G2]), !, G,
-		  '$call_with_default_policy'(comma_errors(G1, G2, B)).
+		 '$call_with_default_policy'(CF = ','(G1, G2)), !, G,
+		 '$call_with_default_policy'(comma_errors(G1, G2, B)).
 ','(G, Atom, B) :- Atom == !, !, G, '$set_cp'(B).
 ','(G1, G2, _)  :- G1, G2.
 
 ;(G1, G2) :- '$get_b_value'(B), ;(G1, G2, B).
 
 :- non_counted_backtracking (;)/3.
-;(G1, G4, B) :- compound(G1), G1 = ->(G2, G3), (G2 -> G3 ; '$set_cp'(B), G4).
-;(G1, G2, B) :- G1 == !, '$set_cp'(B), call(G2).
-;(G1, G2, B) :- G2 == !, call(G2), '$set_cp'(B).
+;(G1, G4, B) :- compound(G1),
+		'$call_with_default_policy'(G1 = ->(G2, G3)),
+		(G2 -> G3 ; '$set_cp'(B), G4).
+;(G1, G2, B) :- G1 == !, '$set_cp'(B), G2.
+;(G1, G2, B) :- G2 == !, G1, '$set_cp'(B).
 ;(G, _, _) :- G.
 ;(_, G, _) :- G.
 
-G1 -> G2 :- '$get_b_value'(B), ->(G1, G2, B).
+G1 -> G2 :- '$get_b_value'(B), '$call_with_default_policy'(->(G1, G2, B)).
 
 :- non_counted_backtracking (->)/3.
-->(G1, G2, B) :- G2 == !, call(G1), !, '$set_cp'(B).
-->(G1, G2, B) :- call(G1), '$set_cp'(B), call(G2).
+->(G1, G2, B) :- G2 == !, G1, '$set_cp'(B).
+->(G1, G2, B) :- G1, '$set_cp'(B), G2.
 
 % univ.
 
