@@ -121,15 +121,23 @@ set_prolog_flag(Flag, _) :-
 
 % control operators.
 
-','(G1, G2) :- '$get_b_value'(B), ','(G1, G2, B).
+','(G1, G2) :- '$get_b_value'(B), '$call_with_default_policy'(comma_errors(G1, G2, B)).
+
+:- non_counted_backtracking comma_errors/3.
+comma_errors(G1, G2, B) :- var(G1), throw(error(instantiation_error, (,)/2)).
+comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 
 :- non_counted_backtracking (,)/3.
-','(!, ','(G1, G2), B) :- '$set_cp'(B), ','(G1, G2, B).
-','(!, !, B) :- '$set_cp'(B).
-','(!, G, B) :- '$set_cp'(B), G.
-','(G, ','(G2, G3), B) :- !, G, ','(G2, G3, B).
-','(G, !, B) :- !, G, '$set_cp'(B).
-','(G1, G2, _) :- G1, G2.
+','(!, CF, B) :- '$set_cp'(B), compound(CF),
+		 '$call_with_default_policy'(CF =.. [',', G1, G2]),
+		 '$call_with_default_policy'(comma_errors(G1, G2, B)).
+','(!, Atom, B) :- Atom == !, '$set_cp'(B).
+','(!, G, B)  :- '$set_cp'(B), G.
+','(G, CF, B) :- compound(CF),
+		 '$call_with_default_policy'(CF =.. [',', G1, G2]), !, G,
+		  '$call_with_default_policy'(comma_errors(G1, G2, B)).
+','(G, Atom, B) :- Atom == !, !, G, '$set_cp'(B).
+','(G1, G2, _)  :- G1, G2.
 
 ;(G1, G2) :- '$get_b_value'(B), ;(G1, G2, B).
 
@@ -146,26 +154,12 @@ G1 -> G2 :- '$get_b_value'(B), ->(G1, G2, B).
 ->(G1, G2, B) :- G2 == !, call(G1), !, '$set_cp'(B).
 ->(G1, G2, B) :- call(G1), '$set_cp'(B), call(G2).
 
-% arg.
-
-/* Here is the old, SWI Prolog-imitative arg/3. It has been superseded by an ISO Prolog
- * compliant arg/3 implemented in Rust.
-
-arg(N, Functor, Arg) :- var(N), !, functor(Functor, _, Arity), arg_(N, 1, Arity, Functor, Arg).
-arg(N, Functor, Arg) :- integer(N), !, functor(Functor, _, Arity), '$get_arg'(N, Functor, Arg).
-arg(N, Functor, Arg) :- throw(error(type_error(integer, N), arg/3)).
-
-arg_(N, N,  N, Functor, Arg)     :- !, '$get_arg'(N, Functor, Arg).
-arg_(N, N,  Arity, Functor, Arg) :- '$get_arg'(N, Functor, Arg).
-arg_(N, N0, Arity, Functor, Arg) :- N0 < Arity, N1 is N0 + 1, arg_(N, N1, Arity, Functor, Arg).
-
-*/
-
 % univ.
 
-\+ Goal :- call(Goal), !, false.
+\+ G :- G, !, false.
 \+ _.
 
+:- non_counted_backtracking univ_errors/3.
 univ_errors(Term, List, N) :-
     '$skip_max_list'(N, -1, List, R),
     ( var(R)       -> ( var(Term), throw(error(instantiation_error, (=..)/2))      % 8.5.3.3 a)
@@ -183,27 +177,30 @@ univ_errors(Term, List, N) :-
     ; var(Term)    -> throw(error(domain_error(non_empty_list, List), (=..)/2))    % 8.5.3.3 f)
     ; true ).
 
-Term =.. List :- univ_errors(Term, List, N), univ_worker(Term, List, N).
+Term =.. List :- '$call_with_default_policy'(univ_errors(Term, List, N)),
+		 '$call_with_default_policy'(univ_worker(Term, List, N)).
 
-univ_worker(Term, List, _) :- atomic(Term), !, List = [Term].
+:- non_counted_backtracking univ_worker/3.
+univ_worker(Term, List, _) :- atomic(Term), !, '$call_with_default_policy'(List = [Term]).
 univ_worker(Term, [Name|Args], N) :-
     var(Term), !,
-    Arity is N-1,
-    functor(Term, Name, Arity),
-    '$get_args'(Args, Term, 1, Arity).
+    '$call_with_default_policy'(Arity is N-1),
+    '$call_with_default_policy'(functor(Term, Name, Arity)),
+    '$call_with_default_policy'(get_args(Args, Term, 1, Arity)).
 univ_worker(Term, List, _) :-
-    functor(Term, Name, Arity),
-    '$get_args'(Args, Term, 1, Arity),
-    List = [Name|Args].
+    '$call_with_default_policy'(functor(Term, Name, Arity)),
+    '$call_with_default_policy'(get_args(Args, Term, 1, Arity)),
+    '$call_with_default_policy'(List = [Name|Args]).
 
-'$get_args'(Args, _, _, 0) :-
-    !, Args = [].
-'$get_args'([Arg], Func, N, N) :-
-    !, arg(N, Func, Arg).
-'$get_args'([Arg|Args], Func, I0, N) :-
-    arg(I0, Func, Arg),
-    I1 is I0 + 1,
-    '$get_args'(Args, Func, I1, N).
+:- non_counted_backtracking get_args/4.
+get_args(Args, _, _, 0) :-
+    !, '$call_with_default_policy'(Args = []).
+get_args([Arg], Func, N, N) :-
+    !, '$call_with_default_policy'(arg(N, Func, Arg)).
+get_args([Arg|Args], Func, I0, N) :-
+    '$call_with_default_policy'(arg(I0, Func, Arg)),
+    '$call_with_default_policy'(I1 is I0 + 1),
+    '$call_with_default_policy'(get_args(Args, Func, I1, N)).
 
 % setup_call_cleanup.
 
