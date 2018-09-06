@@ -124,7 +124,14 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
             EvalSession::from(ParserError::InvalidModuleDecl),
         _ => {
             let name = try_eval_session!(if let Some(name) = tl.name() {
-                Ok(name)
+                match ClauseType::from(name.clone(), tl.arity(), None) {
+                    ClauseType::Named(..) | ClauseType::Op(..) =>
+                        Ok(name),
+                    _ => {
+                        let err_str = format!("{}/{}", name.as_str(), tl.arity());
+                        Err(SessionError::ImpermissibleEntry(err_str))
+                    }
+                }
             } else {
                 Err(SessionError::NamelessEntry)
             });
@@ -132,7 +139,7 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
             let mut code = try_eval_session!(compile_relation(&tl, false, wam.machine_flags()));
             try_eval_session!(compile_appendix(&mut code, queue, false, wam.machine_flags()));
 
-            if !code.is_empty() {
+            if !code.is_empty() {                
                 wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
             } else {
                 EvalSession::from(SessionError::ImpermissibleEntry(String::from("no code generated.")))
