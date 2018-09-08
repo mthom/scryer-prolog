@@ -28,12 +28,12 @@ impl InlinedClauseType {
             &InlinedClauseType::IsAtom(..) => "atom",
             &InlinedClauseType::IsAtomic(..) => "atomic",
             &InlinedClauseType::IsCompound(..) => "compound",
-            &InlinedClauseType::IsInteger (..) => "integer",
+            &InlinedClauseType::IsInteger (..) => "integer",            
             &InlinedClauseType::IsRational(..) => "rational",
             &InlinedClauseType::IsString(..) => "string",
             &InlinedClauseType::IsFloat (..) => "float",
             &InlinedClauseType::IsNonVar(..) => "nonvar",
-            &InlinedClauseType::IsPartialString(..) => "partial_string",
+            &InlinedClauseType::IsPartialString(..) => "is_partial_string",
             &InlinedClauseType::IsVar(..) => "var",
         }
     }
@@ -418,6 +418,7 @@ impl BuiltInClauseType {
             ("\\==", 2) => Some(BuiltInClauseType::NotEq),
             ("sort", 2) => Some(BuiltInClauseType::Sort),
             ("read", 1) => Some(BuiltInClauseType::Read),
+            ("partial_string", 2) => Some(BuiltInClauseType::PartialString),
             _ => None
         }
     }
