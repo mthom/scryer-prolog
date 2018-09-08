@@ -307,3 +307,5 @@ handle_ball(C, C, R) :- !, '$erase_ball', call(R).
 handle_ball(_, _, _) :- '$unwind_stack'.
 
 throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
+
+repl :- read(X), '$compile_and_run_query'(X), repl.

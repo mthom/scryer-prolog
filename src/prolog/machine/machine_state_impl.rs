@@ -6,6 +6,7 @@ use prolog::and_stack::*;
 use prolog::copier::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
+use prolog::machine::MachineCodeIndices;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{Integer, Signed, ToPrimitive, Zero};
@@ -2045,7 +2046,7 @@ impl MachineState {
         self.p += 1;
     }
 
-    fn handle_call_clause<'a>(&mut self, code_dirs: CodeDirs<'a>,
+    fn handle_call_clause<'a>(&mut self, indices: MachineCodeIndices<'a>,
                               call_policy: &mut Box<CallPolicy>,
                               cut_policy:  &mut Box<CutPolicy>,
                               ct: &ClauseType,
@@ -2064,20 +2065,20 @@ impl MachineState {
 
         match ct {
             &ClauseType::BuiltIn(ref ct) =>
-                try_or_fail!(self, call_policy.call_builtin(self, ct, code_dirs)),
+                try_or_fail!(self, call_policy.call_builtin(self, ct, indices)),
             &ClauseType::CallN =>
-                try_or_fail!(self, call_policy.call_n(self, arity, code_dirs)),
+                try_or_fail!(self, call_policy.call_n(self, arity, indices)),
             &ClauseType::Inlined(ref ct) =>
                 self.execute_inlined(ct),
             &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
-                                                            code_dirs)),
+                                                            indices)),
             &ClauseType::System(ref ct) =>
-                try_or_fail!(self, self.system_call(ct, code_dirs, call_policy, cut_policy))
+                try_or_fail!(self, self.system_call(ct, indices, call_policy, cut_policy))
         };
     }
 
-    pub(super) fn execute_ctrl_instr<'a>(&mut self, code_dirs: CodeDirs<'a>,
+    pub(super) fn execute_ctrl_instr<'a>(&mut self, indices: MachineCodeIndices<'a>,
                                          call_policy: &mut Box<CallPolicy>,
                                          cut_policy:  &mut Box<CutPolicy>,
                                          instr: &ControlInstruction)
@@ -2086,7 +2087,7 @@ impl MachineState {
             &ControlInstruction::Allocate(num_cells) =>
                 self.allocate(num_cells),
             &ControlInstruction::CallClause(ref ct, arity, _, lco, use_default_cp) =>
-                self.handle_call_clause(code_dirs, call_policy, cut_policy, ct, arity, lco,
+                self.handle_call_clause(indices, call_policy, cut_policy, ct, arity, lco,
                                         use_default_cp),
             &ControlInstruction::Deallocate => self.deallocate(),
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {

@@ -111,6 +111,7 @@ impl MachineError {
         };
         
         stub.extend(err.into_iter());
+        
         MachineError { stub, from: ErrorProvenance::Constructed }
     }
 

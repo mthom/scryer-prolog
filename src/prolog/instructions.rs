@@ -238,7 +238,8 @@ pub enum SystemClauseType {
     SetDoubleQuotes,
     SkipMaxList,
     Succeed,
-    UnwindStack
+    UnwindStack,
+    CompileAndRunQuery
 }
 
 impl SystemClauseType {
@@ -276,6 +277,7 @@ impl SystemClauseType {
             &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
+            &SystemClauseType::CompileAndRunQuery => clause_name!("$compile_and_run_query")
         }
     }
 
@@ -309,6 +311,7 @@ impl SystemClauseType {
             ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
+            ("$compile_and_run_query", 1) => Some(SystemClauseType::CompileAndRunQuery),
             _ => None
         }
     }

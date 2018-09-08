@@ -42,12 +42,9 @@ pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, Par
     let atom_tbl = wam.atom_tbl();
     let flags = wam.machine_flags();
 
-    let index = MachineCodeIndices {
-        code_dir: &mut wam.code_dir,
-        op_dir: &mut wam.op_dir,
-    };
+    let indices = machine_code_indices!(&mut wam.code_dir, &mut wam.op_dir, &mut HashMap::new());
 
-    let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, flags, index);
+    let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, flags, indices);
     worker.parse_code()
 }
 
@@ -139,7 +136,7 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
             let mut code = try_eval_session!(compile_relation(&tl, false, wam.machine_flags()));
             try_eval_session!(compile_appendix(&mut code, queue, false, wam.machine_flags()));
 
-            if !code.is_empty() {                
+            if !code.is_empty() {
                 wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
             } else {
                 EvalSession::from(SessionError::ImpermissibleEntry(String::from("no code generated.")))
@@ -289,7 +286,8 @@ fn compile_listing(wam: &mut Machine, src_str: &str, mut indices: MachineCodeInd
 }
 
 pub fn compile_user_module(wam: &mut Machine, src_str: &str) -> EvalSession {
-    let mut indices = machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir());
+    let mut indices = machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir(),
+                                            &mut HashMap::new());
 
     if let Some(ref builtins) = wam.modules.get(&clause_name!("builtins")) {
         indices.use_module(builtins);

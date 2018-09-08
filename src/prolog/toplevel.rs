@@ -496,8 +496,7 @@ impl RelationWorker {
         }
     }
 
-    fn pre_query_term(&mut self, idx: &mut MachineCodeIndices, term: Term)
-                      -> Result<QueryTerm, ParserError>
+    fn pre_query_term(&mut self, idx: &mut MachineCodeIndices, term: Term) -> Result<QueryTerm, ParserError>
     {
         match term {
             Term::Clause(r, name, mut subterms, fixity) =>

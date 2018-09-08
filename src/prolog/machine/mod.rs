@@ -23,6 +23,7 @@ static BUILTINS: &str = include_str!("../lib/builtins.pl");
 pub struct MachineCodeIndices<'a> {
     pub(super) code_dir: &'a mut CodeDir,
     pub(super) op_dir: &'a mut OpDir,
+    pub(super) modules: &'a mut ModuleDir
 }
 
 impl<'a> MachineCodeIndices<'a> {
@@ -44,6 +45,13 @@ impl<'a> MachineCodeIndices<'a> {
             },
             ct => ct
         }
+    }
+
+    #[inline]
+    pub(super) fn to_code_dirs(self) -> CodeDirs<'a> {
+        CodeDirs { code_dir: self.code_dir,
+                   op_dir: self.op_dir,
+                   modules: self.modules }
     }
 }
 
@@ -107,13 +115,15 @@ impl Machine {
             cut_policy: Box::new(DefaultCutPolicy {}),
             code: Code::new(),
             code_dir: CodeDir::new(),
-            term_dir: TermDir::new(),
             op_dir: default_op_dir(),
+            term_dir: TermDir::new(),            
             modules: HashMap::new(),
             cached_query: None
         };
 
-        let indices = machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir());
+        let indices = machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir(),
+                                            &mut HashMap::new());
+        
         compile_listing(&mut wam, BUILTINS, indices);
 
         compile_user_module(&mut wam, LISTS);
@@ -194,7 +204,8 @@ impl Machine {
 
         if let Some(mut module) = self.modules.remove(&name) {
             let result = {
-                let mut indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir);
+                let mut indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir,
+                                                        &mut self.modules);
                 indices.use_qualified_module(&mut module, &exports)
             };
 
@@ -211,7 +222,8 @@ impl Machine {
 
         if let Some(mut module) = self.modules.remove(&name) {
             let result = {
-                let mut indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir);
+                let mut indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir,
+                                                        &mut self.modules);
                 indices.use_module(&mut module)
             };
 
@@ -308,9 +320,11 @@ impl Machine {
             Line::Cut(ref cut_instr) =>
                 self.ms.execute_cut_instr(cut_instr, &mut self.cut_policy),
             Line::Control(ref control_instr) => {
-                let code_dirs = CodeDirs::new(&self.code_dir, &self.op_dir,
-                                              &self.modules);
-                self.ms.execute_ctrl_instr(code_dirs, &mut self.call_policy,
+                let indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir,
+                                                    &mut self.modules);
+//                let code_dirs = CodeDirs::new(&self.code_dir, &self.op_dir,
+//                                              &self.modules);
+                self.ms.execute_ctrl_instr(indices, &mut self.call_policy,
                                            &mut self.cut_policy, control_instr)
             },
             Line::Fact(ref fact) => {

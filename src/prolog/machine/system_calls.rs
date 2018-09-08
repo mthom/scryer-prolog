@@ -1,10 +1,12 @@
 use prolog_parser::ast::*;
 
 use prolog::instructions::*;
+use prolog::machine::MachineCodeIndices;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt};
+//use prolog::term_writer::*;
 
 use std::rc::Rc;
 
@@ -164,6 +166,7 @@ impl MachineState {
         Ok(())
     }
 
+    #[inline]
     fn install_new_block(&mut self, r: RegType) -> usize {
         self.block = self.b;
 
@@ -174,6 +177,7 @@ impl MachineState {
         self.block
     }
 
+    #[inline]
     fn set_p(&mut self) {
         if self.last_call {
             self.p = CodePtr::Local(self.cp.clone());
@@ -183,7 +187,7 @@ impl MachineState {
     }
 
     pub(super) fn system_call<'a>(&mut self, ct: &SystemClauseType,
-                                  code_dirs: CodeDirs<'a>,
+                                  indices: MachineCodeIndices<'a>,
                                   call_policy: &mut Box<CallPolicy>,
                                   cut_policy:  &mut Box<CutPolicy>,)
                                   -> CallResult
@@ -237,7 +241,7 @@ impl MachineState {
                 let prev_block = self.block;
 
                 if cut_policy.downcast_ref::<SCCCutPolicy>().is_err() {
-                    let (r_c_w_h, r_c_wo_h) = code_dirs.get_cleaner_sites();
+                    let (r_c_w_h, r_c_wo_h) = indices.to_code_dirs().get_cleaner_sites();
                     *cut_policy = Box::new(SCCCutPolicy::new(r_c_w_h, r_c_wo_h));
                 }
 
@@ -431,7 +435,14 @@ impl MachineState {
                 return Err(err);
             },
             &SystemClauseType::Succeed => {},
-            &SystemClauseType::UnwindStack => self.unwind_stack()
+            &SystemClauseType::UnwindStack => self.unwind_stack(),
+            &SystemClauseType::CompileAndRunQuery => {}
+/*              let addr = self[temp_v!(1)].clone();
+                
+                match term_write(&self, addr) {
+                    Err(e)   => machine_error
+                    Ok(term) => 
+            }*/
         };
 
         self.set_p();
