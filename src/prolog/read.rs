@@ -30,26 +30,48 @@ impl<'a> Reader<'a> {
         Reader { machine_st }
     }
 
-    pub fn read_stdin(&mut self, op_dir: &'a OpDir) -> Result<usize, ParserError> {
+    fn read_term(&self, buffer: &String, op_dir: &'a OpDir) -> Result<Term, ParserError>  {
+        let mut parser = Parser::new(buffer.as_bytes(), self.machine_st.atom_tbl.clone(),
+                                     self.machine_st.machine_flags());
+
+        parser.read_term(op_dir)
+    }
+    
+    fn read_term_loop(&mut self, buffer: &mut String, op_dir: &'a OpDir) -> Result<Term, ParserError> {
+        let stdin = stdin();
+        
+        loop {
+            match self.read_term(&buffer, op_dir) {
+                Err(ParserError::UnexpectedEOF) => {},
+                result => return result
+            };
+             
+            let mut append_buf = String::new();            
+            stdin.read_line(&mut append_buf).unwrap();
+            *buffer += append_buf.as_str();            
+        }
+    }
+/*    
+    pub fn repl_read(&mut self, op_dir: &'a OpDir) -> Result<Vec<Term>, ParserError> {
         let mut buffer = String::new();
 
-        let stdin = stdin();
-        let flags = self.machine_st.machine_flags();
+        stdin().read_line(&mut buffer);
 
-        loop {
-            let mut append_buf = String::new();
-            stdin.read_line(&mut append_buf).unwrap();
+        if buffer.as_str() == "[user]" {
+            let locked = stdin().lock();
+            let mut parser = Parser::new(locked, self.machine_st.atom_tbl.clone(),
+                                         self.machine_st.flags());
 
-            buffer += append_buf.as_str();
-
-            let mut parser = Parser::new(buffer.as_bytes(), self.machine_st.atom_tbl.clone(), flags);
-
-            match parser.read_term(op_dir) {
-                Err(ParserError::UnexpectedEOF) => continue,
-                Err(e) => return Err(e),
-                Ok(term) => return Ok(self.write_term_to_heap(term))
-            };
+            parser.read(op_dir)
+        } else {
+            Ok(vec![self.read_term_loop(buffer, op_dir)?])
         }
+    }
+*/
+    pub fn read_stdin(&mut self, op_dir: &'a OpDir) -> Result<usize, ParserError>
+    {
+        let term = self.read_term_loop(&mut String::new(), op_dir)?;
+        Ok(self.write_term_to_heap(term))
     }
 
     fn push_stub_addr(&mut self) {

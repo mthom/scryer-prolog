@@ -43,10 +43,6 @@ pub(crate) struct CodeDirs<'a> {
 }
 
 impl<'a> CodeDirs<'a> {
-    pub(super) fn new(code_dir: &'a CodeDir, op_dir: &'a OpDir, modules: &'a ModuleDir) -> Self {
-        CodeDirs { code_dir, op_dir, modules }
-    }
-
     fn get_internal(&self, name: ClauseName, arity: usize, in_mod: ClauseName) -> Option<ModuleCodeIndex> {
         self.modules.get(&in_mod)
             .and_then(|ref module| module.code_dir.get(&(name, arity)))
