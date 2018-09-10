@@ -62,7 +62,7 @@ pub struct Machine {
     code: Code,
     pub(super) code_dir: CodeDir,
     pub(super) op_dir: OpDir,
-    term_dir: TermDir,
+    // term_dir: TermDir,
     pub(super) modules: ModuleDir,
     cached_query: Option<Code>
 }
@@ -116,7 +116,7 @@ impl Machine {
             code: Code::new(),
             code_dir: CodeDir::new(),
             op_dir: default_op_dir(),
-            term_dir: TermDir::new(),            
+            // term_dir: TermDir::new(),            
             modules: HashMap::new(),
             cached_query: None
         };
@@ -124,11 +124,11 @@ impl Machine {
         let indices = machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir(),
                                             &mut HashMap::new());
         
-        compile_listing(&mut wam, BUILTINS, indices);
+        compile_listing(&mut wam, BUILTINS.as_bytes(), indices);
 
-        compile_user_module(&mut wam, LISTS);
-        compile_user_module(&mut wam, CONTROL);
-        compile_user_module(&mut wam, QUEUES);
+        compile_user_module(&mut wam, LISTS.as_bytes());
+        compile_user_module(&mut wam, CONTROL.as_bytes());
+        compile_user_module(&mut wam, QUEUES.as_bytes());
 
         wam.use_module_in_toplevel(clause_name!("builtins"));
 
@@ -252,8 +252,7 @@ impl Machine {
         self.code.extend(code.into_iter());
     }
 
-    pub fn add_user_code(&mut self, name: ClauseName, arity: usize, code: Code, pred: Predicate)
-                         -> EvalSession
+    pub fn add_user_code(&mut self, name: ClauseName, arity: usize, code: Code) -> EvalSession
     {
         match self.code_dir.get(&(name.clone(), arity)) {
             Some(&CodeIndex (ref idx)) if idx.borrow().1 != clause_name!("user") =>
@@ -268,7 +267,7 @@ impl Machine {
         let offset = self.code.len();
 
         self.code.extend(code.into_iter());
-        self.term_dir.insert((name.clone(), arity), pred);
+        //self.term_dir.insert((name.clone(), arity), pred);
 
         let idx = self.code_dir.entry((name, arity))
             .or_insert(CodeIndex::from((offset, clause_name!("user"))));

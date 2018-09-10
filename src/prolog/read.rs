@@ -3,14 +3,11 @@ use prolog_parser::parser::*;
 
 use prolog::instructions::*;
 use prolog::iterators::*;
-use prolog::machine::machine_state::*;
+use prolog::machine::*;
+use prolog::machine::machine_state::MachineState;
 
 use std::collections::VecDeque;
-use std::io::stdin;
-
-pub struct Reader<'a> {
-    pub machine_st: &'a mut MachineState,
-}
+use std::io::{Read, stdin};
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
@@ -25,133 +22,137 @@ impl<'a> TermRef<'a> {
     }
 }
 
-impl<'a> Reader<'a> {
-    pub fn new(machine_st: &'a mut MachineState) -> Self {
-        Reader { machine_st }
+pub enum Input {
+    Quit,
+    Clear,
+    Line(String),
+    Batch(String),
+    Term(Term)
+}
+
+fn read_lines(buffer: &mut String, end_delim: &str) -> String {
+    let mut result = String::new();
+    let stdin = stdin();
+
+    buffer.clear();
+    stdin.read_line(buffer).unwrap();
+
+    while &*buffer.trim() != end_delim {
+        result += buffer.as_str();
+        buffer.clear();
+        stdin.read_line(buffer).unwrap();
     }
 
-    fn read_term(&self, buffer: &String, op_dir: &'a OpDir) -> Result<Term, ParserError>  {
-        let mut parser = Parser::new(buffer.as_bytes(), self.machine_st.atom_tbl.clone(),
-                                     self.machine_st.machine_flags());
+    result
+}
 
-        parser.read_term(op_dir)
-    }
-    
-    fn read_term_loop(&mut self, buffer: &mut String, op_dir: &'a OpDir) -> Result<Term, ParserError> {
-        let stdin = stdin();
-        
-        loop {
-            match self.read_term(&buffer, op_dir) {
-                Err(ParserError::UnexpectedEOF) => {},
-                result => return result
-            };
-             
-            let mut append_buf = String::new();            
-            stdin.read_line(&mut append_buf).unwrap();
-            *buffer += append_buf.as_str();            
+pub fn read_toplevel(wam: &Machine) -> Result<Input, ParserError> {    
+    let mut buffer = String::new();
+
+    let stdin = stdin();
+    stdin.read_line(&mut buffer).unwrap();
+
+    match &*buffer.trim() {
+        ":{"    => Ok(Input::Line(read_lines(&mut buffer, "}:"))),
+        ":{{"   => Ok(Input::Batch(read_lines(&mut buffer, "}}:"))),
+        "quit"  => Ok(Input::Quit),
+        "clear" => Ok(Input::Clear),
+        _       => {
+            let mut parser = Parser::new(stdin.lock(), wam.atom_tbl(), wam.machine_flags());
+            
+            parser.add_to_top(buffer.as_str());
+            Ok(Input::Term(parser.read_term(&wam.op_dir)?))
         }
     }
-/*    
-    pub fn repl_read(&mut self, op_dir: &'a OpDir) -> Result<Vec<Term>, ParserError> {
-        let mut buffer = String::new();
+}
 
-        stdin().read_line(&mut buffer);
-
-        if buffer.as_str() == "[user]" {
-            let locked = stdin().lock();
-            let mut parser = Parser::new(locked, self.machine_st.atom_tbl.clone(),
-                                         self.machine_st.flags());
-
-            parser.read(op_dir)
-        } else {
-            Ok(vec![self.read_term_loop(buffer, op_dir)?])
-        }
-    }
-*/
-    pub fn read_stdin(&mut self, op_dir: &'a OpDir) -> Result<usize, ParserError>
+impl MachineState {
+    pub fn read<R: Read>(&mut self, inner: R, op_dir: &OpDir) -> Result<usize, ParserError>
     {
-        let term = self.read_term_loop(&mut String::new(), op_dir)?;
-        Ok(self.write_term_to_heap(term))
+        let mut parser = Parser::new(inner, self.atom_tbl.clone(), self.flags);
+        let term = parser.read_term(op_dir)?;
+
+        Ok(write_term_to_heap(term, self))
     }
+}
 
-    fn push_stub_addr(&mut self) {
-        let h = self.machine_st.heap.h;
-        self.machine_st.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
-    }
+fn push_stub_addr(machine_st: &mut MachineState) {
+    let h = machine_st.heap.h;
+    machine_st.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+}
 
-    fn modify_head_of_queue(&mut self, queue: &mut SubtermDeque, term: TermRef, h: usize) {
-        if let Some((arity, site_h)) = queue.pop_front() {
-            self.machine_st.heap[site_h] = HeapCellValue::Addr(term.as_addr(h));
+fn modify_head_of_queue(machine_st: &mut MachineState, queue: &mut SubtermDeque, term: TermRef, h: usize)
+{
+    if let Some((arity, site_h)) = queue.pop_front() {
+        machine_st.heap[site_h] = HeapCellValue::Addr(term.as_addr(h));
 
-            if arity > 1 {
-                queue.push_front((arity - 1, site_h + 1));
-            }
+        if arity > 1 {
+            queue.push_front((arity - 1, site_h + 1));
         }
     }
+}
 
-    fn write_term_to_heap(&mut self, term: Term) -> usize {
-        let h = self.machine_st.heap.h;
+fn write_term_to_heap(term: Term, machine_st: &mut MachineState) -> usize {
+    let h = machine_st.heap.h;
 
-        let mut queue = SubtermDeque::new();
-        let mut var_dict = HeapVarDict::new();
+    let mut queue = SubtermDeque::new();
+    let mut var_dict = HeapVarDict::new();
 
-        for term in breadth_first_iter(&term, true) {
-            let h = self.machine_st.heap.h;
+    for term in breadth_first_iter(&term, true) {
+        let h = machine_st.heap.h;
 
-            match &term {
-                &TermRef::Cons(lvl, ..) => {
-                    queue.push_back((2, h+1));
-                    self.machine_st.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
+        match &term {
+            &TermRef::Cons(lvl, ..) => {
+                queue.push_back((2, h+1));
+                machine_st.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
 
-                    self.push_stub_addr();
-                    self.push_stub_addr();
+                push_stub_addr(machine_st);
+                push_stub_addr(machine_st);
 
-                    if let Level::Root = lvl {
-                        continue;
-                    }
-                },
-                &TermRef::Clause(lvl, _, ref ct, subterms) => {
-                    queue.push_back((subterms.len(), h+1));
-                    let named = HeapCellValue::NamedStr(subterms.len(), ct.name(),
-                                                        ct.fixity());
-
-                    self.machine_st.heap.push(named);
-
-                    for _ in 0 .. subterms.len() {
-                        self.push_stub_addr();
-                    }
-
-                    if let Level::Root = lvl {
-                        continue;
-                    }
-                },
-                &TermRef::AnonVar(Level::Root)
-              | &TermRef::Var(Level::Root, ..)
-              | &TermRef::Constant(Level::Root, ..) =>
-                    self.machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h))),
-                &TermRef::AnonVar(_) =>
-                    continue,
-                &TermRef::Var(_, _, ref var) => {
-                    if let Some((arity, site_h)) = queue.pop_front() {
-                        if let Some(addr) = var_dict.get(var).cloned() {
-                            self.machine_st.heap[site_h] = HeapCellValue::Addr(addr);
-                        } else {
-                            var_dict.insert(var.clone(), Addr::HeapCell(site_h));
-                        }
-
-                        if arity > 1 {
-                            queue.push_front((arity - 1, site_h + 1));
-                        }
-                    }
-
+                if let Level::Root = lvl {
                     continue;
-                },
-                _ => {}
-            };
+                }
+            },
+            &TermRef::Clause(lvl, _, ref ct, subterms) => {
+                queue.push_back((subterms.len(), h+1));
+                let named = HeapCellValue::NamedStr(subterms.len(), ct.name(), ct.fixity());
 
-            self.modify_head_of_queue(&mut queue, term, h);
-        }
+                machine_st.heap.push(named);
 
-        h
+                for _ in 0 .. subterms.len() {
+                    push_stub_addr(machine_st);
+                }
+
+                if let Level::Root = lvl {
+                    continue;
+                }
+            },
+            &TermRef::AnonVar(Level::Root)
+                | &TermRef::Var(Level::Root, ..)
+                | &TermRef::Constant(Level::Root, ..) =>
+                machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h))),
+            &TermRef::AnonVar(_) =>
+                continue,
+            &TermRef::Var(_, _, ref var) => {
+                if let Some((arity, site_h)) = queue.pop_front() {
+                    if let Some(addr) = var_dict.get(var).cloned() {
+                        machine_st.heap[site_h] = HeapCellValue::Addr(addr);
+                    } else {
+                        var_dict.insert(var.clone(), Addr::HeapCell(site_h));
+                    }
+
+                    if arity > 1 {
+                        queue.push_front((arity - 1, site_h + 1));
+                    }
+                }
+
+                continue;
+            },
+            _ => {}
+        };
+
+        modify_head_of_queue(machine_st, &mut queue, term, h);
     }
+
+    h
 }

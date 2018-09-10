@@ -134,7 +134,7 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::CallClause(ref ct, arity, pvs, true, false) =>
                 write!(f, "execute {}/{}, {}", ct, arity, pvs),
             &ControlInstruction::CallClause(ref ct, arity, pvs, false, false) =>
-                write!(f, "call {}/{}, {}", ct, arity, pvs),            
+                write!(f, "call {}/{}, {}", ct, arity, pvs),
             &ControlInstruction::Deallocate =>
                 write!(f, "deallocate"),
             &ControlInstruction::JmpBy(arity, offset, pvs, false) =>
@@ -162,7 +162,7 @@ impl fmt::Display for IndexedChoiceInstruction {
 
 impl fmt::Display for ChoiceInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {            
+        match self {
             &ChoiceInstruction::TryMeElse(offset) =>
                 write!(f, "try_me_else {}", offset),
             &ChoiceInstruction::DefaultRetryMeElse(offset) =>
@@ -201,7 +201,7 @@ impl fmt::Display for SessionError {
             &SessionError::OpIsInfixAndPostFix =>
                 write!(f, "cannot define an op to be both postfix and infix."),
             &SessionError::NamelessEntry => write!(f, "the predicate head is not an atom or clause."),
-            &SessionError::ParserError(ref e) => write!(f, "{:?}", e)
+            &SessionError::ParserError(ref e) => write!(f, "syntax_error({})", e.as_str()),
         }
     }
 }
@@ -281,58 +281,16 @@ impl fmt::Display for Level {
     }
 }
 
-pub enum Input {
-    Quit,
-    Clear,
-    Line(String),
-    Batch(String)
-}
-
-fn read_lines(buffer: &mut String, end_delim: &str) -> String {
-    let mut result = String::new();
-    let stdin = stdin();
-
-    buffer.clear();
-    stdin.read_line(buffer).unwrap();
-
-    while &*buffer.trim() != end_delim {
-        result += buffer.as_str();
-        buffer.clear();
-        stdin.read_line(buffer).unwrap();
-    }
-
-    result
-}
-
-pub fn read() -> Input {
-    let _ = stdout().flush();
-    let mut buffer = String::new();
-
-    let stdin = stdin();
-    stdin.read_line(&mut buffer).unwrap();
-
-    match &*buffer.trim() {
-        ":{"    => Input::Line(read_lines(&mut buffer, "}:")),
-        ":{{"   => Input::Batch(read_lines(&mut buffer, "}}:")),
-        "quit"  => Input::Quit,
-        "clear" => Input::Clear,
-        _       => Input::Line(buffer)
-    }
-}
-
 pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
         EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
-            print!("true");
-
-            if !wam.or_stack_is_empty() {
-                print!(" ");
-            }
-
-            println!(".");
-
             if heap_locs.is_empty() {
+                println!("true.");
                 return;
+            }
+            
+            if !wam.or_stack_is_empty() {
+                println!("true .");
             }
 
             loop {

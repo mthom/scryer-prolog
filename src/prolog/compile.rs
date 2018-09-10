@@ -7,6 +7,7 @@ use prolog::machine::*;
 use prolog::toplevel::*;
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::io::Read;
 use std::mem;
 
 #[allow(dead_code)]
@@ -46,6 +47,11 @@ pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, Par
 
     let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, flags, indices);
     worker.parse_code()
+}
+
+pub fn compile_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
+    let indices = machine_code_indices!(&mut wam.code_dir, &mut wam.op_dir, &mut HashMap::new());
+    parse_term(term, indices)
 }
 
 // throw errors if declaration or query found.
@@ -137,7 +143,7 @@ fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSe
             try_eval_session!(compile_appendix(&mut code, queue, false, wam.machine_flags()));
 
             if !code.is_empty() {
-                wam.add_user_code(name, tl.arity(), code, tl.as_predicate().ok().unwrap())
+                wam.add_user_code(name, tl.arity(), code)
             } else {
                 EvalSession::from(SessionError::ImpermissibleEntry(String::from("no code generated.")))
             }
@@ -177,8 +183,8 @@ impl<'a> ListingCompiler<'a> {
             .unwrap_or(ClauseName::BuiltIn("user"))
     }
 
-    fn gen_code(&mut self, decls: Vec<(Predicate, VecDeque<TopLevel>)>, code_dir: &mut CodeDir)
-                -> Result<Code, SessionError>
+    fn generate_code(&mut self, decls: Vec<(Predicate, VecDeque<TopLevel>)>, code_dir: &mut CodeDir)
+                     -> Result<Code, SessionError>
     {
         let mut code = vec![];
 
@@ -246,9 +252,9 @@ fn use_qualified_module(module: &mut Option<Module>, submodule: &Module, exports
 }
 
 pub
-fn compile_listing(wam: &mut Machine, src_str: &str, mut indices: MachineCodeIndices) -> EvalSession
+fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: MachineCodeIndices) -> EvalSession
 {
-    let mut worker = TopLevelBatchWorker::new(src_str.as_bytes(), wam.atom_tbl(), wam.machine_flags());
+    let mut worker = TopLevelBatchWorker::new(src, wam.atom_tbl(), wam.machine_flags());
     let mut compiler = ListingCompiler::new(wam);
 
     while let Some(decl) = try_eval_session!(worker.consume(&mut indices)) {
@@ -279,13 +285,13 @@ fn compile_listing(wam: &mut Machine, src_str: &str, mut indices: MachineCodeInd
         }
     }
 
-    let code = try_eval_session!(compiler.gen_code(worker.results, &mut indices.code_dir));
+    let code = try_eval_session!(compiler.generate_code(worker.results, &mut indices.code_dir));
     compiler.add_code(code, indices);
 
     EvalSession::EntrySuccess
 }
 
-pub fn compile_user_module(wam: &mut Machine, src_str: &str) -> EvalSession {
+pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
     let mut indices = machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir(),
                                             &mut HashMap::new());
 
@@ -295,5 +301,5 @@ pub fn compile_user_module(wam: &mut Machine, src_str: &str) -> EvalSession {
         return EvalSession::from(SessionError::ModuleNotFound);
     }
 
-    compile_listing(wam, src_str, indices)
+    compile_listing(wam, src, indices)
 }

@@ -28,7 +28,7 @@ impl InlinedClauseType {
             &InlinedClauseType::IsAtom(..) => "atom",
             &InlinedClauseType::IsAtomic(..) => "atomic",
             &InlinedClauseType::IsCompound(..) => "compound",
-            &InlinedClauseType::IsInteger (..) => "integer",            
+            &InlinedClauseType::IsInteger (..) => "integer",
             &InlinedClauseType::IsRational(..) => "rational",
             &InlinedClauseType::IsString(..) => "string",
             &InlinedClauseType::IsFloat (..) => "float",
@@ -195,7 +195,7 @@ pub type ModuleCodeDir = HashMap<PredicateKey, ModuleCodeIndex>;
 
 pub type CodeDir = HashMap<PredicateKey, CodeIndex>;
 
-pub type TermDir = HashMap<PredicateKey, Predicate>;
+//pub type TermDir = HashMap<PredicateKey, Predicate>;
 
 pub type ModuleDir = HashMap<ClauseName, Module>;
 
@@ -781,6 +781,7 @@ pub enum IndexPtr {
 pub struct CodeIndex(pub Rc<RefCell<(IndexPtr, ClauseName)>>);
 
 impl CodeIndex {
+    #[inline]
     pub fn is_undefined(&self) -> bool {
         let index_ptr = &self.0.borrow().0;
 
@@ -1140,15 +1141,6 @@ impl TopLevel {
             &TopLevel::Rule(Rule { ref head, .. }) => head.1.len()
         }
     }
-
-    pub fn as_predicate(self) -> Result<Predicate, TopLevel> {
-        match self {
-            TopLevel::Fact(term) => Ok(Predicate(vec![PredicateClause::Fact(term)])),
-            TopLevel::Rule(rule) => Ok(Predicate(vec![PredicateClause::Rule(rule)])),
-            TopLevel::Predicate(pred) => Ok(pred),
-            _ => Err(self)
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -1239,7 +1231,7 @@ pub enum SessionError {
     OpIsInfixAndPostFix,
     ParserError(ParserError),
     QueryFailure,
-    QueryFailureWithException(String)
+    QueryFailureWithException(String)    
 }
 
 pub enum EvalSession {

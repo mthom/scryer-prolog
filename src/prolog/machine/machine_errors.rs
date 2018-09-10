@@ -61,48 +61,7 @@ impl MachineError {
     }
 
     pub(super) fn syntax_error(h: usize, err: ParserError) -> Self {
-        let err = match err {
-            ParserError::Arithmetic(_) =>
-                vec![heap_atom!("arithmetic_error")],
-            ParserError::BackQuotedString =>
-                vec![heap_atom!("back_quoted_string")],
-            ParserError::UnexpectedChar(c) =>
-                functor!("unexpected_char", 1, [heap_char!(c)]),
-            ParserError::UnexpectedEOF =>
-                vec![heap_atom!("unexpected_end_of_file")],
-            ParserError::ExpectedRel =>
-                vec![heap_atom!("expected_relation")],
-            ParserError::InadmissibleFact =>                
-                vec![heap_atom!("inadmissible_fact")],
-            ParserError::InadmissibleQueryTerm =>                
-                vec![heap_atom!("inadmissible_query_term")],
-            ParserError::IncompleteReduction =>
-                vec![heap_atom!("incomplete_reduction")],
-            ParserError::InconsistentEntry =>
-                vec![heap_atom!("inconsistent_entry")],
-            ParserError::InvalidModuleDecl =>
-                vec![heap_atom!("invalid_module_declaration")],
-            ParserError::InvalidModuleExport =>
-                vec![heap_atom!("invalid_module_export")],
-            ParserError::InvalidModuleResolution =>
-                vec![heap_atom!("invalid_module_resolution")],
-            ParserError::InvalidRuleHead =>
-                vec![heap_atom!("invalid_head_of_rule")],
-            ParserError::InvalidUseModuleDecl =>
-                vec![heap_atom!("invalid_use_module_declaration")],
-            ParserError::IO(_) =>
-                vec![heap_atom!("input_output_error")],
-            ParserError::MissingQuote =>
-                vec![heap_atom!("missing_quote")],
-            ParserError::NonPrologChar =>
-                vec![heap_atom!("non_prolog_character")],
-            ParserError::ParseBigInt =>
-                vec![heap_atom!("cannot_parse_big_int")],
-            ParserError::ParseFloat =>
-                vec![heap_atom!("cannot_parse_float")],
-            ParserError::Utf8Conversion(_) =>
-                vec![heap_atom!("utf8_conversion_error")]
-        };
+        let err = vec![heap_atom!(err.as_str())];        
 
         let mut stub = if err.len() == 1 {
             functor!("syntax_error", 1)            

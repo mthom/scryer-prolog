@@ -226,7 +226,9 @@ false.
 and so do conjunctive queries:
 ```
 prolog> f(X) :- g(X).
-prolog> g(x). g(y). g(z).
+prolog> :{
+g(x). g(y). g(z).
+}:
 prolog> h(call(f, X)).
 prolog> ?- h(X), X.
 true .

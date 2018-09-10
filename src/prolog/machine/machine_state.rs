@@ -9,12 +9,12 @@ use prolog::machine::MachineCodeIndices;
 use prolog::machine::machine_errors::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
-use prolog::read::*;
 
 use downcast::Any;
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::io::stdin;
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
@@ -297,7 +297,7 @@ pub struct MachineState {
     pub(super) ball: Ball,
     pub(super) interms: Vec<Number>, // intermediate numbers.
     pub(super) last_call: bool,
-    pub(super) flags: MachineFlags
+    pub(crate) flags: MachineFlags
 }
 
 fn call_at_index(machine_st: &mut MachineState, module_name: ClauseName, arity: usize, idx: usize)
@@ -570,25 +570,23 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.fail = !machine_st.is_cyclic_term(addr);
                 return_from_clause!(machine_st.last_call, machine_st)
             },
-            &BuiltInClauseType::Read => {
-                let mut reader = Reader::new(machine_st);
-
-                match reader.read_stdin(&indices.op_dir) {
+            &BuiltInClauseType::Read => {                
+                match machine_st.read(stdin(), &indices.op_dir) {
                     Ok(offset) => {
-                        let addr = reader.machine_st[temp_v!(1)].clone();
-                        reader.machine_st.unify(addr, Addr::HeapCell(offset));
+                        let addr = machine_st[temp_v!(1)].clone();
+                        machine_st.unify(addr, Addr::HeapCell(offset));
                     },
                     Err(e) => {
-                        let h    = reader.machine_st.heap.h;
+                        let h    = machine_st.heap.h;
                         let stub = MachineError::functor_stub(clause_name!("read"), 1);
                         let err  = MachineError::syntax_error(h, e);
-                        let err  = reader.machine_st.error_form(err, stub);
+                        let err  = machine_st.error_form(err, stub);
 
                         return Err(err);
                     }
                 };
 
-                return_from_clause!(reader.machine_st.last_call, reader.machine_st)
+                return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Writeq => {
                 let output = machine_st.print_term(machine_st[temp_v!(1)].clone(),

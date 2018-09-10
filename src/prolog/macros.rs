@@ -22,12 +22,6 @@ macro_rules! heap_integer {
     )
 }
 
-macro_rules! heap_char {
-    ($c:expr) => (
-        HeapCellValue::Addr(Addr::Con(Constant::Char($c)))
-    )
-}
-
 macro_rules! heap_atom {
     ($name:expr) => (
         HeapCellValue::Addr(Addr::Con(atom!($name)))

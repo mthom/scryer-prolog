@@ -645,6 +645,16 @@ impl<'a, R: Read> TopLevelWorker<'a, R> {
     }
 }
 
+pub fn parse_term(term: Term, mut indices: MachineCodeIndices) -> Result<TopLevelPacket, ParserError>
+{
+    let mut rel_worker = RelationWorker::new();
+
+    let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
+    let results = rel_worker.parse_queue(&mut indices)?;
+
+    Ok(deque_to_packet(tl, results))
+}
+
 pub struct TopLevelBatchWorker<R: Read> {
     parser: Parser<R>,
     rel_worker: RelationWorker,
@@ -666,7 +676,7 @@ impl<R: Read> TopLevelBatchWorker<R> {
     {
         let mut preds = vec![];
 
-        while !self.parser.eof() {
+        while !self.parser.eof()? {
             self.parser.reset(); // empty the parser stack of token descriptions.
 
             let mut new_rel_worker = RelationWorker::new();

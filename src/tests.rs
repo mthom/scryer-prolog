@@ -129,7 +129,7 @@ pub fn submit(wam: &mut Machine, buffer: &str) -> bool
                     true,
                 _ => false
             },
-        Err(e) => panic!("parse error: {:?}", e)
+        Err(e) => panic!("syntax_error({})", e.as_str())
     }
 }
 
@@ -146,7 +146,7 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>
                 EvalSession::EntrySuccess => true,
                 _ => false
             },
-        Err(e) => panic!("parse error: {:?}", e)
+        Err(e) => panic!("syntax_error({})", e.as_str())
     }
 }
 
@@ -166,7 +166,7 @@ pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
                 EvalSession::EntrySuccess => true,
                 _ => false
             },
-        Err(e) => panic!("parse error: {:?}", e)
+        Err(e) => panic!("syntax_error({})", e.as_str())
     }
 }
 
@@ -1351,7 +1351,7 @@ fn test_queries_on_modules()
 local_member(X, Xs) :- member(X, Xs).
 
 reverse(Xs, Ys) :- lists:reverse(Xs, Ys).
-");
+".as_bytes());
 
     assert_prolog_success!(&mut wam, "?- my_lists:local_member(1, [1,2,3]).");
     assert_prolog_success!(&mut wam, "?- my_lists:reverse([a,b,c], [c,b,a]).");
@@ -1359,13 +1359,11 @@ reverse(Xs, Ys) :- lists:reverse(Xs, Ys).
     compile_user_module(&mut wam, "
 :- use_module(library(my_lists), [local_member/2]).
 :- module(my_lists_2, [local_member/2]).
-");
+".as_bytes());
 
     assert_prolog_success!(&mut wam, "?- my_lists_2:local_member(1, [1,2,3]).");
     assert_prolog_success!(&mut wam, "?- catch(local_member(X, Xs), error(E, _), true).",
                            [["X = _1", "E = existence_error(procedure, local_member/2)", "Xs = _2"]]);
-
-
 }
 
 #[test]
