@@ -230,6 +230,37 @@ impl<'a> ListingCompiler<'a> {
     fn add_non_counted_bt_flag(&mut self, name: ClauseName, arity: usize) {
         self.non_counted_bt_preds.insert((name, arity));
     }
+
+    fn process_decl(&mut self, decl: Declaration, indices: &mut MachineCodeIndices)
+                    -> Result<(), SessionError>
+    {
+        match decl {
+            Declaration::NonCountedBacktracking(name, arity) =>
+                Ok(self.add_non_counted_bt_flag(name, arity)),
+            Declaration::Op(op_decl) =>
+                op_decl.submit(self.get_module_name(), &mut indices.op_dir),
+            Declaration::UseModule(name) =>
+                if let Some(ref submodule) = self.wam.get_module(name.clone()) {
+                    Ok(use_module(&mut self.module, submodule, indices))
+                } else {
+                    Err(SessionError::ModuleNotFound)
+                },
+            Declaration::UseQualifiedModule(name, exports) =>
+                if let Some(ref submodule) = self.wam.get_module(name.clone()) {
+                    Ok(use_qualified_module(&mut self.module, submodule, &exports, indices))
+                } else {
+                    Err(SessionError::ModuleNotFound)
+                },
+            Declaration::Module(module_decl) =>
+                if self.module.is_none() {
+                    // worker.source_mod = module_decl.name.clone();
+                    self.module = Some(Module::new(module_decl));
+                    Ok(())
+                } else {
+                    Err(SessionError::from(ParserError::InvalidModuleDecl))
+                }
+        }
+    }
 }
 
 fn use_module(module: &mut Option<Module>, submodule: &Module, indices: &mut MachineCodeIndices)
@@ -258,31 +289,7 @@ fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: MachineCodeI
     let mut compiler = ListingCompiler::new(wam);
 
     while let Some(decl) = try_eval_session!(worker.consume(&mut indices)) {
-        match decl {
-            Declaration::NonCountedBacktracking(name, arity) =>
-                compiler.add_non_counted_bt_flag(name, arity),
-            Declaration::Op(op_decl) =>
-                try_eval_session!(op_decl.submit(compiler.get_module_name(), &mut indices.op_dir)),
-            Declaration::UseModule(name) =>
-                if let Some(ref submodule) = compiler.wam.get_module(name.clone()) {
-                    use_module(&mut compiler.module, submodule, &mut indices);
-                } else {
-                    return EvalSession::from(SessionError::ModuleNotFound);
-                },
-            Declaration::UseQualifiedModule(name, exports) =>
-                if let Some(ref submodule) = compiler.wam.get_module(name.clone()) {
-                    use_qualified_module(&mut compiler.module, submodule, &exports, &mut indices);
-                } else {
-                    return EvalSession::from(SessionError::ModuleNotFound);
-                },
-            Declaration::Module(module_decl) =>
-                if compiler.module.is_none() {
-                    worker.source_mod = module_decl.name.clone();
-                    compiler.module = Some(Module::new(module_decl));
-                } else {
-                    return EvalSession::from(ParserError::InvalidModuleDecl);
-                }
-        }
+        try_eval_session!(compiler.process_decl(decl, &mut indices));
     }
 
     let code = try_eval_session!(compiler.generate_code(worker.results, &mut indices.code_dir));

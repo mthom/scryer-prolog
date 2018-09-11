@@ -658,7 +658,6 @@ pub fn parse_term(term: Term, mut indices: MachineCodeIndices) -> Result<TopLeve
 pub struct TopLevelBatchWorker<R: Read> {
     parser: Parser<R>,
     rel_worker: RelationWorker,
-    pub source_mod: ClauseName,
     pub results: Vec<(Predicate, VecDeque<TopLevel>)>
 }
 
@@ -667,7 +666,6 @@ impl<R: Read> TopLevelBatchWorker<R> {
     {
         TopLevelBatchWorker { parser: Parser::new(inner, atom_tbl, flags),
                               rel_worker: RelationWorker::new(),
-                              source_mod: clause_name!("user"),
                               results: vec![] }
     }
 
