@@ -1,6 +1,6 @@
 [package]
 name = "rusty-wam"
-version = "0.7.9"
+version = "0.7.10"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
 repository = "https://github.com/mthom/rusty-wam"
 description = "The Warren Abstract Machine in Rust."
