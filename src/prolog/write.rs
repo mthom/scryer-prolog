@@ -193,15 +193,19 @@ impl fmt::Display for IndexingInstruction {
 impl fmt::Display for SessionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &SessionError::CannotOverwriteBuiltIn(ref msg) =>
+                write!(f, "cannot overwrite {}", msg),
+            &SessionError::CannotOverwriteImport(ref msg) =>
+                write!(f, "cannot overwrite import {}", msg),
             &SessionError::ModuleNotFound => write!(f, "module not found."),
             &SessionError::ModuleDoesNotContainExport => write!(f, "module does not contain claimed export."),
             &SessionError::QueryFailure => write!(f, "false."),
             &SessionError::QueryFailureWithException(ref e) => write!(f, "{}", error_string(e)),
-            &SessionError::ImpermissibleEntry(ref msg) => write!(f, "cannot overwrite {}.", msg),
             &SessionError::OpIsInfixAndPostFix =>
                 write!(f, "cannot define an op to be both postfix and infix."),
             &SessionError::NamelessEntry => write!(f, "the predicate head is not an atom or clause."),
             &SessionError::ParserError(ref e) => write!(f, "syntax_error({})", e.as_str()),
+            &SessionError::UserPrompt => write!(f, "enter predicate at [user] prompt")
         }
     }
 }

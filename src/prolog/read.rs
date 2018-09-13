@@ -25,25 +25,8 @@ impl<'a> TermRef<'a> {
 pub enum Input {
     Quit,
     Clear,
-    Line(String),
-    Batch(String),
+    Batch,
     Term(Term)
-}
-
-fn read_lines(buffer: &mut String, end_delim: &str) -> String {
-    let mut result = String::new();
-    let stdin = stdin();
-
-    buffer.clear();
-    stdin.read_line(buffer).unwrap();
-
-    while &*buffer.trim() != end_delim {
-        result += buffer.as_str();
-        buffer.clear();
-        stdin.read_line(buffer).unwrap();
-    }
-
-    result
 }
 
 pub fn read_toplevel(wam: &Machine) -> Result<Input, ParserError> {    
@@ -53,16 +36,15 @@ pub fn read_toplevel(wam: &Machine) -> Result<Input, ParserError> {
     stdin.read_line(&mut buffer).unwrap();
 
     match &*buffer.trim() {
-        ":{"    => Ok(Input::Line(read_lines(&mut buffer, "}:"))),
-        ":{{"   => Ok(Input::Batch(read_lines(&mut buffer, "}}:"))),
-        "quit"  => Ok(Input::Quit),
-        "clear" => Ok(Input::Clear),
-        _       => {
+        "quit"   => Ok(Input::Quit),
+        "clear"  => Ok(Input::Clear),
+        "[user]" => Ok(Input::Batch),
+        _        => {
             let mut parser = Parser::new(stdin.lock(), wam.atom_tbl(), wam.machine_flags());
             
             parser.add_to_top(buffer.as_str());
             Ok(Input::Term(parser.read_term(&wam.op_dir)?))
-        }
+        }        
     }
 }
 

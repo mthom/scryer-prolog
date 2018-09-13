@@ -12,7 +12,6 @@ use prolog::or_stack::*;
 
 use downcast::Any;
 
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::io::stdin;
 use std::mem::swap;
@@ -65,67 +64,6 @@ impl<'a> CodeDirs<'a> {
         }
 
         return (0, 0);
-    }
-}
-
-pub trait CodeDirsAdapter<'a> {
-    fn get_code_index(&self, PredicateKey, ClauseName) -> Option<CodeIndex>;
-    fn get_op(&self, OpDirKey) -> Option<(Specifier, usize, ClauseName)>;
-    fn op_dir(&self) -> &OpDir;
-}
-
-fn get_code_index(code_dir: &CodeDir, modules: &ModuleDir, key: PredicateKey, module: ClauseName)
-                  -> Option<CodeIndex>
-{
-    match module.as_str() {
-        "user" | "builtin" => code_dir.get(&key).cloned(),
-        _ => modules.get(&module).and_then(|ref module| {
-            module.code_dir.get(&key).cloned().map(CodeIndex::from)
-        })
-    }
-}
-
-impl<'a> CodeDirsAdapter<'a> for MachineCodeIndices<'a> {
-    fn get_code_index(&self, key: PredicateKey, module: ClauseName) -> Option<CodeIndex> {
-        get_code_index(&self.code_dir, &self.modules, key, module)
-    }
-
-    fn get_op(&self, key: OpDirKey) -> Option<(Specifier, usize, ClauseName)> {
-        self.op_dir.get(&key).cloned()
-    }
-
-    fn op_dir(&self) -> &OpDir {
-        &self.op_dir
-    }
-}
-
-impl<'a> CodeDirsAdapter<'a> for CodeDirs<'a> {
-    fn get_code_index(&self, key: PredicateKey, module: ClauseName) -> Option<CodeIndex> {
-        get_code_index(&self.code_dir, &self.modules, key, module)
-    }
-
-    fn get_op(&self, key: OpDirKey) -> Option<(Specifier, usize, ClauseName)> {
-        self.op_dir.get(&key).cloned()
-    }
-
-    fn op_dir(&self) -> &OpDir {
-        &self.op_dir
-    }
-}
-
-impl<'a> CodeDirsAdapter<'a> for &'a Module {
-    fn get_code_index(&self, key: PredicateKey, _: ClauseName) -> Option<CodeIndex> {
-        self.code_dir.get(&key)
-            .cloned()
-            .map(|ModuleCodeIndex(ptr, module)| CodeIndex(Rc::new(RefCell::new((ptr, module)))))
-    }
-
-    fn get_op(&self, key: OpDirKey) -> Option<(Specifier, usize, ClauseName)> {
-        self.op_dir.get(&key).cloned()
-    }
-
-    fn op_dir(&self) -> &OpDir {
-        &self.op_dir
     }
 }
 

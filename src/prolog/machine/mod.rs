@@ -27,8 +27,18 @@ pub struct MachineCodeIndices<'a> {
 }
 
 impl<'a> MachineCodeIndices<'a> {
+    #[inline]
+    pub(super) fn copy_and_swap(&mut self, other: &mut MachineCodeIndices<'a>) {
+        *self.code_dir = other.code_dir.clone();
+        *self.op_dir = other.op_dir.clone();
+
+        swap(&mut self.code_dir, &mut other.code_dir);
+        swap(&mut self.op_dir, &mut other.op_dir);
+        swap(&mut self.modules, &mut other.modules);
+    }
+
     pub(super)
-    fn lookup(&mut self, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> ClauseType
+    fn get_clause_type(&mut self, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> ClauseType
     {
         match ClauseType::from(name, arity, fixity) {
             ClauseType::Named(name, _) => {
@@ -67,6 +77,17 @@ pub struct Machine {
     cached_query: Option<Code>
 }
 
+fn get_code_index(code_dir: &CodeDir, modules: &ModuleDir, key: PredicateKey, module: ClauseName)
+                  -> Option<CodeIndex>
+{
+    match module.as_str() {
+        "user" | "builtin" => code_dir.get(&key).cloned(),
+        _ => modules.get(&module).and_then(|ref module| {
+            module.code_dir.get(&key).cloned().map(CodeIndex::from)
+        })
+    }
+}
+
 impl Index<LocalCodePtr> for Machine {
     type Output = Line;
 
@@ -86,6 +107,14 @@ impl Index<LocalCodePtr> for Machine {
 impl<'a> SubModuleUser for MachineCodeIndices<'a> {
     fn op_dir(&mut self) -> &mut OpDir {
         self.op_dir
+    }
+
+    fn get_code_index(&self, key: PredicateKey, module: ClauseName) -> Option<CodeIndex> {
+        get_code_index(&self.code_dir, &self.modules, key, module)
+    }
+
+    fn remove_code_index(&mut self, key: PredicateKey) {
+        self.code_dir.remove(&key);
     }
 
     fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
@@ -116,21 +145,18 @@ impl Machine {
             code: Code::new(),
             code_dir: CodeDir::new(),
             op_dir: default_op_dir(),
-            // term_dir: TermDir::new(),            
+            // term_dir: TermDir::new(),
             modules: HashMap::new(),
             cached_query: None
         };
 
-        let indices = machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir(),
-                                            &mut HashMap::new());
-        
-        compile_listing(&mut wam, BUILTINS.as_bytes(), indices);
+        compile_listing(&mut wam, BUILTINS.as_bytes(),
+                        default_machine_code_indices!(),
+                        default_machine_code_indices!());
 
         compile_user_module(&mut wam, LISTS.as_bytes());
         compile_user_module(&mut wam, CONTROL.as_bytes());
         compile_user_module(&mut wam, QUEUES.as_bytes());
-
-        wam.use_module_in_toplevel(clause_name!("builtins"));
 
         wam
     }
@@ -138,53 +164,6 @@ impl Machine {
     #[inline]
     pub fn machine_flags(&self) -> MachineFlags {
         self.ms.flags
-    }
-    
-    fn remove_module(&mut self, module_name: ClauseName) {
-        let iter = if let Some(submodule) = self.modules.get(&module_name) {
-            submodule.module_decl.exports.iter().cloned()
-        } else {
-            return;
-        };
-
-        for (name, arity) in iter {
-            let name = name.defrock_brackets();
-
-            match self.code_dir.get(&(name.clone(), arity)).cloned() {
-                Some(CodeIndex (ref code_idx)) => {
-                    if &code_idx.borrow().1 != &module_name {
-                        continue;
-                    }
-
-                    self.code_dir.remove(&(name.clone(), arity));
-
-                    // remove or respecify ops.
-                    if arity == 2 {
-                        if let Some((_, _, mod_name)) = self.op_dir.get(&(name.clone(), Fixity::In)).cloned()
-                        {
-                            if mod_name == module_name {
-                                self.op_dir.remove(&(name.clone(), Fixity::In));
-                            }
-                        }
-                    } else if arity == 1 {
-                        if let Some((_, _, mod_name)) = self.op_dir.get(&(name.clone(), Fixity::Pre)).cloned()
-                        {
-                            if mod_name == module_name {
-                                self.op_dir.remove(&(name.clone(), Fixity::Pre));
-                            }
-                        }
-
-                        if let Some((_, _, mod_name)) = self.op_dir.get(&(name.clone(), Fixity::Post)).cloned()
-                        {
-                            if mod_name == module_name {
-                                self.op_dir.remove(&(name.clone(), Fixity::Post));
-                            }
-                        }
-                    }
-                },
-                _ => {}
-            };
-        }
     }
 
     #[inline]
@@ -196,84 +175,68 @@ impl Machine {
     pub fn atom_tbl(&self) -> TabledData<Atom> {
         self.ms.atom_tbl.clone()
     }
-    
-    pub fn use_qualified_module_in_toplevel(&mut self, name: ClauseName, exports: Vec<PredicateKey>)
-                                            -> EvalSession
-    {
-        self.remove_module(name.clone());
-
-        if let Some(mut module) = self.modules.remove(&name) {
-            let result = {
-                let mut indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir,
-                                                        &mut self.modules);
-                indices.use_qualified_module(&mut module, &exports)
-            };
-
-            self.modules.insert(name, module);
-            result
-        } else {
-            EvalSession::from(SessionError::ModuleNotFound)
-        }
-    }
-
-    pub fn use_module_in_toplevel(&mut self, name: ClauseName) -> EvalSession
-    {
-        self.remove_module(name.clone());
-
-        if let Some(mut module) = self.modules.remove(&name) {
-            let result = {
-                let mut indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir,
-                                                        &mut self.modules);
-                indices.use_module(&mut module)
-            };
-
-            self.modules.insert(name, module);
-            result
-        } else {
-            EvalSession::from(SessionError::ModuleNotFound)
-        }
-    }
 
     pub fn get_module(&self, name: ClauseName) -> Option<&Module> {
         self.modules.get(&name)
     }
 
-    pub fn add_batched_code(&mut self, mut code: Code, code_dir: CodeDir) {
-        self.code.append(&mut code);
-        self.code_dir.extend(code_dir.into_iter());
+    pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir) -> Result<(), SessionError>
+    {
+        for (ref key, ref idx) in code_dir.iter() {
+            match ClauseType::from(key.0.clone(), key.1, None) {
+                ClauseType::Named(..) | ClauseType::Op(..) => {},
+                _ => {
+                    // ensure we don't try to overwrite the name/arity of a builtin.
+                    let err_str = format!("{}/{}", key.0, key.1);
+                    return Err(SessionError::CannotOverwriteBuiltIn(err_str));
+                }
+            };
+
+            if idx.module_name().as_str() == "builtins" {
+                continue;
+            }
+
+            if let Some(ref existing_idx) = self.code_dir.get(&key) {
+                // ensure we don't try to overwrite an existing predicate from a different module.
+                if !existing_idx.is_undefined() {
+                    if existing_idx.module_name() != idx.module_name() {
+                        let err_str = format!("{}/{} from module {}", key.0, key.1,
+                                              existing_idx.module_name().as_str());
+                        return Err(SessionError::CannotOverwriteImport(err_str));
+                    }
+                }
+            }
+        }
+
+        self.code.extend(code.into_iter());
+        Ok(self.code_dir.extend(code_dir.into_iter()))
     }
 
+    #[inline]
     pub fn add_batched_ops(&mut self, op_dir: OpDir) {
         self.op_dir.extend(op_dir.into_iter());
     }
 
+    #[inline]
+    pub fn remove_module(&mut self, module: &Module) {
+        let mut indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir, &mut self.modules);
+        indices.remove_module(clause_name!("user"), module);
+    }
+
+    #[inline]
+    pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
+        self.modules.remove(&name)
+    }
+
+    #[inline]
+    pub fn insert_module(&mut self, module: Module) {
+        self.modules.insert(module.module_decl.name.clone(), module);
+    }
+    
+    #[inline]
     pub fn add_module(&mut self, module: Module, code: Code) {
         self.modules.insert(module.module_decl.name.clone(), module);
         self.code.extend(code.into_iter());
-    }
-
-    pub fn add_user_code(&mut self, name: ClauseName, arity: usize, code: Code) -> EvalSession
-    {
-        match self.code_dir.get(&(name.clone(), arity)) {
-            Some(&CodeIndex (ref idx)) if idx.borrow().1 != clause_name!("user") =>
-                if !(&CodeIndex(idx.clone())).is_undefined() {
-                    return EvalSession::from(SessionError::ImpermissibleEntry(format!("{}/{}",
-                                                                                      name,
-                                                                                      arity)))
-                },
-            _ => {}
-        };
-
-        let offset = self.code.len();
-
-        self.code.extend(code.into_iter());
-        //self.term_dir.insert((name.clone(), arity), pred);
-
-        let idx = self.code_dir.entry((name, arity))
-            .or_insert(CodeIndex::from((offset, clause_name!("user"))));
-
-        set_code_index!(idx, IndexPtr::Index(offset), clause_name!("user"));
-        EvalSession::EntrySuccess
     }
 
     pub fn code_size(&self) -> usize {
@@ -422,7 +385,7 @@ impl Machine {
         while self.ms.p < end_ptr {
             if let CodePtr::Local(LocalCodePtr::TopLevel(mut cn, p)) = self.ms.p {
                 match &self[LocalCodePtr::TopLevel(cn, p)] {
-                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {                        
+                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
                         self.record_var_places(cn, alloc_locs, heap_locs);
                         cn += 1;
                     },
@@ -506,7 +469,7 @@ impl Machine {
     {
         let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = var_dir.iter().collect();
         sorted_vars.sort_by_key(|ref v| v.0);
-        
+
         for (var, addr) in sorted_vars {
             let fmt = TermFormatter {};
             output = self.ms.print_var_eq(var.clone(), addr.clone(), var_dir, fmt, output);

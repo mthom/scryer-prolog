@@ -216,6 +216,13 @@ macro_rules! machine_code_indices {
     )
 }
 
+macro_rules! default_machine_code_indices {
+    () => (
+        machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir(),
+                              &mut HashMap::new());
+    )
+}
+
 macro_rules! put_constant {
     ($lvl:expr, $cons:expr, $r:expr) => (
         QueryInstruction::PutConstant($lvl, $cons, $r)

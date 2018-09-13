@@ -38,22 +38,6 @@ fn print_code(code: &Code) {
     }
 }
 
-pub fn parse_code(wam: &mut Machine, buffer: &str) -> Result<TopLevelPacket, ParserError>
-{
-    let atom_tbl = wam.atom_tbl();
-    let flags = wam.machine_flags();
-
-    let indices = machine_code_indices!(&mut wam.code_dir, &mut wam.op_dir, &mut HashMap::new());
-
-    let mut worker = TopLevelWorker::new(buffer.as_bytes(), atom_tbl, flags, indices);
-    worker.parse_code()
-}
-
-pub fn compile_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
-    let indices = machine_code_indices!(&mut wam.code_dir, &mut wam.op_dir, &mut HashMap::new());
-    parse_term(term, indices)
-}
-
 // throw errors if declaration or query found.
 fn compile_relation(tl: &TopLevel, non_counted_bt: bool, flags: MachineFlags) -> Result<Code, ParserError>
 {
@@ -112,78 +96,89 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
     Ok((code, cg.take_vars()))
 }
 
-fn compile_decl(wam: &mut Machine, tl: TopLevel, queue: Vec<TopLevel>) -> EvalSession
-{
-    match tl {
-        TopLevel::Declaration(Declaration::Op(op_decl)) => {
-            try_eval_session!(op_decl.submit(clause_name!("user"), &mut wam.op_dir));
-            EvalSession::EntrySuccess
-        },
-        TopLevel::Declaration(Declaration::UseModule(name)) =>
-            wam.use_module_in_toplevel(name),
-        TopLevel::Declaration(Declaration::UseQualifiedModule(name, exports)) =>
-            wam.use_qualified_module_in_toplevel(name, exports),
-        TopLevel::Declaration(_) =>
-            EvalSession::from(ParserError::InvalidModuleDecl),
-        _ => {
-            let name = try_eval_session!(if let Some(name) = tl.name() {
-                match ClauseType::from(name.clone(), tl.arity(), None) {
-                    ClauseType::Named(..) | ClauseType::Op(..) =>
-                        Ok(name),
-                    _ => {
-                        let err_str = format!("{}/{}", name.as_str(), tl.arity());
-                        Err(SessionError::ImpermissibleEntry(err_str))
-                    }
-                }
-            } else {
-                Err(SessionError::NamelessEntry)
-            });
-
-            let mut code = try_eval_session!(compile_relation(&tl, false, wam.machine_flags()));
-            try_eval_session!(compile_appendix(&mut code, queue, false, wam.machine_flags()));
-
-            if !code.is_empty() {
-                wam.add_user_code(name, tl.arity(), code)
-            } else {
-                EvalSession::from(SessionError::ImpermissibleEntry(String::from("no code generated.")))
-            }
-        }
-    }
+fn package_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
+    let indices = machine_code_indices!(&mut wam.code_dir, &mut wam.op_dir, &mut wam.modules);
+    parse_term(term, indices)
 }
 
-pub fn compile_packet(wam: &mut Machine, tl: TopLevelPacket) -> EvalSession
+pub fn compile_term(wam: &mut Machine, term: Term) -> EvalSession
 {
-    match tl {
+    let packet = try_eval_session!(package_term(wam, term));
+
+    match packet {
         TopLevelPacket::Query(terms, queue) =>
             match compile_query(terms, queue, wam.machine_flags()) {
                 Ok((mut code, vars)) => wam.submit_query(code, vars),
                 Err(e) => EvalSession::from(e)
             },
-        TopLevelPacket::Decl(tl, queue) =>
-            compile_decl(wam, tl, queue)
+        TopLevelPacket::Decl(TopLevel::Declaration(decl), _) => {
+            let mut compiler = ListingCompiler::new();
+            let mut indices = default_machine_code_indices!();
+
+            try_eval_session!(compiler.process_decl(decl, wam, &mut indices));
+            try_eval_session!(compiler.add_code(wam, vec![], indices));
+
+            EvalSession::EntrySuccess
+        },
+        _ => EvalSession::from(SessionError::UserPrompt)
     }
 }
 
-pub struct ListingCompiler<'a> {
-    wam: &'a mut Machine,
+pub struct ListingCompiler {
     non_counted_bt_preds: HashSet<PredicateKey>,
-    module: Option<Module>
+    module: Option<Module>,
 }
 
-impl<'a> ListingCompiler<'a> {
-    pub fn new(wam: &'a mut Machine) -> Self {
-        ListingCompiler { wam,
-                          module: None,
-                          non_counted_bt_preds: HashSet::new() }
+impl ListingCompiler {
+    pub fn new() -> Self {
+        ListingCompiler { module: None, non_counted_bt_preds: HashSet::new() }
+    }
+    
+    fn use_module(&mut self, submodule: Module, wam: &mut Machine,
+                  indices: &mut MachineCodeIndices) -> Result<(), SessionError>
+    {
+        let mod_name = self.get_module_name();
+                
+        indices.use_module(&submodule)?;
+
+        if let &mut Some(ref mut module) = &mut self.module {
+            module.remove_module(mod_name, &submodule);
+            module.use_module(&submodule)?;
+        } else {
+            wam.remove_module(&submodule);
+        }
+
+        wam.insert_module(submodule);
+        Ok(())
     }
 
+    fn use_qualified_module(&mut self, submodule: Module, wam: &mut Machine,
+                            exports: &Vec<PredicateKey>, indices: &mut MachineCodeIndices)
+                            -> Result<(), SessionError>
+    {
+        let mod_name = self.get_module_name();
+                
+        indices.use_qualified_module(&submodule, exports)?;
+
+        if let &mut Some(ref mut module) = &mut self.module {
+            module.remove_module(mod_name, &submodule);
+            module.use_qualified_module(&submodule, exports)?;
+        } else {
+            wam.remove_module(&submodule);
+        }
+
+        wam.insert_module(submodule);
+        Ok(())
+    }
+    
     fn get_module_name(&self) -> ClauseName {
         self.module.as_ref()
             .map(|module| module.module_decl.name.clone())
             .unwrap_or(ClauseName::BuiltIn("user"))
     }
 
-    fn generate_code(&mut self, decls: Vec<(Predicate, VecDeque<TopLevel>)>, code_dir: &mut CodeDir)
+    fn generate_code(&mut self, decls: Vec<(Predicate, VecDeque<TopLevel>)>,
+                     wam: &Machine, code_dir: &mut CodeDir)
                      -> Result<Code, SessionError>
     {
         let mut code = vec![];
@@ -196,12 +191,11 @@ impl<'a> ListingCompiler<'a> {
 
             let non_counted_bt = self.non_counted_bt_preds.contains(&(name.clone(), arity));
 
-            let p = code.len() + self.wam.code_size();
+            let p = code.len() + wam.code_size();
             let mut decl_code = compile_relation(&TopLevel::Predicate(decl), non_counted_bt,
-                                                 self.wam.machine_flags())?;
+                                                 wam.machine_flags())?;
 
-            compile_appendix(&mut decl_code, Vec::from(queue), non_counted_bt,
-                             self.wam.machine_flags())?;
+            compile_appendix(&mut decl_code, Vec::from(queue), non_counted_bt, wam.machine_flags())?;
 
             let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
@@ -212,26 +206,30 @@ impl<'a> ListingCompiler<'a> {
         Ok(code)
     }
 
-    fn add_code(self, code: Code, indices: MachineCodeIndices) {
+    fn add_code(&mut self, wam: &mut Machine, code: Code, indices: MachineCodeIndices)
+                -> Result<(), SessionError>
+    {
         let code_dir = mem::replace(indices.code_dir, HashMap::new());
         let op_dir   = mem::replace(indices.op_dir, HashMap::new());
 
-        if let Some(mut module) = self.module {
+        if let Some(mut module) = self.module.take() {
             module.code_dir.extend(as_module_code_dir(code_dir));
             module.op_dir.extend(op_dir.into_iter());
 
-            self.wam.add_module(module, code);
+            wam.add_module(module, code);
         } else {
-            self.wam.add_batched_code(code, code_dir);
-            self.wam.add_batched_ops(op_dir);
+            wam.add_batched_code(code, code_dir)?;
+            wam.add_batched_ops(op_dir);
         }
+
+        Ok(())
     }
 
     fn add_non_counted_bt_flag(&mut self, name: ClauseName, arity: usize) {
         self.non_counted_bt_preds.insert((name, arity));
     }
 
-    fn process_decl(&mut self, decl: Declaration, indices: &mut MachineCodeIndices)
+    fn process_decl(&mut self, decl: Declaration, wam: &mut Machine, indices: &mut MachineCodeIndices)
                     -> Result<(), SessionError>
     {
         match decl {
@@ -240,22 +238,20 @@ impl<'a> ListingCompiler<'a> {
             Declaration::Op(op_decl) =>
                 op_decl.submit(self.get_module_name(), &mut indices.op_dir),
             Declaration::UseModule(name) =>
-                if let Some(ref submodule) = self.wam.get_module(name.clone()) {
-                    Ok(use_module(&mut self.module, submodule, indices))
+                if let Some(submodule) = wam.take_module(name) {
+                    self.use_module(submodule, wam, indices)
                 } else {
                     Err(SessionError::ModuleNotFound)
                 },
             Declaration::UseQualifiedModule(name, exports) =>
-                if let Some(ref submodule) = self.wam.get_module(name.clone()) {
-                    Ok(use_qualified_module(&mut self.module, submodule, &exports, indices))
+                if let Some(submodule) = wam.take_module(name) {
+                    self.use_qualified_module(submodule, wam, &exports, indices)
                 } else {
                     Err(SessionError::ModuleNotFound)
                 },
             Declaration::Module(module_decl) =>
                 if self.module.is_none() {
-                    // worker.source_mod = module_decl.name.clone();
-                    self.module = Some(Module::new(module_decl));
-                    Ok(())
+                    Ok(self.module = Some(Module::new(module_decl)))
                 } else {
                     Err(SessionError::from(ParserError::InvalidModuleDecl))
                 }
@@ -263,50 +259,46 @@ impl<'a> ListingCompiler<'a> {
     }
 }
 
-fn use_module(module: &mut Option<Module>, submodule: &Module, indices: &mut MachineCodeIndices)
-{
-    indices.use_module(submodule);
-
-    if let &mut Some(ref mut module) = module {
-        module.use_module(submodule);
-    }
-}
-
-fn use_qualified_module(module: &mut Option<Module>, submodule: &Module, exports: &Vec<PredicateKey>,
-                        indices: &mut MachineCodeIndices)
-{
-    indices.use_qualified_module(submodule, exports);
-
-    if let &mut Some(ref mut module) = module {
-        module.use_qualified_module(submodule, exports);
-    }
-}
-
-pub
-fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: MachineCodeIndices) -> EvalSession
+pub fn compile_listing<'a, R>(wam: &mut Machine, src: R, mut indices: MachineCodeIndices<'a>,
+                              mut toplevel_indices: MachineCodeIndices<'a>)
+                              -> EvalSession
+    where R: Read
 {
     let mut worker = TopLevelBatchWorker::new(src, wam.atom_tbl(), wam.machine_flags());
-    let mut compiler = ListingCompiler::new(wam);
+    let mut compiler = ListingCompiler::new();
+    let mut toplevel_results = vec![];
 
     while let Some(decl) = try_eval_session!(worker.consume(&mut indices)) {
-        try_eval_session!(compiler.process_decl(decl, &mut indices));
+        if decl.is_module_decl() {
+            toplevel_indices.copy_and_swap(&mut indices);
+            mem::swap(&mut worker.results, &mut toplevel_results);
+        }
+
+        try_eval_session!(compiler.process_decl(decl, wam, &mut indices));
     }
 
-    let code = try_eval_session!(compiler.generate_code(worker.results, &mut indices.code_dir));
-    compiler.add_code(code, indices);
+    let module_code = try_eval_session!(compiler.generate_code(worker.results, wam,
+                                                               &mut indices.code_dir));
+    let toplvl_code = try_eval_session!(compiler.generate_code(toplevel_results, wam,
+                                                               &mut toplevel_indices.code_dir));
+
+    try_eval_session!(compiler.add_code(wam, module_code, indices));
+    try_eval_session!(compiler.add_code(wam, toplvl_code, toplevel_indices));
 
     EvalSession::EntrySuccess
 }
 
-pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
-    let mut indices = machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir(),
-                                            &mut HashMap::new());
-
+fn setup_indices(wam: &Machine, indices: &mut MachineCodeIndices) -> Result<(), SessionError> {
     if let Some(ref builtins) = wam.modules.get(&clause_name!("builtins")) {
-        indices.use_module(builtins);
+        indices.use_module(builtins)
     } else {
-        return EvalSession::from(SessionError::ModuleNotFound);
+        Err(SessionError::ModuleNotFound)
     }
+}
 
-    compile_listing(wam, src, indices)
+pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
+    let mut indices = default_machine_code_indices!();
+    try_eval_session!(setup_indices(&wam, &mut indices));
+
+    compile_listing(wam, src, indices, default_machine_code_indices!())
 }

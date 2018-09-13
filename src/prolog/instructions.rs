@@ -791,6 +791,11 @@ impl CodeIndex {
             false
         }
     }
+
+    #[inline]
+    pub fn module_name(&self) -> ClauseName {
+        self.0.borrow().1.clone()
+    }
 }
 
 #[derive(Clone)]
@@ -1033,20 +1038,54 @@ pub fn as_module_code_dir(code_dir: CodeDir) -> ModuleCodeDir {
         .collect()
 }
 
-impl SubModuleUser for Module {
-    fn op_dir(&mut self) -> &mut OpDir {
-        &mut self.op_dir
-    }
-
-    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
-        self.code_dir.insert((name, arity), idx);
-    }
-}
-
 pub trait SubModuleUser {
     fn op_dir(&mut self) -> &mut OpDir;
+    fn remove_code_index(&mut self, key: PredicateKey);
+    fn get_code_index(&self, key: PredicateKey, module: ClauseName) -> Option<CodeIndex>;
+    
     fn insert_dir_entry(&mut self, ClauseName, usize, ModuleCodeIndex);
 
+    fn remove_module(&mut self, mod_name: ClauseName, module: &Module) {
+        for (name, arity) in module.module_decl.exports.iter().cloned() {
+            let name = name.defrock_brackets();
+
+            match self.get_code_index((name.clone(), arity), mod_name.clone()) {
+                Some(CodeIndex (ref code_idx)) => {
+                    if &code_idx.borrow().1 != &module.module_decl.name {
+                        continue;
+                    }
+
+                    self.remove_code_index((name.clone(), arity));
+
+                    // remove or respecify ops.
+                    if arity == 2 {
+                        if let Some((_, _, mod_name)) = self.op_dir().get(&(name.clone(), Fixity::In)).cloned()
+                        {
+                            if mod_name == module.module_decl.name {
+                                self.op_dir().remove(&(name.clone(), Fixity::In));
+                            }
+                        }
+                    } else if arity == 1 {
+                        if let Some((_, _, mod_name)) = self.op_dir().get(&(name.clone(), Fixity::Pre)).cloned()
+                        {
+                            if mod_name == module.module_decl.name {
+                                self.op_dir().remove(&(name.clone(), Fixity::Pre));
+                            }
+                        }
+
+                        if let Some((_, _, mod_name)) = self.op_dir().get(&(name.clone(), Fixity::Post)).cloned()
+                        {
+                            if mod_name == module.module_decl.name {
+                                self.op_dir().remove(&(name.clone(), Fixity::Post));
+                            }
+                        }
+                    }
+                },
+                _ => {}
+            };
+        }
+    }
+    
     // returns true on successful import.
     fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
         let name = name.defrock_brackets();
@@ -1076,7 +1115,8 @@ pub trait SubModuleUser {
         }
     }
 
-    fn use_qualified_module(&mut self, submodule: &Module, exports: &Vec<PredicateKey>) -> EvalSession
+    fn use_qualified_module(&mut self, submodule: &Module, exports: &Vec<PredicateKey>)
+                            -> Result<(), SessionError>
     {
         for (name, arity) in exports.iter().cloned() {
             if !submodule.module_decl.exports.contains(&(name.clone(), arity)) {
@@ -1084,21 +1124,39 @@ pub trait SubModuleUser {
             }
 
             if !self.import_decl(name, arity, submodule) {
-                return EvalSession::from(SessionError::ModuleDoesNotContainExport);
+                return Err(SessionError::ModuleDoesNotContainExport);
             }
         }
 
-        EvalSession::EntrySuccess
+        Ok(())
     }
 
-    fn use_module(&mut self, submodule: &Module) -> EvalSession {
+    fn use_module(&mut self, submodule: &Module) -> Result<(), SessionError> {
         for (name, arity) in submodule.module_decl.exports.iter().cloned() {
             if !self.import_decl(name, arity, submodule) {
-                return EvalSession::from(SessionError::ModuleDoesNotContainExport);
+                return Err(SessionError::ModuleDoesNotContainExport);
             }
         }
 
-        EvalSession::EntrySuccess
+        Ok(())
+    }
+}
+
+impl SubModuleUser for Module {
+    fn op_dir(&mut self) -> &mut OpDir {
+        &mut self.op_dir
+    }
+
+    fn get_code_index(&self, key: PredicateKey, _: ClauseName) -> Option<CodeIndex> {
+        self.code_dir.get(&key).cloned().map(CodeIndex::from)
+    }
+
+    fn remove_code_index(&mut self, key: PredicateKey) {
+        self.code_dir.remove(&key);
+    }
+    
+    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
+        self.code_dir.insert((name, arity), idx);
     }
 }
 
@@ -1108,6 +1166,13 @@ pub enum Declaration {
     Op(OpDecl),
     UseModule(ClauseName),
     UseQualifiedModule(ClauseName, Vec<PredicateKey>)
+}
+
+impl Declaration {
+    #[inline]
+    pub fn is_module_decl(&self) -> bool {
+        if let &Declaration::Module(_) = self { true } else { false }
+    }
 }
 
 pub enum TopLevel {
@@ -1224,14 +1289,16 @@ pub type HeapVarDict  = HashMap<Rc<Var>, Addr>;
 pub type AllocVarDict = HashMap<Rc<Var>, VarData>;
 
 pub enum SessionError {
-    ImpermissibleEntry(String),
+    CannotOverwriteBuiltIn(String),
+    CannotOverwriteImport(String),
     ModuleDoesNotContainExport,
     ModuleNotFound,
     NamelessEntry,
     OpIsInfixAndPostFix,
     ParserError(ParserError),
     QueryFailure,
-    QueryFailureWithException(String)    
+    QueryFailureWithException(String),
+    UserPrompt
 }
 
 pub enum EvalSession {
