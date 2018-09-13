@@ -13,6 +13,7 @@ mod system_calls;
 
 use prolog::machine::machine_state::*;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem::swap;
 use std::ops::Index;
@@ -70,7 +71,7 @@ pub struct Machine {
     call_policy: Box<CallPolicy>,
     cut_policy: Box<CutPolicy>,
     code: Code,
-    pub(super) code_dir: CodeDir,
+    pub(super) code_dir: Rc<RefCell<CodeDir>>,
     pub(super) op_dir: OpDir,
     // term_dir: TermDir,
     pub(super) modules: ModuleDir,
@@ -143,7 +144,7 @@ impl Machine {
             call_policy: Box::new(DefaultCallPolicy {}),
             cut_policy: Box::new(DefaultCutPolicy {}),
             code: Code::new(),
-            code_dir: CodeDir::new(),
+            code_dir: Rc::new(RefCell::new(CodeDir::new())),
             op_dir: default_op_dir(),
             // term_dir: TermDir::new(),
             modules: HashMap::new(),
@@ -192,7 +193,7 @@ impl Machine {
                 continue;
             }
 
-            if let Some(ref existing_idx) = self.code_dir.get(&key) {
+            if let Some(ref existing_idx) = self.code_dir.borrow().get(&key) {
                 // ensure we don't try to overwrite an existing predicate from a different module.
                 if !existing_idx.is_undefined() {
                     if existing_idx.module_name() != idx.module_name() {
@@ -205,7 +206,7 @@ impl Machine {
         }
 
         self.code.extend(code.into_iter());
-        Ok(self.code_dir.extend(code_dir.into_iter()))
+        Ok(self.code_dir.borrow_mut().extend(code_dir.into_iter()))
     }
 
     #[inline]
@@ -215,7 +216,8 @@ impl Machine {
 
     #[inline]
     pub fn remove_module(&mut self, module: &Module) {
-        let mut indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir, &mut self.modules);
+        let mut indices = machine_code_indices!(&mut self.code_dir.borrow_mut(), &mut self.op_dir,
+                                                &mut self.modules);
         indices.remove_module(clause_name!("user"), module);
     }
 
@@ -278,10 +280,10 @@ impl Machine {
             Line::Cut(ref cut_instr) =>
                 self.ms.execute_cut_instr(cut_instr, &mut self.cut_policy),
             Line::Control(ref control_instr) => {
-                let indices = machine_code_indices!(&mut self.code_dir, &mut self.op_dir,
+                let indices = machine_code_indices!(&mut self.code_dir.borrow_mut(),
+                                                    &mut self.op_dir,
                                                     &mut self.modules);
-//                let code_dirs = CodeDirs::new(&self.code_dir, &self.op_dir,
-//                                              &self.modules);
+
                 self.ms.execute_ctrl_instr(indices, &mut self.call_policy,
                                            &mut self.cut_policy, control_instr)
             },

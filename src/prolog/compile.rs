@@ -9,6 +9,7 @@ use prolog::toplevel::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Read;
 use std::mem;
+use std::ops::DerefMut;
 
 #[allow(dead_code)]
 fn print_code(code: &Code) {
@@ -97,7 +98,9 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
 }
 
 fn package_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
-    let indices = machine_code_indices!(&mut wam.code_dir, &mut wam.op_dir, &mut wam.modules);
+    let mut code_dir = wam.code_dir.borrow_mut();
+    let indices = machine_code_indices!(code_dir.deref_mut(), &mut wam.op_dir, &mut wam.modules);
+    
     parse_term(term, indices)
 }
 
