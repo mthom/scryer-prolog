@@ -100,7 +100,7 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
 fn package_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
     let mut code_dir = wam.code_dir.borrow_mut();
     let indices = machine_code_indices!(code_dir.deref_mut(), &mut wam.op_dir, &mut wam.modules);
-    
+        
     parse_term(term, indices)
 }
 
@@ -267,7 +267,8 @@ pub fn compile_listing<'a, R>(wam: &mut Machine, src: R, mut indices: MachineCod
                               -> EvalSession
     where R: Read
 {
-    let mut worker = TopLevelBatchWorker::new(src, wam.atom_tbl(), wam.machine_flags());
+    let mut worker = TopLevelBatchWorker::new(src, wam.atom_tbl(), wam.machine_flags(),
+                                              wam.code_dir.clone());
     let mut compiler = ListingCompiler::new();
     let mut toplevel_results = vec![];
 
@@ -275,6 +276,7 @@ pub fn compile_listing<'a, R>(wam: &mut Machine, src: R, mut indices: MachineCod
         if decl.is_module_decl() {
             toplevel_indices.copy_and_swap(&mut indices);
             mem::swap(&mut worker.results, &mut toplevel_results);
+            worker.in_module = true;
         }
 
         try_eval_session!(compiler.process_decl(decl, wam, &mut indices));

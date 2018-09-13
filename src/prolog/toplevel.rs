@@ -13,6 +13,58 @@ use std::io::Read;
 use std::mem;
 use std::rc::Rc;
 
+struct CompositeIndices<'a, 'b : 'a> {
+    local: &'a mut MachineCodeIndices<'b>,
+    static_code_dir: Option<Rc<RefCell<CodeDir>>>
+}
+
+macro_rules! composite_indices {
+    ($in_module: expr, $local: expr, $static_code_dir: expr) => (
+        CompositeIndices { local: $local,
+                           static_code_dir: if $in_module {
+                               None
+                           } else {
+                               Some($static_code_dir)
+                           }}
+    );
+    ($local: expr) => (
+        CompositeIndices { local: $local, static_code_dir: None }
+    )
+}
+
+impl<'a, 'b : 'a> CompositeIndices<'a, 'b>
+{
+    fn get_code_index(&mut self, name: ClauseName, arity: usize) -> CodeIndex {
+        let idx_opt = self.local.code_dir.get(&(name.clone(), arity)).cloned()
+                          .or_else(|| self.static_code_dir.clone().and_then(|code_dir| {
+                              code_dir.borrow().get(&(name.clone(), arity)).cloned()
+                          }));
+
+        if let Some(idx) = idx_opt {
+            idx.clone()
+        } else {
+            let idx = CodeIndex::default();
+            self.local.code_dir.insert((name, arity), idx.clone());
+            idx
+        }
+    }
+
+    fn get_clause_type(&mut self, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> ClauseType
+    {
+        match ClauseType::from(name, arity, fixity) {
+            ClauseType::Named(name, _) => {
+                let idx = self.get_code_index(name.clone(), arity);
+                ClauseType::Named(name, idx.clone())
+            },
+            ClauseType::Op(name, fixity, _) => {
+                let idx = self.get_code_index(name.clone(), arity);
+                ClauseType::Op(name, fixity, idx.clone())
+            },
+            ct => ct
+        }
+    }
+}
+
 fn setup_fact(term: Term) -> Result<Term, ParserError>
 {
     match term {
@@ -312,7 +364,7 @@ pub enum TopLevelPacket {
 }
 
 struct RelationWorker {
-    queue: VecDeque<VecDeque<Term>>
+    queue: VecDeque<VecDeque<Term>>,
 }
 
 impl RelationWorker {
@@ -409,7 +461,7 @@ impl RelationWorker {
         self.fabricate_rule(fold_by_str(prec_seq, body_term, comma_sym))
     }
 
-    fn to_query_term(&mut self, indices: &mut MachineCodeIndices, term: Term) -> Result<QueryTerm, ParserError>
+    fn to_query_term(&mut self, indices: &mut CompositeIndices, term: Term) -> Result<QueryTerm, ParserError>
     {
         match term {
             Term::Constant(r, Constant::Atom(name)) =>
@@ -496,7 +548,7 @@ impl RelationWorker {
         }
     }
 
-    fn pre_query_term(&mut self, indices: &mut MachineCodeIndices, term: Term) -> Result<QueryTerm, ParserError>
+    fn pre_query_term(&mut self, indices: &mut CompositeIndices, term: Term) -> Result<QueryTerm, ParserError>
     {
         match term {
             Term::Clause(r, name, mut subterms, fixity) =>
@@ -513,7 +565,7 @@ impl RelationWorker {
         }
     }
 
-    fn setup_query(&mut self, indices: &mut MachineCodeIndices, terms: Vec<Box<Term>>, blocks_cuts: bool)
+    fn setup_query(&mut self, indices: &mut CompositeIndices, terms: Vec<Box<Term>>, blocks_cuts: bool)
                    -> Result<Vec<QueryTerm>, ParserError>
     {
         let mut query_terms = vec![];
@@ -548,7 +600,7 @@ impl RelationWorker {
         Ok(query_terms)
     }
 
-    fn setup_rule(&mut self, indices: &mut MachineCodeIndices, mut terms: Vec<Box<Term>>, blocks_cuts: bool)
+    fn setup_rule(&mut self, indices: &mut CompositeIndices, mut terms: Vec<Box<Term>>, blocks_cuts: bool)
                   -> Result<Rule, ParserError>
     {
         let post_head_terms = terms.drain(1..).collect();
@@ -565,7 +617,7 @@ impl RelationWorker {
         }
     }
 
-    fn try_term_to_tl(&mut self, indices: &mut MachineCodeIndices, term: Term, blocks_cuts: bool)
+    fn try_term_to_tl(&mut self, indices: &mut CompositeIndices, term: Term, blocks_cuts: bool)
                       -> Result<TopLevel, ParserError>
     {
         match term {
@@ -584,7 +636,7 @@ impl RelationWorker {
         }
     }
 
-    fn try_terms_to_tls<I>(&mut self, indices: &mut MachineCodeIndices, terms: I, blocks_cuts: bool)
+    fn try_terms_to_tls<I>(&mut self, indices: &mut CompositeIndices, terms: I, blocks_cuts: bool)
                            -> Result<VecDeque<TopLevel>, ParserError>
         where I: IntoIterator<Item=Term>
     {
@@ -597,7 +649,7 @@ impl RelationWorker {
         Ok(results)
     }
 
-    fn parse_queue(&mut self, indices: &mut MachineCodeIndices) -> Result<VecDeque<TopLevel>, ParserError>
+    fn parse_queue(&mut self, indices: &mut CompositeIndices) -> Result<VecDeque<TopLevel>, ParserError>
     {
         let mut queue = VecDeque::new();
 
@@ -614,10 +666,11 @@ impl RelationWorker {
     }
 }
 
-pub fn parse_term(term: Term, mut indices: MachineCodeIndices) -> Result<TopLevelPacket, ParserError>
+pub fn parse_term<'a>(term: Term, mut indices: MachineCodeIndices<'a>) -> Result<TopLevelPacket, ParserError>
 {
     let mut rel_worker = RelationWorker::new();
-
+    let mut indices = composite_indices!(&mut indices);
+    
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
     let results = rel_worker.parse_queue(&mut indices)?;
 
@@ -627,40 +680,47 @@ pub fn parse_term(term: Term, mut indices: MachineCodeIndices) -> Result<TopLeve
 pub struct TopLevelBatchWorker<R: Read> {
     parser: Parser<R>,
     rel_worker: RelationWorker,
+    static_code_dir: Rc<RefCell<CodeDir>>,
     pub results: Vec<(Predicate, VecDeque<TopLevel>)>,
     pub in_module: bool
 }
 
 impl<R: Read> TopLevelBatchWorker<R> {
-    pub fn new(inner: R, atom_tbl: TabledData<Atom>, flags: MachineFlags) -> Self
+    pub fn new(inner: R, atom_tbl: TabledData<Atom>, flags: MachineFlags,
+               static_code_dir: Rc<RefCell<CodeDir>>)
+               -> Self
     {
         TopLevelBatchWorker { parser: Parser::new(inner, atom_tbl, flags),
                               rel_worker: RelationWorker::new(),
+                              static_code_dir,
                               results: vec![],
                               in_module: false }
-    }    
+    }
 
     #[inline]
     fn read_term(&mut self, static_op_dir: &OpDir, op_dir: &OpDir) -> Result<Term, ParserError> {
         let composite_op = composite_op!(self.in_module, op_dir, static_op_dir);
         self.parser.read_term(composite_op)
     }
-    
+
     pub
-    fn consume(&mut self, op_dir: &OpDir, indices: &mut MachineCodeIndices)
-               -> Result<Option<Declaration>, SessionError>
+    fn consume<'a, 'b : 'a>(&mut self, op_dir: &OpDir, indices: &'a mut MachineCodeIndices<'b>)
+                           -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
+        let mut indices = composite_indices!(self.in_module, indices,
+                                             self.static_code_dir.clone());
 
         while !self.parser.eof()? {
             self.parser.reset(); // empty the parser stack of token descriptions.
 
             let mut new_rel_worker = RelationWorker::new();
-            let term = self.read_term(op_dir, &indices.op_dir)?;
-            let tl = new_rel_worker.try_term_to_tl(indices, term, true)?;
+            let term = self.read_term(op_dir, &indices.local.op_dir)?;          
+                
+            let tl = new_rel_worker.try_term_to_tl(&mut indices, term, true)?;
 
             if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.
-                let result_queue = self.rel_worker.parse_queue(indices)?;
+                let result_queue = self.rel_worker.parse_queue(&mut indices)?;
                 self.results.push((append_preds(&mut preds), result_queue));
             }
 
@@ -676,7 +736,7 @@ impl<R: Read> TopLevelBatchWorker<R> {
         }
 
         if !preds.is_empty() {
-            let result_queue = self.rel_worker.parse_queue(indices)?;
+            let result_queue = self.rel_worker.parse_queue(&mut indices)?;
             self.results.push((append_preds(&mut preds), result_queue));
         }
 

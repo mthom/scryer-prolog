@@ -38,26 +38,6 @@ impl<'a> MachineCodeIndices<'a> {
         swap(&mut self.modules, &mut other.modules);
     }
 
-    pub(super)
-    fn get_clause_type(&mut self, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> ClauseType
-    {
-        match ClauseType::from(name, arity, fixity) {
-            ClauseType::Named(name, _) => {
-                let idx = self.code_dir.entry((name.clone(), arity))
-                    .or_insert(CodeIndex::default());
-
-                ClauseType::Named(name, idx.clone())
-            },
-            ClauseType::Op(name, fixity, _) => {
-                let idx = self.code_dir.entry((name.clone(), arity))
-                    .or_insert(CodeIndex::default());
-
-                ClauseType::Op(name, fixity, idx.clone())
-            },
-            ct => ct
-        }
-    }
-
     #[inline]
     pub(super) fn to_code_dirs(self) -> CodeDirs<'a> {
         CodeDirs { code_dir: self.code_dir,
@@ -176,7 +156,7 @@ impl Machine {
     pub fn atom_tbl(&self) -> TabledData<Atom> {
         self.ms.atom_tbl.clone()
     }
-   
+
     pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir) -> Result<(), SessionError>
     {
         for (ref key, ref idx) in code_dir.iter() {
@@ -230,7 +210,7 @@ impl Machine {
     pub fn insert_module(&mut self, module: Module) {
         self.modules.insert(module.module_decl.name.clone(), module);
     }
-    
+
     #[inline]
     pub fn add_module(&mut self, module: Module, code: Code) {
         self.modules.insert(module.module_decl.name.clone(), module);
