@@ -43,7 +43,7 @@ pub fn read_toplevel(wam: &Machine) -> Result<Input, ParserError> {
             let mut parser = Parser::new(stdin.lock(), wam.atom_tbl(), wam.machine_flags());
             
             parser.add_to_top(buffer.as_str());
-            Ok(Input::Term(parser.read_term(&wam.op_dir)?))
+            Ok(Input::Term(parser.read_term(composite_op!(&wam.op_dir))?))
         }        
     }
 }
@@ -52,7 +52,7 @@ impl MachineState {
     pub fn read<R: Read>(&mut self, inner: R, op_dir: &OpDir) -> Result<usize, ParserError>
     {
         let mut parser = Parser::new(inner, self.atom_tbl.clone(), self.flags);
-        let term = parser.read_term(op_dir)?;
+        let term = parser.read_term(composite_op!(op_dir))?;
 
         Ok(write_term_to_heap(term, self))
     }

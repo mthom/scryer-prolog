@@ -175,11 +175,7 @@ impl Machine {
     pub fn atom_tbl(&self) -> TabledData<Atom> {
         self.ms.atom_tbl.clone()
     }
-
-    pub fn get_module(&self, name: ClauseName) -> Option<&Module> {
-        self.modules.get(&name)
-    }
-
+   
     pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir) -> Result<(), SessionError>
     {
         for (ref key, ref idx) in code_dir.iter() {

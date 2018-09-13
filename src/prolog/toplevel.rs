@@ -627,7 +627,8 @@ pub fn parse_term(term: Term, mut indices: MachineCodeIndices) -> Result<TopLeve
 pub struct TopLevelBatchWorker<R: Read> {
     parser: Parser<R>,
     rel_worker: RelationWorker,
-    pub results: Vec<(Predicate, VecDeque<TopLevel>)>
+    pub results: Vec<(Predicate, VecDeque<TopLevel>)>,
+    pub in_module: bool
 }
 
 impl<R: Read> TopLevelBatchWorker<R> {
@@ -635,11 +636,19 @@ impl<R: Read> TopLevelBatchWorker<R> {
     {
         TopLevelBatchWorker { parser: Parser::new(inner, atom_tbl, flags),
                               rel_worker: RelationWorker::new(),
-                              results: vec![] }
+                              results: vec![],
+                              in_module: false }
     }    
 
+    #[inline]
+    fn read_term(&mut self, static_op_dir: &OpDir, op_dir: &OpDir) -> Result<Term, ParserError> {
+        let composite_op = composite_op!(self.in_module, op_dir, static_op_dir);
+        self.parser.read_term(composite_op)
+    }
+    
     pub
-    fn consume(&mut self, indices: &mut MachineCodeIndices) -> Result<Option<Declaration>, SessionError>
+    fn consume(&mut self, op_dir: &OpDir, indices: &mut MachineCodeIndices)
+               -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
 
@@ -647,7 +656,7 @@ impl<R: Read> TopLevelBatchWorker<R> {
             self.parser.reset(); // empty the parser stack of token descriptions.
 
             let mut new_rel_worker = RelationWorker::new();
-            let term = self.parser.read_term(&indices.op_dir)?;
+            let term = self.read_term(op_dir, &indices.op_dir)?;
             let tl = new_rel_worker.try_term_to_tl(indices, term, true)?;
 
             if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.

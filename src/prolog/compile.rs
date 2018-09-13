@@ -133,12 +133,12 @@ impl ListingCompiler {
     pub fn new() -> Self {
         ListingCompiler { module: None, non_counted_bt_preds: HashSet::new() }
     }
-    
-    fn use_module(&mut self, submodule: Module, wam: &mut Machine,
-                  indices: &mut MachineCodeIndices) -> Result<(), SessionError>
+
+    fn use_module(&mut self, submodule: Module, wam: &mut Machine, indices: &mut MachineCodeIndices)
+                  -> Result<(), SessionError>
     {
         let mod_name = self.get_module_name();
-                
+
         indices.use_module(&submodule)?;
 
         if let &mut Some(ref mut module) = &mut self.module {
@@ -157,7 +157,7 @@ impl ListingCompiler {
                             -> Result<(), SessionError>
     {
         let mod_name = self.get_module_name();
-                
+
         indices.use_qualified_module(&submodule, exports)?;
 
         if let &mut Some(ref mut module) = &mut self.module {
@@ -170,7 +170,7 @@ impl ListingCompiler {
         wam.insert_module(submodule);
         Ok(())
     }
-    
+
     fn get_module_name(&self) -> ClauseName {
         self.module.as_ref()
             .map(|module| module.module_decl.name.clone())
@@ -268,7 +268,7 @@ pub fn compile_listing<'a, R>(wam: &mut Machine, src: R, mut indices: MachineCod
     let mut compiler = ListingCompiler::new();
     let mut toplevel_results = vec![];
 
-    while let Some(decl) = try_eval_session!(worker.consume(&mut indices)) {
+    while let Some(decl) = try_eval_session!(worker.consume(&wam.op_dir, &mut indices)) {
         if decl.is_module_decl() {
             toplevel_indices.copy_and_swap(&mut indices);
             mem::swap(&mut worker.results, &mut toplevel_results);
