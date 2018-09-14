@@ -9,7 +9,6 @@ use prolog::toplevel::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Read;
 use std::mem;
-use std::ops::DerefMut;
 
 #[allow(dead_code)]
 fn print_code(code: &Code) {
@@ -98,10 +97,10 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
 }
 
 fn package_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
-    let mut code_dir = wam.code_dir.borrow_mut();
-    let indices = machine_code_indices!(code_dir.deref_mut(), &mut wam.op_dir, &mut wam.modules);
-        
-    parse_term(term, indices)
+    let code_dir = wam.code_dir.clone();
+    let indices = machine_code_indices!(&mut CodeDir::new(), &mut wam.op_dir, &mut wam.modules);
+
+    consume_term(code_dir, term, indices)
 }
 
 pub fn compile_term(wam: &mut Machine, term: Term) -> EvalSession
@@ -262,10 +261,10 @@ impl ListingCompiler {
     }
 }
 
-pub fn compile_listing<'a, R>(wam: &mut Machine, src: R, mut indices: MachineCodeIndices<'a>,
-                              mut toplevel_indices: MachineCodeIndices<'a>)
-                              -> EvalSession
-    where R: Read
+pub
+fn compile_listing<'a, R: Read>(wam: &mut Machine, src: R, mut indices: MachineCodeIndices<'a>,
+                                mut toplevel_indices: MachineCodeIndices<'a>)
+                                -> EvalSession
 {
     let mut worker = TopLevelBatchWorker::new(src, wam.atom_tbl(), wam.machine_flags(),
                                               wam.code_dir.clone());

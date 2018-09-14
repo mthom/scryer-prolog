@@ -770,7 +770,7 @@ impl HeapCellValue {
     }
 }
 
-#[derive(Clone, Copy,PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum IndexPtr {
     Undefined, Index(usize),
     Module // This is a resolved module call. The module
@@ -794,7 +794,7 @@ impl CodeIndex {
 
     #[inline]
     pub fn module_name(&self) -> ClauseName {
-        self.0.borrow().1.clone()
+        self.0.borrow().1.clone()        
     }
 }
 

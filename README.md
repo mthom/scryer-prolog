@@ -169,41 +169,25 @@ The following predicates are built-in to rusty-wam.
 * `writeq/1`
 
 ## Tutorial
-To enter a multi-clause predicate, the brackets ":{" and "}:" are used
-as delimiters. They must be contained entirely within their own lines.
+To enter a multi-clause predicate, the directive "[user]" is used.
 
 For example,
 ```
-prolog> :{
+prolog> [user]
+(type Enter + Ctrl-D to terminate the stream when finished)
 p(f(f(X)), h(W), Y) :- g(W), h(W), f(X).
 p(X, Y, Z) :- h(Y), z(Z).
-}:
-prolog> :{
-h(x).
-h(y).
+prolog> [user]
+(type Enter + Ctrl-D to terminate the stream when finished)
+h(x). h(y).
 h(z).
-}:
 ```
-
-Single clause predicates can be entered without brackets, as in
-```
-prolog> p(X) :- q(X).
-prolog> f(s).
-prolog> z(Z).
-```
+In the example, `Enter + Ctrl-D` is used to terminate the standard
+input stream. The instructive message is always printed.
 
 Queries are issued as
 ```
 prolog> ?- p(X, Y, Z).
-```
-
-Given the above work, the result of the query will be
-```
-prolog> ?- p(X, Y, Z).
-true
-Y = x
-X = _0
-Z = _2
 ```
 
 Pressing `SPACE` will backtrack through other possible answers, if any exist.
@@ -212,10 +196,9 @@ Pressing `.` will abort the search and return to the prompt.
 Wildcards work as well:
 
 ```
-prolog> :{
+prolog> [user]
 member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
-}:
 prolog> ?- member(X, [a, b, c]).
 true .
 X = a ;
@@ -225,11 +208,12 @@ false.
 ```
 and so do conjunctive queries:
 ```
-prolog> f(X) :- g(X).
-prolog> :{
+prolog> [user]
+f(X) :- g(X).
+prolog> [user]
 g(x). g(y). g(z).
-}:
-prolog> h(call(f, X)).
+prolog> [user]
+h(call(f, X)).
 prolog> ?- h(X), X.
 true .
 X = call(f, x) ;
@@ -289,16 +273,15 @@ prolog> :- use_module(library(lists)).
 prolog> :- use_module(library(control)).
 ```
 
-To define modules inline at the REPL, use the ":{{" and "}}:"
-delimiters:
+The [user] prompt can also be used to define modules inline at the
+REPL:
 
 ```
-prolog> :{{
+prolog> [user]
 :- module(test, [local_member/2]).
 :- use_module(library(lists)).
 
 local_member(X, Xs) :- member(X, Xs).
-}}:
 ```
 
 `use_module` directives can be qualified by adding a list of imports:

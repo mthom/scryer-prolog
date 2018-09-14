@@ -36,12 +36,15 @@ impl<'a, 'b : 'a> CompositeIndices<'a, 'b>
 {
     fn get_code_index(&mut self, name: ClauseName, arity: usize) -> CodeIndex {
         let idx_opt = self.local.code_dir.get(&(name.clone(), arity)).cloned()
-                          .or_else(|| self.static_code_dir.clone().and_then(|code_dir| {
-                              code_dir.borrow().get(&(name.clone(), arity)).cloned()
-                          }));
+            .or_else(|| {
+                self.static_code_dir.clone().and_then(|code_dir| {
+                    code_dir.borrow().get(&(name.clone(), arity)).cloned()
+                })
+            });
 
         if let Some(idx) = idx_opt {
-            idx.clone()
+            self.local.code_dir.insert((name, arity), idx.clone());
+            idx
         } else {
             let idx = CodeIndex::default();
             self.local.code_dir.insert((name, arity), idx.clone());
@@ -666,10 +669,20 @@ impl RelationWorker {
     }
 }
 
-pub fn parse_term<'a>(term: Term, mut indices: MachineCodeIndices<'a>) -> Result<TopLevelPacket, ParserError>
+// used to parse queries. mostly.
+pub fn parse_term<R: Read>(wam: &Machine, buf: R) -> Result<Term, ParserError>
+{
+    let mut parser = Parser::new(buf, wam.atom_tbl(), wam.machine_flags());
+    parser.read_term(composite_op!(&wam.op_dir))
+}
+
+pub
+fn consume_term<'a>(static_code_dir: Rc<RefCell<CodeDir>>, term: Term,
+                    mut indices: MachineCodeIndices<'a>)
+                    -> Result<TopLevelPacket, ParserError>
 {
     let mut rel_worker = RelationWorker::new();
-    let mut indices = composite_indices!(&mut indices);
+    let mut indices = composite_indices!(false, &mut indices, static_code_dir);
     
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
     let results = rel_worker.parse_queue(&mut indices)?;

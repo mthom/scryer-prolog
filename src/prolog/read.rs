@@ -5,6 +5,7 @@ use prolog::instructions::*;
 use prolog::iterators::*;
 use prolog::machine::*;
 use prolog::machine::machine_state::MachineState;
+use prolog::toplevel::*;
 
 use std::collections::VecDeque;
 use std::io::{Read, stdin};
@@ -38,13 +39,11 @@ pub fn read_toplevel(wam: &Machine) -> Result<Input, ParserError> {
     match &*buffer.trim() {
         "quit"   => Ok(Input::Quit),
         "clear"  => Ok(Input::Clear),
-        "[user]" => Ok(Input::Batch),
-        _        => {
-            let mut parser = Parser::new(stdin.lock(), wam.atom_tbl(), wam.machine_flags());
-            
-            parser.add_to_top(buffer.as_str());
-            Ok(Input::Term(parser.read_term(composite_op!(&wam.op_dir))?))
-        }        
+        "[user]" => {
+            println!("(type Enter + Ctrl-D to terminate the stream when finished)");
+            Ok(Input::Batch)
+        },
+        _ => Ok(Input::Term(parse_term(wam, buffer.as_bytes())?))
     }
 }
 

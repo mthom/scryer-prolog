@@ -105,7 +105,6 @@ impl<'a> SubModuleUser for MachineCodeIndices<'a> {
             }
 
             set_code_index!(code_idx, idx.0, idx.1);
-
             return;
         }
 
@@ -169,14 +168,15 @@ impl Machine {
                 }
             };
 
-            if idx.module_name().as_str() == "builtins" {
-                continue;
-            }
-
             if let Some(ref existing_idx) = self.code_dir.borrow().get(&key) {
                 // ensure we don't try to overwrite an existing predicate from a different module.
-                if !existing_idx.is_undefined() {
-                    if existing_idx.module_name() != idx.module_name() {
+                if !existing_idx.is_undefined() && !idx.is_undefined() {
+                    // allow the overwriting of user-level predicates by all other predicates.
+                    if existing_idx.module_name().as_str() == "user" {
+                        continue;
+                    }
+
+                    if existing_idx.module_name().as_str() != idx.module_name().as_str() {
                         let err_str = format!("{}/{} from module {}", key.0, key.1,
                                               existing_idx.module_name().as_str());
                         return Err(SessionError::CannotOverwriteImport(err_str));
@@ -185,8 +185,23 @@ impl Machine {
             }
         }
 
+        // error detection has finished, so update the master index of keys.
+        for (key, idx) in code_dir {
+            if let Some(ref mut master_idx) = self.code_dir.borrow_mut().get_mut(&key) {
+                // ensure we don't double borrow if master_idx == idx.
+                // we don't need to modify anything in that case.
+                if !Rc::ptr_eq(&master_idx.0, &idx.0) {
+                    set_code_index!(master_idx, idx.0.borrow().0, idx.module_name());
+                }
+
+                continue;
+            }
+
+            self.code_dir.borrow_mut().insert(key.clone(), idx.clone());
+        }
+
         self.code.extend(code.into_iter());
-        Ok(self.code_dir.borrow_mut().extend(code_dir.into_iter()))
+        Ok(())
     }
 
     #[inline]

@@ -1,9 +1,8 @@
-use prolog_parser::ast::*;
-
 use prolog::heap_print::*;
 use prolog::instructions::*;
 use prolog::compile::*;
 use prolog::machine::*;
+use prolog::toplevel::*;
 
 use std::collections::HashSet;
 use std::mem::swap;
@@ -120,16 +119,12 @@ pub fn submit(wam: &mut Machine, buffer: &str) -> bool
 {
     wam.reset();
 
-    match parse_code(wam, buffer) {
-        Ok(tl) =>
-            match compile_packet(wam, tl) {
-                EvalSession::InitialQuerySuccess(_, _) |
-                EvalSession::EntrySuccess |
-                EvalSession::SubsequentQuerySuccess =>
-                    true,
-                _ => false
-            },
-        Err(e) => panic!("syntax_error({})", e.as_str())
+    match compile_user_module(wam, buffer.as_bytes()) {
+        EvalSession::InitialQuerySuccess(_, _) |
+        EvalSession::EntrySuccess |
+        EvalSession::SubsequentQuerySuccess =>
+            true,
+        _ => false
     }
 }
 
@@ -138,12 +133,27 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>
 {
     wam.reset();
 
-    match parse_code(wam, buffer) {
-        Ok(tl) =>
-            match compile_packet(wam, tl) {
+    match parse_term(&wam, buffer.as_bytes()) {
+        Ok(term) =>
+            match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
                     result == collect_test_output(wam, alloc_locs, heap_locs),
                 EvalSession::EntrySuccess => true,
+                _ => false
+            },
+        Err(e) => panic!("syntax_error({})", e.as_str())
+    }
+}
+
+#[allow(dead_code)]
+pub fn submit_query_without_results(wam: &mut Machine, buffer: &str) -> bool {
+    wam.reset();
+
+    match parse_term(&wam, buffer.as_bytes()) {
+        Ok(term) =>
+            match compile_term(wam, term) {
+                EvalSession::InitialQuerySuccess(..)
+              | EvalSession::EntrySuccess => true,
                 _ => false
             },
         Err(e) => panic!("syntax_error({})", e.as_str())
@@ -157,9 +167,9 @@ pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
 {
     wam.reset();
 
-    match parse_code(wam, buffer) {
-        Ok(tl) =>
-            match compile_packet(wam, tl) {
+    match parse_term(&wam, buffer.as_bytes()) {
+        Ok(term) =>
+            match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
                     result == collect_test_output_with_limit(wam, alloc_locs,
                                                              heap_locs, limit),
@@ -187,7 +197,7 @@ macro_rules! assert_prolog_success_with_limit {
 #[allow(unused_macros)]
 macro_rules! assert_prolog_failure {
     ($wam: expr, $buf: expr) => (
-        assert_eq!(submit($wam, $buf), false)
+        assert_eq!(submit_query_without_results($wam, $buf), false)
     )
 }
 
@@ -197,7 +207,7 @@ macro_rules! assert_prolog_success {
         assert!(submit_query($wam, $query, vec![$(expand_strs!($res)),*]))
     );
     ($wam:expr, $buf:expr) => (
-        assert_eq!(submit($wam, $buf), true)
+        assert_eq!(submit_query_without_results($wam, $buf), true)
     )
 }
 
@@ -1342,7 +1352,7 @@ fn test_queries_on_modules()
 {
     let mut wam = Machine::new();
 
-    wam.use_module_in_toplevel(clause_name!("lists"));
+    submit(&mut wam, ":- use_module(library(lists)).");
 
     compile_user_module(&mut wam, "
 :- module(my_lists, [local_member/2, reverse/2]).
@@ -1357,8 +1367,8 @@ reverse(Xs, Ys) :- lists:reverse(Xs, Ys).
     assert_prolog_success!(&mut wam, "?- my_lists:reverse([a,b,c], [c,b,a]).");
 
     compile_user_module(&mut wam, "
-:- use_module(library(my_lists), [local_member/2]).
 :- module(my_lists_2, [local_member/2]).
+:- use_module(library(my_lists), [local_member/2]).
 ".as_bytes());
 
     assert_prolog_success!(&mut wam, "?- my_lists_2:local_member(1, [1,2,3]).");
@@ -1371,8 +1381,8 @@ fn test_queries_on_builtins()
 {
     let mut wam = Machine::new();
 
-    wam.use_module_in_toplevel(clause_name!("lists"));
-    wam.use_module_in_toplevel(clause_name!("control"));
+    submit(&mut wam, ":- use_module(library(lists)).");
+    submit(&mut wam, ":- use_module(library(control)).");
 
     assert_prolog_failure!(&mut wam, "?- atom(X).");
     assert_prolog_success!(&mut wam, "?- atom(a).");
@@ -1876,19 +1886,19 @@ fn test_queries_on_string_lists()
     assert_prolog_success!(&mut wam, "?- X = [a,b,c|\"abc\"].",
                            [["X = [a, b, c, a, b, c]"]]);
 
-    submit(&mut wam, "?- set_prolog_flag(double_quotes, atom).");
+    assert_prolog_success!(&mut wam, "?- set_prolog_flag(double_quotes, atom).");
 
     assert_prolog_success!(&mut wam, "?- matcher(X, Y).",
                           [["X = [a, b, c | _1]", "Y = _1"]]);
     assert_prolog_failure!(&mut wam, "?- matcher(\"abcdef\", Y).");
 
-    submit(&mut wam, "?- set_prolog_flag(double_quotes, chars).");
+    assert_prolog_success!(&mut wam, "?- set_prolog_flag(double_quotes, chars).");
 
     assert_prolog_success!(&mut wam, "?- X = \"abc\", X = ['a' | Y], set_prolog_flag(double_quotes, atom).",
                            [["X = \"abc\"", "Y = \"bc\""]]);
 
     // partial strings.
-    submit(&mut wam, "?- set_prolog_flag(double_quotes, chars).");
+    assert_prolog_success!(&mut wam, "?- set_prolog_flag(double_quotes, chars).");
 
     assert_prolog_failure!(&mut wam, "?- Y = 5, partial_string(\"abc\", Y).");
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X).",

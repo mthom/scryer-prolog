@@ -6,7 +6,7 @@ extern crate prolog_parser;
 mod and_stack;
 #[macro_use] mod macros;
 #[macro_use] mod allocator;
-mod toplevel;
+pub mod toplevel;
 pub mod machine;
 pub mod compile;
 mod arithmetic;
