@@ -15,7 +15,8 @@ use std::rc::Rc;
 pub enum TokenOrRedirect {
     Atom(ClauseName),
     Op(ClauseName),
-    NumberedVar(String),    
+    NumberedVar(String),
+    CompositeRedirect,
     Redirect,
     Open,
     Close,
@@ -79,7 +80,7 @@ impl HCValueOutputter for PrinterOutputter {
     fn push_char(&mut self, c: char) {
         self.contents.push(c);
     }
-    
+
     fn begin_new_var(&mut self) {
         if self.contents.len() != 0 {
             self.contents += ", ";
@@ -118,18 +119,18 @@ fn print_op(ct: ClauseType, fixity: Fixity, state_stack: &mut Vec<TokenOrRedirec
     match fixity {
         Fixity::Post => {
             state_stack.push(TokenOrRedirect::Op(ct.name()));
-            state_stack.push(TokenOrRedirect::Redirect);
+            state_stack.push(TokenOrRedirect::CompositeRedirect);
         },
         Fixity::Pre => {
-            state_stack.push(TokenOrRedirect::Redirect);
+            state_stack.push(TokenOrRedirect::CompositeRedirect);
             state_stack.push(TokenOrRedirect::Op(ct.name()));
         },
         Fixity::In => {
-            state_stack.push(TokenOrRedirect::Redirect);
+            state_stack.push(TokenOrRedirect::CompositeRedirect);
             state_stack.push(TokenOrRedirect::Op(ct.name()));
-            state_stack.push(TokenOrRedirect::Redirect);
+            state_stack.push(TokenOrRedirect::CompositeRedirect);
         }
-    }    
+    }
 }
 
 impl HCValueFormatter for WriteqFormatter {
@@ -149,7 +150,7 @@ impl HCValueFormatter for WriteqFormatter {
             match iter.machine_st.store(iter.machine_st.deref(addr)) {
                 Addr::Con(Constant::Number(Number::Integer(ref n))) if !n.is_negative() => {
                     iter.stack().pop();
-                    
+
                     let i = n.mod_floor(&BigInt::from(26)).to_usize().unwrap();
                     let j = n.div_floor(&BigInt::from(26));
 
@@ -158,16 +159,16 @@ impl HCValueFormatter for WriteqFormatter {
                     } else {
                         format!("{}{}", CHAR_CODES[i], j)
                     };
-                    
+
                     state_stack.push(TokenOrRedirect::NumberedVar(result));
-                    
+
                     return;
                 }
                 _ => {}
-            };           
+            };
         }
-        
-        self.format_struct(arity, ct.name(), state_stack);        
+
+        self.format_struct(arity, ct.name(), state_stack);
     }
 }
 
@@ -226,7 +227,7 @@ fn non_quoted_graphic_token<Iter: Iterator<Item=char>>(mut iter: Iter, c: char) 
         }
     } else {
         iter.all(|c| graphic_token_char!(c))
-    }        
+    }
 }
 
 fn non_quoted_token<Iter: Iterator<Item=char>>(mut iter: Iter) -> bool {
@@ -240,7 +241,7 @@ fn non_quoted_token<Iter: Iterator<Item=char>>(mut iter: Iter) -> bool {
         } else if cut_char!(c) {
             iter.next().is_none()
         } else if solo_char!(c) {
-            !iter.next().is_none()        
+            !iter.next().is_none()
         } else if c == '[' {
             (iter.next() == Some(']') && iter.next().is_none())
         } else if c == '{' {
@@ -325,7 +326,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             }
         })
     }
-    
+
     fn print_atom(&mut self, atom: &ClauseName, is_op: bool) {
         match atom.as_str() {
             "" => self.outputter.append("''"),
@@ -338,7 +339,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 for c in atom.as_str().chars() {
                     self.print_char(c);
                 }
-                
+
                 self.outputter.push_char('\'');
             }
         }
@@ -356,10 +357,21 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             _ => self.outputter.push_char(c)
         };
     }
-    
-    fn print_constant(&mut self, c: Constant) {
-        match c {            
-            Constant::Atom(ref atom) =>
+
+    fn print_constant(&mut self, c: Constant, composite_brackets: bool) {
+        match c {
+            Constant::Atom(ref atom, Some(_)) => {
+                if composite_brackets {
+                    self.outputter.push_char('(');
+                }
+
+                self.print_atom(atom, true);
+
+                if composite_brackets {
+                    self.outputter.push_char(')');
+                }
+            },
+            Constant::Atom(ref atom, _) =>
                 self.print_atom(atom, false),
             Constant::Char(c) if non_quoted_token(once(c)) =>
                 self.print_char(c),
@@ -391,11 +403,11 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                     }
                 } else { // for now, == DoubleQuotes::Atom
                     let borrowed_str = s.borrow();
-                    
+
                     self.outputter.append("\"");
                     self.outputter.append(&borrowed_str[s.cursor() ..]);
                     self.outputter.append("\"");
-                },            
+                },
             Constant::Usize(i) =>
                 self.outputter.append(&format!("u{}", i))
         }
@@ -410,10 +422,10 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
         self.state_stack.push(TokenOrRedirect::Redirect);
 
-        self.state_stack.push(TokenOrRedirect::OpenList(cell));        
+        self.state_stack.push(TokenOrRedirect::OpenList(cell));
     }
-    
-    fn handle_heap_term(&mut self, iter: &mut HCPreOrderIterator)
+
+    fn handle_heap_term(&mut self, iter: &mut HCPreOrderIterator, composite_brackets: bool)
     {
         let heap_val = match self.check_for_seen(iter) {
             Some(heap_val) => heap_val,
@@ -421,6 +433,18 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         };
 
         match heap_val {
+            HeapCellValue::NamedStr(arity, name, Some(fixity)) => {
+                if composite_brackets {
+                    self.state_stack.push(TokenOrRedirect::Close);
+                }
+
+                let ct = ClauseType::from(name, arity, Some(fixity));
+                self.formatter.format_clause(iter, arity, ct, &mut self.state_stack);
+                
+                if composite_brackets {
+                    self.state_stack.push(TokenOrRedirect::Open);
+                }
+            },
             HeapCellValue::NamedStr(arity, name, fixity) => {
                 let ct = ClauseType::from(name, arity, fixity);
                 self.formatter.format_clause(iter, arity, ct, &mut self.state_stack)
@@ -430,7 +454,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                     self.outputter.append("[]");
                 },
             HeapCellValue::Addr(Addr::Con(c)) =>
-                self.print_constant(c),
+                self.print_constant(c, composite_brackets),
             HeapCellValue::Addr(Addr::Lis(_)) =>
                 self.push_list(),
             HeapCellValue::Addr(addr) => self.print_offset(addr)
@@ -462,8 +486,10 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                         self.print_atom(&atom, true),
                     TokenOrRedirect::NumberedVar(num_var) =>
                         self.outputter.append(num_var.as_str()),
+                    TokenOrRedirect::CompositeRedirect =>
+                        self.handle_heap_term(&mut iter, true),
                     TokenOrRedirect::Redirect =>
-                        self.handle_heap_term(&mut iter),
+                        self.handle_heap_term(&mut iter, false),
                     TokenOrRedirect::Close =>
                         self.outputter.append(")"),
                     TokenOrRedirect::Open =>
@@ -484,7 +510,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                         self.outputter.append(", ")
                 }
             } else if !iter.stack().is_empty() {
-                self.handle_heap_term(&mut iter);
+                self.handle_heap_term(&mut iter, false);
             } else {
                 break;
             }

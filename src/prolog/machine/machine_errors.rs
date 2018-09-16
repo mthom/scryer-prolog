@@ -21,7 +21,7 @@ pub(super) struct MachineError {
 
 impl MachineError {
     pub(super) fn functor_stub(name: ClauseName, arity: usize) -> MachineStub {
-        let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name)));
+        let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name, None)));
         functor!("/", 2, [name, heap_integer!(arity)], Fixity::In)
     }
 
@@ -40,8 +40,8 @@ impl MachineError {
     pub(super)
     fn module_resolution_error(h: usize, mod_name: ClauseName, name: ClauseName, arity: usize) -> Self
     {
-        let mod_name = HeapCellValue::Addr(Addr::Con(Constant::Atom(mod_name)));
-        let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name)));
+        let mod_name = HeapCellValue::Addr(Addr::Con(Constant::Atom(mod_name, None)));
+        let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name, None)));
 
         let mut stub = functor!("evaluation_error", 1, [HeapCellValue::Addr(Addr::HeapCell(h + 2))]);
 

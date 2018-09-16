@@ -219,7 +219,7 @@ impl MachineState {
                                         stepper(c);
                                         continue;
                                     },
-                                    HeapCellValue::Addr(Addr::Con(Constant::Atom(ref a))) =>
+                                    HeapCellValue::Addr(Addr::Con(Constant::Atom(ref a, _))) =>
                                         if let Some(c) = a.as_str().chars().next() {
                                             if c.len_utf8() == a.as_str().len() {
                                                 stepper(c);
@@ -1252,7 +1252,7 @@ impl MachineState {
                     return None;
                 }
             },
-            Addr::Con(Constant::Atom(name)) => (name, 0),
+            Addr::Con(Constant::Atom(name, _)) => (name, 0),
             Addr::HeapCell(_) | Addr::StackCell(_, _) => {
                 let instantiation_error = self.error_form(MachineError::instantiation_error(), stub);
                 self.throw_exception(instantiation_error);
@@ -1466,7 +1466,7 @@ impl MachineState {
                     } else {
                         return Ordering::Greater;
                     },
-                (HeapCellValue::Addr(Addr::Con(Constant::Atom(atom))),
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(atom, _))),
                  HeapCellValue::Addr(Addr::Con(Constant::Char(c)))) =>
                     return if atom.as_str().chars().count() == 1 {
                         atom.as_str().chars().next().cmp(&Some(c))
@@ -1474,7 +1474,7 @@ impl MachineState {
                         Ordering::Greater
                     },
                 (HeapCellValue::Addr(Addr::Con(Constant::Char(c))),
-                 HeapCellValue::Addr(Addr::Con(Constant::Atom(atom)))) =>
+                 HeapCellValue::Addr(Addr::Con(Constant::Atom(atom, _)))) =>
                     return if atom.as_str().chars().count() == 1 {
                         Some(c).cmp(&atom.as_str().chars().next())
                     } else {
@@ -1553,18 +1553,18 @@ impl MachineState {
                 (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
                  HeapCellValue::Addr(Addr::StackCell(..))) =>
                     return Ordering::Greater,
-                (HeapCellValue::Addr(Addr::Con(Constant::Atom(_))),
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
                  HeapCellValue::Addr(Addr::Con(Constant::Number(_)))) =>
                     return Ordering::Greater,
-                (HeapCellValue::Addr(Addr::Con(Constant::Atom(_))),
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
                  HeapCellValue::Addr(Addr::Con(Constant::String(_)))) =>
                     return Ordering::Greater,
-                (HeapCellValue::Addr(Addr::Con(Constant::Atom(s1))),
-                 HeapCellValue::Addr(Addr::Con(Constant::Atom(s2)))) =>
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(s1, _))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Atom(s2, _)))) =>
                     if s1 != s2 {
                         return s1.cmp(&s2);
                     },
-                (HeapCellValue::Addr(Addr::Con(Constant::Atom(_))), _) =>
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))), _) =>
                     return Ordering::Less,
                 (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
                     if ar1 < ar2 {
@@ -1617,7 +1617,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Atom(_)) | Addr::Con(Constant::Char(_)) => self.p += 1,
+                    Addr::Con(Constant::Atom(..)) | Addr::Con(Constant::Char(_)) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1708,7 +1708,7 @@ impl MachineState {
     }
 
     fn try_functor_compound_case(&mut self, name: ClauseName, arity: usize) {
-        let name  = Addr::Con(Constant::Atom(name));
+        let name  = Addr::Con(Constant::Atom(name, None));
         let arity = Addr::Con(integer!(arity));
 
         self.try_functor_unify_components(name, arity);
@@ -1760,7 +1760,7 @@ impl MachineState {
                     match name {
                         Addr::Con(_) if arity == 0 =>
                             self.unify(a1, name),
-                        Addr::Con(Constant::Atom(name)) => {
+                        Addr::Con(Constant::Atom(name, _)) => {
                             let f_a = if name.as_str() == "." && arity == 2 {
                                 Addr::Lis(self.heap.h)
                             } else {

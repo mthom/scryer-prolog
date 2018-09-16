@@ -348,9 +348,9 @@ impl MachineState {
                 deref_cut(self, r),
             &SystemClauseType::SetDoubleQuotes =>
                 match self[temp_v!(1)].clone() {
-                    Addr::Con(Constant::Atom(ref atom)) if atom.as_str() == "chars" =>
+                    Addr::Con(Constant::Atom(ref atom, _)) if atom.as_str() == "chars" =>
                         self.flags.double_quotes = DoubleQuotes::Chars,
-                    Addr::Con(Constant::Atom(ref atom)) if atom.as_str() == "atom" =>
+                    Addr::Con(Constant::Atom(ref atom, _)) if atom.as_str() == "atom" =>
                         self.flags.double_quotes = DoubleQuotes::Atom,
                     _ => self.fail = true
                 },

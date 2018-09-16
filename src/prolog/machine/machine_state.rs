@@ -675,7 +675,7 @@ pub(crate) trait CallPolicy: Any {
                                                          stub));
                     },
                 ClauseType::System(_) => {
-                    let name = Addr::Con(Constant::Atom(name));
+                    let name = Addr::Con(Constant::Atom(name, None));
                     let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
 
                     return Err(machine_st.error_form(MachineError::type_error(ValidType::Callable,

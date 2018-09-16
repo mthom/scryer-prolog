@@ -71,7 +71,7 @@ impl<'a, 'b : 'a> CompositeIndices<'a, 'b>
 fn setup_fact(term: Term) -> Result<Term, ParserError>
 {
     match term {
-        Term::Clause(..) | Term::Constant(_, Constant::Atom(_)) =>
+        Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) =>
             Ok(term),
         _ =>
             Err(ParserError::InadmissibleFact)
@@ -81,12 +81,12 @@ fn setup_fact(term: Term) -> Result<Term, ParserError>
 fn setup_op_decl(mut terms: Vec<Box<Term>>) -> Result<OpDecl, ParserError>
 {
     let name = match *terms.pop().unwrap() {
-        Term::Constant(_, Constant::Atom(name)) => name,
+        Term::Constant(_, Constant::Atom(name, _)) => name,
         _ => return Err(ParserError::InconsistentEntry)
     };
 
     let spec = match *terms.pop().unwrap() {
-        Term::Constant(_, Constant::Atom(name)) => name,
+        Term::Constant(_, Constant::Atom(name, _)) => name,
         _ => return Err(ParserError::InconsistentEntry)
     };
 
@@ -318,7 +318,7 @@ fn fold_by_str(mut terms: Vec<Term>, mut term: Term, sym: ClauseName) -> Term
 fn mark_cut_variables_as(terms: &mut Vec<Term>, name: ClauseName) {
     for term in terms.iter_mut() {
         match term {
-            &mut Term::Constant(_, Constant::Atom(ref mut var)) if var.as_str() == "!" =>
+            &mut Term::Constant(_, Constant::Atom(ref mut var, _)) if var.as_str() == "!" =>
                 *var = name.clone(),
             _ => {}
         }
@@ -327,7 +327,7 @@ fn mark_cut_variables_as(terms: &mut Vec<Term>, name: ClauseName) {
 
 fn mark_cut_variable(term: &mut Term) -> bool {
     let cut_var_found = match term {
-        &mut Term::Constant(_, Constant::Atom(ref var)) if var.as_str() == "!" => true,
+        &mut Term::Constant(_, Constant::Atom(ref var, _)) if var.as_str() == "!" => true,
         _ => false
     };
 
@@ -350,7 +350,7 @@ fn mark_cut_variables(terms: &mut Vec<Term>) -> bool {
 }
 
 fn module_resolution_call(mod_name: Term, body: Term) -> Result<QueryTerm, ParserError> {
-    if let Term::Constant(_, Constant::Atom(mod_name)) = mod_name {
+    if let Term::Constant(_, Constant::Atom(mod_name, _)) = mod_name {
         if let Term::Clause(_, name, terms, _) = body {
             let idx = CodeIndex(Rc::new(RefCell::new((IndexPtr::Module, mod_name))));
             return Ok(QueryTerm::Clause(Cell::default(), ClauseType::Named(name, idx), terms,
@@ -467,11 +467,11 @@ impl RelationWorker {
     fn to_query_term(&mut self, indices: &mut CompositeIndices, term: Term) -> Result<QueryTerm, ParserError>
     {
         match term {
-            Term::Constant(r, Constant::Atom(name)) =>
+            Term::Constant(r, Constant::Atom(name, fixity)) =>
                 if name.as_str() == "!" || name.as_str() == "blocked_!" {
                     Ok(QueryTerm::BlockedCut)
                 } else {
-                    let ct = indices.get_clause_type(name, 0, None);
+                    let ct = indices.get_clause_type(name, 0, fixity);
                     Ok(QueryTerm::Clause(r, ct, vec![], false))
                 },
             Term::Var(_, ref v) if v.as_str() == "!" =>
@@ -614,7 +614,7 @@ impl RelationWorker {
         match *terms.pop().unwrap() {
             Term::Clause(_, name, terms, _) =>
                 Ok(Rule { head: (name, terms, qt), clauses }),
-            Term::Constant(_, Constant::Atom(name)) =>
+            Term::Constant(_, Constant::Atom(name, _)) =>
                 Ok(Rule { head: (name, vec![], qt), clauses }),
             _ => Err(ParserError::InvalidRuleHead)
         }
