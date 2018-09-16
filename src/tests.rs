@@ -1484,7 +1484,11 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- duplicate_term(g(X), f(X)).");
     assert_prolog_success!(&mut wam, "?- duplicate_term(f(X), f(X)).",
                            [["X = _1"]]);
-
+    assert_prolog_success!(&mut wam, "?- duplicate_term([[[[X, Y], Y], X]], Term).",
+                           [["Term = [[[[_22, _26], _26], _22]]", "X = _2", "Y = _0"]]);
+    assert_prolog_success!(&mut wam, "?- duplicate_term([X, [Y, [X]]], Term).",
+                           [["Term = [_12, [_16, [_12]]]", "X = _0", "Y = _4"]]);
+    
     // test duplicate_term on cyclic terms.
     assert_prolog_failure!(&mut wam, "?- X = g(X, Y), Y = f(X), duplicate_term(Y, g(Z)).");
     assert_prolog_success!(&mut wam, "?- X = g(X, Y), Y = f(X), duplicate_term(Y, f(Z)).",

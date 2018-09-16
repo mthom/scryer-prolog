@@ -84,7 +84,6 @@ pub(crate) trait CopierTarget
                             match rd.clone() {
                                 Addr::HeapCell(hc) if hc >= old_h => {
                                     self[threshold] = HeapCellValue::Addr(rd);
-                                    scan += 1;
                                 },
                                 addr @ Addr::HeapCell(..) | addr @ Addr::StackCell(..) => {
                                     if rd == addr {
@@ -92,8 +91,6 @@ pub(crate) trait CopierTarget
                                     } else {
                                         self[threshold] = HeapCellValue::Addr(addr);
                                     }
-
-                                    scan += 1;
                                 },
                                 _ => {
                                     trail.push((Ref::HeapCell(a), self[a].clone()));
