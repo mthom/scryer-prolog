@@ -1491,7 +1491,11 @@ fn test_queries_on_builtins()
                            [["Y = f(g(X, Y))", "X = g(X, f(X))", "Z = g(Z, f(Z))"]]);
     assert_prolog_success!(&mut wam, "?- X = g(X, Y), Y = f(X), duplicate_term(Y, V).",
                            [["Y = f(g(X, Y))", "X = g(X, f(X))", "V = f(g(_9, V))"]]);
-
+    assert_prolog_success!(&mut wam, "?- f(Y,Y,[X,a,[],Y]) = Term, duplicate_term(Term, NewTerm).",
+                           [["NewTerm = f(_16, _16, [_19, a, [], _16])",
+                             "Term = f(_0, Y, [_6, a, [], Y])",
+                             "X = _6", "Y = _0"]]);
+    
     assert_prolog_success!(&mut wam, "?- float(3.14159269).");
     assert_prolog_failure!(&mut wam, "?- float(3).");
     assert_prolog_failure!(&mut wam, "?- float(\"sdfsa\").");

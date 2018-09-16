@@ -168,12 +168,31 @@ impl<'a> CopierTarget for DuplicateBallTerm<'a> {
         self.state.ball.stub.push(hcv);
     }
 
-    fn store(&self, a: Addr) -> Addr {
-        self.state.store(a)
+    fn store(&self, addr: Addr) -> Addr {
+        match addr {
+            Addr::HeapCell(hc) if hc < self.heap_boundary =>
+                self.state.heap[hc].as_addr(hc),
+            Addr::HeapCell(hc) => {
+                let index = hc - self.heap_boundary;
+                self.state.ball.stub[index].as_addr(hc)
+            },
+            Addr::StackCell(fr, sc) =>
+                self.state.and_stack[fr][sc].clone(),
+            addr => addr
+        }
     }
 
-    fn deref(&self, a: Addr) -> Addr {
-        self.state.deref(a)
+    fn deref(&self, mut addr: Addr) -> Addr {
+        loop {
+            let value = self.store(addr.clone());
+
+            if value.is_ref() && value != addr {
+                addr = value;
+                continue;
+            }
+
+            return addr;
+        };
     }
 
     fn stack(&mut self) -> &mut AndStack {
