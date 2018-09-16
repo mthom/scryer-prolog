@@ -433,12 +433,12 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         };
 
         match heap_val {
-            HeapCellValue::NamedStr(arity, name, Some(fixity)) => {
+            HeapCellValue::NamedStr(arity, ref name, Some(fixity)) if name.as_str() != "," => {
                 if composite_brackets {
                     self.state_stack.push(TokenOrRedirect::Close);
                 }
 
-                let ct = ClauseType::from(name, arity, Some(fixity));
+                let ct = ClauseType::from(name.clone(), arity, Some(fixity));
                 self.formatter.format_clause(iter, arity, ct, &mut self.state_stack);
                 
                 if composite_brackets {
