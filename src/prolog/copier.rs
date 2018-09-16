@@ -3,20 +3,12 @@ use prolog::instructions::*;
 
 use std::ops::IndexMut;
 
-//type ListTrail = HashMap<usize, usize>;
 type Trail = Vec<(Ref, HeapCellValue)>;
 
 pub(crate) struct RedirectInfo {
-    //list_trail: ListTrail,
     trail: Trail
 }
-/*
-impl RedirectInfo {
-    fn new() -> Self {
-        RedirectInfo { list_trail: ListTrail::new(), trail: Trail::new() }
-    }
-}
-*/
+
 pub(crate) trait CopierTarget
 {
     fn source(&self) -> usize;
@@ -50,16 +42,15 @@ pub(crate) trait CopierTarget
             self.stack()[fr][sc] = Addr::HeapCell(scan);
             trail.push((Ref::StackCell(fr, sc),
                         HeapCellValue::Addr(Addr::StackCell(fr, sc))));
-        }        
+        }
     }
-    
+
     // duplicate_term_impl(L1, L2) uses Cheney's algorithm to copy the term
     // at L1 to L2. trail is kept to restore the innards of L1 after
     // it's been copied to L2.
     fn duplicate_term_impl(&mut self, addr: Addr) -> RedirectInfo
       where Self: IndexMut<usize, Output=HeapCellValue>
     {
-        // let mut redirect_info = RedirectInfo::new();
         let mut trail = Trail::new();
         let mut scan = self.source();
         let old_h = self.threshold();
@@ -83,13 +74,13 @@ pub(crate) trait CopierTarget
 
                             let threshold = self.threshold();
                             self[scan] = HeapCellValue::Addr(Addr::Lis(threshold));
-                            
+
                             let hcv = self[a].clone();
-                            self.push(hcv.clone());                                                       
-                            
+                            self.push(hcv.clone());
+
                             let ra = hcv.as_addr(threshold);
                             let rd = self.store(self.deref(ra));
-                            
+
                             match rd.clone() {
                                 Addr::HeapCell(hc) if hc >= old_h => {
                                     self[threshold] = HeapCellValue::Addr(rd);
@@ -108,7 +99,7 @@ pub(crate) trait CopierTarget
                                     trail.push((Ref::HeapCell(a), self[a].clone()));
                                     self[a] = HeapCellValue::Addr(Addr::Lis(threshold))
                                 }
-                            };                                                        
+                            };
 
                             let hcv = self[a+1].clone();
                             self.push(hcv);
