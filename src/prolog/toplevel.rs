@@ -669,6 +669,13 @@ impl RelationWorker {
     }
 }
 
+// used to parse queries in test. mostly.
+pub fn parse_term<R: Read>(wam: &Machine, buf: R) -> Result<Term, ParserError>
+{
+    let mut parser = Parser::new(buf, wam.atom_tbl(), wam.machine_flags());
+    parser.read_term(composite_op!(&wam.op_dir))
+}
+
 pub
 fn consume_term<'a>(static_code_dir: Rc<RefCell<CodeDir>>, term: Term,
                     mut indices: MachineCodeIndices<'a>)
@@ -710,7 +717,7 @@ impl<R: Read> TopLevelBatchWorker<R> {
     }
 
     pub
-    fn consume<'a, 'b : 'a>(&mut self, op_dir: &OpDir, indices: &'a mut MachineCodeIndices<'b>)
+    fn consume<'a, 'b : 'a>(&mut self, wam: &mut Machine, indices: &'a mut MachineCodeIndices<'b>)
                            -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
@@ -721,7 +728,7 @@ impl<R: Read> TopLevelBatchWorker<R> {
             self.parser.reset(); // empty the parser stack of token descriptions.
 
             let mut new_rel_worker = RelationWorker::new();
-            let term = self.read_term(op_dir, &indices.local.op_dir)?;          
+            let term = self.read_term(&wam.op_dir, &indices.local.op_dir)?;          
                 
             let tl = new_rel_worker.try_term_to_tl(&mut indices, term, true)?;
 

@@ -53,7 +53,7 @@ pub struct Machine {
     code: Code,
     pub(super) code_dir: Rc<RefCell<CodeDir>>,
     pub(super) op_dir: OpDir,
-    // term_dir: TermDir,
+//    term_dir: TermDir,
     pub(super) modules: ModuleDir,
     cached_query: Option<Code>
 }

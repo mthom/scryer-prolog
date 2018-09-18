@@ -195,7 +195,7 @@ pub type ModuleCodeDir = HashMap<PredicateKey, ModuleCodeIndex>;
 
 pub type CodeDir = HashMap<PredicateKey, CodeIndex>;
 
-//pub type TermDir = HashMap<PredicateKey, Predicate>;
+pub type TermDir = HashMap<PredicateKey, Predicate>;
 
 pub type ModuleDir = HashMap<ClauseName, Module>;
 

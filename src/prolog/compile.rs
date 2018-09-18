@@ -271,7 +271,7 @@ fn compile_listing<'a, R: Read>(wam: &mut Machine, src: R, mut indices: MachineC
     let mut compiler = ListingCompiler::new();
     let mut toplevel_results = vec![];
 
-    while let Some(decl) = try_eval_session!(worker.consume(&wam.op_dir, &mut indices)) {
+    while let Some(decl) = try_eval_session!(worker.consume(wam, &mut indices)) {
         if decl.is_module_decl() {
             toplevel_indices.copy_and_swap(&mut indices);
             mem::swap(&mut worker.results, &mut toplevel_results);
