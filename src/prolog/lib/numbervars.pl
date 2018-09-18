@@ -10,8 +10,6 @@ numbervars(Term, NewTerm, N) :-
 
 numbervars(Term, NewTerm, N1, N2) :-
     var(Term), !, NewTerm = '$VAR'(N1), N2 is N1 + 1.
-numbervars([Arg | Args], NewTerms, N1, N2) :- !,
-    fold_numbervars([Arg | Args], NewTerms, N1, N2).
 numbervars(Term, NewTerm, N1, N2) :- compound(Term), !,
     Term =.. [Name | Args],
     NewTerm =.. [Name | NewArgs],
