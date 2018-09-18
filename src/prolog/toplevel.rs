@@ -669,13 +669,6 @@ impl RelationWorker {
     }
 }
 
-// used to parse queries. mostly.
-pub fn parse_term<R: Read>(wam: &Machine, buf: R) -> Result<Term, ParserError>
-{
-    let mut parser = Parser::new(buf, wam.atom_tbl(), wam.machine_flags());
-    parser.read_term(composite_op!(&wam.op_dir))
-}
-
 pub
 fn consume_term<'a>(static_code_dir: Rc<RefCell<CodeDir>>, term: Term,
                     mut indices: MachineCodeIndices<'a>)
