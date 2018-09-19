@@ -5,6 +5,7 @@ use prolog_parser::tabled_rc::*;
 use prolog::instructions::*;
 use prolog::iterators::*;
 use prolog::machine::*;
+use prolog::machine::term_expansion::*;
 use prolog::num::*;
 
 use std::collections::{HashSet, VecDeque};
@@ -691,7 +692,7 @@ fn consume_term<'a>(static_code_dir: Rc<RefCell<CodeDir>>, term: Term,
 }
 
 pub struct TopLevelBatchWorker<R: Read> {
-    parser: Parser<R>,
+    term_stream: TermStream<R>,
     rel_worker: RelationWorker,
     static_code_dir: Rc<RefCell<CodeDir>>,
     pub results: Vec<(Predicate, VecDeque<TopLevel>)>,
@@ -703,17 +704,11 @@ impl<R: Read> TopLevelBatchWorker<R> {
                static_code_dir: Rc<RefCell<CodeDir>>)
                -> Self
     {
-        TopLevelBatchWorker { parser: Parser::new(inner, atom_tbl, flags),
+        TopLevelBatchWorker { term_stream: TermStream::new(inner, atom_tbl, flags),
                               rel_worker: RelationWorker::new(),
                               static_code_dir,
                               results: vec![],
                               in_module: false }
-    }
-
-    #[inline]
-    fn read_term(&mut self, static_op_dir: &OpDir, op_dir: &OpDir) -> Result<Term, ParserError> {
-        let composite_op = composite_op!(self.in_module, op_dir, static_op_dir);
-        self.parser.read_term(composite_op)
     }
 
     pub
@@ -724,11 +719,11 @@ impl<R: Read> TopLevelBatchWorker<R> {
         let mut indices = composite_indices!(self.in_module, indices,
                                              self.static_code_dir.clone());
 
-        while !self.parser.eof()? {
-            self.parser.reset(); // empty the parser stack of token descriptions.
+        while !self.term_stream.eof()? {
+            self.term_stream.empty_tokens(); // empty the parser stack of token descriptions.
 
             let mut new_rel_worker = RelationWorker::new();
-            let term = self.read_term(&wam.op_dir, &indices.local.op_dir)?;          
+            let term = self.term_stream.read_term(wam, &indices.local.op_dir)?;          
                 
             let tl = new_rel_worker.try_term_to_tl(&mut indices, term, true)?;
 

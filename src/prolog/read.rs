@@ -57,7 +57,7 @@ impl MachineState {
         let mut parser = Parser::new(inner, self.atom_tbl.clone(), self.flags);
         let term = parser.read_term(composite_op!(op_dir))?;
 
-        Ok(write_term_to_heap(term, self))
+        Ok(write_term_to_heap(&term, self))
     }
 }
 
@@ -77,13 +77,13 @@ fn modify_head_of_queue(machine_st: &mut MachineState, queue: &mut SubtermDeque,
     }
 }
 
-fn write_term_to_heap(term: Term, machine_st: &mut MachineState) -> usize {
+pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> usize {
     let h = machine_st.heap.h;
 
     let mut queue = SubtermDeque::new();
     let mut var_dict = HeapVarDict::new();
 
-    for term in breadth_first_iter(&term, true) {
+    for term in breadth_first_iter(term, true) {
         let h = machine_st.heap.h;
 
         match &term {

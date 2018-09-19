@@ -527,7 +527,7 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.fail = !machine_st.is_cyclic_term(addr);
                 return_from_clause!(machine_st.last_call, machine_st)
             },
-            &BuiltInClauseType::Read => {                
+            &BuiltInClauseType::Read => {
                 match machine_st.read(stdin(), &indices.op_dir) {
                     Ok(offset) => {
                         let addr = machine_st[temp_v!(1)].clone();
@@ -642,6 +642,17 @@ pub(crate) trait CallPolicy: Any {
         }
     }
 
+    fn compile_hook(&mut self, machine_st: &mut MachineState, _: &CompileTimeHook) -> CallResult
+    {
+        machine_st.cp = LocalCodePtr::TopLevel(0, 0);
+
+        machine_st.num_of_args = 2;
+        machine_st.b0 = machine_st.b;
+        machine_st.p  = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
+
+        Ok(())
+    }
+
     fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
                   indices: MachineCodeIndices<'a>) //code_dirs: CodeDirs)
                   -> CallResult
@@ -674,7 +685,7 @@ pub(crate) trait CallPolicy: Any {
                         return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
                                                          stub));
                     },
-                ClauseType::System(_) => {
+                ClauseType::Hook(_) | ClauseType::System(_) => {
                     let name = Addr::Con(Constant::Atom(name, None));
                     let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
 

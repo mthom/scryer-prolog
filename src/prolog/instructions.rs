@@ -337,10 +337,22 @@ pub enum BuiltInClauseType {
     Sort,
 }
 
+#[derive(Clone, Copy)]
+pub enum CompileTimeHook {
+    TermExpansion
+}
+
+impl CompileTimeHook {
+    pub fn name(self) -> ClauseName {
+        clause_name!("term_expansion")
+    }
+}
+
 #[derive(Clone)]
 pub enum ClauseType {
     BuiltIn(BuiltInClauseType),
     CallN,
+    Hook(CompileTimeHook),
     Inlined(InlinedClauseType),
     Named(ClauseName, CodeIndex),
     Op(ClauseName, Fixity, CodeIndex),
@@ -442,6 +454,7 @@ impl ClauseType {
         match self {
             &ClauseType::CallN => clause_name!("call"),
             &ClauseType::BuiltIn(ref built_in) => built_in.name(),
+            &ClauseType::Hook(ref hook) => hook.name(),
             &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
             &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
@@ -840,7 +853,7 @@ impl CodePtr {
         match self {
             &CodePtr::BuiltInClause(_, ref local)
           | &CodePtr::CallN(_, ref local)
-          | &CodePtr::Local(ref local) => local.clone()
+          | &CodePtr::Local(ref local) => local.clone()               
         }
     }
 }
@@ -849,6 +862,7 @@ impl CodePtr {
 pub enum LocalCodePtr {
     DirEntry(usize, ClauseName), // offset, resident module name.
     TopLevel(usize, usize), // chunk_num, offset.
+    UserTermExpansion(usize)
 }
 
 impl LocalCodePtr {
@@ -901,7 +915,8 @@ impl Add<usize> for LocalCodePtr {
     fn add(self, rhs: usize) -> Self::Output {
         match self {
             LocalCodePtr::DirEntry(p, name) => LocalCodePtr::DirEntry(p + rhs, name),
-            LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs)
+            LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs),
+            LocalCodePtr::UserTermExpansion(p) => LocalCodePtr::UserTermExpansion(p + rhs)
         }
     }
 }
@@ -909,8 +924,9 @@ impl Add<usize> for LocalCodePtr {
 impl AddAssign<usize> for LocalCodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut LocalCodePtr::DirEntry(ref mut p, _) |
-            &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs
+            &mut LocalCodePtr::UserTermExpansion(ref mut p)
+          | &mut LocalCodePtr::DirEntry(ref mut p, _)
+          | &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs            
         }
     }
 }
