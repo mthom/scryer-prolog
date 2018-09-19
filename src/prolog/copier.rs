@@ -9,7 +9,7 @@ pub(crate) struct RedirectInfo {
     trail: Trail
 }
 
-pub(crate) trait CopierTarget
+pub(crate) trait CopierTarget: IndexMut<usize, Output=HeapCellValue>
 {
     fn source(&self) -> usize;
     fn threshold(&self) -> usize;
@@ -19,7 +19,6 @@ pub(crate) trait CopierTarget
     fn stack(&mut self) -> &mut AndStack;
 
     fn unwind_trail(&mut self, redirect: RedirectInfo)
-      where Self: IndexMut<usize, Output=HeapCellValue>
     {
         for (r, hcv) in redirect.trail {
             match r {
@@ -30,7 +29,6 @@ pub(crate) trait CopierTarget
     }
 
     fn reinstantiate_var(&mut self, ra: Addr, scan: usize, trail: &mut Trail)
-        where Self: IndexMut<usize, Output=HeapCellValue>
     {
         self[scan] = HeapCellValue::Addr(Addr::HeapCell(scan));
 
@@ -49,7 +47,6 @@ pub(crate) trait CopierTarget
     // at L1 to L2. trail is kept to restore the innards of L1 after
     // it's been copied to L2.
     fn duplicate_term_impl(&mut self, addr: Addr) -> RedirectInfo
-      where Self: IndexMut<usize, Output=HeapCellValue>
     {
         let mut trail = Trail::new();
         let mut scan = self.source();
@@ -153,7 +150,6 @@ pub(crate) trait CopierTarget
     }
 
     fn duplicate_term(&mut self, addr: Addr)
-      where Self: IndexMut<usize, Output=HeapCellValue>
     {
         let redirect = self.duplicate_term_impl(addr);
         self.unwind_trail(redirect);
