@@ -14,7 +14,7 @@ numbervars(Term, NewTerm, N1, N2) :- compound(Term), !,
     Term =.. [Name | Args],
     NewTerm =.. [Name | NewArgs],
     fold_numbervars(Args, NewArgs, N1, N2).
-numbervars(_, _, _, _).
+numbervars(_, _, N, N).
 
 marked_already(Term, NewTerm) :-
     var(Term), nonvar(NewTerm), NewTerm = '$VAR'(_).
@@ -23,9 +23,7 @@ marked_already(Term, NewTerm) :-
 
 fold_numbervars([HeadTerm | Terms], [NewHeadTerm | NewTerms], N1, Nn) :-
     ( marked_already(HeadTerm, NewHeadTerm) -> N1 = N2
-    ; numbervars(HeadTerm, NewHeadTerm, N1, N2),
-      ( var(N2) -> N1 = N2
-      ; true )
+    ; numbervars(HeadTerm, NewHeadTerm, N1, N2)
     ),
     fold_numbervars(Terms, NewTerms, N2, Nn).
 fold_numbervars([], [], _, _).
