@@ -94,7 +94,9 @@ impl Machine {
             self.reset();
             Ok(None)
         } else {
-            Ok(Some(read_term_from_heap(&self.ms, Addr::HeapCell(h))?))
+            let term = read_term_from_heap(&self.ms, Addr::HeapCell(h))?;
+            self.reset();            
+            Ok(Some(term))
         }
     }
 }

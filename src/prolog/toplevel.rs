@@ -1,5 +1,4 @@
 use prolog_parser::ast::*;
-use prolog_parser::parser::*;
 use prolog_parser::tabled_rc::*;
 
 use prolog::instructions::*;
@@ -623,12 +622,12 @@ impl RelationWorker {
                   -> Result<(CompileTimeHook, PredicateClause), ParserError>
     {
         match term {
-            Term::Clause(r, name, terms, _) => 
+            Term::Clause(r, name, terms, _) =>
                 if name.as_str() == "term_expansion" && terms.len() == 2 {
                     let term = Term::Clause(r, name, terms, None);
                     Ok((CompileTimeHook::TermExpansion, PredicateClause::Fact(term)))
                 } else if name.as_str() == ":-" {
-                    let rule = self.setup_rule(indices, terms, false)?;                    
+                    let rule = self.setup_rule(indices, terms, false)?;
                     Ok((CompileTimeHook::TermExpansion, PredicateClause::Rule(rule)))
                 } else {
                     Err(ParserError::InvalidHook)
@@ -636,7 +635,7 @@ impl RelationWorker {
             _ => Err(ParserError::InvalidHook)
         }
     }
-    
+
     fn setup_rule(&mut self, indices: &mut CompositeIndices, mut terms: Vec<Box<Term>>, blocks_cuts: bool)
                   -> Result<Rule, ParserError>
     {
@@ -662,7 +661,7 @@ impl RelationWorker {
                 if is_term_expansion(&name, &terms) {
                     let term = Term::Clause(r, name, terms, fixity);
                     let (hook, clauses) = self.setup_hook(indices, term)?;
-                    
+
                     Ok(TopLevel::Declaration(Declaration::Hook(hook, clauses)))
                 } else if name.as_str() == "?-" {
                     Ok(TopLevel::Query(try!(self.setup_query(indices, terms, blocks_cuts))))
@@ -672,9 +671,9 @@ impl RelationWorker {
                     let term = *terms.pop().unwrap();
                     Ok(TopLevel::Declaration(try!(setup_declaration(term))))
                 } else {
-                    let term = Term::Clause(r, name, terms, fixity);                        
+                    let term = Term::Clause(r, name, terms, fixity);
                     Ok(TopLevel::Fact(try!(setup_fact(term))))
-                },        
+                },
             term => Ok(TopLevel::Fact(try!(setup_fact(term))))
         }
     }
@@ -699,7 +698,7 @@ impl RelationWorker {
         while let Some(terms) = self.queue.pop_front() {
             let clauses = merge_clauses(&mut self.try_terms_to_tls(indices, terms, false)?)?;
             queue.push_back(clauses);
-        
+
         }
         Ok(queue)
     }
@@ -709,9 +708,12 @@ impl RelationWorker {
     }
 }
 
-// used to parse queries in test. mostly.
+// used to parse queries in test.
+#[cfg(test)]
 pub fn parse_term<R: Read>(wam: &Machine, buf: R) -> Result<Term, ParserError>
 {
+    use prolog_parser::parser::*;
+
     let mut parser = Parser::new(buf, wam.atom_tbl(), wam.machine_flags());
     parser.read_term(composite_op!(&wam.op_dir))
 }
@@ -723,7 +725,7 @@ fn consume_term<'a>(static_code_dir: Rc<RefCell<CodeDir>>, term: Term,
 {
     let mut rel_worker = RelationWorker::new();
     let mut indices = composite_indices!(false, &mut indices, static_code_dir);
-    
+
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
     let results = rel_worker.parse_queue(&mut indices)?;
 
@@ -762,8 +764,8 @@ impl<R: Read> TopLevelBatchWorker<R> {
             self.term_stream.empty_tokens(); // empty the parser stack of token descriptions.
 
             let mut new_rel_worker = RelationWorker::new();
-            let term = self.term_stream.read_term(wam, &indices.local.op_dir)?;          
-                
+            let term = self.term_stream.read_term(wam, &indices.local.op_dir)?;
+
             let tl = new_rel_worker.try_term_to_tl(&mut indices, term, true)?;
 
             if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.
@@ -777,7 +779,7 @@ impl<R: Read> TopLevelBatchWorker<R> {
                 TopLevel::Fact(fact) => preds.push(PredicateClause::Fact(fact)),
                 TopLevel::Rule(rule) => preds.push(PredicateClause::Rule(rule)),
                 TopLevel::Predicate(pred) => preds.extend(pred.0),
-                TopLevel::Declaration(decl) => return Ok(Some(decl)),                
+                TopLevel::Declaration(decl) => return Ok(Some(decl)),
                 TopLevel::Query(_) => return Err(SessionError::NamelessEntry)
             }
         }

@@ -86,7 +86,8 @@ dependencies = [
 
 [[package]]
 name = "prolog_parser"
-version = "0.7.14"
+version = "0.7.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ordered-float 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -107,12 +108,12 @@ dependencies = [
 
 [[package]]
 name = "rusty-wam"
-version = "0.7.13"
+version = "0.7.14"
 dependencies = [
  "downcast 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ordered-float 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "prolog_parser 0.7.14",
+ "prolog_parser 0.7.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "termion 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -151,6 +152,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum num-traits 0.1.41 (registry+https://github.com/rust-lang/crates.io-index)" = "cacfcab5eb48250ee7d0c7896b51a2c5eec99c1feea5f32025635f5ae4b00070"
 "checksum num-traits 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)" = "630de1ef5cc79d0cdd78b7e33b81f083cbfe90de0f4b2b2f07f905867c70e9fe"
 "checksum ordered-float 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "58d25b6c0e47b20d05226d288ff434940296e7e2f8b877975da32f862152241f"
+"checksum prolog_parser 0.7.15 (registry+https://github.com/rust-lang/crates.io-index)" = "11f378539616d1cd7b8fc006f309b5a4b483b82cbab76e898a9f1c99318b4dfa"
 "checksum redox_syscall 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)" = "ab105df655884ede59d45b7070c8a65002d921461ee813a024558ca16030eea0"
 "checksum redox_termios 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7e891cfe48e9100a70a3b6eb652fef28920c117d366339687bd5576160db0f76"
 "checksum termion 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "689a3bdfaab439fd92bc87df5c4c78417d3cbe537487274e9b0b2dce76e92096"
