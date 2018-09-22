@@ -1,9 +1,11 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::instructions::*;
+use prolog::codegen::*;
 use prolog::compile::*;
+use prolog::debray_allocator::*;
 use prolog::heap_print::*;
+use prolog::instructions::*;
 
 mod machine_errors;
 pub(super) mod machine_state;
@@ -249,6 +251,21 @@ impl Machine {
         }
     }
 
+    #[inline]
+    pub(super)
+    fn add_term_expansion_clause(&mut self, clause: PredicateClause) -> Result<(), ParserError>
+    {
+        let key = (clause_name!("term_expansion"), 2);
+        let preds = self.term_dir.entry(key).or_insert(Predicate(vec![]));
+        
+        preds.0.push(clause);
+                
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(false, self.ms.flags);
+        let code = cg.compile_predicate(&preds.0)?;
+
+        Ok(self.term_expanders = code)
+    }
+    
     fn lookup_instr(&self, p: CodePtr) -> Option<Line> {
         match p {
             CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) =>

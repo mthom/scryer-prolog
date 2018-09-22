@@ -69,6 +69,21 @@ impl<'a, 'b : 'a> CompositeIndices<'a, 'b>
     }
 }
 
+#[inline]
+fn is_term_expansion(name: &ClauseName, terms: &Vec<Box<Term>>) -> bool {
+    if name.as_str() == ":-" {
+        if let Some(ref term) = terms.first() {
+            if let &Term::Clause(_, ref name, ref terms, None) = term.as_ref() {
+                return (name.as_str(), terms.len()) == ("term_expansion", 2);
+            }
+        }
+    } else if name.as_str() == "term_expansion" {
+        return terms.len() == 2;
+    }
+
+    false
+}
+
 fn setup_fact(term: Term) -> Result<Term, ParserError>
 {
     match term {
@@ -604,6 +619,24 @@ impl RelationWorker {
         Ok(query_terms)
     }
 
+    fn setup_hook(&mut self, indices: &mut CompositeIndices, term: Term)
+                  -> Result<(CompileTimeHook, PredicateClause), ParserError>
+    {
+        match term {
+            Term::Clause(r, name, terms, _) => 
+                if name.as_str() == "term_expansion" && terms.len() == 2 {
+                    let term = Term::Clause(r, name, terms, None);
+                    Ok((CompileTimeHook::TermExpansion, PredicateClause::Fact(term)))
+                } else if name.as_str() == ":-" {
+                    let rule = self.setup_rule(indices, terms, false)?;                    
+                    Ok((CompileTimeHook::TermExpansion, PredicateClause::Rule(rule)))
+                } else {
+                    Err(ParserError::InvalidHook)
+                },
+            _ => Err(ParserError::InvalidHook)
+        }
+    }
+    
     fn setup_rule(&mut self, indices: &mut CompositeIndices, mut terms: Vec<Box<Term>>, blocks_cuts: bool)
                   -> Result<Rule, ParserError>
     {
@@ -626,7 +659,12 @@ impl RelationWorker {
     {
         match term {
             Term::Clause(r, name, mut terms, fixity) =>
-                if name.as_str() == "?-" {
+                if is_term_expansion(&name, &terms) {
+                    let term = Term::Clause(r, name, terms, fixity);
+                    let (hook, clauses) = self.setup_hook(indices, term)?;
+                    
+                    Ok(TopLevel::Declaration(Declaration::Hook(hook, clauses)))
+                } else if name.as_str() == "?-" {
                     Ok(TopLevel::Query(try!(self.setup_query(indices, terms, blocks_cuts))))
                 } else if name.as_str() == ":-" && terms.len() > 1 {
                     Ok(TopLevel::Rule(try!(self.setup_rule(indices, terms, blocks_cuts))))
@@ -634,8 +672,9 @@ impl RelationWorker {
                     let term = *terms.pop().unwrap();
                     Ok(TopLevel::Declaration(try!(setup_declaration(term))))
                 } else {
-                    Ok(TopLevel::Fact(try!(setup_fact(Term::Clause(r, name, terms, fixity)))))
-                },
+                    let term = Term::Clause(r, name, terms, fixity);                        
+                    Ok(TopLevel::Fact(try!(setup_fact(term))))
+                },        
             term => Ok(TopLevel::Fact(try!(setup_fact(term))))
         }
     }
@@ -660,8 +699,8 @@ impl RelationWorker {
         while let Some(terms) = self.queue.pop_front() {
             let clauses = merge_clauses(&mut self.try_terms_to_tls(indices, terms, false)?)?;
             queue.push_back(clauses);
+        
         }
-
         Ok(queue)
     }
 
@@ -738,7 +777,7 @@ impl<R: Read> TopLevelBatchWorker<R> {
                 TopLevel::Fact(fact) => preds.push(PredicateClause::Fact(fact)),
                 TopLevel::Rule(rule) => preds.push(PredicateClause::Rule(rule)),
                 TopLevel::Predicate(pred) => preds.extend(pred.0),
-                TopLevel::Declaration(decl) => return Ok(Some(decl)),
+                TopLevel::Declaration(decl) => return Ok(Some(decl)),                
                 TopLevel::Query(_) => return Err(SessionError::NamelessEntry)
             }
         }
