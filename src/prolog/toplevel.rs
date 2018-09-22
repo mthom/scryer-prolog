@@ -1,10 +1,10 @@
 use prolog_parser::ast::*;
-use prolog_parser::parser::*;
 use prolog_parser::tabled_rc::*;
 
 use prolog::instructions::*;
 use prolog::iterators::*;
 use prolog::machine::*;
+use prolog::machine::term_expansion::*;
 use prolog::num::*;
 
 use std::collections::{HashSet, VecDeque};
@@ -66,6 +66,21 @@ impl<'a, 'b : 'a> CompositeIndices<'a, 'b>
             ct => ct
         }
     }
+}
+
+#[inline]
+fn is_term_expansion(name: &ClauseName, terms: &Vec<Box<Term>>) -> bool {
+    if name.as_str() == ":-" {
+        if let Some(ref term) = terms.first() {
+            if let &Term::Clause(_, ref name, ref terms, None) = term.as_ref() {
+                return (name.as_str(), terms.len()) == ("term_expansion", 2);
+            }
+        }
+    } else if name.as_str() == "term_expansion" {
+        return terms.len() == 2;
+    }
+
+    false
 }
 
 fn setup_fact(term: Term) -> Result<Term, ParserError>
@@ -603,6 +618,24 @@ impl RelationWorker {
         Ok(query_terms)
     }
 
+    fn setup_hook(&mut self, indices: &mut CompositeIndices, term: Term)
+                  -> Result<(CompileTimeHook, PredicateClause), ParserError>
+    {
+        match term {
+            Term::Clause(r, name, terms, _) =>
+                if name.as_str() == "term_expansion" && terms.len() == 2 {
+                    let term = Term::Clause(r, name, terms, None);
+                    Ok((CompileTimeHook::TermExpansion, PredicateClause::Fact(term)))
+                } else if name.as_str() == ":-" {
+                    let rule = self.setup_rule(indices, terms, false)?;
+                    Ok((CompileTimeHook::TermExpansion, PredicateClause::Rule(rule)))
+                } else {
+                    Err(ParserError::InvalidHook)
+                },
+            _ => Err(ParserError::InvalidHook)
+        }
+    }
+
     fn setup_rule(&mut self, indices: &mut CompositeIndices, mut terms: Vec<Box<Term>>, blocks_cuts: bool)
                   -> Result<Rule, ParserError>
     {
@@ -625,7 +658,12 @@ impl RelationWorker {
     {
         match term {
             Term::Clause(r, name, mut terms, fixity) =>
-                if name.as_str() == "?-" {
+                if is_term_expansion(&name, &terms) {
+                    let term = Term::Clause(r, name, terms, fixity);
+                    let (hook, clauses) = self.setup_hook(indices, term)?;
+
+                    Ok(TopLevel::Declaration(Declaration::Hook(hook, clauses)))
+                } else if name.as_str() == "?-" {
                     Ok(TopLevel::Query(try!(self.setup_query(indices, terms, blocks_cuts))))
                 } else if name.as_str() == ":-" && terms.len() > 1 {
                     Ok(TopLevel::Rule(try!(self.setup_rule(indices, terms, blocks_cuts))))
@@ -633,7 +671,8 @@ impl RelationWorker {
                     let term = *terms.pop().unwrap();
                     Ok(TopLevel::Declaration(try!(setup_declaration(term))))
                 } else {
-                    Ok(TopLevel::Fact(try!(setup_fact(Term::Clause(r, name, terms, fixity)))))
+                    let term = Term::Clause(r, name, terms, fixity);
+                    Ok(TopLevel::Fact(try!(setup_fact(term))))
                 },
             term => Ok(TopLevel::Fact(try!(setup_fact(term))))
         }
@@ -659,8 +698,8 @@ impl RelationWorker {
         while let Some(terms) = self.queue.pop_front() {
             let clauses = merge_clauses(&mut self.try_terms_to_tls(indices, terms, false)?)?;
             queue.push_back(clauses);
-        }
 
+        }
         Ok(queue)
     }
 
@@ -669,9 +708,12 @@ impl RelationWorker {
     }
 }
 
-// used to parse queries in test. mostly.
+// used to parse queries in test.
+#[cfg(test)]
 pub fn parse_term<R: Read>(wam: &Machine, buf: R) -> Result<Term, ParserError>
 {
+    use prolog_parser::parser::*;
+
     let mut parser = Parser::new(buf, wam.atom_tbl(), wam.machine_flags());
     parser.read_term(composite_op!(&wam.op_dir))
 }
@@ -683,7 +725,7 @@ fn consume_term<'a>(static_code_dir: Rc<RefCell<CodeDir>>, term: Term,
 {
     let mut rel_worker = RelationWorker::new();
     let mut indices = composite_indices!(false, &mut indices, static_code_dir);
-    
+
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
     let results = rel_worker.parse_queue(&mut indices)?;
 
@@ -691,7 +733,7 @@ fn consume_term<'a>(static_code_dir: Rc<RefCell<CodeDir>>, term: Term,
 }
 
 pub struct TopLevelBatchWorker<R: Read> {
-    parser: Parser<R>,
+    term_stream: TermStream<R>,
     rel_worker: RelationWorker,
     static_code_dir: Rc<RefCell<CodeDir>>,
     pub results: Vec<(Predicate, VecDeque<TopLevel>)>,
@@ -703,17 +745,11 @@ impl<R: Read> TopLevelBatchWorker<R> {
                static_code_dir: Rc<RefCell<CodeDir>>)
                -> Self
     {
-        TopLevelBatchWorker { parser: Parser::new(inner, atom_tbl, flags),
+        TopLevelBatchWorker { term_stream: TermStream::new(inner, atom_tbl, flags),
                               rel_worker: RelationWorker::new(),
                               static_code_dir,
                               results: vec![],
                               in_module: false }
-    }
-
-    #[inline]
-    fn read_term(&mut self, static_op_dir: &OpDir, op_dir: &OpDir) -> Result<Term, ParserError> {
-        let composite_op = composite_op!(self.in_module, op_dir, static_op_dir);
-        self.parser.read_term(composite_op)
     }
 
     pub
@@ -724,12 +760,12 @@ impl<R: Read> TopLevelBatchWorker<R> {
         let mut indices = composite_indices!(self.in_module, indices,
                                              self.static_code_dir.clone());
 
-        while !self.parser.eof()? {
-            self.parser.reset(); // empty the parser stack of token descriptions.
+        while !self.term_stream.eof()? {
+            self.term_stream.empty_tokens(); // empty the parser stack of token descriptions.
 
             let mut new_rel_worker = RelationWorker::new();
-            let term = self.read_term(&wam.op_dir, &indices.local.op_dir)?;          
-                
+            let term = self.term_stream.read_term(wam, &indices.local.op_dir)?;
+
             let tl = new_rel_worker.try_term_to_tl(&mut indices, term, true)?;
 
             if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.

@@ -238,8 +238,7 @@ pub enum SystemClauseType {
     SetDoubleQuotes,
     SkipMaxList,
     Succeed,
-    UnwindStack,
-    CompileAndRunQuery
+    UnwindStack
 }
 
 impl SystemClauseType {
@@ -277,7 +276,6 @@ impl SystemClauseType {
             &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
-            &SystemClauseType::CompileAndRunQuery => clause_name!("$compile_and_run_query")
         }
     }
 
@@ -311,7 +309,6 @@ impl SystemClauseType {
             ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
-            ("$compile_and_run_query", 1) => Some(SystemClauseType::CompileAndRunQuery),
             _ => None
         }
     }
@@ -337,10 +334,22 @@ pub enum BuiltInClauseType {
     Sort,
 }
 
+#[derive(Clone, Copy)]
+pub enum CompileTimeHook {
+    TermExpansion
+}
+
+impl CompileTimeHook {
+    pub fn name(self) -> ClauseName {
+        clause_name!("term_expansion")
+    }
+}
+
 #[derive(Clone)]
 pub enum ClauseType {
     BuiltIn(BuiltInClauseType),
     CallN,
+    Hook(CompileTimeHook),
     Inlined(InlinedClauseType),
     Named(ClauseName, CodeIndex),
     Op(ClauseName, Fixity, CodeIndex),
@@ -442,6 +451,7 @@ impl ClauseType {
         match self {
             &ClauseType::CallN => clause_name!("call"),
             &ClauseType::BuiltIn(ref built_in) => built_in.name(),
+            &ClauseType::Hook(ref hook) => hook.name(),
             &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
             &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
@@ -840,7 +850,7 @@ impl CodePtr {
         match self {
             &CodePtr::BuiltInClause(_, ref local)
           | &CodePtr::CallN(_, ref local)
-          | &CodePtr::Local(ref local) => local.clone()
+          | &CodePtr::Local(ref local) => local.clone()               
         }
     }
 }
@@ -849,6 +859,7 @@ impl CodePtr {
 pub enum LocalCodePtr {
     DirEntry(usize, ClauseName), // offset, resident module name.
     TopLevel(usize, usize), // chunk_num, offset.
+    UserTermExpansion(usize)
 }
 
 impl LocalCodePtr {
@@ -901,7 +912,8 @@ impl Add<usize> for LocalCodePtr {
     fn add(self, rhs: usize) -> Self::Output {
         match self {
             LocalCodePtr::DirEntry(p, name) => LocalCodePtr::DirEntry(p + rhs, name),
-            LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs)
+            LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs),
+            LocalCodePtr::UserTermExpansion(p) => LocalCodePtr::UserTermExpansion(p + rhs)
         }
     }
 }
@@ -909,8 +921,9 @@ impl Add<usize> for LocalCodePtr {
 impl AddAssign<usize> for LocalCodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut LocalCodePtr::DirEntry(ref mut p, _) |
-            &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs
+            &mut LocalCodePtr::UserTermExpansion(ref mut p)
+          | &mut LocalCodePtr::DirEntry(ref mut p, _)
+          | &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs            
         }
     }
 }
@@ -1160,9 +1173,10 @@ impl SubModuleUser for Module {
     }
 }
 
-pub enum Declaration {
-    NonCountedBacktracking(ClauseName, usize), // name, arity
+pub enum Declaration {    
+    Hook(CompileTimeHook, PredicateClause),    
     Module(ModuleDecl),
+    NonCountedBacktracking(ClauseName, usize), // name, arity
     Op(OpDecl),
     UseModule(ClauseName),
     UseQualifiedModule(ClauseName, Vec<PredicateKey>)
@@ -1177,10 +1191,10 @@ impl Declaration {
 
 pub enum TopLevel {
     Declaration(Declaration),
-    Fact(Term),
+    Fact(Term),    
     Predicate(Predicate),
     Query(Vec<QueryTerm>),
-    Rule(Rule)
+    Rule(Rule),    
 }
 
 impl TopLevel {

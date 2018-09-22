@@ -5,6 +5,7 @@ use prolog::instructions::*;
 use prolog::iterators::*;
 use prolog::machine::*;
 use prolog::machine::machine_state::MachineState;
+use prolog::machine::term_expansion::*;
 
 use std::collections::VecDeque;
 use std::io::{Read, stdin};
@@ -29,7 +30,7 @@ pub enum Input {
     Term(Term)
 }
 
-pub fn read_toplevel(wam: &Machine) -> Result<Input, ParserError> {    
+pub fn read_toplevel(wam: &mut Machine) -> Result<Input, ParserError> {    
     let mut buffer = String::new();
 
     let stdin = stdin();
@@ -43,10 +44,10 @@ pub fn read_toplevel(wam: &Machine) -> Result<Input, ParserError> {
             Ok(Input::Batch)
         },
         _ => {
-            let mut parser = Parser::new(stdin.lock(), wam.atom_tbl(), wam.machine_flags());
-            parser.add_to_top(buffer.as_str());
+            let mut term_stream = TermStream::new(stdin.lock(), wam.atom_tbl(), wam.machine_flags());
+            term_stream.add_to_top(buffer.as_str());
 
-            Ok(Input::Term(parser.read_term(composite_op!(&wam.op_dir))?))
+            Ok(Input::Term(term_stream.read_term(wam, &OpDir::new())?))
         }
     }
 }
@@ -57,7 +58,7 @@ impl MachineState {
         let mut parser = Parser::new(inner, self.atom_tbl.clone(), self.flags);
         let term = parser.read_term(composite_op!(op_dir))?;
 
-        Ok(write_term_to_heap(term, self))
+        Ok(write_term_to_heap(&term, self))
     }
 }
 
@@ -77,13 +78,13 @@ fn modify_head_of_queue(machine_st: &mut MachineState, queue: &mut SubtermDeque,
     }
 }
 
-fn write_term_to_heap(term: Term, machine_st: &mut MachineState) -> usize {
+pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> usize {
     let h = machine_st.heap.h;
 
     let mut queue = SubtermDeque::new();
     let mut var_dict = HeapVarDict::new();
 
-    for term in breadth_first_iter(&term, true) {
+    for term in breadth_first_iter(term, true) {
         let h = machine_st.heap.h;
 
         match &term {

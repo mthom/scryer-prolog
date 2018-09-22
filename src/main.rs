@@ -39,8 +39,7 @@ fn prolog_repl() {
                 wam.clear();
                 continue;
             },
-            Err(e) =>
-                print(&mut wam, EvalSession::from(e))
+            Err(e) => print(&mut wam, EvalSession::from(e))
         };
 
         wam.reset();

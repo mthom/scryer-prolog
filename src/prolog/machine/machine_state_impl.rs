@@ -196,7 +196,7 @@ impl MachineState {
                         self.fail = true;
                     },
                     (Addr::Lis(a1), Addr::Con(Constant::String(ref mut s)))
-                  | (Addr::Con(Constant::String(ref mut s)), Addr::Lis(a1))
+                        | (Addr::Con(Constant::String(ref mut s)), Addr::Lis(a1))
                         if self.flags.double_quotes.is_chars() => {
                             if let Some(c) = s.head() {
                                 pdl.push(Addr::Con(Constant::String(s.tail())));
@@ -233,7 +233,7 @@ impl MachineState {
                             self.fail = true;
                         },
                     (Addr::Con(Constant::EmptyList), Addr::Con(Constant::String(ref s)))
-                  | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
+                        | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
                         if self.flags.double_quotes.is_chars() => {
                             if s.is_expandable() && s.is_empty() {
                                 s.set_non_expandable();
@@ -314,7 +314,7 @@ impl MachineState {
             }
         }
     }
-
+    
     fn trail(&mut self, r: Ref) {
         match r {
             Ref::HeapCell(hc) =>
@@ -1457,7 +1457,7 @@ impl MachineState {
         for (v1, v2) in iter {
             match (v1, v2) {
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Con(Constant::String(_))))
-              | (HeapCellValue::Addr(Addr::Con(Constant::String(_))), HeapCellValue::Addr(Addr::Lis(_)))
+                    | (HeapCellValue::Addr(Addr::Con(Constant::String(_))), HeapCellValue::Addr(Addr::Lis(_)))
                     if self.flags.double_quotes.is_chars() => {},
                 (HeapCellValue::Addr(Addr::Con(Constant::EmptyList)),
                  HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
@@ -1577,7 +1577,7 @@ impl MachineState {
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
                     continue,
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::NamedStr(ar, n, _))
-              | (HeapCellValue::NamedStr(ar, n, _), HeapCellValue::Addr(Addr::Lis(_))) =>
+                    | (HeapCellValue::NamedStr(ar, n, _), HeapCellValue::Addr(Addr::Lis(_))) =>
                     if ar == 2 && n.as_str() == "." {
                         continue;
                     } else if ar < 2 {
@@ -2045,7 +2045,7 @@ impl MachineState {
 
         self.p += 1;
     }
-
+    
     fn handle_call_clause<'a>(&mut self, indices: MachineCodeIndices<'a>,
                               call_policy: &mut Box<CallPolicy>,
                               cut_policy:  &mut Box<CutPolicy>,
@@ -2068,6 +2068,8 @@ impl MachineState {
                 try_or_fail!(self, call_policy.call_builtin(self, ct, indices)),
             &ClauseType::CallN =>
                 try_or_fail!(self, call_policy.call_n(self, arity, indices)),
+            &ClauseType::Hook(ref hook) =>
+                try_or_fail!(self, call_policy.compile_hook(self, hook)),
             &ClauseType::Inlined(ref ct) =>
                 self.execute_inlined(ct),
             &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
@@ -2087,8 +2089,8 @@ impl MachineState {
             &ControlInstruction::Allocate(num_cells) =>
                 self.allocate(num_cells),
             &ControlInstruction::CallClause(ref ct, arity, _, lco, use_default_cp) =>
-                self.handle_call_clause(indices, call_policy, cut_policy, ct, arity, lco,
-                                        use_default_cp),
+                self.handle_call_clause(indices, call_policy, cut_policy, 
+                                        ct, arity, lco, use_default_cp),
             &ControlInstruction::Deallocate => self.deallocate(),
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
                 if !lco {

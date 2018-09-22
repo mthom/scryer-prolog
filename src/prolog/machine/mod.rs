@@ -1,12 +1,15 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::instructions::*;
+use prolog::codegen::*;
 use prolog::compile::*;
+use prolog::debray_allocator::*;
 use prolog::heap_print::*;
+use prolog::instructions::*;
 
 mod machine_errors;
 pub(super) mod machine_state;
+pub(super) mod term_expansion;
 
 #[macro_use] mod machine_state_impl;
 mod system_calls;
@@ -53,7 +56,8 @@ pub struct Machine {
     code: Code,
     pub(super) code_dir: Rc<RefCell<CodeDir>>,
     pub(super) op_dir: OpDir,
-//    term_dir: TermDir,
+    term_dir: TermDir,
+    term_expanders: Code,
     pub(super) modules: ModuleDir,
     cached_query: Option<Code>
 }
@@ -80,7 +84,8 @@ impl Index<LocalCodePtr> for Machine {
                     &None => panic!("Out-of-bounds top level index.")
                 }
             },
-            LocalCodePtr::DirEntry(p, _) => &self.code[p]
+            LocalCodePtr::DirEntry(p, _) => &self.code[p],
+            LocalCodePtr::UserTermExpansion(p) => &self.term_expanders[p]
         }
     }
 }
@@ -115,7 +120,7 @@ impl<'a> SubModuleUser for MachineCodeIndices<'a> {
 static LISTS: &str   = include_str!("../lib/lists.pl");
 static CONTROL: &str = include_str!("../lib/control.pl");
 static QUEUES: &str  = include_str!("../lib/queues.pl");
-static NUMBERVARS: &str  = include_str!("../lib/numbervars.pl");
+static NUMVARS: &str = include_str!("../lib/numbervars.pl");
 
 impl Machine {
     pub fn new() -> Self {
@@ -126,7 +131,8 @@ impl Machine {
             code: Code::new(),
             code_dir: Rc::new(RefCell::new(CodeDir::new())),
             op_dir: default_op_dir(),
-            // term_dir: TermDir::new(),
+            term_dir: TermDir::new(),
+            term_expanders: Code::new(),
             modules: HashMap::new(),
             cached_query: None
         };
@@ -138,7 +144,7 @@ impl Machine {
         compile_user_module(&mut wam, LISTS.as_bytes());
         compile_user_module(&mut wam, CONTROL.as_bytes());
         compile_user_module(&mut wam, QUEUES.as_bytes());
-	compile_user_module(&mut wam, NUMBERVARS.as_bytes());
+	compile_user_module(&mut wam, NUMVARS.as_bytes());
 
         wam
     }
@@ -245,8 +251,29 @@ impl Machine {
         }
     }
 
+    #[inline]
+    pub(super)
+    fn add_term_expansion_clause(&mut self, clause: PredicateClause) -> Result<(), ParserError>
+    {
+        let key = (clause_name!("term_expansion"), 2);
+        let preds = self.term_dir.entry(key).or_insert(Predicate(vec![]));
+        
+        preds.0.push(clause);
+                
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(false, self.ms.flags);
+        let code = cg.compile_predicate(&preds.0)?;
+
+        Ok(self.term_expanders = code)
+    }
+    
     fn lookup_instr(&self, p: CodePtr) -> Option<Line> {
         match p {
+            CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) =>
+                if p < self.term_expanders.len() {
+                    Some(self.term_expanders[p].clone())
+                } else {
+                    None
+                },
             CodePtr::Local(LocalCodePtr::TopLevel(_, p)) =>
                 match &self.cached_query {
                     &Some(ref cq) => Some(cq[p].clone()),
@@ -342,6 +369,8 @@ impl Machine {
 
             match self.ms.p {
                 CodePtr::Local(LocalCodePtr::DirEntry(p, _)) if p < self.code.len() => {},
+                CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) if p < self.term_expanders.len() => {},
+                CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) => self.ms.fail = true,
                 CodePtr::Local(_) => break,
                 _ => {}
             };

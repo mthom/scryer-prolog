@@ -203,7 +203,7 @@ impl MachineState {
             },
             &SystemClauseType::GetDoubleQuotes => {
                 let a1 = self[temp_v!(1)].clone();
-                
+
                 match self.flags.double_quotes {
                     DoubleQuotes::Chars =>
                         self.unify(a1, Addr::Con(atom!("chars"))),
@@ -435,14 +435,7 @@ impl MachineState {
                 return Err(err);
             },
             &SystemClauseType::Succeed => {},
-            &SystemClauseType::UnwindStack => self.unwind_stack(),
-            &SystemClauseType::CompileAndRunQuery => {}
-/*              let addr = self[temp_v!(1)].clone();
-                
-                match term_write(&self, addr) {
-                    Err(e)   => machine_error
-                    Ok(term) => 
-            }*/
+            &SystemClauseType::UnwindStack => self.unwind_stack()
         };
 
         self.set_p();

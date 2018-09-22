@@ -235,6 +235,8 @@ impl ListingCompiler {
                     -> Result<(), SessionError>
     {
         match decl {
+            Declaration::Hook(CompileTimeHook::TermExpansion, clause) =>
+                Ok(wam.add_term_expansion_clause(clause)?),
             Declaration::NonCountedBacktracking(name, arity) =>
                 Ok(self.add_non_counted_bt_flag(name, arity)),
             Declaration::Op(op_decl) =>
