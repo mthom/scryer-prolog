@@ -26,4 +26,4 @@ fold_numbervars([HeadTerm | Terms], [NewHeadTerm | NewTerms], N1, Nn) :-
     ; numbervars(HeadTerm, NewHeadTerm, N1, N2)
     ),
     fold_numbervars(Terms, NewTerms, N2, Nn).
-fold_numbervars([], [], _, _).
+fold_numbervars([], [], N, N).
