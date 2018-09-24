@@ -33,7 +33,7 @@ Extend rusty-wam to include the following, among other features:
 * Default representation of strings as list of chars, using a packed
   internal representation (_done_).
     - A representation of 'partial strings' as difference lists
-      of characters (_done_).
+      of characters (_in progress_).
 * `term_expansion/2` and `goal_expansion/2` (_in progress_).
 * Definite Clause Grammars.
 * Attributed variables using the SICStus Prolog interface and
