@@ -249,7 +249,8 @@ pub struct MachineState {
     pub(super) or_stack: OrStack,
     pub(super) registers: Registers,
     pub(super) trail: Vec<Ref>,
-    pub(super) partial_string_trail: Vec<(StringList, usize)>,
+    pub(super) pstr_trail: Vec<(usize, StringList, usize)>, // b, String, trunc_pt
+    pub(super) pstr_tr: usize,
     pub(super) tr: usize,
     pub(super) hb: usize,
     pub(super) block: usize, // an offset into the OR stack.
@@ -298,6 +299,15 @@ pub(crate) trait CallPolicy: Any {
         machine_st.tr = machine_st.or_stack[b].tr;
 
         machine_st.trail.truncate(machine_st.tr);
+
+        let old_pstr_tr  = machine_st.or_stack[b].pstr_tr;
+        let curr_pstr_tr = machine_st.pstr_tr;
+
+        machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
+        machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
+
+        machine_st.pstr_trail.truncate(machine_st.pstr_tr);
+        
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         machine_st.hb = machine_st.heap.h;
@@ -324,9 +334,18 @@ pub(crate) trait CallPolicy: Any {
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
-        machine_st.tr = machine_st.or_stack[b].tr;
+        machine_st.tr = machine_st.or_stack[b].tr;        
 
         machine_st.trail.truncate(machine_st.tr);
+
+        let old_pstr_tr  = machine_st.or_stack[b].pstr_tr;
+        let curr_pstr_tr = machine_st.pstr_tr;
+
+        machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
+        machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
+
+        machine_st.pstr_trail.truncate(machine_st.pstr_tr);
+        
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         machine_st.hb = machine_st.heap.h;
@@ -351,10 +370,18 @@ pub(crate) trait CallPolicy: Any {
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
-
         machine_st.tr = machine_st.or_stack[b].tr;
+        
         machine_st.trail.truncate(machine_st.tr);
 
+        let old_pstr_tr  = machine_st.or_stack[b].pstr_tr;
+        let curr_pstr_tr = machine_st.pstr_tr;
+
+        machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
+        machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
+
+        machine_st.pstr_trail.truncate(machine_st.pstr_tr);
+        
         machine_st.heap.truncate(machine_st.or_stack[b].h);
         machine_st.b = machine_st.or_stack[b].b;
 
@@ -382,10 +409,18 @@ pub(crate) trait CallPolicy: Any {
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
-
         machine_st.tr = machine_st.or_stack[b].tr;
+        
         machine_st.trail.truncate(machine_st.tr);
 
+        let old_pstr_tr  = machine_st.or_stack[b].pstr_tr;
+        let curr_pstr_tr = machine_st.pstr_tr;
+
+        machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
+        machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
+
+        machine_st.pstr_trail.truncate(machine_st.pstr_tr);
+        
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         machine_st.b = machine_st.or_stack[b].b;
@@ -842,6 +877,7 @@ fn cut_body(machine_st: &mut MachineState, addr: Addr) -> bool {
         if b > b0 {
             machine_st.b = b0;
             machine_st.tidy_trail();
+            machine_st.tidy_pstr_trail();
             machine_st.or_stack.truncate(machine_st.b);
         }
     } else {
@@ -923,6 +959,7 @@ impl CutPolicy for SCCCutPolicy {
             if b > b0 {
                 machine_st.b = b0;
                 machine_st.tidy_trail();
+                machine_st.tidy_pstr_trail();
                 machine_st.or_stack.truncate(machine_st.b);
             }
         } else {

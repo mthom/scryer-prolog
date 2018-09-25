@@ -10,7 +10,7 @@ license = "BSD-3-Clause"
 downcast = "0.9.1"
 num = "0.2"
 ordered-float = "0.5.0"
-prolog_parser = "0.7.15"
+prolog_parser = "0.7.16"
 
 [dependencies.termion]
 version = "1.4.0"

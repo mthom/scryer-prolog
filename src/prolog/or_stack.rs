@@ -10,6 +10,7 @@ pub struct Frame {
     pub b: usize,    
     pub bp: CodePtr,
     pub tr: usize,
+    pub pstr_tr: usize,
     pub h: usize,
     pub b0: usize,
     args: Vec<Addr>
@@ -22,20 +23,22 @@ impl Frame {
            b: usize,
            bp: CodePtr,
            tr: usize,
+           pstr_tr: usize,
            h: usize,
            b0: usize,
            n: usize)
            -> Self
     {
         Frame {
-            global_index: global_index,
-            e: e,
-            cp: cp,
-            b: b,
-            bp: bp,
-            tr: tr,
-            h: h,
-            b0: b0,
+            global_index,
+            e,
+            cp,
+            b,
+            bp,
+            tr,
+            pstr_tr,
+            h,
+            b0,
             args: vec![Addr::HeapCell(0); n]
         }
     }
@@ -59,11 +62,12 @@ impl OrStack {
                 b: usize,
                 bp: CodePtr,
                 tr: usize,
+                pstr_tr: usize,
                 h: usize,
                 b0: usize,
                 n: usize)
     {
-        self.0.push(Frame::new(global_index, e, cp, b, bp, tr, h, b0, n));
+        self.0.push(Frame::new(global_index, e, cp, b, bp, tr, pstr_tr, h, b0, n));
     }
 
     pub fn len(&self) -> usize {

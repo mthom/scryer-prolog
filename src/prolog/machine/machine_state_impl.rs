@@ -49,7 +49,8 @@ impl MachineState {
             or_stack: OrStack::new(),
             registers: vec![Addr::HeapCell(0); MAX_ARITY + 1], // self.registers[0] is never used.
             trail: vec![],
-            partial_string_trail: vec![],
+            pstr_trail: vec![],
+            pstr_tr: 0,
             tr: 0,
             hb: 0,
             block: 0,
@@ -162,6 +163,51 @@ impl MachineState {
         printer.print(addr)
     }
 
+    pub(super)
+    fn unify_string(&mut self, pdl: &mut Vec<Addr>, s1: &mut StringList, s2: &mut StringList) -> bool
+    {
+        if let Some(c1) = s1.head() {
+            if let Some(c2) = s2.head() {
+                if c1 == c2 {
+                    pdl.push(Addr::Con(Constant::String(s1.tail())));
+                    pdl.push(Addr::Con(Constant::String(s2.tail())));
+
+                    return true;
+                }
+            } else if s2.is_expandable() {
+                self.pstr_trail(s2.clone());
+
+                pdl.push(Addr::Con(Constant::String(s2.push_char(c1))));
+                pdl.push(Addr::Con(Constant::String(s1.tail())));
+
+                return true;
+            }
+        } else if s1.is_expandable() {
+            if let Some(c) = s2.head() {
+                self.pstr_trail(s1.clone());
+
+                pdl.push(Addr::Con(Constant::String(s1.push_char(c))));
+                pdl.push(Addr::Con(Constant::String(s2.tail())));
+            } else if s2.is_expandable() {
+                return s1 == s2;
+            } else {
+                self.pstr_trail(s1.clone());
+                s1.set_non_expandable();
+            }
+
+            return true;
+        } else if s2.head().is_none() {
+            if s2.is_expandable() {
+                self.pstr_trail(s2.clone());
+            }
+
+            s2.set_non_expandable();
+            return true;
+        }
+
+        false
+    }
+
     pub(super) fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
 
@@ -208,6 +254,8 @@ impl MachineState {
 
                                 continue;
                             } else if s.is_expandable() {
+                                let prev_s = s.clone();
+
                                 let mut stepper = |c| {
                                     let new_s = s.push_char(c);
 
@@ -217,12 +265,14 @@ impl MachineState {
 
                                 match self.heap[a1].clone() {
                                     HeapCellValue::Addr(Addr::Con(Constant::Char(c))) => {
+                                        self.pstr_trail(prev_s);
                                         stepper(c);
                                         continue;
                                     },
                                     HeapCellValue::Addr(Addr::Con(Constant::Atom(ref a, _))) =>
                                         if let Some(c) = a.as_str().chars().next() {
                                             if c.len_utf8() == a.as_str().len() {
+                                                self.pstr_trail(prev_s);
                                                 stepper(c);
                                                 continue;
                                             }
@@ -237,6 +287,7 @@ impl MachineState {
                   | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
                         if self.flags.double_quotes.is_chars() => {
                             if s.is_expandable() && s.is_empty() {
+                                self.pstr_trail(s.clone());
                                 s.set_non_expandable();
                                 continue;
                             }
@@ -251,43 +302,9 @@ impl MachineState {
                         pdl.push(Addr::HeapCell(a2 + 1));
                     },
                     (Addr::Con(Constant::String(ref mut s1)),
-                     Addr::Con(Constant::String(ref mut s2))) => {
-                        let mut stepper = |s1: &mut StringList, s2: &mut StringList| -> bool {
-                            if let Some(c1) = s1.head() {
-                                if let Some(c2) = s2.head() {
-                                    if c1 == c2 {
-                                        pdl.push(Addr::Con(Constant::String(s1.tail())));
-                                        pdl.push(Addr::Con(Constant::String(s2.tail())));
-
-                                        return true;
-                                    }
-                                } else if s2.is_expandable() {
-                                    pdl.push(Addr::Con(Constant::String(s2.push_char(c1))));
-                                    pdl.push(Addr::Con(Constant::String(s1.tail())));
-
-                                    return true;
-                                }
-                            } else if s1.is_expandable() {
-                                if let Some(c) = s2.head() {
-                                    pdl.push(Addr::Con(Constant::String(s1.push_char(c))));
-                                    pdl.push(Addr::Con(Constant::String(s2.tail())));
-                                } else if s2.is_expandable() {
-                                    return s1 == s2;
-                                } else {
-                                    s1.set_non_expandable();
-                                }
-
-                                return true;
-                            } else if s2.head().is_none() {
-                                s2.set_non_expandable();
-                                return true;
-                            }
-
-                            false
-                        };
-
-                        self.fail = !(stepper(s1, s2) || stepper(s2, s1));
-                    },
+                     Addr::Con(Constant::String(ref mut s2))) =>
+                        self.fail = !(self.unify_string(&mut pdl, s1, s2)
+                                   || self.unify_string(&mut pdl, s2, s1)),
                     (Addr::Con(ref c1), Addr::Con(ref c2)) =>
                         if c1 != c2 {
                             self.fail = true;
@@ -315,6 +332,19 @@ impl MachineState {
                 };
             }
         }
+    }
+
+    #[inline]
+    fn pstr_trail(&mut self, s: StringList) {
+        if let Some((prev_b, prev_s, _)) = self.pstr_trail.last().cloned() {
+            if prev_b == self.b && prev_s == s {
+                return;
+            }
+        }
+
+        let len = s.len();
+        self.pstr_trail.push((self.b, s, len));
+        self.pstr_tr += 1;
     }
 
     fn trail(&mut self, r: Ref) {
@@ -352,6 +382,35 @@ impl MachineState {
                     self.heap[r] = HeapCellValue::Addr(Addr::HeapCell(r)),
                 Ref::StackCell(fr, sc) =>
                     self.and_stack[fr][sc] = Addr::StackCell(fr, sc)
+            }
+        }
+    }
+
+    pub(super) fn unwind_pstr_trail(&mut self, a1: usize, a2: usize) {
+        for i in a1 .. a2 {
+            let (_, mut s, end) = self.pstr_trail[i].clone();
+            s.truncate(end);
+        }
+    }
+
+    pub(super) fn tidy_pstr_trail(&mut self) {
+        if self.b == 0 {
+            return;
+        }
+
+        let b = self.b - 1;
+        let mut i = self.or_stack[b].pstr_tr;
+
+        while i < self.pstr_tr {
+            let str_b = self.pstr_trail[i].0;
+
+            if b < str_b {
+                let pstr_tr = self.pstr_tr;
+                let val = self.pstr_trail[pstr_tr - 1].clone();
+                self.pstr_trail[i] = val;
+                self.pstr_tr -= 1;
+            } else {
+                i += 1;
             }
         }
     }
@@ -402,6 +461,8 @@ impl MachineState {
 
     #[inline]
     fn write_char_to_string(&mut self, s: &mut StringList, c: char) -> bool {
+        self.pstr_trail(s.clone());
+
         let new_s = s.push_char(c);
         self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(new_s))));
         false
@@ -422,6 +483,7 @@ impl MachineState {
                     Constant::EmptyList if self.flags.double_quotes.is_chars() =>
                         !s.is_empty(),
                     Constant::String(ref s2) if s.is_empty() && s.is_expandable() => {
+                        self.pstr_trail(s.clone());
                         s.append(s2);
                         false
                     },
@@ -2140,6 +2202,7 @@ impl MachineState {
                                    self.b,
                                    self.p.clone() + 1,
                                    self.tr,
+                                   self.pstr_tr,
                                    self.heap.h,
                                    self.b0,
                                    self.num_of_args);
@@ -2175,6 +2238,7 @@ impl MachineState {
                                    self.b,
                                    self.p.clone() + offset,
                                    self.tr,
+                                   self.pstr_tr,
                                    self.heap.h,
                                    self.b0,
                                    self.num_of_args);
@@ -2246,13 +2310,14 @@ impl MachineState {
         self.b0 = 0;
         self.s = 0;
         self.tr = 0;
+        self.pstr_tr = 0;
         self.p = CodePtr::default();
         self.cp = LocalCodePtr::default();
         self.num_of_args = 0;
 
         self.fail = false;
         self.trail.clear();
-        self.partial_string_trail.clear();
+        self.pstr_trail.clear();
         self.heap.clear();
         self.mode = MachineMode::Write;
         self.and_stack.clear();
