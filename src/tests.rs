@@ -2019,4 +2019,9 @@ fn test_queries_on_string_lists()
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y).",
                            [["X = [a, b, c]", "Y = []"],
                             ["X = [a, b, c | _]", "Y = _"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"a\", X), matcher(X, Y).",
+                           [["X = [a, b, c]", "Y = []"],
+                            ["X = [a, b, c | _]", "Y = _"]]);
+
+    assert_prolog_failure!(&mut wam, "?- partial_string(\"abc\", X), partial_string(\"bc\", Y), X = [a | Y].");
 }
