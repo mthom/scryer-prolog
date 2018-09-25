@@ -238,6 +238,7 @@ pub enum SystemClauseType {
     SetDoubleQuotes,
     SkipMaxList,
     Succeed,
+    TermVariables,
     UnwindStack
 }
 
@@ -275,6 +276,7 @@ impl SystemClauseType {
             &SystemClauseType::SetDoubleQuotes => clause_name!("$set_double_quotes"),
             &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
             &SystemClauseType::Succeed => clause_name!("$succeed"),
+            &SystemClauseType::TermVariables => clause_name!("$term_variables"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
         }
     }
@@ -308,6 +310,7 @@ impl SystemClauseType {
             ("$set_cp_by_default", 1) => Some(SystemClauseType::SetCutPointByDefault(temp_v!(1))),
             ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
+            ("$term_variables", 2) => Some(SystemClauseType::TermVariables),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             _ => None
         }

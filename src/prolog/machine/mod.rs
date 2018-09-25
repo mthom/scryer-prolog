@@ -120,7 +120,7 @@ impl<'a> SubModuleUser for MachineCodeIndices<'a> {
 static LISTS: &str   = include_str!("../lib/lists.pl");
 static CONTROL: &str = include_str!("../lib/control.pl");
 static QUEUES: &str  = include_str!("../lib/queues.pl");
-static NUMVARS: &str = include_str!("../lib/numbervars.pl");
+static TERMS: &str   = include_str!("../lib/terms.pl");
 
 impl Machine {
     pub fn new() -> Self {
@@ -144,7 +144,7 @@ impl Machine {
         compile_user_module(&mut wam, LISTS.as_bytes());
         compile_user_module(&mut wam, CONTROL.as_bytes());
         compile_user_module(&mut wam, QUEUES.as_bytes());
-	compile_user_module(&mut wam, NUMVARS.as_bytes());
+	compile_user_module(&mut wam, TERMS.as_bytes());
 
         wam
     }

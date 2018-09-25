@@ -1,13 +1,14 @@
 use prolog_parser::ast::*;
 
+use prolog::heap_iter::*;
 use prolog::instructions::*;
 use prolog::machine::MachineCodeIndices;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt};
-//use prolog::term_writer::*;
 
+use std::collections::HashSet;
 use std::rc::Rc;
 
 struct BrentAlgState {
@@ -435,6 +436,47 @@ impl MachineState {
                 return Err(err);
             },
             &SystemClauseType::Succeed => {},
+            &SystemClauseType::TermVariables => {
+                let a1 = self[temp_v!(1)].clone();
+                let mut vars = Vec::new();
+                
+                {
+                    let iter = HCPreOrderIterator::new(self, a1);                    
+                    
+                    for item in iter {
+                        match item {                        
+                            HeapCellValue::Addr(Addr::HeapCell(h)) =>
+                                vars.push(Ref::HeapCell(h)),                            
+                            HeapCellValue::Addr(Addr::StackCell(fr, sc)) =>
+                                vars.push(Ref::StackCell(fr, sc)),                            
+                            _ => {}
+                        }
+                    }
+                }
+                
+                let mut h = self.heap.h;
+                let outcome = Addr::HeapCell(h);
+
+                let mut seen_vars = HashSet::new();
+                
+                for r in vars {
+                    if seen_vars.contains(&r) {
+                        continue;
+                    }
+                    
+                    self.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
+                    self.heap.push(HeapCellValue::Addr(r.as_addr()));
+
+                    h += 2;
+
+                    seen_vars.insert(r);
+                }
+
+                self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
+
+                let a2 = self[temp_v!(2)].clone();
+                self.unify(a2, outcome);
+            },
             &SystemClauseType::UnwindStack => self.unwind_stack()
         };
 

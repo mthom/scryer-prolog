@@ -33,7 +33,7 @@ Extend rusty-wam to include the following, among other features:
 * Default representation of strings as list of chars, using a packed
   internal representation (_done_).
     - A representation of 'partial strings' as difference lists
-      of characters (_in progress_).
+      of characters (_done_).
 * `term_expansion/2` and `goal_expansion/2` (_in progress_).
 * Definite Clause Grammars.
 * Attributed variables using the SICStus Prolog interface and
@@ -153,6 +153,7 @@ The following predicates are built-in to rusty-wam.
 * `member/2`
 * `memberchk/2`
 * `nonvar/1`
+* `numbervars/{2,3}`
 * `once/1`
 * `partial_string/2`
 * `rational/1`
@@ -163,6 +164,7 @@ The following predicates are built-in to rusty-wam.
 * `setup_call_cleanup/3`
 * `sort/2`
 * `string/1`
+* `term_variables/2`
 * `throw/1`
 * `true/0`
 * `var/1`
