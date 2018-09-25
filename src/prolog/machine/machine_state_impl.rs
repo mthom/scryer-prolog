@@ -48,7 +48,8 @@ impl MachineState {
             and_stack: AndStack::new(),
             or_stack: OrStack::new(),
             registers: vec![Addr::HeapCell(0); MAX_ARITY + 1], // self.registers[0] is never used.
-            trail: Vec::new(),
+            trail: vec![],
+            partial_string_trail: vec![],
             tr: 0,
             hb: 0,
             block: 0,
@@ -135,7 +136,7 @@ impl MachineState {
         let mut output = printer.print(addr);
 
         let bad_ending = format!("= {}", &var);
-        
+
         if output.ends_with(&bad_ending) {
             output.truncate(orig_len);
         }
@@ -196,7 +197,7 @@ impl MachineState {
                         self.fail = true;
                     },
                     (Addr::Lis(a1), Addr::Con(Constant::String(ref mut s)))
-                        | (Addr::Con(Constant::String(ref mut s)), Addr::Lis(a1))
+                  | (Addr::Con(Constant::String(ref mut s)), Addr::Lis(a1))
                         if self.flags.double_quotes.is_chars() => {
                             if let Some(c) = s.head() {
                                 pdl.push(Addr::Con(Constant::String(s.tail())));
@@ -233,7 +234,7 @@ impl MachineState {
                             self.fail = true;
                         },
                     (Addr::Con(Constant::EmptyList), Addr::Con(Constant::String(ref s)))
-                        | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
+                  | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
                         if self.flags.double_quotes.is_chars() => {
                             if s.is_expandable() && s.is_empty() {
                                 s.set_non_expandable();
@@ -249,7 +250,8 @@ impl MachineState {
                         pdl.push(Addr::HeapCell(a1 + 1));
                         pdl.push(Addr::HeapCell(a2 + 1));
                     },
-                    (Addr::Con(Constant::String(ref mut s1)), Addr::Con(Constant::String(ref mut s2))) => {
+                    (Addr::Con(Constant::String(ref mut s1)),
+                     Addr::Con(Constant::String(ref mut s2))) => {
                         let mut stepper = |s1: &mut StringList, s2: &mut StringList| -> bool {
                             if let Some(c1) = s1.head() {
                                 if let Some(c2) = s2.head() {
@@ -314,7 +316,7 @@ impl MachineState {
             }
         }
     }
-    
+
     fn trail(&mut self, r: Ref) {
         match r {
             Ref::HeapCell(hc) =>
@@ -368,7 +370,7 @@ impl MachineState {
 
             match tr_i {
                 Ref::HeapCell(tr_i) =>
-                    if tr_i < hb { //|| ((h < tr_i) && tr_i < b) {
+                    if tr_i < hb {
                         i += 1;
                     } else {
                         let tr = self.tr;
@@ -398,6 +400,13 @@ impl MachineState {
         }
     }
 
+    #[inline]
+    fn write_char_to_string(&mut self, s: &mut StringList, c: char) -> bool {
+        let new_s = s.push_char(c);
+        self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(new_s))));
+        false
+    }
+
     pub(super) fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
         match self.store(self.deref(addr)) {
             Addr::HeapCell(hc) => {
@@ -417,13 +426,24 @@ impl MachineState {
                         false
                     },
                     Constant::String(s2) => *s != s2,
+                    Constant::Atom(ref a, _) if s.is_empty() && s.is_expandable() =>
+                        if let Some(c) = a.as_str().chars().next() {
+                            if c.len_utf8() == a.as_str().len() {
+                                self.write_char_to_string(s, c)
+                            } else {
+                                true
+                            }
+                        } else {
+                            true
+                        },
+                    Constant::Char(ref c) if s.is_empty() && s.is_expandable() =>
+                        self.write_char_to_string(s, *c),
                     _ => true
                 },
-            Addr::Con(c1) => {
+            Addr::Con(c1) =>
                 if c1 != c {
                     self.fail = true;
-                }
-            },
+                },
             _ => self.fail = true
         };
     }
@@ -1529,7 +1549,7 @@ impl MachineState {
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::String(_))),
                  HeapCellValue::Addr(Addr::Con(Constant::Number(_)))) =>
-                    return Ordering::Greater,                
+                    return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::String(s1))),
                  HeapCellValue::Addr(Addr::Con(Constant::String(s2)))) =>
                     return if s1.is_expandable() {
@@ -2045,7 +2065,7 @@ impl MachineState {
 
         self.p += 1;
     }
-    
+
     fn handle_call_clause<'a>(&mut self, indices: MachineCodeIndices<'a>,
                               call_policy: &mut Box<CallPolicy>,
                               cut_policy:  &mut Box<CutPolicy>,
@@ -2089,7 +2109,7 @@ impl MachineState {
             &ControlInstruction::Allocate(num_cells) =>
                 self.allocate(num_cells),
             &ControlInstruction::CallClause(ref ct, arity, _, lco, use_default_cp) =>
-                self.handle_call_clause(indices, call_policy, cut_policy, 
+                self.handle_call_clause(indices, call_policy, cut_policy,
                                         ct, arity, lco, use_default_cp),
             &ControlInstruction::Deallocate => self.deallocate(),
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
@@ -2207,7 +2227,6 @@ impl MachineState {
                 self.p += 1;
             },
             &CutInstruction::GetLevelAndUnify(r) => {
-                // let b0 = Addr::Con(Constant::Usize(self.b0));
                 let b0 = self[perm_v!(1)].clone();
                 let a  = self[r].clone();
 
@@ -2233,6 +2252,7 @@ impl MachineState {
 
         self.fail = false;
         self.trail.clear();
+        self.partial_string_trail.clear();
         self.heap.clear();
         self.mode = MachineMode::Write;
         self.and_stack.clear();

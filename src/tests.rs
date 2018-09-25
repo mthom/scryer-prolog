@@ -1972,4 +1972,14 @@ fn test_queries_on_string_lists()
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), X @> \"abc\".");
     assert_prolog_failure!(&mut wam, "?- partial_string(\"abc\", X), X \\=@= \"abc\".");
     assert_prolog_failure!(&mut wam, "?- partial_string(\"abc\", X), X @< \"abc\".");
+
+    assert_prolog_success!(&mut wam, "?- partial_string(\"ab\", X), matcher(X, Y), Y = [a,b|V], 
+                                         matcher(Y, Z), is_partial_string(Y).",
+                           [["V = [c | _]", "X = [a, b, c, a, b, c | _]", "Y = [a, b, c | _]", "Z = _"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"a\", X), matcher(X, Y).",
+                           [["X = [a, b, c | _]", "Y = _"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"a\", X), matcher(X, Y), is_partial_string(Y).",
+                           [["X = [a, b, c | _]", "Y = _"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"a\", X), matcher(X, Y), Y = \"def\".",
+                           [["X = [a, b, c, d, e, f]", "Y = [d, e, f]"]]);
 }

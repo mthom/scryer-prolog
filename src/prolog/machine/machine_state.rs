@@ -1,4 +1,5 @@
 use prolog_parser::ast::*;
+use prolog_parser::string_list::*;
 use prolog_parser::tabled_rc::*;
 
 use prolog::instructions::*;
@@ -248,6 +249,7 @@ pub struct MachineState {
     pub(super) or_stack: OrStack,
     pub(super) registers: Registers,
     pub(super) trail: Vec<Ref>,
+    pub(super) partial_string_trail: Vec<(StringList, usize)>,
     pub(super) tr: usize,
     pub(super) hb: usize,
     pub(super) block: usize, // an offset into the OR stack.
@@ -299,7 +301,6 @@ pub(crate) trait CallPolicy: Any {
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         machine_st.hb = machine_st.heap.h;
-
         machine_st.p += 1;
 
         Ok(())
@@ -329,7 +330,6 @@ pub(crate) trait CallPolicy: Any {
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         machine_st.hb = machine_st.heap.h;
-
         machine_st.p += offset;
 
         Ok(())
