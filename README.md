@@ -153,7 +153,7 @@ The following predicates are built-in to rusty-wam.
 * `member/2`
 * `memberchk/2`
 * `nonvar/1`
-* `numbervars/{2,3}`
+* `numbervars/2`
 * `once/1`
 * `partial_string/2`
 * `rational/1`
