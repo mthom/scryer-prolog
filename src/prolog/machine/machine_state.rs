@@ -588,7 +588,7 @@ pub(crate) trait CallPolicy: Any {
                 println!("{}", output.result());
                 return_from_clause!(machine_st.last_call, machine_st)
             },
-            &BuiltInClauseType::DuplicateTerm => {
+            &BuiltInClauseType::CopyTerm => {
                 machine_st.duplicate_term();
                 return_from_clause!(machine_st.last_call, machine_st)
             },

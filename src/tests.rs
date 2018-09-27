@@ -1477,25 +1477,25 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- catch(length(a, []), error(E, _), true).",
                            [["E = type_error(integer, [])"]]);
 
-    assert_prolog_success!(&mut wam, "?- duplicate_term([1,2,3], [X,Y,Z]).",
+    assert_prolog_success!(&mut wam, "?- copy_term([1,2,3], [X,Y,Z]).",
                            [["Z = 3", "Y = 2", "X = 1"]]);
-    assert_prolog_success!(&mut wam, "?- duplicate_term(f(X, [a], Z), f(X, Y, Z)).",
+    assert_prolog_success!(&mut wam, "?- copy_term(f(X, [a], Z), f(X, Y, Z)).",
                            [["X = _3", "Y = [a]", "Z = _5"]]);
-    assert_prolog_failure!(&mut wam, "?- duplicate_term(g(X), f(X)).");
-    assert_prolog_success!(&mut wam, "?- duplicate_term(f(X), f(X)).",
+    assert_prolog_failure!(&mut wam, "?- copy_term(g(X), f(X)).");
+    assert_prolog_success!(&mut wam, "?- copy_term(f(X), f(X)).",
                            [["X = _1"]]);
-    assert_prolog_success!(&mut wam, "?- duplicate_term([[[[X, Y], Y], X]], Term).",
+    assert_prolog_success!(&mut wam, "?- copy_term([[[[X, Y], Y], X]], Term).",
                            [["Term = [[[[_22, _26], _26], _22]]", "X = _2", "Y = _0"]]);
-    assert_prolog_success!(&mut wam, "?- duplicate_term([X, [Y, [X]]], Term).",
+    assert_prolog_success!(&mut wam, "?- copy_term([X, [Y, [X]]], Term).",
                            [["Term = [_12, [_16, [_12]]]", "X = _0", "Y = _4"]]);
 
-    // test duplicate_term on cyclic terms.
-    assert_prolog_failure!(&mut wam, "?- X = g(X, Y), Y = f(X), duplicate_term(Y, g(Z)).");
-    assert_prolog_success!(&mut wam, "?- X = g(X, Y), Y = f(X), duplicate_term(Y, f(Z)).",
+    // test copy_term on cyclic terms.
+    assert_prolog_failure!(&mut wam, "?- X = g(X, Y), Y = f(X), copy_term(Y, g(Z)).");
+    assert_prolog_success!(&mut wam, "?- X = g(X, Y), Y = f(X), copy_term(Y, f(Z)).",
                            [["Y = f(g(X, Y))", "X = g(X, f(X))", "Z = g(Z, f(Z))"]]);
-    assert_prolog_success!(&mut wam, "?- X = g(X, Y), Y = f(X), duplicate_term(Y, V).",
+    assert_prolog_success!(&mut wam, "?- X = g(X, Y), Y = f(X), copy_term(Y, V).",
                            [["Y = f(g(X, Y))", "X = g(X, f(X))", "V = f(g(_9, V))"]]);
-    assert_prolog_success!(&mut wam, "?- f(Y,Y,[X,a,[],Y]) = Term, duplicate_term(Term, NewTerm).",
+    assert_prolog_success!(&mut wam, "?- f(Y,Y,[X,a,[],Y]) = Term, copy_term(Term, NewTerm).",
                            [["NewTerm = f(_16, _16, [_19, a, [], _16])",
                              "Term = f(_0, Y, [_6, a, [], Y])",
                              "X = _6", "Y = _0"]]);
