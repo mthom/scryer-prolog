@@ -2279,6 +2279,7 @@ impl MachineState {
                 if b > b0 {
                     self.b = b0;
                     self.tidy_trail();
+		    self.tidy_pstr_trail();
                     self.or_stack.truncate(self.b);
                 }
 
