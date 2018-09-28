@@ -135,6 +135,7 @@ The following predicates are built-in to rusty-wam.
 * `call/1..62`
 * `call_cleanup/2`
 * `call_with_inference_limit/3`
+* `can_be/2`
 * `catch/3`
 * `compare/3`
 * `compound/1`
@@ -152,6 +153,7 @@ The following predicates are built-in to rusty-wam.
 * `maplist/2..9`
 * `member/2`
 * `memberchk/2`
+* `must_be/2`
 * `nonvar/1`
 * `numbervars/2`
 * `once/1`
