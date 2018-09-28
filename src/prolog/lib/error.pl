@@ -1,4 +1,5 @@
-:- module(error, [must_be/2, can_be/2]).
+:- module(error, [must_be/2,
+                  can_be/2]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Written September 2018 by Markus Triska (triska@metalevel.at)
@@ -47,16 +48,13 @@ ilist([]).
 ilist([_|Ls]) :- ilist(Ls).
 
 
-
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    can_be(Type, Term)
 
    This predicate is intended for type-checks of built-in predicates.
 
-   It asserts that:
-
-       1) Term is either a variable or instantiated *and*
-       2) _if_ it is instantiated, then it is an instance of Type.
+   It asserts that there is a substitution which, if applied to Term,
+   makes it an instance of Type.
 
    It corresponds to usage mode ?Term.
 
@@ -66,9 +64,18 @@ ilist([_|Ls]) :- ilist(Ls).
 
 can_be(Type, Term) :-
         (   var(Term) -> true
-        ;   must_be(Type, Term)
+        ;   can_(Type, Term) -> true
+        ;   type_error(Type, Term)
         ).
 
+can_(integer, Term) :- integer(Term).
+can_(atom, Term)    :- atom(Term).
+can_(list, Term)    :- list_or_partial_list(Term).
+
+list_or_partial_list(Var) :- var(Var).
+list_or_partial_list([]).
+list_or_partial_list([_|Ls]) :-
+        list_or_partial_list(Ls).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Shorthands for throwing ISO errors.
