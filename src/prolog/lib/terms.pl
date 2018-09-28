@@ -1,9 +1,12 @@
-:- module(terms, [numbervars/2]).
+:- module(terms, [numbervars/3]).
 
-numbervars(Term, N) :-
-    integer(N),
-    term_variables(Term, Vars),
-    numberlist(Vars, N, N1).
+:- use_module(library(error)).
+
+numbervars(Term, N0, N) :-
+   must_be(integer, N0),
+   can_be(integer, N),
+   term_variables(Term, Vars),
+   numberlist(Vars, N0,N).
 
 numberlist([], N,N).
 numberlist(['$VAR'(N0)|Vars], N0,N) :-

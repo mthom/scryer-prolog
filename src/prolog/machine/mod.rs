@@ -120,6 +120,7 @@ impl<'a> SubModuleUser for MachineCodeIndices<'a> {
 static LISTS: &str   = include_str!("../lib/lists.pl");
 static CONTROL: &str = include_str!("../lib/control.pl");
 static QUEUES: &str  = include_str!("../lib/queues.pl");
+static ERROR: &str  = include_str!("../lib/error.pl");
 static TERMS: &str   = include_str!("../lib/terms.pl");
 
 impl Machine {
@@ -144,6 +145,7 @@ impl Machine {
         compile_user_module(&mut wam, LISTS.as_bytes());
         compile_user_module(&mut wam, CONTROL.as_bytes());
         compile_user_module(&mut wam, QUEUES.as_bytes());
+        compile_user_module(&mut wam, ERROR.as_bytes());
 	compile_user_module(&mut wam, TERMS.as_bytes());
 
         wam
