@@ -84,7 +84,7 @@ impl Index<LocalCodePtr> for Machine {
                     &None => panic!("Out-of-bounds top level index.")
                 }
             },
-            LocalCodePtr::DirEntry(p, _) => &self.code[p],
+            LocalCodePtr::DirEntry(p) => &self.code[p],
             LocalCodePtr::UserTermExpansion(p) => &self.term_expanders[p]
         }
     }
@@ -281,7 +281,7 @@ impl Machine {
                     &Some(ref cq) => Some(cq[p].clone()),
                     &None => None
                 },
-            CodePtr::Local(LocalCodePtr::DirEntry(p, _)) =>
+            CodePtr::Local(LocalCodePtr::DirEntry(p)) =>
                 Some(self.code[p].clone()),
             CodePtr::BuiltInClause(built_in, _) =>
                 Some(call_clause!(ClauseType::BuiltIn(built_in.clone()), built_in.arity(),
@@ -370,7 +370,7 @@ impl Machine {
             }
 
             match self.ms.p {
-                CodePtr::Local(LocalCodePtr::DirEntry(p, _)) if p < self.code.len() => {},
+                CodePtr::Local(LocalCodePtr::DirEntry(p)) if p < self.code.len() => {},
                 CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) if p < self.term_expanders.len() => {},
                 CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) => self.ms.fail = true,
                 CodePtr::Local(_) => break,

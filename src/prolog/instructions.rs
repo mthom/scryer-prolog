@@ -858,9 +858,9 @@ impl CodePtr {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum LocalCodePtr {
-    DirEntry(usize, ClauseName), // offset, resident module name.
+    DirEntry(usize), // offset.
     TopLevel(usize, usize), // chunk_num, offset.
     UserTermExpansion(usize)
 }
@@ -886,7 +886,7 @@ impl PartialOrd<CodePtr> for CodePtr {
 impl PartialOrd<LocalCodePtr> for LocalCodePtr {
     fn partial_cmp(&self, other: &LocalCodePtr) -> Option<Ordering> {
         match (self, other) {
-            (&LocalCodePtr::DirEntry(p1, _), &LocalCodePtr::DirEntry(p2, _)) =>
+            (&LocalCodePtr::DirEntry(p1), &LocalCodePtr::DirEntry(p2)) =>
                 p1.partial_cmp(&p2),
             (&LocalCodePtr::DirEntry(..), &LocalCodePtr::TopLevel(_, _)) =>
                 Some(Ordering::Less),
@@ -914,7 +914,7 @@ impl Add<usize> for LocalCodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            LocalCodePtr::DirEntry(p, name) => LocalCodePtr::DirEntry(p + rhs, name),
+            LocalCodePtr::DirEntry(p) => LocalCodePtr::DirEntry(p + rhs),
             LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs),
             LocalCodePtr::UserTermExpansion(p) => LocalCodePtr::UserTermExpansion(p + rhs)
         }
@@ -925,7 +925,7 @@ impl AddAssign<usize> for LocalCodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
             &mut LocalCodePtr::UserTermExpansion(ref mut p)
-          | &mut LocalCodePtr::DirEntry(ref mut p, _)
+          | &mut LocalCodePtr::DirEntry(ref mut p)
           | &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs            
         }
     }

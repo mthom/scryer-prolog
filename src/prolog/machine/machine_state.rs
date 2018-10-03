@@ -260,19 +260,19 @@ pub struct MachineState {
     pub(crate) flags: MachineFlags
 }
 
-fn call_at_index(machine_st: &mut MachineState, module_name: ClauseName, arity: usize, idx: usize)
+fn call_at_index(machine_st: &mut MachineState, arity: usize, idx: usize)
 {
     machine_st.cp.assign_if_local(machine_st.p.clone() + 1);
     machine_st.num_of_args = arity;
     machine_st.b0 = machine_st.b;
-    machine_st.p  = dir_entry!(idx, module_name);
+    machine_st.p  = dir_entry!(idx);
 }
 
-fn execute_at_index(machine_st: &mut MachineState, module_name: ClauseName, arity: usize, idx: usize)
+fn execute_at_index(machine_st: &mut MachineState, arity: usize, idx: usize)
 {
     machine_st.num_of_args = arity;
     machine_st.b0 = machine_st.b;
-    machine_st.p  = dir_entry!(idx, module_name);
+    machine_st.p  = dir_entry!(idx);
 }
 
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
@@ -457,7 +457,7 @@ pub(crate) trait CallPolicy: Any {
                 if let Some(ref idx) = indices.get_code_index((name.clone(), arity), module_name.clone())
                 {
                     if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
-                        call_at_index(machine_st, module_name, arity, compiled_tl_index);
+                        call_at_index(machine_st, arity, compiled_tl_index);
                         return Ok(());
                     }
                 }
@@ -472,10 +472,8 @@ pub(crate) trait CallPolicy: Any {
                 return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
                                                  stub));
             },
-            IndexPtr::Index(compiled_tl_index) => {
-                let module_name = idx.0.borrow().1.clone();
-                call_at_index(machine_st, module_name, arity, compiled_tl_index)
-            }
+            IndexPtr::Index(compiled_tl_index) =>
+                call_at_index(machine_st, arity, compiled_tl_index)
         }
 
         Ok(())
@@ -494,7 +492,7 @@ pub(crate) trait CallPolicy: Any {
                 if let Some(ref idx) = indices.get_code_index((name.clone(), arity), module_name.clone())
                 {
                     if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
-                        execute_at_index(machine_st, module_name, arity, compiled_tl_index);
+                        execute_at_index(machine_st, arity, compiled_tl_index);
                         return Ok(());
                     }
                 }
@@ -509,10 +507,8 @@ pub(crate) trait CallPolicy: Any {
                 return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
                                                  stub));
             },
-            IndexPtr::Index(compiled_tl_index) => {
-                let module_name = idx.0.borrow().1.clone();
-                execute_at_index(machine_st, module_name, arity, compiled_tl_index);
-            }
+            IndexPtr::Index(compiled_tl_index) =>
+                execute_at_index(machine_st, arity, compiled_tl_index)            
         }
 
         Ok(())
@@ -929,7 +925,6 @@ impl SCCCutPolicy {
     fn run_cleaners(&self, machine_st: &mut MachineState) -> bool {
         if let Some(&(_, b_cutoff, prev_block)) = self.cont_pts.last() {
             if machine_st.b < b_cutoff {
-                let builtins = clause_name!("builtins");
                 let (idx, arity) = if machine_st.block < prev_block {
                     (self.r_c_w_h, 0)
                 } else {
@@ -938,9 +933,9 @@ impl SCCCutPolicy {
                 };
 
                 if machine_st.last_call {
-                    execute_at_index(machine_st, builtins, arity, idx);
+                    execute_at_index(machine_st, arity, idx);
                 } else {
-                    call_at_index(machine_st, builtins, arity, idx);
+                    call_at_index(machine_st, arity, idx);
                 }
 
                 return true;
