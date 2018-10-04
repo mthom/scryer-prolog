@@ -733,11 +733,11 @@ fn consume_term<'a>(static_code_dir: Rc<RefCell<CodeDir>>, term: Term,
 }
 
 pub struct TopLevelBatchWorker<R: Read> {
-    term_stream: TermStream<R>,
+    pub(crate) term_stream: TermStream<R>,
     rel_worker: RelationWorker,
     static_code_dir: Rc<RefCell<CodeDir>>,
-    pub results: Vec<(Predicate, VecDeque<TopLevel>)>,
-    pub in_module: bool
+    pub(crate) results: Vec<(Predicate, VecDeque<TopLevel>)>,
+    pub(crate) in_module: bool
 }
 
 impl<R: Read> TopLevelBatchWorker<R> {

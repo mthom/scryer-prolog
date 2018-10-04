@@ -1,4 +1,5 @@
 use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::TabledData;
 
 use prolog::instructions::*;
 use prolog::debray_allocator::*;
@@ -98,7 +99,9 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
 
 fn package_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
     let code_dir = wam.code_dir.clone();
-    let indices = machine_code_indices!(&mut CodeDir::new(), &mut wam.op_dir, &mut wam.modules);
+    let indices = machine_code_indices!(&mut CodeDir::new(),
+                                        &mut wam.op_dir,
+                                        &mut wam.modules);
 
     consume_term(code_dir, term, indices)
 }
@@ -132,8 +135,11 @@ pub struct ListingCompiler {
 }
 
 impl ListingCompiler {
+    #[inline]
     pub fn new() -> Self {
-        ListingCompiler { module: None, non_counted_bt_preds: HashSet::new() }
+        ListingCompiler {
+            module: None, non_counted_bt_preds: HashSet::new()
+        }
     }
 
     fn use_module(&mut self, submodule: Module, wam: &mut Machine, indices: &mut MachineCodeIndices)
@@ -150,8 +156,7 @@ impl ListingCompiler {
             wam.remove_module(&submodule);
         }
 
-        wam.insert_module(submodule);
-        Ok(())
+        Ok(wam.insert_module(submodule))
     }
 
     fn use_qualified_module(&mut self, submodule: Module, wam: &mut Machine,
@@ -169,8 +174,7 @@ impl ListingCompiler {
             wam.remove_module(&submodule);
         }
 
-        wam.insert_module(submodule);
-        Ok(())
+        Ok(wam.insert_module(submodule))
     }
 
     fn get_module_name(&self) -> ClauseName {
@@ -255,7 +259,10 @@ impl ListingCompiler {
                 },
             Declaration::Module(module_decl) =>
                 if self.module.is_none() {
-                    Ok(self.module = Some(Module::new(module_decl)))
+                    let module_name = module_decl.name.clone();
+                    let atom_tbl = TabledData::new(module_name.to_rc());
+
+                    Ok(self.module = Some(Module::new(module_decl, atom_tbl)))
                 } else {
                     Err(SessionError::from(ParserError::InvalidModuleDecl))
                 }
@@ -278,9 +285,15 @@ fn compile_listing<'a, R: Read>(wam: &mut Machine, src: R, mut indices: MachineC
             toplevel_indices.copy_and_swap(&mut indices);
             mem::swap(&mut worker.results, &mut toplevel_results);
             worker.in_module = true;
-        }
 
-        try_eval_session!(compiler.process_decl(decl, wam, &mut indices));
+            try_eval_session!(compiler.process_decl(decl, wam, &mut indices));
+
+            if let &Some(ref module) = &compiler.module {
+                worker.term_stream.set_atom_tbl(module.atom_tbl.clone());
+            }
+        } else {
+            try_eval_session!(compiler.process_decl(decl, wam, &mut indices));
+        }
     }
 
     let module_code = try_eval_session!(compiler.generate_code(worker.results, wam,
@@ -305,6 +318,5 @@ fn setup_indices(wam: &Machine, indices: &mut MachineCodeIndices) -> Result<(), 
 pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
     let mut indices = default_machine_code_indices!();
     try_eval_session!(setup_indices(&wam, &mut indices));
-
     compile_listing(wam, src, indices, default_machine_code_indices!())
 }

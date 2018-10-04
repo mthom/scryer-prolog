@@ -26,6 +26,12 @@ impl fmt::Display for IndexPtr {
     }
 }
 
+impl fmt::Display for ModuleCodeIndex {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl fmt::Display for FactInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

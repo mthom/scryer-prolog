@@ -1,4 +1,5 @@
 use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::*;
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap, VecDeque};
@@ -207,6 +208,7 @@ pub struct ModuleDecl {
 }
 
 pub struct Module {
+    pub atom_tbl: TabledData<Atom>,
     pub module_decl: ModuleDecl,
     pub code_dir: ModuleCodeDir,
     pub op_dir: OpDir
@@ -807,7 +809,7 @@ impl CodeIndex {
 
     #[inline]
     pub fn module_name(&self) -> ClauseName {
-        self.0.borrow().1.clone()        
+        self.0.borrow().1.clone()
     }
 }
 
@@ -853,7 +855,7 @@ impl CodePtr {
         match self {
             &CodePtr::BuiltInClause(_, ref local)
           | &CodePtr::CallN(_, ref local)
-          | &CodePtr::Local(ref local) => local.clone()               
+          | &CodePtr::Local(ref local) => local.clone()
         }
     }
 }
@@ -926,7 +928,7 @@ impl AddAssign<usize> for LocalCodePtr {
         match self {
             &mut LocalCodePtr::UserTermExpansion(ref mut p)
           | &mut LocalCodePtr::DirEntry(ref mut p)
-          | &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs            
+          | &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs
         }
     }
 }
@@ -1038,8 +1040,8 @@ impl<'a> TermIterState<'a> {
 }
 
 impl Module {
-    pub fn new(module_decl: ModuleDecl) -> Self {
-        Module { module_decl,
+    pub fn new(module_decl: ModuleDecl, atom_tbl: TabledData<Atom>) -> Self {
+        Module { module_decl, atom_tbl,
                  code_dir: ModuleCodeDir::new(),
                  op_dir: default_op_dir() }
     }
@@ -1056,9 +1058,9 @@ pub fn as_module_code_dir(code_dir: CodeDir) -> ModuleCodeDir {
 
 pub trait SubModuleUser {
     fn op_dir(&mut self) -> &mut OpDir;
-    fn remove_code_index(&mut self, key: PredicateKey);
-    fn get_code_index(&self, key: PredicateKey, module: ClauseName) -> Option<CodeIndex>;
-    
+    fn remove_code_index(&mut self, PredicateKey);
+    fn get_code_index(&self, PredicateKey, ClauseName) -> Option<CodeIndex>;
+
     fn insert_dir_entry(&mut self, ClauseName, usize, ModuleCodeIndex);
 
     fn remove_module(&mut self, mod_name: ClauseName, module: &Module) {
@@ -1101,7 +1103,7 @@ pub trait SubModuleUser {
             };
         }
     }
-    
+
     // returns true on successful import.
     fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
         let name = name.defrock_brackets();
@@ -1124,6 +1126,7 @@ pub trait SubModuleUser {
         }
 
         if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
+            let name = name.with_table(submodule.atom_tbl.clone());
             self.insert_dir_entry(name, arity, code_data.clone());
             true
         } else {
@@ -1170,14 +1173,15 @@ impl SubModuleUser for Module {
     fn remove_code_index(&mut self, key: PredicateKey) {
         self.code_dir.remove(&key);
     }
-    
-    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
+
+    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex)
+    {
         self.code_dir.insert((name, arity), idx);
     }
 }
 
-pub enum Declaration {    
-    Hook(CompileTimeHook, PredicateClause),    
+pub enum Declaration {
+    Hook(CompileTimeHook, PredicateClause),
     Module(ModuleDecl),
     NonCountedBacktracking(ClauseName, usize), // name, arity
     Op(OpDecl),
@@ -1194,10 +1198,10 @@ impl Declaration {
 
 pub enum TopLevel {
     Declaration(Declaration),
-    Fact(Term),    
+    Fact(Term),
     Predicate(Predicate),
     Query(Vec<QueryTerm>),
-    Rule(Rule),    
+    Rule(Rule),
 }
 
 impl TopLevel {

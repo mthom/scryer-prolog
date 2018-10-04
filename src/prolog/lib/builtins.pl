@@ -6,9 +6,8 @@
 	(=:=)/2, (-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2,
 	(==)/2, (\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2,
 	(\=@=)/2, (:)/2, call_with_inference_limit/3, catch/3,
-	current_prolog_flag/2, set_prolog_flag/2,
-	setup_call_cleanup/3, term_variables/2, throw/1, true/0,
-	false/0]).
+	current_prolog_flag/2, set_prolog_flag/2, term_variables/2,
+	setup_call_cleanup/3, throw/1, true/0, false/0]).
 
 /* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
    and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
@@ -206,8 +205,12 @@ get_args([Arg|Args], Func, I0, N) :-
     '$call_with_default_policy'(I1 is I0 + 1),
     '$call_with_default_policy'(get_args(Args, Func, I1, N)).
 
-term_variables(Term, Vars) :- '$term_variables'(Term, Vars).
-
+% term_variables.
+    
+term_variables(Term, Vars) :-
+    error:can_be(list, Vars),
+    '$term_variables'(Term, Vars).
+    
 % setup_call_cleanup.
 
 setup_call_cleanup(S, G, C) :- '$get_b_value'(B),

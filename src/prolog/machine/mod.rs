@@ -62,17 +62,6 @@ pub struct Machine {
     cached_query: Option<Code>
 }
 
-fn get_code_index(code_dir: &CodeDir, modules: &ModuleDir, key: PredicateKey, module: ClauseName)
-                  -> Option<CodeIndex>
-{
-    match module.as_str() {
-        "user" | "builtin" => code_dir.get(&key).cloned(),
-        _ => modules.get(&module).and_then(|ref module| {
-            module.code_dir.get(&key).cloned().map(CodeIndex::from)
-        })
-    }
-}
-
 impl Index<LocalCodePtr> for Machine {
     type Output = Line;
 
@@ -95,15 +84,22 @@ impl<'a> SubModuleUser for MachineCodeIndices<'a> {
         self.op_dir
     }
 
-    fn get_code_index(&self, key: PredicateKey, module: ClauseName) -> Option<CodeIndex> {
-        get_code_index(&self.code_dir, &self.modules, key, module)
+    fn get_code_index(&self, key: PredicateKey, module: ClauseName) -> Option<CodeIndex>
+    {
+        match module.as_str() {
+            "user" | "builtin" => self.code_dir.get(&key).cloned(),
+            _ => self.modules.get(&module).and_then(|ref module| {
+                module.code_dir.get(&key).cloned().map(CodeIndex::from)
+            })
+        }
     }
 
     fn remove_code_index(&mut self, key: PredicateKey) {
         self.code_dir.remove(&key);
     }
 
-    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
+    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex)
+    {
         if let Some(ref mut code_idx) = self.code_dir.get_mut(&(name.clone(), arity)) {
             if !code_idx.is_undefined() {
                 println!("warning: overwriting {}/{}", &name, arity);
@@ -120,7 +116,7 @@ impl<'a> SubModuleUser for MachineCodeIndices<'a> {
 static LISTS: &str   = include_str!("../lib/lists.pl");
 static CONTROL: &str = include_str!("../lib/control.pl");
 static QUEUES: &str  = include_str!("../lib/queues.pl");
-static ERROR: &str  = include_str!("../lib/error.pl");
+static ERROR: &str   = include_str!("../lib/error.pl");
 static TERMS: &str   = include_str!("../lib/terms.pl");
 
 impl Machine {
@@ -221,7 +217,8 @@ impl Machine {
 
     #[inline]
     pub fn remove_module(&mut self, module: &Module) {
-        let mut indices = machine_code_indices!(&mut self.code_dir.borrow_mut(), &mut self.op_dir,
+        let mut indices = machine_code_indices!(&mut self.code_dir.borrow_mut(),
+                                                &mut self.op_dir,
                                                 &mut self.modules);
         indices.remove_module(clause_name!("user"), module);
     }
@@ -259,15 +256,15 @@ impl Machine {
     {
         let key = (clause_name!("term_expansion"), 2);
         let preds = self.term_dir.entry(key).or_insert(Predicate(vec![]));
-        
+
         preds.0.push(clause);
-                
+
         let mut cg = CodeGenerator::<DebrayAllocator>::new(false, self.ms.flags);
         let code = cg.compile_predicate(&preds.0)?;
 
         Ok(self.term_expanders = code)
     }
-    
+
     fn lookup_instr(&self, p: CodePtr) -> Option<Line> {
         match p {
             CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) =>

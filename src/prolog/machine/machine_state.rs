@@ -307,7 +307,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
-        
+
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         machine_st.hb = machine_st.heap.h;
@@ -334,7 +334,7 @@ pub(crate) trait CallPolicy: Any {
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
-        machine_st.tr = machine_st.or_stack[b].tr;        
+        machine_st.tr = machine_st.or_stack[b].tr;
 
         machine_st.trail.truncate(machine_st.tr);
 
@@ -345,7 +345,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
-        
+
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         machine_st.hb = machine_st.heap.h;
@@ -371,7 +371,7 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.unwind_trail(old_tr, curr_tr);
         machine_st.tr = machine_st.or_stack[b].tr;
-        
+
         machine_st.trail.truncate(machine_st.tr);
 
         let old_pstr_tr  = machine_st.or_stack[b].pstr_tr;
@@ -381,7 +381,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
-        
+
         machine_st.heap.truncate(machine_st.or_stack[b].h);
         machine_st.b = machine_st.or_stack[b].b;
 
@@ -410,7 +410,7 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.unwind_trail(old_tr, curr_tr);
         machine_st.tr = machine_st.or_stack[b].tr;
-        
+
         machine_st.trail.truncate(machine_st.tr);
 
         let old_pstr_tr  = machine_st.or_stack[b].pstr_tr;
@@ -420,7 +420,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
-        
+
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         machine_st.b = machine_st.or_stack[b].b;
@@ -508,7 +508,7 @@ pub(crate) trait CallPolicy: Any {
                                                  stub));
             },
             IndexPtr::Index(compiled_tl_index) =>
-                execute_at_index(machine_st, arity, compiled_tl_index)            
+                execute_at_index(machine_st, arity, compiled_tl_index)
         }
 
         Ok(())
@@ -685,12 +685,10 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
-                  indices: MachineCodeIndices<'a>) //code_dirs: CodeDirs)
+                  indices: MachineCodeIndices<'a>)
                   -> CallResult
     {
         if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-            let user = clause_name!("user");
-
             match ClauseType::from(name.clone(), arity, None) {
                 ClauseType::CallN => {
                     machine_st.handle_internal_call_n(arity);
@@ -707,15 +705,18 @@ pub(crate) trait CallPolicy: Any {
                 },
                 ClauseType::Inlined(inlined) =>
                     machine_st.execute_inlined(&inlined),
-                ClauseType::Op(..) | ClauseType::Named(..) =>
-                    if let Some(idx) = indices.get_code_index((name.clone(), arity), user) {
+                ClauseType::Op(..) | ClauseType::Named(..) => {
+                    let module = name.owning_module();
+                    
+                    if let Some(idx) = indices.get_code_index((name.clone(), arity), module) {
                         self.context_call(machine_st, name, arity, idx, indices)?;
                     } else {
                         let h = machine_st.heap.h;
                         let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
                         return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
                                                          stub));
-                    },
+                    }
+                },
                 ClauseType::Hook(_) | ClauseType::System(_) => {
                     let name = Addr::Con(Constant::Atom(name, None));
                     let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);

@@ -1,5 +1,6 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::StringList;
+use prolog_parser::tabled_rc::TabledData;
 
 use prolog::instructions::*;
 use prolog::and_stack::*;
@@ -14,7 +15,6 @@ use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 use prolog::or_stack::*;
 
-use std::cell::RefCell;
 use std::cmp::{max, Ordering};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -34,7 +34,7 @@ macro_rules! try_or_fail {
 impl MachineState {
     pub(super) fn new() -> Self {
         MachineState {
-            atom_tbl: Rc::new(RefCell::new(HashSet::new())),
+            atom_tbl: TabledData::new(Rc::new("user".to_string())),
             s: 0,
             p: CodePtr::default(),
             b: 0,

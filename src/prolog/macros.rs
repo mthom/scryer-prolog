@@ -210,16 +210,18 @@ macro_rules! set_code_index {
 }
 
 macro_rules! machine_code_indices {
-    ($code_dir:expr, $op_dir:expr, $modules:expr) => ( //, $modules:expr) => (
-        MachineCodeIndices { code_dir: $code_dir, op_dir: $op_dir,
-                             modules: $modules} //, modules: $modules }
+    ($code_dir:expr, $op_dir:expr, $modules:expr) => (
+        MachineCodeIndices { code_dir: $code_dir,
+                             op_dir: $op_dir,
+                             modules: $modules }
     )
 }
 
 macro_rules! default_machine_code_indices {
     () => (
-        machine_code_indices!(&mut CodeDir::new(), &mut default_op_dir(),
-                              &mut HashMap::new());
+        machine_code_indices!(&mut CodeDir::new(),
+                              &mut default_op_dir(),
+                              &mut HashMap::new())
     )
 }
 

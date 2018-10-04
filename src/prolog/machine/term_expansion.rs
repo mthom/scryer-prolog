@@ -25,6 +25,11 @@ impl<R: Read> TermStream<R> {
     }
 
     #[inline]
+    pub fn set_atom_tbl(&mut self, atom_tbl: TabledData<Atom>) {
+        self.parser.set_atom_tbl(atom_tbl);
+    }
+    
+    #[inline]
     pub fn add_to_top(&mut self, buf: &str) {
         self.parser.add_to_top(buf);
     }
