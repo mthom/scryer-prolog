@@ -206,11 +206,15 @@ get_args([Arg|Args], Func, I0, N) :-
     '$call_with_default_policy'(get_args(Args, Func, I1, N)).
 
 % term_variables.
-    
+
+can_be(Type, Term) :- error:can_be(Type, Term).
+
 term_variables(Term, Vars) :-
-    error:can_be(list, Vars),
+    catch(can_be(list, Vars), error(E, Ctx),
+	  ( ( var(Ctx) -> Ctx = term_variables/2 ; true ),
+	    throw(error(E, Ctx)) ) ),
     '$term_variables'(Term, Vars).
-    
+
 % setup_call_cleanup.
 
 setup_call_cleanup(S, G, C) :- '$get_b_value'(B),
