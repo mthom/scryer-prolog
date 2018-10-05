@@ -222,8 +222,7 @@ impl Machine {
         let atom_tbl = wam.indices.atom_tbl.clone();
         
         compile_listing(&mut wam, BUILTINS.as_bytes(),
-                        default_index_store!(atom_tbl.clone()),
-                        default_index_store!(atom_tbl));
+                        default_index_store!(atom_tbl.clone()));
 
         compile_user_module(&mut wam, LISTS.as_bytes());
         compile_user_module(&mut wam, CONTROL.as_bytes());

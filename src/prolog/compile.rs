@@ -99,8 +99,8 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
 
 fn package_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
     let mut code_dir = wam.take_code_dir();
-    let packet = consume_term(&mut code_dir, term, &mut wam.indices)?;    
-    wam.swap_code_dir(&mut code_dir); 
+    let packet = consume_term(&mut code_dir, term, &mut wam.indices)?;
+    wam.swap_code_dir(&mut code_dir);
     Ok(packet)
 }
 
@@ -269,17 +269,16 @@ impl ListingCompiler {
 }
 
 pub
-fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: IndexStore,
-                            mut toplevel_indices: IndexStore)
-                            -> EvalSession
+fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: IndexStore) -> EvalSession
 {
     let code_dir = wam.take_code_dir();
     let mut worker = TopLevelBatchWorker::new(src, wam.indices.atom_tbl.clone(),
                                               wam.machine_flags(),
                                               code_dir);
-    
+
     let mut compiler = ListingCompiler::new();
     let mut toplevel_results = vec![];
+    let mut toplevel_indices = default_index_store!(wam.indices.atom_tbl.clone());
 
     while let Some(decl) = try_eval_session!(worker.consume(wam, &mut indices)) {
         if decl.is_module_decl() {
@@ -298,7 +297,7 @@ fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: IndexStore,
     }
 
     wam.swap_code_dir(&mut worker.static_code_dir);
-    
+
     let module_code = try_eval_session!(compiler.generate_code(worker.results, wam,
                                                                &mut indices.code_dir));
     let toplvl_code = try_eval_session!(compiler.generate_code(toplevel_results, wam,
@@ -319,10 +318,7 @@ fn setup_indices(wam: &Machine, indices: &mut IndexStore) -> Result<(), SessionE
 }
 
 pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
-    let atom_tbl = wam.indices.atom_tbl.clone();    
-    let mut indices = default_index_store!(atom_tbl.clone());
-    
+    let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     try_eval_session!(setup_indices(&wam, &mut indices));
-    
-    compile_listing(wam, src, indices, default_index_store!(atom_tbl))
+    compile_listing(wam, src, indices)
 }
