@@ -10,6 +10,7 @@ use prolog::targets::*;
 
 use std::cell::Cell;
 use std::collections::{HashMap};
+use std::mem;
 use std::rc::Rc;
 use std::vec::Vec;
 
@@ -235,15 +236,18 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         let mut dealloc_index = code.len() - 1;
 
         match code.last_mut() {
-            Some(&mut Line::Control(ref mut ctrl)) =>
-                match ctrl.clone() {
+            Some(&mut Line::Control(ref mut ctrl)) => {
+                let old_ctrl = mem::replace(ctrl, ControlInstruction::Proceed);
+                
+                match old_ctrl {
                     ControlInstruction::CallClause(ct, arity, pvs, false, use_default_cp) =>
                         *ctrl = ControlInstruction::CallClause(ct, arity, pvs, true, use_default_cp),
                     ControlInstruction::JmpBy(arity, offset, pvs, false) =>
                         *ctrl = ControlInstruction::JmpBy(arity, offset, pvs, true),
                     ControlInstruction::Proceed => {},
                     _ => dealloc_index += 1
-                },
+                }
+            },
             Some(&mut Line::Cut(CutInstruction::Cut(_))) =>
                 dealloc_index += 1,
             _ => {}

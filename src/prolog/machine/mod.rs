@@ -30,6 +30,20 @@ pub struct IndexStore {
     pub(super) modules: ModuleDir
 }
 
+enum RefOrOwned<'a, T: 'a> {
+    Borrowed(&'a T),
+    Owned(T)
+}
+
+impl<'a, T> RefOrOwned<'a, T> {
+    fn as_ref(&'a self) -> &'a T {
+        match self {
+            &RefOrOwned::Borrowed(r) => r,
+            &RefOrOwned::Owned(ref r) => r
+        }
+    }
+}
+
 impl IndexStore {
     #[inline]
     pub(super) fn new() -> Self {
@@ -37,7 +51,7 @@ impl IndexStore {
             atom_tbl: TabledData::new(Rc::new("user".to_string())),
             code_dir: CodeDir::new(),
             op_dir: default_op_dir(),
-            modules: ModuleDir::new()
+            modules: ModuleDir::new(),
         }
     }
 
@@ -78,15 +92,59 @@ impl IndexStore {
     }
 }
 
+pub struct CodeRepo {
+    cached_query: Option<Code>,
+    pub(super) term_expanders: Code,
+    pub(super) code: Code      
+}
+
+impl CodeRepo {
+    #[inline]
+    fn new() -> Self {
+        CodeRepo {
+            cached_query: None,
+            term_expanders: Code::new(),
+            code: Code::new()
+        }
+    }
+    
+    fn lookup_instr<'a>(&'a self, last_call: bool, p: &CodePtr) -> Option<RefOrOwned<'a, Line>>
+    {
+        match p {
+            &CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) =>
+                if p < self.term_expanders.len() {
+                    Some(RefOrOwned::Borrowed(&self.term_expanders[p]))
+                } else {
+                    None
+                },
+            &CodePtr::Local(LocalCodePtr::TopLevel(_, p)) =>
+                match &self.cached_query {
+                    &Some(ref cq) => Some(RefOrOwned::Borrowed(&cq[p])),
+                    &None => None
+                },
+            &CodePtr::Local(LocalCodePtr::DirEntry(p)) =>
+                Some(RefOrOwned::Borrowed(&self.code[p])),
+            &CodePtr::BuiltInClause(ref built_in, _) => {
+                let call_clause = call_clause!(ClauseType::BuiltIn(built_in.clone()),
+                                               built_in.arity(),
+                                               0, last_call);
+                Some(RefOrOwned::Owned(call_clause))
+            },
+            &CodePtr::CallN(arity, _) => {
+                let call_clause = call_clause!(ClauseType::CallN, arity, 0, last_call);
+                Some(RefOrOwned::Owned(call_clause))
+            }
+        }
+    }
+}
+
 pub struct Machine {
     ms: MachineState,
     call_policy: Box<CallPolicy>,
     cut_policy: Box<CutPolicy>,
-    code: Code,
     pub(super) indices: IndexStore,
     term_dir: TermDir,
-    term_expanders: Code,
-    cached_query: Option<Code>
+    pub(super) code_repo: CodeRepo  
 }
 
 impl Index<LocalCodePtr> for Machine {
@@ -95,13 +153,13 @@ impl Index<LocalCodePtr> for Machine {
     fn index(&self, ptr: LocalCodePtr) -> &Self::Output {
         match ptr {
             LocalCodePtr::TopLevel(_, p) => {
-                match &self.cached_query {
+                match &self.code_repo.cached_query {
                     &Some(ref cq) => &cq[p],
                     &None => panic!("Out-of-bounds top level index.")
                 }
             },
-            LocalCodePtr::DirEntry(p) => &self.code[p],
-            LocalCodePtr::UserTermExpansion(p) => &self.term_expanders[p]
+            LocalCodePtr::DirEntry(p) => &self.code_repo.code[p],
+            LocalCodePtr::UserTermExpansion(p) => &self.code_repo.term_expanders[p]
         }
     }
 }
@@ -156,11 +214,9 @@ impl Machine {
             ms: MachineState::new(),
             call_policy: Box::new(DefaultCallPolicy {}),
             cut_policy: Box::new(DefaultCutPolicy {}),
-            code: Code::new(),
             indices: IndexStore::new(),
             term_dir: TermDir::new(),
-            term_expanders: Code::new(),
-            cached_query: None
+            code_repo: CodeRepo::new()
         };
 
         let atom_tbl = wam.indices.atom_tbl.clone();
@@ -232,7 +288,7 @@ impl Machine {
             self.indices.code_dir.insert(key.clone(), idx.clone());
         }
 
-        self.code.extend(code.into_iter());
+        self.code_repo.code.extend(code.into_iter());
         Ok(())
     }
 
@@ -269,15 +325,15 @@ impl Machine {
     #[inline]
     pub fn add_module(&mut self, module: Module, code: Code) {
         self.indices.modules.insert(module.module_decl.name.clone(), module);
-        self.code.extend(code.into_iter());
+        self.code_repo.code.extend(code.into_iter());
     }
 
     pub fn code_size(&self) -> usize {
-        self.code.len()
+        self.code_repo.code.len()
     }
 
     fn cached_query_size(&self) -> usize {
-        match &self.cached_query {
+        match &self.code_repo.cached_query {
             &Some(ref query) => query.len(),
             _ => 0
         }
@@ -295,50 +351,27 @@ impl Machine {
         let mut cg = CodeGenerator::<DebrayAllocator>::new(false, self.ms.flags);
         let code = cg.compile_predicate(&preds.0)?;
 
-        Ok(self.term_expanders = code)
-    }
-
-    fn lookup_instr(&self, p: CodePtr) -> Option<Line> {
-        match p {
-            CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) =>
-                if p < self.term_expanders.len() {
-                    Some(self.term_expanders[p].clone())
-                } else {
-                    None
-                },
-            CodePtr::Local(LocalCodePtr::TopLevel(_, p)) =>
-                match &self.cached_query {
-                    &Some(ref cq) => Some(cq[p].clone()),
-                    &None => None
-                },
-            CodePtr::Local(LocalCodePtr::DirEntry(p)) =>
-                Some(self.code[p].clone()),
-            CodePtr::BuiltInClause(built_in, _) =>
-                Some(call_clause!(ClauseType::BuiltIn(built_in.clone()), built_in.arity(),
-                                  0, self.ms.last_call)),
-            CodePtr::CallN(arity, _) =>
-                Some(call_clause!(ClauseType::CallN, arity, 0, self.ms.last_call))
-        }
+        Ok(self.code_repo.term_expanders = code)
     }
 
     fn execute_instr(&mut self)
     {
-        let instr = match self.lookup_instr(self.ms.p.clone()) {
+        let instr = match self.code_repo.lookup_instr(self.ms.last_call, &self.ms.p) {
             Some(instr) => instr,
             None => return
         };
 
-        match instr {
-            Line::Arithmetic(ref arith_instr) =>
+        match instr.as_ref() {
+            &Line::Arithmetic(ref arith_instr) =>
                 self.ms.execute_arith_instr(arith_instr),
-            Line::Choice(ref choice_instr) =>
+            &Line::Choice(ref choice_instr) =>
                 self.ms.execute_choice_instr(choice_instr, &mut self.call_policy),
-            Line::Cut(ref cut_instr) =>
+            &Line::Cut(ref cut_instr) =>
                 self.ms.execute_cut_instr(cut_instr, &mut self.cut_policy),
-            Line::Control(ref control_instr) => 
+            &Line::Control(ref control_instr) => 
                 self.ms.execute_ctrl_instr(&mut self.indices, &mut self.call_policy,
                                            &mut self.cut_policy, control_instr),            
-            Line::Fact(ref fact) => {
+            &Line::Fact(ref fact) => {
                 for fact_instr in fact {
                     if self.failed() {
                         break;
@@ -349,11 +382,11 @@ impl Machine {
 
                 self.ms.p += 1;
             },
-            Line::Indexing(ref indexing_instr) =>
+            &Line::Indexing(ref indexing_instr) =>
                 self.ms.execute_indexing_instr(&indexing_instr),
-            Line::IndexedChoice(ref choice_instr) =>
+            &Line::IndexedChoice(ref choice_instr) =>
                 self.ms.execute_indexed_choice_instr(choice_instr, &mut self.call_policy),
-            Line::Query(ref query) => {
+            &Line::Query(ref query) => {
                 for query_instr in query {
                     if self.failed() {
                         break;
@@ -395,8 +428,8 @@ impl Machine {
             }
 
             match self.ms.p {
-                CodePtr::Local(LocalCodePtr::DirEntry(p)) if p < self.code.len() => {},
-                CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) if p < self.term_expanders.len() => {},
+                CodePtr::Local(LocalCodePtr::DirEntry(p)) if p < self.code_repo.code.len() => {},
+                CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) if p < self.code_repo.term_expanders.len() => {},
                 CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) => self.ms.fail = true,
                 CodePtr::Local(_) => break,
                 _ => {}
@@ -483,7 +516,7 @@ impl Machine {
     {
         let mut heap_locs = HashMap::new();
 
-        self.cached_query = Some(code);
+        self.code_repo.cached_query = Some(code);
         self.run_query(&alloc_locs, &mut heap_locs);
 
         if self.failed() {

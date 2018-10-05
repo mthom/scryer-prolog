@@ -493,7 +493,6 @@ impl From<InlinedClauseType> for ClauseType {
     }
 }
 
-#[derive(Clone)]
 pub enum ChoiceInstruction {
     DefaultRetryMeElse(usize),
     DefaultTrustMe,
@@ -502,7 +501,6 @@ pub enum ChoiceInstruction {
     TryMeElse(usize)
 }
 
-#[derive(Clone)]
 pub enum CutInstruction {
     Cut(RegType),
     GetLevel(RegType),
@@ -510,7 +508,6 @@ pub enum CutInstruction {
     NeckCut
 }
 
-#[derive(Clone)]
 pub enum IndexedChoiceInstruction {
     Retry(usize),
     Trust(usize),
@@ -570,7 +567,6 @@ pub enum ArithmeticInstruction {
     Neg(ArithmeticTerm, usize),
 }
 
-#[derive(Clone)]
 pub enum ControlInstruction {
     Allocate(usize), // num_frames.
     // name, arity, perm_vars after threshold, last call, use default call policy.
@@ -590,11 +586,10 @@ impl ControlInstruction {
     }
 }
 
-#[derive(Clone)]
 pub enum IndexingInstruction {
     SwitchOnTerm(usize, usize, usize, usize),
-    SwitchOnConstant(usize, Rc<HashMap<Constant, usize>>),
-    SwitchOnStructure(usize, Rc<HashMap<(ClauseName, usize), usize>>)
+    SwitchOnConstant(usize, HashMap<Constant, usize>),
+    SwitchOnStructure(usize, HashMap<(ClauseName, usize), usize>)
 }
 
 impl From<IndexingInstruction> for Line {
@@ -637,7 +632,6 @@ pub type CompiledFact = Vec<FactInstruction>;
 
 pub type CompiledQuery = Vec<QueryInstruction>;
 
-#[derive(Clone)]
 pub enum Line {
     Arithmetic(ArithmeticInstruction),
     Choice(ChoiceInstruction),
