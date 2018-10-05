@@ -98,13 +98,10 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
 }
 
 fn package_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
-    let code_dir = wam.code_dir.clone();
-    let indices = machine_code_indices!(wam.atom_tbl.clone(),
-                                        &mut CodeDir::new(),
-                                        &mut wam.op_dir,
-                                        &mut wam.modules);
-
-    consume_term(code_dir, term, indices)
+    let mut code_dir = wam.take_code_dir();
+    let packet = consume_term(&mut code_dir, term, &mut wam.indices)?;    
+    wam.swap_code_dir(&mut code_dir); 
+    Ok(packet)
 }
 
 pub fn compile_term(wam: &mut Machine, term: Term) -> EvalSession
@@ -119,7 +116,7 @@ pub fn compile_term(wam: &mut Machine, term: Term) -> EvalSession
             },
         TopLevelPacket::Decl(TopLevel::Declaration(decl), _) => {
             let mut compiler = ListingCompiler::new();
-            let mut indices = default_machine_code_indices!(wam.atom_tbl.clone());
+            let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
 
             try_eval_session!(compiler.process_decl(decl, wam, &mut indices));
             try_eval_session!(compiler.add_code(wam, vec![], indices));
@@ -143,7 +140,7 @@ impl ListingCompiler {
         }
     }
 
-    fn use_module(&mut self, submodule: Module, wam: &mut Machine, indices: &mut MachineCodeIndices)
+    fn use_module(&mut self, submodule: Module, wam: &mut Machine, indices: &mut IndexStore)
                   -> Result<(), SessionError>
     {
         let mod_name = self.get_module_name();
@@ -161,7 +158,7 @@ impl ListingCompiler {
     }
 
     fn use_qualified_module(&mut self, submodule: Module, wam: &mut Machine,
-                            exports: &Vec<PredicateKey>, indices: &mut MachineCodeIndices)
+                            exports: &Vec<PredicateKey>, indices: &mut IndexStore)
                             -> Result<(), SessionError>
     {
         let mod_name = self.get_module_name();
@@ -213,11 +210,11 @@ impl ListingCompiler {
         Ok(code)
     }
 
-    fn add_code(&mut self, wam: &mut Machine, code: Code, indices: MachineCodeIndices)
+    fn add_code(&mut self, wam: &mut Machine, code: Code, mut indices: IndexStore)
                 -> Result<(), SessionError>
     {
-        let code_dir = mem::replace(indices.code_dir, HashMap::new());
-        let op_dir   = mem::replace(indices.op_dir, HashMap::new());
+        let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
+        let op_dir   = mem::replace(&mut indices.op_dir, OpDir::new());
 
         if let Some(mut module) = self.module.take() {
             module.code_dir.extend(as_module_code_dir(code_dir));
@@ -236,7 +233,7 @@ impl ListingCompiler {
         self.non_counted_bt_preds.insert((name, arity));
     }
 
-    fn process_decl(&mut self, decl: Declaration, wam: &mut Machine, indices: &mut MachineCodeIndices)
+    fn process_decl(&mut self, decl: Declaration, wam: &mut Machine, indices: &mut IndexStore)
                     -> Result<(), SessionError>
     {
         match decl {
@@ -272,13 +269,15 @@ impl ListingCompiler {
 }
 
 pub
-fn compile_listing<'a, R: Read>(wam: &mut Machine, src: R, mut indices: MachineCodeIndices<'a>,
-                                mut toplevel_indices: MachineCodeIndices<'a>)
-                                -> EvalSession
+fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: IndexStore,
+                            mut toplevel_indices: IndexStore)
+                            -> EvalSession
 {
-    let mut worker = TopLevelBatchWorker::new(src, wam.atom_tbl.clone(),
+    let code_dir = wam.take_code_dir();
+    let mut worker = TopLevelBatchWorker::new(src, wam.indices.atom_tbl.clone(),
                                               wam.machine_flags(),
-                                              wam.code_dir.clone());
+                                              code_dir);
+    
     let mut compiler = ListingCompiler::new();
     let mut toplevel_results = vec![];
 
@@ -298,6 +297,8 @@ fn compile_listing<'a, R: Read>(wam: &mut Machine, src: R, mut indices: MachineC
         }
     }
 
+    wam.swap_code_dir(&mut worker.static_code_dir);
+    
     let module_code = try_eval_session!(compiler.generate_code(worker.results, wam,
                                                                &mut indices.code_dir));
     let toplvl_code = try_eval_session!(compiler.generate_code(toplevel_results, wam,
@@ -309,8 +310,8 @@ fn compile_listing<'a, R: Read>(wam: &mut Machine, src: R, mut indices: MachineC
     EvalSession::EntrySuccess
 }
 
-fn setup_indices(wam: &Machine, indices: &mut MachineCodeIndices) -> Result<(), SessionError> {
-    if let Some(ref builtins) = wam.modules.get(&clause_name!("builtins")) {
+fn setup_indices(wam: &Machine, indices: &mut IndexStore) -> Result<(), SessionError> {
+    if let Some(ref builtins) = wam.indices.modules.get(&clause_name!("builtins")) {
         indices.use_module(builtins)
     } else {
         Err(SessionError::ModuleNotFound)
@@ -318,10 +319,10 @@ fn setup_indices(wam: &Machine, indices: &mut MachineCodeIndices) -> Result<(), 
 }
 
 pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
-    let atom_tbl = wam.atom_tbl.clone();    
-    let mut indices = default_machine_code_indices!(atom_tbl.clone());
+    let atom_tbl = wam.indices.atom_tbl.clone();    
+    let mut indices = default_index_store!(atom_tbl.clone());
     
     try_eval_session!(setup_indices(&wam, &mut indices));
     
-    compile_listing(wam, src, indices, default_machine_code_indices!(atom_tbl))
+    compile_listing(wam, src, indices, default_index_store!(atom_tbl))
 }

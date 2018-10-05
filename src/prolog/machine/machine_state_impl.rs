@@ -6,7 +6,7 @@ use prolog::and_stack::*;
 use prolog::copier::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
-use prolog::machine::MachineCodeIndices;
+use prolog::machine::IndexStore;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{Integer, Signed, ToPrimitive, Zero};
@@ -2126,13 +2126,13 @@ impl MachineState {
         self.p += 1;
     }
 
-    fn handle_call_clause<'a>(&mut self, indices: MachineCodeIndices<'a>,
-                              call_policy: &mut Box<CallPolicy>,
-                              cut_policy:  &mut Box<CutPolicy>,
-                              ct: &ClauseType,
-                              arity: usize,
-                              lco: bool,
-                              use_default_cp: bool)
+    fn handle_call_clause(&mut self, indices: &mut IndexStore,
+                          call_policy: &mut Box<CallPolicy>,
+                          cut_policy:  &mut Box<CutPolicy>,
+                          ct: &ClauseType,
+                          arity: usize,
+                          lco: bool,
+                          use_default_cp: bool)
     {
         let mut default_call_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
         let call_policy = if use_default_cp {
@@ -2160,10 +2160,10 @@ impl MachineState {
         };
     }
 
-    pub(super) fn execute_ctrl_instr<'a>(&mut self, indices: MachineCodeIndices<'a>,
-                                         call_policy: &mut Box<CallPolicy>,
-                                         cut_policy:  &mut Box<CutPolicy>,
-                                         instr: &ControlInstruction)
+    pub(super) fn execute_ctrl_instr(&mut self, indices: &mut IndexStore,
+                                     call_policy: &mut Box<CallPolicy>,
+                                     cut_policy:  &mut Box<CutPolicy>,
+                                     instr: &ControlInstruction)
     {
         match instr {
             &ControlInstruction::Allocate(num_cells) =>

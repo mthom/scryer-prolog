@@ -77,7 +77,8 @@ impl<R: Read> TermStream<R> {
                 };
             }
 
-            let term = self.parser.read_term(composite_op!(self.in_module, &wam.op_dir, op_dir))?;
+            let term = self.parser.read_term(composite_op!(self.in_module, &wam.indices.op_dir,
+                                                           op_dir))?;
             self.stack.push(term);
         }
     }

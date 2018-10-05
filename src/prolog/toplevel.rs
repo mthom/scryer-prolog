@@ -13,9 +13,9 @@ use std::io::Read;
 use std::mem;
 use std::rc::Rc;
 
-struct CompositeIndices<'a, 'b : 'a> {
-    local: &'a mut MachineCodeIndices<'b>,
-    static_code_dir: Option<Rc<RefCell<CodeDir>>>
+struct CompositeIndices<'a, 'b> {
+    local: &'a mut IndexStore,
+    static_code_dir: Option<&'b mut CodeDir>
 }
 
 macro_rules! composite_indices {
@@ -32,15 +32,16 @@ macro_rules! composite_indices {
     )
 }
 
-impl<'a, 'b : 'a> CompositeIndices<'a, 'b>
+impl<'a, 'b> CompositeIndices<'a, 'b>
 {
     fn get_code_index(&mut self, name: ClauseName, arity: usize) -> CodeIndex {
-        let idx_opt = self.local.code_dir.get(&(name.clone(), arity)).cloned()
+        let idx_opt = self.local.code_dir.get(&(name.clone(), arity))
             .or_else(|| {
-                self.static_code_dir.clone().and_then(|code_dir| {
-                    code_dir.borrow().get(&(name.clone(), arity)).cloned()
-                })
-            });
+                match &self.static_code_dir {
+                    &Some(ref code_dir) => code_dir.get(&(name.clone(), arity)),
+                    _ => None
+                }
+            }).cloned();
 
         if let Some(idx) = idx_opt {
             self.local.code_dir.insert((name, arity), idx.clone());
@@ -714,17 +715,16 @@ pub fn parse_term<R: Read>(wam: &Machine, buf: R) -> Result<Term, ParserError>
 {
     use prolog_parser::parser::*;
 
-    let mut parser = Parser::new(buf, wam.atom_tbl.clone(), wam.machine_flags());
-    parser.read_term(composite_op!(&wam.op_dir))
+    let mut parser = Parser::new(buf, wam.indices.atom_tbl.clone(), wam.machine_flags());
+    parser.read_term(composite_op!(&wam.indices.op_dir))
 }
 
 pub
-fn consume_term<'a>(static_code_dir: Rc<RefCell<CodeDir>>, term: Term,
-                    mut indices: MachineCodeIndices<'a>)
-                    -> Result<TopLevelPacket, ParserError>
+fn consume_term(static_code_dir: &mut CodeDir, term: Term, indices: &mut IndexStore)
+                -> Result<TopLevelPacket, ParserError>
 {
     let mut rel_worker = RelationWorker::new();
-    let mut indices = composite_indices!(false, &mut indices, static_code_dir);
+    let mut indices = composite_indices!(false, indices, static_code_dir);
 
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
     let results = rel_worker.parse_queue(&mut indices)?;
@@ -735,14 +735,13 @@ fn consume_term<'a>(static_code_dir: Rc<RefCell<CodeDir>>, term: Term,
 pub struct TopLevelBatchWorker<R: Read> {
     pub(crate) term_stream: TermStream<R>,
     rel_worker: RelationWorker,
-    static_code_dir: Rc<RefCell<CodeDir>>,
+    pub(super) static_code_dir: CodeDir,
     pub(crate) results: Vec<(Predicate, VecDeque<TopLevel>)>,
     pub(crate) in_module: bool
 }
 
 impl<R: Read> TopLevelBatchWorker<R> {
-    pub fn new(inner: R, atom_tbl: TabledData<Atom>, flags: MachineFlags,
-               static_code_dir: Rc<RefCell<CodeDir>>)
+    pub fn new(inner: R, atom_tbl: TabledData<Atom>, flags: MachineFlags, static_code_dir: CodeDir)
                -> Self
     {
         TopLevelBatchWorker { term_stream: TermStream::new(inner, atom_tbl, flags),
@@ -753,12 +752,12 @@ impl<R: Read> TopLevelBatchWorker<R> {
     }
 
     pub
-    fn consume<'a, 'b : 'a>(&mut self, wam: &mut Machine, indices: &'a mut MachineCodeIndices<'b>)
-                           -> Result<Option<Declaration>, SessionError>
+    fn consume(&mut self, wam: &mut Machine, indices: &mut IndexStore)
+               -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
         let mut indices = composite_indices!(self.in_module, indices,
-                                             self.static_code_dir.clone());
+                                             &mut self.static_code_dir);
 
         while !self.term_stream.eof()? {
             self.term_stream.empty_tokens(); // empty the parser stack of token descriptions.

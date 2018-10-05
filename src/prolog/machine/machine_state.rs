@@ -5,7 +5,7 @@ use prolog::instructions::*;
 use prolog::and_stack::*;
 use prolog::copier::*;
 use prolog::heap_print::*;
-use prolog::machine::MachineCodeIndices;
+use prolog::machine::IndexStore;
 use prolog::machine::machine_errors::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
@@ -31,39 +31,6 @@ impl Ball {
     pub(super) fn reset(&mut self) {
         self.boundary = 0;
         self.stub.clear();
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct CodeDirs<'a> {
-    pub code_dir: &'a CodeDir,
-    pub op_dir: &'a OpDir,
-    pub modules: &'a ModuleDir
-}
-
-impl<'a> CodeDirs<'a> {
-    fn get_internal(&self, name: ClauseName, arity: usize, in_mod: ClauseName) -> Option<ModuleCodeIndex> {
-        self.modules.get(&in_mod)
-            .and_then(|ref module| module.code_dir.get(&(name, arity)))
-            .cloned()
-    }
-
-    pub(super) fn get_cleaner_sites(&self) -> (usize, usize) {
-        let r_w_h  = clause_name!("run_cleaners_with_handling");
-        let r_wo_h = clause_name!("run_cleaners_without_handling");
-
-        let builtins = clause_name!("builtins");
-
-        let r_w_h  = self.get_internal(r_w_h, 0, builtins.clone()).and_then(|item| item.local());
-        let r_wo_h = self.get_internal(r_wo_h, 1, builtins).and_then(|item| item.local());
-
-        if let Some(r_w_h) = r_w_h {
-            if let Some(r_wo_h) = r_wo_h {
-                return (r_w_h, r_wo_h);
-            }
-        }
-
-        return (0, 0);
     }
 }
 
@@ -431,8 +398,8 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
-                    idx: CodeIndex, indices: MachineCodeIndices)
+    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                    arity: usize, idx: CodeIndex, indices: &mut IndexStore)
                     -> CallResult
     {
         if machine_st.last_call {
@@ -442,9 +409,9 @@ pub(crate) trait CallPolicy: Any {
         }
     }
 
-    fn try_call<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
-                    idx: CodeIndex, indices: MachineCodeIndices<'a>)
-                    -> CallResult
+    fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
+                idx: CodeIndex, indices: &IndexStore)
+                -> CallResult
     {
         match idx.0.borrow().0 {
             IndexPtr::Module => {
@@ -477,9 +444,9 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn try_execute<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                       arity: usize, idx: CodeIndex, indices: MachineCodeIndices<'a>)
-                       -> CallResult
+    fn try_execute(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                   arity: usize, idx: CodeIndex, indices: &IndexStore)
+                   -> CallResult
     {
         match idx.0.borrow().0 {
             IndexPtr::Module => {
@@ -512,9 +479,9 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
-                        indices: MachineCodeIndices<'a>) //code_dirs: CodeDirs)
-                        -> CallResult
+    fn call_builtin(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
+                    indices: &mut IndexStore)
+                    -> CallResult
     {
         match ct {
             &BuiltInClauseType::AcyclicTerm => {
@@ -682,9 +649,8 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize,
-                  indices: MachineCodeIndices<'a>)
-                  -> CallResult
+    fn call_n(&mut self, machine_st: &mut MachineState, arity: usize, indices: &mut IndexStore)
+              -> CallResult
     {
         if let Some((name, arity)) = machine_st.setup_call_n(arity) {
             match ClauseType::from(name.clone(), arity, None) {
@@ -731,9 +697,9 @@ pub(crate) trait CallPolicy: Any {
 }
 
 impl CallPolicy for CWILCallPolicy {
-    fn context_call<'a>(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                        arity: usize, idx: CodeIndex, indices: MachineCodeIndices<'a>)
-                        -> CallResult
+    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
+                    arity: usize, idx: CodeIndex, indices: &mut IndexStore)
+                    -> CallResult
     {
         self.prev_policy.context_call(machine_st, name, arity, idx, indices)?;
         self.increment(machine_st)
@@ -763,16 +729,16 @@ impl CallPolicy for CWILCallPolicy {
         self.increment(machine_st)
     }
 
-    fn call_builtin<'a>(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
-                        indices: MachineCodeIndices<'a>)
-                        -> CallResult
+    fn call_builtin(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
+                    indices: &mut IndexStore)
+                    -> CallResult
     {
         self.prev_policy.call_builtin(machine_st, ct, indices)?;
         self.increment(machine_st)
     }
 
-    fn call_n<'a>(&mut self, machine_st: &mut MachineState, arity: usize, indices: MachineCodeIndices<'a>)
-                  -> CallResult
+    fn call_n(&mut self, machine_st: &mut MachineState, arity: usize, indices: &mut IndexStore)
+              -> CallResult
     {
         self.prev_policy.call_n(machine_st, arity, indices)?;
         self.increment(machine_st)

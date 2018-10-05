@@ -209,21 +209,18 @@ macro_rules! set_code_index {
     }}
 }
 
-macro_rules! machine_code_indices {
+macro_rules! index_store {
     ($atom_tbl:expr, $code_dir:expr, $op_dir:expr, $modules:expr) => (
-        MachineCodeIndices { atom_tbl: $atom_tbl,
-                             code_dir: $code_dir,
-                             op_dir: $op_dir,
-                             modules: $modules }
+        IndexStore { atom_tbl: $atom_tbl,
+                     code_dir: $code_dir,
+                     op_dir: $op_dir,
+                     modules: $modules }
     )
 }
 
-macro_rules! default_machine_code_indices {
+macro_rules! default_index_store {
     ($atom_tbl:expr) => (
-        machine_code_indices!($atom_tbl,
-                              &mut CodeDir::new(),
-                              &mut default_op_dir(),
-                              &mut HashMap::new())
+        index_store!($atom_tbl, CodeDir::new(), default_op_dir(), HashMap::new())
     )
 }
 

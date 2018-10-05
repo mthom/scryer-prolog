@@ -2,7 +2,7 @@ use prolog_parser::ast::*;
 
 use prolog::heap_iter::*;
 use prolog::instructions::*;
-use prolog::machine::MachineCodeIndices;
+use prolog::machine::IndexStore;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{ToPrimitive, Zero};
@@ -187,11 +187,11 @@ impl MachineState {
         }
     }
 
-    pub(super) fn system_call<'a>(&mut self, ct: &SystemClauseType,
-                                  indices: MachineCodeIndices<'a>,
-                                  call_policy: &mut Box<CallPolicy>,
-                                  cut_policy:  &mut Box<CutPolicy>,)
-                                  -> CallResult
+    pub(super) fn system_call(&mut self, ct: &SystemClauseType,
+                              indices: &IndexStore,
+                              call_policy: &mut Box<CallPolicy>,
+                              cut_policy:  &mut Box<CutPolicy>,)
+                              -> CallResult
     {
         match ct {
             &SystemClauseType::CheckCutPoint => {
@@ -242,7 +242,7 @@ impl MachineState {
                 let prev_block = self.block;
 
                 if cut_policy.downcast_ref::<SCCCutPolicy>().is_err() {
-                    let (r_c_w_h, r_c_wo_h) = indices.to_code_dirs().get_cleaner_sites();
+                    let (r_c_w_h, r_c_wo_h) = indices.get_cleaner_sites();
                     *cut_policy = Box::new(SCCCutPolicy::new(r_c_w_h, r_c_wo_h));
                 }
 

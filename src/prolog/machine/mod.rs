@@ -16,37 +16,65 @@ mod system_calls;
 
 use prolog::machine::machine_state::*;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::mem::swap;
+use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
 
 static BUILTINS: &str = include_str!("../lib/builtins.pl");
 
-pub struct MachineCodeIndices<'a> {
+pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,
-    pub(super) code_dir: &'a mut CodeDir,
-    pub(super) op_dir: &'a mut OpDir,
-    pub(super) modules: &'a mut ModuleDir
+    pub(super) code_dir: CodeDir,
+    pub(super) op_dir: OpDir,
+    pub(super) modules: ModuleDir
 }
 
-impl<'a> MachineCodeIndices<'a> {
+impl IndexStore {
     #[inline]
-    pub(super) fn copy_and_swap(&mut self, other: &mut MachineCodeIndices<'a>) {
-        *self.code_dir = other.code_dir.clone();
-        *self.op_dir = other.op_dir.clone();
-
-        swap(&mut self.code_dir, &mut other.code_dir);
-        swap(&mut self.op_dir, &mut other.op_dir);
-        swap(&mut self.modules, &mut other.modules);
+    pub(super) fn new() -> Self {
+        IndexStore {
+            atom_tbl: TabledData::new(Rc::new("user".to_string())),
+            code_dir: CodeDir::new(),
+            op_dir: default_op_dir(),
+            modules: ModuleDir::new()
+        }
     }
 
     #[inline]
-    pub(super) fn to_code_dirs(self) -> CodeDirs<'a> {
-        CodeDirs { code_dir: self.code_dir,
-                   op_dir: self.op_dir,
-                   modules: self.modules }
+    pub(super) fn copy_and_swap(&mut self, other: &mut IndexStore) {
+        self.code_dir = other.code_dir.clone();
+        self.op_dir = other.op_dir.clone();
+
+        mem::swap(&mut self.code_dir, &mut other.code_dir);
+        mem::swap(&mut self.op_dir, &mut other.op_dir);
+        mem::swap(&mut self.modules, &mut other.modules);
+    }
+
+    fn get_internal(&self, name: ClauseName, arity: usize, in_mod: ClauseName)
+                    -> Option<ModuleCodeIndex>
+    {
+        self.modules.get(&in_mod)
+            .and_then(|ref module| module.code_dir.get(&(name, arity)))
+            .cloned()
+    }
+
+    pub(super) fn get_cleaner_sites(&self) -> (usize, usize) {
+        let r_w_h  = clause_name!("run_cleaners_with_handling");
+        let r_wo_h = clause_name!("run_cleaners_without_handling");
+
+        let builtins = clause_name!("builtins");
+
+        let r_w_h  = self.get_internal(r_w_h, 0, builtins.clone()).and_then(|item| item.local());
+        let r_wo_h = self.get_internal(r_wo_h, 1, builtins).and_then(|item| item.local());
+
+        if let Some(r_w_h) = r_w_h {
+            if let Some(r_wo_h) = r_wo_h {
+                return (r_w_h, r_wo_h);
+            }
+        }
+
+        return (0, 0);
     }
 }
 
@@ -55,12 +83,9 @@ pub struct Machine {
     call_policy: Box<CallPolicy>,
     cut_policy: Box<CutPolicy>,
     code: Code,
-    pub(super) atom_tbl: TabledData<Atom>,
-    pub(super) code_dir: Rc<RefCell<CodeDir>>,
-    pub(super) op_dir: OpDir,
+    pub(super) indices: IndexStore,
     term_dir: TermDir,
     term_expanders: Code,
-    pub(super) modules: ModuleDir,
     cached_query: Option<Code>
 }
 
@@ -81,13 +106,13 @@ impl Index<LocalCodePtr> for Machine {
     }
 }
 
-impl<'a> SubModuleUser for MachineCodeIndices<'a> {
+impl SubModuleUser for IndexStore {
     fn atom_tbl(&self) -> TabledData<Atom> {
         self.atom_tbl.clone()
     }
     
     fn op_dir(&mut self) -> &mut OpDir {
-        self.op_dir
+        &mut self.op_dir
     }
 
     fn get_code_index(&self, key: PredicateKey, module: ClauseName) -> Option<CodeIndex>
@@ -132,20 +157,17 @@ impl Machine {
             call_policy: Box::new(DefaultCallPolicy {}),
             cut_policy: Box::new(DefaultCutPolicy {}),
             code: Code::new(),
-            atom_tbl: TabledData::new(Rc::new("user".to_string())),
-            code_dir: Rc::new(RefCell::new(CodeDir::new())),
-            op_dir: default_op_dir(),
+            indices: IndexStore::new(),
             term_dir: TermDir::new(),
             term_expanders: Code::new(),
-            modules: HashMap::new(),
             cached_query: None
         };
 
-        let atom_tbl = wam.atom_tbl.clone();
+        let atom_tbl = wam.indices.atom_tbl.clone();
         
         compile_listing(&mut wam, BUILTINS.as_bytes(),
-                        default_machine_code_indices!(atom_tbl.clone()),
-                        default_machine_code_indices!(atom_tbl));
+                        default_index_store!(atom_tbl.clone()),
+                        default_index_store!(atom_tbl));
 
         compile_user_module(&mut wam, LISTS.as_bytes());
         compile_user_module(&mut wam, CONTROL.as_bytes());
@@ -178,7 +200,7 @@ impl Machine {
                 }
             };
 
-            if let Some(ref existing_idx) = self.code_dir.borrow().get(&key) {
+            if let Some(ref existing_idx) = self.indices.code_dir.get(&key) {
                 // ensure we don't try to overwrite an existing predicate from a different module.
                 if !existing_idx.is_undefined() && !idx.is_undefined() {
                     // allow the overwriting of user-level predicates by all other predicates.
@@ -197,7 +219,7 @@ impl Machine {
 
         // error detection has finished, so update the master index of keys.
         for (key, idx) in code_dir {
-            if let Some(ref mut master_idx) = self.code_dir.borrow_mut().get_mut(&key) {
+            if let Some(ref mut master_idx) = self.indices.code_dir.get_mut(&key) {
                 // ensure we don't double borrow if master_idx == idx.
                 // we don't need to modify anything in that case.
                 if !Rc::ptr_eq(&master_idx.0, &idx.0) {
@@ -207,7 +229,7 @@ impl Machine {
                 continue;
             }
 
-            self.code_dir.borrow_mut().insert(key.clone(), idx.clone());
+            self.indices.code_dir.insert(key.clone(), idx.clone());
         }
 
         self.code.extend(code.into_iter());
@@ -216,31 +238,37 @@ impl Machine {
 
     #[inline]
     pub fn add_batched_ops(&mut self, op_dir: OpDir) {
-        self.op_dir.extend(op_dir.into_iter());
+        self.indices.op_dir.extend(op_dir.into_iter());
     }
 
     #[inline]
     pub fn remove_module(&mut self, module: &Module) {
-        let mut indices = machine_code_indices!(self.atom_tbl.clone(),
-                                                &mut self.code_dir.borrow_mut(),
-                                                &mut self.op_dir,
-                                                &mut self.modules);
-        indices.remove_module(clause_name!("user"), module);
+        self.indices.remove_module(clause_name!("user"), module);
     }
 
     #[inline]
     pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
-        self.modules.remove(&name)
+        self.indices.modules.remove(&name)
     }
 
     #[inline]
+    pub fn take_code_dir(&mut self) -> CodeDir {
+        mem::replace(&mut self.indices.code_dir, CodeDir::new())
+    }
+    
+    #[inline]
+    pub fn swap_code_dir(&mut self, code_dir: &mut CodeDir) {
+        mem::swap(&mut self.indices.code_dir, code_dir);        
+    }
+    
+    #[inline]
     pub fn insert_module(&mut self, module: Module) {
-        self.modules.insert(module.module_decl.name.clone(), module);
+        self.indices.modules.insert(module.module_decl.name.clone(), module);
     }
 
     #[inline]
     pub fn add_module(&mut self, module: Module, code: Code) {
-        self.modules.insert(module.module_decl.name.clone(), module);
+        self.indices.modules.insert(module.module_decl.name.clone(), module);
         self.code.extend(code.into_iter());
     }
 
@@ -300,8 +328,6 @@ impl Machine {
             None => return
         };
 
-        let atom_tbl = self.atom_tbl.clone();
-
         match instr {
             Line::Arithmetic(ref arith_instr) =>
                 self.ms.execute_arith_instr(arith_instr),
@@ -309,15 +335,9 @@ impl Machine {
                 self.ms.execute_choice_instr(choice_instr, &mut self.call_policy),
             Line::Cut(ref cut_instr) =>
                 self.ms.execute_cut_instr(cut_instr, &mut self.cut_policy),
-            Line::Control(ref control_instr) => {
-                let indices = machine_code_indices!(atom_tbl,
-                                                    &mut self.code_dir.borrow_mut(),
-                                                    &mut self.op_dir,
-                                                    &mut self.modules);
-
-                self.ms.execute_ctrl_instr(indices, &mut self.call_policy,
-                                           &mut self.cut_policy, control_instr)
-            },
+            Line::Control(ref control_instr) => 
+                self.ms.execute_ctrl_instr(&mut self.indices, &mut self.call_policy,
+                                           &mut self.cut_policy, control_instr),            
             Line::Fact(ref fact) => {
                 for fact_instr in fact {
                     if self.failed() {
@@ -515,7 +535,7 @@ impl Machine {
 
     pub fn clear(&mut self) {
         let mut machine = Machine::new();
-        swap(self, &mut machine);
+        mem::swap(self, &mut machine);
     }
 
     pub fn reset(&mut self) {

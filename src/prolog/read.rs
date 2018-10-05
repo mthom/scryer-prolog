@@ -45,7 +45,7 @@ pub fn read_toplevel(wam: &mut Machine) -> Result<Input, ParserError> {
             Ok(Input::Batch)
         },
         _ => {
-            let mut term_stream = TermStream::new(stdin.lock(), wam.atom_tbl.clone(),
+            let mut term_stream = TermStream::new(stdin.lock(), wam.indices.atom_tbl.clone(),
                                                   wam.machine_flags());
             term_stream.add_to_top(buffer.as_str());
 
