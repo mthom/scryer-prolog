@@ -1057,6 +1057,7 @@ pub fn as_module_code_dir(code_dir: CodeDir) -> ModuleCodeDir {
 }
 
 pub trait SubModuleUser {
+    fn atom_tbl(&self) -> TabledData<Atom>;
     fn op_dir(&mut self) -> &mut OpDir;
     fn remove_code_index(&mut self, PredicateKey);
     fn get_code_index(&self, PredicateKey, ClauseName) -> Option<CodeIndex>;
@@ -1127,6 +1128,10 @@ pub trait SubModuleUser {
 
         if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
             let name = name.with_table(submodule.atom_tbl.clone());
+
+            let mut atom_tbl = self.atom_tbl();
+            atom_tbl.borrow_mut().insert(name.to_rc());
+
             self.insert_dir_entry(name, arity, code_data.clone());
             true
         } else {
@@ -1162,6 +1167,10 @@ pub trait SubModuleUser {
 }
 
 impl SubModuleUser for Module {
+    fn atom_tbl(&self) -> TabledData<Atom> {
+        self.atom_tbl.clone()
+    }
+
     fn op_dir(&mut self) -> &mut OpDir {
         &mut self.op_dir
     }

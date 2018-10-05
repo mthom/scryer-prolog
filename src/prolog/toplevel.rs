@@ -714,7 +714,7 @@ pub fn parse_term<R: Read>(wam: &Machine, buf: R) -> Result<Term, ParserError>
 {
     use prolog_parser::parser::*;
 
-    let mut parser = Parser::new(buf, wam.atom_tbl(), wam.machine_flags());
+    let mut parser = Parser::new(buf, wam.atom_tbl.clone(), wam.machine_flags());
     parser.read_term(composite_op!(&wam.op_dir))
 }
 

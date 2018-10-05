@@ -1,6 +1,5 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::StringList;
-use prolog_parser::tabled_rc::TabledData;
 
 use prolog::instructions::*;
 use prolog::and_stack::*;
@@ -33,8 +32,7 @@ macro_rules! try_or_fail {
 
 impl MachineState {
     pub(super) fn new() -> Self {
-        MachineState {
-            atom_tbl: TabledData::new(Rc::new("user".to_string())),
+        MachineState {            
             s: 0,
             p: CodePtr::default(),
             b: 0,

@@ -1,6 +1,5 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::*;
-use prolog_parser::tabled_rc::*;
 
 use prolog::instructions::*;
 use prolog::and_stack::*;
@@ -234,7 +233,6 @@ pub(super) enum MachineMode {
 }
 
 pub struct MachineState {
-    pub(crate) atom_tbl: TabledData<Atom>,
     pub(super) s: usize,
     pub(super) p: CodePtr,
     pub(super) b: usize,
@@ -559,7 +557,7 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Read => {
-                match machine_st.read(stdin(), &indices.op_dir) {
+                match machine_st.read(stdin(), indices.atom_tbl.clone(), &indices.op_dir) {
                     Ok(offset) => {
                         let addr = machine_st[temp_v!(1)].clone();
                         machine_st.unify(addr, Addr::HeapCell(offset));

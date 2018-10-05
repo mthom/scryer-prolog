@@ -99,7 +99,8 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
 
 fn package_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
     let code_dir = wam.code_dir.clone();
-    let indices = machine_code_indices!(&mut CodeDir::new(),
+    let indices = machine_code_indices!(wam.atom_tbl.clone(),
+                                        &mut CodeDir::new(),
                                         &mut wam.op_dir,
                                         &mut wam.modules);
 
@@ -118,7 +119,7 @@ pub fn compile_term(wam: &mut Machine, term: Term) -> EvalSession
             },
         TopLevelPacket::Decl(TopLevel::Declaration(decl), _) => {
             let mut compiler = ListingCompiler::new();
-            let mut indices = default_machine_code_indices!();
+            let mut indices = default_machine_code_indices!(wam.atom_tbl.clone());
 
             try_eval_session!(compiler.process_decl(decl, wam, &mut indices));
             try_eval_session!(compiler.add_code(wam, vec![], indices));
@@ -275,7 +276,8 @@ fn compile_listing<'a, R: Read>(wam: &mut Machine, src: R, mut indices: MachineC
                                 mut toplevel_indices: MachineCodeIndices<'a>)
                                 -> EvalSession
 {
-    let mut worker = TopLevelBatchWorker::new(src, wam.atom_tbl(), wam.machine_flags(),
+    let mut worker = TopLevelBatchWorker::new(src, wam.atom_tbl.clone(),
+                                              wam.machine_flags(),
                                               wam.code_dir.clone());
     let mut compiler = ListingCompiler::new();
     let mut toplevel_results = vec![];
@@ -316,7 +318,10 @@ fn setup_indices(wam: &Machine, indices: &mut MachineCodeIndices) -> Result<(), 
 }
 
 pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
-    let mut indices = default_machine_code_indices!();
+    let atom_tbl = wam.atom_tbl.clone();    
+    let mut indices = default_machine_code_indices!(atom_tbl.clone());
+    
     try_eval_session!(setup_indices(&wam, &mut indices));
-    compile_listing(wam, src, indices, default_machine_code_indices!())
+    
+    compile_listing(wam, src, indices, default_machine_code_indices!(atom_tbl))
 }

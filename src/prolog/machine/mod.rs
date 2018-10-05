@@ -25,6 +25,7 @@ use std::rc::Rc;
 static BUILTINS: &str = include_str!("../lib/builtins.pl");
 
 pub struct MachineCodeIndices<'a> {
+    pub(super) atom_tbl: TabledData<Atom>,
     pub(super) code_dir: &'a mut CodeDir,
     pub(super) op_dir: &'a mut OpDir,
     pub(super) modules: &'a mut ModuleDir
@@ -54,6 +55,7 @@ pub struct Machine {
     call_policy: Box<CallPolicy>,
     cut_policy: Box<CutPolicy>,
     code: Code,
+    pub(super) atom_tbl: TabledData<Atom>,
     pub(super) code_dir: Rc<RefCell<CodeDir>>,
     pub(super) op_dir: OpDir,
     term_dir: TermDir,
@@ -80,6 +82,10 @@ impl Index<LocalCodePtr> for Machine {
 }
 
 impl<'a> SubModuleUser for MachineCodeIndices<'a> {
+    fn atom_tbl(&self) -> TabledData<Atom> {
+        self.atom_tbl.clone()
+    }
+    
     fn op_dir(&mut self) -> &mut OpDir {
         self.op_dir
     }
@@ -126,6 +132,7 @@ impl Machine {
             call_policy: Box::new(DefaultCallPolicy {}),
             cut_policy: Box::new(DefaultCutPolicy {}),
             code: Code::new(),
+            atom_tbl: TabledData::new(Rc::new("user".to_string())),
             code_dir: Rc::new(RefCell::new(CodeDir::new())),
             op_dir: default_op_dir(),
             term_dir: TermDir::new(),
@@ -134,9 +141,11 @@ impl Machine {
             cached_query: None
         };
 
+        let atom_tbl = wam.atom_tbl.clone();
+        
         compile_listing(&mut wam, BUILTINS.as_bytes(),
-                        default_machine_code_indices!(),
-                        default_machine_code_indices!());
+                        default_machine_code_indices!(atom_tbl.clone()),
+                        default_machine_code_indices!(atom_tbl));
 
         compile_user_module(&mut wam, LISTS.as_bytes());
         compile_user_module(&mut wam, CONTROL.as_bytes());
@@ -155,11 +164,6 @@ impl Machine {
     #[inline]
     pub fn failed(&self) -> bool {
         self.ms.fail
-    }
-
-    #[inline]
-    pub fn atom_tbl(&self) -> TabledData<Atom> {
-        self.ms.atom_tbl.clone()
     }
 
     pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir) -> Result<(), SessionError>
@@ -217,7 +221,8 @@ impl Machine {
 
     #[inline]
     pub fn remove_module(&mut self, module: &Module) {
-        let mut indices = machine_code_indices!(&mut self.code_dir.borrow_mut(),
+        let mut indices = machine_code_indices!(self.atom_tbl.clone(),
+                                                &mut self.code_dir.borrow_mut(),
                                                 &mut self.op_dir,
                                                 &mut self.modules);
         indices.remove_module(clause_name!("user"), module);
@@ -295,6 +300,8 @@ impl Machine {
             None => return
         };
 
+        let atom_tbl = self.atom_tbl.clone();
+
         match instr {
             Line::Arithmetic(ref arith_instr) =>
                 self.ms.execute_arith_instr(arith_instr),
@@ -303,7 +310,8 @@ impl Machine {
             Line::Cut(ref cut_instr) =>
                 self.ms.execute_cut_instr(cut_instr, &mut self.cut_policy),
             Line::Control(ref control_instr) => {
-                let indices = machine_code_indices!(&mut self.code_dir.borrow_mut(),
+                let indices = machine_code_indices!(atom_tbl,
+                                                    &mut self.code_dir.borrow_mut(),
                                                     &mut self.op_dir,
                                                     &mut self.modules);
 

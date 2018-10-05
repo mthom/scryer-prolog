@@ -1,5 +1,6 @@
 use prolog_parser::ast::*;
 use prolog_parser::parser::*;
+use prolog_parser::tabled_rc::TabledData;
 
 use prolog::instructions::*;
 use prolog::iterators::*;
@@ -44,7 +45,8 @@ pub fn read_toplevel(wam: &mut Machine) -> Result<Input, ParserError> {
             Ok(Input::Batch)
         },
         _ => {
-            let mut term_stream = TermStream::new(stdin.lock(), wam.atom_tbl(), wam.machine_flags());
+            let mut term_stream = TermStream::new(stdin.lock(), wam.atom_tbl.clone(),
+                                                  wam.machine_flags());
             term_stream.add_to_top(buffer.as_str());
 
             Ok(Input::Term(term_stream.read_term(wam, &OpDir::new())?))
@@ -53,9 +55,10 @@ pub fn read_toplevel(wam: &mut Machine) -> Result<Input, ParserError> {
 }
 
 impl MachineState {
-    pub fn read<R: Read>(&mut self, inner: R, op_dir: &OpDir) -> Result<usize, ParserError>
+    pub fn read<R: Read>(&mut self, inner: R, atom_tbl: TabledData<Atom>, op_dir: &OpDir)
+                         -> Result<usize, ParserError>
     {
-        let mut parser = Parser::new(inner, self.atom_tbl.clone(), self.flags);
+        let mut parser = Parser::new(inner, atom_tbl, self.flags);
         let term = parser.read_term(composite_op!(op_dir))?;
 
         Ok(write_term_to_heap(&term, self))
