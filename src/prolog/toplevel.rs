@@ -756,15 +756,22 @@ impl<R: Read> TopLevelBatchWorker<R> {
                -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
-        let mut indices = composite_indices!(self.in_module, indices,
-                                             &mut self.static_code_dir);
 
         while !self.term_stream.eof()? {
             self.term_stream.empty_tokens(); // empty the parser stack of token descriptions.
 
             let mut new_rel_worker = RelationWorker::new();
-            let term = self.term_stream.read_term(wam, &indices.local.op_dir)?;
-
+            
+            let term = {                
+                wam.swap_code_dir(&mut self.static_code_dir);
+                self.term_stream.read_term(wam, &indices.op_dir)?
+            };
+        
+            self.static_code_dir = wam.take_code_dir();
+            
+            let mut indices = composite_indices!(self.in_module, indices,
+                                                 &mut self.static_code_dir);
+            
             let tl = new_rel_worker.try_term_to_tl(&mut indices, term, true)?;
 
             if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.
@@ -784,6 +791,9 @@ impl<R: Read> TopLevelBatchWorker<R> {
         }
 
         if !preds.is_empty() {
+            let mut indices = composite_indices!(self.in_module, indices,
+                                                 &mut self.static_code_dir);
+
             let result_queue = self.rel_worker.parse_queue(&mut indices)?;
             self.results.push((append_preds(&mut preds), result_queue));
         }
