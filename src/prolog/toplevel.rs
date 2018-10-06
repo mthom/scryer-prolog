@@ -4,6 +4,7 @@ use prolog_parser::tabled_rc::*;
 use prolog::instructions::*;
 use prolog::iterators::*;
 use prolog::machine::*;
+use prolog::machine::machine_state::MachineState;
 use prolog::machine::term_expansion::*;
 use prolog::num::*;
 
@@ -15,7 +16,7 @@ use std::rc::Rc;
 
 struct CompositeIndices<'a, 'b> {
     local: &'a mut IndexStore,
-    static_code_dir: Option<&'b mut CodeDir>
+    static_code_dir: Option<&'b CodeDir>
 }
 
 macro_rules! composite_indices {
@@ -720,11 +721,11 @@ pub fn parse_term<R: Read>(wam: &Machine, buf: R) -> Result<Term, ParserError>
 }
 
 pub
-fn consume_term(static_code_dir: &mut CodeDir, term: Term, indices: &mut IndexStore)
-                -> Result<TopLevelPacket, ParserError>
+fn consume_term(term: Term, indices: &mut IndexStore) -> Result<TopLevelPacket, ParserError>
 {
     let mut rel_worker = RelationWorker::new();
-    let mut indices = composite_indices!(false, indices, static_code_dir);
+    let mut _code_dir = CodeDir::new();
+    let mut indices = composite_indices!(false, indices, &mut _code_dir);
 
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
     let results = rel_worker.parse_queue(&mut indices)?;
@@ -732,49 +733,52 @@ fn consume_term(static_code_dir: &mut CodeDir, term: Term, indices: &mut IndexSt
     Ok(deque_to_packet(tl, results))
 }
 
-pub struct TopLevelBatchWorker<R: Read> {
-    pub(crate) term_stream: TermStream<R>,
+pub struct TopLevelBatchWorker<'a, R: Read> {
+    pub(crate) term_stream: TermStream<'a, R>,
     rel_worker: RelationWorker,
-    pub(super) static_code_dir: CodeDir,
     pub(crate) results: Vec<(Predicate, VecDeque<TopLevel>)>,
     pub(crate) in_module: bool
 }
 
-impl<R: Read> TopLevelBatchWorker<R> {
-    pub fn new(inner: R, atom_tbl: TabledData<Atom>, flags: MachineFlags, static_code_dir: CodeDir)
+impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
+    pub fn new(inner: R,
+               atom_tbl: TabledData<Atom>,
+               flags: MachineFlags,
+               indices: &'a mut IndexStore,
+               policies: &'a mut MachinePolicies,
+               code_repo: &'a mut CodeRepo)
                -> Self
     {
-        TopLevelBatchWorker { term_stream: TermStream::new(inner, atom_tbl, flags),
+        let term_stream = TermStream::new(inner, atom_tbl, flags,
+                                          indices, policies, code_repo);
+
+        TopLevelBatchWorker { term_stream,
                               rel_worker: RelationWorker::new(),
-                              static_code_dir,
                               results: vec![],
                               in_module: false }
     }
 
     pub
-    fn consume(&mut self, wam: &mut Machine, indices: &mut IndexStore)
+    fn consume(&mut self, machine_st: &mut MachineState, indices: &mut IndexStore)
                -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
 
         while !self.term_stream.eof()? {
-            self.term_stream.empty_tokens(); // empty the parser stack of token descriptions.
+            // empty the parser stack of token descriptions.
+            self.term_stream.empty_tokens();
 
             let mut new_rel_worker = RelationWorker::new();
-            
-            let term = {                
-                wam.swap_code_dir(&mut self.static_code_dir);
-                self.term_stream.read_term(wam, &indices.op_dir)?
-            };
-        
-            self.static_code_dir = wam.take_code_dir();
-            
-            let mut indices = composite_indices!(self.in_module, indices,
-                                                 &mut self.static_code_dir);
+            let term = self.term_stream.read_term(machine_st, &indices.op_dir)?;
+
+            let mut indices =
+                composite_indices!(self.in_module, indices,
+                                   &mut self.term_stream.indices.code_dir);
             
             let tl = new_rel_worker.try_term_to_tl(&mut indices, term, true)?;
 
-            if !is_consistent(&tl, &preds) {  // if is_consistent returns false, preds is non-empty.
+            // if is_consistent returns false, preds is non-empty.
+            if !is_consistent(&tl, &preds) {
                 let result_queue = self.rel_worker.parse_queue(&mut indices)?;
                 self.results.push((append_preds(&mut preds), result_queue));
             }
@@ -791,8 +795,9 @@ impl<R: Read> TopLevelBatchWorker<R> {
         }
 
         if !preds.is_empty() {
-            let mut indices = composite_indices!(self.in_module, indices,
-                                                 &mut self.static_code_dir);
+            let mut indices =
+                composite_indices!(self.in_module, indices,
+                                   &mut self.term_stream.indices.code_dir);
 
             let result_queue = self.rel_worker.parse_queue(&mut indices)?;
             self.results.push((append_preds(&mut preds), result_queue));

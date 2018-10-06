@@ -9,16 +9,26 @@ use prolog::read::*;
 use std::cell::Cell;
 use std::io::Read;
 
-pub struct TermStream<R: Read> {
+pub struct TermStream<'a, R: Read> {
     stack: Vec<Term>,
+    pub(crate) indices: &'a mut IndexStore,
+    policies: &'a mut MachinePolicies,
+    code_repo: &'a mut CodeRepo,    
     parser: Parser<R>,
     in_module: bool
 }
 
-impl<R: Read> TermStream<R> {
-    pub fn new(src: R, atom_tbl: TabledData<Atom>, flags: MachineFlags) -> Self {
+impl<'a, R: Read> TermStream<'a, R> {
+    pub fn new(src: R, atom_tbl: TabledData<Atom>, flags: MachineFlags,
+               indices: &'a mut IndexStore, policies: &'a mut MachinePolicies,
+               code_repo: &'a mut CodeRepo)
+               -> Self
+    {
         TermStream {
             stack: Vec::new(),
+            indices,
+            policies,
+            code_repo,
             parser: Parser::new(src, atom_tbl, flags),
             in_module: false
         }
@@ -67,40 +77,47 @@ impl<R: Read> TermStream<R> {
         }
     }
 
-    pub fn read_term(&mut self, wam: &mut Machine, op_dir: &OpDir) -> Result<Term, ParserError>
+    pub fn read_term(&mut self, machine_st: &mut MachineState, op_dir: &OpDir)
+                     -> Result<Term, ParserError>
     {
         loop {
             while let Some(term) = self.stack.pop() {
-                match wam.try_expand_term(&term)? {
+                match machine_st.try_expand_term(self.indices, self.policies, self.code_repo, &term)? {
                     Some(term) => self.enqueue_term(term)?,
                     None => return Ok(term)
                 };
             }
 
-            let term = self.parser.read_term(composite_op!(self.in_module, &wam.indices.op_dir,
+            let term = self.parser.read_term(composite_op!(self.in_module,
+                                                           &self.indices.op_dir,
                                                            op_dir))?;
             self.stack.push(term);
         }
     }
 }
 
-impl Machine {
-    fn try_expand_term(&mut self, term: &Term) -> Result<Option<Term>, ParserError> {
-        let term_h = write_term_to_heap(term, &mut self.ms);
-        let h = self.ms.heap.h;
+impl MachineState {
+    fn try_expand_term(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
+                       code_repo: &mut CodeRepo, term: &Term)
+                       -> Result<Option<Term>, ParserError>
+    {
+        let term_h = write_term_to_heap(term, self);
+        let h = self.heap.h;
 
-        self.ms[temp_v!(1)] = Addr::HeapCell(term_h);
-        self.ms.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
-        self.ms[temp_v!(2)] = Addr::HeapCell(h);
+        self[temp_v!(1)] = Addr::HeapCell(term_h);
+        self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+        self[temp_v!(2)] = Addr::HeapCell(h);
 
         let code = vec![call_clause!(ClauseType::Hook(CompileTimeHook::TermExpansion), 2, 0, true)];
-        self.submit_query(code, AllocVarDict::new());
 
-        if self.failed() {
+        code_repo.cached_query = Some(code);
+        self.run_query(indices, policies, code_repo, &AllocVarDict::new(), &mut HeapVarDict::new());
+
+        if self.fail {
             self.reset();
             Ok(None)
         } else {
-            let term = read_term_from_heap(&self.ms, Addr::HeapCell(h))?;
+            let term = read_term_from_heap(&self, Addr::HeapCell(h))?;
             self.reset();            
             Ok(Some(term))
         }

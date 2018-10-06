@@ -107,6 +107,14 @@ impl CodeRepo {
             code: Code::new()
         }
     }
+
+    #[inline]
+    fn size_of_cached_query(&self) -> usize {
+        match &self.cached_query {
+            &Some(ref query) => query.len(),
+            _ => 0
+        }
+    }
     
     fn lookup_instr<'a>(&'a self, last_call: bool, p: &CodePtr) -> Option<RefOrOwned<'a, Line>>
     {
@@ -138,29 +146,51 @@ impl CodeRepo {
     }
 }
 
-pub struct Machine {
-    ms: MachineState,
+pub struct MachinePolicies {
     call_policy: Box<CallPolicy>,
     cut_policy: Box<CutPolicy>,
+}
+
+impl MachinePolicies {
+    #[inline]
+    fn new() -> Self {
+        MachinePolicies {
+            call_policy: Box::new(DefaultCallPolicy {}),
+            cut_policy: Box::new(DefaultCutPolicy {}),
+        }
+    }
+}
+
+pub struct Machine {
+    pub(super) machine_st: MachineState,
+    pub(super) policies: MachinePolicies,
     pub(super) indices: IndexStore,
     term_dir: TermDir,
     pub(super) code_repo: CodeRepo  
+}
+
+impl Index<LocalCodePtr> for CodeRepo {
+    type Output = Line;
+
+    fn index(&self, ptr: LocalCodePtr) -> &Self::Output {
+        match ptr {
+            LocalCodePtr::TopLevel(_, p) => {
+                match &self.cached_query {
+                    &Some(ref cq) => &cq[p],
+                    &None => panic!("Out-of-bounds top level index.")
+                }
+            },
+            LocalCodePtr::DirEntry(p) => &self.code[p],
+            LocalCodePtr::UserTermExpansion(p) => &self.term_expanders[p]
+        }
+    }
 }
 
 impl Index<LocalCodePtr> for Machine {
     type Output = Line;
 
     fn index(&self, ptr: LocalCodePtr) -> &Self::Output {
-        match ptr {
-            LocalCodePtr::TopLevel(_, p) => {
-                match &self.code_repo.cached_query {
-                    &Some(ref cq) => &cq[p],
-                    &None => panic!("Out-of-bounds top level index.")
-                }
-            },
-            LocalCodePtr::DirEntry(p) => &self.code_repo.code[p],
-            LocalCodePtr::UserTermExpansion(p) => &self.code_repo.term_expanders[p]
-        }
+        &self.code_repo[ptr]
     }
 }
 
@@ -211,9 +241,8 @@ static TERMS: &str   = include_str!("../lib/terms.pl");
 impl Machine {
     pub fn new() -> Self {
         let mut wam = Machine {
-            ms: MachineState::new(),
-            call_policy: Box::new(DefaultCallPolicy {}),
-            cut_policy: Box::new(DefaultCutPolicy {}),
+            machine_st: MachineState::new(),
+            policies: MachinePolicies::new(),
             indices: IndexStore::new(),
             term_dir: TermDir::new(),
             code_repo: CodeRepo::new()
@@ -235,12 +264,12 @@ impl Machine {
 
     #[inline]
     pub fn machine_flags(&self) -> MachineFlags {
-        self.ms.flags
+        self.machine_st.flags
     }
 
     #[inline]
     pub fn failed(&self) -> bool {
-        self.ms.fail
+        self.machine_st.fail
     }
 
     pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir) -> Result<(), SessionError>
@@ -305,16 +334,6 @@ impl Machine {
     pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
         self.indices.modules.remove(&name)
     }
-
-    #[inline]
-    pub fn take_code_dir(&mut self) -> CodeDir {
-        mem::replace(&mut self.indices.code_dir, CodeDir::new())
-    }
-    
-    #[inline]
-    pub fn swap_code_dir(&mut self, code_dir: &mut CodeDir) {
-        mem::swap(&mut self.indices.code_dir, code_dir);        
-    }
     
     #[inline]
     pub fn insert_module(&mut self, module: Module) {
@@ -347,159 +366,19 @@ impl Machine {
 
         preds.0.push(clause);
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(false, self.ms.flags);
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(false, self.machine_st.flags);
         let code = cg.compile_predicate(&preds.0)?;
 
         Ok(self.code_repo.term_expanders = code)
     }
 
-    fn execute_instr(&mut self)
-    {
-        let instr = match self.code_repo.lookup_instr(self.ms.last_call, &self.ms.p) {
-            Some(instr) => instr,
-            None => return
-        };
-
-        match instr.as_ref() {
-            &Line::Arithmetic(ref arith_instr) =>
-                self.ms.execute_arith_instr(arith_instr),
-            &Line::Choice(ref choice_instr) =>
-                self.ms.execute_choice_instr(choice_instr, &mut self.call_policy),
-            &Line::Cut(ref cut_instr) =>
-                self.ms.execute_cut_instr(cut_instr, &mut self.cut_policy),
-            &Line::Control(ref control_instr) => 
-                self.ms.execute_ctrl_instr(&mut self.indices, &mut self.call_policy,
-                                           &mut self.cut_policy, control_instr),            
-            &Line::Fact(ref fact) => {
-                for fact_instr in fact {
-                    if self.failed() {
-                        break;
-                    }
-
-                    self.ms.execute_fact_instr(&fact_instr);
-                }
-
-                self.ms.p += 1;
-            },
-            &Line::Indexing(ref indexing_instr) =>
-                self.ms.execute_indexing_instr(&indexing_instr),
-            &Line::IndexedChoice(ref choice_instr) =>
-                self.ms.execute_indexed_choice_instr(choice_instr, &mut self.call_policy),
-            &Line::Query(ref query) => {
-                for query_instr in query {
-                    if self.failed() {
-                        break;
-                    }
-
-                    self.ms.execute_query_instr(&query_instr);
-                }
-
-                self.ms.p += 1;
-            }
-        }
-    }
-
-    fn backtrack(&mut self)
-    {
-        if self.ms.b > 0 {
-            let b = self.ms.b - 1;
-
-            self.ms.b0 = self.ms.or_stack[b].b0;
-            self.ms.p  = self.ms.or_stack[b].bp.clone();
-
-            if let CodePtr::Local(LocalCodePtr::TopLevel(_, p)) = self.ms.p {
-                self.ms.fail = p == 0;
-            } else {
-                self.ms.fail = false;
-            }
-        } else {
-            self.ms.p = CodePtr::Local(LocalCodePtr::TopLevel(0, 0));
-        }
-    }
-
-    fn query_stepper<'a>(&mut self)
-    {
-        loop {
-            self.execute_instr();
-
-            if self.failed() {
-                self.backtrack();
-            }
-
-            match self.ms.p {
-                CodePtr::Local(LocalCodePtr::DirEntry(p)) if p < self.code_repo.code.len() => {},
-                CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) if p < self.code_repo.term_expanders.len() => {},
-                CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) => self.ms.fail = true,
-                CodePtr::Local(_) => break,
-                _ => {}
-            };
-        }
-    }
-
-    fn record_var_places(&self, chunk_num: usize, alloc_locs: &AllocVarDict,
-                         heap_locs: &mut HeapVarDict)
-    {
-        for (var, var_data) in alloc_locs {
-            match var_data {
-                &VarData::Perm(p) if p > 0 => {
-                    let e = self.ms.e;
-                    let r = var_data.as_reg_type().reg_num();
-                    let addr = self.ms.and_stack[e][r].clone();
-
-                    heap_locs.insert(var.clone(), addr);
-                },
-                &VarData::Temp(cn, _, _) if cn == chunk_num => {
-                    let r = var_data.as_reg_type();
-
-                    if r.reg_num() != 0 {
-                        let addr = self.ms[r].clone();
-                        heap_locs.insert(var.clone(), addr);
-                    }
-                },
-                _ => {}
-            }
-        }
-    }
-
-    fn run_query(&mut self, alloc_locs: &AllocVarDict, heap_locs: &mut HeapVarDict)
-    {
-        let end_ptr = top_level_code_ptr!(0, self.cached_query_size());
-
-        while self.ms.p < end_ptr {
-            if let CodePtr::Local(LocalCodePtr::TopLevel(mut cn, p)) = self.ms.p {
-                match &self[LocalCodePtr::TopLevel(cn, p)] {
-                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
-                        self.record_var_places(cn, alloc_locs, heap_locs);
-                        cn += 1;
-                    },
-                    _ => {}
-                }
-
-                self.ms.p = top_level_code_ptr!(cn, p);
-            }
-
-            self.query_stepper();
-
-            match self.ms.p {
-                CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {},
-                _ => {
-                    if heap_locs.is_empty() {
-                        self.record_var_places(0, alloc_locs, heap_locs);
-                    }
-
-                    break;
-                }
-            };
-        }
-    }
-
     fn fail(&mut self, heap_locs: &HeapVarDict) -> EvalSession
     {
-        if self.ms.ball.stub.len() > 0 {
-            let h = self.ms.heap.h;
-            self.ms.copy_and_align_ball_to_heap();
+        if self.machine_st.ball.stub.len() > 0 {
+            let h = self.machine_st.heap.h;
+            self.machine_st.copy_and_align_ball_to_heap();
 
-            let error_str = self.ms.print_exception(Addr::HeapCell(h),
+            let error_str = self.machine_st.print_exception(Addr::HeapCell(h),
                                                     &heap_locs,
                                                     TermFormatter {},
                                                     PrinterOutputter::new())
@@ -516,9 +395,9 @@ impl Machine {
         let mut heap_locs = HashMap::new();
 
         self.code_repo.cached_query = Some(code);
-        self.run_query(&alloc_locs, &mut heap_locs);
+        self.machine_st.run_query(&mut self.indices, &mut self.policies, &self.code_repo, &alloc_locs, &mut heap_locs);
 
-        if self.failed() {
+        if self.machine_st.fail {
             self.fail(&heap_locs)
         } else {
             EvalSession::InitialQuerySuccess(alloc_locs, heap_locs)
@@ -528,16 +407,17 @@ impl Machine {
     pub fn continue_query(&mut self, alloc_l: &AllocVarDict, heap_l: &mut HeapVarDict) -> EvalSession
     {
         if !self.or_stack_is_empty() {
-            let b = self.ms.b - 1;
-            self.ms.p = self.ms.or_stack[b].bp.clone();
+            let b = self.machine_st.b - 1;
+            self.machine_st.p = self.machine_st.or_stack[b].bp.clone();
 
-            if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.ms.p {
+            if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
                 return EvalSession::from(SessionError::QueryFailure);
             }
 
-            self.run_query(alloc_l, heap_l);
-
-            if self.failed() {
+            self.machine_st.run_query(&mut self.indices, &mut self.policies, &self.code_repo,
+                                      alloc_l, heap_l);
+            
+            if self.machine_st.fail {
                 self.fail(&heap_l)
             } else {
                 EvalSession::SubsequentQuerySuccess
@@ -555,14 +435,14 @@ impl Machine {
 
         for (var, addr) in sorted_vars {
             let fmt = TermFormatter {};
-            output = self.ms.print_var_eq(var.clone(), addr.clone(), var_dir, fmt, output);
+            output = self.machine_st.print_var_eq(var.clone(), addr.clone(), var_dir, fmt, output);
         }
 
         output
     }
 
     pub fn or_stack_is_empty(&self) -> bool {
-        self.ms.b == 0
+        self.machine_st.b == 0
     }
 
     pub fn clear(&mut self) {
@@ -571,7 +451,154 @@ impl Machine {
     }
 
     pub fn reset(&mut self) {
-        self.cut_policy = Box::new(DefaultCutPolicy {});
-        self.ms.reset();
+        self.policies.cut_policy = Box::new(DefaultCutPolicy {});
+        self.machine_st.reset();
     }
 }
+
+
+impl MachineState {    
+    fn execute_instr(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
+                     code_repo: &CodeRepo)
+    {
+        let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
+            Some(instr) => instr,
+            None => return
+        };
+
+        match instr.as_ref() {
+            &Line::Arithmetic(ref arith_instr) =>
+                self.execute_arith_instr(arith_instr),
+            &Line::Choice(ref choice_instr) =>
+                self.execute_choice_instr(choice_instr, &mut policies.call_policy),
+            &Line::Cut(ref cut_instr) =>
+                self.execute_cut_instr(cut_instr, &mut policies.cut_policy),
+            &Line::Control(ref control_instr) => 
+                self.execute_ctrl_instr(indices, &mut policies.call_policy,
+                                        &mut policies.cut_policy, control_instr),            
+            &Line::Fact(ref fact) => {
+                for fact_instr in fact {
+                    if self.fail {
+                        break;
+                    }
+
+                    self.execute_fact_instr(&fact_instr);
+                }
+
+                self.p += 1;
+            },
+            &Line::Indexing(ref indexing_instr) =>
+                self.execute_indexing_instr(&indexing_instr),
+            &Line::IndexedChoice(ref choice_instr) =>
+                self.execute_indexed_choice_instr(choice_instr, &mut policies.call_policy),
+            &Line::Query(ref query) => {
+                for query_instr in query {
+                    if self.fail {
+                        break;
+                    }
+
+                    self.execute_query_instr(&query_instr);
+                }
+
+                self.p += 1;
+            }
+        }
+    }
+
+    fn backtrack(&mut self)
+    {
+        if self.b > 0 {
+            let b = self.b - 1;
+
+            self.b0 = self.or_stack[b].b0;
+            self.p  = self.or_stack[b].bp.clone();
+
+            if let CodePtr::Local(LocalCodePtr::TopLevel(_, p)) = self.p {
+                self.fail = p == 0;
+            } else {
+                self.fail = false;
+            }
+        } else {
+            self.p = CodePtr::Local(LocalCodePtr::TopLevel(0, 0));
+        }
+    }
+
+    fn query_stepper(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies, code_repo: &CodeRepo)
+    {
+        loop {
+            self.execute_instr(indices, policies, code_repo);
+
+            if self.fail {
+                self.backtrack();
+            }
+
+            match self.p {
+                CodePtr::Local(LocalCodePtr::DirEntry(p)) if p < code_repo.code.len() => {},
+                CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) if p < code_repo.term_expanders.len() => {},
+                CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) => self.fail = true,
+                CodePtr::Local(_) => break,
+                _ => {}
+            };
+        }
+    }
+
+    fn record_var_places(&self, chunk_num: usize, alloc_locs: &AllocVarDict, heap_locs: &mut HeapVarDict)
+    {
+        for (var, var_data) in alloc_locs {
+            match var_data {
+                &VarData::Perm(p) if p > 0 => {
+                    let e = self.e;
+                    let r = var_data.as_reg_type().reg_num();
+                    let addr = self.and_stack[e][r].clone();
+
+                    heap_locs.insert(var.clone(), addr);
+                },
+                &VarData::Temp(cn, _, _) if cn == chunk_num => {
+                    let r = var_data.as_reg_type();
+
+                    if r.reg_num() != 0 {
+                        let addr = self[r].clone();
+                        heap_locs.insert(var.clone(), addr);
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+
+    pub(super)
+    fn run_query(&mut self, indices: &mut IndexStore,
+                 policies: &mut MachinePolicies, code_repo: &CodeRepo,
+                 alloc_locs: &AllocVarDict, heap_locs: &mut HeapVarDict)
+    {
+        let end_ptr = top_level_code_ptr!(0, code_repo.size_of_cached_query());
+
+        while self.p < end_ptr {
+            if let CodePtr::Local(LocalCodePtr::TopLevel(mut cn, p)) = self.p {
+                match &code_repo[LocalCodePtr::TopLevel(cn, p)] {
+                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
+                        self.record_var_places(cn, alloc_locs, heap_locs);
+                        cn += 1;
+                    },
+                    _ => {}
+                }
+
+                self.p = top_level_code_ptr!(cn, p);
+            }
+
+            self.query_stepper(indices, policies, code_repo);
+
+            match self.p {
+                CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {},
+                _ => {
+                    if heap_locs.is_empty() {
+                        self.record_var_places(0, alloc_locs, heap_locs);
+                    }
+
+                    break;
+                }
+            };
+        }
+    }    
+}
+

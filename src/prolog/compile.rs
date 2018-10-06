@@ -97,16 +97,20 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
     Ok((code, cg.take_vars()))
 }
 
-fn package_term(wam: &mut Machine, term: Term) -> Result<TopLevelPacket, ParserError> {
-    let mut code_dir = wam.take_code_dir();
-    let packet = consume_term(&mut code_dir, term, &mut wam.indices)?;
-    wam.swap_code_dir(&mut code_dir);
-    Ok(packet)
+fn compile_decl(wam: &mut Machine, compiler: &mut ListingCompiler, decl: Declaration)
+                -> Result<IndexStore, SessionError>
+{
+    let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
+    let wam_indices = &mut wam.indices;
+    
+    compiler.process_decl(decl, wam_indices, &mut indices)?;
+
+    Ok(indices)
 }
 
 pub fn compile_term(wam: &mut Machine, term: Term) -> EvalSession
 {
-    let packet = try_eval_session!(package_term(wam, term));
+    let packet = try_eval_session!(consume_term(term, &mut wam.indices));
 
     match packet {
         TopLevelPacket::Query(terms, queue) =>
@@ -116,15 +120,20 @@ pub fn compile_term(wam: &mut Machine, term: Term) -> EvalSession
             },
         TopLevelPacket::Decl(TopLevel::Declaration(decl), _) => {
             let mut compiler = ListingCompiler::new();
-            let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
 
-            try_eval_session!(compiler.process_decl(decl, wam, &mut indices));
+            let indices = try_eval_session!(compile_decl(wam, &mut compiler, decl));
             try_eval_session!(compiler.add_code(wam, vec![], indices));
 
             EvalSession::EntrySuccess
         },
         _ => EvalSession::from(SessionError::UserPrompt)
     }
+}
+
+struct GatherResult {
+    worker_results: Vec<(Predicate, VecDeque<TopLevel>)>,
+    toplevel_results: Vec<(Predicate, VecDeque<TopLevel>)>,
+    toplevel_indices: IndexStore
 }
 
 pub struct ListingCompiler {
@@ -140,41 +149,38 @@ impl ListingCompiler {
         }
     }
 
-    fn use_module(&mut self, submodule: Module, wam: &mut Machine, indices: &mut IndexStore)
+    fn use_module(&mut self, submodule: &Module, indices: &mut IndexStore)
                   -> Result<(), SessionError>
     {
         let mod_name = self.get_module_name();
 
-        indices.use_module(&submodule)?;
+        indices.use_module(submodule)?;
 
         if let &mut Some(ref mut module) = &mut self.module {
-            module.remove_module(mod_name, &submodule);
-            module.use_module(&submodule)?;
-        } else {
-            wam.remove_module(&submodule);
+            module.remove_module(mod_name, submodule);
+            module.use_module(submodule)?;
         }
 
-        Ok(wam.insert_module(submodule))
+        Ok(())
     }
 
-    fn use_qualified_module(&mut self, submodule: Module, wam: &mut Machine,
-                            exports: &Vec<PredicateKey>, indices: &mut IndexStore)
+    fn use_qualified_module(&mut self, submodule: &Module, exports: &Vec<PredicateKey>,
+                            indices: &mut IndexStore)
                             -> Result<(), SessionError>
     {
         let mod_name = self.get_module_name();
 
-        indices.use_qualified_module(&submodule, exports)?;
+        indices.use_qualified_module(submodule, exports)?;
 
         if let &mut Some(ref mut module) = &mut self.module {
-            module.remove_module(mod_name, &submodule);
-            module.use_qualified_module(&submodule, exports)?;
-        } else {
-            wam.remove_module(&submodule);
+            module.remove_module(mod_name, submodule);
+            module.use_qualified_module(submodule, exports)?;
         }
 
-        Ok(wam.insert_module(submodule))
+        Ok(())
     }
 
+    #[inline]
     fn get_module_name(&self) -> ClauseName {
         self.module.as_ref()
             .map(|module| module.module_decl.name.clone())
@@ -233,25 +239,26 @@ impl ListingCompiler {
         self.non_counted_bt_preds.insert((name, arity));
     }
 
-    fn process_decl(&mut self, decl: Declaration, wam: &mut Machine, indices: &mut IndexStore)
+    fn process_decl(&mut self, decl: Declaration, wam_indices: &IndexStore, indices: &mut IndexStore)
                     -> Result<(), SessionError>
     {
         match decl {
             Declaration::Hook(CompileTimeHook::TermExpansion, clause) =>
-                Ok(wam.add_term_expansion_clause(clause)?),
+            //Ok(wam.add_term_expansion_clause(clause)?),
+                Ok(()),
             Declaration::NonCountedBacktracking(name, arity) =>
                 Ok(self.add_non_counted_bt_flag(name, arity)),
             Declaration::Op(op_decl) =>
                 op_decl.submit(self.get_module_name(), &mut indices.op_dir),
             Declaration::UseModule(name) =>
-                if let Some(submodule) = wam.take_module(name) {
-                    self.use_module(submodule, wam, indices)
+                if let Some(ref submodule) = wam_indices.modules.get(&name) {
+                    self.use_module(submodule, indices)
                 } else {
                     Err(SessionError::ModuleNotFound)
                 },
             Declaration::UseQualifiedModule(name, exports) =>
-                if let Some(submodule) = wam.take_module(name) {
-                    self.use_qualified_module(submodule, wam, &exports, indices)
+                if let Some(ref submodule) = wam_indices.modules.get(&name) {
+                    self.use_qualified_module(submodule, &exports, indices)
                 } else {
                     Err(SessionError::ModuleNotFound)
                 },
@@ -266,45 +273,60 @@ impl ListingCompiler {
                 }
         }
     }
+
+    fn gather_items<R: Read>(&mut self, wam: &mut Machine, src: R, indices: &mut IndexStore)
+                             -> Result<GatherResult, SessionError>
+    {
+        let flags = wam.machine_flags();
+        let machine_st  = &mut wam.machine_st;
+        let wam_indices = &mut wam.indices;
+
+        let atom_tbl   = wam_indices.atom_tbl.clone();
+
+        let mut worker = TopLevelBatchWorker::new(src, atom_tbl.clone(), flags,
+                                                  wam_indices, &mut wam.policies,
+                                                  &mut wam.code_repo);
+
+        let mut toplevel_results = vec![];
+        let mut toplevel_indices = default_index_store!(atom_tbl.clone());
+
+        while let Some(decl) = worker.consume(machine_st, indices)? {
+            if decl.is_module_decl() {
+                toplevel_indices.copy_and_swap(indices);
+                mem::swap(&mut worker.results, &mut toplevel_results);
+                worker.in_module = true;
+
+                self.process_decl(decl, worker.term_stream.indices, indices)?;
+
+                if let &Some(ref module) = &self.module {
+                    worker.term_stream.set_atom_tbl(module.atom_tbl.clone());
+                }
+            } else {
+                self.process_decl(decl, worker.term_stream.indices, indices)?;
+            }
+        }
+
+        Ok(GatherResult {
+            worker_results: worker.results,
+            toplevel_results,
+            toplevel_indices
+        })
+    }
 }
 
 pub
 fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: IndexStore) -> EvalSession
 {
-    let code_dir = wam.take_code_dir();
-    let mut worker = TopLevelBatchWorker::new(src, wam.indices.atom_tbl.clone(),
-                                              wam.machine_flags(),
-                                              code_dir);
-
     let mut compiler = ListingCompiler::new();
-    let mut toplevel_results = vec![];
-    let mut toplevel_indices = default_index_store!(wam.indices.atom_tbl.clone());
+    let mut results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
 
-    while let Some(decl) = try_eval_session!(worker.consume(wam, &mut indices)) {
-        if decl.is_module_decl() {
-            toplevel_indices.copy_and_swap(&mut indices);
-            mem::swap(&mut worker.results, &mut toplevel_results);
-            worker.in_module = true;
-
-            try_eval_session!(compiler.process_decl(decl, wam, &mut indices));
-
-            if let &Some(ref module) = &compiler.module {
-                worker.term_stream.set_atom_tbl(module.atom_tbl.clone());
-            }
-        } else {
-            try_eval_session!(compiler.process_decl(decl, wam, &mut indices));
-        }
-    }
-
-    wam.swap_code_dir(&mut worker.static_code_dir);
-
-    let module_code = try_eval_session!(compiler.generate_code(worker.results, wam,
+    let module_code = try_eval_session!(compiler.generate_code(results.worker_results, wam,
                                                                &mut indices.code_dir));
-    let toplvl_code = try_eval_session!(compiler.generate_code(toplevel_results, wam,
-                                                               &mut toplevel_indices.code_dir));
+    let toplvl_code = try_eval_session!(compiler.generate_code(results.toplevel_results, wam,
+                                                               &mut results.toplevel_indices.code_dir));
 
     try_eval_session!(compiler.add_code(wam, module_code, indices));
-    try_eval_session!(compiler.add_code(wam, toplvl_code, toplevel_indices));
+    try_eval_session!(compiler.add_code(wam, toplvl_code, results.toplevel_indices));
 
     EvalSession::EntrySuccess
 }
