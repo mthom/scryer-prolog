@@ -702,6 +702,7 @@ impl RelationWorker {
             queue.push_back(clauses);
 
         }
+        
         Ok(queue)
     }
 

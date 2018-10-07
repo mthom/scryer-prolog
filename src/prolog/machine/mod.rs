@@ -44,7 +44,17 @@ impl<'a, T> RefOrOwned<'a, T> {
     }
 }
 
-impl IndexStore {
+impl IndexStore {    
+    #[inline]
+    pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
+        self.modules.remove(&name)
+    }
+    
+    #[inline]
+    pub fn insert_module(&mut self, module: Module) {
+        self.modules.insert(module.module_decl.name.clone(), module);
+    }
+    
     #[inline]
     pub(super) fn new() -> Self {
         IndexStore {
@@ -237,6 +247,7 @@ static CONTROL: &str = include_str!("../lib/control.pl");
 static QUEUES: &str  = include_str!("../lib/queues.pl");
 static ERROR: &str   = include_str!("../lib/error.pl");
 static TERMS: &str   = include_str!("../lib/terms.pl");
+static DCGS: &str    = include_str!("../lib/dcgs.pl");
 
 impl Machine {
     pub fn new() -> Self {
@@ -258,6 +269,7 @@ impl Machine {
         compile_user_module(&mut wam, QUEUES.as_bytes());
         compile_user_module(&mut wam, ERROR.as_bytes());
 	compile_user_module(&mut wam, TERMS.as_bytes());
+        compile_user_module(&mut wam, DCGS.as_bytes());
 
         wam
     }
@@ -266,12 +278,7 @@ impl Machine {
     pub fn machine_flags(&self) -> MachineFlags {
         self.machine_st.flags
     }
-
-    #[inline]
-    pub fn failed(&self) -> bool {
-        self.machine_st.fail
-    }
-
+        
     pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir) -> Result<(), SessionError>
     {
         for (ref key, ref idx) in code_dir.iter() {
@@ -326,21 +333,6 @@ impl Machine {
     }
 
     #[inline]
-    pub fn remove_module(&mut self, module: &Module) {
-        self.indices.remove_module(clause_name!("user"), module);
-    }
-
-    #[inline]
-    pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
-        self.indices.modules.remove(&name)
-    }
-    
-    #[inline]
-    pub fn insert_module(&mut self, module: Module) {
-        self.indices.modules.insert(module.module_decl.name.clone(), module);
-    }
-
-    #[inline]
     pub fn add_module(&mut self, module: Module, code: Code) {
         self.indices.modules.insert(module.module_decl.name.clone(), module);
         self.code_repo.code.extend(code.into_iter());
@@ -348,13 +340,6 @@ impl Machine {
 
     pub fn code_size(&self) -> usize {
         self.code_repo.code.len()
-    }
-
-    fn cached_query_size(&self) -> usize {
-        match &self.code_repo.cached_query {
-            &Some(ref query) => query.len(),
-            _ => 0
-        }
     }
 
     #[inline]

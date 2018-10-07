@@ -102,7 +102,7 @@ fn compile_decl(wam: &mut Machine, compiler: &mut ListingCompiler, decl: Declara
 {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     let wam_indices = &mut wam.indices;
-    
+
     compiler.process_decl(decl, wam_indices, &mut indices)?;
 
     Ok(indices)
@@ -149,35 +149,47 @@ impl ListingCompiler {
         }
     }
 
-    fn use_module(&mut self, submodule: &Module, indices: &mut IndexStore)
+    fn use_module(&mut self, submodule: ClauseName, wam_indices: &mut IndexStore, indices: &mut IndexStore)
                   -> Result<(), SessionError>
     {
         let mod_name = self.get_module_name();
 
-        indices.use_module(submodule)?;
+        if let Some(submodule) = wam_indices.take_module(submodule) {
+            indices.use_module(&submodule)?;
 
-        if let &mut Some(ref mut module) = &mut self.module {
-            module.remove_module(mod_name, submodule);
-            module.use_module(submodule)?;
+            if let &mut Some(ref mut module) = &mut self.module {
+                module.remove_module(mod_name, &submodule);
+                module.use_module(&submodule)?;
+            } else {
+                wam_indices.remove_module(clause_name!("user"), &submodule);
+            }
+
+            Ok(wam_indices.insert_module(submodule))
+        } else {
+            Err(SessionError::ModuleNotFound)
         }
-
-        Ok(())
     }
 
-    fn use_qualified_module(&mut self, submodule: &Module, exports: &Vec<PredicateKey>,
-                            indices: &mut IndexStore)
+    fn use_qualified_module(&mut self, submodule: ClauseName, exports: &Vec<PredicateKey>,
+                            wam_indices: &mut IndexStore, indices: &mut IndexStore)
                             -> Result<(), SessionError>
     {
         let mod_name = self.get_module_name();
 
-        indices.use_qualified_module(submodule, exports)?;
+        if let Some(submodule) = wam_indices.take_module(submodule) {
+            indices.use_qualified_module(&submodule, exports)?;
 
-        if let &mut Some(ref mut module) = &mut self.module {
-            module.remove_module(mod_name, submodule);
-            module.use_qualified_module(submodule, exports)?;
+            if let &mut Some(ref mut module) = &mut self.module {
+                module.remove_module(mod_name, &submodule);
+                module.use_qualified_module(&submodule, exports)?;
+            } else {
+                wam_indices.remove_module(clause_name!("user"), &submodule);
+            }
+
+            Ok(wam_indices.insert_module(submodule))
+        } else {
+            Err(SessionError::ModuleNotFound)
         }
-
-        Ok(())
     }
 
     #[inline]
@@ -239,7 +251,7 @@ impl ListingCompiler {
         self.non_counted_bt_preds.insert((name, arity));
     }
 
-    fn process_decl(&mut self, decl: Declaration, wam_indices: &IndexStore, indices: &mut IndexStore)
+    fn process_decl(&mut self, decl: Declaration, wam_indices: &mut IndexStore, indices: &mut IndexStore)
                     -> Result<(), SessionError>
     {
         match decl {
@@ -251,17 +263,9 @@ impl ListingCompiler {
             Declaration::Op(op_decl) =>
                 op_decl.submit(self.get_module_name(), &mut indices.op_dir),
             Declaration::UseModule(name) =>
-                if let Some(ref submodule) = wam_indices.modules.get(&name) {
-                    self.use_module(submodule, indices)
-                } else {
-                    Err(SessionError::ModuleNotFound)
-                },
+                self.use_module(name, wam_indices, indices),
             Declaration::UseQualifiedModule(name, exports) =>
-                if let Some(ref submodule) = wam_indices.modules.get(&name) {
-                    self.use_qualified_module(submodule, &exports, indices)
-                } else {
-                    Err(SessionError::ModuleNotFound)
-                },
+                self.use_qualified_module(name, &exports, wam_indices, indices),
             Declaration::Module(module_decl) =>
                 if self.module.is_none() {
                     let module_name = module_decl.name.clone();

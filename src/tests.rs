@@ -1374,6 +1374,17 @@ reverse(Xs, Ys) :- lists:reverse(Xs, Ys).
     assert_prolog_success!(&mut wam, "?- my_lists_2:local_member(1, [1,2,3]).");
     assert_prolog_success!(&mut wam, "?- catch(local_member(X, Xs), error(E, _), true).",
                            [["X = _1", "E = existence_error(procedure, local_member/2)", "Xs = _2"]]);
+
+    submit(&mut wam, ":- use_module(library(lists), [reverse/2]).");
+
+    assert_prolog_success!(&mut wam, "?- catch(member(_, _), error(existence_error(procedure, P), _), true).",
+                           [["P = member/2"]]);
+    assert_prolog_success!(&mut wam, "?- reverse(_, _).");
+
+    submit(&mut wam, ":- use_module(library(lists), []).");
+    
+    assert_prolog_success!(&mut wam, "?- catch(reverse(_, _), error(existence_error(procedure, P), _), true).",
+                           [["P = reverse/2"]]);
 }
 
 #[test]
