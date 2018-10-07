@@ -1184,7 +1184,7 @@ impl SubModuleUser for Module {
 }
 
 pub enum Declaration {
-    Hook(CompileTimeHook, PredicateClause),
+    Hook(CompileTimeHook, PredicateClause, VecDeque<TopLevel>),
     Module(ModuleDecl),
     NonCountedBacktracking(ClauseName, usize), // name, arity
     Op(OpDecl),

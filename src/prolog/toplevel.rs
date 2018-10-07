@@ -85,6 +85,8 @@ fn is_term_expansion(name: &ClauseName, terms: &Vec<Box<Term>>) -> bool {
     false
 }
 
+type CompileTimeHookCompileInfo = (CompileTimeHook, PredicateClause, VecDeque<TopLevel>);
+
 fn setup_fact(term: Term) -> Result<Term, ParserError>
 {
     match term {
@@ -621,16 +623,21 @@ impl RelationWorker {
     }
 
     fn setup_hook(&mut self, indices: &mut CompositeIndices, term: Term)
-                  -> Result<(CompileTimeHook, PredicateClause), ParserError>
+                  -> Result<CompileTimeHookCompileInfo, ParserError>
     {
         match term {
             Term::Clause(r, name, terms, _) =>
                 if name.as_str() == "term_expansion" && terms.len() == 2 {
-                    let term = Term::Clause(r, name, terms, None);
-                    Ok((CompileTimeHook::TermExpansion, PredicateClause::Fact(term)))
+                    let term = setup_fact(Term::Clause(r, name, terms, None))?;
+                    
+                    Ok((CompileTimeHook::TermExpansion, PredicateClause::Fact(term),
+                        VecDeque::from(vec![])))
                 } else if name.as_str() == ":-" {
-                    let rule = self.setup_rule(indices, terms, false)?;
-                    Ok((CompileTimeHook::TermExpansion, PredicateClause::Rule(rule)))
+                    let rule = self.setup_rule(indices, terms, true)?;
+                    let results_queue = self.parse_queue(indices)?;
+                    
+                    Ok((CompileTimeHook::TermExpansion, PredicateClause::Rule(rule),
+                        results_queue))
                 } else {
                     Err(ParserError::InvalidHook)
                 },
@@ -638,7 +645,8 @@ impl RelationWorker {
         }
     }
 
-    fn setup_rule(&mut self, indices: &mut CompositeIndices, mut terms: Vec<Box<Term>>, blocks_cuts: bool)
+    fn setup_rule(&mut self, indices: &mut CompositeIndices, mut terms: Vec<Box<Term>>,
+                  blocks_cuts: bool)
                   -> Result<Rule, ParserError>
     {
         let post_head_terms = terms.drain(1..).collect();
@@ -662,9 +670,9 @@ impl RelationWorker {
             Term::Clause(r, name, mut terms, fixity) =>
                 if is_term_expansion(&name, &terms) {
                     let term = Term::Clause(r, name, terms, fixity);
-                    let (hook, clauses) = self.setup_hook(indices, term)?;
+                    let (hook, clause, queue) = self.setup_hook(indices, term)?;
 
-                    Ok(TopLevel::Declaration(Declaration::Hook(hook, clauses)))
+                    Ok(TopLevel::Declaration(Declaration::Hook(hook, clause, queue)))
                 } else if name.as_str() == "?-" {
                     Ok(TopLevel::Query(try!(self.setup_query(indices, terms, blocks_cuts))))
                 } else if name.as_str() == ":-" && terms.len() > 1 {
@@ -702,7 +710,7 @@ impl RelationWorker {
             queue.push_back(clauses);
 
         }
-        
+
         Ok(queue)
     }
 
@@ -766,16 +774,13 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         let mut preds = vec![];
 
         while !self.term_stream.eof()? {
-            // empty the parser stack of token descriptions.
-            self.term_stream.empty_tokens();
-
             let mut new_rel_worker = RelationWorker::new();
             let term = self.term_stream.read_term(machine_st, &indices.op_dir)?;
 
             let mut indices =
                 composite_indices!(self.in_module, indices,
                                    &mut self.term_stream.indices.code_dir);
-            
+
             let tl = new_rel_worker.try_term_to_tl(&mut indices, term, true)?;
 
             // if is_consistent returns false, preds is non-empty.

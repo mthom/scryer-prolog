@@ -1,9 +1,7 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::codegen::*;
 use prolog::compile::*;
-use prolog::debray_allocator::*;
 use prolog::heap_print::*;
 use prolog::instructions::*;
 
@@ -105,7 +103,8 @@ impl IndexStore {
 pub struct CodeRepo {
     cached_query: Option<Code>,
     pub(super) term_expanders: Code,
-    pub(super) code: Code      
+    pub(super) code: Code,
+    pub(super) term_dir: TermDir        
 }
 
 impl CodeRepo {
@@ -114,7 +113,8 @@ impl CodeRepo {
         CodeRepo {
             cached_query: None,
             term_expanders: Code::new(),
-            code: Code::new()
+            code: Code::new(),
+            term_dir: TermDir::new()               
         }
     }
 
@@ -174,8 +174,7 @@ impl MachinePolicies {
 pub struct Machine {
     pub(super) machine_st: MachineState,
     pub(super) policies: MachinePolicies,
-    pub(super) indices: IndexStore,
-    term_dir: TermDir,
+    pub(super) indices: IndexStore,    
     pub(super) code_repo: CodeRepo  
 }
 
@@ -255,7 +254,6 @@ impl Machine {
             machine_st: MachineState::new(),
             policies: MachinePolicies::new(),
             indices: IndexStore::new(),
-            term_dir: TermDir::new(),
             code_repo: CodeRepo::new()
         };
 
@@ -340,21 +338,6 @@ impl Machine {
 
     pub fn code_size(&self) -> usize {
         self.code_repo.code.len()
-    }
-
-    #[inline]
-    pub(super)
-    fn add_term_expansion_clause(&mut self, clause: PredicateClause) -> Result<(), ParserError>
-    {
-        let key = (clause_name!("term_expansion"), 2);
-        let preds = self.term_dir.entry(key).or_insert(Predicate(vec![]));
-
-        preds.0.push(clause);
-
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(false, self.machine_st.flags);
-        let code = cg.compile_predicate(&preds.0)?;
-
-        Ok(self.code_repo.term_expanders = code)
     }
 
     fn fail(&mut self, heap_locs: &HeapVarDict) -> EvalSession

@@ -115,6 +115,29 @@ fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
     }
 }
 
+impl MachineState {
+    pub fn numbervar(&self, addr: Addr) -> Option<Var> {
+        static CHAR_CODES: [char; 26] = ['A','B','C','D','E','F','G','H','I','J',
+                                         'K','L','M','N','O','P','Q','R','S','T',
+                                         'U','V','W','X','Y','Z'];
+
+        match self.store(self.deref(addr)) {
+            Addr::Con(Constant::Number(Number::Integer(ref n)))
+                if !n.is_negative() => {
+                    let i = n.mod_floor(&BigInt::from(26)).to_usize().unwrap();
+                    let j = n.div_floor(&BigInt::from(26));
+
+                    Some(if j.is_zero() {
+                        CHAR_CODES[i].to_string()
+                    } else {
+                        format!("{}{}", CHAR_CODES[i], j)
+                    })
+                },
+            _ => None
+        }
+    }
+}
+
 fn print_op(ct: ClauseType, fixity: Fixity, state_stack: &mut Vec<TokenOrRedirect>) {
     match fixity {
         Fixity::Post => {
@@ -137,35 +160,17 @@ impl HCValueFormatter for WriteqFormatter {
     fn format_clause(&self, iter: &mut HCPreOrderIterator, arity: usize,
                      ct: ClauseType, state_stack: &mut Vec<TokenOrRedirect>)
     {
-        static CHAR_CODES: [char; 26] = ['A','B','C','D','E','F','G','H','I','J',
-                                         'K','L','M','N','O','P','Q','R','S','T',
-                                         'U','V','W','X','Y','Z'];
-
         if let Some(fixity) = ct.fixity() {
             return print_op(ct, fixity, state_stack);
         } else if is_numbered_var(&ct, arity) {
             let addr = iter.stack().last().cloned().unwrap();
 
             // 7.10.4
-            match iter.machine_st.store(iter.machine_st.deref(addr)) {
-                Addr::Con(Constant::Number(Number::Integer(ref n))) if !n.is_negative() => {
-                    iter.stack().pop();
-
-                    let i = n.mod_floor(&BigInt::from(26)).to_usize().unwrap();
-                    let j = n.div_floor(&BigInt::from(26));
-
-                    let mut result = if j.is_zero() {
-                        CHAR_CODES[i].to_string()
-                    } else {
-                        format!("{}{}", CHAR_CODES[i], j)
-                    };
-
-                    state_stack.push(TokenOrRedirect::NumberedVar(result));
-
-                    return;
-                }
-                _ => {}
-            };
+            if let Some(var) = iter.machine_st.numbervar(addr) {
+                iter.stack().pop();
+                state_stack.push(TokenOrRedirect::NumberedVar(var));
+                return;
+            }
         }
 
         self.format_struct(arity, ct.name(), state_stack);

@@ -100,10 +100,11 @@ fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlag
 fn compile_decl(wam: &mut Machine, compiler: &mut ListingCompiler, decl: Declaration)
                 -> Result<IndexStore, SessionError>
 {
+    let flags = wam.machine_flags();
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     let wam_indices = &mut wam.indices;
 
-    compiler.process_decl(decl, wam_indices, &mut indices)?;
+    compiler.process_decl(decl, &mut wam.code_repo, wam_indices, &mut indices, flags)?;
 
     Ok(indices)
 }
@@ -251,13 +252,25 @@ impl ListingCompiler {
         self.non_counted_bt_preds.insert((name, arity));
     }
 
-    fn process_decl(&mut self, decl: Declaration, wam_indices: &mut IndexStore, indices: &mut IndexStore)
+    fn process_decl(&mut self, decl: Declaration, code_repo: &mut CodeRepo,
+                    wam_indices: &mut IndexStore, indices: &mut IndexStore,
+                    flags: MachineFlags)
                     -> Result<(), SessionError>
     {
         match decl {
-            Declaration::Hook(CompileTimeHook::TermExpansion, clause) =>
-            //Ok(wam.add_term_expansion_clause(clause)?),
-                Ok(()),
+            Declaration::Hook(CompileTimeHook::TermExpansion, clause, queue) => {
+                let key = (clause_name!("term_expansion"), 2);
+                let preds = code_repo.term_dir.entry(key).or_insert(Predicate(vec![]));
+
+                preds.0.push(clause);
+
+                let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
+                let mut code = cg.compile_predicate(&preds.0)?;
+
+                compile_appendix(&mut code, Vec::from(queue), false, flags)?;
+
+                Ok(code_repo.term_expanders = code)
+            },
             Declaration::NonCountedBacktracking(name, arity) =>
                 Ok(self.add_non_counted_bt_flag(name, arity)),
             Declaration::Op(op_decl) =>
@@ -300,13 +313,17 @@ impl ListingCompiler {
                 mem::swap(&mut worker.results, &mut toplevel_results);
                 worker.in_module = true;
 
-                self.process_decl(decl, worker.term_stream.indices, indices)?;
+                self.process_decl(decl, worker.term_stream.code_repo,
+                                  worker.term_stream.indices,
+                                  indices, flags)?;
 
                 if let &Some(ref module) = &self.module {
                     worker.term_stream.set_atom_tbl(module.atom_tbl.clone());
                 }
             } else {
-                self.process_decl(decl, worker.term_stream.indices, indices)?;
+                self.process_decl(decl, worker.term_stream.code_repo,
+                                  worker.term_stream.indices,
+                                  indices, flags)?;
             }
         }
 

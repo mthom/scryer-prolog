@@ -1,21 +1,20 @@
 use prolog_parser::ast::*;
 use prolog_parser::parser::*;
 
-use prolog::heap_iter::*;
 use prolog::instructions::HeapCellValue;
 use prolog::machine::*;
 use prolog::read::*;
 
-use std::cell::Cell;
 use std::io::Read;
 
 pub struct TermStream<'a, R: Read> {
     stack: Vec<Term>,
     pub(crate) indices: &'a mut IndexStore,
     policies: &'a mut MachinePolicies,
-    code_repo: &'a mut CodeRepo,    
+    pub(crate) code_repo: &'a mut CodeRepo,
     parser: Parser<R>,
-    in_module: bool
+    in_module: bool,
+    flags: MachineFlags        
 }
 
 impl<'a, R: Read> TermStream<'a, R> {
@@ -30,7 +29,8 @@ impl<'a, R: Read> TermStream<'a, R> {
             policies,
             code_repo,
             parser: Parser::new(src, atom_tbl, flags),
-            in_module: false
+            in_module: false,
+            flags
         }
     }
 
@@ -38,7 +38,7 @@ impl<'a, R: Read> TermStream<'a, R> {
     pub fn set_atom_tbl(&mut self, atom_tbl: TabledData<Atom>) {
         self.parser.set_atom_tbl(atom_tbl);
     }
-    
+
     #[inline]
     pub fn add_to_top(&mut self, buf: &str) {
         self.parser.add_to_top(buf);
@@ -47,11 +47,6 @@ impl<'a, R: Read> TermStream<'a, R> {
     #[inline]
     pub fn eof(&mut self) -> Result<bool, ParserError> {
         Ok(self.stack.is_empty() && self.parser.eof()?)
-    }
-
-    #[inline]
-    pub fn empty_tokens(&mut self) {
-        self.parser.reset();
     }
 
     fn enqueue_term(&mut self, term: Term) -> Result<(), ParserError> {
@@ -77,17 +72,29 @@ impl<'a, R: Read> TermStream<'a, R> {
         }
     }
 
+    fn parse_expansion_output(&mut self, term_string: &str, op_dir: &OpDir) -> Result<Term, ParserError> {
+        let mut parser = Parser::new(term_string.trim().as_bytes(), self.indices.atom_tbl.clone(), self.flags);        
+        parser.read_term(composite_op!(self.in_module,
+                                       &self.indices.op_dir,
+                                       op_dir))
+    }
+    
     pub fn read_term(&mut self, machine_st: &mut MachineState, op_dir: &OpDir)
                      -> Result<Term, ParserError>
     {
         loop {
             while let Some(term) = self.stack.pop() {
-                match machine_st.try_expand_term(self.indices, self.policies, self.code_repo, &term)? {
-                    Some(term) => self.enqueue_term(term)?,
+                match machine_st.try_expand_term(self.indices, self.policies, self.code_repo, &term)?
+                {
+                    Some(term_string) => {
+                        let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;
+                        self.enqueue_term(term)?
+                    },
                     None => return Ok(term)
                 };
             }
 
+            self.parser.reset();
             let term = self.parser.read_term(composite_op!(self.in_module,
                                                            &self.indices.op_dir,
                                                            op_dir))?;
@@ -99,7 +106,7 @@ impl<'a, R: Read> TermStream<'a, R> {
 impl MachineState {
     fn try_expand_term(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
                        code_repo: &mut CodeRepo, term: &Term)
-                       -> Result<Option<Term>, ParserError>
+                       -> Result<Option<String>, ParserError>
     {
         let term_h = write_term_to_heap(term, self);
         let h = self.heap.h;
@@ -117,55 +124,13 @@ impl MachineState {
             self.reset();
             Ok(None)
         } else {
-            let term = read_term_from_heap(&self, Addr::HeapCell(h))?;
-            self.reset();            
-            Ok(Some(term))
+            let mut output = self.print_term(Addr::HeapCell(h),
+                                             WriteqFormatter {},
+                                             PrinterOutputter::new());
+            output.push_char('.');
+
+            self.reset();
+            Ok(Some(output.result()))
         }
     }
-}
-
-pub fn read_term_from_heap(machine_st: &MachineState, addr: Addr) -> Result<Term, ParserError>
-{
-    let pre_order_iter  = HCPreOrderIterator::new(machine_st, addr);
-    let post_order_iter = HCPostOrderIterator::new(pre_order_iter);
-
-    let mut stack = vec![];
-
-    for value in post_order_iter {
-        match value {
-            HeapCellValue::NamedStr(arity, ref name, fixity)
-                if stack.len() >= arity => {
-                    let stack_len = stack.len();
-                    let subterms: Vec<_> = stack.drain(stack_len - arity ..).collect();
-
-                    stack.push(Box::new(Term::Clause(Cell::default(), name.clone(), subterms,
-                                                     fixity)));
-                },
-            HeapCellValue::Addr(Addr::Con(constant)) =>
-                stack.push(Box::new(Term::Constant(Cell::default(), constant))),
-            HeapCellValue::Addr(Addr::Lis(_))
-                if stack.len() >= 2 => {
-                    let stack_len = stack.len();
-                    let (head, tail) = {
-                        let mut iter  = stack.drain(stack_len - 2 ..);
-                        (iter.next().unwrap(), iter.next().unwrap())
-                    };
-
-                    stack.push(Box::new(Term::Cons(Cell::default(), head, tail)));
-                },
-            HeapCellValue::Addr(Addr::HeapCell(h)) =>
-                stack.push(Box::new(Term::Var(Cell::default(), Rc::new(format!("_{}", h))))),
-            HeapCellValue::Addr(Addr::StackCell(fr, sc)) =>
-                stack.push(Box::new(Term::Var(Cell::default(), Rc::new(format!("_{}_{}", sc, fr))))),
-            _ => return Err(ParserError::IncompleteReduction)
-        }
-    }
-
-    if let Some(term) = stack.pop() {
-        if stack.is_empty() {
-            return Ok(*term);
-        }
-    }
-
-    Err(ParserError::IncompleteReduction)
 }
