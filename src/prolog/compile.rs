@@ -74,7 +74,8 @@ fn set_first_index(code: &mut Code)
     }
 }
 
-fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>, non_counted_bt: bool, flags: MachineFlags)
+fn compile_appendix(code: &mut Code, queue: &VecDeque<TopLevel>, non_counted_bt: bool,
+                    flags: MachineFlags)
                     -> Result<(), ParserError>
 {
     for tl in queue.iter() {
@@ -85,14 +86,14 @@ fn compile_appendix(code: &mut Code, queue: Vec<TopLevel>, non_counted_bt: bool,
     Ok(())
 }
 
-fn compile_query(terms: Vec<QueryTerm>, queue: Vec<TopLevel>, flags: MachineFlags)
+fn compile_query(terms: Vec<QueryTerm>, queue: VecDeque<TopLevel>, flags: MachineFlags)
                  -> Result<(Code, AllocVarDict), ParserError>
 {
     // count backtracking inferences.
     let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
     let mut code = try!(cg.compile_query(&terms));
 
-    compile_appendix(&mut code, queue, false, flags)?;
+    compile_appendix(&mut code, &queue, false, flags)?;
 
     Ok((code, cg.take_vars()))
 }
@@ -218,7 +219,7 @@ impl ListingCompiler {
             let mut decl_code = compile_relation(&TopLevel::Predicate(decl), non_counted_bt,
                                                  wam.machine_flags())?;
 
-            compile_appendix(&mut decl_code, Vec::from(queue), non_counted_bt, wam.machine_flags())?;
+            compile_appendix(&mut decl_code, &queue, non_counted_bt, wam.machine_flags())?;
 
             let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
@@ -260,14 +261,16 @@ impl ListingCompiler {
         match decl {
             Declaration::Hook(CompileTimeHook::TermExpansion, clause, queue) => {
                 let key = (clause_name!("term_expansion"), 2);
-                let preds = code_repo.term_dir.entry(key).or_insert(Predicate(vec![]));
+                let preds = code_repo.term_dir.entry(key)
+                    .or_insert((Predicate(vec![]), VecDeque::from(vec![])));
 
-                preds.0.push(clause);
-
+                (preds.0).0.push(clause);
+                preds.1.extend(queue.into_iter());
+                
                 let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
-                let mut code = cg.compile_predicate(&preds.0)?;
+                let mut code = cg.compile_predicate(&(preds.0).0)?;
 
-                compile_appendix(&mut code, Vec::from(queue), false, flags)?;
+                compile_appendix(&mut code, &preds.1, false, flags)?;
 
                 Ok(code_repo.term_expanders = code)
             },

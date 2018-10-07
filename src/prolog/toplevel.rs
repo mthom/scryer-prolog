@@ -247,8 +247,8 @@ fn is_consistent(tl: &TopLevel, clauses: &Vec<PredicateClause>) -> bool
 fn deque_to_packet(head: TopLevel, deque: VecDeque<TopLevel>) -> TopLevelPacket
 {
     match head {
-        TopLevel::Query(query) => TopLevelPacket::Query(query, Vec::from(deque)),
-        tl => TopLevelPacket::Decl(tl, Vec::from(deque))
+        TopLevel::Query(query) => TopLevelPacket::Query(query, deque),
+        tl => TopLevelPacket::Decl(tl, deque)
     }
 }
 
@@ -381,8 +381,8 @@ fn module_resolution_call(mod_name: Term, body: Term) -> Result<QueryTerm, Parse
 }
 
 pub enum TopLevelPacket {
-    Query(Vec<QueryTerm>, Vec<TopLevel>),
-    Decl(TopLevel, Vec<TopLevel>)
+    Query(Vec<QueryTerm>, VecDeque<TopLevel>),
+    Decl(TopLevel, VecDeque<TopLevel>)
 }
 
 struct RelationWorker {
