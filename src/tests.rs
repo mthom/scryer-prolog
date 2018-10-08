@@ -1890,9 +1890,9 @@ fn test_queries_on_dcgs()
       instant('Lightning Bolt') --> [].".as_bytes());
 
     assert_prolog_success!(&mut wam, "?- phrase(ability(destroy, X), P).",
-                           [["P = [destroy, target, creature | _4]", "X = 'Llanowar Elves'"],
-                            ["P = [destroy, target, artifact | _4]", "X = 'Ankh of Mishra'"],
-                            ["P = [destroy, target, land | _4]", "X = 'Mountain'"]]);
+                           [["P = [destroy, target, creature]", "X = 'Llanowar Elves'"],
+                            ["P = [destroy, target, artifact]", "X = 'Ankh of Mishra'"],
+                            ["P = [destroy, target, land]", "X = 'Mountain'"]]);
 }
 
 #[test]
