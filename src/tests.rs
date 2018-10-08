@@ -1865,6 +1865,37 @@ fn test_queries_on_call_with_inference_limit()
 }
 
 #[test]
+fn test_queries_on_dcgs()
+{
+    let mut wam = Machine::new();
+
+    submit(&mut wam, ":- use_module(library(dcgs)).");
+    
+    // test case by YeGoblynQueene on hacker news.
+    compile_user_module(&mut wam,
+    " ability(destroy, X) --> destroy(X).
+      destroy(X) --> [destroy], target(X).
+      target(X) --> [target], permanent(X).
+      permanent(X) --> [creature], creature(X).
+      permanent(X) --> [artifact], artifact(X).
+      permanent(X) --> [land], land(X).
+      spell(X) --> [sorcery], sorcery(X).
+      spell(X) --> [instant], instant(X).
+      
+      creature('Llanowar Elves') --> [].
+      artifact('Ankh of Mishra') --> [].
+      land('Mountain') --> [].
+      % etc permanents
+      sorcery('Duress') --> [].
+      instant('Lightning Bolt') --> [].".as_bytes());
+
+    assert_prolog_success!(&mut wam, "?- phrase(ability(destroy, X), P).",
+                           [["P = [destroy, target, creature | _4]", "X = 'Llanowar Elves'"],
+                            ["P = [destroy, target, artifact | _4]", "X = 'Ankh of Mishra'"],
+                            ["P = [destroy, target, land | _4]", "X = 'Mountain'"]]);
+}
+
+#[test]
 fn test_queries_on_string_lists()
 {
     let mut wam = Machine::new();
