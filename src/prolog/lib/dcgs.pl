@@ -25,7 +25,7 @@ term_expansion(Term0, (ModHead :- ModBody)) :-
     !,
     nonvar(Head),
     Head =.. [RuleName | Args],
-    append(Args, ['$VAR'(0), '$VAR'(N)], ModArgs),
+    append(Args, ['$VAR'(0), '$VAR'(N)], ModArgs), %% problematic line.
     ModHead =.. [RuleName | ModArgs],
     nonvar(Body),
     expand_body(Body, ModBody1, 0, N1),

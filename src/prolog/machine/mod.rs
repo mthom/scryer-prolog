@@ -317,7 +317,7 @@ impl Machine {
 
                 continue;
             }
-
+                        
             self.indices.code_dir.insert(key.clone(), idx.clone());
         }
 
@@ -347,9 +347,9 @@ impl Machine {
             self.machine_st.copy_and_align_ball_to_heap();
 
             let error_str = self.machine_st.print_exception(Addr::HeapCell(h),
-                                                    &heap_locs,
-                                                    TermFormatter {},
-                                                    PrinterOutputter::new())
+                                                            &heap_locs,
+                                                            TermFormatter {},
+                                                            PrinterOutputter::new())
                                 .result();
 
             EvalSession::from(SessionError::QueryFailureWithException(error_str))

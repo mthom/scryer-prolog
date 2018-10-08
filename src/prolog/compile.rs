@@ -220,7 +220,7 @@ impl ListingCompiler {
                                                  wam.machine_flags())?;
 
             compile_appendix(&mut decl_code, &queue, non_counted_bt, wam.machine_flags())?;
-
+            
             let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
 
@@ -271,7 +271,7 @@ impl ListingCompiler {
                 let mut code = cg.compile_predicate(&(preds.0).0)?;
 
                 compile_appendix(&mut code, &preds.1, false, flags)?;
-
+                
                 Ok(code_repo.term_expanders = code)
             },
             Declaration::NonCountedBacktracking(name, arity) =>
@@ -351,7 +351,7 @@ fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: IndexStore) 
 
     try_eval_session!(compiler.add_code(wam, module_code, indices));
     try_eval_session!(compiler.add_code(wam, toplvl_code, results.toplevel_indices));
-
+  
     EvalSession::EntrySuccess
 }
 

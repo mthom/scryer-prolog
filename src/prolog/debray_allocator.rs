@@ -231,24 +231,23 @@ impl<'a> Allocator<'a> for DebrayAllocator
         where Target: CompilationTarget<'a>
     {
         let r = cell.get();
+        
+        let r = match lvl {
+            Level::Shallow => {
+                let k = self.arg_c;
+                
+                if let GenContext::Last(chunk_num) = term_loc {
+                    self.evacuate_arg(chunk_num, target);
+                }
+                
+                self.arg_c += 1;
+                RegType::Temp(k)
+            },
+            _ if r.reg_num() == 0 => RegType::Temp(self.alloc_reg_to_non_var()),
+            _ => r
+        };
 
-        if r.reg_num() == 0 {
-            let r = match lvl {
-                Level::Shallow => {
-                    let k = self.arg_c;
-
-                    if let GenContext::Last(chunk_num) = term_loc {
-                        self.evacuate_arg(chunk_num, target);
-                    }
-
-                    self.arg_c += 1;
-                    RegType::Temp(k)
-                },
-                _ => RegType::Temp(self.alloc_reg_to_non_var())
-            };
-
-            cell.set(r);
-        }
+        cell.set(r);        
     }
 
     fn mark_var<Target>(&mut self, var: Rc<Var>, lvl: Level, cell: &'a Cell<VarReg>,
