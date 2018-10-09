@@ -208,19 +208,14 @@ pub struct HCPrinter<'a, Formatter, Outputter> {
     printed_vars: HashSet<Addr>
 }
 
-#[derive(Clone, Copy)]
-enum TrailingType {
-    Atom, Var
-}
-
 macro_rules! push_space_if_amb {
-    ($self:expr, $atom:expr, $tt:expr, $op:expr, $action:block) => (
-        match $self.ambiguity_check($atom, $tt, $op) {
+    ($self:expr, $atom:expr, $op:expr, $action:block) => (
+        match $self.ambiguity_check($atom, $op) {
             Some(DirectedOp::Left(_)) => {
                 $self.outputter.push_char(' ');
-                $action;                
+                $action;
             },
-            Some(DirectedOp::Right(_)) => {                
+            Some(DirectedOp::Right(_)) => {
                 $action;
                 $self.outputter.push_char(' ');
             },
@@ -229,32 +224,22 @@ macro_rules! push_space_if_amb {
     )
 }
 
-fn continues_with_append(atom: &str, tt: TrailingType, op: &str) -> bool {
-    match tt {
-        TrailingType::Atom => match atom.chars().next() {
-            Some(ac) => op.chars().next().map(|oc| {
-                if alpha_char!(ac) {
-                    alpha_numeric_char!(oc)
-                } else if graphic_token_char!(ac) {
-                    graphic_char!(oc)
-                } else {
-                    false
-                }
-            }).unwrap_or(false),
-            None => false,
-        },
-        TrailingType::Var  => match atom.chars().next() {
-            Some(ac) => op.chars().next().map(|oc| {
-                if variable_indicator_char!(ac) {
-                    alpha_numeric_char!(oc)
-                } else if capital_letter_char!(ac) {
-                    alpha_numeric_char!(oc)
-                } else {
-                    false
-                }
-            }).unwrap_or(false),
-            None => false
-        }
+fn continues_with_append(atom: &str, op: &str) -> bool {
+    match atom.chars().next() {
+        Some(ac) => op.chars().next().map(|oc| {
+            if alpha_char!(ac) {
+                alpha_numeric_char!(oc)
+            } else if graphic_token_char!(ac) {
+                graphic_char!(oc)
+            } else if variable_indicator_char!(ac) {
+                alpha_numeric_char!(oc)
+            } else if capital_letter_char!(ac) {
+                alpha_numeric_char!(oc)
+            } else {
+                false
+            }
+        }).unwrap_or(false),
+        _ => false
     }
 }
 
@@ -350,13 +335,12 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
 
     // return op itself if there is an ambiguity to indicate the direction the op
     // lies, None otherwise.
-    fn ambiguity_check(&mut self, atom: &str, tt: TrailingType, op: &Option<DirectedOp>)
-                       -> Option<DirectedOp>
+    fn ambiguity_check(&mut self, atom: &str, op: &Option<DirectedOp>) -> Option<DirectedOp>
     {
         match op {
-            &Some(DirectedOp::Left(ref lop)) if continues_with_append(lop.as_str(), tt, atom) =>
+            &Some(DirectedOp::Left(ref lop)) if continues_with_append(lop.as_str(), atom) =>
                 Some(DirectedOp::Left(lop.clone())),
-            &Some(DirectedOp::Right(ref rop)) if continues_with_append(atom, tt, rop.as_str()) =>
+            &Some(DirectedOp::Right(ref rop)) if continues_with_append(atom, rop.as_str()) =>
                 Some(DirectedOp::Right(rop.clone())),
             _ =>
                 None
@@ -375,7 +359,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                     return iter.next();
                 } else {
                     iter.stack().pop();
-                    push_space_if_amb!(self, &var, TrailingType::Var, op, {
+                    push_space_if_amb!(self, &var, op, {
                         self.outputter.append(&var);
                     });
 
@@ -384,9 +368,9 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 None => if self.machine_st.is_cyclic_term(addr.clone()) {
                     if self.printed_vars.contains(&addr) {
                         iter.stack().pop();
-                        
+
                         if let Some(offset_str) = self.offset_as_string(addr) {
-                            push_space_if_amb!(self, &offset_str, TrailingType::Var, op, {
+                            push_space_if_amb!(self, &offset_str, op, {
                                 self.outputter.append(offset_str.as_str());
                             });
                         }
@@ -447,16 +431,16 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 }
 
                 self.print_atom(atom, Some(fixity));
-                
+
                 if op.is_some() {
                     self.outputter.push_char(')');
                 }
             },
             Constant::Atom(ref atom, None) =>
-                push_space_if_amb!(self, atom.as_str(), TrailingType::Atom, &op, {
+                push_space_if_amb!(self, atom.as_str(), &op, {
                     self.print_atom(atom, None);
                 }),
-            Constant::Char(c) if non_quoted_token(once(c)) =>                
+            Constant::Char(c) if non_quoted_token(once(c)) =>
                 self.print_char(c),
             Constant::Char(c) => {
                 self.outputter.push_char('\'');
@@ -467,20 +451,20 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 self.outputter.append("[]"),
             Constant::Number(Number::Float(fl)) =>
                 if &fl == &OrderedFloat(0f64) {
-                    push_space_if_amb!(self, "0", TrailingType::Atom, &op, {
+                    push_space_if_amb!(self, "0", &op, {
                         self.outputter.append("0");
                     });
                 } else {
                     let output_str = format!("{}", fl);
-                    
-                    push_space_if_amb!(self, &output_str, TrailingType::Atom, &op, {
+
+                    push_space_if_amb!(self, &output_str, &op, {
                         self.outputter.append(&output_str);
                     });
                 },
             Constant::Number(n) => {
                 let output_str = format!("{}", n);
-                
-                push_space_if_amb!(self, &output_str, TrailingType::Atom, &op, {
+
+                push_space_if_amb!(self, &output_str, &op, {
                     self.outputter.append(&output_str);
                 });
             },
@@ -539,10 +523,11 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                     self.state_stack.push(TokenOrRedirect::Open);
                 }
             },
-            HeapCellValue::NamedStr(arity, name, fixity) => {
-                let ct = ClauseType::from(name, arity, fixity);
-                self.formatter.format_clause(iter, arity, ct, &mut self.state_stack)
-            },
+            HeapCellValue::NamedStr(arity, name, fixity) =>
+                push_space_if_amb!(self, name.as_str(), &op, {
+                    let ct = ClauseType::from(name, arity, fixity);
+                    self.formatter.format_clause(iter, arity, ct, &mut self.state_stack)
+                }),
             HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
                 if !self.at_cdr("") {
                     self.outputter.append("[]");
@@ -553,8 +538,8 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 self.push_list(),
             HeapCellValue::Addr(addr) =>
                 if let Some(offset_str) = self.offset_as_string(addr) {
-                    push_space_if_amb!(self, &offset_str, TrailingType::Var, &op, {
-                        self.outputter.append(offset_str.as_str());                        
+                    push_space_if_amb!(self, &offset_str, &op, {
+                        self.outputter.append(offset_str.as_str());
                     })
                 }
         }
