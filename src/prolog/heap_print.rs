@@ -12,11 +12,17 @@ use std::iter::once;
 use std::rc::Rc;
 
 #[derive(Clone)]
+pub enum DirectedOp {
+    Left(ClauseName),
+    Right(ClauseName)
+}
+
+#[derive(Clone)]
 pub enum TokenOrRedirect {
     Atom(ClauseName),
-    Op(ClauseName),
+    Op(ClauseName, Fixity),
     NumberedVar(String),
-    CompositeRedirect,
+    CompositeRedirect(DirectedOp),
     Redirect,
     Open,
     Close,
@@ -141,17 +147,17 @@ impl MachineState {
 fn print_op(ct: ClauseType, fixity: Fixity, state_stack: &mut Vec<TokenOrRedirect>) {
     match fixity {
         Fixity::Post => {
-            state_stack.push(TokenOrRedirect::Op(ct.name()));
-            state_stack.push(TokenOrRedirect::CompositeRedirect);
+            state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
+            state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
         },
         Fixity::Pre => {
-            state_stack.push(TokenOrRedirect::CompositeRedirect);
-            state_stack.push(TokenOrRedirect::Op(ct.name()));
+            state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Left(ct.name())));
+            state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
         },
         Fixity::In => {
-            state_stack.push(TokenOrRedirect::CompositeRedirect);
-            state_stack.push(TokenOrRedirect::Op(ct.name()));
-            state_stack.push(TokenOrRedirect::CompositeRedirect);
+            state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Left(ct.name())));
+            state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
+            state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
         }
     }
 }
@@ -200,6 +206,56 @@ pub struct HCPrinter<'a, Formatter, Outputter> {
     state_stack:  Vec<TokenOrRedirect>,
     heap_locs:    ReverseHeapVarDict<'a>,
     printed_vars: HashSet<Addr>
+}
+
+#[derive(Clone, Copy)]
+enum TrailingType {
+    Atom, Var
+}
+
+macro_rules! push_space_if_amb {
+    ($self:expr, $atom:expr, $tt:expr, $op:expr, $action:block) => (
+        match $self.ambiguity_check($atom, $tt, $op) {
+            Some(DirectedOp::Left(_)) => {
+                $self.outputter.push_char(' ');
+                $action;                
+            },
+            Some(DirectedOp::Right(_)) => {                
+                $action;
+                $self.outputter.push_char(' ');
+            },
+            None => $action
+        };
+    )
+}
+
+fn continues_with_append(atom: &str, tt: TrailingType, op: &str) -> bool {
+    match tt {
+        TrailingType::Atom => match atom.chars().next() {
+            Some(ac) => op.chars().next().map(|oc| {
+                if alpha_char!(ac) {
+                    alpha_numeric_char!(oc)
+                } else if graphic_token_char!(ac) {
+                    graphic_char!(oc)
+                } else {
+                    false
+                }
+            }).unwrap_or(false),
+            None => false,
+        },
+        TrailingType::Var  => match atom.chars().next() {
+            Some(ac) => op.chars().next().map(|oc| {
+                if variable_indicator_char!(ac) {
+                    alpha_numeric_char!(oc)
+                } else if capital_letter_char!(ac) {
+                    alpha_numeric_char!(oc)
+                } else {
+                    false
+                }
+            }).unwrap_or(false),
+            None => false
+        }
+    }
 }
 
 fn reverse_heap_locs<'a>(machine_st: &'a MachineState, heap_locs: &'a HeapVarDict)
@@ -287,16 +343,29 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             Addr::HeapCell(h) | Addr::Lis(h) | Addr::Str(h) =>
                 Some(format!("_{}", h)),
             Addr::StackCell(fr, sc) =>
-                Some(format!("s_{}_{}", fr, sc)),
+                Some(format!("_s_{}_{}", fr, sc)),
             _ => None
         }
     }
 
-    fn print_offset(&mut self, addr: Addr) {
-        self.offset_as_string(addr).map(|s| self.outputter.append(s.as_str()));
+    // return op itself if there is an ambiguity to indicate the direction the op
+    // lies, None otherwise.
+    fn ambiguity_check(&mut self, atom: &str, tt: TrailingType, op: &Option<DirectedOp>)
+                       -> Option<DirectedOp>
+    {
+        match op {
+            &Some(DirectedOp::Left(ref lop)) if continues_with_append(lop.as_str(), tt, atom) =>
+                Some(DirectedOp::Left(lop.clone())),
+            &Some(DirectedOp::Right(ref rop)) if continues_with_append(atom, tt, rop.as_str()) =>
+                Some(DirectedOp::Right(rop.clone())),
+            _ =>
+                None
+        }
     }
 
-    fn check_for_seen(&mut self, iter: &mut HCPreOrderIterator) -> Option<HeapCellValue> {
+    fn check_for_seen(&mut self, iter: &mut HCPreOrderIterator, op: &Option<DirectedOp>)
+                      -> Option<HeapCellValue>
+    {
         iter.stack().last().cloned().and_then(|addr| {
             let addr = self.machine_st.store(self.machine_st.deref(addr));
 
@@ -306,14 +375,21 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                     return iter.next();
                 } else {
                     iter.stack().pop();
-                    self.outputter.append(var.as_str());
+                    push_space_if_amb!(self, &var, TrailingType::Var, op, {
+                        self.outputter.append(&var);
+                    });
 
                     return None;
                 },
                 None => if self.machine_st.is_cyclic_term(addr.clone()) {
                     if self.printed_vars.contains(&addr) {
                         iter.stack().pop();
-                        self.print_offset(addr);
+                        
+                        if let Some(offset_str) = self.offset_as_string(addr) {
+                            push_space_if_amb!(self, &offset_str, TrailingType::Var, op, {
+                                self.outputter.append(offset_str.as_str());
+                            });
+                        }
 
                         None
                     } else {
@@ -332,12 +408,12 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         })
     }
 
-    fn print_atom(&mut self, atom: &ClauseName, is_op: bool) {
+    fn print_atom(&mut self, atom: &ClauseName, fixity: Option<Fixity>) {
         match atom.as_str() {
             "" => self.outputter.append("''"),
             ";" | "!" => self.outputter.append(atom.as_str()),
-            s => if is_op || non_quoted_token(s.chars()) {
-                self.outputter.append(atom.as_str());
+            s => if fixity.is_some() || non_quoted_token(s.chars()) {
+                self.outputter.append(atom.as_str())
             } else {
                 self.outputter.push_char('\'');
 
@@ -363,22 +439,24 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         };
     }
 
-    fn print_constant(&mut self, c: Constant, composite_brackets: bool) {
+    fn print_constant(&mut self, c: Constant, op: &Option<DirectedOp>) {
         match c {
-            Constant::Atom(ref atom, Some(_)) => {
-                if composite_brackets {
+            Constant::Atom(ref atom, Some(fixity)) => {
+                if op.is_some() {
                     self.outputter.push_char('(');
                 }
 
-                self.print_atom(atom, true);
-
-                if composite_brackets {
+                self.print_atom(atom, Some(fixity));
+                
+                if op.is_some() {
                     self.outputter.push_char(')');
                 }
             },
-            Constant::Atom(ref atom, _) =>
-                self.print_atom(atom, false),
-            Constant::Char(c) if non_quoted_token(once(c)) =>
+            Constant::Atom(ref atom, None) =>
+                push_space_if_amb!(self, atom.as_str(), TrailingType::Atom, &op, {
+                    self.print_atom(atom, None);
+                }),
+            Constant::Char(c) if non_quoted_token(once(c)) =>                
                 self.print_char(c),
             Constant::Char(c) => {
                 self.outputter.push_char('\'');
@@ -389,12 +467,23 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 self.outputter.append("[]"),
             Constant::Number(Number::Float(fl)) =>
                 if &fl == &OrderedFloat(0f64) {
-                    self.outputter.append("0");
+                    push_space_if_amb!(self, "0", TrailingType::Atom, &op, {
+                        self.outputter.append("0");
+                    });
                 } else {
-                    self.outputter.append(&format!("{}", fl));
+                    let output_str = format!("{}", fl);
+                    
+                    push_space_if_amb!(self, &output_str, TrailingType::Atom, &op, {
+                        self.outputter.append(&output_str);
+                    });
                 },
-            Constant::Number(n) =>
-                self.outputter.append(&format!("{}", n)),
+            Constant::Number(n) => {
+                let output_str = format!("{}", n);
+                
+                push_space_if_amb!(self, &output_str, TrailingType::Atom, &op, {
+                    self.outputter.append(&output_str);
+                });
+            },
             Constant::String(s) =>
                 if self.machine_st.machine_flags().double_quotes.is_chars() {
                     if !s.is_empty() {
@@ -430,23 +519,23 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         self.state_stack.push(TokenOrRedirect::OpenList(cell));
     }
 
-    fn handle_heap_term(&mut self, iter: &mut HCPreOrderIterator, composite_brackets: bool)
+    fn handle_heap_term(&mut self, iter: &mut HCPreOrderIterator, op: Option<DirectedOp>)
     {
-        let heap_val = match self.check_for_seen(iter) {
+        let heap_val = match self.check_for_seen(iter, &op) {
             Some(heap_val) => heap_val,
-            _ => return
+            None => return
         };
 
         match heap_val {
             HeapCellValue::NamedStr(arity, ref name, Some(fixity)) if name.as_str() != "," => {
-                if composite_brackets {
+                if op.is_some() {
                     self.state_stack.push(TokenOrRedirect::Close);
                 }
 
                 let ct = ClauseType::from(name.clone(), arity, Some(fixity));
                 self.formatter.format_clause(iter, arity, ct, &mut self.state_stack);
-                
-                if composite_brackets {
+
+                if op.is_some() {
                     self.state_stack.push(TokenOrRedirect::Open);
                 }
             },
@@ -459,10 +548,15 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                     self.outputter.append("[]");
                 },
             HeapCellValue::Addr(Addr::Con(c)) =>
-                self.print_constant(c, composite_brackets),
+                self.print_constant(c, &op),
             HeapCellValue::Addr(Addr::Lis(_)) =>
                 self.push_list(),
-            HeapCellValue::Addr(addr) => self.print_offset(addr)
+            HeapCellValue::Addr(addr) =>
+                if let Some(offset_str) = self.offset_as_string(addr) {
+                    push_space_if_amb!(self, &offset_str, TrailingType::Var, &op, {
+                        self.outputter.append(offset_str.as_str());                        
+                    })
+                }
         }
     }
 
@@ -486,15 +580,15 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
                     TokenOrRedirect::Atom(atom) =>
-                        self.print_atom(&atom, false),
-                    TokenOrRedirect::Op(atom) =>
-                        self.print_atom(&atom, true),
+                        self.print_atom(&atom, None),
+                    TokenOrRedirect::Op(atom, fixity) =>
+                        self.print_atom(&atom, Some(fixity)),
                     TokenOrRedirect::NumberedVar(num_var) =>
                         self.outputter.append(num_var.as_str()),
-                    TokenOrRedirect::CompositeRedirect =>
-                        self.handle_heap_term(&mut iter, true),
+                    TokenOrRedirect::CompositeRedirect(op) =>
+                        self.handle_heap_term(&mut iter, Some(op)),
                     TokenOrRedirect::Redirect =>
-                        self.handle_heap_term(&mut iter, false),
+                        self.handle_heap_term(&mut iter, None),
                     TokenOrRedirect::Close =>
                         self.outputter.append(")"),
                     TokenOrRedirect::Open =>
@@ -515,7 +609,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                         self.outputter.append(", ")
                 }
             } else if !iter.stack().is_empty() {
-                self.handle_heap_term(&mut iter, false);
+                self.handle_heap_term(&mut iter, None);
             } else {
                 break;
             }
