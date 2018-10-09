@@ -39,8 +39,7 @@ term_expansion(Term0, (ModHead :- ModBody)) :-
     append(Args, ['$VAR'(0), '$VAR'(N)], ModArgs),
     ModHead =.. [RuleName | ModArgs],
     nonvar(Body),
-    expand_body(Body, ModBody, 0, N),
-    writeq((ModHead :- ModBody)).
+    expand_body(Body, ModBody, 0, N).
 
 expand_body((Term, Terms), (ModTerm, ModTerms), N0, N) :-
     !, expand_body_term(Term, ModTerm, N0, N1),
