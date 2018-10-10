@@ -210,7 +210,7 @@ pub struct HCPrinter<'a, Formatter, Outputter> {
 
 macro_rules! push_space_if_amb {
     ($self:expr, $atom:expr, $op:expr, $action:block) => (
-        match $self.ambiguity_check($atom, $op) {
+        match ambiguity_check($atom, $op) {
             Some(DirectedOp::Left(_)) => {
                 $self.outputter.push_char(' ');
                 $action;
@@ -300,6 +300,20 @@ fn non_quoted_token<Iter: Iterator<Item=char>>(mut iter: Iter) -> bool {
     }
 }
 
+// return op itself if there is an ambiguity to indicate the direction the op
+// lies, None otherwise.
+fn ambiguity_check(atom: &str, op: &Option<DirectedOp>) -> Option<DirectedOp>
+{
+    match op {
+        &Some(DirectedOp::Left(ref lop)) if continues_with_append(lop.as_str(), atom) =>
+            Some(DirectedOp::Left(lop.clone())),
+        &Some(DirectedOp::Right(ref rop)) if continues_with_append(atom, rop.as_str()) =>
+            Some(DirectedOp::Right(rop.clone())),
+        _ =>
+            None
+    }
+}
+
 impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
     HCPrinter<'a, Formatter, Outputter>
 {
@@ -330,20 +344,6 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             Addr::StackCell(fr, sc) =>
                 Some(format!("_s_{}_{}", fr, sc)),
             _ => None
-        }
-    }
-
-    // return op itself if there is an ambiguity to indicate the direction the op
-    // lies, None otherwise.
-    fn ambiguity_check(&mut self, atom: &str, op: &Option<DirectedOp>) -> Option<DirectedOp>
-    {
-        match op {
-            &Some(DirectedOp::Left(ref lop)) if continues_with_append(lop.as_str(), atom) =>
-                Some(DirectedOp::Left(lop.clone())),
-            &Some(DirectedOp::Right(ref rop)) if continues_with_append(atom, rop.as_str()) =>
-                Some(DirectedOp::Right(rop.clone())),
-            _ =>
-                None
         }
     }
 
