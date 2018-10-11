@@ -158,6 +158,7 @@ The following predicates are built-in to rusty-wam.
 * `numbervars/2`
 * `once/1`
 * `partial_string/2`
+* `phrase/{2,3}`
 * `rational/1`
 * `read/1`
 * `repeat/0`
