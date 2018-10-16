@@ -131,8 +131,6 @@ pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> 
                 continue;
             },
             &TermRef::Var(_, _, ref var) => {
-                let v = var.as_str();
-                
                 if let Some((arity, site_h)) = queue.pop_front() {
                     if let Some(addr) = var_dict.get(var).cloned() {
                         machine_st.heap[site_h] = HeapCellValue::Addr(addr);
