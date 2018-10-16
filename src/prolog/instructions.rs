@@ -217,6 +217,7 @@ pub struct Module {
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
     CheckCutPoint,
+    ExpandTerm,
     GetBValue,
     GetSCCCleaner,
     InstallSCCCleaner,
@@ -252,6 +253,7 @@ impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
+            &SystemClauseType::ExpandTerm => clause_name!("$expand_term"),
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
             &SystemClauseType::GetDoubleQuotes => clause_name!("$get_double_quotes"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
@@ -286,6 +288,7 @@ impl SystemClauseType {
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
+            ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
             ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),

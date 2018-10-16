@@ -43,6 +43,7 @@ term_expansion(Term0, (ModHead :- ModBody)) :-
 
 expand_body(Term0, (ModTerm, ModTerms), N0, N) :-
     nonvar(Term0), Term0 = (Term, Terms), !,
+    nonvar(Term),
     expand_body_term(Term, ModTerm, N0, N1),
     expand_body(Terms, ModTerms, N1, N).
 expand_body(Term0, ModTerm, N0, N) :-

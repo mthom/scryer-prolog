@@ -190,7 +190,7 @@ impl MachineState {
     pub(super) fn system_call(&mut self, ct: &SystemClauseType,
                               indices: &IndexStore,
                               call_policy: &mut Box<CallPolicy>,
-                              cut_policy:  &mut Box<CutPolicy>,)
+                              cut_policy:  &mut Box<CutPolicy>)
                               -> CallResult
     {
         match ct {
@@ -201,6 +201,10 @@ impl MachineState {
                     Addr::Con(Constant::Usize(old_b)) if self.b <= old_b + 2 => {},
                     _ => self.fail = true
                 };
+            },
+            &SystemClauseType::ExpandTerm => {
+                self.p = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
+                return Ok(());
             },
             &SystemClauseType::GetDoubleQuotes => {
                 let a1 = self[temp_v!(1)].clone();
