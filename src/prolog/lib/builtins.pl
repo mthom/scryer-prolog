@@ -6,7 +6,8 @@
 	(=:=)/2, (-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2,
 	(==)/2, (\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2,
 	(\=@=)/2, (:)/2, call_with_inference_limit/3, catch/3,
-	current_prolog_flag/2, set_prolog_flag/2, term_variables/2,
+	current_prolog_flag/2, expand_term/2, set_prolog_flag/2,
+	term_variables/2,
 	setup_call_cleanup/3, throw/1, true/0, false/0]).
 
 /* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
@@ -204,6 +205,10 @@ get_args([Arg|Args], Func, I0, N) :-
     '$call_with_default_policy'(arg(I0, Func, Arg)),
     '$call_with_default_policy'(I1 is I0 + 1),
     '$call_with_default_policy'(get_args(Args, Func, I1, N)).
+
+% expand_term.
+
+expand_term(Term0, Term) :- '$expand_term'(Term0, Term).
 
 % term_variables.
 
