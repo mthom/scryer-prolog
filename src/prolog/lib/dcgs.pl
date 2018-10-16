@@ -25,12 +25,11 @@ term_expansion(Term0, (ModHead :- ModBody)) :-
     !,
     nonvar(Head),
     Head =.. [RuleName | Args],
-    append(Args, ['$VAR'(0), '$VAR'(N)], ModArgs), %% problematic line.
+    append([SC | SCs], '$VAR'(N), SemiContextArgs),
+    append(Args, ['$VAR'(0), SemiContextArgs], ModArgs),
     ModHead =.. [RuleName | ModArgs],
     nonvar(Body),
-    expand_body(Body, ModBody1, 0, N1),
-    expand_body_term([SC | SCs], ModBody2, N1, N),
-    ModBody = (ModBody1, ModBody2).
+    expand_body(Body, ModBody, 0, N).
 term_expansion(Term0, (ModHead :- ModBody)) :-
     nonvar(Term0),
     Term0 = (Head --> Body),
