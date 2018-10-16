@@ -118,12 +118,21 @@ pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> 
                 }
             },
             &TermRef::AnonVar(Level::Root)
-                | &TermRef::Var(Level::Root, ..)
-                | &TermRef::Constant(Level::Root, ..) =>
+          | &TermRef::Var(Level::Root, ..)
+          | &TermRef::Constant(Level::Root, ..) =>
                 machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h))),
-            &TermRef::AnonVar(_) =>
-                continue,
+            &TermRef::AnonVar(_) => {
+                if let Some((arity, site_h)) = queue.pop_front() {
+                    if arity > 1 {
+                        queue.push_front((arity - 1, site_h + 1));
+                    }
+                }
+
+                continue;
+            },
             &TermRef::Var(_, _, ref var) => {
+                let v = var.as_str();
+                
                 if let Some((arity, site_h)) = queue.pop_front() {
                     if let Some(addr) = var_dict.get(var).cloned() {
                         machine_st.heap[site_h] = HeapCellValue::Addr(addr);
