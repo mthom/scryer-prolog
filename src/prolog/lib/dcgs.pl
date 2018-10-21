@@ -4,10 +4,10 @@
 
 :- op(1200, xfx, -->).
 
+phrase(G, G) :-
+    nonvar(G), G = [_|_], !. %, append(G, _, Ls0).
 phrase(G, Ls0) :-
-    nonvar(G), G = [_|_], !, append(G, _, Ls0).
-phrase(G, Ls0) :-
-    nonvar(G), G = (G1, G2), !, phrase(G1, Ls0, Ls1), phrase(G2, Ls1).
+    nonvar(G), G = (G1, G2), !, phrase(G1, Ls0, Ls1), phrase(G2, Ls1, []).
 phrase(G, Ls0) :-
     call(G, Ls0, []).
 
