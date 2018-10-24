@@ -247,8 +247,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     state_stack: vec![],
                     heap_locs: ReverseHeapVarDict::new(),
                     printed_vars: HashSet::new(),
-                    numbervars: true,
-                    quoted: true,
+                    numbervars: false,
+                    quoted: false,
                     ignore_ops: false }
     }
 
@@ -377,13 +377,17 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             s => if fixity.is_some() || !self.quoted || non_quoted_token(s.chars()) {
                 self.outputter.append(atom.as_str())
             } else {
-                self.outputter.push_char('\'');
+                if self.quoted {
+                    self.outputter.push_char('\'');
+                }
 
                 for c in atom.as_str().chars() {
                     self.print_char(c);
                 }
 
-                self.outputter.push_char('\'');
+                if self.quoted {
+                    self.outputter.push_char('\'');
+                }
             }
         }
     }
