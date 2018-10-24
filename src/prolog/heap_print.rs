@@ -32,29 +32,6 @@ pub enum TokenOrRedirect {
     HeadTailSeparator,
 }
 
-pub trait HCValueFormatter {
-    // this function belongs to the display predicate formatter, which it uses
-    // to format all clauses.
-    fn format_struct(&self, arity: usize, name: ClauseName, state_stack: &mut Vec<TokenOrRedirect>)
-    {
-        state_stack.push(TokenOrRedirect::Close);
-
-        for _ in 0 .. arity {
-            state_stack.push(TokenOrRedirect::Redirect);
-            state_stack.push(TokenOrRedirect::Comma);
-        }
-
-        state_stack.pop();
-        state_stack.push(TokenOrRedirect::Open);
-
-        state_stack.push(TokenOrRedirect::Atom(name));
-    }
-
-    // this can be overloaded to handle special cases, falling back on the default of
-    // format_struct when convenient.
-    fn format_clause(&self, &mut HCPreOrderIterator, usize, ClauseType, &mut Vec<TokenOrRedirect>);
-}
-
 pub trait HCValueOutputter {
     type Output;
 
@@ -110,9 +87,6 @@ impl HCValueOutputter for PrinterOutputter {
     }
 }
 
-// the 'classic' display corresponding to the display predicate.
-pub struct WriteqFormatter {}
-
 #[inline]
 fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
     arity == 1 && if let &ClauseType::Named(ref name, _) = ct {
@@ -145,68 +119,17 @@ impl MachineState {
     }
 }
 
-fn print_op(ct: ClauseType, fixity: Fixity, state_stack: &mut Vec<TokenOrRedirect>) {
-    match fixity {
-        Fixity::Post => {
-            state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
-            state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
-        },
-        Fixity::Pre => {
-            state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Left(ct.name())));
-            state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
-        },
-        Fixity::In => {
-            state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Left(ct.name())));
-            state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
-            state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
-        }
-    }
-}
-
-impl HCValueFormatter for WriteqFormatter {
-    fn format_clause(&self, iter: &mut HCPreOrderIterator, arity: usize,
-                     ct: ClauseType, state_stack: &mut Vec<TokenOrRedirect>)
-    {
-        if let Some(fixity) = ct.fixity() {
-            return print_op(ct, fixity, state_stack);
-        } else if is_numbered_var(&ct, arity) {
-            let addr = iter.stack().last().cloned().unwrap();
-
-            // 7.10.4
-            if let Some(var) = iter.machine_st.numbervar(addr) {
-                iter.stack().pop();
-                state_stack.push(TokenOrRedirect::NumberedVar(var));
-                return;
-            }
-        }
-
-        self.format_struct(arity, ct.name(), state_stack);
-    }
-}
-
-pub struct TermFormatter {}
-
-impl HCValueFormatter for TermFormatter {
-    fn format_clause(&self, _: &mut HCPreOrderIterator, arity: usize, ct: ClauseType,
-                     state_stack: &mut Vec<TokenOrRedirect>)
-    {
-        if let Some(fixity) = ct.fixity() {
-            print_op(ct, fixity, state_stack);
-        } else {
-            self.format_struct(arity, ct.name(), state_stack);
-        }
-    }
-}
-
 type ReverseHeapVarDict<'a> = HashMap<Addr, Rc<Var>>;
 
-pub struct HCPrinter<'a, Formatter, Outputter> {
-    formatter:    Formatter,
+pub struct HCPrinter<'a, Outputter> {
     outputter:    Outputter,
     machine_st:   &'a MachineState,
     state_stack:  Vec<TokenOrRedirect>,
     heap_locs:    ReverseHeapVarDict<'a>,
-    printed_vars: HashSet<Addr>
+    printed_vars: HashSet<Addr>,
+    pub(crate) numbervars:   bool,
+    pub(crate) quoted:       bool,
+    pub(crate) ignore_ops:   bool
 }
 
 macro_rules! push_space_if_amb {
@@ -315,27 +238,81 @@ fn ambiguity_check(atom: &str, op: &Option<DirectedOp>) -> Option<DirectedOp>
     }
 }
 
-impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
-    HCPrinter<'a, Formatter, Outputter>
+impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 {
-    pub fn new(machine_st: &'a MachineState, fmt: Formatter, output: Outputter) -> Self
+    pub fn new(machine_st: &'a MachineState, output: Outputter) -> Self
     {
-        HCPrinter { formatter: fmt,
-                    outputter: output,
+        HCPrinter { outputter: output,
                     machine_st,
                     state_stack: vec![],
                     heap_locs: ReverseHeapVarDict::new(),
-                    printed_vars: HashSet::new() }
+                    printed_vars: HashSet::new(),
+                    numbervars: true,
+                    quoted: true,
+                    ignore_ops: false }
     }
 
-    pub fn from_heap_locs(machine_st: &'a MachineState, fmt: Formatter,
-                          output: Outputter, heap_locs: &'a HeapVarDict)
+    pub fn from_heap_locs(machine_st: &'a MachineState, output: Outputter,
+                          heap_locs: &'a HeapVarDict)
                           -> Self
     {
-        let mut printer = Self::new(machine_st, fmt, output);
+        let mut printer = Self::new(machine_st, output);
 
         printer.heap_locs = reverse_heap_locs(machine_st, heap_locs);
         printer
+    }
+
+    fn enqueue_op(&mut self, ct: ClauseType, fixity: Fixity) {
+        match fixity {
+            Fixity::Post => {
+                self.state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
+            },
+            Fixity::Pre => {
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Left(ct.name())));
+                self.state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
+            },
+            Fixity::In => {
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Left(ct.name())));
+                self.state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
+            }
+        }
+    }
+
+    fn format_struct(&mut self, arity: usize, name: ClauseName)
+    {
+        self.state_stack.push(TokenOrRedirect::Close);
+
+        for _ in 0 .. arity {
+            self.state_stack.push(TokenOrRedirect::Redirect);
+            self.state_stack.push(TokenOrRedirect::Comma);
+        }
+
+        self.state_stack.pop();
+        self.state_stack.push(TokenOrRedirect::Open);
+
+        self.state_stack.push(TokenOrRedirect::Atom(name));
+    }
+
+    fn format_clause(&mut self, iter: &mut HCPreOrderIterator, arity: usize, ct: ClauseType)
+    {
+        if let Some(fixity) = ct.fixity() {
+            if !self.ignore_ops {
+                return self.enqueue_op(ct, fixity);
+            }
+        } else if self.numbervars && is_numbered_var(&ct, arity) {
+            let addr = iter.stack().last().cloned().unwrap();
+
+            // 7.10.4
+            if let Some(var) = iter.machine_st.numbervar(addr) {
+                iter.stack().pop();
+                self.state_stack.push(TokenOrRedirect::NumberedVar(var));
+                return;
+            }
+        }
+
+        self.format_struct(arity, ct.name());
     }
 
     fn offset_as_string(&self, addr: Addr) -> Option<String> {
@@ -397,7 +374,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
         match atom.as_str() {
             "" => self.outputter.append("''"),
             ";" | "!" => self.outputter.append(atom.as_str()),
-            s => if fixity.is_some() || non_quoted_token(s.chars()) {
+            s => if fixity.is_some() || !self.quoted || non_quoted_token(s.chars()) {
                 self.outputter.append(atom.as_str())
             } else {
                 self.outputter.push_char('\'');
@@ -424,7 +401,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             _ => self.outputter.append(&format!("\\x{:x}", c as u32))
         };
     }
-    
+
     fn print_constant(&mut self, c: Constant, op: &Option<DirectedOp>) {
         match c {
             Constant::Atom(ref atom, Some(fixity)) => {
@@ -444,11 +421,14 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 }),
             Constant::Char(c) if non_quoted_token(once(c)) =>
                 self.print_char(c),
-            Constant::Char(c) => {
-                self.outputter.push_char('\'');
-                self.print_char(c);
-                self.outputter.push_char('\'');
-            },
+            Constant::Char(c) =>
+                if self.quoted {
+                    self.outputter.push_char('\'');
+                    self.print_char(c);
+                    self.outputter.push_char('\'');
+                } else {
+                    self.print_char(c);
+                },
             Constant::EmptyList =>
                 self.outputter.append("[]"),
             Constant::Number(Number::Float(fl)) =>
@@ -519,7 +499,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                 }
 
                 let ct = ClauseType::from(name.clone(), arity, Some(fixity));
-                self.formatter.format_clause(iter, arity, ct, &mut self.state_stack);
+                self.format_clause(iter, arity, ct);
 
                 if op.is_some() {
                     self.state_stack.push(TokenOrRedirect::Open);
@@ -528,7 +508,7 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
             HeapCellValue::NamedStr(arity, name, fixity) =>
                 push_space_if_amb!(self, name.as_str(), &op, {
                     let ct = ClauseType::from(name, arity, fixity);
-                    self.formatter.format_clause(iter, arity, ct, &mut self.state_stack)
+                    self.format_clause(iter, arity, ct);
                 }),
             HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
                 if !self.at_cdr("") {
@@ -581,17 +561,21 @@ impl<'a, Formatter: HCValueFormatter, Outputter: HCValueOutputter>
                     TokenOrRedirect::Open =>
                         self.outputter.append("("),
                     TokenOrRedirect::OpenList(delimit) =>
-                        if !self.at_cdr(", ") {
+                        if self.ignore_ops {
+                            self.format_struct(2, clause_name!("."));
+                        } else if !self.at_cdr(", ") {
                             self.outputter.append("[");
                         } else {
                             delimit.set(false);
                         },
                     TokenOrRedirect::CloseList(delimit) =>
-                        if delimit.get() {
+                        if !self.ignore_ops && delimit.get() {
                             self.outputter.append("]");
                         },
                     TokenOrRedirect::HeadTailSeparator =>
-                        self.outputter.append(" | "),
+                        if !self.ignore_ops {
+                            self.outputter.append(" | ");
+                        },
                     TokenOrRedirect::Comma =>
                         self.outputter.append(", ")
                 }

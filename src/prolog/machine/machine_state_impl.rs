@@ -119,10 +119,10 @@ impl MachineState {
     }
 
     pub(super)
-    fn print_var_eq<Fmt, Outputter>(&self, var: Rc<Var>, addr: Addr, var_dir: &HeapVarDict,
-                                    fmt: Fmt, mut output: Outputter)
-                                    -> Outputter
-      where Fmt: HCValueFormatter, Outputter: HCValueOutputter
+    fn print_var_eq<Outputter>(&self, var: Rc<Var>, addr: Addr, var_dir: &HeapVarDict,
+                               mut output: Outputter)
+                               -> Outputter
+      where Outputter: HCValueOutputter
     {
         let orig_len = output.len();
 
@@ -131,7 +131,9 @@ impl MachineState {
         output.append(var.as_str());
         output.append(" = ");
 
-        let printer    = HCPrinter::from_heap_locs(&self, fmt, output, var_dir);
+        let mut printer = HCPrinter::from_heap_locs(&self, output, var_dir);
+        printer.numbervars = false;
+            
         let mut output = printer.print(addr);
 
         let bad_ending = format!("= {}", &var);
@@ -144,20 +146,11 @@ impl MachineState {
     }
 
     pub(super)
-    fn print_exception<Fmt, Outputter>(&self, addr: Addr, var_dir: &HeapVarDict,
-                                       fmt: Fmt, output: Outputter)
-                                       -> Outputter
-      where Fmt: HCValueFormatter, Outputter: HCValueOutputter
+    fn print_exception<Outputter>(&self, addr: Addr, var_dir: &HeapVarDict, output: Outputter)
+                                  -> Outputter
+        where Outputter: HCValueOutputter
     {
-        let printer = HCPrinter::from_heap_locs(&self, fmt, output, var_dir);
-        printer.print(addr)
-    }
-
-    pub(super)
-    fn print_term<Fmt, Outputter>(&self, addr: Addr, fmt: Fmt, output: Outputter) -> Outputter
-      where Fmt: HCValueFormatter, Outputter: HCValueOutputter
-    {
-        let printer = HCPrinter::new(&self, fmt, output);
+        let printer = HCPrinter::from_heap_locs(&self, output, var_dir);
         printer.print(addr)
     }
 

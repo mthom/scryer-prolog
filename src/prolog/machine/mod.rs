@@ -348,7 +348,6 @@ impl Machine {
 
             let error_str = self.machine_st.print_exception(Addr::HeapCell(h),
                                                             &heap_locs,
-                                                            TermFormatter {},
                                                             PrinterOutputter::new())
                                 .result();
 
@@ -401,9 +400,8 @@ impl Machine {
         let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = var_dir.iter().collect();
         sorted_vars.sort_by_key(|ref v| v.0);
 
-        for (var, addr) in sorted_vars {
-            let fmt = TermFormatter {};
-            output = self.machine_st.print_var_eq(var.clone(), addr.clone(), var_dir, fmt, output);
+        for (var, addr) in sorted_vars {            
+            output = self.machine_st.print_var_eq(var.clone(), addr.clone(), var_dir, output);
         }
 
         output

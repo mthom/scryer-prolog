@@ -242,7 +242,8 @@ pub enum SystemClauseType {
     SkipMaxList,
     Succeed,
     TermVariables,
-    UnwindStack
+    UnwindStack,
+    WriteTerm
 }
 
 impl SystemClauseType {
@@ -282,6 +283,7 @@ impl SystemClauseType {
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::TermVariables => clause_name!("$term_variables"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
+            &SystemClauseType::WriteTerm => clause_name!("$write_term"),
         }
     }
 
@@ -317,6 +319,7 @@ impl SystemClauseType {
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$term_variables", 2) => Some(SystemClauseType::TermVariables),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
+            ("$write_term", 4) => Some(SystemClauseType::WriteTerm),
             _ => None
         }
     }
@@ -329,7 +332,6 @@ pub enum BuiltInClauseType {
     Compare,
     CompareTerm(CompareTermQT),
     CyclicTerm,
-    Writeq,
     CopyTerm,
     Eq,
     Functor,
@@ -381,7 +383,6 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Compare => clause_name!("compare"),
             &BuiltInClauseType::CompareTerm(qt) => clause_name!(qt.name()),
             &BuiltInClauseType::CyclicTerm => clause_name!("cyclic_term"),
-            &BuiltInClauseType::Writeq => clause_name!("writeq"),
             &BuiltInClauseType::CopyTerm => clause_name!("copy_term"),
             &BuiltInClauseType::Eq => clause_name!("=="),
             &BuiltInClauseType::Functor => clause_name!("functor"),
@@ -402,7 +403,6 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Compare => 2,
             &BuiltInClauseType::CompareTerm(_) => 2,
             &BuiltInClauseType::CyclicTerm => 1,
-            &BuiltInClauseType::Writeq => 1,
             &BuiltInClauseType::CopyTerm => 2,
             &BuiltInClauseType::Eq => 2,
             &BuiltInClauseType::Functor => 3,
@@ -428,7 +428,6 @@ impl BuiltInClauseType {
             ("@=<", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::LessThanOrEqual)),
             ("\\=@=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::NotEqual)),
             ("=@=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::Equal)),
-            ("writeq", 1) => Some(BuiltInClauseType::Writeq),
             ("copy_term", 2) => Some(BuiltInClauseType::CopyTerm),
             ("==", 2) => Some(BuiltInClauseType::Eq),
             ("functor", 3) => Some(BuiltInClauseType::Functor),

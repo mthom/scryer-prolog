@@ -7,8 +7,8 @@
 	(==)/2, (\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2,
 	(\=@=)/2, (:)/2, call_with_inference_limit/3, catch/3,
 	current_prolog_flag/2, expand_term/2, set_prolog_flag/2,
-	term_variables/2,
-	setup_call_cleanup/3, throw/1, true/0, false/0]).
+	setup_call_cleanup/3, term_variables/2, throw/1, true/0, false/0,
+	write/1, write_canonical/1, writeq/1, write_term/2]).
 
 /* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
    and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
@@ -205,6 +205,37 @@ get_args([Arg|Args], Func, I0, N) :-
     '$call_with_default_policy'(arg(I0, Func, Arg)),
     '$call_with_default_policy'(I1 is I0 + 1),
     '$call_with_default_policy'(get_args(Args, Func, I1, N)).
+
+% write, write_canonical, writeq, write_term.
+is_write_option(Functor) :-
+    Functor =.. [Name, Arg | Args],
+    ( Args == [], Arg == true -> true
+    ; Args == [], Arg == false -> true
+    ; throw(error(domain_error(write_option, Functor), write_term/2)) ), % 8.14.2.3 e)
+    ( Name == ignore_ops -> true
+    ; Name == quoted -> true
+    ; Name == numbervars -> true
+    ; throw(error(domain_error(write_option, Functor), write_term/2)) ). % 8.14.2.3 e)
+
+inst_member_or([X|Xs], Y, _) :-
+    ( nonvar(X), is_write_option(X) -> ( Y = X, ! ; inst_member_or(Xs, Y, _) )
+    ; throw(instantiation_error) ). % 8.14.2.3 b)
+inst_member_or([], Y, Y).
+
+write_term(Term, Options) :-
+    '$skip_max_list'(_, -1, Options, Options0),
+    ( Options0 == [] -> true
+    ; throw(error(type_error(list, Options), write_term/2)) ), % 8.14.2.3 c)
+    inst_member_or(Options, ignore_ops(IgnoreOps), ignore_ops(false)),
+    inst_member_or(Options, numbervars(NumberVars), numbervars(false)),
+    inst_member_or(Options, quoted(Quoted), quoted(false)),
+    '$write_term'(Term, IgnoreOps, NumberVars, Quoted).
+
+write(Term) :- write_term(Term, [numbervars(true)]).
+
+write_canonical(Term) :- write_term(Term, [ignore_ops(true), quoted(true)]).
+
+writeq(Term) :- write_term(Term, [quoted(true), numbervars(true)]).
 
 % expand_term.
 

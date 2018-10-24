@@ -1,6 +1,7 @@
 use prolog_parser::ast::*;
 
 use prolog::heap_iter::*;
+use prolog::heap_print::*;
 use prolog::instructions::*;
 use prolog::machine::IndexStore;
 use prolog::machine::machine_errors::*;
@@ -443,31 +444,31 @@ impl MachineState {
             &SystemClauseType::TermVariables => {
                 let a1 = self[temp_v!(1)].clone();
                 let mut vars = Vec::new();
-                
+
                 {
-                    let iter = HCPreOrderIterator::new(self, a1);                    
-                    
+                    let iter = HCPreOrderIterator::new(self, a1);
+
                     for item in iter {
-                        match item {                        
+                        match item {
                             HeapCellValue::Addr(Addr::HeapCell(h)) =>
-                                vars.push(Ref::HeapCell(h)),                            
+                                vars.push(Ref::HeapCell(h)),
                             HeapCellValue::Addr(Addr::StackCell(fr, sc)) =>
-                                vars.push(Ref::StackCell(fr, sc)),                            
+                                vars.push(Ref::StackCell(fr, sc)),
                             _ => {}
                         }
                     }
                 }
-                
+
                 let mut h = self.heap.h;
                 let outcome = Addr::HeapCell(h);
 
                 let mut seen_vars = HashSet::new();
-                
+
                 for r in vars {
                     if seen_vars.contains(&r) {
                         continue;
                     }
-                    
+
                     self.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
                     self.heap.push(HeapCellValue::Addr(r.as_addr()));
 
@@ -481,7 +482,31 @@ impl MachineState {
                 let a2 = self[temp_v!(2)].clone();
                 self.unify(a2, outcome);
             },
-            &SystemClauseType::UnwindStack => self.unwind_stack()
+            &SystemClauseType::UnwindStack => self.unwind_stack(),
+            &SystemClauseType::WriteTerm => {
+                let addr = self[temp_v!(1)].clone();
+
+                let ignore_ops = self[temp_v!(2)].clone();
+                let numbervars = self[temp_v!(3)].clone();
+                let quoted = self[temp_v!(4)].clone();
+
+                let mut printer = HCPrinter::new(&self, PrinterOutputter::new());
+
+                if let &Addr::Con(Constant::Atom(ref name, ..)) = &ignore_ops {
+                    printer.ignore_ops = name.as_str() == "true";
+                }
+
+                if let &Addr::Con(Constant::Atom(ref name, ..)) = &numbervars {
+                    printer.numbervars = name.as_str() == "true";
+                }
+
+                if let &Addr::Con(Constant::Atom(ref name, ..)) = &quoted {
+                    printer.quoted = name.as_str() == "true";
+                }
+
+                let mut output  = printer.print(addr);
+                println!("{}", output.result());
+            }
         };
 
         self.set_p();

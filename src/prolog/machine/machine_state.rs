@@ -4,7 +4,6 @@ use prolog_parser::string_list::*;
 use prolog::instructions::*;
 use prolog::and_stack::*;
 use prolog::copier::*;
-use prolog::heap_print::*;
 use prolog::machine::IndexStore;
 use prolog::machine::machine_errors::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
@@ -541,14 +540,6 @@ pub(crate) trait CallPolicy: Any {
 
                 return_from_clause!(machine_st.last_call, machine_st)
             },
-            &BuiltInClauseType::Writeq => {
-                let output = machine_st.print_term(machine_st[temp_v!(1)].clone(),
-                                                   WriteqFormatter {},
-                                                   PrinterOutputter::new());
-
-                println!("{}", output.result());
-                return_from_clause!(machine_st.last_call, machine_st)
-            },
             &BuiltInClauseType::CopyTerm => {
                 machine_st.duplicate_term();
                 return_from_clause!(machine_st.last_call, machine_st)
@@ -671,7 +662,7 @@ pub(crate) trait CallPolicy: Any {
                     machine_st.execute_inlined(&inlined),
                 ClauseType::Op(..) | ClauseType::Named(..) => {
                     let module = name.owning_module();
-                    
+
                     if let Some(idx) = indices.get_code_index((name.clone(), arity), module) {
                         self.context_call(machine_st, name, arity, idx, indices)?;
                     } else {

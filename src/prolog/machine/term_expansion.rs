@@ -124,9 +124,11 @@ impl MachineState {
             self.reset();
             Ok(None)
         } else {
-            let mut output = self.print_term(Addr::HeapCell(h),
-                                             WriteqFormatter {},
-                                             PrinterOutputter::new());
+            let mut output  = {
+                let mut printer = HCPrinter::new(&self, PrinterOutputter::new());
+                printer.print(Addr::HeapCell(h))
+            };
+
             output.push_char('.');
 
             self.reset();

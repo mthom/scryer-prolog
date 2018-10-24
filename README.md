@@ -172,7 +172,10 @@ The following predicates are built-in to rusty-wam.
 * `throw/1`
 * `true/0`
 * `var/1`
+* `write/1`
+* `write_canonical/1`
 * `writeq/1`
+* `write_term/2`
 
 ## Tutorial
 To enter a multi-clause predicate, the directive "[user]" is used.
