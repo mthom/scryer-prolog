@@ -401,7 +401,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             '\u{0c}' => self.outputter.append("\\f"), // UTF-8 form feed
             '\u{08}' => self.outputter.append("\\b"), // UTF-8 backspace
             '\u{07}' => self.outputter.append("\\a"), // UTF-8 alert
-            '\x20' ..= '\x7e' => self.outputter.push_char(c),
+            '\x20' ... '\x7e' => self.outputter.push_char(c),
             _ => self.outputter.append(&format!("\\x{:x}", c as u32))
         };
     }
