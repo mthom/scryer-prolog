@@ -1871,7 +1871,7 @@ fn test_queries_on_dcgs()
 
     submit(&mut wam, ":- use_module(library(dcgs)).");
     
-    // test case by YeGoblynQueene on hacker news.
+    // test case by YeGoblynQueene from hacker news.
     compile_user_module(&mut wam,
     " ability(destroy, X) --> destroy(X).
       destroy(X) --> [destroy], target(X).

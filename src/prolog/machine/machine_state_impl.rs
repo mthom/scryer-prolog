@@ -132,7 +132,9 @@ impl MachineState {
         output.append(" = ");
 
         let mut printer = HCPrinter::from_heap_locs(&self, output, var_dir);
+        
         printer.numbervars = false;
+        printer.quoted = true;
             
         let mut output = printer.print(addr);
 

@@ -126,6 +126,10 @@ impl MachineState {
         } else {
             let mut output  = {
                 let mut printer = HCPrinter::new(&self, PrinterOutputter::new());
+                
+                printer.quoted = true;
+                printer.numbervars = true;
+                
                 printer.print(Addr::HeapCell(h))
             };
 
