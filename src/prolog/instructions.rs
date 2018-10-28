@@ -4,6 +4,7 @@ use prolog_parser::tabled_rc::*;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::cmp::Ordering;
+use std::fmt;
 use std::ops::{Add, AddAssign, Index, IndexMut, Sub};
 use std::rc::Rc;
 
@@ -658,6 +659,18 @@ pub enum Addr {
     HeapCell(usize),
     StackCell(usize, usize),
     Str(usize)
+}
+
+impl fmt::Display for Addr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Addr::Con(ref c) => write!(f, "Addr::Con({})", c),
+            &Addr::Lis(l) => write!(f, "Addr::Lis({})", l),
+            &Addr::HeapCell(h) => write!(f, "Addr::HeapCell({})", h),
+            &Addr::StackCell(fr, sc)=> write!(f, "Addr::StackCell({}, {})", fr, sc),
+            &Addr::Str(s) => write!(f, "Addr::Str({})", s)
+        }
+    }
 }
 
 impl PartialEq<Ref> for Addr {

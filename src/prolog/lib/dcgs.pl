@@ -1,6 +1,7 @@
 :- module(dcgs, [(-->)/2, phrase/2, phrase/3]).
 
 :- use_module(library(lists), [append/3]).
+:- use_module(library(terms)).
 
 :- op(1200, xfx, -->).
 
@@ -19,40 +20,51 @@ phrase(G, Ls0, Ls2) :-
 phrase(G, Ls0, Ls1) :-
     call(G, Ls0, Ls1).
 
-term_expansion(Term0, (ModHead :- ModBody)) :-
+term_expansion(Term0, Term) :-
+    numbervars(Term0, 0, N),
+    expand_dcgs(Term0, N, Term).
+
+expand_dcgs(Term0, N, (ModHead :- ModBody)) :-
     nonvar(Term0),
     Term0 = (Head, [SC | SCs] --> Body),
     !,
     nonvar(Head),
     Head =.. [RuleName | Args],
-    append([SC | SCs], '$VAR'(N), SemiContextArgs),
-    append(Args, ['$VAR'(0), SemiContextArgs], ModArgs),
+    append([SC | SCs], '$VAR'(N1), SemiContextArgs),
+    append(Args, ['$VAR'(N), SemiContextArgs], ModArgs),
     ModHead =.. [RuleName | ModArgs],
     nonvar(Body),
-    expand_body(Body, ModBody, 0, N).
-term_expansion(Term0, (ModHead :- ModBody)) :-
+    expand_body(Body, ModBody, 0, N1).
+expand_dcgs(Term0, N, (ModHead :- ModBody)) :-
     nonvar(Term0),
     Term0 = (Head --> Body),
     nonvar(Head),
     Head =.. [RuleName | Args],
-    append(Args, ['$VAR'(0), '$VAR'(N)], ModArgs),
+    append(Args, ['$VAR'(N), '$VAR'(N1)], ModArgs),
     ModHead =.. [RuleName | ModArgs],
     nonvar(Body),
-    expand_body(Body, ModBody, 0, N).
+    expand_body(Body, ModBody, N, N1).
 
 expand_body(Term0, (ModTerm, ModTerms), N0, N) :-
     nonvar(Term0), Term0 = (Term, Terms), !,
     nonvar(Term),
     expand_body_term(Term, ModTerm, N0, N1),
     expand_body(Terms, ModTerms, N1, N).
-expand_body(Term0, ModTerm, N0, N) :-
-    nonvar(Term0), expand_body_term(Term0, ModTerm, N0, N).
+expand_body(Term0, ModTerm, N0, N) :-    
+    nonvar(Term0),
+    expand_body_term(Term0, ModTerm, N0, N).
 
 expand_body_term([], true, N, N) :- !.
 expand_body_term([Arg|Args], ModTerm, N0, N) :-
     !, N is N0 + 1,
     append([Arg|Args], '$VAR'(N), ModArgs),
     ModTerm = ('$VAR'(N0) = ModArgs).
+expand_body_term((P -> Q), (PModTerm -> QModTerm), N0, N) :-
+    !, expand_body(P, PModTerm, N0, N1),
+    expand_body(Q, QModTerm, N1, N).
+expand_body_term((P ; Q), (PModTerm ; QModTerm), N0, N) :-
+    !, expand_body(P, PModTerm, N0, N),
+    expand_body(Q, QModTerm, N0, N).
 expand_body_term(CommaTerm, ModTerm, N, N) :-
     CommaTerm =.. [{} | BodyTerms], !,
     comma_ify(BodyTerms, ModTerm).
