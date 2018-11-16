@@ -32,7 +32,7 @@ macro_rules! try_or_fail {
 
 impl MachineState {
     pub(super) fn new() -> Self {
-        MachineState {            
+        MachineState {
             s: 0,
             p: CodePtr::default(),
             b: 0,
@@ -132,10 +132,10 @@ impl MachineState {
         output.append(" = ");
 
         let mut printer = HCPrinter::from_heap_locs(&self, output, var_dir);
-        
+
         printer.numbervars = false;
         printer.quoted = true;
-            
+
         let mut output = printer.print(addr);
 
         let bad_ending = format!("= {}", &var);
@@ -428,6 +428,7 @@ impl MachineState {
                         let tr = self.tr;
                         let val = self.trail[tr - 1];
                         self.trail[i] = val;
+                        self.trail.pop();
                         self.tr -= 1;
                     },
                 Ref::StackCell(fr, _) => {
@@ -445,6 +446,7 @@ impl MachineState {
                         let tr = self.tr;
                         let val = self.trail[tr - 1];
                         self.trail[i] = val;
+                        self.trail.pop();
                         self.tr -= 1;
                     }
                 }

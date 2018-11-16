@@ -6,7 +6,7 @@
 :- op(1200, xfx, -->).
 
 phrase(G, G) :-
-    nonvar(G), G = [_|_], !. %, append(G, _, Ls0).
+    nonvar(G), G = [_|_], !.
 phrase(G, Ls0) :-
     nonvar(G), G = (G1, G2), !, phrase(G1, Ls0, Ls1), phrase(G2, Ls1, []).
 phrase(G, Ls0) :-
@@ -50,7 +50,7 @@ expand_body(Term0, (ModTerm, ModTerms), N0, N) :-
     nonvar(Term),
     expand_body_term(Term, ModTerm, N0, N1),
     expand_body(Terms, ModTerms, N1, N).
-expand_body(Term0, ModTerm, N0, N) :-    
+expand_body(Term0, ModTerm, N0, N) :-
     nonvar(Term0),
     expand_body_term(Term0, ModTerm, N0, N).
 
