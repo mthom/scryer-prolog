@@ -34,7 +34,7 @@ expand_dcgs(Term0, N, (ModHead :- ModBody)) :-
     append(Args, ['$VAR'(N), SemiContextArgs], ModArgs),
     ModHead =.. [RuleName | ModArgs],
     nonvar(Body),
-    expand_body(Body, ModBody, 0, N1).
+    expand_body(Body, ModBody, N, N1).
 expand_dcgs(Term0, N, (ModHead :- ModBody)) :-
     nonvar(Term0),
     Term0 = (Head --> Body),
