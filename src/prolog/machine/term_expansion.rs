@@ -84,7 +84,7 @@ impl<'a, R: Read> TermStream<'a, R> {
     {
         loop {
             while let Some(term) = self.stack.pop() {
-                match machine_st.try_expand_term(self.indices, self.policies, self.code_repo, &term)?
+                match machine_st.try_expand_term(self.indices, self.policies, self.code_repo, &term)
                 {
                     Some(term_string) => {
                         let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;
@@ -106,7 +106,7 @@ impl<'a, R: Read> TermStream<'a, R> {
 impl MachineState {
     fn try_expand_term(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
                        code_repo: &mut CodeRepo, term: &Term)
-                       -> Result<Option<String>, ParserError>
+                       -> Option<String>
     {
         let term_h = write_term_to_heap(term, self);
         let h = self.heap.h;
@@ -122,7 +122,7 @@ impl MachineState {
 
         if self.fail {
             self.reset();
-            Ok(None)
+            None
         } else {
             let mut output  = {
                 let mut printer = HCPrinter::new(&self, PrinterOutputter::new());
@@ -136,7 +136,7 @@ impl MachineState {
             output.push_char('.');
 
             self.reset();
-            Ok(Some(output.result()))
+            Some(output.result())
         }
     }
 }
