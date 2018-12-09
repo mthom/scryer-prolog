@@ -259,8 +259,8 @@ impl ListingCompiler {
                     -> Result<(), SessionError>
     {
         match decl {
-            Declaration::Hook(CompileTimeHook::TermExpansion, clause, queue) => {
-                let key = (clause_name!("term_expansion"), 2);
+            Declaration::Hook(hook, clause, queue) => {
+                let key = (hook.name(), hook.arity());
                 let preds = code_repo.term_dir.entry(key)
                     .or_insert((Predicate(vec![]), VecDeque::from(vec![])));
 
@@ -271,8 +271,13 @@ impl ListingCompiler {
                 let mut code = cg.compile_predicate(&(preds.0).0)?;
 
                 compile_appendix(&mut code, &preds.1, false, flags)?;
-                
-                Ok(code_repo.term_expanders = code)
+
+                match hook {
+                    CompileTimeHook::TermExpansion =>
+                        Ok(code_repo.term_expanders = code),
+                    CompileTimeHook::GoalExpansion =>
+                        Ok(code_repo.goal_expanders = code)
+                }
             },
             Declaration::NonCountedBacktracking(name, arity) =>
                 Ok(self.add_non_counted_bt_flag(name, arity)),

@@ -629,13 +629,19 @@ pub(crate) trait CallPolicy: Any {
         }
     }
 
-    fn compile_hook(&mut self, machine_st: &mut MachineState, _: &CompileTimeHook) -> CallResult
+    fn compile_hook(&mut self, machine_st: &mut MachineState, hook: &CompileTimeHook) -> CallResult
     {
         machine_st.cp = LocalCodePtr::TopLevel(0, 0);
 
-        machine_st.num_of_args = 2;
+        machine_st.num_of_args = hook.arity();
         machine_st.b0 = machine_st.b;
-        machine_st.p  = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
+
+        machine_st.p = match hook {
+            CompileTimeHook::TermExpansion =>
+                CodePtr::Local(LocalCodePtr::UserTermExpansion(0)),
+            CompileTimeHook::GoalExpansion =>
+                CodePtr::Local(LocalCodePtr::UserGoalExpansion(0))
+        };
 
         Ok(())
     }

@@ -102,6 +102,7 @@ impl IndexStore {
 
 pub struct CodeRepo {
     cached_query: Option<Code>,
+    pub(super) goal_expanders: Code,
     pub(super) term_expanders: Code,
     pub(super) code: Code,
     pub(super) term_dir: TermDir        
@@ -112,6 +113,7 @@ impl CodeRepo {
     fn new() -> Self {
         CodeRepo {
             cached_query: None,
+            goal_expanders: Code::new(),
             term_expanders: Code::new(),
             code: Code::new(),
             term_dir: TermDir::new()               
@@ -124,11 +126,17 @@ impl CodeRepo {
             &Some(ref query) => query.len(),
             _ => 0
         }
-    }
+    }    
     
     fn lookup_instr<'a>(&'a self, last_call: bool, p: &CodePtr) -> Option<RefOrOwned<'a, Line>>
     {
         match p {
+            &CodePtr::Local(LocalCodePtr::UserGoalExpansion(p)) =>
+                if p < self.goal_expanders.len() {
+                    Some(RefOrOwned::Borrowed(&self.goal_expanders[p]))
+                } else {
+                    None
+                },
             &CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) =>
                 if p < self.term_expanders.len() {
                     Some(RefOrOwned::Borrowed(&self.term_expanders[p]))
@@ -190,6 +198,7 @@ impl Index<LocalCodePtr> for CodeRepo {
                 }
             },
             LocalCodePtr::DirEntry(p) => &self.code[p],
+            LocalCodePtr::UserGoalExpansion(p) => &self.goal_expanders[p],
             LocalCodePtr::UserTermExpansion(p) => &self.term_expanders[p]
         }
     }
@@ -502,6 +511,8 @@ impl MachineState {
                 CodePtr::Local(LocalCodePtr::DirEntry(p)) if p < code_repo.code.len() => {},
                 CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) if p < code_repo.term_expanders.len() => {},
                 CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) => self.fail = true,
+                CodePtr::Local(LocalCodePtr::UserGoalExpansion(p)) if p < code_repo.goal_expanders.len() => {},
+                CodePtr::Local(LocalCodePtr::UserGoalExpansion(_)) => self.fail = true,
                 CodePtr::Local(_) => break,
                 _ => {}
             };

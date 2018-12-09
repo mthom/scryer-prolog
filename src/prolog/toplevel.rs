@@ -71,18 +71,25 @@ impl<'a, 'b> CompositeIndices<'a, 'b>
 }
 
 #[inline]
-fn is_term_expansion(name: &ClauseName, terms: &Vec<Box<Term>>) -> bool {
+fn get_compile_time_hook(name: &str, arity: usize) -> Option<CompileTimeHook> {
+    match (name, arity) {
+        ("term_expansion", 2) => Some(CompileTimeHook::TermExpansion),
+        ("goal_expansion", 2) => Some(CompileTimeHook::GoalExpansion),
+        _ => None
+    }
+}
+
+#[inline]
+fn is_compile_time_hook(name: &ClauseName, terms: &Vec<Box<Term>>) -> Option<CompileTimeHook> {
     if name.as_str() == ":-" {
         if let Some(ref term) = terms.first() {
             if let &Term::Clause(_, ref name, ref terms, None) = term.as_ref() {
-                return (name.as_str(), terms.len()) == ("term_expansion", 2);
+                return get_compile_time_hook(name.as_str(), terms.len());
             }
         }
-    } else if name.as_str() == "term_expansion" {
-        return terms.len() == 2;
     }
-
-    false
+    
+    get_compile_time_hook(name.as_str(), terms.len())    
 }
 
 type CompileTimeHookCompileInfo = (CompileTimeHook, PredicateClause, VecDeque<TopLevel>);
@@ -296,44 +303,6 @@ fn append_preds(preds: &mut Vec<PredicateClause>) -> Predicate {
     Predicate(mem::replace(preds, vec![]))
 }
 
-fn unfold_by_str_once(term: &mut Term, s: &str) -> Option<(Term, Term)>
-{
-    if let &mut Term::Clause(_, ref name, ref mut subterms, _) = term {
-        if name.as_str() == s && subterms.len() == 2 {
-            let snd = *subterms.pop().unwrap();
-            let fst = *subterms.pop().unwrap();
-
-            return Some((fst, snd));
-        }
-    }
-
-    None
-}
-
-fn unfold_by_str(mut term: Term, s: &str) -> Vec<Term>
-{
-    let mut terms = vec![];
-
-    while let Some((fst, snd)) = unfold_by_str_once(&mut term, s) {
-        terms.push(fst);
-        term = snd;
-    }
-
-    terms.push(term);
-    terms
-}
-
-fn fold_by_str(mut terms: Vec<Term>, mut term: Term, sym: ClauseName) -> Term
-{
-    while let Some(prec) = terms.pop() {
-        term = Term::Clause(Cell::default(), sym.clone(),
-                            vec![Box::new(prec), Box::new(term)],
-                            None);
-    }
-
-    term
-}
-
 fn mark_cut_variables_as(terms: &mut Vec<Term>, name: ClauseName) {
     for term in terms.iter_mut() {
         match term {
@@ -445,7 +414,7 @@ impl RelationWorker {
                 cut_var_found = mark_cut_variables(&mut subterms);
 
                 let term = subterms.pop().unwrap();
-                fold_by_str(subterms, term, clause_name!(","))
+                fold_by_str(subterms.into_iter(), term, clause_name!(","))
             }).collect();
 
         if cut_var_found {
@@ -480,7 +449,7 @@ impl RelationWorker {
         let body_term  = Term::Clause(Cell::default(), comma_sym.clone(),
                                       vec![front_term, back_term], None);
 
-        self.fabricate_rule(fold_by_str(prec_seq, body_term, comma_sym))
+        self.fabricate_rule(fold_by_str(prec_seq.into_iter(), body_term, comma_sym))
     }
 
     fn to_query_term(&mut self, indices: &mut CompositeIndices, term: Term) -> Result<QueryTerm, ParserError>
@@ -622,22 +591,19 @@ impl RelationWorker {
         Ok(query_terms)
     }
 
-    fn setup_hook(&mut self, indices: &mut CompositeIndices, term: Term)
+    fn setup_hook(&mut self, hook: CompileTimeHook, indices: &mut CompositeIndices, term: Term)
                   -> Result<CompileTimeHookCompileInfo, ParserError>
     {
         match term {
             Term::Clause(r, name, terms, _) =>
-                if name.as_str() == "term_expansion" && terms.len() == 2 {
+                if name == hook.name() && terms.len() == hook.arity() {
                     let term = setup_fact(Term::Clause(r, name, terms, None))?;
-                    
-                    Ok((CompileTimeHook::TermExpansion, PredicateClause::Fact(term),
-                        VecDeque::from(vec![])))
+                    Ok((hook, PredicateClause::Fact(term), VecDeque::from(vec![])))
                 } else if name.as_str() == ":-" {
                     let rule = self.setup_rule(indices, terms, true)?;
                     let results_queue = self.parse_queue(indices)?;
-                    
-                    Ok((CompileTimeHook::TermExpansion, PredicateClause::Rule(rule),
-                        results_queue))
+
+                    Ok((hook, PredicateClause::Rule(rule), results_queue))
                 } else {
                     Err(ParserError::InvalidHook)
                 },
@@ -668,9 +634,9 @@ impl RelationWorker {
     {
         match term {
             Term::Clause(r, name, mut terms, fixity) =>
-                if is_term_expansion(&name, &terms) {
+                if let Some(hook) = is_compile_time_hook(&name, &terms) {
                     let term = Term::Clause(r, name, terms, fixity);
-                    let (hook, clause, queue) = self.setup_hook(indices, term)?;
+                    let (hook, clause, queue) = self.setup_hook(hook, indices, term)?;
 
                     Ok(TopLevel::Declaration(Declaration::Hook(hook, clause, queue)))
                 } else if name.as_str() == "?-" {
@@ -750,12 +716,9 @@ pub struct TopLevelBatchWorker<'a, R: Read> {
 }
 
 impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
-    pub fn new(inner: R,
-               atom_tbl: TabledData<Atom>,
-               flags: MachineFlags,
-               indices: &'a mut IndexStore,
-               policies: &'a mut MachinePolicies,
-               code_repo: &'a mut CodeRepo)
+    pub fn new(inner: R, atom_tbl: TabledData<Atom>,
+               flags: MachineFlags, indices: &'a mut IndexStore,
+               policies: &'a mut MachinePolicies, code_repo: &'a mut CodeRepo)
                -> Self
     {
         let term_stream = TermStream::new(inner, atom_tbl, flags,

@@ -347,12 +347,23 @@ pub enum BuiltInClauseType {
 
 #[derive(Clone, Copy)]
 pub enum CompileTimeHook {
+    GoalExpansion,
     TermExpansion
 }
 
 impl CompileTimeHook {
     pub fn name(self) -> ClauseName {
-        clause_name!("term_expansion")
+        match self {
+            CompileTimeHook::GoalExpansion => clause_name!("goal_expansion"),
+            CompileTimeHook::TermExpansion => clause_name!("term_expansion")
+        }
+    }
+
+    pub fn arity(self) -> usize {
+        match self {
+            CompileTimeHook::GoalExpansion => 2,
+            CompileTimeHook::TermExpansion => 2
+        }
     }
 }
 
@@ -873,6 +884,7 @@ impl CodePtr {
 pub enum LocalCodePtr {
     DirEntry(usize), // offset.
     TopLevel(usize, usize), // chunk_num, offset.
+    UserGoalExpansion(usize),
     UserTermExpansion(usize)
 }
 
@@ -927,7 +939,8 @@ impl Add<usize> for LocalCodePtr {
         match self {
             LocalCodePtr::DirEntry(p) => LocalCodePtr::DirEntry(p + rhs),
             LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs),
-            LocalCodePtr::UserTermExpansion(p) => LocalCodePtr::UserTermExpansion(p + rhs)
+            LocalCodePtr::UserTermExpansion(p) => LocalCodePtr::UserTermExpansion(p + rhs),
+            LocalCodePtr::UserGoalExpansion(p) => LocalCodePtr::UserGoalExpansion(p + rhs),
         }
     }
 }
@@ -935,7 +948,8 @@ impl Add<usize> for LocalCodePtr {
 impl AddAssign<usize> for LocalCodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut LocalCodePtr::UserTermExpansion(ref mut p)
+            &mut LocalCodePtr::UserGoalExpansion(ref mut p)
+          | &mut LocalCodePtr::UserTermExpansion(ref mut p)
           | &mut LocalCodePtr::DirEntry(ref mut p)
           | &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs
         }

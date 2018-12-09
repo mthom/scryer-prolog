@@ -262,6 +262,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         printer
     }
 
+    #[inline]
+    pub fn see_all_locs(&mut self) {
+        for key in self.heap_locs.keys().cloned() {
+            self.printed_vars.insert(key);
+        }
+    }        
+    
     fn enqueue_op(&mut self, ct: ClauseType, fixity: Fixity) {
         match fixity {
             Fixity::Post => {
