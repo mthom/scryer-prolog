@@ -230,7 +230,7 @@ impl MachineState {
 
         let code = vec![call_clause!(ClauseType::Hook(hook), 2, 0, true)];
 
-        code_repo.cached_query = Some(code);
+        code_repo.cached_query = code;
         self.run_query(indices, policies, code_repo, &AllocVarDict::new(), &mut HeapVarDict::new());
 
         if self.fail {

@@ -41,14 +41,14 @@
 :- op(700, xfx, >=).
 :- op(700, xfx, =<).
 
+% conditional operators.
+:- op(1050, xfy, ->).
+:- op(1100, xfy, ;).
+
 % control.
 :- op(700, xfx, =).
 :- op(900, fy, \+).
 :- op(700, xfx, =..).
-
-% conditional operators.
-:- op(1050, xfy, ->).
-:- op(1100, xfy, ;).
 
 % term comparison.
 :- op(700, xfx, ==).

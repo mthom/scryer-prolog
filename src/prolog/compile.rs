@@ -40,7 +40,8 @@ fn print_code(code: &Code) {
 }
 
 // throw errors if declaration or query found.
-fn compile_relation(tl: &TopLevel, non_counted_bt: bool, flags: MachineFlags) -> Result<Code, ParserError>
+fn compile_relation(tl: &TopLevel, non_counted_bt: bool, flags: MachineFlags)
+                    -> Result<Code, ParserError>
 {
     let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt, flags);
 
@@ -307,7 +308,6 @@ impl ListingCompiler {
         let wam_indices = &mut wam.indices;
 
         let atom_tbl   = wam_indices.atom_tbl.clone();
-
         let mut worker = TopLevelBatchWorker::new(src, atom_tbl.clone(), flags,
                                                   wam_indices, &mut wam.policies,
                                                   &mut wam.code_repo);

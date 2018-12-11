@@ -101,7 +101,7 @@ impl IndexStore {
 }
 
 pub struct CodeRepo {
-    cached_query: Option<Code>,
+    cached_query: Code,
     pub(super) goal_expanders: Code,
     pub(super) term_expanders: Code,
     pub(super) code: Code,
@@ -112,7 +112,7 @@ impl CodeRepo {
     #[inline]
     fn new() -> Self {
         CodeRepo {
-            cached_query: None,
+            cached_query: vec![],
             goal_expanders: Code::new(),
             term_expanders: Code::new(),
             code: Code::new(),
@@ -122,10 +122,7 @@ impl CodeRepo {
 
     #[inline]
     fn size_of_cached_query(&self) -> usize {
-        match &self.cached_query {
-            &Some(ref query) => query.len(),
-            _ => 0
-        }
+        self.cached_query.len()
     }    
     
     fn lookup_instr<'a>(&'a self, last_call: bool, p: &CodePtr) -> Option<RefOrOwned<'a, Line>>
@@ -144,9 +141,10 @@ impl CodeRepo {
                     None
                 },
             &CodePtr::Local(LocalCodePtr::TopLevel(_, p)) =>
-                match &self.cached_query {
-                    &Some(ref cq) => Some(RefOrOwned::Borrowed(&cq[p])),
-                    &None => None
+                if p < self.cached_query.len() {
+                    Some(RefOrOwned::Borrowed(&self.cached_query[p]))
+                } else {
+                    None
                 },
             &CodePtr::Local(LocalCodePtr::DirEntry(p)) =>
                 Some(RefOrOwned::Borrowed(&self.code[p])),
@@ -191,12 +189,7 @@ impl Index<LocalCodePtr> for CodeRepo {
 
     fn index(&self, ptr: LocalCodePtr) -> &Self::Output {
         match ptr {
-            LocalCodePtr::TopLevel(_, p) => {
-                match &self.cached_query {
-                    &Some(ref cq) => &cq[p],
-                    &None => panic!("Out-of-bounds top level index.")
-                }
-            },
+            LocalCodePtr::TopLevel(_, p) => &self.cached_query[p],
             LocalCodePtr::DirEntry(p) => &self.code[p],
             LocalCodePtr::UserGoalExpansion(p) => &self.goal_expanders[p],
             LocalCodePtr::UserTermExpansion(p) => &self.term_expanders[p]
@@ -370,7 +363,7 @@ impl Machine {
     {
         let mut heap_locs = HashMap::new();
 
-        self.code_repo.cached_query = Some(code);
+        self.code_repo.cached_query = code;
         self.machine_st.run_query(&mut self.indices, &mut self.policies, &self.code_repo, &alloc_locs, &mut heap_locs);
 
         if self.machine_st.fail {
