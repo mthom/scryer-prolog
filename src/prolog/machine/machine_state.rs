@@ -224,19 +224,57 @@ pub struct MachineState {
     pub(crate) flags: MachineFlags
 }
 
-fn call_at_index(machine_st: &mut MachineState, arity: usize, idx: usize)
+fn call_at_index(machine_st: &mut MachineState, arity: usize, p: usize)
 {
     machine_st.cp.assign_if_local(machine_st.p.clone() + 1);
     machine_st.num_of_args = arity;
     machine_st.b0 = machine_st.b;
-    machine_st.p  = dir_entry!(idx);
+    machine_st.p  = dir_entry!(p);
 }
 
-fn execute_at_index(machine_st: &mut MachineState, arity: usize, idx: usize)
+fn execute_at_index(machine_st: &mut MachineState, arity: usize, p: usize)
 {
     machine_st.num_of_args = arity;
     machine_st.b0 = machine_st.b;
-    machine_st.p  = dir_entry!(idx);
+    machine_st.p  = dir_entry!(p);
+}
+
+fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore)
+                      -> Option<usize>
+{
+    match indices.in_situ_code_dir.get(&(name.clone(), arity)) {
+        Some(p) => Some(*p),
+        None => match indices.code_dir.get(&(name, arity)) {
+            Some(ref idx) => if let &IndexPtr::Index(p) = &idx.0.borrow().0 {
+                Some(p)
+            } else {
+                None
+            },
+            _ => None
+        }
+    }
+}
+
+fn try_in_situ(machine_st: &mut MachineState, name: ClauseName, arity: usize,
+               indices: &IndexStore, last_call: bool)
+               -> CallResult
+{
+    if let Some(p) = try_in_situ_lookup(name.clone(), arity, indices) {
+        if last_call {
+            execute_at_index(machine_st, arity, p);
+        } else {
+            call_at_index(machine_st, arity, p);
+        }
+
+        machine_st.p = in_situ_dir_entry!(p);
+        Ok(())
+    } else {
+        let stub = MachineError::functor_stub(name.clone(), arity);
+        let h = machine_st.heap.h;
+        
+        Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
+                                  stub))
+    }
 }
 
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
@@ -429,13 +467,8 @@ pub(crate) trait CallPolicy: Any {
                 let err = MachineError::module_resolution_error(h, module_name, name, arity);
                 return Err(machine_st.error_form(err, stub));
             },
-            IndexPtr::Undefined => {
-                let stub = MachineError::functor_stub(name.clone(), arity);
-                let h = machine_st.heap.h;
-
-                return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
-                                                 stub));
-            },
+            IndexPtr::Undefined =>
+                return try_in_situ(machine_st, name, arity, indices, false),
             IndexPtr::Index(compiled_tl_index) =>
                 call_at_index(machine_st, arity, compiled_tl_index)
         }
@@ -464,13 +497,8 @@ pub(crate) trait CallPolicy: Any {
                 let err = MachineError::module_resolution_error(h, module_name, name, arity);
                 return Err(machine_st.error_form(err, stub));
             },
-            IndexPtr::Undefined => {
-                let stub = MachineError::functor_stub(name.clone(), arity);
-                let h = machine_st.heap.h;
-
-                return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
-                                                 stub));
-            },
+            IndexPtr::Undefined =>
+                return try_in_situ(machine_st, name, arity, indices, true),
             IndexPtr::Index(compiled_tl_index) =>
                 execute_at_index(machine_st, arity, compiled_tl_index)
         }

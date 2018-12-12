@@ -6,59 +6,46 @@
 	(=:=)/2, (-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2,
 	(==)/2, (\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2,
 	(\=@=)/2, (:)/2, call_with_inference_limit/3, catch/3,
-	current_prolog_flag/2, expand_term/2, set_prolog_flag/2,
-	setup_call_cleanup/3, term_variables/2, throw/1, true/0, false/0,
-	write/1, write_canonical/1, writeq/1, write_term/2]).
+	current_prolog_flag/2, expand_goal/2, expand_term/2,
+	set_prolog_flag/2, setup_call_cleanup/3, term_variables/2,
+	throw/1, true/0, false/0, write/1, write_canonical/1,
+	writeq/1, write_term/2]).
 
 /* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
    and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
    instructions are unchanged. */
 :- op(700, fx, non_counted_backtracking).
 
+term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
+    expand_op_list([Op | OtherOps], Pred, Spec, OpResults).
+
+expand_op_list([], _, _, []).
+expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResults]) :-
+    expand_op_list(OtherOps, Pred, Spec, OtherResults).
+
 % arithmetic operators.
 :- op(700, xfx, is).
-:- op(500, yfx, +).
-:- op(500, yfx, -).
+:- op(500, yfx, [+, -]).
 :- op(400, yfx, *).
 :- op(200, xfy, **).
-:- op(500, yfx, /\).
-:- op(500, yfx, \/).
-:- op(500, yfx, xor).
-:- op(400, yfx, div).
-:- op(400, yfx, //).
-:- op(400, yfx, rdiv).
-:- op(400, yfx, <<).
-:- op(400, yfx, >>).
-:- op(400, yfx, mod).
-:- op(400, yfx, rem).
+:- op(500, yfx, [/\, \/, xor]).
+:- op(400, yfx, [div, //, rdiv]).
+:- op(400, yfx, [<<, >>, mod, rem]).
 :- op(200, fy, -).
 
 % arithmetic comparison operators.
-:- op(700, xfx, >).
-:- op(700, xfx, <).
-:- op(700, xfx, =\=).
-:- op(700, xfx, =:=).
-:- op(700, xfx, >=).
-:- op(700, xfx, =<).
+:- op(700, xfx, [>, <, =\=, =:=, >=, =<]).
 
 % conditional operators.
 :- op(1050, xfy, ->).
 :- op(1100, xfy, ;).
 
 % control.
-:- op(700, xfx, =).
+:- op(700, xfx, [=, =..]).
 :- op(900, fy, \+).
-:- op(700, xfx, =..).
 
 % term comparison.
-:- op(700, xfx, ==).
-:- op(700, xfx, \==).
-:- op(700, xfx, @=<).
-:- op(700, xfx, @>=).
-:- op(700, xfx, @<).
-:- op(700, xfx, @>).
-:- op(700, xfx, =@=).
-:- op(700, xfx, \=@=).
+:- op(700, xfx, [==, \==, @=<, @>=, @<, @>, =@=, \=@=]).
 
 % module resolution operator.
 :- op(600, xfy, :).
@@ -237,9 +224,13 @@ write_canonical(Term) :- write_term(Term, [ignore_ops(true), quoted(true)]).
 
 writeq(Term) :- write_term(Term, [quoted(true), numbervars(true)]).
 
+% expand_goal.
+
+expand_goal(Term0, Term) :- '$expand_goal'(Term0, Term), !.
+
 % expand_term.
 
-expand_term(Term0, Term) :- '$expand_term'(Term0, Term).
+expand_term(Term0, Term) :- '$expand_term'(Term0, Term), !.
 
 % term_variables.
 

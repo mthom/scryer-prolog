@@ -75,9 +75,9 @@ fn set_first_index(code: &mut Code)
     }
 }
 
-fn compile_appendix(code: &mut Code, queue: &VecDeque<TopLevel>, non_counted_bt: bool,
-                    flags: MachineFlags)
-                    -> Result<(), ParserError>
+pub fn compile_appendix(code: &mut Code, queue: &VecDeque<TopLevel>, non_counted_bt: bool,
+                        flags: MachineFlags)
+                        -> Result<(), ParserError>
 {
     for tl in queue.iter() {
         set_first_index(code);

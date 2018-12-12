@@ -1,7 +1,9 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
+use prolog::codegen::*;
 use prolog::compile::*;
+use prolog::debray_allocator::*;
 use prolog::heap_print::*;
 use prolog::instructions::*;
 
@@ -14,16 +16,19 @@ mod system_calls;
 
 use prolog::machine::machine_state::*;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
 
 static BUILTINS: &str = include_str!("../lib/builtins.pl");
 
+pub type InSituCodeDir = HashMap<PredicateKey, usize>;
+
 pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,
     pub(super) code_dir: CodeDir,
+    pub(super) in_situ_code_dir: InSituCodeDir,
     pub(super) op_dir: OpDir,
     pub(super) modules: ModuleDir
 }
@@ -42,22 +47,23 @@ impl<'a, T> RefOrOwned<'a, T> {
     }
 }
 
-impl IndexStore {    
+impl IndexStore {
     #[inline]
     pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
         self.modules.remove(&name)
     }
-    
+
     #[inline]
     pub fn insert_module(&mut self, module: Module) {
         self.modules.insert(module.module_decl.name.clone(), module);
     }
-    
+
     #[inline]
     pub(super) fn new() -> Self {
         IndexStore {
             atom_tbl: TabledData::new(Rc::new("user".to_string())),
             code_dir: CodeDir::new(),
+            in_situ_code_dir: InSituCodeDir::new(),
             op_dir: default_op_dir(),
             modules: ModuleDir::new(),
         }
@@ -100,12 +106,15 @@ impl IndexStore {
     }
 }
 
+pub type CompiledResult = (Predicate, VecDeque<TopLevel>);
+
 pub struct CodeRepo {
     cached_query: Code,
     pub(super) goal_expanders: Code,
     pub(super) term_expanders: Code,
     pub(super) code: Code,
-    pub(super) term_dir: TermDir        
+    pub(super) in_situ_code: Code,
+    pub(super) term_dir: TermDir
 }
 
 impl CodeRepo {
@@ -116,15 +125,38 @@ impl CodeRepo {
             goal_expanders: Code::new(),
             term_expanders: Code::new(),
             code: Code::new(),
-            term_dir: TermDir::new()               
+            in_situ_code: Code::new(),
+            term_dir: TermDir::new()
         }
+    }
+
+    pub fn add_in_situ_result(&mut self, result: &CompiledResult, in_situ_code_dir: &mut InSituCodeDir,
+                              flags: MachineFlags)
+                              -> Result<(), SessionError>
+    {
+        let (ref decl, ref queue) = result;
+        let (name, arity) = decl.0.first().and_then(|cl| {
+            let arity = cl.arity();
+            cl.name().map(|name| (name, arity))
+        }).ok_or(SessionError::NamelessEntry)?;
+
+        let p   = self.in_situ_code.len();
+        in_situ_code_dir.insert((name, arity), p);
+
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(true, flags);
+        let mut decl_code = cg.compile_predicate(&decl.0)?;
+
+        compile_appendix(&mut decl_code, queue, true, flags)?;
+
+        self.in_situ_code.extend(decl_code.into_iter());
+        Ok(())
     }
 
     #[inline]
     fn size_of_cached_query(&self) -> usize {
         self.cached_query.len()
-    }    
-    
+    }
+
     fn lookup_instr<'a>(&'a self, last_call: bool, p: &CodePtr) -> Option<RefOrOwned<'a, Line>>
     {
         match p {
@@ -146,6 +178,8 @@ impl CodeRepo {
                 } else {
                     None
                 },
+            &CodePtr::Local(LocalCodePtr::InSituDirEntry(p)) =>
+                Some(RefOrOwned::Borrowed(&self.in_situ_code[p])),
             &CodePtr::Local(LocalCodePtr::DirEntry(p)) =>
                 Some(RefOrOwned::Borrowed(&self.code[p])),
             &CodePtr::BuiltInClause(ref built_in, _) => {
@@ -180,8 +214,8 @@ impl MachinePolicies {
 pub struct Machine {
     pub(super) machine_st: MachineState,
     pub(super) policies: MachinePolicies,
-    pub(super) indices: IndexStore,    
-    pub(super) code_repo: CodeRepo  
+    pub(super) indices: IndexStore,
+    pub(super) code_repo: CodeRepo
 }
 
 impl Index<LocalCodePtr> for CodeRepo {
@@ -189,6 +223,7 @@ impl Index<LocalCodePtr> for CodeRepo {
 
     fn index(&self, ptr: LocalCodePtr) -> &Self::Output {
         match ptr {
+            LocalCodePtr::InSituDirEntry(p) => &self.in_situ_code[p],
             LocalCodePtr::TopLevel(_, p) => &self.cached_query[p],
             LocalCodePtr::DirEntry(p) => &self.code[p],
             LocalCodePtr::UserGoalExpansion(p) => &self.goal_expanders[p],
@@ -209,7 +244,7 @@ impl SubModuleUser for IndexStore {
     fn atom_tbl(&self) -> TabledData<Atom> {
         self.atom_tbl.clone()
     }
-    
+
     fn op_dir(&mut self) -> &mut OpDir {
         &mut self.op_dir
     }
@@ -260,7 +295,7 @@ impl Machine {
         };
 
         let atom_tbl = wam.indices.atom_tbl.clone();
-        
+
         compile_listing(&mut wam, BUILTINS.as_bytes(),
                         default_index_store!(atom_tbl.clone()));
 
@@ -278,7 +313,7 @@ impl Machine {
     pub fn machine_flags(&self) -> MachineFlags {
         self.machine_st.flags
     }
-        
+
     pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir) -> Result<(), SessionError>
     {
         for (ref key, ref idx) in code_dir.iter() {
@@ -319,7 +354,7 @@ impl Machine {
 
                 continue;
             }
-                        
+
             self.indices.code_dir.insert(key.clone(), idx.clone());
         }
 
@@ -385,7 +420,7 @@ impl Machine {
 
             self.machine_st.run_query(&mut self.indices, &mut self.policies, &self.code_repo,
                                       alloc_l, heap_l);
-            
+
             if self.machine_st.fail {
                 self.fail(&heap_l)
             } else {
@@ -402,7 +437,7 @@ impl Machine {
         let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = var_dir.iter().collect();
         sorted_vars.sort_by_key(|ref v| v.0);
 
-        for (var, addr) in sorted_vars {            
+        for (var, addr) in sorted_vars {
             output = self.machine_st.print_var_eq(var.clone(), addr.clone(), var_dir, output);
         }
 
@@ -425,7 +460,7 @@ impl Machine {
 }
 
 
-impl MachineState {    
+impl MachineState {
     fn execute_instr(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
                      code_repo: &CodeRepo)
     {
@@ -441,9 +476,9 @@ impl MachineState {
                 self.execute_choice_instr(choice_instr, &mut policies.call_policy),
             &Line::Cut(ref cut_instr) =>
                 self.execute_cut_instr(cut_instr, &mut policies.cut_policy),
-            &Line::Control(ref control_instr) => 
+            &Line::Control(ref control_instr) =>
                 self.execute_ctrl_instr(indices, &mut policies.call_policy,
-                                        &mut policies.cut_policy, control_instr),            
+                                        &mut policies.cut_policy, control_instr),
             &Line::Fact(ref fact) => {
                 for fact_instr in fact {
                     if self.fail {
@@ -491,7 +526,8 @@ impl MachineState {
         }
     }
 
-    fn query_stepper(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies, code_repo: &CodeRepo)
+    fn query_stepper(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
+                     code_repo: &CodeRepo)
     {
         loop {
             self.execute_instr(indices, policies, code_repo);
@@ -501,18 +537,27 @@ impl MachineState {
             }
 
             match self.p {
-                CodePtr::Local(LocalCodePtr::DirEntry(p)) if p < code_repo.code.len() => {},
-                CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) if p < code_repo.term_expanders.len() => {},
-                CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) => self.fail = true,
-                CodePtr::Local(LocalCodePtr::UserGoalExpansion(p)) if p < code_repo.goal_expanders.len() => {},
-                CodePtr::Local(LocalCodePtr::UserGoalExpansion(_)) => self.fail = true,
-                CodePtr::Local(_) => break,
+                CodePtr::Local(LocalCodePtr::DirEntry(p))
+                    if p < code_repo.code.len() => {},
+                CodePtr::Local(LocalCodePtr::UserTermExpansion(p))
+                    if p < code_repo.term_expanders.len() => {},
+                CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) =>
+                    self.fail = true,
+                CodePtr::Local(LocalCodePtr::UserGoalExpansion(p))
+                    if p < code_repo.goal_expanders.len() => {},
+                CodePtr::Local(LocalCodePtr::UserGoalExpansion(_)) =>
+                    self.fail = true,
+                CodePtr::Local(LocalCodePtr::InSituDirEntry(p))
+                    if p < code_repo.in_situ_code.len() => {},
+                CodePtr::Local(_) =>
+                    break,
                 _ => {}
             };
         }
     }
 
-    fn record_var_places(&self, chunk_num: usize, alloc_locs: &AllocVarDict, heap_locs: &mut HeapVarDict)
+    fn record_var_places(&self, chunk_num: usize, alloc_locs: &AllocVarDict,
+                         heap_locs: &mut HeapVarDict)
     {
         for (var, var_data) in alloc_locs {
             match var_data {
@@ -569,6 +614,5 @@ impl MachineState {
                 }
             };
         }
-    }    
+    }
 }
-

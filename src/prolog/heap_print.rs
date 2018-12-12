@@ -267,8 +267,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         for key in self.heap_locs.keys().cloned() {
             self.printed_vars.insert(key);
         }
-    }        
-    
+    }
+
     fn enqueue_op(&mut self, ct: ClauseType, fixity: Fixity) {
         match fixity {
             Fixity::Post => {
@@ -528,7 +528,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             HeapCellValue::Addr(Addr::Con(c)) =>
                 self.print_constant(c, &op),
             HeapCellValue::Addr(Addr::Lis(_)) =>
-                self.push_list(),
+                if self.ignore_ops {
+                    self.format_struct(2, clause_name!("."))
+                } else {
+                    self.push_list()
+                },
             HeapCellValue::Addr(addr) =>
                 if let Some(offset_str) = self.offset_as_string(addr) {
                     push_space_if_amb!(self, &offset_str, &op, {
@@ -572,9 +576,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     TokenOrRedirect::Open =>
                         self.outputter.append("("),
                     TokenOrRedirect::OpenList(delimit) =>
-                        if self.ignore_ops {
-                            self.format_struct(2, clause_name!("."));
-                        } else if !self.at_cdr(", ") {
+                        if !self.at_cdr(", ") {
                             self.outputter.append("[");
                         } else {
                             delimit.set(false);

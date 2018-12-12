@@ -200,6 +200,12 @@ macro_rules! dir_entry {
     )
 }
 
+macro_rules! in_situ_dir_entry {
+    ($idx:expr) => (
+        CodePtr::Local(LocalCodePtr::InSituDirEntry($idx))
+    )
+}
+
 macro_rules! set_code_index {
     ($idx:expr, $ip:expr, $mod_name:expr) => {{
         let mut idx = $idx.0.borrow_mut();
@@ -213,7 +219,8 @@ macro_rules! index_store {
     ($atom_tbl:expr, $code_dir:expr, $op_dir:expr, $modules:expr) => (
         IndexStore { atom_tbl: $atom_tbl,
                      code_dir: $code_dir,
-                     op_dir: $op_dir,
+                     in_situ_code_dir: InSituCodeDir::new(),
+                     op_dir: $op_dir,                     
                      modules: $modules }
     )
 }

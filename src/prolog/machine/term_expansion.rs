@@ -57,7 +57,14 @@ pub struct TermStream<'a, R: Read> {
     pub(crate) code_repo: &'a mut CodeRepo,
     parser: Parser<R>,
     in_module: bool,
-    flags: MachineFlags
+    pub(crate) flags: MachineFlags
+}
+
+impl<'a, R: Read> Drop for TermStream<'a, R> {
+    fn drop(&mut self) {
+        self.indices.in_situ_code_dir.clear();
+        self.code_repo.in_situ_code.clear();
+    }
 }
 
 impl<'a, R: Read> TermStream<'a, R> {
@@ -243,6 +250,7 @@ impl MachineState {
 
                 printer.quoted = true;
                 printer.numbervars = true;
+                printer.ignore_ops = true;
 
                 printer.see_all_locs();
 

@@ -699,8 +699,8 @@ pub
 fn consume_term(term: Term, indices: &mut IndexStore) -> Result<TopLevelPacket, ParserError>
 {
     let mut rel_worker = RelationWorker::new();
-    let mut _code_dir = CodeDir::new();
-    let mut indices = composite_indices!(false, indices, &mut _code_dir);
+    let mut code_dir = CodeDir::new();
+    let mut indices = composite_indices!(false, indices, &mut code_dir);
 
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
     let results = rel_worker.parse_queue(&mut indices)?;
@@ -749,7 +749,13 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
             // if is_consistent returns false, preds is non-empty.
             if !is_consistent(&tl, &preds) {
                 let result_queue = self.rel_worker.parse_queue(&mut indices)?;
-                self.results.push((append_preds(&mut preds), result_queue));
+                let result = (append_preds(&mut preds), result_queue);
+                let in_situ_code_dir = &mut self.term_stream.indices.in_situ_code_dir;
+
+                self.term_stream.code_repo.add_in_situ_result(&result,
+                                                              in_situ_code_dir,
+                                                              self.term_stream.flags)?;
+                self.results.push(result);
             }
 
             self.rel_worker.absorb(new_rel_worker);

@@ -203,9 +203,13 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &SystemClauseType::ExpandGoal => {
+                self.p = CodePtr::Local(LocalCodePtr::UserGoalExpansion(0));
+//                return Ok(());
+            },
             &SystemClauseType::ExpandTerm => {
                 self.p = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
-                return Ok(());
+//                return Ok(());
             },
             &SystemClauseType::GetDoubleQuotes => {
                 let a1 = self[temp_v!(1)].clone();

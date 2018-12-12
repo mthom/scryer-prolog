@@ -218,6 +218,7 @@ pub struct Module {
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
     CheckCutPoint,
+    ExpandGoal,
     ExpandTerm,
     GetBValue,
     GetSCCCleaner,
@@ -256,6 +257,7 @@ impl SystemClauseType {
         match self {
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
             &SystemClauseType::ExpandTerm => clause_name!("$expand_term"),
+            &SystemClauseType::ExpandGoal => clause_name!("$expand_goal"),
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
             &SystemClauseType::GetDoubleQuotes => clause_name!("$get_double_quotes"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
@@ -292,6 +294,7 @@ impl SystemClauseType {
         match (name, arity) {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
             ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
+            ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
             ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
@@ -807,9 +810,10 @@ impl HeapCellValue {
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum IndexPtr {
-    Undefined, Index(usize),
-    Module // This is a resolved module call. The module
-    // targeted is in the wrapping CodeIndex, and the name is in the ClauseType.
+    Undefined,
+    Index(usize),
+    Module /* This is a resolved module call. The module
+        targeted is in the wrapping CodeIndex, and the name is in the ClauseType. */
 }
 
 #[derive(Clone)]
@@ -883,6 +887,7 @@ impl CodePtr {
 #[derive(Copy, Clone, PartialEq)]
 pub enum LocalCodePtr {
     DirEntry(usize), // offset.
+    InSituDirEntry(usize),
     TopLevel(usize, usize), // chunk_num, offset.
     UserGoalExpansion(usize),
     UserTermExpansion(usize)
@@ -937,6 +942,7 @@ impl Add<usize> for LocalCodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
+            LocalCodePtr::InSituDirEntry(p) => LocalCodePtr::InSituDirEntry(p + rhs),
             LocalCodePtr::DirEntry(p) => LocalCodePtr::DirEntry(p + rhs),
             LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs),
             LocalCodePtr::UserTermExpansion(p) => LocalCodePtr::UserTermExpansion(p + rhs),
@@ -948,7 +954,8 @@ impl Add<usize> for LocalCodePtr {
 impl AddAssign<usize> for LocalCodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut LocalCodePtr::UserGoalExpansion(ref mut p)
+            &mut LocalCodePtr::InSituDirEntry(ref mut p)
+          | &mut LocalCodePtr::UserGoalExpansion(ref mut p)
           | &mut LocalCodePtr::UserTermExpansion(ref mut p)
           | &mut LocalCodePtr::DirEntry(ref mut p)
           | &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs
