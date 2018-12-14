@@ -226,11 +226,11 @@ writeq(Term) :- write_term(Term, [quoted(true), numbervars(true)]).
 
 % expand_goal.
 
-expand_goal(Term0, Term) :- '$expand_goal'(Term0, Term), !.
+expand_goal(Term0, Term) :- '$expand_goal'(Term0, Term).
 
 % expand_term.
 
-expand_term(Term0, Term) :- '$expand_term'(Term0, Term), !.
+expand_term(Term0, Term) :- '$expand_term'(Term0, Term).
 
 % term_variables.
 
