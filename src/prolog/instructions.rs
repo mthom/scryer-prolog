@@ -914,12 +914,14 @@ impl PartialOrd<CodePtr> for CodePtr {
 impl PartialOrd<LocalCodePtr> for LocalCodePtr {
     fn partial_cmp(&self, other: &LocalCodePtr) -> Option<Ordering> {
         match (self, other) {
-            (&LocalCodePtr::DirEntry(p1), &LocalCodePtr::DirEntry(p2)) =>
-                p1.partial_cmp(&p2),
-            (&LocalCodePtr::DirEntry(..), &LocalCodePtr::TopLevel(_, _)) =>
-                Some(Ordering::Less),
-            (&LocalCodePtr::TopLevel(_, p1), &LocalCodePtr::TopLevel(_, ref p2)) =>
+            (&LocalCodePtr::InSituDirEntry(p1), &LocalCodePtr::DirEntry(ref p2))
+          | (&LocalCodePtr::DirEntry(p1), &LocalCodePtr::DirEntry(ref p2))
+          | (&LocalCodePtr::UserTermExpansion(p1), &LocalCodePtr::UserTermExpansion(ref p2))
+          | (&LocalCodePtr::UserGoalExpansion(p1), &LocalCodePtr::UserGoalExpansion(ref p2))
+          | (&LocalCodePtr::TopLevel(_, p1), &LocalCodePtr::TopLevel(_, ref p2)) =>
                 p1.partial_cmp(p2),
+            (_, &LocalCodePtr::TopLevel(_, _)) =>
+                Some(Ordering::Less),
             _ => Some(Ordering::Greater)
         }
     }
