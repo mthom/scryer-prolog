@@ -14,7 +14,7 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub enum DirectedOp {
     Left(ClauseName),
-    Right(ClauseName)
+    Right(ClauseName),
 }
 
 #[derive(Clone)]
@@ -516,11 +516,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     self.state_stack.push(TokenOrRedirect::Open);
                 }
             },
-            HeapCellValue::NamedStr(arity, name, fixity) =>
+            HeapCellValue::NamedStr(0, name, fixity) =>
                 push_space_if_amb!(self, name.as_str(), &op, {
-                    let ct = ClauseType::from(name, arity, fixity);
-                    self.format_clause(iter, arity, ct);
+                    let ct = ClauseType::from(name, 0, fixity);
+                    self.format_clause(iter, 0, ct);
                 }),
+            HeapCellValue::NamedStr(arity, name, fixity) => {
+                let ct = ClauseType::from(name, arity, fixity);
+                self.format_clause(iter, arity, ct);
+            },
             HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) =>
                 if !self.at_cdr("") {
                     self.outputter.append("[]");
