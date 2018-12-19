@@ -82,7 +82,8 @@ impl HCValueOutputter for PrinterOutputter {
     }
 
     fn insert_from_end(&mut self, idx: usize, c: char) {
-        self.contents.insert(idx, c);
+        let len = self.contents.len();
+        self.contents.insert(len - idx, c);
     }
 
     fn result(self) -> Self::Output {
