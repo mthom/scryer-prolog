@@ -572,18 +572,18 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     TokenOrRedirect::Redirect =>
                         self.handle_heap_term(&mut iter, None),
                     TokenOrRedirect::Close =>
-                        self.outputter.append(")"),
+                        self.outputter.push_char(')'),
                     TokenOrRedirect::Open =>
-                        self.outputter.append("("),
+                        self.outputter.push_char('('),
                     TokenOrRedirect::OpenList(delimit) =>
                         if !self.at_cdr(", ") {
-                            self.outputter.append("[");
+                            self.outputter.push_char('[');
                         } else {
                             delimit.set(false);
                         },
                     TokenOrRedirect::CloseList(delimit) =>
                         if !self.ignore_ops && delimit.get() {
-                            self.outputter.append("]");
+                            self.outputter.push_char(']');
                         },
                     TokenOrRedirect::HeadTailSeparator =>
                         if !self.ignore_ops {
