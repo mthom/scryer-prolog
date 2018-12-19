@@ -50,6 +50,10 @@ impl HCValueOutputter for TestOutputter {
         }
     }
 
+    fn insert_from_end(&mut self, idx: usize, c: char) {
+        self.focus.insert(idx, c);
+    }
+    
     fn result(self) -> Self::Output {
         self.results
     }

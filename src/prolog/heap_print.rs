@@ -13,8 +13,17 @@ use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum DirectedOp {
-    Left(ClauseName),
+    Left(ClauseName, bool), // bool is true if infix.
     Right(ClauseName),
+}
+
+impl DirectedOp {
+    fn as_str(&self) -> &str {
+        match self {
+            &DirectedOp::Left(ref name, _) | &DirectedOp::Right(ref name) =>
+                name.as_str()
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -30,6 +39,7 @@ pub enum TokenOrRedirect {
     OpenList(Rc<Cell<bool>>),
     CloseList(Rc<Cell<bool>>),
     HeadTailSeparator,
+    Space
 }
 
 pub trait HCValueOutputter {
@@ -39,10 +49,11 @@ pub trait HCValueOutputter {
     fn push_char(&mut self, char);
     fn append(&mut self, &str);
     fn begin_new_var(&mut self);
+    fn insert_from_end(&mut self, usize, char);
     fn result(self) -> Self::Output;
     fn ends_with(&self, &str) -> bool;
     fn len(&self) -> usize;
-    fn truncate(&mut self, usize);
+    fn truncate(&mut self, usize);    
 }
 
 pub struct PrinterOutputter {
@@ -68,6 +79,10 @@ impl HCValueOutputter for PrinterOutputter {
         if self.contents.len() != 0 {
             self.contents += ", ";
         }
+    }
+
+    fn insert_from_end(&mut self, idx: usize, c: char) {
+        self.contents.insert(idx, c);
     }
 
     fn result(self) -> Self::Output {
@@ -134,12 +149,12 @@ pub struct HCPrinter<'a, Outputter> {
 
 macro_rules! push_space_if_amb {
     ($self:expr, $atom:expr, $op:expr, $action:block) => (
-        match ambiguity_check($atom, $op) {
-            Some(DirectedOp::Left(_)) => {
+        match $self.ambiguity_check($atom, $op) {
+            Some(DirectedOp::Left(..)) => {
                 $self.outputter.push_char(' ');
                 $action;
             },
-            Some(DirectedOp::Right(_)) => {
+            Some(DirectedOp::Right(..)) => {
                 $action;
                 $self.outputter.push_char(' ');
             },
@@ -224,20 +239,6 @@ fn non_quoted_token<Iter: Iterator<Item=char>>(mut iter: Iter) -> bool {
     }
 }
 
-// return op itself if there is an ambiguity to indicate the direction the op
-// lies, None otherwise.
-fn ambiguity_check(atom: &str, op: &Option<DirectedOp>) -> Option<DirectedOp>
-{
-    match op {
-        &Some(DirectedOp::Left(ref lop)) if continues_with_append(lop.as_str(), atom) =>
-            Some(DirectedOp::Left(lop.clone())),
-        &Some(DirectedOp::Right(ref rop)) if continues_with_append(atom, rop.as_str()) =>
-            Some(DirectedOp::Right(rop.clone())),
-        _ =>
-            None
-    }
-}
-
 impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 {
     pub fn new(machine_st: &'a MachineState, output: Outputter) -> Self
@@ -250,6 +251,29 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     numbervars: false,
                     quoted: false,
                     ignore_ops: false }
+    }
+
+    // return op itself if there is an ambiguity to indicate the direction the op
+    // lies, None otherwise.
+    fn ambiguity_check(&mut self, atom: &str, op: &Option<DirectedOp>) -> Option<DirectedOp>
+    {
+        match op {
+            &Some(DirectedOp::Left(ref lop, false)) if continues_with_append(lop.as_str(), atom) =>
+                Some(DirectedOp::Left(lop.clone(), false)),
+            &Some(DirectedOp::Left(ref lop, true)) =>
+                if self.outputter.ends_with(&format!(" {}", lop.as_str())) {
+                    Some(DirectedOp::Left(lop.clone(), true))
+                } else if continues_with_append(lop.as_str(), atom) {
+                    self.outputter.insert_from_end(lop.as_str().len(), ' ');
+                    Some(DirectedOp::Left(lop.clone(), true))
+                } else {
+                    None
+                },
+            &Some(DirectedOp::Right(ref rop)) if continues_with_append(atom, rop.as_str()) =>
+                Some(DirectedOp::Right(rop.clone())),
+            _ =>
+                None
+        }
     }
 
     pub fn from_heap_locs(machine_st: &'a MachineState, output: Outputter,
@@ -276,11 +300,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                 self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
             },
             Fixity::Pre => {
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Left(ct.name())));
+                let left_directed_op = DirectedOp::Left(ct.name(), false);
+
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
                 self.state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
             },
             Fixity::In => {
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Left(ct.name())));
+                let left_directed_op = DirectedOp::Left(ct.name(), true);
+
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
                 self.state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
                 self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
             }
@@ -416,7 +444,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     fn print_constant(&mut self, c: Constant, op: &Option<DirectedOp>) {
         match c {
             Constant::Atom(ref atom, Some(fixity)) => {
-                if op.is_some() {
+                if let Some(ref op) = op {
+                    if self.outputter.ends_with(&format!(" {}", op.as_str())) {
+                        self.outputter.push_char(' ');
+                    }
+                    
                     self.outputter.push_char('(');
                 }
 
@@ -512,8 +544,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                 let ct = ClauseType::from(name.clone(), arity, Some(fixity));
                 self.format_clause(iter, arity, ct);
 
-                if op.is_some() {
+                if let Some(ref op) = op {
                     self.state_stack.push(TokenOrRedirect::Open);
+                    
+                    if self.outputter.ends_with(&format!(" {}", op.as_str())) {
+                        self.state_stack.push(TokenOrRedirect::Space);
+                    }                                        
                 }
             },
             HeapCellValue::NamedStr(0, name, fixity) =>
@@ -575,6 +611,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                         self.handle_heap_term(&mut iter, Some(op)),
                     TokenOrRedirect::Redirect =>
                         self.handle_heap_term(&mut iter, None),
+                    TokenOrRedirect::Space =>
+                        self.outputter.push_char(' '),
                     TokenOrRedirect::Close =>
                         self.outputter.push_char(')'),
                     TokenOrRedirect::Open =>
