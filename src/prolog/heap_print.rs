@@ -119,13 +119,13 @@ impl MachineState {
     }
 }
 
-type ReverseHeapVarDict<'a> = HashMap<Addr, Rc<Var>>;
+type ReverseHeapVarDict = HashMap<Addr, Rc<Var>>;
 
 pub struct HCPrinter<'a, Outputter> {
     outputter:    Outputter,
     machine_st:   &'a MachineState,
     state_stack:  Vec<TokenOrRedirect>,
-    heap_locs:    ReverseHeapVarDict<'a>,
+    heap_locs:    ReverseHeapVarDict,
     printed_vars: HashSet<Addr>,
     pub(crate) numbervars:   bool,
     pub(crate) quoted:       bool,
@@ -168,7 +168,7 @@ fn continues_with_append(atom: &str, op: &str) -> bool {
 }
 
 fn reverse_heap_locs<'a>(machine_st: &'a MachineState, heap_locs: &'a HeapVarDict)
-                         -> ReverseHeapVarDict<'a>
+                         -> ReverseHeapVarDict
 {
     heap_locs.iter().map(|(var, var_addr)| {
         (machine_st.store(machine_st.deref(var_addr.clone())), var.clone())
