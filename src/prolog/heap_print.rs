@@ -53,7 +53,7 @@ pub trait HCValueOutputter {
     fn result(self) -> Self::Output;
     fn ends_with(&self, &str) -> bool;
     fn len(&self) -> usize;
-    fn truncate(&mut self, usize);    
+    fn truncate(&mut self, usize);
 }
 
 pub struct PrinterOutputter {
@@ -151,7 +151,12 @@ pub struct HCPrinter<'a, Outputter> {
 macro_rules! push_space_if_amb {
     ($self:expr, $atom:expr, $op:expr, $action:block) => (
         match $self.ambiguity_check($atom, $op) {
-            Some(DirectedOp::Left(..)) => {
+            Some(DirectedOp::Left(_, false)) => {
+                $self.outputter.push_char(' ');
+                $action;
+            },
+            Some(DirectedOp::Left(lop, true)) => {
+                $self.outputter.insert_from_end(lop.as_str().len(), ' ');
                 $self.outputter.push_char(' ');
                 $action;
             },
@@ -254,29 +259,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     ignore_ops: false }
     }
 
-    // return op itself if there is an ambiguity to indicate the direction the op
-    // lies, None otherwise.
-    fn ambiguity_check(&mut self, atom: &str, op: &Option<DirectedOp>) -> Option<DirectedOp>
-    {
-        match op {
-            &Some(DirectedOp::Left(ref lop, false)) if continues_with_append(lop.as_str(), atom) =>
-                Some(DirectedOp::Left(lop.clone(), false)),
-            &Some(DirectedOp::Left(ref lop, true)) =>
-                if self.outputter.ends_with(&format!(" {}", lop.as_str())) {
-                    Some(DirectedOp::Left(lop.clone(), true))
-                } else if continues_with_append(lop.as_str(), atom) {
-                    self.outputter.insert_from_end(lop.as_str().len(), ' ');
-                    Some(DirectedOp::Left(lop.clone(), true))
-                } else {
-                    None
-                },
-            &Some(DirectedOp::Right(ref rop)) if continues_with_append(atom, rop.as_str()) =>
-                Some(DirectedOp::Right(rop.clone())),
-            _ =>
-                None
-        }
-    }
-
     pub fn from_heap_locs(machine_st: &'a MachineState, output: Outputter,
                           heap_locs: &'a HeapVarDict)
                           -> Self
@@ -293,6 +275,29 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             self.printed_vars.insert(key);
         }
     }
+
+    // return op itself if there is an ambiguity to indicate the direction the op
+    // lies, None otherwise.
+    fn ambiguity_check(&self, atom: &str, op: &Option<DirectedOp>) -> Option<DirectedOp>
+    {
+        match op {
+            &Some(DirectedOp::Left(ref lop, false)) if continues_with_append(lop.as_str(), atom) =>
+                Some(DirectedOp::Left(lop.clone(), false)),
+            &Some(DirectedOp::Left(ref lop, true)) =>
+                if self.outputter.ends_with(&format!(" {}", lop.as_str())) {
+                    Some(DirectedOp::Left(lop.clone(), false))
+                } else if continues_with_append(lop.as_str(), atom) {
+                    Some(DirectedOp::Left(lop.clone(), true))
+                } else {
+                    None
+                },
+            &Some(DirectedOp::Right(ref rop)) if continues_with_append(atom, rop.as_str()) =>
+                Some(DirectedOp::Right(rop.clone())),
+            _ =>
+                None
+        }
+    }
+
 
     fn enqueue_op(&mut self, ct: ClauseType, fixity: Fixity) {
         match fixity {
@@ -449,7 +454,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     if self.outputter.ends_with(&format!(" {}", op.as_str())) {
                         self.outputter.push_char(' ');
                     }
-                    
+
                     self.outputter.push_char('(');
                 }
 
@@ -547,10 +552,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
                 if let Some(ref op) = op {
                     self.state_stack.push(TokenOrRedirect::Open);
-                    
+
                     if self.outputter.ends_with(&format!(" {}", op.as_str())) {
                         self.state_stack.push(TokenOrRedirect::Space);
-                    }                                        
+                    }
                 }
             },
             HeapCellValue::NamedStr(0, name, fixity) =>
