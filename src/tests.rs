@@ -1988,6 +1988,9 @@ fn test_queries_on_string_lists()
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), \"def\" = Y.",
                            [["X = [a, b, c, d, e, f]", "Y = [d, e, f]"]]);
 
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), partial_string(\"def\", Y).",
+                           [["X = [a, b, c, d, e, f | _]",
+                             "Y = [d, e, f | _]"]]);    
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), partial_string(\"def\", Y),
                                          Y = \"defghijkl\".",
                            [["X = [a, b, c, d, e, f, g, h, i, j, k, l]",
@@ -1996,7 +1999,7 @@ fn test_queries_on_string_lists()
                                          \"defghijkl\" = Y.",
                            [["X = [a, b, c, d, e, f, g, h, i, j, k, l]",
                              "Y = [d, e, f, g, h, i, j, k, l]"]]);
-
+    
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G].",
                            [["X = [a, b, c, d, e, f | _]", "Y = [d, e, f | _]", "G = _"]]);
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), [d, e, f | G] = Y.",
@@ -2091,4 +2094,18 @@ fn test_queries_on_string_lists()
                             ["X = [b, d | _]", "Y = [d | _]"]]);
     assert_prolog_success!(&mut wam, "?- partial_string(\"bc\", X), matcher(X, Y).",
                            [["X = [b, c | _]", "Y = [c | _]"]]);
+    
+    submit(&mut wam, "f(\"appendy jones\").
+                      f(\"appendy smithers jones\").
+                      f(\"appendy o'toole\").");
+
+    assert_prolog_success!(&mut wam, "?- partial_string(\"appendy\", X), f(X).",
+                           [["X = [a, p, p, e, n, d, y, ' ', j, o, n, e, s]"],
+                            ["X = [a, p, p, e, n, d, y, ' ', s, m, i, t, h, e, r, s, ' ', j, o, n, e, s]"],
+                            ["X = [a, p, p, e, n, d, y, ' ', o, ''', t, o, o, l, e]"]]);
+
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), partial_string(\"abcdef\", X).",
+                           [["X = [a, b, c, d, e, f | _]"]]);
+    assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), partial_string(\"abcdef\", X), X = \"abcdef\".",
+                           [["X = [a, b, c, d, e, f]"]]);
 }

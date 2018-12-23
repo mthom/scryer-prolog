@@ -271,7 +271,7 @@ fn try_in_situ(machine_st: &mut MachineState, name: ClauseName, arity: usize,
     } else {
         let stub = MachineError::functor_stub(name.clone(), arity);
         let h = machine_st.heap.h;
-        
+
         Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
                                   stub))
     }
@@ -601,7 +601,7 @@ pub(crate) trait CallPolicy: Any {
                 let a2 = machine_st[temp_v!(2)].clone();
 
                 if let Addr::Con(Constant::String(s)) = a1 {
-                    s.set_expandable();
+                    s.set_expandable(true);
                     machine_st.write_constant_to_var(a2, Constant::String(s));
                 } else {
                     machine_st.fail = true;

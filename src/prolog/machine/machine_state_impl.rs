@@ -185,7 +185,7 @@ impl MachineState {
                 return s1 == s2;
             } else {
                 self.pstr_trail(s1.clone());
-                s1.set_non_expandable();
+                s1.set_expandable(false);
             }
 
             return true;
@@ -194,7 +194,7 @@ impl MachineState {
                 self.pstr_trail(s2.clone());
             }
 
-            s2.set_non_expandable();
+            s2.set_expandable(false);
             return true;
         }
 
@@ -281,7 +281,7 @@ impl MachineState {
                         if self.flags.double_quotes.is_chars() => {
                             if s.is_expandable() && s.is_empty() {
                                 self.pstr_trail(s.clone());
-                                s.set_non_expandable();
+                                s.set_expandable(false);
                                 continue;
                             }
 
@@ -335,8 +335,8 @@ impl MachineState {
             }
         }
 
-        let len = s.len();
-        self.pstr_trail.push((self.b, s, len));
+        let truncate_end = s.len() + s.cursor();
+        self.pstr_trail.push((self.b, s, truncate_end));
         self.pstr_tr += 1;
     }
 
@@ -477,24 +477,39 @@ impl MachineState {
                 self.fail = match c {
                     Constant::EmptyList if self.flags.double_quotes.is_chars() =>
                         !s.is_empty(),
-                    Constant::String(ref s2) if s.is_empty() && s.is_expandable() => {
-                        self.pstr_trail(s.clone());
-                        s.append(s2);
-                        false
-                    },
+                    Constant::String(ref s2)
+                        if s.is_expandable() && s2.starts_with(s) => {
+                            self.pstr_trail(s.clone());
+                            s.append_suffix(s2);
+                            s.set_expandable(s2.is_expandable());
+                            false
+                        },
                     Constant::String(s2) => *s != s2,
-                    Constant::Atom(ref a, _) if s.is_empty() && s.is_expandable() =>
-                        if let Some(c) = a.as_str().chars().next() {
-                            if c.len_utf8() == a.as_str().len() {
-                                self.write_char_to_string(s, c)
+                    Constant::Atom(ref a, _)
+                        if a.as_str().starts_with(&s.borrow()[s.cursor() ..]) =>
+                            if let Some(c) = a.as_str().chars().next() {
+                                if c.len_utf8() == a.as_str().len() {
+                                    // detect chars masquerading as atoms.
+                                    if s.is_empty() {
+                                        self.write_char_to_string(s, c);
+                                    }
+
+                                    false
+                                } else {
+                                    true
+                                }
                             } else {
                                 true
-                            }
+                            },
+                    Constant::Char(ref c) if s.is_empty() && s.is_expandable() =>
+                        self.write_char_to_string(s, *c),
+                    Constant::Char(ref c) =>
+                        if s.borrow().chars().next() == Some(*c) && c.len_utf8() == s.len() {
+                            s.set_expandable(false);
+                            false
                         } else {
                             true
                         },
-                    Constant::Char(ref c) if s.is_empty() && s.is_expandable() =>
-                        self.write_char_to_string(s, *c),
                     _ => true
                 },
             Addr::Con(c1) =>
