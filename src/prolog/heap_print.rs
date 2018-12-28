@@ -298,7 +298,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         }
     }
 
-
     fn enqueue_op(&mut self, ct: ClauseType, fixity: Fixity) {
         match fixity {
             Fixity::Post => {
@@ -502,7 +501,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             Constant::String(s) =>
                 if self.machine_st.machine_flags().double_quotes.is_chars() {
                     if !s.is_empty() {
-                        self.push_list();
+                        if self.ignore_ops {
+                            self.format_struct(2, clause_name!("."));
+                        } else {
+                            self.push_list();
+                        }
                     } else if s.is_expandable() {
                         if !self.at_cdr(" | _") {
                             self.outputter.push_char('_');
@@ -575,9 +578,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                 self.print_constant(c, &op),
             HeapCellValue::Addr(Addr::Lis(_)) =>
                 if self.ignore_ops {
-                    self.format_struct(2, clause_name!("."))
+                    self.format_struct(2, clause_name!("."));
                 } else {
-                    self.push_list()
+                    self.push_list();
                 },
             HeapCellValue::Addr(addr) =>
                 if let Some(offset_str) = self.offset_as_string(addr) {
@@ -630,13 +633,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                             delimit.set(false);
                         },
                     TokenOrRedirect::CloseList(delimit) =>
-                        if !self.ignore_ops && delimit.get() {
+                        if delimit.get() {
                             self.outputter.push_char(']');
                         },
                     TokenOrRedirect::HeadTailSeparator =>
-                        if !self.ignore_ops {
-                            self.outputter.append(" | ");
-                        },
+//                      if !self.ignore_ops {
+                            self.outputter.append(" | "),
+//                      },
                     TokenOrRedirect::Comma =>
                         self.outputter.append(", ")
                 }
