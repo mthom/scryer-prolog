@@ -71,7 +71,7 @@ impl<'a, 'b> CompositeIndices<'a, 'b>
 }
 
 #[inline]
-fn get_compile_time_hook(name: &str, arity: usize) -> Option<CompileTimeHook> {
+fn as_compile_time_hook(name: &str, arity: usize) -> Option<CompileTimeHook> {
     match (name, arity) {
         ("term_expansion", 2) => Some(CompileTimeHook::TermExpansion),
         ("goal_expansion", 2) => Some(CompileTimeHook::GoalExpansion),
@@ -84,12 +84,12 @@ fn is_compile_time_hook(name: &ClauseName, terms: &Vec<Box<Term>>) -> Option<Com
     if name.as_str() == ":-" {
         if let Some(ref term) = terms.first() {
             if let &Term::Clause(_, ref name, ref terms, None) = term.as_ref() {
-                return get_compile_time_hook(name.as_str(), terms.len());
+                return as_compile_time_hook(name.as_str(), terms.len());
             }
         }
     }
     
-    get_compile_time_hook(name.as_str(), terms.len())    
+    as_compile_time_hook(name.as_str(), terms.len())    
 }
 
 type CompileTimeHookCompileInfo = (CompileTimeHook, PredicateClause, VecDeque<TopLevel>);

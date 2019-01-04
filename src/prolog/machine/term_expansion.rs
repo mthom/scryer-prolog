@@ -50,6 +50,24 @@ pub fn fold_by_str<I>(terms: I, mut term: Term, sym: ClauseName) -> Term
     term
 }
 
+fn extract_from_list(head: Box<Term>, tail: Box<Term>)
+                     -> Result<Rev<IntoIter<Term>>, ParserError>
+{
+    let mut terms = vec![*head];
+    let mut tail  = *tail;
+
+    while let Term::Cons(_, head, next_tail) = tail {
+        terms.push(*head);
+        tail = *next_tail;
+    }
+
+    if let Term::Constant(_, Constant::EmptyList) = tail {
+        Ok(terms.into_iter().rev())
+    } else {
+        Err(ParserError::ExpectedTopLevelTerm)
+    }
+}
+
 pub struct TermStream<'a, R: Read> {
     stack: Vec<Term>,
     pub(crate) indices: &'a mut IndexStore,
@@ -57,13 +75,37 @@ pub struct TermStream<'a, R: Read> {
     pub(crate) code_repo: &'a mut CodeRepo,
     parser: Parser<R>,
     in_module: bool,
-    pub(crate) flags: MachineFlags
+    pub(crate) flags: MachineFlags,
+    term_expansion_lens: (usize, usize),
+    goal_expansion_lens: (usize, usize),
+}
+
+pub struct ExpansionAdditionResult {
+    term_expansion_additions: (Predicate, VecDeque<TopLevel>),
+    goal_expansion_additions: (Predicate, VecDeque<TopLevel>)
+}
+
+impl ExpansionAdditionResult {
+    pub fn take_term_expansions(&mut self) -> (Predicate, VecDeque<TopLevel>) {
+        let tes  = mem::replace(&mut self.term_expansion_additions.0, Predicate::new());
+        let teqs = mem::replace(&mut self.term_expansion_additions.1, VecDeque::from(vec![]));
+
+        (tes, teqs)
+    }
+
+    pub fn take_goal_expansions(&mut self) -> (Predicate, VecDeque<TopLevel>) {
+        let ges  = mem::replace(&mut self.goal_expansion_additions.0, Predicate::new());
+        let geqs = mem::replace(&mut self.goal_expansion_additions.1, VecDeque::from(vec![]));
+
+        (ges, geqs)
+    }
 }
 
 impl<'a, R: Read> Drop for TermStream<'a, R> {
     fn drop(&mut self) {
         self.indices.in_situ_code_dir.clear();
-        self.code_repo.in_situ_code.clear();
+        self.code_repo.in_situ_code.clear();        
+        discard_result!(self.rollback_expansion_code());
     }
 }
 
@@ -75,12 +117,28 @@ impl<'a, R: Read> TermStream<'a, R> {
     {
         TermStream {
             stack: Vec::new(),
+            term_expansion_lens: code_repo.term_dir_entry_len((clause_name!("term_expansion"), 2)),
+            goal_expansion_lens: code_repo.term_dir_entry_len((clause_name!("goal_expansion"), 2)),
+            code_repo,
             indices,
             policies,
-            code_repo,
             parser: Parser::new(src, atom_tbl, flags),
             in_module: false,
             flags
+        }
+    }
+
+    #[inline]
+    pub fn incr_expansion_lens(&mut self, hook: CompileTimeHook, len: usize, queue_len: usize) {
+        match hook {
+            CompileTimeHook::TermExpansion => {
+                self.term_expansion_lens.0 += len;
+                self.term_expansion_lens.1 += queue_len;
+            },
+            CompileTimeHook::GoalExpansion => {
+                self.goal_expansion_lens.0 += len;
+                self.goal_expansion_lens.1 += queue_len;
+            }
         }
     }
 
@@ -99,28 +157,33 @@ impl<'a, R: Read> TermStream<'a, R> {
         Ok(self.stack.is_empty() && self.parser.eof()?)
     }
 
-    fn extract_from_list(&mut self, head: Box<Term>, tail: Box<Term>)
-                         -> Result<Rev<IntoIter<Term>>, ParserError>
-    {
-        let mut terms = vec![*head];
-        let mut tail  = *tail;
+    pub fn rollback_expansion_code(&mut self) -> Result<ExpansionAdditionResult, ParserError> {
+        let te_len = self.term_expansion_lens.0;
+        let te_queue_len = self.term_expansion_lens.1;
 
-        while let Term::Cons(_, head, next_tail) = tail {
-            terms.push(*head);
-            tail = *next_tail;
-        }
+        let ge_len = self.goal_expansion_lens.0;
+        let ge_queue_len = self.goal_expansion_lens.1;
 
-        if let Term::Constant(_, Constant::EmptyList) = tail {
-            Ok(terms.into_iter().rev())
-        } else {
-            Err(ParserError::ExpectedTopLevelTerm)
-        }
+        let term_expansion_additions =
+            self.code_repo.truncate_terms((clause_name!("term_expansion"), 2),
+                                          te_len, te_queue_len);
+        let goal_expansion_additions =
+            self.code_repo.truncate_terms((clause_name!("goal_expansion"), 2),
+                                          ge_len, ge_queue_len);
+
+        self.code_repo.compile_hook(CompileTimeHook::TermExpansion, self.flags)?;
+        self.code_repo.compile_hook(CompileTimeHook::GoalExpansion, self.flags)?;
+
+        Ok(ExpansionAdditionResult {
+            term_expansion_additions,
+            goal_expansion_additions
+        })
     }
 
     fn enqueue_term(&mut self, term: Term) -> Result<(), ParserError> {
         match term {
             Term::Cons(_, head, tail) => {
-                let iter = self.extract_from_list(head, tail)?;
+                let iter = extract_from_list(head, tail)?;
                 Ok(self.stack.extend(iter))
             },
             Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) =>
@@ -208,7 +271,7 @@ impl<'a, R: Read> TermStream<'a, R> {
 
                     match term {
                         Term::Cons(_, head, tail) =>
-                            for term in self.extract_from_list(head, tail)? {
+                            for term in extract_from_list(head, tail)? {
                                 terms.push_front(term);
                             },
                         term =>

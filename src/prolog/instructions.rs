@@ -125,6 +125,7 @@ impl CompareTermQT {
 // of vars (we get their adjoining cells this way).
 pub type JumpStub = Vec<Term>;
 
+#[derive(Clone)]
 pub enum QueryTerm {
     // register, clause type, subterms, use default call policy.
     Clause(Cell<RegType>, ClauseType, Vec<Box<Term>>, bool),
@@ -152,19 +153,26 @@ impl QueryTerm {
     }
 }
 
+#[derive(Clone)]
 pub struct Rule {
     pub head: (ClauseName, Vec<Box<Term>>, QueryTerm),
     pub clauses: Vec<QueryTerm>
 }
 
+#[derive(Clone)]
 pub struct Predicate(pub Vec<PredicateClause>);
 
 impl Predicate {
+    pub fn new() -> Self {
+        Predicate(vec![])
+    }
+
     pub fn clauses(self) -> Vec<PredicateClause> {
         self.0
     }
 }
 
+#[derive(Clone)]
 pub enum PredicateClause {
     Fact(Term),
     Rule(Rule)
@@ -203,6 +211,16 @@ pub type ModuleDir = HashMap<ClauseName, Module>;
 
 pub type PredicateKey = (ClauseName, usize); // name, arity.
 
+pub struct CodeRepo {
+    pub(super) cached_query: Code,
+    pub(super) goal_expanders: Code,
+    pub(super) term_expanders: Code,
+    pub(super) code: Code,
+    pub(super) in_situ_code: Code,
+    pub(super) term_dir: TermDir
+}
+
+#[derive(Clone)]
 pub struct ModuleDecl {
     pub name: ClauseName,
     pub exports: Vec<PredicateKey>
@@ -212,7 +230,9 @@ pub struct Module {
     pub atom_tbl: TabledData<Atom>,
     pub module_decl: ModuleDecl,
     pub code_dir: ModuleCodeDir,
-    pub op_dir: OpDir
+    pub op_dir: OpDir,
+    pub term_expansions: (Predicate, VecDeque<TopLevel>),
+    pub goal_expansions: (Predicate, VecDeque<TopLevel>),
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -1074,8 +1094,35 @@ impl<'a> TermIterState<'a> {
 impl Module {
     pub fn new(module_decl: ModuleDecl, atom_tbl: TabledData<Atom>) -> Self {
         Module { module_decl, atom_tbl,
+                 term_expansions: (Predicate::new(), VecDeque::from(vec![])),
+                 goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
                  code_dir: ModuleCodeDir::new(),
                  op_dir: default_op_dir() }
+    }
+
+    pub fn dump_expansions(&self, code_repo: &mut CodeRepo, flags: MachineFlags)
+                           -> Result<(), ParserError>
+    {
+        {
+            let te = code_repo.term_dir.entry((clause_name!("term_expansion"), 2))
+                .or_insert((Predicate::new(), VecDeque::from(vec![])));
+
+            (te.0).0.extend((self.term_expansions.0).0.iter().cloned());
+            te.1.extend(self.term_expansions.1.iter().cloned());
+        }
+
+        {
+            let ge = code_repo.term_dir.entry((clause_name!("goal_expansion"), 2))
+                .or_insert((Predicate::new(), VecDeque::from(vec![])));
+            
+            (ge.0).0.extend((self.goal_expansions.0).0.iter().cloned());
+            ge.1.extend(self.goal_expansions.1.iter().cloned());
+        }
+
+        code_repo.compile_hook(CompileTimeHook::TermExpansion, flags)?;
+        code_repo.compile_hook(CompileTimeHook::GoalExpansion, flags)?;
+
+        Ok(())
     }
 }
 
@@ -1171,31 +1218,39 @@ pub trait SubModuleUser {
         }
     }
 
-    fn use_qualified_module(&mut self, submodule: &Module, exports: &Vec<PredicateKey>)
-                            -> Result<(), SessionError>
-    {
-        for (name, arity) in exports.iter().cloned() {
-            if !submodule.module_decl.exports.contains(&(name.clone(), arity)) {
-                continue;
-            }
+    fn use_qualified_module(&mut self, &mut CodeRepo, MachineFlags, &Module, &Vec<PredicateKey>)
+                            -> Result<(), SessionError>;
+    fn use_module(&mut self, &mut CodeRepo, MachineFlags, &Module)
+                  -> Result<(), SessionError>;
+}
 
-            if !self.import_decl(name, arity, submodule) {
-                return Err(SessionError::ModuleDoesNotContainExport);
-            }
+pub fn use_qualified_module<User>(user: &mut User, submodule: &Module, exports: &Vec<PredicateKey>)
+                              -> Result<(), SessionError>
+  where User: SubModuleUser
+{
+    for (name, arity) in exports.iter().cloned() {
+        if !submodule.module_decl.exports.contains(&(name.clone(), arity)) {
+            continue;
         }
 
-        Ok(())
-    }
-
-    fn use_module(&mut self, submodule: &Module) -> Result<(), SessionError> {
-        for (name, arity) in submodule.module_decl.exports.iter().cloned() {
-            if !self.import_decl(name, arity, submodule) {
-                return Err(SessionError::ModuleDoesNotContainExport);
-            }
+        if !user.import_decl(name, arity, submodule) {
+            return Err(SessionError::ModuleDoesNotContainExport);
         }
-
-        Ok(())
     }
+
+    Ok(())
+}
+
+pub fn use_module<User: SubModuleUser>(user: &mut User, submodule: &Module)
+                                       -> Result<(), SessionError>
+{
+    for (name, arity) in submodule.module_decl.exports.iter().cloned() {
+        if !user.import_decl(name, arity, submodule) {
+            return Err(SessionError::ModuleDoesNotContainExport);
+        }
+    }
+
+    Ok(())
 }
 
 impl SubModuleUser for Module {
@@ -1215,12 +1270,41 @@ impl SubModuleUser for Module {
         self.code_dir.remove(&key);
     }
 
-    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex)
-    {
+    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
         self.code_dir.insert((name, arity), idx);
+    }
+
+    fn use_qualified_module(&mut self, _: &mut CodeRepo, _: MachineFlags, submodule: &Module,
+                            exports: &Vec<PredicateKey>)
+                            -> Result<(), SessionError>
+    {
+        use_qualified_module(self, submodule, exports)?;
+
+        (self.term_expansions.0).0.extend((submodule.term_expansions.0).0.iter().cloned());
+        self.term_expansions.1.extend(submodule.term_expansions.1.iter().cloned());
+
+        (self.goal_expansions.0).0.extend((submodule.goal_expansions.0).0.iter().cloned());
+        self.goal_expansions.1.extend(submodule.goal_expansions.1.iter().cloned());
+
+        Ok(())
+    }
+
+    fn use_module(&mut self, _: &mut CodeRepo, _: MachineFlags, submodule: &Module)
+                  -> Result<(), SessionError>
+    {
+        use_module(self, submodule)?;
+
+        (self.term_expansions.0).0.extend((submodule.term_expansions.0).0.iter().cloned());
+        self.term_expansions.1.extend(submodule.term_expansions.1.iter().cloned());
+
+        (self.goal_expansions.0).0.extend((submodule.goal_expansions.0).0.iter().cloned());
+        self.goal_expansions.1.extend(submodule.goal_expansions.1.iter().cloned());
+
+        Ok(())
     }
 }
 
+#[derive(Clone)]
 pub enum Declaration {
     Hook(CompileTimeHook, PredicateClause, VecDeque<TopLevel>),
     Module(ModuleDecl),
@@ -1237,6 +1321,7 @@ impl Declaration {
     }
 }
 
+#[derive(Clone)]
 pub enum TopLevel {
     Declaration(Declaration),
     Fact(Term),
@@ -1388,6 +1473,7 @@ impl From<ParserError> for EvalSession {
     }
 }
 
+#[derive(Clone)]
 pub struct OpDecl(pub usize, pub Specifier, pub ClauseName);
 
 impl OpDecl {

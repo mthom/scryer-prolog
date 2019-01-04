@@ -30,7 +30,7 @@ pub struct IndexStore {
     pub(super) code_dir: CodeDir,
     pub(super) in_situ_code_dir: InSituCodeDir,
     pub(super) op_dir: OpDir,
-    pub(super) modules: ModuleDir
+    pub(super) modules: ModuleDir,
 }
 
 enum RefOrOwned<'a, T: 'a> {
@@ -108,16 +108,7 @@ impl IndexStore {
 
 pub type CompiledResult = (Predicate, VecDeque<TopLevel>);
 
-pub struct CodeRepo {
-    cached_query: Code,
-    pub(super) goal_expanders: Code,
-    pub(super) term_expanders: Code,
-    pub(super) code: Code,
-    pub(super) in_situ_code: Code,
-    pub(super) term_dir: TermDir
-}
-
-impl CodeRepo {
+impl CodeRepo {       
     #[inline]
     fn new() -> Self {
         CodeRepo {
@@ -129,6 +120,25 @@ impl CodeRepo {
             term_dir: TermDir::new()
         }
     }
+
+    #[inline]
+    pub fn term_dir_entry_len(&self, key: PredicateKey) -> (usize, usize) {
+        self.term_dir.get(&key)
+            .map(|entry| ((entry.0).0.len(), entry.1.len()))
+            .unwrap_or((0,0))
+    }
+
+    #[inline]
+    pub fn truncate_terms(&mut self, key: PredicateKey, len: usize, queue_len: usize) 
+                          -> (Predicate, VecDeque<TopLevel>)
+    {
+        //TODO: fix this! this is causing a test to fail. because term_expansions, when
+        //removed by rollback_expansion_code, aren't jump-labeled properly by generate_code.
+        self.term_dir.get_mut(&key)
+            .map(|entry| (Predicate((entry.0).0.clone()[len ..].to_vec()), //drain(len ..).collect()),
+                          entry.1.drain(queue_len ..).collect()))
+            .unwrap_or((Predicate(vec![]), VecDeque::from(vec![])))
+    }    
 
     pub fn add_in_situ_result(&mut self, result: &CompiledResult, in_situ_code_dir: &mut InSituCodeDir,
                               flags: MachineFlags)
@@ -275,6 +285,21 @@ impl SubModuleUser for IndexStore {
         }
 
         self.code_dir.insert((name, arity), CodeIndex::from(idx));
+    }
+
+    fn use_qualified_module(&mut self, code_repo: &mut CodeRepo, flags: MachineFlags,
+                            submodule: &Module, exports: &Vec<PredicateKey>)
+                            -> Result<(), SessionError>
+    {
+        use_qualified_module(self, submodule, exports)?;
+        submodule.dump_expansions(code_repo, flags).map_err(SessionError::from)
+    }
+    
+    fn use_module(&mut self, code_repo: &mut CodeRepo, flags: MachineFlags, submodule: &Module)
+                  -> Result<(), SessionError>
+    {
+        use_module(self, submodule)?;
+        submodule.dump_expansions(code_repo, flags).map_err(SessionError::from)
     }
 }
 

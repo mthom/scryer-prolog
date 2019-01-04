@@ -248,3 +248,11 @@ macro_rules! get_level_and_unify {
         Line::Cut(CutInstruction::GetLevelAndUnify($r))
     )
 }
+
+macro_rules! discard_result {
+    ($f: expr) => (
+        match $f {
+            _ => ()
+        }
+    )
+}
