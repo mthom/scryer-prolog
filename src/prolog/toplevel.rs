@@ -8,6 +8,7 @@ use prolog::machine::machine_state::MachineState;
 use prolog::machine::term_expansion::*;
 use prolog::num::*;
 
+use std::borrow::BorrowMut;
 use std::collections::{HashSet, VecDeque};
 use std::cell::{Cell, RefCell};
 use std::io::Read;
@@ -70,11 +71,28 @@ impl<'a, 'b> CompositeIndices<'a, 'b>
     }
 }
 
-#[inline]
-fn as_compile_time_hook(name: &str, arity: usize) -> Option<CompileTimeHook> {
+fn as_compile_time_hook(name: &str, arity: usize, terms: &Vec<Box<Term>>) -> Option<CompileTimeHook>
+{
     match (name, arity) {
         ("term_expansion", 2) => Some(CompileTimeHook::TermExpansion),
         ("goal_expansion", 2) => Some(CompileTimeHook::GoalExpansion),
+        (":", 2) => {
+            if let &Term::Constant(_, Constant::Atom(ref name, _)) = &terms[0].as_ref() {
+                if name.as_str() == "user" {
+                    if let &Term::Clause(_, ref name, ref terms, _) = &terms[1].as_ref() {
+                        return match name.as_str() {
+                            "term_expansion" if terms.len() == 2 =>
+                                Some(CompileTimeHook::UserTermExpansion),
+                            "goal_expansion" if terms.len() == 2 =>
+                                Some(CompileTimeHook::UserGoalExpansion),
+                            _ => None
+                        }
+                    }
+                }
+            }
+
+            None
+        },                
         _ => None
     }
 }
@@ -83,13 +101,13 @@ fn as_compile_time_hook(name: &str, arity: usize) -> Option<CompileTimeHook> {
 fn is_compile_time_hook(name: &ClauseName, terms: &Vec<Box<Term>>) -> Option<CompileTimeHook> {
     if name.as_str() == ":-" {
         if let Some(ref term) = terms.first() {
-            if let &Term::Clause(_, ref name, ref terms, None) = term.as_ref() {
-                return as_compile_time_hook(name.as_str(), terms.len());
+            if let &Term::Clause(_, ref name, ref terms, _) = term.as_ref() {
+                return as_compile_time_hook(name.as_str(), terms.len(), terms);
             }
         }
     }
     
-    as_compile_time_hook(name.as_str(), terms.len())    
+    as_compile_time_hook(name.as_str(), terms.len(), terms)    
 }
 
 type CompileTimeHookCompileInfo = (CompileTimeHook, PredicateClause, VecDeque<TopLevel>);
@@ -349,6 +367,28 @@ fn module_resolution_call(mod_name: Term, body: Term) -> Result<QueryTerm, Parse
     Err(ParserError::InvalidModuleResolution)
 }
 
+fn flatten_hook(mut term: Term) -> Term {
+    if let &mut Term::Clause(_, ref mut name, ref mut terms, _) = &mut term {        
+        if name.as_str() == ":-" && terms.len() == 2 {
+            let inner_term = match terms.first_mut().map(|term| term.borrow_mut()) {
+                Some(&mut Term::Clause(_, ref name, ref mut inner_terms, _)) =>
+                    if name.as_str() == ":" && inner_terms.len() == 2 {
+                        Some(*inner_terms.pop().unwrap())
+                    } else {
+                        None
+                    },
+                _ => None
+            };
+
+            if let Some(mut inner_term) = inner_term {                
+                mem::swap(&mut terms[0], &mut Box::new(inner_term));
+            }
+        }
+    }
+
+    term
+}
+
 pub enum TopLevelPacket {
     Query(Vec<QueryTerm>, VecDeque<TopLevel>),
     Decl(TopLevel, VecDeque<TopLevel>)
@@ -594,7 +634,7 @@ impl RelationWorker {
     fn setup_hook(&mut self, hook: CompileTimeHook, indices: &mut CompositeIndices, term: Term)
                   -> Result<CompileTimeHookCompileInfo, ParserError>
     {
-        match term {
+        match flatten_hook(term) {
             Term::Clause(r, name, terms, _) =>
                 if name == hook.name() && terms.len() == hook.arity() {
                     let term = setup_fact(Term::Clause(r, name, terms, None))?;

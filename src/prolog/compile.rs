@@ -101,9 +101,9 @@ impl CodeRepo {
                 compile_appendix(&mut code, &preds.1, false, flags)?;
                 
                 Ok(match hook {
-                    CompileTimeHook::TermExpansion =>
+                    CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion =>
                         self.term_expanders = code,
-                    CompileTimeHook::GoalExpansion =>
+                    CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion =>
                         self.goal_expanders = code
                 })
             },

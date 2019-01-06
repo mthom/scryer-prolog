@@ -131,14 +131,15 @@ impl<'a, R: Read> TermStream<'a, R> {
     #[inline]
     pub fn incr_expansion_lens(&mut self, hook: CompileTimeHook, len: usize, queue_len: usize) {
         match hook {
-            CompileTimeHook::TermExpansion => {
+            CompileTimeHook::UserTermExpansion => {
                 self.term_expansion_lens.0 += len;
                 self.term_expansion_lens.1 += queue_len;
             },
-            CompileTimeHook::GoalExpansion => {
+            CompileTimeHook::UserGoalExpansion => {
                 self.goal_expansion_lens.0 += len;
                 self.goal_expansion_lens.1 += queue_len;
-            }
+            },
+            _ => {}
         }
     }
 

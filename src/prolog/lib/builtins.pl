@@ -16,7 +16,10 @@
    instructions are unchanged. */
 :- op(700, fx, non_counted_backtracking).
 
-term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
+% module resolution operator.
+:- op(600, xfy, :).
+
+user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
     expand_op_list([Op | OtherOps], Pred, Spec, OpResults).
 
 expand_op_list([], _, _, []).
@@ -46,9 +49,6 @@ expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResu
 
 % term comparison.
 :- op(700, xfx, [==, \==, @=<, @>=, @<, @>, =@=, \=@=]).
-
-% module resolution operator.
-:- op(600, xfy, :).
 
 % the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
 max_arity(63).

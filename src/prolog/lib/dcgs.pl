@@ -20,7 +20,7 @@ phrase(G, Ls0, Ls2) :-
 phrase(G, Ls0, Ls1) :-
     call(G, Ls0, Ls1).
 
-term_expansion(Term0, Term) :-
+user:term_expansion(Term0, Term) :-
     numbervars(Term0, 0, N),
     expand_dcgs(Term0, N, Term).
 

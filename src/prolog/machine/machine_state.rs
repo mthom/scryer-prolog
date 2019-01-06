@@ -665,9 +665,9 @@ pub(crate) trait CallPolicy: Any {
         machine_st.b0 = machine_st.b;
 
         machine_st.p = match hook {
-            CompileTimeHook::TermExpansion =>
+            CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion =>
                 CodePtr::Local(LocalCodePtr::UserTermExpansion(0)),
-            CompileTimeHook::GoalExpansion =>
+            CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion =>
                 CodePtr::Local(LocalCodePtr::UserGoalExpansion(0))
         };
 

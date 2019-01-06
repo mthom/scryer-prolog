@@ -371,21 +371,27 @@ pub enum BuiltInClauseType {
 #[derive(Clone, Copy)]
 pub enum CompileTimeHook {
     GoalExpansion,
-    TermExpansion
+    TermExpansion,
+    UserGoalExpansion,
+    UserTermExpansion
 }
 
 impl CompileTimeHook {
     pub fn name(self) -> ClauseName {
         match self {
-            CompileTimeHook::GoalExpansion => clause_name!("goal_expansion"),
-            CompileTimeHook::TermExpansion => clause_name!("term_expansion")
+            CompileTimeHook::UserGoalExpansion
+          | CompileTimeHook::GoalExpansion => clause_name!("goal_expansion"),
+            CompileTimeHook::UserTermExpansion
+          | CompileTimeHook::TermExpansion => clause_name!("term_expansion")
         }
     }
 
     pub fn arity(self) -> usize {
         match self {
-            CompileTimeHook::GoalExpansion => 2,
-            CompileTimeHook::TermExpansion => 2
+            CompileTimeHook::UserGoalExpansion
+          | CompileTimeHook::GoalExpansion => 2,
+            CompileTimeHook::UserTermExpansion
+          | CompileTimeHook::TermExpansion => 2
         }
     }
 }
