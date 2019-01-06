@@ -34,11 +34,11 @@ Extend rusty-wam to include the following, among other features:
   internal representation (_done_).
     - A representation of 'partial strings' as difference lists
       of characters (_done_).
-* `term_expansion/2` and `goal_expansion/2` (_in progress_).
-* Definite Clause Grammars (_in progress_).
+* `term_expansion/2` and `goal_expansion/2` (_done_).
+* Definite Clause Grammars (_done_).
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
-  is straightforward with attributed variables.
+  is straightforward with attributed variables (_in progress_).
 * An occurs check.
 * Mode declarations.
 * Extensions for clp(FD).
@@ -146,6 +146,7 @@ The following predicates are built-in to rusty-wam.
 * `false/0`
 * `float/1`
 * `functor/3`
+* `goal_expansion/2`
 * `ground/1`
 * `integer/1`
 * `is_list/1`
@@ -169,9 +170,12 @@ The following predicates are built-in to rusty-wam.
 * `setup_call_cleanup/3`
 * `sort/2`
 * `string/1`
+* `term_expansion/2`
 * `term_variables/2`
 * `throw/1`
 * `true/0`
+* `user:goal_expansion/2`
+* `user:term_expansion/2`
 * `var/1`
 * `write/1`
 * `write_canonical/1`
