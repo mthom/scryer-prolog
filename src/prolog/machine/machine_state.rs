@@ -224,19 +224,48 @@ pub struct MachineState {
     pub(crate) flags: MachineFlags
 }
 
-fn call_at_index(machine_st: &mut MachineState, arity: usize, p: usize)
-{
-    machine_st.cp.assign_if_local(machine_st.p.clone() + 1);
-    machine_st.num_of_args = arity;
-    machine_st.b0 = machine_st.b;
-    machine_st.p  = dir_entry!(p);
-}
+impl MachineState {
+    fn call_at_index(&mut self, arity: usize, p: usize)
+    {
+        self.cp.assign_if_local(self.p.clone() + 1);
+        self.num_of_args = arity;
+        self.b0 = self.b;
+        self.p  = dir_entry!(p);
+    }
 
-fn execute_at_index(machine_st: &mut MachineState, arity: usize, p: usize)
-{
-    machine_st.num_of_args = arity;
-    machine_st.b0 = machine_st.b;
-    machine_st.p  = dir_entry!(p);
+    fn execute_at_index(&mut self, arity: usize, p: usize)
+    {
+        self.num_of_args = arity;
+        self.b0 = self.b;
+        self.p  = dir_entry!(p);
+    }
+
+    pub(super)
+    fn module_lookup(&mut self, indices: &IndexStore, key: PredicateKey, module_name: ClauseName,
+                     last_call: bool)
+                     -> CallResult
+    {
+        let (name, arity) = key;        
+        
+        if let Some(ref idx) = indices.get_code_index((name.clone(), arity), module_name.clone())
+        {
+            if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
+                if last_call {
+                    self.execute_at_index(arity, compiled_tl_index);
+                } else {
+                    self.call_at_index(arity, compiled_tl_index);
+                }
+                
+                return Ok(());
+            }
+        }
+
+        let h = self.heap.h;
+        let stub = MachineError::functor_stub(name.clone(), arity);        
+        let err = MachineError::module_resolution_error(h, module_name, name, arity);        
+        
+        return Err(self.error_form(err, stub));
+    }
 }
 
 fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore)
@@ -261,9 +290,9 @@ fn try_in_situ(machine_st: &mut MachineState, name: ClauseName, arity: usize,
 {
     if let Some(p) = try_in_situ_lookup(name.clone(), arity, indices) {
         if last_call {
-            execute_at_index(machine_st, arity, p);
+            machine_st.execute_at_index(arity, p);
         } else {
-            call_at_index(machine_st, arity, p);
+            machine_st.call_at_index(arity, p);
         }
 
         machine_st.p = in_situ_dir_entry!(p);
@@ -451,26 +480,10 @@ pub(crate) trait CallPolicy: Any {
                 -> CallResult
     {
         match idx.0.borrow().0 {
-            IndexPtr::Module => {
-                let stub = MachineError::functor_stub(name.clone(), arity);
-                let module_name = idx.0.borrow().1.clone();
-                let h = machine_st.heap.h;
-
-                if let Some(ref idx) = indices.get_code_index((name.clone(), arity), module_name.clone())
-                {
-                    if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
-                        call_at_index(machine_st, arity, compiled_tl_index);
-                        return Ok(());
-                    }
-                }
-
-                let err = MachineError::module_resolution_error(h, module_name, name, arity);
-                return Err(machine_st.error_form(err, stub));
-            },
             IndexPtr::Undefined =>
                 return try_in_situ(machine_st, name, arity, indices, false),
             IndexPtr::Index(compiled_tl_index) =>
-                call_at_index(machine_st, arity, compiled_tl_index)
+                machine_st.call_at_index(arity, compiled_tl_index)
         }
 
         Ok(())
@@ -481,26 +494,10 @@ pub(crate) trait CallPolicy: Any {
                    -> CallResult
     {
         match idx.0.borrow().0 {
-            IndexPtr::Module => {
-                let stub = MachineError::functor_stub(name.clone(), arity);
-                let module_name = idx.0.borrow().1.clone();
-                let h = machine_st.heap.h;
-
-                if let Some(ref idx) = indices.get_code_index((name.clone(), arity), module_name.clone())
-                {
-                    if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
-                        execute_at_index(machine_st, arity, compiled_tl_index);
-                        return Ok(());
-                    }
-                }
-
-                let err = MachineError::module_resolution_error(h, module_name, name, arity);
-                return Err(machine_st.error_form(err, stub));
-            },
             IndexPtr::Undefined =>
                 return try_in_situ(machine_st, name, arity, indices, true),
             IndexPtr::Index(compiled_tl_index) =>
-                execute_at_index(machine_st, arity, compiled_tl_index)
+                machine_st.execute_at_index(arity, compiled_tl_index)
         }
 
         Ok(())
@@ -923,9 +920,9 @@ impl SCCCutPolicy {
                 };
 
                 if machine_st.last_call {
-                    execute_at_index(machine_st, arity, idx);
+                    machine_st.execute_at_index(arity, idx);
                 } else {
-                    call_at_index(machine_st, arity, idx);
+                    machine_st.call_at_index(arity, idx);
                 }
 
                 return true;

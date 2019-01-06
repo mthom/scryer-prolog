@@ -10,7 +10,7 @@ use prolog::num::*;
 
 use std::borrow::BorrowMut;
 use std::collections::{HashSet, VecDeque};
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::io::Read;
 use std::mem;
 use std::rc::Rc;
@@ -355,18 +355,6 @@ fn mark_cut_variables(terms: &mut Vec<Term>) -> bool {
     found_cut_var
 }
 
-fn module_resolution_call(mod_name: Term, body: Term) -> Result<QueryTerm, ParserError> {
-    if let Term::Constant(_, Constant::Atom(mod_name, _)) = mod_name {
-        if let Term::Clause(_, name, terms, _) = body {
-            let idx = CodeIndex(Rc::new(RefCell::new((IndexPtr::Module, mod_name))));
-            return Ok(QueryTerm::Clause(Cell::default(), ClauseType::Named(name, idx), terms,
-                                        false));
-        }
-    }
-
-    Err(ParserError::InvalidModuleResolution)
-}
-
 fn flatten_hook(mut term: Term) -> Term {
     if let &mut Term::Clause(_, ref mut name, ref mut terms, _) = &mut term {
         match (name.as_str(), terms.len()) {
@@ -516,12 +504,6 @@ impl RelationWorker {
 
                         self.queue.push_back(clauses);
                         Ok(QueryTerm::Jump(stub))
-                    },
-                    (":", 2) => {
-                        let callee   = *terms.pop().unwrap();
-                        let mod_name = *terms.pop().unwrap();
-
-                        module_resolution_call(mod_name, callee)
                     },
                     ("->", 2) => {
                         let conq = *terms.pop().unwrap();

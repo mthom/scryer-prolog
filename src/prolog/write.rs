@@ -16,8 +16,6 @@ fn error_string(e: &String) -> String {
 impl fmt::Display for IndexPtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &IndexPtr::Module =>
-                write!(f, ""),
             &IndexPtr::Undefined =>
                 write!(f, "undefined"),
             &IndexPtr::Index(i)  =>

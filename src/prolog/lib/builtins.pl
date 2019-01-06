@@ -60,6 +60,13 @@ true.
 
 false :- '$fail'.
 
+% dynamic module resolution.
+
+Module : Predicate :-
+    ( atom(Module) -> '$module_call'(Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)))
+    ).
+
 % flags.
 
 current_prolog_flag(Flag, false) :- Flag == bounded, !.

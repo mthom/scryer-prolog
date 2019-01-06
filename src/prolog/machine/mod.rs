@@ -79,6 +79,7 @@ impl IndexStore {
         mem::swap(&mut self.modules, &mut other.modules);
     }
 
+    #[inline]
     fn get_internal(&self, name: ClauseName, arity: usize, in_mod: ClauseName)
                     -> Option<ModuleCodeIndex>
     {
@@ -86,7 +87,7 @@ impl IndexStore {
             .and_then(|ref module| module.code_dir.get(&(name, arity)))
             .cloned()
     }
-
+    
     pub(super) fn get_cleaner_sites(&self) -> (usize, usize) {
         let r_w_h  = clause_name!("run_cleaners_with_handling");
         let r_wo_h = clause_name!("run_cleaners_without_handling");

@@ -238,6 +238,7 @@ pub struct Module {
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
     CheckCutPoint,
+    DynamicModuleResolution,
     ExpandGoal,
     ExpandTerm,
     GetBValue,
@@ -276,6 +277,7 @@ impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
+            &SystemClauseType::DynamicModuleResolution => clause_name!("$module_call"),
             &SystemClauseType::ExpandTerm => clause_name!("$expand_term"),
             &SystemClauseType::ExpandGoal => clause_name!("$expand_goal"),
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
@@ -313,6 +315,7 @@ impl SystemClauseType {
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
+            ("$module_call", 2) => Some(SystemClauseType::DynamicModuleResolution),
             ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
@@ -857,8 +860,6 @@ impl HeapCellValue {
 pub enum IndexPtr {
     Undefined,
     Index(usize),
-    Module /* This is a resolved module call. The module
-        targeted is in the wrapping CodeIndex, and the name is in the ClauseType. */
 }
 
 #[derive(Clone)]
