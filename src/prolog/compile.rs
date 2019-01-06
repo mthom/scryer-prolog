@@ -40,6 +40,8 @@ fn print_code(code: &Code) {
     }
 }
 
+type PredicateCompileQueue = (Predicate, VecDeque<TopLevel>);
+
 // throw errors if declaration or query found.
 fn compile_relation(tl: &TopLevel, non_counted_bt: bool, flags: MachineFlags)
                     -> Result<Code, ParserError>
@@ -97,9 +99,9 @@ impl CodeRepo {
             Some(preds) => {
                 let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
                 let mut code = cg.compile_predicate(&(preds.0).0)?;
-                
+
                 compile_appendix(&mut code, &preds.1, false, flags)?;
-                
+
                 Ok(match hook {
                     CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion =>
                         self.term_expanders = code,
@@ -159,8 +161,8 @@ pub fn compile_term(wam: &mut Machine, term: Term) -> EvalSession
 }
 
 struct GatherResult {
-    worker_results: Vec<(Predicate, VecDeque<TopLevel>)>,
-    toplevel_results: Vec<(Predicate, VecDeque<TopLevel>)>,
+    worker_results: Vec<PredicateCompileQueue>,
+    toplevel_results: Vec<PredicateCompileQueue>,
     toplevel_indices: IndexStore,
     addition_results: ExpansionAdditionResult
 }
@@ -168,13 +170,15 @@ struct GatherResult {
 pub struct ListingCompiler {
     non_counted_bt_preds: HashSet<PredicateKey>,
     module: Option<Module>,
+    user_term_dir: TermDir
 }
 
 impl ListingCompiler {
     #[inline]
     pub fn new() -> Self {
         ListingCompiler {
-            module: None, non_counted_bt_preds: HashSet::new()
+            module: None, non_counted_bt_preds: HashSet::new(),
+            user_term_dir: TermDir::new()
         }
     }
 
@@ -231,7 +235,7 @@ impl ListingCompiler {
             .unwrap_or(ClauseName::BuiltIn("user"))
     }
 
-    fn generate_code(&mut self, decls: Vec<(Predicate, VecDeque<TopLevel>)>,
+    fn generate_code(&mut self, decls: Vec<PredicateCompileQueue>,
                      wam: &Machine, code_dir: &mut CodeDir)
                      -> Result<Code, SessionError>
     {
@@ -250,7 +254,7 @@ impl ListingCompiler {
                                                  wam.machine_flags())?;
 
             compile_appendix(&mut decl_code, &queue, non_counted_bt, wam.machine_flags())?;
-            
+
             let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
 
@@ -283,6 +287,41 @@ impl ListingCompiler {
         self.non_counted_bt_preds.insert((name, arity));
     }
 
+    fn add_term_dir_terms(&mut self, hook: CompileTimeHook, code_repo: &mut CodeRepo,
+                          key: PredicateKey, clause: PredicateClause, queue: VecDeque<TopLevel>)
+                          -> (usize, usize)
+    {
+        let preds = code_repo.term_dir.entry(key.clone())
+            .or_insert((Predicate::new(), VecDeque::from(vec![])));
+
+        let (mut len, mut queue_len) = ((preds.0).0.len(), preds.1.len());
+
+        if self.module.is_some() && hook.has_module_scope() {
+            let module_preds = self.user_term_dir.entry(key.clone())
+                .or_insert((Predicate::new(), VecDeque::from(vec![])));
+
+            (module_preds.0).0.push(clause);
+            module_preds.1.extend(queue.into_iter());
+
+            (preds.0).0.extend((module_preds.0).0.iter().cloned());
+            preds.1.extend(module_preds.1.iter().cloned());
+        } else {
+            let module_preds = self.user_term_dir.entry(key.clone())
+                .or_insert((Predicate::new(), VecDeque::from(vec![])));
+
+            len += 1;
+            queue_len += queue_len;
+
+            (preds.0).0.push(clause);
+            preds.1.extend(queue.into_iter());
+
+            (preds.0).0.extend((module_preds.0).0.iter().cloned());
+            preds.1.extend(module_preds.1.iter().cloned());
+        }
+
+        (len, queue_len)
+    }
+
     fn process_decl(&mut self, decl: Declaration, code_repo: &mut CodeRepo,
                     wam_indices: &mut IndexStore, indices: &mut IndexStore,
                     flags: MachineFlags)
@@ -291,17 +330,13 @@ impl ListingCompiler {
         match decl {
             Declaration::Hook(hook, clause, queue) => {
                 let key = (hook.name(), hook.arity());
+                let (len, queue_len) = self.add_term_dir_terms(hook, code_repo, key.clone(),
+                                                               clause, queue);
 
-                {
-                    let preds = code_repo.term_dir.entry(key)
-                        .or_insert((Predicate(vec![]), VecDeque::from(vec![])));
-                    
-                    (preds.0).0.push(clause);
-                    preds.1.extend(queue.into_iter());
-                }
-                
-                code_repo.compile_hook(hook, flags)
-                         .map_err(SessionError::from)
+                let result = code_repo.compile_hook(hook, flags).map_err(SessionError::from);
+                code_repo.truncate_terms(key, len, queue_len);
+
+                result
             },
             Declaration::NonCountedBacktracking(name, arity) =>
                 Ok(self.add_non_counted_bt_flag(name, arity)),
@@ -330,13 +365,15 @@ impl ListingCompiler {
     {
         match &decl {
             &Declaration::Hook(hook, _, ref queue) if self.module.is_none() =>
-                term_stream.incr_expansion_lens(hook, 1, queue.len()),            
+                term_stream.incr_expansion_lens(hook.user_scope(), 1, queue.len()),
+            &Declaration::Hook(hook, _, ref queue) if !hook.has_module_scope() =>
+                term_stream.incr_expansion_lens(hook, 1, queue.len()),
             _ => {}
         };
 
         self.process_decl(decl, term_stream.code_repo, term_stream.indices, indices, flags)
     }
-    
+
     fn gather_items<R: Read>(&mut self, wam: &mut Machine, src: R, indices: &mut IndexStore)
                              -> Result<GatherResult, SessionError>
     {
@@ -396,10 +433,15 @@ fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: IndexStore) 
         module.term_expansions = results.addition_results.take_term_expansions();
         module.goal_expansions = results.addition_results.take_goal_expansions();
     }
-    
+
     try_eval_session!(compiler.add_code(wam, module_code, indices));
     try_eval_session!(compiler.add_code(wam, toplvl_code, results.toplevel_indices));
-  
+
+    let flags = wam.machine_flags();
+
+    try_eval_session!(wam.code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags));
+    try_eval_session!(wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags));
+
     EvalSession::EntrySuccess
 }
 

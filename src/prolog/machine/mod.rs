@@ -132,12 +132,10 @@ impl CodeRepo {
     pub fn truncate_terms(&mut self, key: PredicateKey, len: usize, queue_len: usize) 
                           -> (Predicate, VecDeque<TopLevel>)
     {
-        //TODO: fix this! this is causing a test to fail. because term_expansions, when
-        //removed by rollback_expansion_code, aren't jump-labeled properly by generate_code.
         self.term_dir.get_mut(&key)
-            .map(|entry| (Predicate((entry.0).0.clone()[len ..].to_vec()), //drain(len ..).collect()),
+            .map(|entry| (Predicate((entry.0).0.drain(len ..).collect()),
                           entry.1.drain(queue_len ..).collect()))
-            .unwrap_or((Predicate(vec![]), VecDeque::from(vec![])))
+            .unwrap_or((Predicate::new(), VecDeque::from(vec![])))
     }    
 
     pub fn add_in_situ_result(&mut self, result: &CompiledResult, in_situ_code_dir: &mut InSituCodeDir,

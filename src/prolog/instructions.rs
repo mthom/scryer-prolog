@@ -386,12 +386,31 @@ impl CompileTimeHook {
         }
     }
 
+    #[inline]
     pub fn arity(self) -> usize {
         match self {
             CompileTimeHook::UserGoalExpansion
           | CompileTimeHook::GoalExpansion => 2,
             CompileTimeHook::UserTermExpansion
           | CompileTimeHook::TermExpansion => 2
+        }
+    }
+
+    #[inline]
+    pub fn user_scope(self) -> Self {
+        match self {
+            CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion =>
+                CompileTimeHook::UserGoalExpansion,
+            CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion =>
+                CompileTimeHook::UserTermExpansion,
+        }
+    }
+
+    #[inline]
+    pub fn has_module_scope(self) -> bool {
+        match self {
+            CompileTimeHook::UserTermExpansion | CompileTimeHook::UserGoalExpansion => false,
+            _ => true
         }
     }
 }

@@ -92,7 +92,7 @@ fn as_compile_time_hook(name: &str, arity: usize, terms: &Vec<Box<Term>>) -> Opt
             }
 
             None
-        },                
+        },
         _ => None
     }
 }
@@ -106,8 +106,8 @@ fn is_compile_time_hook(name: &ClauseName, terms: &Vec<Box<Term>>) -> Option<Com
             }
         }
     }
-    
-    as_compile_time_hook(name.as_str(), terms.len(), terms)    
+
+    as_compile_time_hook(name.as_str(), terms.len(), terms)
 }
 
 type CompileTimeHookCompileInfo = (CompileTimeHook, PredicateClause, VecDeque<TopLevel>);
@@ -368,21 +368,25 @@ fn module_resolution_call(mod_name: Term, body: Term) -> Result<QueryTerm, Parse
 }
 
 fn flatten_hook(mut term: Term) -> Term {
-    if let &mut Term::Clause(_, ref mut name, ref mut terms, _) = &mut term {        
-        if name.as_str() == ":-" && terms.len() == 2 {
-            let inner_term = match terms.first_mut().map(|term| term.borrow_mut()) {
-                Some(&mut Term::Clause(_, ref name, ref mut inner_terms, _)) =>
-                    if name.as_str() == ":" && inner_terms.len() == 2 {
-                        Some(*inner_terms.pop().unwrap())
-                    } else {
-                        None
-                    },
-                _ => None
-            };
+    if let &mut Term::Clause(_, ref mut name, ref mut terms, _) = &mut term {
+        match (name.as_str(), terms.len()) {
+            (":-", 2) => {
+                let inner_term = match terms.first_mut().map(|term| term.borrow_mut()) {
+                    Some(&mut Term::Clause(_, ref name, ref mut inner_terms, _)) =>
+                        if name.as_str() == ":" && inner_terms.len() == 2 {
+                            Some(*inner_terms.pop().unwrap())
+                        } else {
+                            None
+                        },
+                    _ => None
+                };
 
-            if let Some(mut inner_term) = inner_term {                
-                mem::swap(&mut terms[0], &mut Box::new(inner_term));
-            }
+                if let Some(mut inner_term) = inner_term {
+                    mem::swap(&mut terms[0], &mut Box::new(inner_term));
+                }
+            },
+            (":", 2) => return *terms.pop().unwrap(),
+            _ => {}
         }
     }
 
