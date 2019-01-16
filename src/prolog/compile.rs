@@ -149,7 +149,7 @@ pub fn compile_term(wam: &mut Machine, term: Term) -> EvalSession
                 Err(e) => EvalSession::from(e)
             },
         TopLevelPacket::Decl(TopLevel::Declaration(decl), _) => {
-            let mut compiler = ListingCompiler::new();
+            let mut compiler = ListingCompiler::new(&wam.code_repo);
 
             let indices = try_eval_session!(compile_decl(wam, &mut compiler, decl));
             try_eval_session!(compiler.add_code(wam, vec![], indices));
@@ -170,15 +170,19 @@ struct GatherResult {
 pub struct ListingCompiler {
     non_counted_bt_preds: HashSet<PredicateKey>,
     module: Option<Module>,
-    user_term_dir: TermDir
+    user_term_dir: TermDir,
+    orig_term_expansion_lens: (usize, usize),
+    orig_goal_expansion_lens: (usize, usize)        
 }
 
 impl ListingCompiler {
     #[inline]
-    pub fn new() -> Self {
+    pub fn new(code_repo: &CodeRepo) -> Self {
         ListingCompiler {
             module: None, non_counted_bt_preds: HashSet::new(),
-            user_term_dir: TermDir::new()
+            user_term_dir: TermDir::new(),
+            orig_term_expansion_lens: code_repo.term_dir_entry_len((clause_name!("term_expansion"), 2)),
+            orig_goal_expansion_lens: code_repo.term_dir_entry_len((clause_name!("goal_expansion"), 2)),
         }
     }
 
@@ -416,13 +420,29 @@ impl ListingCompiler {
             addition_results
         })
     }
+
+    fn drop_expansions(&self, wam: &mut Machine, err: SessionError) -> SessionError {
+        let (te_len, te_queue_len) = self.orig_term_expansion_lens;
+        let (ge_len, ge_queue_len) = self.orig_goal_expansion_lens;
+
+        let flags = wam.machine_flags();
+        
+        wam.code_repo.truncate_terms((clause_name!("term_expansion"), 2), te_len, te_queue_len);
+        wam.code_repo.truncate_terms((clause_name!("goal_expansion"), 2), ge_len, ge_queue_len);
+
+        discard_result!(wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags));
+        discard_result!(wam.code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags));
+        
+        err
+    }
 }
 
 pub
 fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: IndexStore) -> EvalSession
 {
-    let mut compiler = ListingCompiler::new();
-    let mut results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
+    let mut compiler = ListingCompiler::new(&wam.code_repo);
+    let mut results  = try_eval_session!(compiler.gather_items(wam, src, &mut indices)
+                                                 .map_err(|e| compiler.drop_expansions(wam, e)));
 
     let module_code = try_eval_session!(compiler.generate_code(results.worker_results, wam,
                                                                &mut indices.code_dir));
