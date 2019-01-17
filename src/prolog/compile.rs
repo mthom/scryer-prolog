@@ -437,12 +437,11 @@ impl ListingCompiler {
     }
 }
 
-pub
-fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: IndexStore) -> EvalSession
+fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src: R,
+                         mut indices: IndexStore)
+                         -> EvalSession
 {
-    let mut compiler = ListingCompiler::new(&wam.code_repo);
-    let mut results  = try_eval_session!(compiler.gather_items(wam, src, &mut indices)
-                                                 .map_err(|e| compiler.drop_expansions(wam, e)));
+    let mut results  = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
 
     let module_code = try_eval_session!(compiler.generate_code(results.worker_results, wam,
                                                                &mut indices.code_dir));
@@ -463,6 +462,17 @@ fn compile_listing<R: Read>(wam: &mut Machine, src: R, mut indices: IndexStore) 
     try_eval_session!(wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags));
 
     EvalSession::EntrySuccess
+}
+
+#[inline]
+pub fn compile_listing<R: Read>(wam: &mut Machine, src: R, indices: IndexStore) -> EvalSession
+{
+    let mut compiler = ListingCompiler::new(&wam.code_repo);
+    
+    match compile_work(&mut compiler, wam, src, indices) {
+        EvalSession::Error(e) => EvalSession::Error(compiler.drop_expansions(wam, e)),
+        result => result
+    }
 }
 
 fn setup_indices(wam: &mut Machine, indices: &mut IndexStore) -> Result<(), SessionError> {
