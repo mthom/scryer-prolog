@@ -172,7 +172,7 @@ pub struct ListingCompiler {
     module: Option<Module>,
     user_term_dir: TermDir,
     orig_term_expansion_lens: (usize, usize),
-    orig_goal_expansion_lens: (usize, usize)        
+    orig_goal_expansion_lens: (usize, usize)
 }
 
 impl ListingCompiler {
@@ -426,13 +426,13 @@ impl ListingCompiler {
         let (ge_len, ge_queue_len) = self.orig_goal_expansion_lens;
 
         let flags = wam.machine_flags();
-        
+
         wam.code_repo.truncate_terms((clause_name!("term_expansion"), 2), te_len, te_queue_len);
         wam.code_repo.truncate_terms((clause_name!("goal_expansion"), 2), ge_len, ge_queue_len);
 
         discard_result!(wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags));
         discard_result!(wam.code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags));
-        
+
         err
     }
 }
@@ -468,7 +468,7 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src:
 pub fn compile_listing<R: Read>(wam: &mut Machine, src: R, indices: IndexStore) -> EvalSession
 {
     let mut compiler = ListingCompiler::new(&wam.code_repo);
-    
+
     match compile_work(&mut compiler, wam, src, indices) {
         EvalSession::Error(e) => EvalSession::Error(compiler.drop_expansions(wam, e)),
         result => result
