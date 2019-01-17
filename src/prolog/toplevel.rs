@@ -625,7 +625,7 @@ impl RelationWorker {
                 if name == hook.name() && terms.len() == hook.arity() {
                     let term = setup_fact(Term::Clause(r, name, terms, None))?;
                     Ok((hook, PredicateClause::Fact(term), VecDeque::from(vec![])))
-                } else if name.as_str() == ":-" {
+                } else if name.as_str() == ":-" && terms.len() == 2 {
                     let rule = self.setup_rule(indices, terms, true)?;
                     let results_queue = self.parse_queue(indices)?;
 

@@ -490,5 +490,6 @@ fn setup_indices(wam: &mut Machine, indices: &mut IndexStore) -> Result<(), Sess
 pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     try_eval_session!(setup_indices(wam, &mut indices));
+    
     compile_listing(wam, src, indices)
 }
