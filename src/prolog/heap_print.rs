@@ -29,7 +29,7 @@ impl DirectedOp {
 #[derive(Clone)]
 pub enum TokenOrRedirect {
     Atom(ClauseName),
-    Op(ClauseName, Fixity),
+    Op(ClauseName, (usize, Specifier)),
     NumberedVar(String),
     CompositeRedirect(DirectedOp),
     Redirect,
@@ -298,25 +298,21 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         }
     }
 
-    fn enqueue_op(&mut self, ct: ClauseType, fixity: Fixity) {
-        match fixity {
-            Fixity::Post => {
-                self.state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
-            },
-            Fixity::Pre => {
-                let left_directed_op = DirectedOp::Left(ct.name(), false);
+    fn enqueue_op(&mut self, ct: ClauseType, spec: (usize, Specifier)) {        
+        if is_postfix!(spec.1) {
+            self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
+        } else if is_prefix!(spec.1) {
+            let left_directed_op = DirectedOp::Left(ct.name(), false);
 
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
-                self.state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
-            },
-            Fixity::In => {
-                let left_directed_op = DirectedOp::Left(ct.name(), true);
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
+            self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
+        } else { // if is_infix!(spec.1)
+            let left_directed_op = DirectedOp::Left(ct.name(), true);
 
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
-                self.state_stack.push(TokenOrRedirect::Op(ct.name(), fixity));
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
-            }
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
+            self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
         }
     }
 
@@ -337,9 +333,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
     fn format_clause(&mut self, iter: &mut HCPreOrderIterator, arity: usize, ct: ClauseType)
     {
-        if let Some(fixity) = ct.fixity() {
+        if let Some(spec) = ct.spec() {
             if !self.ignore_ops {
-                return self.enqueue_op(ct, fixity);
+                return self.enqueue_op(ct, spec);
             }
         } else if self.numbervars && is_numbered_var(&ct, arity) {
             let addr = iter.stack().last().cloned().unwrap();
@@ -410,11 +406,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         })
     }
 
-    fn print_atom(&mut self, atom: &ClauseName, fixity: Option<Fixity>) {
+    fn print_atom(&mut self, atom: &ClauseName, spec: Option<(usize, Specifier)>) {
         match atom.as_str() {
             "" => self.outputter.append("''"),
             ";" | "!" => self.outputter.append(atom.as_str()),
-            s => if fixity.is_some() || !self.quoted || non_quoted_token(s.chars()) {
+            s => if spec.is_some() || !self.quoted || non_quoted_token(s.chars()) {
                 self.outputter.append(atom.as_str())
             } else {
                 if self.quoted {
@@ -448,7 +444,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
     fn print_constant(&mut self, c: Constant, op: &Option<DirectedOp>) {
         match c {
-            Constant::Atom(ref atom, Some(fixity)) => {
+            Constant::Atom(ref atom, Some(spec)) => {
                 if let Some(ref op) = op {
                     if self.outputter.ends_with(&format!(" {}", op.as_str())) {
                         self.outputter.push_char(' ');
@@ -457,7 +453,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     self.outputter.push_char('(');
                 }
 
-                self.print_atom(atom, Some(fixity));
+                self.print_atom(atom, Some(spec));
 
                 if op.is_some() {
                     self.outputter.push_char(')');
@@ -545,12 +541,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         };
 
         match heap_val {
-            HeapCellValue::NamedStr(arity, ref name, Some(fixity)) if name.as_str() != "," => {
+            HeapCellValue::NamedStr(arity, ref name, Some(spec)) if name.as_str() != "," => {
                 if op.is_some() {
                     self.state_stack.push(TokenOrRedirect::Close);
                 }
 
-                let ct = ClauseType::from(name.clone(), arity, Some(fixity));
+                let ct = ClauseType::from(name.clone(), arity, Some(spec));
                 self.format_clause(iter, arity, ct);
 
                 if let Some(ref op) = op {
@@ -612,8 +608,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                 match loc_data {
                     TokenOrRedirect::Atom(atom) =>
                         self.print_atom(&atom, None),
-                    TokenOrRedirect::Op(atom, fixity) =>
-                        self.print_atom(&atom, Some(fixity)),
+                    TokenOrRedirect::Op(atom, spec) =>
+                        self.print_atom(&atom, Some(spec)),
                     TokenOrRedirect::NumberedVar(num_var) =>
                         self.outputter.append(num_var.as_str()),
                     TokenOrRedirect::CompositeRedirect(op) =>
@@ -637,9 +633,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                             self.outputter.push_char(']');
                         },
                     TokenOrRedirect::HeadTailSeparator =>
-//                      if !self.ignore_ops {
-                            self.outputter.append(" | "),
-//                      },
+                        self.outputter.append(" | "),
                     TokenOrRedirect::Comma =>
                         self.outputter.append(", ")
                 }

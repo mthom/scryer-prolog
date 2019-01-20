@@ -270,10 +270,6 @@ pub enum SystemClauseType {
 }
 
 impl SystemClauseType {
-    pub fn fixity(&self) -> Option<Fixity> {
-        None
-    }
-
     pub fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
@@ -425,20 +421,11 @@ pub enum ClauseType {
     Hook(CompileTimeHook),
     Inlined(InlinedClauseType),
     Named(ClauseName, CodeIndex),
-    Op(ClauseName, Fixity, CodeIndex),
+    Op(OpDecl, CodeIndex),
     System(SystemClauseType)
 }
 
 impl BuiltInClauseType {
-    fn fixity(&self) -> Option<Fixity> {
-        match self {
-            &BuiltInClauseType::Compare | &BuiltInClauseType::CompareTerm(_)
-          | &BuiltInClauseType::NotEq   | &BuiltInClauseType::Is(..) | &BuiltInClauseType::Eq
-                => Some(Fixity::In),
-            _ => None
-        }
-    }
-
     pub fn name(&self) -> ClauseName {
         match self {
             &BuiltInClauseType::AcyclicTerm => clause_name!("acyclic_term"),
@@ -507,12 +494,16 @@ impl BuiltInClauseType {
 }
 
 impl ClauseType {
-    pub fn fixity(&self) -> Option<Fixity> {
-        match self {
-            &ClauseType::BuiltIn(ref built_in) => built_in.fixity(),
-            &ClauseType::Inlined(InlinedClauseType::CompareNumber(..)) => Some(Fixity::In),
-            &ClauseType::Op(_, fixity, _) => Some(fixity),
-            &ClauseType::System(ref system) => system.fixity(),
+    pub fn spec(&self) -> Option<(usize, Specifier)> {
+        match self {            
+            &ClauseType::Op(ref op_decl, _) =>
+                Some((op_decl.0, op_decl.1)),
+            &ClauseType::Inlined(InlinedClauseType::CompareNumber(..))
+          | &ClauseType::BuiltIn(BuiltInClauseType::Is(..))
+          | &ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(_))      
+          | &ClauseType::BuiltIn(BuiltInClauseType::NotEq)
+          | &ClauseType::BuiltIn(BuiltInClauseType::Eq) =>
+                Some((700, XFX)),
             _ => None
         }
     }
@@ -523,13 +514,13 @@ impl ClauseType {
             &ClauseType::BuiltIn(ref built_in) => built_in.name(),
             &ClauseType::Hook(ref hook) => hook.name(),
             &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
-            &ClauseType::Op(ref name, ..) => name.clone(),
+            &ClauseType::Op(ref op_decl, ..) => op_decl.name(),
             &ClauseType::Named(ref name, ..) => name.clone(),
             &ClauseType::System(ref system) => system.name(),
         }
     }
 
-    pub fn from(name: ClauseName, arity: usize, fixity: Option<Fixity>) -> Self {
+    pub fn from(name: ClauseName, arity: usize, spec: Option<(usize, Specifier)>) -> Self {
         InlinedClauseType::from(name.as_str(), arity)
             .map(ClauseType::Inlined)
             .unwrap_or_else(|| {
@@ -539,8 +530,9 @@ impl ClauseType {
                         SystemClauseType::from(name.as_str(), arity)
                             .map(ClauseType::System)
                             .unwrap_or_else(|| {
-                                if let Some(fixity) = fixity {
-                                    ClauseType::Op(name, fixity, CodeIndex::default())
+                                if let Some(spec) = spec {
+                                    let op_decl = OpDecl(spec.0, spec.1, name);
+                                    ClauseType::Op(op_decl, CodeIndex::default())
                                 } else if name.as_str() == "call" {
                                     ClauseType::CallN
                                 } else {
@@ -844,7 +836,7 @@ impl Ref {
 #[derive(Clone, PartialEq)]
 pub enum HeapCellValue {
     Addr(Addr),
-    NamedStr(usize, ClauseName, Option<Fixity>), // arity, name, fixity if it has one.
+    NamedStr(usize, ClauseName, Option<(usize, Specifier)>), // arity, name, fixity if it has one.
 }
 
 impl HeapCellValue {
@@ -1098,9 +1090,10 @@ impl<'a> TermIterState<'a> {
         match term {
             &Term::AnonVar =>
                 TermIterState::AnonVar(lvl),
-            &Term::Clause(ref cell, ref name, ref subterms, fixity) => {
-                let ct = if let Some(fixity) = fixity {
-                    ClauseType::Op(name.clone(), fixity, CodeIndex::default())
+            &Term::Clause(ref cell, ref name, ref subterms, spec) => {
+                let ct = if let Some(spec) = spec {
+                    let op_decl = OpDecl(spec.0, spec.1, name.clone());
+                    ClauseType::Op(op_decl, CodeIndex::default())
                 } else {
                     ClauseType::Named(name.clone(), CodeIndex::default())
                 };
@@ -1503,6 +1496,11 @@ impl From<ParserError> for EvalSession {
 pub struct OpDecl(pub usize, pub Specifier, pub ClauseName);
 
 impl OpDecl {
+    #[inline]
+    pub fn name(&self) -> ClauseName {
+        self.2.clone()
+    }
+        
     pub fn submit(&self, module: ClauseName, op_dir: &mut OpDir) -> Result<(), SessionError>
     {
         let (prec, spec, name) = (self.0, self.1, self.2.clone());

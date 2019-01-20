@@ -55,16 +55,16 @@ impl<'a, 'b> CompositeIndices<'a, 'b>
         }
     }
 
-    fn get_clause_type(&mut self, name: ClauseName, arity: usize, fixity: Option<Fixity>) -> ClauseType
+    fn get_clause_type(&mut self, name: ClauseName, arity: usize, spec: Option<(usize, Specifier)>) -> ClauseType
     {
-        match ClauseType::from(name, arity, fixity) {
+        match ClauseType::from(name, arity, spec) {
             ClauseType::Named(name, _) => {
                 let idx = self.get_code_index(name.clone(), arity);
                 ClauseType::Named(name, idx.clone())
             },
-            ClauseType::Op(name, fixity, _) => {
-                let idx = self.get_code_index(name.clone(), arity);
-                ClauseType::Op(name, fixity, idx.clone())
+            ClauseType::Op(op_decl, _) => {
+                let idx = self.get_code_index(op_decl.2.clone(), arity);
+                ClauseType::Op(op_decl, idx.clone())
             },
             ct => ct
         }
@@ -158,7 +158,7 @@ fn setup_op_decl(mut terms: Vec<Box<Term>>) -> Result<OpDecl, ParserError>
 fn setup_predicate_export(mut term: Term) -> Result<PredicateKey, ParserError>
 {
     match term {
-        Term::Clause(_, ref name, ref mut terms, Some(Fixity::In))
+        Term::Clause(_, ref name, ref mut terms, Some(_))
             if name.as_str() == "/" && terms.len() == 2 => {
                 let arity = *terms.pop().unwrap();
                 let name  = *terms.pop().unwrap();

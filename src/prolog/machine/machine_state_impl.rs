@@ -567,7 +567,7 @@ impl MachineState {
 
         for heap_val in self.post_order_iter(a) {
             match heap_val {
-                HeapCellValue::NamedStr(2, name, Some(Fixity::In)) => {
+                HeapCellValue::NamedStr(2, name, Some(_)) => {
                     let a2 = interms.pop().unwrap();
                     let a1 = interms.pop().unwrap();
 
@@ -597,7 +597,7 @@ impl MachineState {
                                                             caller))
                     }
                 },
-                HeapCellValue::NamedStr(1, name, Some(Fixity::Pre)) => {
+                HeapCellValue::NamedStr(1, name, Some(_)) => {
                     let a1 = interms.pop().unwrap();
 
                     match name.as_str() {
@@ -1033,7 +1033,7 @@ impl MachineState {
                         let h = self.heap.h;
 
                         self.heap.push(HeapCellValue::Addr(Addr::Str(h + 1)));
-                        self.heap.push(HeapCellValue::NamedStr(arity, ct.name(), ct.fixity()));
+                        self.heap.push(HeapCellValue::NamedStr(arity, ct.name(), ct.spec()));
 
                         self.bind(addr.as_var().unwrap(), Addr::HeapCell(h));
 
@@ -1214,7 +1214,7 @@ impl MachineState {
             &QueryInstruction::PutStructure(ref ct, arity, reg) => {
                 let h = self.heap.h;
 
-                self.heap.push(HeapCellValue::NamedStr(arity, ct.name(), ct.fixity()));
+                self.heap.push(HeapCellValue::NamedStr(arity, ct.name(), ct.spec()));
                 self[reg] = Addr::Str(h);
             },
             &QueryInstruction::PutUnsafeValue(n, arg) => {
@@ -1969,7 +1969,7 @@ impl MachineState {
                 Err(self.error_form(MachineError::instantiation_error(), stub)),
             Addr::Str(s) =>
                 match self.heap[s].clone() {
-                    HeapCellValue::NamedStr(2, ref name, Some(Fixity::In))
+                    HeapCellValue::NamedStr(2, ref name, Some(_))
                         if *name == clause_name!("-") =>
                            Ok(Addr::HeapCell(s+1)),
                     _ => Err(self.error_form(MachineError::type_error(ValidType::Pair,
@@ -2164,7 +2164,7 @@ impl MachineState {
                 try_or_fail!(self, call_policy.compile_hook(self, hook)),
             &ClauseType::Inlined(ref ct) =>
                 self.execute_inlined(ct),
-            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
+            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(OpDecl(.., ref name), ref idx) =>
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
                                                             indices)),
             &ClauseType::System(ref ct) =>

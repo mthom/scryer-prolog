@@ -105,7 +105,7 @@ pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> 
             },
             &TermRef::Clause(lvl, _, ref ct, subterms) => {
                 queue.push_back((subterms.len(), h+1));
-                let named = HeapCellValue::NamedStr(subterms.len(), ct.name(), ct.fixity());
+                let named = HeapCellValue::NamedStr(subterms.len(), ct.name(), ct.spec());
 
                 machine_st.heap.push(named);
 

@@ -117,7 +117,8 @@ impl fmt::Display for CompareTermQT {
 impl fmt::Display for ClauseType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(ref name, _, ref idx) => {
+            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(OpDecl(.., ref name), ref idx) =>
+            {
                 let idx = idx.0.borrow();
                 write!(f, "{}:{}/{}", idx.1, name, idx.0)
             },
@@ -296,7 +297,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                 println!("true.");
                 return;
             }
-            
+
             if !wam.or_stack_is_empty() {
                 println!("true .");
             }

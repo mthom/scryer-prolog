@@ -22,7 +22,7 @@ pub(super) struct MachineError {
 impl MachineError {
     pub(super) fn functor_stub(name: ClauseName, arity: usize) -> MachineStub {
         let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name, None)));
-        functor!("/", 2, [name, heap_integer!(arity)], Fixity::In)
+        functor!("/", 2, [name, heap_integer!(arity)], (400, YFX))
     }
 
     pub(super) fn evaluation_error(eval_error: EvalError) -> Self {
@@ -47,8 +47,8 @@ impl MachineError {
 
         stub.append(&mut functor!("/", 2, [HeapCellValue::Addr(Addr::HeapCell(h + 2 + 3)),
                                            heap_integer!(arity)],
-                                  Fixity::In));
-        stub.append(&mut functor!(":", 2, [mod_name, name], Fixity::In));
+                                  (400, YFX)));
+        stub.append(&mut functor!(":", 2, [mod_name, name], (600, XFY)));
 
         MachineError { stub, from: ErrorProvenance::Constructed }
     }
@@ -258,7 +258,7 @@ impl MachineState {
                     loop {
                         match self.heap[new_l].clone() {
                             HeapCellValue::Addr(Addr::Str(l)) => new_l = l,
-                            HeapCellValue::NamedStr(2, ref name, Some(Fixity::In))
+                            HeapCellValue::NamedStr(2, ref name, Some(_))
                                 if name.as_str() == "-" => break,
                             HeapCellValue::Addr(Addr::HeapCell(_)) => break,
                             HeapCellValue::Addr(Addr::StackCell(..)) => break,
@@ -278,7 +278,7 @@ impl MachineState {
 
     // see 8.4.4 of Draft Technical Corrigendum 2.
     pub(super) fn check_keysort_errors(&self) -> CallResult {
-        let stub   = MachineError::functor_stub(clause_name!("keysort"), 2);
+        let stub   = MachineError::functor_stub(clause_name!("keysort"), 2);        
         let pairs  = self.store(self.deref(self[temp_v!(1)].clone()));
         let sorted = self.store(self.deref(self[temp_v!(2)].clone()));
 
