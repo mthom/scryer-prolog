@@ -250,15 +250,15 @@ impl ListingCompiler {
                 let arity = cl.arity();
                 cl.name().map(|name| (name, arity))
             }).ok_or(SessionError::NamelessEntry)?;
-
+            
             let non_counted_bt = self.non_counted_bt_preds.contains(&(name.clone(), arity));
 
-            let p = code.len() + wam.code_size();
+            let p = code.len() + wam.code_size();                                    
             let mut decl_code = compile_relation(&TopLevel::Predicate(decl), non_counted_bt,
                                                  wam.machine_flags())?;
 
             compile_appendix(&mut decl_code, &queue, non_counted_bt, wam.machine_flags())?;
-
+            
             let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
 
@@ -489,7 +489,6 @@ fn setup_indices(wam: &mut Machine, indices: &mut IndexStore) -> Result<(), Sess
 
 pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
-    try_eval_session!(setup_indices(wam, &mut indices));
-    
+    try_eval_session!(setup_indices(wam, &mut indices));    
     compile_listing(wam, src, indices)
 }

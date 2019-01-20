@@ -109,8 +109,8 @@ impl<'a> VariableFixtures<'a>
         var_count
     }
 
-    pub fn mark_vars_in_chunk<Iter>(&mut self, iter: Iter, lt_arity: usize, term_loc: GenContext)
-        where Iter: Iterator<Item=TermRef<'a>>
+    pub fn mark_vars_in_chunk<I>(&mut self, iter: I, lt_arity: usize, term_loc: GenContext)
+        where I: Iterator<Item=TermRef<'a>>
     {
         let chunk_num = term_loc.chunk_num();
         let mut arg_c = 1;

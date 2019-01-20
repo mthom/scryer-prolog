@@ -1,12 +1,12 @@
 :- op(400, yfx, /).
 
-:- module(builtins, [(=)/2, (+)/2, (**)/2, (*)/2, (-)/2, (/)/2,
-	(/\)/2, (\/)/2, (is)/2, (xor)/2, (div)/2, (//)/2, (rdiv)/2,
-	(<<)/2, (>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2,
-	(=:=)/2, (-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2,
-	(==)/2, (\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2,
-	(\=@=)/2, (:)/2, call_with_inference_limit/3, catch/3,
-	current_prolog_flag/2, expand_goal/2, expand_term/2,
+:- module(builtins, [(=)/2, (+)/1, (+)/2, (**)/2, (*)/2, (-)/1, (-)/2,
+	(/)/2, (/\)/2, (\/)/2, (is)/2, (xor)/2, (div)/2, (//)/2,
+	(rdiv)/2, (<<)/2, (>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2,
+	(=\=)/2, (=:=)/2, (-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2,
+	(=..)/2, (==)/2, (\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2,
+	(=@=)/2, (\=@=)/2, (:)/2, call_with_inference_limit/3,
+	catch/3, current_prolog_flag/2, expand_goal/2, expand_term/2,
 	set_prolog_flag/2, setup_call_cleanup/3, term_variables/2,
 	throw/1, true/0, false/0, write/1, write_canonical/1,
 	writeq/1, write_term/2]).
@@ -34,7 +34,7 @@ expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResu
 :- op(500, yfx, [/\, \/, xor]).
 :- op(400, yfx, [div, //, rdiv]).
 :- op(400, yfx, [<<, >>, mod, rem]).
-:- op(200, fy, -).
+:- op(200, fy, [+, -]).
 
 % arithmetic comparison operators.
 :- op(700, xfx, [>, <, =\=, =:=, >=, =<]).

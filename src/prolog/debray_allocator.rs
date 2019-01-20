@@ -231,15 +231,15 @@ impl<'a> Allocator<'a> for DebrayAllocator
         where Target: CompilationTarget<'a>
     {
         let r = cell.get();
-        
+
         let r = match lvl {
             Level::Shallow => {
                 let k = self.arg_c;
-                
+
                 if let GenContext::Last(chunk_num) = term_loc {
                     self.evacuate_arg(chunk_num, target);
                 }
-                
+
                 self.arg_c += 1;
                 RegType::Temp(k)
             },
@@ -247,7 +247,7 @@ impl<'a> Allocator<'a> for DebrayAllocator
             _ => r
         };
 
-        cell.set(r);        
+        cell.set(r);
     }
 
     fn mark_var<Target>(&mut self, var: Rc<Var>, lvl: Level, cell: &'a Cell<VarReg>,
@@ -258,15 +258,14 @@ impl<'a> Allocator<'a> for DebrayAllocator
             RegType::Temp(0) => {
                 // here, r is temporary *and* unassigned.
                 let o = self.alloc_reg_to_var(&var, lvl, term_loc, target);
-
                 cell.set(VarReg::Norm(RegType::Temp(o)));
-
+                
                 (RegType::Temp(o), true)
             },
             RegType::Perm(0) => {
                 let pr = cell.get().norm();
                 self.record_register(var.clone(), pr);
-
+                
                 (pr, true)
             },
             r => (r, false)

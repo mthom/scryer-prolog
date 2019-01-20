@@ -104,7 +104,7 @@ impl ExpansionAdditionResult {
 impl<'a, R: Read> Drop for TermStream<'a, R> {
     fn drop(&mut self) {
         self.indices.in_situ_code_dir.clear();
-        self.code_repo.in_situ_code.clear();        
+        self.code_repo.in_situ_code.clear();
         discard_result!(self.rollback_expansion_code());
     }
 }
@@ -322,7 +322,6 @@ impl MachineState {
             };
 
             output.push_char('.');
-
             self.reset();
             Some(output.result())
         }

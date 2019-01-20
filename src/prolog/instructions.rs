@@ -140,7 +140,7 @@ impl QueryTerm {
         match self {
             &mut QueryTerm::Clause(_, _, _, ref mut use_default_cp) => *use_default_cp = true,
             _ => {}
-        };
+        }
     }
 
     pub fn arity(&self) -> usize {
@@ -1140,7 +1140,7 @@ impl Module {
         {
             let ge = code_repo.term_dir.entry((clause_name!("goal_expansion"), 2))
                 .or_insert((Predicate::new(), VecDeque::from(vec![])));
-            
+
             (ge.0).0.extend((self.goal_expansions.0).0.iter().cloned());
             ge.1.extend(self.goal_expansions.1.iter().cloned());
         }

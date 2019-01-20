@@ -149,14 +149,15 @@ impl CodeRepo {
             cl.name().map(|name| (name, arity))
         }).ok_or(SessionError::NamelessEntry)?;
 
-        let p   = self.in_situ_code.len();
+        let p = self.in_situ_code.len();
         in_situ_code_dir.insert((name, arity), p);
 
         let mut cg = CodeGenerator::<DebrayAllocator>::new(true, flags);
-        let mut decl_code = cg.compile_predicate(&decl.0)?;
-
+        // clone the decl to avoid the need to wipe its register cells later.
+        let mut decl_code = cg.compile_predicate(&decl.0.clone())?;        
+        
         compile_appendix(&mut decl_code, queue, true, flags)?;
-
+                
         self.in_situ_code.extend(decl_code.into_iter());
         Ok(())
     }

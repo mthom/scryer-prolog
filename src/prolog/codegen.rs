@@ -405,6 +405,46 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         evaluator.eval(term)
     }
 
+    fn compile_is_call(&mut self, terms: &'a Vec<Box<Term>>, code: &mut Code,
+                       term_loc: GenContext, use_default_call_policy: bool)
+                       -> Result<(), ParserError>
+    {
+        let (mut acode, at) = self.call_arith_eval(terms[1].as_ref(), 1)?;
+        code.append(&mut acode);
+
+        Ok(match terms[0].as_ref() {
+            &Term::Var(ref vr, ref name) => {
+                let mut target = Vec::new();
+
+                self.marker.reset_arg(2);
+                self.marker.mark_var(name.clone(), Level::Shallow, vr,
+                                     term_loc, &mut target);
+
+                if !target.is_empty() {
+                    code.push(Line::Query(target));
+                }
+
+                if use_default_call_policy {
+                    code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))))
+                } else {
+                    code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))))
+                }
+            },
+            &Term::Constant(_, ref c @ Constant::Number(_)) => {
+                code.push(query![put_constant!(Level::Shallow,
+                                               c.clone(),
+                                               temp_v!(1))]);
+
+                if use_default_call_policy {
+                    code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))))
+                } else {
+                    code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))))
+                }
+            },
+            _ => code.push(fail!())
+        })
+    }
+
     fn compile_seq(&mut self, iter: ChunkedIterator<'a>, conjunct_info: &ConjunctInfo<'a>,
                    code: &mut Code, is_exposed: bool)
                    -> Result<(), ParserError>
@@ -441,47 +481,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         }),
                     &QueryTerm::Clause(_, ClauseType::BuiltIn(BuiltInClauseType::Is(..)),
                                        ref terms, use_default_call_policy)
-                        =>
-                    {
-                        let (mut acode, at) = self.call_arith_eval(terms[1].as_ref(), 1)?;
-                        code.append(&mut acode);
-
-                        match terms[0].as_ref() {
-                            &Term::Var(ref vr, ref name) => {
-                                let mut target = Vec::new();
-
-                                self.marker.reset_arg(2);
-                                self.marker.mark_var(name.clone(), Level::Shallow, vr,
-                                                     term_loc, &mut target);
-
-                                if !target.is_empty() {
-                                    code.push(Line::Query(target));
-                                }
-
-                                if use_default_call_policy {
-                                    code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))));
-                                } else {
-                                    code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
-                                }
-                            },
-                            &Term::Constant(_, ref c @ Constant::Number(_)) => {
-                                code.push(query![put_constant!(Level::Shallow,
-                                                               c.clone(),
-                                                               temp_v!(1))]);
-
-                                if use_default_call_policy {
-                                    code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))));
-                                } else {
-                                    code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))));
-                                }
-                            },
-                            _ => {
-                                code.push(fail!());
-                            }
-                        }
-                    },                    
-                    &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms, _) =>
-                        try!(self.compile_inlined(ct, terms, term_loc, code)),
+                      => self.compile_is_call(terms, code, term_loc, use_default_call_policy)?,
+                    &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms, _)
+                      => self.compile_inlined(ct, terms, term_loc, code)?,
                     _ => {
                         let num_perm_vars = if chunk_num == 0 {
                             conjunct_info.perm_vars()
@@ -491,7 +493,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 
                         self.compile_query_line(term, term_loc, code, num_perm_vars, is_exposed);
                     },
-                };
+                }
             }
 
             self.marker.reset_contents();
@@ -518,7 +520,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         // add a proceed to bookend any trailing cuts.
         match toc {
             &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => code.push(proceed!()),
-            &QueryTerm::Clause(_, ClauseType::Inlined(..), ..) => code.push(proceed!()),            
+            &QueryTerm::Clause(_, ClauseType::Inlined(..), ..) => code.push(proceed!()),
             _ => {}
         };
 

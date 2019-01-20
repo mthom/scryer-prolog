@@ -268,8 +268,7 @@ impl MachineState {
     }
 }
 
-fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore)
-                      -> Option<usize>
+fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore) -> Option<usize>
 {
     match indices.in_situ_code_dir.get(&(name.clone(), arity)) {
         Some(p) => Some(*p),

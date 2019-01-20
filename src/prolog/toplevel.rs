@@ -487,12 +487,12 @@ impl RelationWorker {
     fn to_query_term(&mut self, indices: &mut CompositeIndices, term: Term) -> Result<QueryTerm, ParserError>
     {
         match term {
-            Term::Constant(r, Constant::Atom(name, fixity)) =>
+            Term::Constant(_, Constant::Atom(name, fixity)) =>
                 if name.as_str() == "!" || name.as_str() == "blocked_!" {
                     Ok(QueryTerm::BlockedCut)
                 } else {
                     let ct = indices.get_clause_type(name, 0, fixity);
-                    Ok(QueryTerm::Clause(r, ct, vec![], false))
+                    Ok(QueryTerm::Clause(Cell::default(), ct, vec![], false))
                 },
             Term::Var(_, ref v) if v.as_str() == "!" =>
                 Ok(QueryTerm::UnblockedCut(Cell::default())),
