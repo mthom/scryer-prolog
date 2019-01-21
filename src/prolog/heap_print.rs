@@ -143,6 +143,7 @@ pub struct HCPrinter<'a, Outputter> {
     state_stack:  Vec<TokenOrRedirect>,
     heap_locs:    ReverseHeapVarDict,
     printed_vars: HashSet<Addr>,
+    bracketed_addrs: HashSet<Addr>,
     pub(crate) numbervars:   bool,
     pub(crate) quoted:       bool,
     pub(crate) ignore_ops:   bool
@@ -254,6 +255,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     state_stack: vec![],
                     heap_locs: ReverseHeapVarDict::new(),
                     printed_vars: HashSet::new(),
+                    bracketed_addrs: HashSet::new(),
                     numbervars: false,
                     quoted: false,
                     ignore_ops: false }
@@ -298,7 +300,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         }
     }
 
-    fn enqueue_op(&mut self, ct: ClauseType, spec: (usize, Specifier)) {        
+    fn enqueue_op(&mut self, ct: ClauseType, spec: (usize, Specifier)) {
         if is_postfix!(spec.1) {
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
@@ -331,7 +333,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
-    fn format_clause(&mut self, iter: &mut HCPreOrderIterator, arity: usize, ct: ClauseType)
+    fn format_clause(&mut self, iter: &mut HCTrackingPreOrderIter, arity: usize, ct: ClauseType)
     {
         if let Some(spec) = ct.spec() {
             if !self.ignore_ops {
@@ -341,7 +343,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             let addr = iter.stack().last().cloned().unwrap();
 
             // 7.10.4
-            if let Some(var) = iter.machine_st.numbervar(addr) {
+            if let Some(var) = iter.machine_st().numbervar(addr) {
                 iter.stack().pop();
                 self.state_stack.push(TokenOrRedirect::NumberedVar(var));
                 return;
@@ -361,7 +363,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         }
     }
 
-    fn check_for_seen(&mut self, iter: &mut HCPreOrderIterator, op: &Option<DirectedOp>)
+    fn check_for_seen(&mut self, iter: &mut HCTrackingPreOrderIter, op: &Option<DirectedOp>)
                       -> Option<HeapCellValue>
     {
         iter.stack().last().cloned().and_then(|addr| {
@@ -533,7 +535,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.state_stack.push(TokenOrRedirect::OpenList(cell));
     }
 
-    fn handle_heap_term(&mut self, iter: &mut HCPreOrderIterator, op: Option<DirectedOp>)
+    fn handle_heap_term(&mut self, iter: &mut HCTrackingPreOrderIter, op: Option<DirectedOp>)
     {
         let heap_val = match self.check_for_seen(iter, &op) {
             Some(heap_val) => heap_val,
@@ -600,8 +602,70 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         }
     }
 
+    fn mark_terms_for_brackets(&mut self, addr: Addr) {
+        let mut iter = self.machine_st.acyclic_tracking_post_order_iter(addr);
+        let mut stack: Vec<(Addr, usize)> = vec![];
+
+        while let Some(heap_val) = iter.next() {
+            let addr = iter.this_addr();
+
+            match heap_val {
+                HeapCellValue::NamedStr(2, _, Some((prec, spec))) => {
+                    let (addr_2, prec_2) = stack.pop().unwrap();
+                    let (addr_1, prec_1) = stack.pop().unwrap();
+
+                    if prec_1 > prec || (prec_1 == prec && (is_xfy!(spec) || is_xfx!(spec))) {
+                        self.bracketed_addrs.insert(addr_1);
+                    }
+
+                    if prec_2 > prec || (prec_2 == prec && (is_yfx!(spec) || is_xfx!(spec))) {
+                        self.bracketed_addrs.insert(addr_2);
+                    }
+
+                    stack.push((addr, prec));
+                    continue;
+                },
+                HeapCellValue::NamedStr(1, _, Some((prec, spec))) => {
+                    let (addr_1, prec_1) = stack.pop().unwrap();
+
+                    if prec_1 > prec || (prec_1 == prec && (is_fx!(spec) || is_xf!(spec))) {
+                        self.bracketed_addrs.insert(addr_1);
+                    }
+
+                    stack.push((addr, prec));
+                    continue;
+                },
+                HeapCellValue::NamedStr(arity, _, None) => {
+                    let stack_len = stack.len();
+
+                    for (addr_1, prec_1) in stack.drain(stack_len - arity ..) {
+                        if prec_1 >= 1000 { // 1000 is the precedence of the (,) operator.
+                            self.bracketed_addrs.insert(addr_1);
+                        }
+                    }                    
+                },
+                HeapCellValue::Addr(addr_1 @ Addr::Con(Constant::Atom(_, Some(_)))) => {
+                    self.bracketed_addrs.insert(addr_1);
+                },
+                HeapCellValue::Addr(Addr::Lis(_)) => {
+                    let stack_len = stack.len();
+                    
+                    for (addr_1, prec_1) in stack.drain(stack_len - 2 ..) {
+                        if prec_1 >= 1000 { // 1000 is the precedence of the (,) operator.
+                            self.bracketed_addrs.insert(addr_1);
+                        }
+                    }
+                },
+                _ => {}
+            };
+
+            stack.push((addr, 0));
+        }
+    }
+
     pub fn print(mut self, addr: Addr) -> Outputter {
-        let mut iter = HCPreOrderIterator::new(&self.machine_st, addr);
+        self.mark_terms_for_brackets(addr.clone());
+        let mut iter = self.machine_st.tracking_pre_order_iter(addr);
 
         loop {
             if let Some(loc_data) = self.state_stack.pop() {

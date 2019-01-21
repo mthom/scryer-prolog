@@ -836,7 +836,7 @@ impl Ref {
 #[derive(Clone, PartialEq)]
 pub enum HeapCellValue {
     Addr(Addr),
-    NamedStr(usize, ClauseName, Option<(usize, Specifier)>), // arity, name, fixity if it has one.
+    NamedStr(usize, ClauseName, Option<(usize, Specifier)>), // arity, name, precedence/Specifier if it has one.
 }
 
 impl HeapCellValue {

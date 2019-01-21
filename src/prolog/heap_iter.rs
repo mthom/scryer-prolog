@@ -4,10 +4,11 @@ use prolog::instructions::*;
 use prolog::machine::machine_state::*;
 
 use std::collections::HashSet;
+use std::ops::Deref;
 use std::vec::Vec;
 
 pub struct HCPreOrderIterator<'a> {
-    pub(crate) machine_st: &'a MachineState,
+    machine_st: &'a MachineState,
     state_stack: Vec<Addr>
 }
 
@@ -83,21 +84,83 @@ impl<'a> Iterator for HCPreOrderIterator<'a> {
     }
 }
 
-pub struct HCPostOrderIterator<'a> {
-    pre_iter:     HCPreOrderIterator<'a>,
+pub struct HCTrackingPreOrderIter<'a> {
+    pre_iter:  HCPreOrderIterator<'a>,
+    this_addr: Addr
+}
+
+impl<'a> HCTrackingPreOrderIter<'a> {
+    fn new(machine_st: &'a MachineState, a: Addr) -> Self {
+        HCTrackingPreOrderIter {
+            pre_iter: HCPreOrderIterator::new(machine_st, a.clone()),
+            this_addr: a
+        }
+    }
+
+    #[inline]
+    pub fn this_addr(&self) -> Addr {
+        self.this_addr.clone()
+    }
+
+    #[inline]
+    pub fn machine_st(&self) -> &MachineState {
+        self.pre_iter.machine_st
+    }
+}
+
+impl<'a> MutStackHCIterator for HCTrackingPreOrderIter<'a> {
+    fn stack(&mut self) -> &mut Vec<Addr> {
+        self.pre_iter.stack()
+    }
+}
+
+impl<'a> Iterator for HCTrackingPreOrderIter<'a> {
+    type Item = HeapCellValue;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pre_iter.state_stack.pop().map(|a| {
+            let addr = self.pre_iter.follow(a);
+            self.this_addr = addr.clone();
+
+            match addr {
+                Addr::HeapCell(h) =>
+                    self.pre_iter.machine_st.heap[h].clone(),
+                Addr::StackCell(fr, sc) =>
+                    HeapCellValue::Addr(self.pre_iter.machine_st.and_stack[fr][sc].clone()),
+                da =>
+                    HeapCellValue::Addr(da)
+            }
+        })
+    }
+}
+
+pub trait MutStackHCIterator where Self: Iterator<Item=HeapCellValue> {
+    fn stack(&mut self) -> &mut Vec<Addr>;
+}
+
+pub struct HCPostOrderIterator<HCIter> {
+    base_iter:    HCIter,
     parent_stack: Vec<(usize, HeapCellValue)> // number of children, parent node.
 }
 
-impl<'a> HCPostOrderIterator<'a> {
-    pub fn new(pre_iter: HCPreOrderIterator<'a>) -> Self {
+impl<HCIter> Deref for HCPostOrderIterator<HCIter> {
+    type Target = HCIter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base_iter
+    }
+}
+
+impl<HCIter: Iterator<Item=HeapCellValue>> HCPostOrderIterator<HCIter> {
+    pub fn new(base_iter: HCIter) -> Self {
         HCPostOrderIterator {
-            pre_iter,
+            base_iter,
             parent_stack: vec![]
         }
     }
 }
 
-impl<'a> Iterator for HCPostOrderIterator<'a> {
+impl<HCIter: Iterator<Item=HeapCellValue>> Iterator for HCPostOrderIterator<HCIter> {
     type Item = HeapCellValue;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -110,7 +173,7 @@ impl<'a> Iterator for HCPostOrderIterator<'a> {
                 self.parent_stack.push((child_count - 1, node));
             }
 
-            if let Some(item) = self.pre_iter.next() {
+            if let Some(item) = self.base_iter.next() {
                 match item {
                     HeapCellValue::NamedStr(arity, name, fix) =>
                         self.parent_stack.push((arity, HeapCellValue::NamedStr(arity, name, fix))),
@@ -127,13 +190,24 @@ impl<'a> Iterator for HCPostOrderIterator<'a> {
     }
 }
 
+pub type HCProperPostOrderIterator<'a> = HCPostOrderIterator<HCPreOrderIterator<'a>>;
+pub type HCAcyclicPostOrderIterator<'a> = HCPostOrderIterator<HCAcyclicIterator<HCTrackingPreOrderIter<'a>>>;
+
 impl MachineState {
+    pub fn tracking_pre_order_iter<'a>(&'a self, a: Addr) -> HCTrackingPreOrderIter<'a> {
+        HCTrackingPreOrderIter::new(self, a)
+    }
+    
     pub fn pre_order_iter<'a>(&'a self, a: Addr) -> HCPreOrderIterator<'a> {
         HCPreOrderIterator::new(self, a)
     }
 
-    pub fn post_order_iter<'a>(&'a self, a: Addr) -> HCPostOrderIterator<'a> {
+    pub fn post_order_iter<'a>(&'a self, a: Addr) -> HCProperPostOrderIterator<'a> {
         HCPostOrderIterator::new(HCPreOrderIterator::new(self, a))
+    }
+
+    pub fn acyclic_tracking_post_order_iter<'a>(&'a self, a: Addr) -> HCAcyclicPostOrderIterator<'a> {
+        HCPostOrderIterator::new(HCAcyclicIterator::new(HCTrackingPreOrderIter::new(self, a)))
     }
 
     pub fn acyclic_pre_order_iter<'a>(&'a self, a: Addr) -> HCAcyclicIterator<HCPreOrderIterator<'a>>
@@ -147,10 +221,6 @@ impl MachineState {
         HCZippedAcyclicIterator::new(HCPreOrderIterator::new(self, a1),
                                      HCPreOrderIterator::new(self, a2))
     }
-}
-
-pub trait MutStackHCIterator {
-    fn stack(&mut self) -> &mut Vec<Addr>;
 }
 
 impl<'a> MutStackHCIterator for HCPreOrderIterator<'a> {
@@ -171,8 +241,16 @@ impl<HCIter: MutStackHCIterator> HCAcyclicIterator<HCIter>
     }
 }
 
+impl<HCIter> Deref for HCAcyclicIterator<HCIter> {
+    type Target = HCIter;
+    
+    fn deref(&self) -> &Self::Target {
+        &self.iter
+    }
+}
+
 impl<HCIter> Iterator for HCAcyclicIterator<HCIter>
-where HCIter: Iterator<Item=HeapCellValue> + MutStackHCIterator
+  where HCIter: Iterator<Item=HeapCellValue> + MutStackHCIterator
 {
     type Item = HeapCellValue;
 
@@ -204,7 +282,7 @@ impl<HCIter: MutStackHCIterator> HCZippedAcyclicIterator<HCIter>
 }
 
 impl<HCIter> Iterator for HCZippedAcyclicIterator<HCIter>
-where HCIter: Iterator<Item=HeapCellValue> + MutStackHCIterator
+  where HCIter: Iterator<Item=HeapCellValue> + MutStackHCIterator
 {
     type Item = (HeapCellValue, HeapCellValue);
 
