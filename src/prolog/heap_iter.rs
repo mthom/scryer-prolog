@@ -20,6 +20,10 @@ impl<'a> HCPreOrderIterator<'a> {
         }
     }
 
+    pub fn machine_st(&self) -> &MachineState {
+        &self.machine_st
+    }
+    
     fn follow_heap(&mut self, h: usize) -> Addr
     {
         match &self.machine_st.heap[h] {
@@ -84,56 +88,6 @@ impl<'a> Iterator for HCPreOrderIterator<'a> {
     }
 }
 
-pub struct HCTrackingPreOrderIter<'a> {
-    pre_iter:  HCPreOrderIterator<'a>,
-    this_addr: Addr
-}
-
-impl<'a> HCTrackingPreOrderIter<'a> {
-    fn new(machine_st: &'a MachineState, a: Addr) -> Self {
-        HCTrackingPreOrderIter {
-            pre_iter: HCPreOrderIterator::new(machine_st, a.clone()),
-            this_addr: a
-        }
-    }
-
-    #[inline]
-    pub fn this_addr(&self) -> Addr {
-        self.this_addr.clone()
-    }
-
-    #[inline]
-    pub fn machine_st(&self) -> &MachineState {
-        self.pre_iter.machine_st
-    }
-}
-
-impl<'a> MutStackHCIterator for HCTrackingPreOrderIter<'a> {
-    fn stack(&mut self) -> &mut Vec<Addr> {
-        self.pre_iter.stack()
-    }
-}
-
-impl<'a> Iterator for HCTrackingPreOrderIter<'a> {
-    type Item = HeapCellValue;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.pre_iter.state_stack.pop().map(|a| {
-            let addr = self.pre_iter.follow(a);
-            self.this_addr = addr.clone();
-
-            match addr {
-                Addr::HeapCell(h) =>
-                    self.pre_iter.machine_st.heap[h].clone(),
-                Addr::StackCell(fr, sc) =>
-                    HeapCellValue::Addr(self.pre_iter.machine_st.and_stack[fr][sc].clone()),
-                da =>
-                    HeapCellValue::Addr(da)
-            }
-        })
-    }
-}
-
 pub trait MutStackHCIterator where Self: Iterator<Item=HeapCellValue> {
     fn stack(&mut self) -> &mut Vec<Addr>;
 }
@@ -191,23 +145,14 @@ impl<HCIter: Iterator<Item=HeapCellValue>> Iterator for HCPostOrderIterator<HCIt
 }
 
 pub type HCProperPostOrderIterator<'a> = HCPostOrderIterator<HCPreOrderIterator<'a>>;
-pub type HCAcyclicPostOrderIterator<'a> = HCPostOrderIterator<HCAcyclicIterator<HCTrackingPreOrderIter<'a>>>;
 
-impl MachineState {
-    pub fn tracking_pre_order_iter<'a>(&'a self, a: Addr) -> HCTrackingPreOrderIter<'a> {
-        HCTrackingPreOrderIter::new(self, a)
-    }
-    
+impl MachineState { 
     pub fn pre_order_iter<'a>(&'a self, a: Addr) -> HCPreOrderIterator<'a> {
         HCPreOrderIterator::new(self, a)
     }
 
     pub fn post_order_iter<'a>(&'a self, a: Addr) -> HCProperPostOrderIterator<'a> {
         HCPostOrderIterator::new(HCPreOrderIterator::new(self, a))
-    }
-
-    pub fn acyclic_tracking_post_order_iter<'a>(&'a self, a: Addr) -> HCAcyclicPostOrderIterator<'a> {
-        HCPostOrderIterator::new(HCAcyclicIterator::new(HCTrackingPreOrderIter::new(self, a)))
     }
 
     pub fn acyclic_pre_order_iter<'a>(&'a self, a: Addr) -> HCAcyclicIterator<HCPreOrderIterator<'a>>

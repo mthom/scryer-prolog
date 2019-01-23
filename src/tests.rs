@@ -1676,7 +1676,9 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- X = [.,.(.,.,.)].",
                            [["X = ['.', '.'('.', '.', '.')]"]]);
     assert_prolog_success!(&mut wam, "?- X = a+(b*c).",
-                           [["X = a+(b*c)"]]);
+                           [["X = a+b*c"]]);
+    assert_prolog_success!(&mut wam, "?- X = a*(b+c).",
+                           [["X = a*(b+c)"]]);
     assert_prolog_success!(&mut wam, "?- X = [:-,-].",
                            [["X = [:-, -]"]]);
     assert_prolog_success!(&mut wam, "?- X = a*(b+c).",

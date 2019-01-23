@@ -314,7 +314,6 @@ impl MachineState {
 
                 printer.quoted = true;
                 printer.numbervars = true;
-                printer.ignore_ops = true;
 
                 printer.see_all_locs();
 

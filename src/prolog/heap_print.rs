@@ -11,17 +11,32 @@ use std::collections::{HashMap, HashSet};
 use std::iter::once;
 use std::rc::Rc;
 
+/* contains the location, name, precision and Specifier of the parent op. */
 #[derive(Clone)]
 pub enum DirectedOp {
-    Left(ClauseName, bool), // bool is true if infix.
-    Right(ClauseName),
+    Left(ClauseName, (usize, Specifier)),
+    Right(ClauseName, (usize, Specifier)),
 }
 
 impl DirectedOp {
+    #[inline]
     fn as_str(&self) -> &str {
         match self {
-            &DirectedOp::Left(ref name, _) | &DirectedOp::Right(ref name) =>
+            &DirectedOp::Left(ref name, _) | &DirectedOp::Right(ref name, _) =>
                 name.as_str()
+        }
+    }
+}
+
+fn needs_bracketing(child_spec: (usize, Specifier), op: &DirectedOp) -> bool {
+    match op {
+        &DirectedOp::Left(_, (priority, spec)) => {
+            let is_strict_right = is_yfx!(spec) || is_xfx!(spec) || is_fx!(spec);
+            child_spec.0 > priority || (child_spec.0 == priority && is_strict_right)
+        },
+        &DirectedOp::Right(_, (priority, spec)) => {
+            let is_strict_left = is_xfx!(spec) || is_xfy!(spec) || is_xf!(spec);
+            child_spec.0 > priority || (child_spec.0 == priority && is_strict_left)
         }
     }
 }
@@ -32,7 +47,7 @@ pub enum TokenOrRedirect {
     Op(ClauseName, (usize, Specifier)),
     NumberedVar(String),
     CompositeRedirect(DirectedOp),
-    Redirect,
+    FunctorRedirect,
     Open,
     Close,
     Comma,
@@ -143,7 +158,6 @@ pub struct HCPrinter<'a, Outputter> {
     state_stack:  Vec<TokenOrRedirect>,
     heap_locs:    ReverseHeapVarDict,
     printed_vars: HashSet<Addr>,
-    bracketed_addrs: HashSet<Addr>,
     pub(crate) numbervars:   bool,
     pub(crate) quoted:       bool,
     pub(crate) ignore_ops:   bool
@@ -152,15 +166,15 @@ pub struct HCPrinter<'a, Outputter> {
 macro_rules! push_space_if_amb {
     ($self:expr, $atom:expr, $op:expr, $action:block) => (
         match $self.ambiguity_check($atom, $op) {
-            Some(DirectedOp::Left(_, false)) => {
-                $self.outputter.push_char(' ');
-                $action;
-            },
-            Some(DirectedOp::Left(lop, true)) => {
-                $self.outputter.insert_from_end(lop.as_str().len(), ' ');
-                $self.outputter.push_char(' ');
-                $action;
-            },
+            Some(DirectedOp::Left(lop, (_, spec))) =>
+                if is_infix!(spec) {
+                    $self.outputter.insert_from_end(lop.as_str().len(), ' ');
+                    $self.outputter.push_char(' ');
+                    $action;
+                } else {
+                    $self.outputter.push_char(' ');
+                    $action;
+                },
             Some(DirectedOp::Right(..)) => {
                 $action;
                 $self.outputter.push_char(' ');
@@ -255,7 +269,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     state_stack: vec![],
                     heap_locs: ReverseHeapVarDict::new(),
                     printed_vars: HashSet::new(),
-                    bracketed_addrs: HashSet::new(),
                     numbervars: false,
                     quoted: false,
                     ignore_ops: false }
@@ -283,18 +296,20 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     fn ambiguity_check(&self, atom: &str, op: &Option<DirectedOp>) -> Option<DirectedOp>
     {
         match op {
-            &Some(DirectedOp::Left(ref lop, false)) if continues_with_append(lop.as_str(), atom) =>
-                Some(DirectedOp::Left(lop.clone(), false)),
-            &Some(DirectedOp::Left(ref lop, true)) =>
+            &Some(DirectedOp::Left(ref lop, (priority, spec))) if is_infix!(spec) =>
                 if self.outputter.ends_with(&format!(" {}", lop.as_str())) {
-                    Some(DirectedOp::Left(lop.clone(), false))
+                    Some(DirectedOp::Left(lop.clone(), (priority, spec)))
                 } else if continues_with_append(lop.as_str(), atom) {
-                    Some(DirectedOp::Left(lop.clone(), true))
+                    Some(DirectedOp::Left(lop.clone(), (priority, spec)))
                 } else {
                     None
                 },
-            &Some(DirectedOp::Right(ref rop)) if continues_with_append(atom, rop.as_str()) =>
-                Some(DirectedOp::Right(rop.clone())),
+            &Some(DirectedOp::Left(ref lop, spec))
+                if continues_with_append(lop.as_str(), atom) =>
+                  Some(DirectedOp::Left(lop.clone(), spec)),
+            &Some(DirectedOp::Right(ref rop, spec))
+                if continues_with_append(atom, rop.as_str()) =>
+                  Some(DirectedOp::Right(rop.clone(), spec)),
             _ =>
                 None
         }
@@ -302,19 +317,22 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
     fn enqueue_op(&mut self, ct: ClauseType, spec: (usize, Specifier)) {
         if is_postfix!(spec.1) {
+            let right_directed_op = DirectedOp::Right(ct.name(), spec);
+
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
-            self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(right_directed_op));
         } else if is_prefix!(spec.1) {
-            let left_directed_op = DirectedOp::Left(ct.name(), false);
+            let left_directed_op = DirectedOp::Left(ct.name(), spec);
 
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
         } else { // if is_infix!(spec.1)
-            let left_directed_op = DirectedOp::Left(ct.name(), true);
+            let left_directed_op  = DirectedOp::Left(ct.name(), spec);
+            let right_directed_op = DirectedOp::Right(ct.name(), spec);
 
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
-            self.state_stack.push(TokenOrRedirect::CompositeRedirect(DirectedOp::Right(ct.name())));
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(right_directed_op));
         }
     }
 
@@ -323,7 +341,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.state_stack.push(TokenOrRedirect::Close);
 
         for _ in 0 .. arity {
-            self.state_stack.push(TokenOrRedirect::Redirect);
+            self.state_stack.push(TokenOrRedirect::FunctorRedirect);
             self.state_stack.push(TokenOrRedirect::Comma);
         }
 
@@ -333,7 +351,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
-    fn format_clause(&mut self, iter: &mut HCTrackingPreOrderIter, arity: usize, ct: ClauseType)
+    fn format_clause(&mut self, iter: &mut HCPreOrderIterator, arity: usize, ct: ClauseType)
     {
         if let Some(spec) = ct.spec() {
             if !self.ignore_ops {
@@ -363,7 +381,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         }
     }
 
-    fn check_for_seen(&mut self, iter: &mut HCTrackingPreOrderIter, op: &Option<DirectedOp>)
+    fn check_for_seen(&mut self, iter: &mut HCPreOrderIterator, op: &Option<DirectedOp>)
                       -> Option<HeapCellValue>
     {
         iter.stack().last().cloned().and_then(|addr| {
@@ -528,14 +546,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
         self.state_stack.push(TokenOrRedirect::CloseList(cell.clone()));
 
-        self.state_stack.push(TokenOrRedirect::Redirect);
+        self.state_stack.push(TokenOrRedirect::FunctorRedirect);
         self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
-        self.state_stack.push(TokenOrRedirect::Redirect);
+        self.state_stack.push(TokenOrRedirect::FunctorRedirect);
 
         self.state_stack.push(TokenOrRedirect::OpenList(cell));
     }
 
-    fn handle_heap_term(&mut self, iter: &mut HCTrackingPreOrderIter, op: Option<DirectedOp>)
+    fn handle_heap_term(&mut self, iter: &mut HCPreOrderIterator, op: Option<DirectedOp>,
+                        is_functor_redirect: bool)
     {
         let heap_val = match self.check_for_seen(iter, &op) {
             Some(heap_val) => heap_val,
@@ -543,18 +562,30 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         };
 
         match heap_val {
-            HeapCellValue::NamedStr(arity, ref name, Some(spec)) if name.as_str() != "," => {
-                if op.is_some() {
+            HeapCellValue::NamedStr(arity, ref name, Some(spec)) => {                
+                let add_brackets = if !self.ignore_ops {
+                    if let Some(ref op) = &op {
+                        needs_bracketing(spec, op)
+                    } else {
+                        is_functor_redirect && spec.0 >= 1000
+                    }
+                } else {
+                    false
+                };
+                    
+                if add_brackets {
                     self.state_stack.push(TokenOrRedirect::Close);
                 }
 
                 let ct = ClauseType::from(name.clone(), arity, Some(spec));
                 self.format_clause(iter, arity, ct);
 
-                if let Some(ref op) = op {
+                if add_brackets {
                     self.state_stack.push(TokenOrRedirect::Open);
+                }
 
-                    if self.outputter.ends_with(&format!(" {}", op.as_str())) {
+                if let Some(op) = op {
+                    if !add_brackets && self.outputter.ends_with(&format!(" {}", op.as_str())) {
                         self.state_stack.push(TokenOrRedirect::Space);
                     }
                 }
@@ -602,70 +633,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         }
     }
 
-    fn mark_terms_for_brackets(&mut self, addr: Addr) {
-        let mut iter = self.machine_st.acyclic_tracking_post_order_iter(addr);
-        let mut stack: Vec<(Addr, usize)> = vec![];
-
-        while let Some(heap_val) = iter.next() {
-            let addr = iter.this_addr();
-
-            match heap_val {
-                HeapCellValue::NamedStr(2, _, Some((prec, spec))) => {
-                    let (addr_2, prec_2) = stack.pop().unwrap();
-                    let (addr_1, prec_1) = stack.pop().unwrap();
-
-                    if prec_1 > prec || (prec_1 == prec && (is_xfy!(spec) || is_xfx!(spec))) {
-                        self.bracketed_addrs.insert(addr_1);
-                    }
-
-                    if prec_2 > prec || (prec_2 == prec && (is_yfx!(spec) || is_xfx!(spec))) {
-                        self.bracketed_addrs.insert(addr_2);
-                    }
-
-                    stack.push((addr, prec));
-                    continue;
-                },
-                HeapCellValue::NamedStr(1, _, Some((prec, spec))) => {
-                    let (addr_1, prec_1) = stack.pop().unwrap();
-
-                    if prec_1 > prec || (prec_1 == prec && (is_fx!(spec) || is_xf!(spec))) {
-                        self.bracketed_addrs.insert(addr_1);
-                    }
-
-                    stack.push((addr, prec));
-                    continue;
-                },
-                HeapCellValue::NamedStr(arity, _, None) => {
-                    let stack_len = stack.len();
-
-                    for (addr_1, prec_1) in stack.drain(stack_len - arity ..) {
-                        if prec_1 >= 1000 { // 1000 is the precedence of the (,) operator.
-                            self.bracketed_addrs.insert(addr_1);
-                        }
-                    }                    
-                },
-                HeapCellValue::Addr(addr_1 @ Addr::Con(Constant::Atom(_, Some(_)))) => {
-                    self.bracketed_addrs.insert(addr_1);
-                },
-                HeapCellValue::Addr(Addr::Lis(_)) => {
-                    let stack_len = stack.len();
-                    
-                    for (addr_1, prec_1) in stack.drain(stack_len - 2 ..) {
-                        if prec_1 >= 1000 { // 1000 is the precedence of the (,) operator.
-                            self.bracketed_addrs.insert(addr_1);
-                        }
-                    }
-                },
-                _ => {}
-            };
-
-            stack.push((addr, 0));
-        }
-    }
-
     pub fn print(mut self, addr: Addr) -> Outputter {
-        self.mark_terms_for_brackets(addr.clone());
-        let mut iter = self.machine_st.tracking_pre_order_iter(addr);
+        let mut iter = self.machine_st.pre_order_iter(addr);
 
         loop {
             if let Some(loc_data) = self.state_stack.pop() {
@@ -677,9 +646,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     TokenOrRedirect::NumberedVar(num_var) =>
                         self.outputter.append(num_var.as_str()),
                     TokenOrRedirect::CompositeRedirect(op) =>
-                        self.handle_heap_term(&mut iter, Some(op)),
-                    TokenOrRedirect::Redirect =>
-                        self.handle_heap_term(&mut iter, None),
+                        self.handle_heap_term(&mut iter, Some(op), false),
+                    TokenOrRedirect::FunctorRedirect =>
+                        self.handle_heap_term(&mut iter, None, true),
                     TokenOrRedirect::Space =>
                         self.outputter.push_char(' '),
                     TokenOrRedirect::Close =>
@@ -702,7 +671,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                         self.outputter.append(", ")
                 }
             } else if !iter.stack().is_empty() {
-                self.handle_heap_term(&mut iter, None);
+                self.handle_heap_term(&mut iter, None, false);
             } else {
                 break;
             }
