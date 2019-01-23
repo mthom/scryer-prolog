@@ -6,6 +6,7 @@ use prolog::toplevel::*;
 
 use std::collections::HashSet;
 use std::mem::swap;
+use std::ops::{Range, RangeFrom};
 
 pub struct TestOutputter {
     results: Vec<HashSet<String>>,
@@ -50,11 +51,10 @@ impl HCValueOutputter for TestOutputter {
         }
     }
 
-    fn insert_from_end(&mut self, idx: usize, c: char) {
-        let len = self.focus.len();
-        self.focus.insert(len - idx, c);
+    fn insert(&mut self, idx: usize, c: char) {
+        self.focus.insert(idx, c);
     }
-    
+
     fn result(self) -> Self::Output {
         self.results
     }
@@ -69,6 +69,14 @@ impl HCValueOutputter for TestOutputter {
 
     fn truncate(&mut self, len: usize) {
         self.focus.truncate(len);
+    }
+
+    fn range(&self, index: Range<usize>) -> &str {
+        &self.focus.as_str()[index]
+    }
+
+    fn range_from(&self, index: RangeFrom<usize>) -> &str {
+        &self.focus.as_str()[index]
     }
 }
 
@@ -1387,7 +1395,7 @@ reverse(Xs, Ys) :- lists:reverse(Xs, Ys).
     assert_prolog_success!(&mut wam, "?- reverse(_, _).");
 
     submit(&mut wam, ":- use_module(library(lists), []).");
-    
+
     assert_prolog_success!(&mut wam, "?- catch(reverse(_, _), error(existence_error(procedure, P), _), true).",
                            [["P = reverse/2"]]);
 }
@@ -1689,6 +1697,18 @@ fn test_queries_on_builtins()
                            [["X = (:-):-(:-)"]]);
     assert_prolog_success!(&mut wam, "?- X = (a:-b,c).",
                            [["X = a:-b,c"]]);
+    assert_prolog_success!(&mut wam, "?- X = f((f:-a,b,c)).",
+                           [["X = f((f:-a,b,c))"]]);
+    assert_prolog_success!(&mut wam, "?- X = f((f:-a,(b,c))).",
+                           [["X = f((f:-a,b,c))"]]);
+    assert_prolog_success!(&mut wam, "?- X = f((a,b,c)).",
+                           [["X = f((a,b,c))"]]);
+    assert_prolog_success!(&mut wam, "?- X = f((a,(b,c))).",
+                           [["X = f((a,b,c))"]]);
+    assert_prolog_success!(&mut wam, "?- X = f(((a,b),c)).",
+                           [["X = f(((a,b),c))"]]);
+    assert_prolog_success!(&mut wam, "?- X = f(((a,b),(c, d))).",
+                           [["X = f(((a,b),c,d))"]]);
 }
 
 #[test]
@@ -1877,7 +1897,7 @@ fn test_queries_on_dcgs()
     let mut wam = Machine::new();
 
     submit(&mut wam, ":- use_module(library(dcgs)).");
-    
+
     // test case by YeGoblynQueene from hacker news.
     compile_user_module(&mut wam,
     " ability(destroy, X) --> destroy(X).
@@ -1888,7 +1908,7 @@ fn test_queries_on_dcgs()
       permanent(X) --> [land], land(X).
       spell(X) --> [sorcery], sorcery(X).
       spell(X) --> [instant], instant(X).
-      
+
       creature('Llanowar Elves') --> [].
       artifact('Ankh of Mishra') --> [].
       land('Mountain') --> [].
@@ -1992,7 +2012,7 @@ fn test_queries_on_string_lists()
 
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), partial_string(\"def\", Y).",
                            [["X = [a, b, c, d, e, f | _]",
-                             "Y = [d, e, f | _]"]]);    
+                             "Y = [d, e, f | _]"]]);
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), partial_string(\"def\", Y),
                                          Y = \"defghijkl\".",
                            [["X = [a, b, c, d, e, f, g, h, i, j, k, l]",
@@ -2001,7 +2021,7 @@ fn test_queries_on_string_lists()
                                          \"defghijkl\" = Y.",
                            [["X = [a, b, c, d, e, f, g, h, i, j, k, l]",
                              "Y = [d, e, f, g, h, i, j, k, l]"]]);
-    
+
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G].",
                            [["X = [a, b, c, d, e, f | _]", "Y = [d, e, f | _]", "G = _"]]);
     assert_prolog_success!(&mut wam, "?- partial_string(\"abc\", X), matcher(X, Y), [d, e, f | G] = Y.",
@@ -2096,7 +2116,7 @@ fn test_queries_on_string_lists()
                             ["X = [b, d | _]", "Y = [d | _]"]]);
     assert_prolog_success!(&mut wam, "?- partial_string(\"bc\", X), matcher(X, Y).",
                            [["X = [b, c | _]", "Y = [c | _]"]]);
-    
+
     submit(&mut wam, "f(\"appendy jones\").
                       f(\"appendy smithers jones\").
                       f(\"appendy o'toole\").");
