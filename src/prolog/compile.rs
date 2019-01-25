@@ -122,7 +122,7 @@ fn compile_query(terms: Vec<QueryTerm>, queue: VecDeque<TopLevel>, flags: Machin
     let mut code = try!(cg.compile_query(&terms));
 
     compile_appendix(&mut code, &queue, false, flags)?;
-
+    
     Ok((code, cg.take_vars()))
 }
 

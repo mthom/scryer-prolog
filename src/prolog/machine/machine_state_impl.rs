@@ -59,6 +59,13 @@ impl MachineState {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn print_heap(&self) {
+        for h in 0 .. self.heap.h {
+            println!("{} : {}", h, self.heap[h]);
+        }
+    }
+    
     #[inline]
     pub fn machine_flags(&self) -> MachineFlags {
         self.flags
@@ -1260,7 +1267,8 @@ impl MachineState {
 
                 if let Addr::HeapCell(hc) = addr {
                     if hc < h {
-                        self.heap.push(HeapCellValue::Addr(addr));
+                        let heap_val = self.heap[hc].clone();
+                        self.heap.push(heap_val);
                         return;
                     }
                 }
@@ -2112,14 +2120,14 @@ impl MachineState {
                 .unwrap_or(0);
 
             if and_gi > or_gi {
-                let index = self.e + 1;
+                let new_e = self.e + 1;
 
-                self.and_stack[index].e  = self.e;
-                self.and_stack[index].cp = self.cp.clone();
-                self.and_stack[index].global_index = gi;
+                self.and_stack[new_e].e  = self.e;
+                self.and_stack[new_e].cp = self.cp.clone();
+                self.and_stack[new_e].global_index = gi;
 
-                self.and_stack.resize(index, num_cells);
-                self.e = index;
+                self.and_stack.resize(new_e, num_cells);
+                self.e = new_e;
 
                 return;
             }

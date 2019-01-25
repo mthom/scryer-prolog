@@ -43,6 +43,30 @@ impl<'a> ConjunctInfo<'a>
     fn perm_var_offset(&self) -> usize {
         self.has_deep_cut as usize
     }
+
+    fn mark_unsafe_vars(&self, mut unsafe_var_marker: UnsafeVarMarker, code: &mut Code) {
+        // target the last goal of the rule for handling unsafe variables.
+        // we use this weird logic to find the last goal.
+        let index = if let &Line::Control(_) = code.last().unwrap() {
+            code.len() - 2
+        } else {
+            code.len() - 1
+        };
+
+        if let Line::Query(_) = &code[index] {
+            unsafe_var_marker.record_unsafe_vars(&self.perm_vs);
+
+            for line in code.iter_mut() {
+                if let &mut Line::Query(ref mut query) = line {
+                    unsafe_var_marker.mark_safe_vars(query);
+                }
+            }
+        }
+
+        if let &mut Line::Query(ref mut query) = &mut code[index] {
+            unsafe_var_marker.mark_unsafe_vars(query);
+        }
+    }
 }
 
 impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
@@ -544,9 +568,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         self.compile_seq_prelude(&conjunct_info, &mut code);
 
         let iter = FactIterator::from_rule_head_clause(args);
-        let fact = self.compile_target(iter, GenContext::Head, false);
+        let mut fact = self.compile_target(iter, GenContext::Head, false);
+
+        let mut unsafe_var_marker = UnsafeVarMarker::new();
 
         if !fact.is_empty() {
+            unsafe_var_marker = self.mark_unsafe_fact_vars(&mut fact);
             code.push(Line::Fact(fact));
         }
 
@@ -554,23 +581,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         try!(self.compile_seq(iter, &conjunct_info, &mut code, false));
 
         if conjunct_info.allocates() {
-            let index = if let &Line::Control(_) = code.last().unwrap() {
-                code.len() - 2
-            } else {
-                code.len() - 1
-            };
-
-            if let &mut Line::Query(ref mut query) = &mut code[index] {
-                let head_iter = FactIterator::from_rule_head_clause(args);
-                conjunct_info.perm_vs.mark_unsafe_vars_in_rule(head_iter, query);
-            }
+            conjunct_info.mark_unsafe_vars(unsafe_var_marker, &mut code);
         }
 
         Self::compile_cleanup(&mut code, &conjunct_info, clauses.last().unwrap_or(p1));
         Ok(code)
     }
 
-    fn mark_unsafe_fact_vars(&self, fact: &mut CompiledFact)
+    fn mark_unsafe_fact_vars(&self, fact: &mut CompiledFact) -> UnsafeVarMarker
     {
         let mut unsafe_vars = HashMap::new();
 
@@ -587,14 +605,15 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                             *fact_instr = FactInstruction::UnifyLocalValue(reg);
                         }
                     },
-                &mut FactInstruction::UnifyVariable(reg) => {
+                &mut FactInstruction::UnifyVariable(reg) =>
                     if let Some(found) = unsafe_vars.get_mut(&reg) {
                         *found = true;
-                    }
-                },
+                    },
                 _ => {}
             };
         }
+
+        UnsafeVarMarker { unsafe_vars }
     }
 
     pub fn compile_fact<'b: 'a>(&mut self, term: &'b Term) -> Code
@@ -653,15 +672,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         try!(self.compile_seq(iter, &conjunct_info, &mut code, true));
 
         if conjunct_info.allocates() {
-            let index = if let &Line::Control(_) = code.last().unwrap() {
-                code.len() - 2
-            } else {
-                code.len() - 1
-            };
-
-            if let &mut Line::Query(ref mut query) = &mut code[index] {
-                conjunct_info.perm_vs.mark_unsafe_vars_in_query(query);
-            }
+            conjunct_info.mark_unsafe_vars(UnsafeVarMarker::new(), &mut code);
         }
 
         if let Some(query_term) = query.last() {

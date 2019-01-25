@@ -202,9 +202,9 @@ get_args([Arg|Args], Func, I0, N) :-
 
 % write, write_canonical, writeq, write_term.
 is_write_option(Functor) :-
-    Functor =.. [Name, Arg | Args],
-    ( Args == [], Arg == true -> true
-    ; Args == [], Arg == false -> true
+    Functor =.. [Name, Arg],
+    ( Arg == true -> true
+    ; Arg == false -> true
     ; throw(error(domain_error(write_option, Functor), write_term/2)) ), % 8.14.2.3 e)
     ( Name == ignore_ops -> true
     ; Name == quoted -> true

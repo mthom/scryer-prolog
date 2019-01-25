@@ -4,7 +4,6 @@ use prolog_parser::tabled_rc::*;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::cmp::Ordering;
-use std::fmt;
 use std::ops::{Add, AddAssign, Index, IndexMut, Sub};
 use std::rc::Rc;
 
@@ -495,12 +494,12 @@ impl BuiltInClauseType {
 
 impl ClauseType {
     pub fn spec(&self) -> Option<(usize, Specifier)> {
-        match self {            
+        match self {
             &ClauseType::Op(ref op_decl, _) =>
                 Some((op_decl.0, op_decl.1)),
             &ClauseType::Inlined(InlinedClauseType::CompareNumber(..))
           | &ClauseType::BuiltIn(BuiltInClauseType::Is(..))
-          | &ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(_))      
+          | &ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(_))
           | &ClauseType::BuiltIn(BuiltInClauseType::NotEq)
           | &ClauseType::BuiltIn(BuiltInClauseType::Eq) =>
                 Some((700, XFX)),
@@ -713,18 +712,6 @@ pub enum Addr {
     HeapCell(usize),
     StackCell(usize, usize),
     Str(usize)
-}
-
-impl fmt::Display for Addr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Addr::Con(ref c) => write!(f, "Addr::Con({})", c),
-            &Addr::Lis(l) => write!(f, "Addr::Lis({})", l),
-            &Addr::HeapCell(h) => write!(f, "Addr::HeapCell({})", h),
-            &Addr::StackCell(fr, sc)=> write!(f, "Addr::StackCell({}, {})", fr, sc),
-            &Addr::Str(s) => write!(f, "Addr::Str({})", s)
-        }
-    }
 }
 
 impl PartialEq<Ref> for Addr {
@@ -1500,7 +1487,7 @@ impl OpDecl {
     pub fn name(&self) -> ClauseName {
         self.2.clone()
     }
-        
+
     pub fn submit(&self, module: ClauseName, op_dir: &mut OpDir) -> Result<(), SessionError>
     {
         let (prec, spec, name) = (self.0, self.1, self.2.clone());

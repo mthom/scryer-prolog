@@ -108,7 +108,7 @@ dependencies = [
 
 [[package]]
 name = "rusty-wam"
-version = "0.7.16"
+version = "0.7.17"
 dependencies = [
  "downcast 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",

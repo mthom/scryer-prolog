@@ -127,6 +127,32 @@ impl fmt::Display for ClauseType {
     }
 }
 
+impl fmt::Display for HeapCellValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &HeapCellValue::Addr(ref addr) =>
+                write!(f, "{}", addr),
+            &HeapCellValue::NamedStr(arity, ref name, Some((priority, spec))) =>
+                write!(f, "{}/{} (op, priority: {}, spec: {})", name.as_str(), arity,
+                       priority, spec),
+            &HeapCellValue::NamedStr(arity, ref name, None) =>
+                write!(f, "{}/{}", name.as_str(), arity)
+        }
+    }
+}
+
+impl fmt::Display for Addr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Addr::Con(ref c) => write!(f, "Addr::Con({})", c),
+            &Addr::Lis(l) => write!(f, "Addr::Lis({})", l),
+            &Addr::HeapCell(h) => write!(f, "Addr::HeapCell({})", h),
+            &Addr::StackCell(fr, sc)=> write!(f, "Addr::StackCell({}, {})", fr, sc),
+            &Addr::Str(s) => write!(f, "Addr::Str({})", s)
+        }
+    }
+}
+
 impl fmt::Display for ControlInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

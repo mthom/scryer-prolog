@@ -627,7 +627,7 @@ impl MachineState {
             }
 
             self.query_stepper(indices, policies, code_repo);
-
+            
             match self.p {
                 CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {},
                 _ => {

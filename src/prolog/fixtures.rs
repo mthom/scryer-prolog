@@ -174,25 +174,58 @@ impl<'a> VariableFixtures<'a>
             }
         }
     }
+}
 
-    fn mark_unsafe_vars(&self, unsafe_vars: &mut HashMap<RegType, bool>, query: &mut CompiledQuery)
+pub struct UnsafeVarMarker {
+    pub unsafe_vars: HashMap<RegType, bool>
+}
+
+impl UnsafeVarMarker {
+    pub fn new() -> Self {
+        UnsafeVarMarker {
+            unsafe_vars: HashMap::new()
+        }
+    }
+
+    pub fn record_unsafe_vars(&mut self, fixtures: &VariableFixtures) {
+        for &(_, ref cb) in fixtures.values() {
+            if let Some(index) = cb.first() {
+                if !self.unsafe_vars.contains_key(&index.get().norm()) {
+                    self.unsafe_vars.insert(index.get().norm(), false);
+                }
+            }
+        }
+    }
+
+    pub fn mark_safe_vars(&mut self, query: &mut CompiledQuery) {
+        for query_instr in query.iter_mut() {
+            match query_instr {
+                &mut QueryInstruction::PutVariable(RegType::Temp(r), _) =>
+                    if let Some(found) = self.unsafe_vars.get_mut(&RegType::Temp(r)) {
+                        *found = true;
+                    },
+                &mut QueryInstruction::SetVariable(reg) =>
+                    if let Some(found) = self.unsafe_vars.get_mut(&reg) {
+                        *found = true;
+                    },
+                _ => {}
+            }
+        }
+    }
+
+    pub fn mark_unsafe_vars(&mut self, query: &mut CompiledQuery)
     {
         for query_instr in query.iter_mut() {
             match query_instr {
                 &mut QueryInstruction::PutValue(RegType::Perm(i), arg) =>
-                    if let Some(found) = unsafe_vars.get_mut(&RegType::Perm(i)) {
+                    if let Some(found) = self.unsafe_vars.get_mut(&RegType::Perm(i)) {
                         if !*found {
                             *found = true;
                             *query_instr = QueryInstruction::PutUnsafeValue(i, arg);
                         }
                     },
-                &mut QueryInstruction::SetVariable(reg)
-              | &mut QueryInstruction::PutVariable(reg, _) =>
-                    if let Some(found) = unsafe_vars.get_mut(&reg) {
-                        *found = true;
-                    },
                 &mut QueryInstruction::SetValue(reg) =>
-                    if let Some(found) = unsafe_vars.get_mut(&reg) {
+                    if let Some(found) = self.unsafe_vars.get_mut(&reg) {
                         if !*found {
                             *found = true;
                             *query_instr = QueryInstruction::SetLocalValue(reg);
@@ -201,44 +234,5 @@ impl<'a> VariableFixtures<'a>
                 _ => {}
             };
         }
-    }
-
-    fn record_unsafe_vars(&self, unsafe_vars: &mut HashMap<RegType, bool>) {
-        for &(_, ref cb) in self.values() {
-            match cb.first() {
-                Some(index) => {
-                    unsafe_vars.insert(index.get().norm(), false);
-                },
-                None => {}
-            };
-        }
-    }
-
-    fn mark_head_vars_as_safe(&self, head_iter: FactIterator<'a>, unsafe_vars: &mut HashMap<RegType, bool>)
-    {
-        for term_ref in head_iter {
-            match term_ref {
-                TermRef::Var(Level::Shallow, cell, _) => {
-                    unsafe_vars.remove(&cell.get().norm());
-                },
-                _ => {}
-            };
-        }
-    }
-
-    pub fn mark_unsafe_vars_in_query(&self, query: &mut CompiledQuery) {
-        let mut unsafe_vars = HashMap::new();
-
-        self.record_unsafe_vars(&mut unsafe_vars);
-        self.mark_unsafe_vars(&mut unsafe_vars, query);
-    }
-
-    pub fn mark_unsafe_vars_in_rule(&self, head_iter: FactIterator<'a>, query: &mut CompiledQuery)
-    {
-        let mut unsafe_vars = HashMap::new();
-
-        self.record_unsafe_vars(&mut unsafe_vars);
-        self.mark_head_vars_as_safe(head_iter, &mut unsafe_vars);
-        self.mark_unsafe_vars(&mut unsafe_vars, query);
     }
 }

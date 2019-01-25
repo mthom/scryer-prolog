@@ -628,7 +628,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
     pub fn print(mut self, addr: Addr) -> Outputter {
         let mut iter = self.machine_st.pre_order_iter(addr);
-
+        
         loop {
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {

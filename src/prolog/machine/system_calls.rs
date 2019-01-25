@@ -516,9 +516,9 @@ impl MachineState {
             &SystemClauseType::WriteTerm => {
                 let addr = self[temp_v!(1)].clone();
 
-                let ignore_ops = self[temp_v!(2)].clone();
-                let numbervars = self[temp_v!(3)].clone();
-                let quoted = self[temp_v!(4)].clone();
+                let ignore_ops = self.store(self.deref(self[temp_v!(2)].clone()));
+                let numbervars = self.store(self.deref(self[temp_v!(3)].clone()));
+                let quoted = self.store(self.deref(self[temp_v!(4)].clone()));
 
                 let mut printer = HCPrinter::new(&self, PrinterOutputter::new());
 

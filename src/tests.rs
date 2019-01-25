@@ -1493,7 +1493,7 @@ fn test_queries_on_builtins()
                                        ["N = 5", "Xs = [_4, _8, _12, _16, _20]"]],
                                       6);
 
-    assert_prolog_success!(&mut wam, "?- length(Xs, 3).", [["Xs = [_4, _8, _12]"]]);
+    assert_prolog_success!(&mut wam, "?- length(Xs, 3).", [["Xs = [_5, _9, _13]"]]);
     assert_prolog_success!(&mut wam, "?- length([], N).", [["N = 0"]]);
     assert_prolog_success!(&mut wam, "?- length(Xs, 0).", [["Xs = []"]]);
     assert_prolog_success!(&mut wam, "?- length([a,b,[a,b,c]], 3).");
@@ -1630,7 +1630,7 @@ fn test_queries_on_builtins()
 
     assert_prolog_failure!(&mut wam, "?- Pairs = [a-a|Pairs], keysort(Pairs, _).");
     assert_prolog_success!(&mut wam, "?- Pairs = [a-a|Pairs], catch(keysort(Pairs, _), error(E, _), true).",
-                           [["E = type_error(list, [a-a | _22])", "Pairs = [a-a | Pairs]"]]);
+                           [["E = type_error(list, [a-a | _25])", "Pairs = [a-a | Pairs]"]]);
 
     assert_prolog_success!(&mut wam, "?- keysort([], L).",
                            [["L = []"]]);
@@ -1639,9 +1639,9 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- catch(keysort([],[a|a]),error(Pat, _),true).",
                            [["Pat = type_error(list, [a | a])"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort(_, _), error(E, _), true).",
-                           [["E = type_error(list, _13)"]]);
+                           [["E = type_error(list, _16)"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a-1], [_|b]), error(E, _), true).",
-                           [["E = type_error(list, [_24 | b])"]]);
+                           [["E = type_error(list, [_27 | b])"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a-1], [a-b,c-d,a]), error(E, _), true).",
                            [["E = type_error(pair, a)"]]);
     assert_prolog_success!(&mut wam, "?- catch(keysort([a], [a-b]), error(E, _), true).",
@@ -1654,7 +1654,7 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- sort([], L).",
                            [["L = []"]]);
     assert_prolog_success!(&mut wam, "?- catch(sort(_, []), error(E, _), true).",
-                           [["E = type_error(list, _13)"]]);
+                           [["E = type_error(list, _16)"]]);
     assert_prolog_success!(&mut wam, "?- catch(sort([a,b,c], not_a_list), error(E, _), true).",
                            [["E = type_error(list, not_a_list)"]]);
 

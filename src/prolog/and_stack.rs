@@ -46,18 +46,18 @@ impl AndStack {
     pub fn clear(&mut self) {
         self.0.clear()
     }
-    
-    pub fn resize(&mut self, fr: usize, n: usize) {                        
-        let len = self[fr].perms.len();               
-        
+
+    pub fn resize(&mut self, fr: usize, n: usize) {
+        let len = self[fr].perms.len();
+
         if len < n {
             self[fr].perms.reserve(n - len);
 
-            for i in len .. n {                
+            for i in len .. n {
                 self[fr].perms.push(Addr::StackCell(fr, i));
             }
         }
-    }    
+    }
 }
 
 impl Index<usize> for AndStack {
