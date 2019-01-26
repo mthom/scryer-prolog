@@ -193,13 +193,14 @@ impl ListingCompiler {
     {
         let mod_name = self.get_module_name();
 
-        if let Some(submodule) = wam_indices.take_module(submodule) {
+        if let Some(mut submodule) = wam_indices.take_module(submodule) {
             indices.use_module(code_repo, flags, &submodule)?;
 
             if let &mut Some(ref mut module) = &mut self.module {
                 module.remove_module(mod_name, &submodule);
                 module.use_module(code_repo, flags, &submodule)?;
             } else {
+                submodule.inserted_expansions = true;
                 wam_indices.remove_module(clause_name!("user"), &submodule);
             }
 
@@ -216,13 +217,14 @@ impl ListingCompiler {
     {
         let mod_name = self.get_module_name();
 
-        if let Some(submodule) = wam_indices.take_module(submodule) {
+        if let Some(mut submodule) = wam_indices.take_module(submodule) {
             indices.use_qualified_module(code_repo, flags, &submodule, exports)?;
 
             if let &mut Some(ref mut module) = &mut self.module {
                 module.remove_module(mod_name, &submodule);
                 module.use_qualified_module(code_repo, flags, &submodule, exports)?;
             } else {
+                submodule.inserted_expansions = true;
                 wam_indices.remove_module(clause_name!("user"), &submodule);
             }
 
@@ -346,7 +348,7 @@ impl ListingCompiler {
                 Ok(self.add_non_counted_bt_flag(name, arity)),
             Declaration::Op(op_decl) =>
                 op_decl.submit(self.get_module_name(), &mut indices.op_dir),
-            Declaration::UseModule(name) =>
+            Declaration::UseModule(name) =>                
                 self.use_module(name, code_repo, flags, wam_indices, indices),
             Declaration::UseQualifiedModule(name, exports) =>
                 self.use_qualified_module(name, code_repo, flags, &exports, wam_indices, indices),

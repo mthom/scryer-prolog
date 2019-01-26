@@ -45,14 +45,26 @@ expand_dcgs(Term0, N, (ModHead :- ModBody)) :-
     nonvar(Body),
     expand_body(Body, ModBody, N, N1).
 
-expand_body(Term0, (ModTerm, ModTerms), N0, N) :-
+expand_body(Term0, ModTerms, N0, N) :-
     nonvar(Term0), Term0 = (Term, Terms), !,
     nonvar(Term),
     expand_body_term(Term, ModTerm, N0, N1),
-    expand_body(Terms, ModTerms, N1, N).
+    unfurl_commas(ModTerm, ModTerms, ModTerms1),
+    expand_body(Terms, ModTerms1, N1, N).
 expand_body(Term0, ModTerm, N0, N) :-
     nonvar(Term0),
     expand_body_term(Term0, ModTerm, N0, N).
+
+/* unfurl_commas(?ModTerm, -ModTerms, -ModTerms1) :
+   sets  ModTerms = (ModTermI0, ModTermI1, ..., ModTermIN, ModTerms1) 
+   where ModTerm  = (ModTermI0, ModTermI1, ..., ModTermIN) */
+unfurl_commas(ModTerm, ModTerms, ModTerms1) :-
+    nonvar(ModTerm),
+    ModTerm  = (ModTermI0, ModTermIs),
+    !,
+    ModTerms = (ModTermI0, ModTerms2),    
+    unfurl_commas(ModTermIs, ModTerms2, ModTerms1).
+unfurl_commas(ModTermIN, (ModTermIN, ModTerms1), ModTerms1).
 
 expand_body_term([], true, N, N) :- !.
 expand_body_term([Arg|Args], ModTerm, N0, N) :-

@@ -299,7 +299,12 @@ impl SubModuleUser for IndexStore {
                   -> Result<(), SessionError>
     {
         use_module(self, submodule)?;
-        submodule.dump_expansions(code_repo, flags).map_err(SessionError::from)
+
+        if !submodule.inserted_expansions {
+            submodule.dump_expansions(code_repo, flags).map_err(SessionError::from)
+        } else {
+            Ok(())
+        }
     }
 }
 

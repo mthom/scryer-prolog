@@ -232,6 +232,7 @@ pub struct Module {
     pub op_dir: OpDir,
     pub term_expansions: (Predicate, VecDeque<TopLevel>),
     pub goal_expansions: (Predicate, VecDeque<TopLevel>),
+    pub inserted_expansions: bool // has the module been successfully inserted into toplevel??
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -1103,7 +1104,8 @@ impl Module {
                  term_expansions: (Predicate::new(), VecDeque::from(vec![])),
                  goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
                  code_dir: ModuleCodeDir::new(),
-                 op_dir: default_op_dir() }
+                 op_dir: default_op_dir(),
+                 inserted_expansions: false }
     }
 
     pub fn dump_expansions(&self, code_repo: &mut CodeRepo, flags: MachineFlags)
