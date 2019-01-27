@@ -109,16 +109,16 @@ impl MachineState {
                     self.heap[h] = HeapCellValue::Addr(t2)
             };
 
-            self.trail(r1);
+            self.trail(TrailRef::from(r1));
         } else {
             match a2.as_var() {
                 Some(Ref::StackCell(fr, sc)) => {
                     self.and_stack[fr][sc] = t1;
-                    self.trail(Ref::StackCell(fr, sc));
+                    self.trail(TrailRef::StackCell(fr, sc));
                 },
                 Some(Ref::HeapCell(h)) => {
                     self.heap[h] = HeapCellValue::Addr(t1);
-                    self.trail(Ref::HeapCell(h));
+                    self.trail(TrailRef::HeapCell(h));
                 },
                 None => {}
             }
@@ -347,14 +347,19 @@ impl MachineState {
         self.pstr_tr += 1;
     }
 
-    fn trail(&mut self, r: Ref) {
+    fn trail(&mut self, r: TrailRef) {
         match r {
-            Ref::HeapCell(hc) =>
-                if hc < self.hb {
-                    self.trail.push(r);
+            TrailRef::HeapCell(h) =>
+                if h < self.hb {
+                    self.trail.push(TrailRef::HeapCell(h));
                     self.tr += 1;
                 },
-            Ref::StackCell(fr, _) => {
+            TrailRef::AttrVarLink(h, prev_addr) =>
+                if h < self.hb {
+                    self.trail.push(TrailRef::AttrVarLink(h, prev_addr));
+                    self.tr += 1;
+                },
+            TrailRef::StackCell(fr, sc) => {
                 let fr_gi = self.and_stack[fr].global_index;
                 let b_gi  = if !self.or_stack.is_empty() {
                     if self.b > 0 {
@@ -368,7 +373,7 @@ impl MachineState {
                 };
 
                 if fr_gi < b_gi {
-                    self.trail.push(r);
+                    self.trail.push(TrailRef::StackCell(fr, sc));
                     self.tr += 1;
                 }
             }
@@ -376,12 +381,17 @@ impl MachineState {
     }
 
     pub(super) fn unwind_trail(&mut self, a1: usize, a2: usize) {
-        for i in a1 .. a2 {
-            match self.trail[i] {
-                Ref::HeapCell(r) =>
-                    self.heap[r] = HeapCellValue::Addr(Addr::HeapCell(r)),
-                Ref::StackCell(fr, sc) =>
-                    self.and_stack[fr][sc] = Addr::StackCell(fr, sc)
+        // the sequence is reversed to respect the chronology of trail
+        // additions, now that deleted attributes can be undeleted by
+        // backtracking.
+        for i in (a1 .. a2).rev() {
+            match self.trail[i].clone() {
+                TrailRef::HeapCell(h) =>
+                    self.heap[h] = HeapCellValue::Addr(Addr::HeapCell(h)),
+                TrailRef::StackCell(fr, sc) =>
+                    self.and_stack[fr][sc] = Addr::StackCell(fr, sc),
+                TrailRef::AttrVarLink(h, prev_addr) =>
+                    self.heap[h] = HeapCellValue::Addr(prev_addr)
             }
         }
     }
@@ -424,21 +434,21 @@ impl MachineState {
         let mut i = self.or_stack[b].tr;
 
         while i < self.tr {
-            let tr_i = self.trail[i];
+            let tr_i = self.trail[i].clone();
             let hb = self.hb;
 
             match tr_i {
-                Ref::HeapCell(tr_i) =>
+                TrailRef::HeapCell(tr_i) | TrailRef::AttrVarLink(tr_i, _) =>
                     if tr_i < hb {
                         i += 1;
                     } else {
                         let tr = self.tr;
-                        let val = self.trail[tr - 1];
+                        let val = self.trail[tr - 1].clone();
                         self.trail[i] = val;
                         self.trail.pop();
                         self.tr -= 1;
                     },
-                Ref::StackCell(fr, _) => {
+                TrailRef::StackCell(fr, _) => {
                     let b = self.b - 1;
                     let fr_gi = self.and_stack[fr].global_index;
                     let b_gi  = if !self.or_stack.is_empty() {
@@ -451,7 +461,7 @@ impl MachineState {
                         i += 1;
                     } else {
                         let tr = self.tr;
-                        let val = self.trail[tr - 1];
+                        let val = self.trail[tr - 1].clone();
                         self.trail[i] = val;
                         self.trail.pop();
                         self.tr -= 1;
@@ -474,11 +484,11 @@ impl MachineState {
         match self.store(self.deref(addr)) {
             Addr::HeapCell(hc) => {
                 self.heap[hc] = HeapCellValue::Addr(Addr::Con(c.clone()));
-                self.trail(Ref::HeapCell(hc));
+                self.trail(TrailRef::HeapCell(hc));
             },
             Addr::StackCell(fr, sc) => {
                 self.and_stack[fr][sc] = Addr::Con(c.clone());
-                self.trail(Ref::StackCell(fr, sc));
+                self.trail(TrailRef::StackCell(fr, sc));
             },
             Addr::Con(Constant::String(ref mut s)) =>
                 self.fail = match c {

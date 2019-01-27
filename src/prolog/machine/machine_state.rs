@@ -212,7 +212,7 @@ pub struct MachineState {
     pub(crate) and_stack: AndStack,
     pub(super) or_stack: OrStack,
     pub(super) registers: Registers,
-    pub(super) trail: Vec<Ref>,
+    pub(super) trail: Vec<TrailRef>,
     pub(super) pstr_trail: Vec<(usize, StringList, usize)>, // b, String, trunc_pt
     pub(super) pstr_tr: usize,
     pub(super) tr: usize,

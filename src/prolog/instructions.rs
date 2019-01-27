@@ -821,6 +821,22 @@ impl Ref {
     }
 }
 
+#[derive(Clone)]
+pub enum TrailRef {
+    HeapCell(usize),
+    StackCell(usize, usize),
+    AttrVarLink(usize, Addr)
+}
+
+impl From<Ref> for TrailRef {
+    fn from(r: Ref) -> Self {
+        match r {
+            Ref::HeapCell(h) => TrailRef::HeapCell(h),
+            Ref::StackCell(fr, sc) => TrailRef::StackCell(fr, sc)
+        }
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub enum HeapCellValue {
     Addr(Addr),
