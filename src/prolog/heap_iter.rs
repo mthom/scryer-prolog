@@ -65,7 +65,7 @@ impl<'a> HCPreOrderIterator<'a> {
 
                 da
             },
-            Addr::HeapCell(_) | Addr::StackCell(_, _) => da,
+            Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) => da,
             Addr::Str(s) => self.follow_heap(s) // record terms of structure.
         }
     }

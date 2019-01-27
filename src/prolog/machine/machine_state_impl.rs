@@ -78,7 +78,8 @@ impl MachineState {
 
     pub(crate) fn store(&self, a: Addr) -> Addr {
         match a {
-            Addr::HeapCell(r)       => self.heap[r].as_addr(r),
+            Addr::AttrVar(h)        => self.heap[h+1].as_addr(h+1),
+            Addr::HeapCell(h)       => self.heap[h].as_addr(h),
             Addr::StackCell(fr, sc) => self.and_stack[fr][sc].clone(),
             addr                    => addr
         }
@@ -219,10 +220,14 @@ impl MachineState {
 
             if d1 != d2 {
                 match (self.store(d1.clone()), self.store(d2.clone())) {
-                    (Addr::HeapCell(hc), _) =>
-                        self.bind(Ref::HeapCell(hc), d2),
-                    (_, Addr::HeapCell(hc)) =>
-                        self.bind(Ref::HeapCell(hc), d1),
+                    (Addr::AttrVar(h), addr) | (addr, Addr::AttrVar(h)) => {
+                        pdl.push(Addr::HeapCell(h+1));
+                        pdl.push(addr);
+                    },
+                    (Addr::HeapCell(h), _) =>
+                        self.bind(Ref::HeapCell(h), d2),
+                    (_, Addr::HeapCell(h)) =>
+                        self.bind(Ref::HeapCell(h), d1),
                     (Addr::StackCell(fr, sc), _) =>
                         self.bind(Ref::StackCell(fr, sc), d2),
                     (_, Addr::StackCell(fr, sc)) =>
@@ -481,10 +486,10 @@ impl MachineState {
     }
 
     pub(super) fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
-        match self.store(self.deref(addr)) {
-            Addr::HeapCell(hc) => {
-                self.heap[hc] = HeapCellValue::Addr(Addr::Con(c.clone()));
-                self.trail(TrailRef::HeapCell(hc));
+        match self.store(self.deref(addr)) {            
+            Addr::HeapCell(h) => {
+                self.heap[h] = HeapCellValue::Addr(Addr::Con(c.clone()));
+                self.trail(TrailRef::HeapCell(h));
             },
             Addr::StackCell(fr, sc) => {
                 self.and_stack[fr][sc] = Addr::Con(c.clone());
@@ -1163,7 +1168,7 @@ impl MachineState {
                 let addr = self.store(self.deref(a1));
 
                 let offset = match addr {
-                    Addr::HeapCell(_) | Addr::StackCell(_, _) => v,
+                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) => v,
                     Addr::Con(Constant::String(_)) if self.flags.double_quotes.is_chars() => l,
                     Addr::Con(_) => c,
                     Addr::Lis(_) => l,
@@ -1839,7 +1844,7 @@ impl MachineState {
                 },
             Addr::Lis(_) =>
                 self.try_functor_compound_case(clause_name!("."), 2),
-            Addr::HeapCell(_) | Addr::StackCell(_, _) => {
+            Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(..) => {
                 let name  = self.store(self.deref(self[temp_v!(2)].clone()));
                 let arity = self.store(self.deref(self[temp_v!(3)].clone()));
 

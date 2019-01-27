@@ -708,6 +708,7 @@ pub type CodeDeque = VecDeque<Line>;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Addr {
+    AttrVar(usize),
     Con(Constant),
     Lis(usize),
     HeapCell(usize),
@@ -776,8 +777,9 @@ impl Add<usize> for Addr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
+            Addr::AttrVar(a) => Addr::AttrVar(a + rhs),
             Addr::Lis(a) => Addr::Lis(a + rhs),
-            Addr::HeapCell(hc) => Addr::HeapCell(hc + rhs),
+            Addr::HeapCell(h) => Addr::HeapCell(h + rhs),
             Addr::Str(s) => Addr::Str(s + rhs),
             _ => self
         }
@@ -789,8 +791,9 @@ impl Sub<usize> for Addr {
 
     fn sub(self, rhs: usize) -> Self::Output {
         match self {
+            Addr::AttrVar(a) => Addr::AttrVar(a - rhs),
             Addr::Lis(a) => Addr::Lis(a - rhs),
-            Addr::HeapCell(hc) => Addr::HeapCell(hc - rhs),
+            Addr::HeapCell(h) => Addr::HeapCell(h - rhs),
             Addr::Str(s) => Addr::Str(s - rhs),
             _ => self
         }
@@ -800,7 +803,7 @@ impl Sub<usize> for Addr {
 impl From<Ref> for Addr {
     fn from(r: Ref) -> Self {
         match r {
-            Ref::HeapCell(hc)      => Addr::HeapCell(hc),
+            Ref::HeapCell(h)       => Addr::HeapCell(h),
             Ref::StackCell(fr, sc) => Addr::StackCell(fr, sc)
         }
     }
