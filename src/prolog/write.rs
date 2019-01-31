@@ -146,7 +146,7 @@ impl fmt::Display for Addr {
         match self {
             &Addr::Con(ref c) => write!(f, "Addr::Con({})", c),
             &Addr::Lis(l) => write!(f, "Addr::Lis({})", l),
-            &Addr::AttrVar(h) => write!(f, "Addr::AttrVar({})", h),
+            &Addr::AttrVar(h, attr_var_list) => write!(f, "Addr::AttrVar({}, {})", h, attr_var_list),
             &Addr::HeapCell(h) => write!(f, "Addr::HeapCell({})", h),
             &Addr::StackCell(fr, sc)=> write!(f, "Addr::StackCell({}, {})", fr, sc),
             &Addr::Str(s) => write!(f, "Addr::Str({})", s)

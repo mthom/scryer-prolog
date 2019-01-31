@@ -196,7 +196,7 @@ impl<'a, R: Read> TermStream<'a, R> {
     fn parse_expansion_output(&mut self, term_string: &str, op_dir: &OpDir)
                               -> Result<Term, ParserError>
     {
-        let mut parser = Parser::new(term_string.trim().as_bytes(), self.indices.atom_tbl.clone(),
+        let mut parser = Parser::new(term_string.trim().as_bytes(), self.parser.get_atom_tbl(),
                                      self.flags);
         parser.read_term(composite_op!(self.in_module, &self.indices.op_dir, op_dir))
     }
@@ -288,6 +288,18 @@ impl<'a, R: Read> TermStream<'a, R> {
 }
 
 impl MachineState {
+    fn print_with_locs(&self, target: usize, var_dict: &HeapVarDict) -> PrinterOutputter {
+        let output = PrinterOutputter::new();
+        let mut printer = HCPrinter::from_heap_locs(&self, output, &var_dict);
+
+        printer.quoted = true;
+        printer.numbervars = true;
+
+        printer.see_all_locs();
+
+        printer.print(Addr::HeapCell(target))
+    }
+
     fn try_expand_term(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
                        code_repo: &mut CodeRepo, term: &Term, hook: CompileTimeHook)
                        -> Option<String>
@@ -308,17 +320,7 @@ impl MachineState {
             self.reset();
             None
         } else {
-            let mut output  = {
-                let output = PrinterOutputter::new();
-                let mut printer = HCPrinter::from_heap_locs(&self, output, &var_dict);
-
-                printer.quoted = true;
-                printer.numbervars = true;
-
-                printer.see_all_locs();
-
-                printer.print(Addr::HeapCell(h))
-            };
+            let mut output = self.print_with_locs(h, &var_dict);
 
             output.push_char('.');
             self.reset();

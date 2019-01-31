@@ -238,9 +238,12 @@ pub struct Module {
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
     CheckCutPoint,
+    DeleteAttribute,
+    DeleteHeadAttribute,
     DynamicModuleResolution,
     ExpandGoal,
     ExpandTerm,
+    GetAttributedVariableList,
     GetBValue,
     GetSCCCleaner,
     InstallSCCCleaner,
@@ -273,9 +276,12 @@ impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
+            &SystemClauseType::DeleteAttribute => clause_name!("$del_attr"),
+            &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
             &SystemClauseType::DynamicModuleResolution => clause_name!("$module_call"),
             &SystemClauseType::ExpandTerm => clause_name!("$expand_term"),
             &SystemClauseType::ExpandGoal => clause_name!("$expand_goal"),
+            &SystemClauseType::GetAttributedVariableList => clause_name!("$get_attr_list"),
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
             &SystemClauseType::GetDoubleQuotes => clause_name!("$get_double_quotes"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
@@ -311,9 +317,12 @@ impl SystemClauseType {
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
+            ("$del_attr", 1) => Some(SystemClauseType::DeleteAttribute),
+            ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),
             ("$module_call", 2) => Some(SystemClauseType::DynamicModuleResolution),
             ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
+            ("$get_attr_list", 2) => Some(SystemClauseType::GetAttributedVariableList),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
             ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
@@ -708,7 +717,7 @@ pub type CodeDeque = VecDeque<Line>;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Addr {
-    AttrVar(usize),
+    AttrVar(usize, usize), // the location of the AttrVal in the heap, the location of the attribute list.
     Con(Constant),
     Lis(usize),
     HeapCell(usize),
@@ -751,14 +760,15 @@ impl PartialOrd<Ref> for Addr {
 impl Addr {
     pub fn is_ref(&self) -> bool {
         match self {
-            &Addr::HeapCell(_) | &Addr::StackCell(_, _) => true,
+            &Addr::AttrVar(..) | &Addr::HeapCell(_) | &Addr::StackCell(_, _) => true,
             _ => false
         }
     }
 
     pub fn as_var(&self) -> Option<Ref> {
         match self {
-            &Addr::HeapCell(hc) => Some(Ref::HeapCell(hc)),
+            &Addr::AttrVar(h, _) => Some(Ref::HeapCell(h)), 
+            &Addr::HeapCell(h) => Some(Ref::HeapCell(h)),
             &Addr::StackCell(fr, sc) => Some(Ref::StackCell(fr, sc)),
             _ => None
         }
@@ -777,7 +787,6 @@ impl Add<usize> for Addr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            Addr::AttrVar(a) => Addr::AttrVar(a + rhs),
             Addr::Lis(a) => Addr::Lis(a + rhs),
             Addr::HeapCell(h) => Addr::HeapCell(h + rhs),
             Addr::Str(s) => Addr::Str(s + rhs),
@@ -791,7 +800,6 @@ impl Sub<usize> for Addr {
 
     fn sub(self, rhs: usize) -> Self::Output {
         match self {
-            Addr::AttrVar(a) => Addr::AttrVar(a - rhs),
             Addr::Lis(a) => Addr::Lis(a - rhs),
             Addr::HeapCell(h) => Addr::HeapCell(h - rhs),
             Addr::Str(s) => Addr::Str(s - rhs),

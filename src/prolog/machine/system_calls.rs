@@ -203,6 +203,36 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &SystemClauseType::DeleteAttribute => {
+                let ls0 = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                if let Addr::Lis(l1) = ls0 {
+                    if let Addr::Lis(l2) = self.store(self.deref(Addr::HeapCell(l1 + 1))) {
+                        let addr = self.heap[l1 + 1].as_addr(l1 + 1);                        
+                        self.heap[l1 + 1] = HeapCellValue::Addr(Addr::HeapCell(l2 + 1));
+                        self.trail(TrailRef::AttrVarLink(l2 + 1, addr));
+                    }
+                }                
+            },
+            &SystemClauseType::DeleteHeadAttribute => {
+                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+                
+                match addr {
+                    Addr::AttrVar(_, attr_var) => {
+                        let addr = self.heap[attr_var].as_addr(attr_var).clone();
+                        let addr = self.store(self.deref(addr));
+                        
+                        match addr {
+                            Addr::Lis(l) => {
+                                self.heap[attr_var] = HeapCellValue::Addr(Addr::HeapCell(l+1));
+                                self.trail(TrailRef::AttrVarLink(attr_var, Addr::Lis(l)));
+                            },
+                            _ => {}
+                        }
+                    },
+                    _ => {}
+                }
+            },
             &SystemClauseType::DynamicModuleResolution => {
                 let module_name = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -213,14 +243,14 @@ impl MachineState {
                                 for i in 1 .. arity + 1 {
                                     self.registers[i] = self.heap[a+i].as_addr(a+i);
                                 }
-                                
+
                                 return self.module_lookup(indices, (name, arity), module_name, true);
                             },
                         Addr::Con(Constant::Atom(name, _)) =>
                             return self.module_lookup(indices, (name, 0), module_name, true),
                         addr => {
                             let stub = MachineError::functor_stub(clause_name!("(:)"), 2);
-                            
+
                             let type_error = MachineError::type_error(ValidType::Callable, addr);
                             let type_error = self.error_form(type_error, stub);
 
@@ -236,6 +266,40 @@ impl MachineState {
             &SystemClauseType::ExpandTerm => {
                 self.p = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
                 return Ok(());
+            },
+            &SystemClauseType::GetAttributedVariableList => {
+                let attr_var = self.store(self.deref(self[temp_v!(1)].clone()));
+                let mut attr_var_list = match attr_var {
+                    Addr::AttrVar(_, attr_var_list) => attr_var_list,
+                    attr_var @ Addr::HeapCell(_) | attr_var @ Addr::StackCell(..) => {
+                        // create an AttrVar in the heap.
+                        let h = self.heap.h;
+                        
+                        self.heap.push(HeapCellValue::Addr(Addr::AttrVar(h, h + 2)));
+                        self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h + 1)));
+                        self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h + 2)));
+
+                        match attr_var.as_var().unwrap() {
+                            Ref::HeapCell(r) => {
+                                self.heap[r] = HeapCellValue::Addr(Addr::HeapCell(h));
+                                self.trail(TrailRef::HeapCell(r));
+                            },
+                            Ref::StackCell(fr, sc) => {
+                                self.and_stack[fr][sc] = Addr::HeapCell(h);
+                                self.trail(TrailRef::StackCell(fr, sc));
+                            }
+                        }
+
+                        h + 2
+                    },
+                    _ => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                };
+
+                let list_var = self[temp_v!(2)].clone();
+                self.unify(Addr::HeapCell(attr_var_list), list_var);
             },
             &SystemClauseType::GetDoubleQuotes => {
                 let a1 = self[temp_v!(1)].clone();

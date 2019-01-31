@@ -31,7 +31,7 @@ pub enum Input {
     Term(Term)
 }
 
-pub fn read_toplevel(wam: &mut Machine) -> Result<Input, ParserError> {    
+pub fn read_toplevel(wam: &mut Machine) -> Result<Input, ParserError> {
     let mut buffer = String::new();
 
     let stdin = stdin();
@@ -48,7 +48,7 @@ pub fn read_toplevel(wam: &mut Machine) -> Result<Input, ParserError> {
             let mut term_stream = TermStream::new(stdin.lock(), wam.indices.atom_tbl.clone(),
                                                   wam.machine_flags(), &mut wam.indices,
                                                   &mut wam.policies, &mut wam.code_repo);
-            
+
             term_stream.add_to_top(buffer.as_str());
             Ok(Input::Term(term_stream.read_term(&mut wam.machine_st, &OpDir::new())?))
         }
