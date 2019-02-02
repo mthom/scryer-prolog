@@ -592,13 +592,14 @@ impl MachineState {
     {
         for (var, var_data) in alloc_locs {
             match var_data {
-                &VarData::Perm(p) if p > 0 => {
-                    let e = self.e;
-                    let r = var_data.as_reg_type().reg_num();
-                    let addr = self.and_stack[e][r].clone();
+                &VarData::Perm(p) if p > 0 =>
+                    if !heap_locs.contains_key(var) {
+                        let e = self.e;
+                        let r = var_data.as_reg_type().reg_num(); // crashes here.
+                        let addr = self.and_stack[e][r].clone();
 
-                    heap_locs.insert(var.clone(), addr);
-                },
+                        heap_locs.insert(var.clone(), addr);
+                    },
                 &VarData::Temp(cn, _, _) if cn == chunk_num => {
                     let r = var_data.as_reg_type();
 
