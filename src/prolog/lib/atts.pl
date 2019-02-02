@@ -81,7 +81,7 @@ get_attrs_var_check -->
 
 put_attrs(Name/Arity) -->
     put_attr(Name, Arity),
-    { numbervars([Var, Attr], 0, _) },
+    { numbervars([Var, Attr], 0, _) }, 
     [(put_atts(Var, Attr) :- lists:maplist(put_atts(Var), Attr))].
 put_attrs((Name/Arity, Atts)) -->
     { nonvar(Atts) },

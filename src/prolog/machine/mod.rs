@@ -87,7 +87,7 @@ impl IndexStore {
             .and_then(|ref module| module.code_dir.get(&(name, arity)))
             .cloned()
     }
-    
+
     pub(super) fn get_cleaner_sites(&self) -> (usize, usize) {
         let r_w_h  = clause_name!("run_cleaners_with_handling");
         let r_wo_h = clause_name!("run_cleaners_without_handling");
@@ -109,7 +109,7 @@ impl IndexStore {
 
 pub type CompiledResult = (Predicate, VecDeque<TopLevel>);
 
-impl CodeRepo {       
+impl CodeRepo {
     #[inline]
     fn new() -> Self {
         CodeRepo {
@@ -130,14 +130,14 @@ impl CodeRepo {
     }
 
     #[inline]
-    pub fn truncate_terms(&mut self, key: PredicateKey, len: usize, queue_len: usize) 
+    pub fn truncate_terms(&mut self, key: PredicateKey, len: usize, queue_len: usize)
                           -> (Predicate, VecDeque<TopLevel>)
     {
         self.term_dir.get_mut(&key)
             .map(|entry| (Predicate((entry.0).0.drain(len ..).collect()),
                           entry.1.drain(queue_len ..).collect()))
             .unwrap_or((Predicate::new(), VecDeque::from(vec![])))
-    }    
+    }
 
     pub fn add_in_situ_result(&mut self, result: &CompiledResult, in_situ_code_dir: &mut InSituCodeDir,
                               flags: MachineFlags)
@@ -154,10 +154,10 @@ impl CodeRepo {
 
         let mut cg = CodeGenerator::<DebrayAllocator>::new(true, flags);
         // clone the decl to avoid the need to wipe its register cells later.
-        let mut decl_code = cg.compile_predicate(&decl.0.clone())?;        
-        
+        let mut decl_code = cg.compile_predicate(&decl.0.clone())?;
+
         compile_appendix(&mut decl_code, queue, true, flags)?;
-                
+
         self.in_situ_code.extend(decl_code.into_iter());
         Ok(())
     }
@@ -294,7 +294,7 @@ impl SubModuleUser for IndexStore {
         use_qualified_module(self, submodule, exports)?;
         submodule.dump_expansions(code_repo, flags).map_err(SessionError::from)
     }
-    
+
     fn use_module(&mut self, code_repo: &mut CodeRepo, flags: MachineFlags, submodule: &Module)
                   -> Result<(), SessionError>
     {
@@ -429,7 +429,8 @@ impl Machine {
         let mut heap_locs = HashMap::new();
 
         self.code_repo.cached_query = code;
-        self.machine_st.run_query(&mut self.indices, &mut self.policies, &self.code_repo, &alloc_locs, &mut heap_locs);
+        self.machine_st.run_query(&mut self.indices, &mut self.policies, &self.code_repo,
+                                  &alloc_locs, &mut heap_locs);
 
         if self.machine_st.fail {
             self.fail(&heap_locs)
@@ -632,7 +633,7 @@ impl MachineState {
             }
 
             self.query_stepper(indices, policies, code_repo);
-            
+
             match self.p {
                 CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {},
                 _ => {
