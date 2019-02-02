@@ -4,9 +4,7 @@ use prolog_parser::tabled_rc::TabledData;
 
 use prolog::instructions::*;
 use prolog::iterators::*;
-use prolog::machine::*;
 use prolog::machine::machine_state::MachineState;
-use prolog::machine::term_expansion::*;
 
 use std::collections::VecDeque;
 use std::io::{Read, stdin};
@@ -28,10 +26,10 @@ pub enum Input {
     Quit,
     Clear,
     Batch,
-    Term(Term)
+    TermString(String)
 }
 
-pub fn read_toplevel(wam: &mut Machine) -> Result<Input, ParserError> {
+pub fn toplevel_read_line() -> Result<Input, ParserError> {
     let mut buffer = String::new();
 
     let stdin = stdin();
@@ -44,14 +42,7 @@ pub fn read_toplevel(wam: &mut Machine) -> Result<Input, ParserError> {
             println!("(type Enter + Ctrl-D to terminate the stream when finished)");
             Ok(Input::Batch)
         },
-        _ => {
-            let mut term_stream = TermStream::new(stdin.lock(), wam.indices.atom_tbl.clone(),
-                                                  wam.machine_flags(), &mut wam.indices,
-                                                  &mut wam.policies, &mut wam.code_repo);
-
-            term_stream.add_to_top(buffer.as_str());
-            Ok(Input::Term(term_stream.read_term(&mut wam.machine_st, &OpDir::new())?))
-        }
+        _ => Ok(Input::TermString(buffer))
     }
 }
 

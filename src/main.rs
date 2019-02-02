@@ -9,6 +9,7 @@ mod prolog;
 use prolog::compile::*;
 use prolog::machine::*;
 use prolog::read::*;
+use prolog::toplevel::string_to_toplevel;
 use prolog::write::*;
 
 use std::io::{Write, stdin, stdout};
@@ -23,9 +24,14 @@ fn prolog_repl() {
         print!("prolog> ");
         stdout().flush().unwrap();
         
-        match read_toplevel(&mut wam) {
-            Ok(Input::Term(term)) => {
-                let result = compile_term(&mut wam, term);
+        match toplevel_read_line() {
+            Ok(Input::TermString(buffer)) => {
+                let stdin  = stdin();
+                let result = match string_to_toplevel(stdin.lock(), buffer, &mut wam) {
+                    Ok(packet) => compile_term(&mut wam, packet),
+                    Err(e) => EvalSession::from(e)
+                };
+
                 print(&mut wam, result)
             },
             Ok(Input::Batch) => {

@@ -320,7 +320,7 @@ impl fmt::Display for Level {
 pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
         EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
-            if heap_locs.is_empty() {
+            if wam.or_stack_is_empty() && heap_locs.is_empty() {
                 println!("true.");
                 return;
             }

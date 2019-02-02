@@ -31,7 +31,7 @@ macro_rules! try_or_fail {
 }
 
 impl MachineState {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         MachineState {
             s: 0,
             p: CodePtr::default(),

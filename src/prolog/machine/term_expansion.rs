@@ -193,17 +193,17 @@ impl<'a, R: Read> TermStream<'a, R> {
         }
     }
 
-    fn parse_expansion_output(&mut self, term_string: &str, op_dir: &OpDir)
-                              -> Result<Term, ParserError>
+    fn parse_expansion_output(&self, term_string: &str, op_dir: &OpDir) -> Result<Term, ParserError>
     {
         let mut parser = Parser::new(term_string.trim().as_bytes(), self.parser.get_atom_tbl(),
                                      self.flags);
         parser.read_term(composite_op!(self.in_module, &self.indices.op_dir, op_dir))
     }
 
-    pub fn read_term(&mut self, machine_st: &mut MachineState, op_dir: &OpDir)
-                     -> Result<Term, ParserError>
+    pub fn read_term(&mut self, op_dir: &OpDir) -> Result<Term, ParserError>
     {
+        let mut machine_st = MachineState::new();
+
         loop {
             while let Some(term) = self.stack.pop() {
                 match machine_st.try_expand_term(self.indices, self.policies, self.code_repo,
@@ -214,7 +214,7 @@ impl<'a, R: Read> TermStream<'a, R> {
                         self.enqueue_term(term)?
                     },
                     None => {
-                        let term = self.run_goal_expanders(machine_st, op_dir, term)?;
+                        let term = self.run_goal_expanders(&mut machine_st, op_dir, term)?;
                         return Ok(term);
                     }
                 };
@@ -227,6 +227,7 @@ impl<'a, R: Read> TermStream<'a, R> {
         }
     }
 
+    pub(crate)
     fn run_goal_expanders(&mut self, machine_st: &mut MachineState, op_dir: &OpDir, term: Term)
                           -> Result<Term, ParserError>
     {
@@ -257,8 +258,7 @@ impl<'a, R: Read> TermStream<'a, R> {
         }
     }
 
-    fn expand_goals(&mut self, machine_st: &mut MachineState, op_dir: &OpDir,
-                    mut terms: VecDeque<Term>)
+    fn expand_goals(&mut self, machine_st: &mut MachineState, op_dir: &OpDir, mut terms: VecDeque<Term>)
                     -> Result<Vec<Term>, ParserError>
     {
         let mut results = vec![];
@@ -275,8 +275,7 @@ impl<'a, R: Read> TermStream<'a, R> {
                             for term in extract_from_list(head, tail)? {
                                 terms.push_front(term);
                             },
-                        term =>
-                            terms.push_front(term)
+                        term => terms.push_front(term)
                     };
                 },
                 None => results.push(term)

@@ -700,7 +700,6 @@ impl RelationWorker {
         while let Some(terms) = self.queue.pop_front() {
             let clauses = merge_clauses(&mut self.try_terms_to_tls(indices, terms, false)?)?;
             queue.push_back(clauses);
-
         }
 
         Ok(queue)
@@ -709,29 +708,59 @@ impl RelationWorker {
     fn absorb(&mut self, other: RelationWorker) {
         self.queue.extend(other.queue.into_iter());
     }
+
+    fn expand_queue_contents<'a, R>(&mut self, term_stream: &mut TermStream<'a, R>, op_dir: &OpDir)
+                                    -> Result<(), SessionError>
+        where R: Read
+    {
+        let mut machine_st = MachineState::new();
+        let mut new_queue  = VecDeque::new();
+
+        while let Some(terms) = self.queue.pop_front() {
+            let mut new_terms = VecDeque::new();
+
+            for term in terms {
+                new_terms.push_back(term_stream.run_goal_expanders(&mut machine_st, &op_dir, term)?);
+            }
+
+            new_queue.push_back(new_terms);
+        }
+
+        Ok(self.queue = new_queue)
+    }
 }
 
-// used to parse queries in test.
-#[cfg(test)]
-pub fn parse_term<R: Read>(wam: &Machine, buf: R) -> Result<Term, ParserError>
+fn term_to_toplevel<'a, R>(term_stream: &mut TermStream<'a, R>, code_dir: &mut CodeDir, term: Term)
+                           -> Result<(TopLevel, RelationWorker), ParserError>
+    where R: Read
 {
-    use prolog_parser::parser::*;
+    let mut rel_worker = RelationWorker::new();
+    let mut indices = composite_indices!(false, term_stream.indices, code_dir);
 
-    let mut parser = Parser::new(buf, wam.indices.atom_tbl.clone(), wam.machine_flags());
-    parser.read_term(composite_op!(&wam.indices.op_dir))
+    Ok((rel_worker.try_term_to_tl(&mut indices, term, true)?, rel_worker))
 }
 
 pub
-fn consume_term(term: Term, indices: &mut IndexStore) -> Result<TopLevelPacket, ParserError>
+fn string_to_toplevel<R: Read>(src: R, buffer: String, wam: &mut Machine)
+                               -> Result<TopLevelPacket, SessionError>
 {
-    let mut rel_worker = RelationWorker::new();
+    let mut term_stream = TermStream::new(src, wam.indices.atom_tbl.clone(),
+                                          wam.machine_flags(), &mut wam.indices,
+                                          &mut wam.policies, &mut wam.code_repo);
+
+    term_stream.add_to_top(buffer.as_str());
+
+    let term = term_stream.read_term(&OpDir::new())?;
     let mut code_dir = CodeDir::new();
-    let mut indices = composite_indices!(false, indices, &mut code_dir);
 
-    let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
-    let results = rel_worker.parse_queue(&mut indices)?;
+    let (tl, mut rel_worker) = term_to_toplevel(&mut term_stream, &mut code_dir, term)?;
 
-    Ok(deque_to_packet(tl, results))
+    rel_worker.expand_queue_contents(&mut term_stream, &OpDir::new())?;
+
+    let mut indices = composite_indices!(false, term_stream.indices, &mut code_dir);
+    let queue = rel_worker.parse_queue(&mut indices)?;
+
+    Ok(deque_to_packet(tl, queue))
 }
 
 pub struct TopLevelBatchWorker<'a, R: Read> {
@@ -756,31 +785,47 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
                               in_module: false }
     }
 
+    fn try_term_to_tl(&self, indices: &mut IndexStore, term: Term)
+                      -> Result<(TopLevel, RelationWorker), SessionError>
+    {
+        let mut new_rel_worker = RelationWorker::new();
+        let mut indices = composite_indices!(self.in_module, indices,
+                                             &self.term_stream.indices.code_dir);
+
+        Ok((new_rel_worker.try_term_to_tl(&mut indices, term, true)?, new_rel_worker))
+    }
+
+    fn process_result(&mut self, indices: &mut IndexStore, preds: &mut Vec<PredicateClause>)
+                      -> Result<(Predicate, VecDeque<TopLevel>), SessionError>
+    {
+        self.rel_worker.expand_queue_contents(&mut self.term_stream, &indices.op_dir)?;
+
+        let mut indices = composite_indices!(self.in_module, indices,
+                                             &mut self.term_stream.indices.code_dir);
+
+        let queue  = self.rel_worker.parse_queue(&mut indices)?;
+        let result = (append_preds(preds), queue);
+
+        let in_situ_code_dir = &mut self.term_stream.indices.in_situ_code_dir;
+
+        self.term_stream.code_repo.add_in_situ_result(&result, in_situ_code_dir,
+                                                      self.term_stream.flags)?;
+
+        Ok(result)
+    }
+
     pub
-    fn consume(&mut self, machine_st: &mut MachineState, indices: &mut IndexStore)
-               -> Result<Option<Declaration>, SessionError>
+    fn consume(&mut self, indices: &mut IndexStore) -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
 
         while !self.term_stream.eof()? {
-            let mut new_rel_worker = RelationWorker::new();
-            let term = self.term_stream.read_term(machine_st, &indices.op_dir)?;
+            let term = self.term_stream.read_term(&indices.op_dir)?;
+            let (tl, new_rel_worker) = self.try_term_to_tl(indices, term)?;
 
-            let mut indices =
-                composite_indices!(self.in_module, indices,
-                                   &mut self.term_stream.indices.code_dir);
-
-            let tl = new_rel_worker.try_term_to_tl(&mut indices, term, true)?;
-
-            // if is_consistent returns false, preds is non-empty.
+            // if is_consistent is false, preds is non-empty.
             if !is_consistent(&tl, &preds) {
-                let result_queue = self.rel_worker.parse_queue(&mut indices)?;
-                let result = (append_preds(&mut preds), result_queue);
-                let in_situ_code_dir = &mut self.term_stream.indices.in_situ_code_dir;
-
-                self.term_stream.code_repo.add_in_situ_result(&result,
-                                                              in_situ_code_dir,
-                                                              self.term_stream.flags)?;
+                let result = self.process_result(indices, &mut preds)?;
                 self.results.push(result);
             }
 
@@ -796,12 +841,8 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         }
 
         if !preds.is_empty() {
-            let mut indices =
-                composite_indices!(self.in_module, indices,
-                                   &mut self.term_stream.indices.code_dir);
-
-            let result_queue = self.rel_worker.parse_queue(&mut indices)?;
-            self.results.push((append_preds(&mut preds), result_queue));
+            let result = self.process_result(indices, &mut preds)?;
+            self.results.push(result);
         }
 
         Ok(None)

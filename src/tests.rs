@@ -5,6 +5,7 @@ use prolog::machine::*;
 use prolog::toplevel::*;
 
 use std::collections::HashSet;
+use std::io::empty;
 use std::mem::swap;
 use std::ops::{Range, RangeFrom};
 
@@ -146,7 +147,7 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>
 {
     wam.reset();
 
-    match parse_term(&wam, buffer.as_bytes()) {
+    match string_to_toplevel(empty(), String::from(buffer), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
@@ -154,22 +155,23 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>
                 EvalSession::EntrySuccess => true,
                 _ => false
             },
-        Err(e) => panic!("syntax_error({})", e.as_str())
+        Err(_) => panic!("syntax error")
     }
 }
 
 #[allow(dead_code)]
-pub fn submit_query_without_results(wam: &mut Machine, buffer: &str) -> bool {
+pub fn submit_query_without_results(wam: &mut Machine, buffer: &str) -> bool
+{
     wam.reset();
 
-    match parse_term(&wam, buffer.as_bytes()) {
+    match string_to_toplevel(empty(), String::from(buffer), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(..)
               | EvalSession::EntrySuccess => true,
                 _ => false
             },
-        Err(e) => panic!("syntax_error({})", e.as_str())
+        Err(_) => panic!("syntax error")
     }
 }
 
@@ -180,7 +182,7 @@ pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
 {
     wam.reset();
 
-    match parse_term(&wam, buffer.as_bytes()) {
+    match string_to_toplevel(empty(), String::from(buffer), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
@@ -189,7 +191,7 @@ pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
                 EvalSession::EntrySuccess => true,
                 _ => false
             },
-        Err(e) => panic!("syntax_error({})", e.as_str())
+        Err(_) => panic!("syntax_error")
     }
 }
 

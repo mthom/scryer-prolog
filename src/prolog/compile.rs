@@ -138,10 +138,8 @@ fn compile_decl(wam: &mut Machine, compiler: &mut ListingCompiler, decl: Declara
     Ok(indices)
 }
 
-pub fn compile_term(wam: &mut Machine, term: Term) -> EvalSession
+pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession
 {
-    let packet = try_eval_session!(consume_term(term, &mut wam.indices));
-
     match packet {
         TopLevelPacket::Query(terms, queue) =>
             match compile_query(terms, queue, wam.machine_flags()) {
@@ -260,7 +258,7 @@ impl ListingCompiler {
                                                  wam.machine_flags())?;
 
             compile_appendix(&mut decl_code, &queue, non_counted_bt, wam.machine_flags())?;
-            
+
             let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
 
@@ -384,7 +382,6 @@ impl ListingCompiler {
                              -> Result<GatherResult, SessionError>
     {
         let flags = wam.machine_flags();
-        let machine_st  = &mut wam.machine_st;
         let wam_indices = &mut wam.indices;
 
         let atom_tbl   = wam_indices.atom_tbl.clone();
@@ -395,7 +392,7 @@ impl ListingCompiler {
         let mut toplevel_results = vec![];
         let mut toplevel_indices = default_index_store!(atom_tbl.clone());
 
-        while let Some(decl) = worker.consume(machine_st, indices)? {
+        while let Some(decl) = worker.consume(indices)? {
             if decl.is_module_decl() {
                 toplevel_indices.copy_and_swap(indices);
                 mem::swap(&mut worker.results, &mut toplevel_results);

@@ -111,9 +111,9 @@ get_attr(Name, Arity) -->
      (get_atts(V,  Attr) :- !, functor(Attr, _, _), get_attr(V, Attr)),
      (get_atts(V, -Attr) :- !, functor(Attr, _, _), absent_attr(V, Attr))].
 
-user:goal_expansion(Term, [M:put_atts(Var, Attr)]) :-
+user:goal_expansion(Term, M:put_atts(Var, Attr)) :-
     nonvar(Term),
     Term = put_atts(Var, M, Attr).
-user:goal_expansion(Term, [M:get_atts(Var, Attr)]) :-
+user:goal_expansion(Term, M:get_atts(Var, Attr)) :-
     nonvar(Term),
     Term = get_atts(Var, M, Attr).
