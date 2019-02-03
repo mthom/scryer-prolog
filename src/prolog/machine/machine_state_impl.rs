@@ -76,26 +76,45 @@ impl MachineState {
             if self.b > 0 { self.or_stack[self.b - 1].global_index } else { 0 }) + 1
     }
 
-    pub(crate) fn store(&self, a: Addr) -> Addr {
-        match a {
-            Addr::AttrVar(h, _)     => self.heap[h].as_addr(h),
-            Addr::HeapCell(h)       => self.heap[h].as_addr(h),
+    pub(crate) fn store(&self, addr: Addr) -> Addr {
+        match addr {
+            Addr::AttrVar(h) | Addr::HeapCell(h) => self.heap[h].as_addr(h),
             Addr::StackCell(fr, sc) => self.and_stack[fr][sc].clone(),
-            addr                    => addr
+            addr => addr
         }
     }
 
-    pub(crate) fn deref(&self, mut a: Addr) -> Addr {
+    pub(crate) fn deref(&self, mut addr: Addr) -> Addr {
         loop {
-            let value = self.store(a.clone());
+            let value = self.store(addr.clone());
 
-            if value.is_ref() && value != a {
-                a = value;
+            if value.is_ref() && value != addr {
+                addr = value;
                 continue;
             }
 
-            return a;
+            return addr;
         };
+    }
+
+    // from the assumptions active at the call site in bind, we know:
+    //   if addr is a Ref, it precedes h in the heap.
+    fn bind_attr_var(&mut self, h: usize, addr: Addr) {
+        match addr.as_var() {
+            Some(Ref::HeapCell(hc)) => {
+                self.heap[hc] = HeapCellValue::Addr(Addr::AttrVar(h));
+                self.trail(TrailRef::from(Ref::HeapCell(hc)));
+            },
+            Some(Ref::StackCell(fr, sc)) => {
+                self.and_stack[fr][sc] = Addr::AttrVar(h);
+                self.trail(TrailRef::from(Ref::StackCell(fr, sc)));
+            },
+            _ => {
+                // TODO: set up writing to the attribute queue here.
+                self.heap[h] = HeapCellValue::Addr(addr);
+                self.trail(TrailRef::from(Ref::AttrVar(h)));
+            }
+        }
     }
 
     pub(super) fn bind(&mut self, r1: Ref, a2: Addr) {
@@ -107,7 +126,9 @@ impl MachineState {
                 Ref::StackCell(fr, sc) =>
                     self.and_stack[fr][sc] = t2,
                 Ref::HeapCell(h) =>
-                    self.heap[h] = HeapCellValue::Addr(t2)
+                    self.heap[h] = HeapCellValue::Addr(t2),
+                Ref::AttrVar(h) =>
+                    return self.bind_attr_var(h, t2)
             };
 
             self.trail(TrailRef::from(r1));
@@ -115,12 +136,14 @@ impl MachineState {
             match a2.as_var() {
                 Some(Ref::StackCell(fr, sc)) => {
                     self.and_stack[fr][sc] = t1;
-                    self.trail(TrailRef::StackCell(fr, sc));
+                    self.trail(TrailRef::Ref(Ref::StackCell(fr, sc)));
                 },
                 Some(Ref::HeapCell(h)) => {
                     self.heap[h] = HeapCellValue::Addr(t1);
-                    self.trail(TrailRef::HeapCell(h));
+                    self.trail(TrailRef::Ref(Ref::HeapCell(h)));
                 },
+                Some(Ref::AttrVar(h)) =>
+                    return self.bind_attr_var(h, t1),
                 None => {}
             }
         }
@@ -220,10 +243,8 @@ impl MachineState {
 
             if d1 != d2 {
                 match (self.store(d1.clone()), self.store(d2.clone())) {
-                    (Addr::AttrVar(h, _), addr) | (addr, Addr::AttrVar(h, _)) => {
-                        pdl.push(Addr::HeapCell(h+1));
-                        pdl.push(addr);
-                    },
+                    (Addr::AttrVar(h), addr) | (addr, Addr::AttrVar(h)) =>
+                        self.bind(Ref::AttrVar(h), addr),
                     (Addr::HeapCell(h), _) =>
                         self.bind(Ref::HeapCell(h), d2),
                     (_, Addr::HeapCell(h)) =>
@@ -354,9 +375,14 @@ impl MachineState {
 
     pub(super) fn trail(&mut self, r: TrailRef) {
         match r {
-            TrailRef::HeapCell(h) =>
+            TrailRef::Ref(Ref::HeapCell(h)) =>
                 if h < self.hb {
-                    self.trail.push(TrailRef::HeapCell(h));
+                    self.trail.push(TrailRef::Ref(Ref::HeapCell(h)));
+                    self.tr += 1;
+                },
+            TrailRef::Ref(Ref::AttrVar(h)) =>
+                if h < self.hb {
+                    self.trail.push(TrailRef::Ref(Ref::AttrVar(h)));
                     self.tr += 1;
                 },
             TrailRef::AttrVarLink(h, prev_addr) =>
@@ -364,7 +390,7 @@ impl MachineState {
                     self.trail.push(TrailRef::AttrVarLink(h, prev_addr));
                     self.tr += 1;
                 },
-            TrailRef::StackCell(fr, sc) => {
+            TrailRef::Ref(Ref::StackCell(fr, sc)) => {
                 let fr_gi = self.and_stack[fr].global_index;
                 let b_gi  = if !self.or_stack.is_empty() {
                     if self.b > 0 {
@@ -378,7 +404,7 @@ impl MachineState {
                 };
 
                 if fr_gi < b_gi {
-                    self.trail.push(TrailRef::StackCell(fr, sc));
+                    self.trail.push(TrailRef::Ref(Ref::StackCell(fr, sc)));
                     self.tr += 1;
                 }
             }
@@ -391,9 +417,11 @@ impl MachineState {
         // backtracking.
         for i in (a1 .. a2).rev() {
             match self.trail[i].clone() {
-                TrailRef::HeapCell(h) =>
+                TrailRef::Ref(Ref::HeapCell(h)) =>
                     self.heap[h] = HeapCellValue::Addr(Addr::HeapCell(h)),
-                TrailRef::StackCell(fr, sc) =>
+                TrailRef::Ref(Ref::AttrVar(h)) =>
+                    self.heap[h] = HeapCellValue::Addr(Addr::AttrVar(h)),
+                TrailRef::Ref(Ref::StackCell(fr, sc)) =>
                     self.and_stack[fr][sc] = Addr::StackCell(fr, sc),
                 TrailRef::AttrVarLink(h, prev_addr) =>
                     self.heap[h] = HeapCellValue::Addr(prev_addr)
@@ -443,7 +471,9 @@ impl MachineState {
             let hb = self.hb;
 
             match tr_i {
-                TrailRef::HeapCell(tr_i) | TrailRef::AttrVarLink(tr_i, _) =>
+                TrailRef::Ref(Ref::AttrVar(tr_i))
+              | TrailRef::Ref(Ref::HeapCell(tr_i))
+              | TrailRef::AttrVarLink(tr_i, _) =>
                     if tr_i < hb {
                         i += 1;
                     } else {
@@ -453,7 +483,7 @@ impl MachineState {
                         self.trail.pop();
                         self.tr -= 1;
                     },
-                TrailRef::StackCell(fr, _) => {
+                TrailRef::Ref(Ref::StackCell(fr, _)) => {
                     let b = self.b - 1;
                     let fr_gi = self.and_stack[fr].global_index;
                     let b_gi  = if !self.or_stack.is_empty() {
@@ -489,11 +519,11 @@ impl MachineState {
         match self.store(self.deref(addr)) {
             Addr::HeapCell(h) => {
                 self.heap[h] = HeapCellValue::Addr(Addr::Con(c.clone()));
-                self.trail(TrailRef::HeapCell(h));
+                self.trail(TrailRef::Ref(Ref::HeapCell(h)));
             },
             Addr::StackCell(fr, sc) => {
                 self.and_stack[fr][sc] = Addr::Con(c.clone());
-                self.trail(TrailRef::StackCell(fr, sc));
+                self.trail(TrailRef::Ref(Ref::StackCell(fr, sc)));
             },
             Addr::Con(Constant::String(ref mut s)) =>
                 self.fail = match c {
@@ -1012,19 +1042,11 @@ impl MachineState {
                                 self.fail = true;
                             }
                         },
-                    Addr::HeapCell(hc) => {
+                    addr @ Addr::AttrVar(_) | addr @ Addr::StackCell(..) | addr @ Addr::HeapCell(_) => {
                         let h = self.heap.h;
 
                         self.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
-                        self.bind(Ref::HeapCell(hc), Addr::HeapCell(h));
-
-                        self.mode = MachineMode::Write;
-                    },
-                    Addr::StackCell(fr, sc) => {
-                        let h = self.heap.h;
-
-                        self.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
-                        self.bind(Ref::StackCell(fr, sc), Addr::HeapCell(h));
+                        self.bind(addr.as_var().unwrap(), Addr::HeapCell(h));
 
                         self.mode = MachineMode::Write;
                     },
@@ -1051,7 +1073,7 @@ impl MachineState {
                             }
                         }
                     },
-                    Addr::HeapCell(_) | Addr::StackCell(_, _) => {
+                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) => {
                         let h = self.heap.h;
 
                         self.heap.push(HeapCellValue::Addr(Addr::Str(h + 1)));
@@ -1788,8 +1810,8 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::HeapCell(_) | Addr::StackCell(..) => self.fail = true,
-                    Addr::AttrVar(h, _) => {
+                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(..) => self.fail = true,
+/*                  Addr::AttrVar(h) => {
                         let addr = self.heap[h].as_addr(h);
 
                         if let Some(_) = addr.as_var() {
@@ -1799,7 +1821,7 @@ impl MachineState {
                         }
 
                         self.p += 1;
-                    },
+                    },*/
                     _ => self.p += 1
                 };
             },
@@ -1807,8 +1829,8 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::HeapCell(_) | Addr::StackCell(_,_) => self.p += 1,
-                    Addr::AttrVar(h, _) => {
+                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_,_) => self.p += 1,
+/*                    Addr::AttrVar(h, _) => {
                         let addr = self.heap[h].as_addr(h);
 
                         if let Some(_) = addr.as_var() {
@@ -1818,7 +1840,7 @@ impl MachineState {
                         }
 
                         self.p += 1;
-                    },
+                    },*/
                     _ => self.fail = true
                 };
             },

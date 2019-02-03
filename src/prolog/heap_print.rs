@@ -373,7 +373,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
     fn offset_as_string(&self, addr: Addr) -> Option<String> {
         match addr {
-            Addr::AttrVar(h, _) =>
+            Addr::AttrVar(h) =>
                 Some(format!("_{}", h + 1)),
             Addr::HeapCell(h) | Addr::Lis(h) | Addr::Str(h) =>
                 Some(format!("_{}", h)),

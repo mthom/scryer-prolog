@@ -2147,28 +2147,33 @@ fn test_queries_on_attributed_variables()
 
     assert_prolog_success!(&mut wam, "?- ( put_atts(V, my_mod, dif(1)) ; put_atts(V, my_mod, dif(2)) ),
                                          get_atts(V, my_mod, L).",
-                           [["L = [dif(1) | _17]", "V = _12"],
-                            ["L = [dif(2) | _17]", "V = _12"]]);
+                           [["L = [dif(1) | _16]", "V = _12"],
+                            ["L = [dif(2) | _16]", "V = _12"]]);
 
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, frozen(a)),
    				       ( put_atts(V, my_mod, dif(1))
    				       ; put_atts(V, my_mod, -frozen(a)), put_atts(V, my_mod, dif(2))
    				       ; put_atts(V, my_mod, dif(different)) ),
    				       get_atts(V, my_mod, Ls).",
-                           [["Ls = [frozen(a), dif(1) | _37]", "V = _12"],
-                            ["Ls = [dif(2) | _51]", "V = _12"],
-                            ["Ls = [frozen(a), dif(different) | _37]", "V = _12"]]);
+                           [["Ls = [frozen(a), dif(1) | _36]", "V = _12"],
+                            ["Ls = [dif(2) | _50]", "V = _12"],
+                            ["Ls = [frozen(a), dif(different) | _36]", "V = _12"]]);
 
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a)]),
-   				       ( put_atts(V, my_mod, -dif(2)) ; put_atts(V, my_mod, -frozen(A)) ),
+   				       ( put_atts(V, my_mod, -dif(2)); put_atts(V, my_mod, -frozen(A)) ),
    				  	 get_atts(V, my_mod, L).",
-                           [["A = _70", "L = [dif(1), frozen(a) | _68]", "V = _27"],
-                            ["A = _70", "L = [dif(1), dif(2) | _68]", "V = _27"]]);
+                           [["A = _69", "L = [dif(1), frozen(a) | _67]", "V = _27"],
+                            ["A = _69", "L = [dif(1), dif(2) | _67]", "V = _27"]]);
+    assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a)]),
+   				       ( put_atts(V, my_mod, -dif(2)), V = f(a)
+                                       ; put_atts(V, my_mod, -frozen(_)), get_atts(V, my_mod, L) ).",
+                           [["L = _69", "V = f(a)"],
+                            ["L = [dif(1), dif(2) | _67]", "V = _27"]]);
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
    				       ( put_atts(V, my_mod, -dif(2)) ; put_atts(V, my_mod, -frozen(A)) ),
    				  	 get_atts(V, my_mod, L).",
-                           [["A = _98", "L = [dif(1), frozen(a), frozen(b) | _96]", "V = _31"],
-                            ["A = _98", "L = [dif(1), dif(2) | _96]", "V = _31"]]);
+                           [["A = _97", "L = [dif(1), frozen(a), frozen(b) | _95]", "V = _31"],
+                            ["A = _97", "L = [dif(1), dif(2) | _95]", "V = _31"]]);
     assert_prolog_failure!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
                                          get_atts(V, my_mod, -dif(1)).");
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
@@ -2179,8 +2184,8 @@ fn test_queries_on_attributed_variables()
                             ["X = 2", "V = _31"]]);
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
                                          put_atts(V, my_mod, -dif(A)), get_atts(V, my_mod, Ls).",
-                           [["A = _99", "Ls = [frozen(a), frozen(b) | _96]", "V = _31"]]);
+                           [["A = _98", "Ls = [frozen(a), frozen(b) | _95]", "V = _31"]]);
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), frozen(a), dif(2), frozen(b)]),
                                          put_atts(V, my_mod, -dif(A)), get_atts(V, my_mod, Ls).",
-                           [["A = _99", "Ls = [frozen(a), frozen(b) | _96]", "V = _31"]]);
+                           [["A = _98", "Ls = [frozen(a), frozen(b) | _95]", "V = _31"]]);
 }

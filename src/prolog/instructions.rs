@@ -717,7 +717,7 @@ pub type CodeDeque = VecDeque<Line>;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Addr {
-    AttrVar(usize, usize), // the location of the AttrVal in the heap, the location of the attribute list.
+    AttrVar(usize),
     Con(Constant),
     Lis(usize),
     HeapCell(usize),
@@ -737,7 +737,8 @@ impl PartialOrd<Ref> for Addr {
         match self {
             &Addr::StackCell(fr, sc) =>
                 match *r {
-                    Ref::HeapCell(_) => Some(Ordering::Greater),
+                    Ref::AttrVar(_) | Ref::HeapCell(_) =>
+                        Some(Ordering::Greater),
                     Ref::StackCell(fr1, sc1) =>
                         if fr1 < fr || (fr1 == fr && sc1 < sc) {
                             Some(Ordering::Greater)
@@ -747,10 +748,10 @@ impl PartialOrd<Ref> for Addr {
                             Some(Ordering::Less)
                         }
                 },
-            &Addr::HeapCell(h) | &Addr::AttrVar(h, _) =>
+            &Addr::HeapCell(h) | &Addr::AttrVar(h) =>
                 match r {
                     &Ref::StackCell(..) => Some(Ordering::Less),
-                    &Ref::HeapCell(h1) => h.partial_cmp(&h1)
+                    &Ref::AttrVar(h1) | &Ref::HeapCell(h1) => h.partial_cmp(&h1)
                 },
             _ => None
         }
@@ -760,14 +761,14 @@ impl PartialOrd<Ref> for Addr {
 impl Addr {
     pub fn is_ref(&self) -> bool {
         match self {
-            &Addr::AttrVar(..) | &Addr::HeapCell(_) | &Addr::StackCell(_, _) => true,
+            &Addr::AttrVar(_) | &Addr::HeapCell(_) | &Addr::StackCell(_, _) => true,
             _ => false
         }
     }
 
     pub fn as_var(&self) -> Option<Ref> {
         match self {
-            &Addr::AttrVar(h, _) => Some(Ref::HeapCell(h)), 
+            &Addr::AttrVar(h) => Some(Ref::AttrVar(h)),
             &Addr::HeapCell(h) => Some(Ref::HeapCell(h)),
             &Addr::StackCell(fr, sc) => Some(Ref::StackCell(fr, sc)),
             _ => None
@@ -788,6 +789,7 @@ impl Add<usize> for Addr {
     fn add(self, rhs: usize) -> Self::Output {
         match self {
             Addr::Lis(a) => Addr::Lis(a + rhs),
+            Addr::AttrVar(h) => Addr::AttrVar(h + rhs),
             Addr::HeapCell(h) => Addr::HeapCell(h + rhs),
             Addr::Str(s) => Addr::Str(s + rhs),
             _ => self
@@ -801,6 +803,7 @@ impl Sub<usize> for Addr {
     fn sub(self, rhs: usize) -> Self::Output {
         match self {
             Addr::Lis(a) => Addr::Lis(a - rhs),
+            Addr::AttrVar(h) => Addr::AttrVar(h - rhs),
             Addr::HeapCell(h) => Addr::HeapCell(h - rhs),
             Addr::Str(s) => Addr::Str(s - rhs),
             _ => self
@@ -811,6 +814,7 @@ impl Sub<usize> for Addr {
 impl From<Ref> for Addr {
     fn from(r: Ref) -> Self {
         match r {
+            Ref::AttrVar(h)        => Addr::AttrVar(h),
             Ref::HeapCell(h)       => Addr::HeapCell(h),
             Ref::StackCell(fr, sc) => Addr::StackCell(fr, sc)
         }
@@ -819,6 +823,7 @@ impl From<Ref> for Addr {
 
 #[derive(Clone, Copy, Hash, Eq, PartialEq)]
 pub enum Ref {
+    AttrVar(usize),
     HeapCell(usize),
     StackCell(usize, usize)
 }
@@ -826,6 +831,7 @@ pub enum Ref {
 impl Ref {
     pub fn as_addr(self) -> Addr {
         match self {
+            Ref::AttrVar(h)        => Addr::AttrVar(h),
             Ref::HeapCell(h)       => Addr::HeapCell(h),
             Ref::StackCell(fr, sc) => Addr::StackCell(fr, sc)
         }
@@ -834,17 +840,13 @@ impl Ref {
 
 #[derive(Clone)]
 pub enum TrailRef {
-    HeapCell(usize),
-    StackCell(usize, usize),
+    Ref(Ref),
     AttrVarLink(usize, Addr)
 }
 
 impl From<Ref> for TrailRef {
     fn from(r: Ref) -> Self {
-        match r {
-            Ref::HeapCell(h) => TrailRef::HeapCell(h),
-            Ref::StackCell(fr, sc) => TrailRef::StackCell(fr, sc)
-        }
+        TrailRef::Ref(r)
     }
 }
 

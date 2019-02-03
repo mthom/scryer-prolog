@@ -431,7 +431,7 @@ impl Machine {
         let mut heap_locs = HashMap::new();
 
         self.code_repo.cached_query = code;
-        self.machine_st.run_query(&mut self.indices, &mut self.policies, &self.code_repo,
+        self.machine_st.run_query(&mut self.indices, &mut self.policies, &mut self.code_repo,
                                   &alloc_locs, &mut heap_locs);
 
         if self.machine_st.fail {
@@ -451,7 +451,7 @@ impl Machine {
                 return EvalSession::from(SessionError::QueryFailure);
             }
 
-            self.machine_st.run_query(&mut self.indices, &mut self.policies, &self.code_repo,
+            self.machine_st.run_query(&mut self.indices, &mut self.policies, &mut self.code_repo,
                                       alloc_l, heap_l);
 
             if self.machine_st.fail {
@@ -560,7 +560,7 @@ impl MachineState {
     }
 
     fn query_stepper(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
-                     code_repo: &CodeRepo)
+                     code_repo: &mut CodeRepo)
     {
         loop {
             self.execute_instr(indices, policies, code_repo);
@@ -617,7 +617,7 @@ impl MachineState {
 
     pub(super)
     fn run_query(&mut self, indices: &mut IndexStore,
-                 policies: &mut MachinePolicies, code_repo: &CodeRepo,
+                 policies: &mut MachinePolicies, code_repo: &mut CodeRepo,
                  alloc_locs: &AllocVarDict, heap_locs: &mut HeapVarDict)
     {
         let end_ptr = top_level_code_ptr!(0, code_repo.size_of_cached_query());

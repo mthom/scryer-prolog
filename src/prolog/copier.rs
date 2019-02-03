@@ -22,7 +22,7 @@ pub(crate) trait CopierTarget: IndexMut<usize, Output=HeapCellValue>
     {
         for (r, hcv) in redirect.trail {
             match r {
-                Ref::HeapCell(hc) => self[hc] = hcv.clone(),
+                Ref::AttrVar(hc) | Ref::HeapCell(hc) => self[hc] = hcv.clone(),
                 Ref::StackCell(fr, sc) => self.stack()[fr][sc] = hcv.as_addr(0)
             }
         }
@@ -100,12 +100,12 @@ pub(crate) trait CopierTarget: IndexMut<usize, Output=HeapCellValue>
 
                             scan += 1;
                         },
-                        Addr::AttrVar(..) | Addr::HeapCell(_) | Addr::StackCell(_, _) => {
+                        Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) => {
                             let ra = a;
                             let rd = self.store(self.deref(ra.clone()));
 
                             match rd.clone() {
-                                Addr::AttrVar(h, _) | Addr::HeapCell(h) if h >= old_h => {
+                                Addr::AttrVar(h) | Addr::HeapCell(h) if h >= old_h => {
                                     self[scan] = HeapCellValue::Addr(rd);
                                     scan += 1;
                                 },
