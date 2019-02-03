@@ -314,6 +314,7 @@ static QUEUES: &str  = include_str!("../lib/queues.pl");
 static ERROR: &str   = include_str!("../lib/error.pl");
 static TERMS: &str   = include_str!("../lib/terms.pl");
 static DCGS: &str    = include_str!("../lib/dcgs.pl");
+static ATTS: &str    = include_str!("../lib/atts.pl");
 
 impl Machine {
     pub fn new() -> Self {
@@ -335,6 +336,7 @@ impl Machine {
         compile_user_module(&mut wam, ERROR.as_bytes());
 	compile_user_module(&mut wam, TERMS.as_bytes());
         compile_user_module(&mut wam, DCGS.as_bytes());
+        compile_user_module(&mut wam, ATTS.as_bytes());
 
         wam
     }

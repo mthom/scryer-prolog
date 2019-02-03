@@ -210,7 +210,7 @@ impl MachineState {
                     if let Addr::Lis(l2) = self.store(self.deref(Addr::HeapCell(l1 + 1))) {
                         let addr = self.heap[l1 + 1].as_addr(l1 + 1);                        
                         self.heap[l1 + 1] = HeapCellValue::Addr(Addr::HeapCell(l2 + 1));
-                        self.trail(TrailRef::AttrVarLink(l2 + 1, addr));
+                        self.trail(TrailRef::AttrVarLink(l1 + 1, addr));
                     }
                 }                
             },

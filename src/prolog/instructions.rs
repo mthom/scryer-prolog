@@ -276,7 +276,7 @@ impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
-            &SystemClauseType::DeleteAttribute => clause_name!("$del_attr"),
+            &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
             &SystemClauseType::DynamicModuleResolution => clause_name!("$module_call"),
             &SystemClauseType::ExpandTerm => clause_name!("$expand_term"),
@@ -317,7 +317,7 @@ impl SystemClauseType {
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
-            ("$del_attr", 1) => Some(SystemClauseType::DeleteAttribute),
+            ("$del_attr_non_head", 1) => Some(SystemClauseType::DeleteAttribute),
             ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),
             ("$module_call", 2) => Some(SystemClauseType::DynamicModuleResolution),
             ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
