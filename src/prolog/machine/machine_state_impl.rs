@@ -97,8 +97,6 @@ impl MachineState {
         };
     }
 
-    // from the assumptions active at the call site in bind, we know:
-    //   if addr is a Ref, it precedes h in the heap.
     fn bind_attr_var(&mut self, h: usize, addr: Addr) {
         match addr.as_var() {
             Some(Ref::HeapCell(hc)) => {

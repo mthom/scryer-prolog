@@ -1,6 +1,7 @@
-:- module(atts, [attribute/1, '$absent_attr'/2, '$get_attr'/2, '$put_attr'/2,
-		 '$absent_from_list'/2, '$get_from_list'/2, '$add_to_list'/2,
-		 '$del_attr'/3, '$del_attr_step'/2, '$del_attr_buried'/3]).
+:- module(atts, [attribute/1, '$absent_attr'/2, '$copy_attr_list'/2,
+		 '$get_attr'/2, '$put_attr'/2, '$absent_from_list'/2,
+		 '$get_from_list'/2, '$add_to_list'/2, '$del_attr'/3,
+		 '$del_attr_step'/2, '$del_attr_buried'/3]).
 
 :- use_module(library(control)).
 :- use_module(library(dcgs)).
@@ -60,6 +61,10 @@
     ).
 '$del_attr_buried'(_, _, _).
 
+'$copy_attr_list'(L, []) :- var(L), !.
+'$copy_attr_list'([Att|Atts], [Att|CopiedAtts]) :-
+    '$copy_attr_list'(Atts, CopiedAtts).
+
 user:term_expansion(Term0, Terms) :-
     nonvar(Term0),
     Term0 = (:- attribute Atts),
@@ -75,13 +80,14 @@ put_attrs_var_check -->
      (put_atts(Var, Attr) :- var(Attr), throw(error(instantiation_error, put_atts/2)))].
 
 get_attrs_var_check -->
-    { numbervars([Var, Attr], 0, _) },
+    { numbervars([Var, Ls, Attr], 0, _) },
     [(get_atts(Var, Attr) :- nonvar(Var), throw(error(type_error(variable, Var), get_atts/2))),
-     (get_atts(Var, Attr) :- var(Attr), !, '$get_attr_list'(Var, Attr))].
+     (get_atts(Var, Attr) :- var(Attr), !, '$get_attr_list'(Var, Ls), nonvar(Ls),
+			     '$copy_attr_list'(Ls, Attr))].
 
 put_attrs(Name/Arity) -->
     put_attr(Name, Arity),
-    { numbervars([Var, Attr], 0, _) }, 
+    { numbervars([Var, Attr], 0, _) },
     [(put_atts(Var, Attr) :- lists:maplist(put_atts(Var), Attr))].
 put_attrs((Name/Arity, Atts)) -->
     { nonvar(Atts) },
