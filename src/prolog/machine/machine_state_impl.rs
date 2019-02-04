@@ -515,14 +515,6 @@ impl MachineState {
 
     pub(super) fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
         match self.store(self.deref(addr)) {
-            Addr::HeapCell(h) => {
-                self.heap[h] = HeapCellValue::Addr(Addr::Con(c.clone()));
-                self.trail(TrailRef::Ref(Ref::HeapCell(h)));
-            },
-            Addr::StackCell(fr, sc) => {
-                self.and_stack[fr][sc] = Addr::Con(c.clone());
-                self.trail(TrailRef::Ref(Ref::StackCell(fr, sc)));
-            },
             Addr::Con(Constant::String(ref mut s)) =>
                 self.fail = match c {
                     Constant::EmptyList if self.flags.double_quotes.is_chars() =>
@@ -566,7 +558,11 @@ impl MachineState {
                 if c1 != c {
                     self.fail = true;
                 },
-            _ => self.fail = true
+            addr => if let Some(r) = addr.as_var() {
+                self.bind(r, Addr::Con(c));
+            } else {
+                self.fail = true;
+            }
         };
     }
 
@@ -1809,17 +1805,6 @@ impl MachineState {
 
                 match d {
                     Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(..) => self.fail = true,
-/*                  Addr::AttrVar(h) => {
-                        let addr = self.heap[h].as_addr(h);
-
-                        if let Some(_) = addr.as_var() {
-                            if self.store(self.deref(addr)).as_var().is_some() {
-                                self.fail = true;
-                            }
-                        }
-
-                        self.p += 1;
-                    },*/
                     _ => self.p += 1
                 };
             },
@@ -1828,17 +1813,6 @@ impl MachineState {
 
                 match d {
                     Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_,_) => self.p += 1,
-/*                    Addr::AttrVar(h, _) => {
-                        let addr = self.heap[h].as_addr(h);
-
-                        if let Some(_) = addr.as_var() {
-                            if self.store(self.deref(addr)).as_var().is_none() {
-                                self.fail = true;
-                            }
-                        }
-
-                        self.p += 1;
-                    },*/
                     _ => self.fail = true
                 };
             },
