@@ -30,16 +30,26 @@ pub(crate) trait CopierTarget: IndexMut<usize, Output=HeapCellValue>
 
     fn reinstantiate_var(&mut self, ra: Addr, scan: usize, trail: &mut Trail)
     {
-        self[scan] = HeapCellValue::Addr(Addr::HeapCell(scan));
-
-        if let Addr::HeapCell(hc) = ra.clone() {
-            self[hc] = HeapCellValue::Addr(Addr::HeapCell(scan));
-            trail.push((Ref::HeapCell(hc),
-                        HeapCellValue::Addr(Addr::HeapCell(hc))));
-        } else if let Addr::StackCell(fr, sc) = ra {
-            self.stack()[fr][sc] = Addr::HeapCell(scan);
-            trail.push((Ref::StackCell(fr, sc),
-                        HeapCellValue::Addr(Addr::StackCell(fr, sc))));
+        match ra {
+            Addr::HeapCell(hc) => {
+                self[scan] = HeapCellValue::Addr(Addr::HeapCell(scan));
+                self[hc] = HeapCellValue::Addr(Addr::HeapCell(scan));
+                trail.push((Ref::HeapCell(hc),
+                            HeapCellValue::Addr(Addr::HeapCell(hc))));
+            },
+            Addr::StackCell(fr, sc) => {
+                self[scan] = HeapCellValue::Addr(Addr::HeapCell(scan));
+                self.stack()[fr][sc] = Addr::HeapCell(scan);
+                trail.push((Ref::StackCell(fr, sc),
+                            HeapCellValue::Addr(Addr::StackCell(fr, sc))));
+            },
+            Addr::AttrVar(hc) => {
+                self[scan] = HeapCellValue::Addr(Addr::AttrVar(scan));
+                self[hc] = HeapCellValue::Addr(Addr::AttrVar(scan));
+                trail.push((Ref::AttrVar(hc),
+                            HeapCellValue::Addr(Addr::AttrVar(hc))));
+            },
+            _ => {}
         }
     }
 
@@ -111,6 +121,12 @@ pub(crate) trait CopierTarget: IndexMut<usize, Output=HeapCellValue>
                                 },
                                 _ if ra == rd => {
                                     self.reinstantiate_var(ra, scan, &mut trail);
+
+                                    if let Addr::AttrVar(h) = rd {
+                                        let value = self[h + 1].clone();
+                                        self.push(value);
+                                    }
+
                                     scan += 1;
                                 },
                                 _ => self[scan] = HeapCellValue::Addr(rd)

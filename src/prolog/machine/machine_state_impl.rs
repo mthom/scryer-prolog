@@ -1588,7 +1588,7 @@ impl MachineState {
         for (v1, v2) in iter {
             match (v1, v2) {
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Con(Constant::String(_))))
-                    | (HeapCellValue::Addr(Addr::Con(Constant::String(_))), HeapCellValue::Addr(Addr::Lis(_)))
+              | (HeapCellValue::Addr(Addr::Con(Constant::String(_))), HeapCellValue::Addr(Addr::Lis(_)))
                     if self.flags.double_quotes.is_chars() => {},
                 (HeapCellValue::Addr(Addr::Con(Constant::EmptyList)),
                  HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
