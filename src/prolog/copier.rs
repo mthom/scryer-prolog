@@ -89,7 +89,7 @@ pub(crate) trait CopierTarget: IndexMut<usize, Output=HeapCellValue>
                             let rd = self.store(self.deref(ra));
 
                             match rd.clone() {
-                                Addr::HeapCell(hc) if hc >= old_h =>
+                                Addr::AttrVal(h) | Addr::HeapCell(h) if h >= old_h =>
                                     self[threshold] = HeapCellValue::Addr(rd),
                                 ra @ Addr::AttrVar(_) | ra @ Addr::HeapCell(..) | ra @ Addr::StackCell(..) =>
                                     if ra == rd {
