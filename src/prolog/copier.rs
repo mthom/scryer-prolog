@@ -118,18 +118,14 @@ pub(crate) trait CopierTarget: IndexMut<usize, Output=HeapCellValue>
                                     scan += 1;
                                 },
                                 Addr::AttrVar(h) if ra == rd => {
-                                    let threshold = self.threshold();
-                                    
+                                    let threshold = self.threshold();                                   
                                     self.push(HeapCellValue::Addr(Addr::AttrVar(threshold)));
 
                                     let list_val = self[h+1].clone();
                                     self.push(list_val);
 
+                                    self.reinstantiate_var(ra, threshold, &mut trail);
                                     self[scan] = HeapCellValue::Addr(Addr::AttrVar(threshold));
-                                    self[h] = HeapCellValue::Addr(Addr::AttrVar(threshold));
-                                    
-                                    trail.push((Ref::AttrVar(h),
-                                                HeapCellValue::Addr(Addr::AttrVar(h))));                                    
                                 },
                                 _ if ra == rd => {
                                     self.reinstantiate_var(ra, scan, &mut trail);
