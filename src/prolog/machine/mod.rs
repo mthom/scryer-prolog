@@ -7,6 +7,7 @@ use prolog::debray_allocator::*;
 use prolog::heap_print::*;
 use prolog::instructions::*;
 
+mod attributed_variables;
 mod machine_errors;
 pub(super) mod machine_state;
 pub(super) mod term_expansion;
@@ -14,14 +15,13 @@ pub(super) mod term_expansion;
 #[macro_use] mod machine_state_impl;
 mod system_calls;
 
+use prolog::machine::attributed_variables::*;
 use prolog::machine::machine_state::*;
 
 use std::collections::{HashMap, VecDeque};
 use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
-
-static BUILTINS: &str = include_str!("../lib/builtins.pl");
 
 pub type InSituCodeDir = HashMap<PredicateKey, usize>;
 
@@ -118,6 +118,7 @@ impl CodeRepo {
             term_expanders: Code::new(),
             code: Code::new(),
             in_situ_code: Code::new(),
+            verify_attrs_code: Code::new(),
             term_dir: TermDir::new()
         }
     }
@@ -308,15 +309,23 @@ impl SubModuleUser for IndexStore {
     }
 }
 
-static LISTS: &str   = include_str!("../lib/lists.pl");
-static CONTROL: &str = include_str!("../lib/control.pl");
-static QUEUES: &str  = include_str!("../lib/queues.pl");
-static ERROR: &str   = include_str!("../lib/error.pl");
-static TERMS: &str   = include_str!("../lib/terms.pl");
-static DCGS: &str    = include_str!("../lib/dcgs.pl");
-static ATTS: &str    = include_str!("../lib/atts.pl");
+static BUILTINS: &str = include_str!("../lib/builtins.pl");
+static LISTS: &str    = include_str!("../lib/lists.pl");
+static CONTROL: &str  = include_str!("../lib/control.pl");
+static QUEUES: &str   = include_str!("../lib/queues.pl");
+static ERROR: &str    = include_str!("../lib/error.pl");
+static TERMS: &str    = include_str!("../lib/terms.pl");
+static DCGS: &str     = include_str!("../lib/dcgs.pl");
+static ATTS: &str     = include_str!("../lib/atts.pl");
 
 impl Machine {
+    fn compile_special_forms(&mut self) {
+        match compile_special_form(self, VERIFY_ATTRS.as_bytes()) {
+            Ok(code) => self.code_repo.verify_attrs_code = code,
+            Err(_e)  => panic!("Machine::compile_special_forms() failed")
+        }
+    }
+
     pub fn new() -> Self {
         let mut wam = Machine {
             machine_st: MachineState::new(),
@@ -338,6 +347,7 @@ impl Machine {
         compile_user_module(&mut wam, DCGS.as_bytes());
         compile_user_module(&mut wam, ATTS.as_bytes());
 
+        wam.compile_special_forms();
         wam
     }
 
@@ -512,30 +522,16 @@ impl MachineState {
             &Line::Control(ref control_instr) =>
                 self.execute_ctrl_instr(indices, &mut policies.call_policy,
                                         &mut policies.cut_policy, control_instr),
-            &Line::Fact(ref fact) => {
-                for fact_instr in fact {
-                    if self.fail {
-                        break;
-                    }
-
-                    self.execute_fact_instr(&fact_instr);
-                }
-
+            &Line::Fact(ref fact_instr) => {
+                self.execute_fact_instr(&fact_instr);
                 self.p += 1;
             },
             &Line::Indexing(ref indexing_instr) =>
                 self.execute_indexing_instr(&indexing_instr),
             &Line::IndexedChoice(ref choice_instr) =>
                 self.execute_indexed_choice_instr(choice_instr, &mut policies.call_policy),
-            &Line::Query(ref query) => {
-                for query_instr in query {
-                    if self.fail {
-                        break;
-                    }
-
-                    self.execute_query_instr(&query_instr);
-                }
-
+            &Line::Query(ref query_instr) => {
+                self.execute_query_instr(&query_instr);
                 self.p += 1;
             }
         }

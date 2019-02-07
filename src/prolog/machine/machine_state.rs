@@ -206,6 +206,7 @@ pub struct MachineState {
     pub(super) e: usize,
     pub(super) num_of_args: usize,
     pub(super) cp: LocalCodePtr,
+    pub(super) special_form_cp: CodePtr,
     pub(super) fail: bool,
     pub(crate) heap: Heap,
     pub(super) mode: MachineMode,

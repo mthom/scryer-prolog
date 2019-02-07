@@ -47,24 +47,40 @@ impl<'a> ConjunctInfo<'a>
     fn mark_unsafe_vars(&self, mut unsafe_var_marker: UnsafeVarMarker, code: &mut Code) {
         // target the last goal of the rule for handling unsafe variables.
         // we use this weird logic to find the last goal.
-        let index = if let &Line::Control(_) = code.last().unwrap() {
+        let right_index = if let &Line::Control(_) = code.last().unwrap() {
             code.len() - 2
         } else {
             code.len() - 1
         };
 
-        if let Line::Query(_) = &code[index] {
+        let mut index = right_index;
+
+        if let Line::Query(_) = &code[right_index] {
+            while let Line::Query(_) = &code[index] { // index >= 0.
+                if index == 0 {
+                    break;
+                } else {
+                    index -= 1;
+                }
+            }
+
+            if let Line::Query(_) = &code[index] {} else {
+                index += 1;
+            }
+
             unsafe_var_marker.record_unsafe_vars(&self.perm_vs);
 
             for line in code.iter_mut() {
-                if let &mut Line::Query(ref mut query) = line {
-                    unsafe_var_marker.mark_safe_vars(query);
+                if let &mut Line::Query(ref mut query_instr) = line {
+                    unsafe_var_marker.mark_safe_vars(query_instr);
                 }
             }
-        }
 
-        if let &mut Line::Query(ref mut query) = &mut code[index] {
-            unsafe_var_marker.mark_unsafe_vars(query);
+            for index in index .. right_index + 1 {
+                if let &mut Line::Query(ref mut query_instr) = &mut code[index] {
+                    unsafe_var_marker.mark_unsafe_vars(query_instr);
+                }
+            }
         }
     }
 }
@@ -110,7 +126,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
                 if !target.is_empty() {
-                    code.push(Line::Query(target));
+                    for query_instr in target {
+                        code.push(Line::Query(query_instr));
+                    }
                 }
 
                 vr.get().norm()
@@ -445,7 +463,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                                      term_loc, &mut target);
 
                 if !target.is_empty() {
-                    code.push(Line::Query(target));
+                    for query_instr in target {
+                        code.push(Line::Query(query_instr));
+                    }
                 }
 
                 if use_default_call_policy {
@@ -455,9 +475,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 }
             },
             &Term::Constant(_, ref c @ Constant::Number(_)) => {
-                code.push(query![put_constant!(Level::Shallow,
-                                               c.clone(),
-                                               temp_v!(1))]);
+                code.push(Line::Query(put_constant!(Level::Shallow,
+                                                    c.clone(),
+                                                    temp_v!(1))));
 
                 if use_default_call_policy {
                     code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))))
@@ -490,7 +510,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                                              term_loc, &mut target);
 
                         if !target.is_empty() {
-                            code.push(Line::Query(target));
+                            for query_instr in target {
+                                code.push(Line::Query(query_instr));
+                            }
                         }
 
                         code.push(get_level_and_unify!(cell.get().norm()));
@@ -574,7 +596,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 
         if !fact.is_empty() {
             unsafe_var_marker = self.mark_unsafe_fact_vars(&mut fact);
-            code.push(Line::Fact(fact));
+
+            for fact_instr in fact {
+                code.push(Line::Fact(fact_instr));
+            }
         }
 
         let iter = ChunkedIterator::from_rule_body(p1, clauses);
@@ -637,7 +662,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
             self.mark_unsafe_fact_vars(&mut compiled_fact);
 
             if !compiled_fact.is_empty() {
-                code.push(Line::Fact(compiled_fact));
+                for fact_instr in compiled_fact {
+                    code.push(Line::Fact(fact_instr));
+                }
             }
         }
 
@@ -654,7 +681,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         let query = self.compile_target(iter, term_loc, is_exposed);
 
         if !query.is_empty() {
-            code.push(Line::Query(query));
+            for query_instr in query {
+                code.push(Line::Query(query_instr));
+            }
         }
 
         Self::add_conditional_call(code, term, num_perm_vars_left);

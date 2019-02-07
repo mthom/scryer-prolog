@@ -19,7 +19,7 @@ mod tests;
 
 fn prolog_repl() {
     let mut wam = Machine::new();
-
+    
     loop {
         print!("prolog> ");
         stdout().flush().unwrap();

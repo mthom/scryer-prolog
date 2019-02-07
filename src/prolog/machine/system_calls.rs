@@ -375,6 +375,29 @@ impl MachineState {
                     }
                 };
             },
+            &SystemClauseType::ModuleOf => {
+                let module = self.store(self.deref(self[temp_v!(2)].clone()));
+
+                match module {
+                    Addr::Con(Constant::Atom(name, _)) => {
+                        let module = Addr::Con(Constant::Atom(name.owning_module(), None));
+                        let target = self[temp_v!(1)].clone();
+
+                        self.unify(target, module);
+                    },
+                    Addr::Str(s) =>
+                        match self.heap[s].clone() {
+                            HeapCellValue::NamedStr(_, name, ..) => {
+                                let module = Addr::Con(Constant::Atom(name.owning_module(), None));
+                                let target = self[temp_v!(1)].clone();
+
+                                self.unify(target, module);
+                            },
+                            _ => self.fail = true
+                        },
+                    _ => self.fail = true
+                };
+            },
             &SystemClauseType::RemoveCallPolicyCheck => {
                 let restore_default =
                     match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
@@ -418,6 +441,10 @@ impl MachineState {
                     None => panic!("remove_inference_counter: requires \\
                                     CWILCallPolicy.")
                 },
+            &SystemClauseType::RestoreCodePtrFromSpecialFormCP => {
+                self.p = self.special_form_cp.clone();
+                return Ok(());
+            },
             &SystemClauseType::RestoreCutPolicy => {
                 let restore_default =
                     if let Ok(cut_policy) = cut_policy.downcast_ref::<SCCCutPolicy>() {

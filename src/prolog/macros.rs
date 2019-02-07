@@ -4,12 +4,6 @@ macro_rules! interm {
     )
 }
 
-macro_rules! query {
-    [$($x:expr),+] => (
-        Line::Query(vec![$($x),+])
-    )
-}
-
 macro_rules! heap_str {
     ($s:expr) => (
         HeapCellValue::Addr(Addr::Str($s))

@@ -197,42 +197,38 @@ impl UnsafeVarMarker {
         }
     }
 
-    pub fn mark_safe_vars(&mut self, query: &mut CompiledQuery) {
-        for query_instr in query.iter_mut() {
-            match query_instr {
-                &mut QueryInstruction::PutVariable(RegType::Temp(r), _) =>
-                    if let Some(found) = self.unsafe_vars.get_mut(&RegType::Temp(r)) {
-                        *found = true;
-                    },
-                &mut QueryInstruction::SetVariable(reg) =>
-                    if let Some(found) = self.unsafe_vars.get_mut(&reg) {
-                        *found = true;
-                    },
-                _ => {}
-            }
+    pub fn mark_safe_vars(&mut self, query_instr: &mut QueryInstruction) {
+        match query_instr {
+            &mut QueryInstruction::PutVariable(RegType::Temp(r), _) =>
+                if let Some(found) = self.unsafe_vars.get_mut(&RegType::Temp(r)) {
+                    *found = true;
+                },
+            &mut QueryInstruction::SetVariable(reg) =>
+                if let Some(found) = self.unsafe_vars.get_mut(&reg) {
+                    *found = true;
+                },
+            _ => {}
         }
     }
 
-    pub fn mark_unsafe_vars(&mut self, query: &mut CompiledQuery)
+    pub fn mark_unsafe_vars(&mut self, query_instr: &mut QueryInstruction)
     {
-        for query_instr in query.iter_mut() {
-            match query_instr {
-                &mut QueryInstruction::PutValue(RegType::Perm(i), arg) =>
-                    if let Some(found) = self.unsafe_vars.get_mut(&RegType::Perm(i)) {
-                        if !*found {
-                            *found = true;
-                            *query_instr = QueryInstruction::PutUnsafeValue(i, arg);
-                        }
-                    },
-                &mut QueryInstruction::SetValue(reg) =>
-                    if let Some(found) = self.unsafe_vars.get_mut(&reg) {
-                        if !*found {
-                            *found = true;
-                            *query_instr = QueryInstruction::SetLocalValue(reg);
-                        }
-                    },
-                _ => {}
-            };
+        match query_instr {
+            &mut QueryInstruction::PutValue(RegType::Perm(i), arg) =>
+                if let Some(found) = self.unsafe_vars.get_mut(&RegType::Perm(i)) {
+                    if !*found {
+                        *found = true;
+                        *query_instr = QueryInstruction::PutUnsafeValue(i, arg);
+                    }
+                },
+            &mut QueryInstruction::SetValue(reg) =>
+                if let Some(found) = self.unsafe_vars.get_mut(&reg) {
+                    if !*found {
+                        *found = true;
+                        *query_instr = QueryInstruction::SetLocalValue(reg);
+                    }
+                },
+            _ => {}
         }
     }
 }

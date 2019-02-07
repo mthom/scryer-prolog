@@ -216,6 +216,7 @@ pub struct CodeRepo {
     pub(super) term_expanders: Code,
     pub(super) code: Code,
     pub(super) in_situ_code: Code,
+    pub(super) verify_attrs_code: Code,
     pub(super) term_dir: TermDir
 }
 
@@ -248,6 +249,7 @@ pub enum SystemClauseType {
     GetSCCCleaner,
     InstallSCCCleaner,
     InstallInferenceCounter,
+    ModuleOf,
     RemoveCallPolicyCheck,
     RemoveInferenceCounter,
     RestoreCutPolicy,
@@ -262,6 +264,7 @@ pub enum SystemClauseType {
     GetDoubleQuotes,
     InstallNewBlock,
     ResetBlock,
+    RestoreCodePtrFromSpecialFormCP,
     SetBall,
     SetCutPointByDefault(RegType),
     SetDoubleQuotes,
@@ -286,12 +289,10 @@ impl SystemClauseType {
             &SystemClauseType::GetDoubleQuotes => clause_name!("$get_double_quotes"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
             &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
-            &SystemClauseType::InstallInferenceCounter =>
-                clause_name!("$install_inference_counter"),
-            &SystemClauseType::RemoveCallPolicyCheck =>
-                clause_name!("$remove_call_policy_check"),
-            &SystemClauseType::RemoveInferenceCounter =>
-                clause_name!("$remove_inference_counter"),
+            &SystemClauseType::InstallInferenceCounter => clause_name!("$install_inference_counter"),
+            &SystemClauseType::ModuleOf => clause_name!("$module_of"),
+            &SystemClauseType::RemoveCallPolicyCheck => clause_name!("$remove_call_policy_check"),
+            &SystemClauseType::RemoveInferenceCounter => clause_name!("$remove_inference_counter"),
             &SystemClauseType::RestoreCutPolicy => clause_name!("$restore_cut_policy"),
             &SystemClauseType::SetCutPoint(_) => clause_name!("$set_cp"),
             &SystemClauseType::InferenceLevel => clause_name!("$inference_level"),
@@ -303,6 +304,7 @@ impl SystemClauseType {
             &SystemClauseType::GetCurrentBlock => clause_name!("$get_current_block"),
             &SystemClauseType::InstallNewBlock => clause_name!("$install_new_block"),
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
+            &SystemClauseType::RestoreCodePtrFromSpecialFormCP => clause_name!("$restore_p_from_sfcp"),
             &SystemClauseType::SetBall => clause_name!("$set_ball"),
             &SystemClauseType::SetCutPointByDefault(_) => clause_name!("$set_cp_by_default"),
             &SystemClauseType::SetDoubleQuotes => clause_name!("$set_double_quotes"),
@@ -326,14 +328,11 @@ impl SystemClauseType {
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
             ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
-            ("$install_scc_cleaner", 2) =>
-                Some(SystemClauseType::InstallSCCCleaner),
-            ("$install_inference_counter", 3) =>
-                Some(SystemClauseType::InstallInferenceCounter),
-            ("$remove_call_policy_check", 1) =>
-                Some(SystemClauseType::RemoveCallPolicyCheck),
-            ("$remove_inference_counter", 2) =>
-                Some(SystemClauseType::RemoveInferenceCounter),
+            ("$install_scc_cleaner", 2) => Some(SystemClauseType::InstallSCCCleaner),
+            ("$install_inference_counter", 3) => Some(SystemClauseType::InstallInferenceCounter),
+            ("$module_of", 2) => Some(SystemClauseType::ModuleOf),
+            ("$remove_call_policy_check", 1) => Some(SystemClauseType::RemoveCallPolicyCheck),
+            ("$remove_inference_counter", 2) => Some(SystemClauseType::RemoveInferenceCounter),
             ("$restore_cut_policy", 0) => Some(SystemClauseType::RestoreCutPolicy),
             ("$set_cp", 1) => Some(SystemClauseType::SetCutPoint(temp_v!(1))),
             ("$inference_level", 2) => Some(SystemClauseType::InferenceLevel),
@@ -345,6 +344,7 @@ impl SystemClauseType {
             ("$get_cp", 1) => Some(SystemClauseType::GetCutPoint),
             ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
+            ("$restore_p_from_sfcp", 0) => Some(SystemClauseType::RestoreCodePtrFromSpecialFormCP),
             ("$set_ball", 1) => Some(SystemClauseType::SetBall),
             ("$set_cp_by_default", 1) => Some(SystemClauseType::SetCutPointByDefault(temp_v!(1))),
             ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
@@ -696,17 +696,15 @@ pub enum QueryInstruction {
 
 pub type CompiledFact = Vec<FactInstruction>;
 
-pub type CompiledQuery = Vec<QueryInstruction>;
-
 pub enum Line {
     Arithmetic(ArithmeticInstruction),
     Choice(ChoiceInstruction),
     Control(ControlInstruction),
     Cut(CutInstruction),
-    Fact(CompiledFact),
+    Fact(FactInstruction),
     Indexing(IndexingInstruction),
     IndexedChoice(IndexedChoiceInstruction),
-    Query(CompiledQuery)
+    Query(QueryInstruction)
 }
 
 pub type ThirdLevelIndex = Vec<IndexedChoiceInstruction>;

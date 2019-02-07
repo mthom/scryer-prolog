@@ -814,8 +814,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         Ok(result)
     }
 
-    pub
-    fn consume(&mut self, indices: &mut IndexStore) -> Result<Option<Declaration>, SessionError>
+    pub fn consume(&mut self, indices: &mut IndexStore) -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
 

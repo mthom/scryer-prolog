@@ -18,10 +18,8 @@ fn print_code(code: &Code) {
         match clause {
             &Line::Arithmetic(ref arith) =>
                 println!("{}", arith),
-            &Line::Fact(ref fact) =>
-                for fact_instr in fact {
-                    println!("{}", fact_instr);
-                },
+            &Line::Fact(ref fact_instr) =>
+                println!("{}", fact_instr),
             &Line::Cut(ref cut) =>
                 println!("{}", cut),
             &Line::Choice(ref choice) =>
@@ -32,10 +30,8 @@ fn print_code(code: &Code) {
                 println!("{}", choice),
             &Line::Indexing(ref indexing) =>
                 println!("{}", indexing),
-            &Line::Query(ref query) =>
-                for query_instr in query {
-                    println!("{}", query_instr);
-                }
+            &Line::Query(ref query_instr) =>
+                println!("{}", query_instr)
         }
     }
 }
@@ -122,7 +118,7 @@ fn compile_query(terms: Vec<QueryTerm>, queue: VecDeque<TopLevel>, flags: Machin
     let mut code = try!(cg.compile_query(&terms));
 
     compile_appendix(&mut code, &queue, false, flags)?;
-    
+
     Ok((code, cg.take_vars()))
 }
 
@@ -147,9 +143,9 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession
                 Err(e) => EvalSession::from(e)
             },
         TopLevelPacket::Decl(TopLevel::Declaration(decl), _) => {
-            let mut compiler = ListingCompiler::new(&wam.code_repo);
-
+            let mut compiler = ListingCompiler::new(&wam.code_repo, wam.code_size());
             let indices = try_eval_session!(compile_decl(wam, &mut compiler, decl));
+
             try_eval_session!(compiler.add_code(wam, vec![], indices));
 
             EvalSession::EntrySuccess
@@ -166,6 +162,7 @@ struct GatherResult {
 }
 
 pub struct ListingCompiler {
+    code_size_offset: usize,
     non_counted_bt_preds: HashSet<PredicateKey>,
     module: Option<Module>,
     user_term_dir: TermDir,
@@ -175,9 +172,11 @@ pub struct ListingCompiler {
 
 impl ListingCompiler {
     #[inline]
-    pub fn new(code_repo: &CodeRepo) -> Self {
+    pub fn new(code_repo: &CodeRepo, code_size_offset: usize) -> Self {
         ListingCompiler {
-            module: None, non_counted_bt_preds: HashSet::new(),
+            code_size_offset,
+            non_counted_bt_preds: HashSet::new(),
+            module: None,
             user_term_dir: TermDir::new(),
             orig_term_expansion_lens: code_repo.term_dir_entry_len((clause_name!("term_expansion"), 2)),
             orig_goal_expansion_lens: code_repo.term_dir_entry_len((clause_name!("goal_expansion"), 2)),
@@ -239,8 +238,8 @@ impl ListingCompiler {
             .unwrap_or(ClauseName::BuiltIn("user"))
     }
 
-    fn generate_code(&mut self, decls: Vec<PredicateCompileQueue>,
-                     wam: &Machine, code_dir: &mut CodeDir)
+    fn generate_code(&mut self, decls: Vec<PredicateCompileQueue>, wam: &Machine,
+                     code_dir: &mut CodeDir)
                      -> Result<Code, SessionError>
     {
         let mut code = vec![];
@@ -250,10 +249,10 @@ impl ListingCompiler {
                 let arity = cl.arity();
                 cl.name().map(|name| (name, arity))
             }).ok_or(SessionError::NamelessEntry)?;
-            
+
             let non_counted_bt = self.non_counted_bt_preds.contains(&(name.clone(), arity));
 
-            let p = code.len() + wam.code_size();                                    
+            let p = code.len() + self.code_size_offset;
             let mut decl_code = compile_relation(&TopLevel::Predicate(decl), non_counted_bt,
                                                  wam.machine_flags())?;
 
@@ -346,7 +345,7 @@ impl ListingCompiler {
                 Ok(self.add_non_counted_bt_flag(name, arity)),
             Declaration::Op(op_decl) =>
                 op_decl.submit(self.get_module_name(), &mut indices.op_dir),
-            Declaration::UseModule(name) =>                
+            Declaration::UseModule(name) =>
                 self.use_module(name, code_repo, flags, wam_indices, indices),
             Declaration::UseQualifiedModule(name, exports) =>
                 self.use_qualified_module(name, code_repo, flags, &exports, wam_indices, indices),
@@ -382,11 +381,9 @@ impl ListingCompiler {
                              -> Result<GatherResult, SessionError>
     {
         let flags = wam.machine_flags();
-        let wam_indices = &mut wam.indices;
-
-        let atom_tbl   = wam_indices.atom_tbl.clone();
+        let atom_tbl   = wam.indices.atom_tbl.clone();
         let mut worker = TopLevelBatchWorker::new(src, atom_tbl.clone(), flags,
-                                                  wam_indices, &mut wam.policies,
+                                                  &mut wam.indices, &mut wam.policies,
                                                   &mut wam.code_repo);
 
         let mut toplevel_results = vec![];
@@ -463,10 +460,24 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src:
     EvalSession::EntrySuccess
 }
 
+/* This is a truncated version of compile_user_module, used for
+   compiling code composing special forms, ie. the code that calls
+   M:verify_attributes on attributed variables. */
+pub fn compile_special_form<R: Read>(wam: &mut Machine, src: R) -> Result<Code, SessionError>
+{
+    let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
+    setup_indices(wam, &mut indices)?;
+
+    let mut compiler = ListingCompiler::new(&wam.code_repo, 0);
+    let results = compiler.gather_items(wam, src, &mut indices)?;
+
+    compiler.generate_code(results.worker_results, wam, &mut indices.code_dir)
+}
+
 #[inline]
 pub fn compile_listing<R: Read>(wam: &mut Machine, src: R, indices: IndexStore) -> EvalSession
 {
-    let mut compiler = ListingCompiler::new(&wam.code_repo);
+    let mut compiler = ListingCompiler::new(&wam.code_repo, wam.code_size());
 
     match compile_work(&mut compiler, wam, src, indices) {
         EvalSession::Error(e) => EvalSession::Error(compiler.drop_expansions(wam, e)),
@@ -488,6 +499,6 @@ fn setup_indices(wam: &mut Machine, indices: &mut IndexStore) -> Result<(), Sess
 
 pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
-    try_eval_session!(setup_indices(wam, &mut indices));    
+    try_eval_session!(setup_indices(wam, &mut indices));
     compile_listing(wam, src, indices)
 }

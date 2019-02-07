@@ -40,6 +40,7 @@ impl MachineState {
             e: 0,
             num_of_args: 0,
             cp: LocalCodePtr::default(),
+            special_form_cp: CodePtr::default(),
             fail: false,
             heap: Heap::with_capacity(256),
             mode: MachineMode::Write,
@@ -2363,6 +2364,7 @@ impl MachineState {
         self.pstr_tr = 0;
         self.p = CodePtr::default();
         self.cp = LocalCodePtr::default();
+        self.special_form_cp = CodePtr::default();
         self.num_of_args = 0;
 
         self.fail = false;
