@@ -10,6 +10,7 @@ use prolog::num::{ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt};
 
 use std::collections::HashSet;
+use std::mem;
 use std::rc::Rc;
 
 struct BrentAlgState {
@@ -442,7 +443,17 @@ impl MachineState {
                                     CWILCallPolicy.")
                 },
             &SystemClauseType::RestoreCodePtrFromSpecialFormCP => {
-                self.p = self.special_form_cp.clone();
+                self.p = mem::replace(&mut self.attr_var_init.special_form_cp,
+                                      CodePtr::VerifyAttrInterrupt(self.attr_var_init.verify_attrs_loc));
+                mem::swap(&mut self.registers, &mut self.attr_var_init.registers);
+
+                let mut bindings = vec![];
+                mem::swap(&mut bindings, &mut self.attr_var_init.bindings);
+
+                for (h, addr) in bindings {
+                    self.heap[h] = HeapCellValue::Addr(addr);
+                }
+
                 return Ok(());
             },
             &SystemClauseType::RestoreCutPolicy => {

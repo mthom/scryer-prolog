@@ -6,7 +6,7 @@ use prolog::and_stack::*;
 use prolog::copier::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
-use prolog::machine::IndexStore;
+use prolog::machine::{AttrVarInitializer, IndexStore};
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{Integer, Signed, ToPrimitive, Zero};
@@ -40,7 +40,7 @@ impl MachineState {
             e: 0,
             num_of_args: 0,
             cp: LocalCodePtr::default(),
-            special_form_cp: CodePtr::default(),
+            attr_var_init: AttrVarInitializer::new(0),
             fail: false,
             heap: Heap::with_capacity(256),
             mode: MachineMode::Write,
@@ -102,16 +102,16 @@ impl MachineState {
         match addr.as_var() {
             Some(Ref::HeapCell(hc)) => {
                 self.heap[hc] = HeapCellValue::Addr(Addr::AttrVar(h));
-                self.trail(TrailRef::from(Ref::HeapCell(hc)));
+                self.trail(TrailRef::Ref(Ref::HeapCell(hc)));
             },
             Some(Ref::StackCell(fr, sc)) => {
                 self.and_stack[fr][sc] = Addr::AttrVar(h);
-                self.trail(TrailRef::from(Ref::StackCell(fr, sc)));
+                self.trail(TrailRef::Ref(Ref::StackCell(fr, sc)));
             },
             _ => {
-                // TODO: set up writing to the attribute queue here.
+                self.add_attr_var_binding(h, addr.clone());
                 self.heap[h] = HeapCellValue::Addr(addr);
-                self.trail(TrailRef::from(Ref::AttrVar(h)));
+                self.trail(TrailRef::Ref(Ref::AttrVar(h)));
             }
         }
     }
@@ -1941,20 +1941,6 @@ impl MachineState {
         *list = result;
     }
 
-    pub(super) fn to_list<Iter: Iterator<Item=Addr>>(&mut self, values: Iter) -> usize {
-        let head_addr = self.heap.h;
-
-        for value in values {
-            let h = self.heap.h;
-
-            self.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
-            self.heap.push(HeapCellValue::Addr(value));
-        }
-
-        self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
-        head_addr
-    }
-
     pub(super) fn try_from_list(&self, r: RegType, caller: MachineStub)
                                 -> Result<Vec<Addr>, MachineStub>
     {
@@ -2364,7 +2350,7 @@ impl MachineState {
         self.pstr_tr = 0;
         self.p = CodePtr::default();
         self.cp = LocalCodePtr::default();
-        self.special_form_cp = CodePtr::default();
+        self.attr_var_init.reset();
         self.num_of_args = 0;
 
         self.fail = false;

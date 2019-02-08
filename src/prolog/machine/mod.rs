@@ -118,7 +118,6 @@ impl CodeRepo {
             term_expanders: Code::new(),
             code: Code::new(),
             in_situ_code: Code::new(),
-            verify_attrs_code: Code::new(),
             term_dir: TermDir::new()
         }
     }
@@ -202,7 +201,10 @@ impl CodeRepo {
             &CodePtr::CallN(arity, _) => {
                 let call_clause = call_clause!(ClauseType::CallN, arity, 0, last_call);
                 Some(RefOrOwned::Owned(call_clause))
-            }
+            },
+            &CodePtr::VerifyAttrInterrupt(p) =>
+                Some(RefOrOwned::Borrowed(&self.code[p])),
+
         }
     }
 }
@@ -238,7 +240,7 @@ impl Index<LocalCodePtr> for CodeRepo {
             LocalCodePtr::TopLevel(_, p) => &self.cached_query[p],
             LocalCodePtr::DirEntry(p) => &self.code[p],
             LocalCodePtr::UserGoalExpansion(p) => &self.goal_expanders[p],
-            LocalCodePtr::UserTermExpansion(p) => &self.term_expanders[p]
+            LocalCodePtr::UserTermExpansion(p) => &self.term_expanders[p],
         }
     }
 }
@@ -321,7 +323,11 @@ static ATTS: &str     = include_str!("../lib/atts.pl");
 impl Machine {
     fn compile_special_forms(&mut self) {
         match compile_special_form(self, VERIFY_ATTRS.as_bytes()) {
-            Ok(code) => self.code_repo.verify_attrs_code = code,
+            Ok(code) => {
+                self.machine_st.attr_var_init.verify_attrs_loc = self.code_repo.code.len();
+                self.machine_st.attr_var_init.reset();                
+                self.code_repo.code.extend(code.into_iter());
+            },
             Err(_e)  => panic!("Machine::compile_special_forms() failed")
         }
     }
@@ -580,6 +586,13 @@ impl MachineState {
                     if p < code_repo.in_situ_code.len() => {},
                 CodePtr::Local(_) =>
                     break,
+                CodePtr::VerifyAttrInterrupt(p) => {
+                    self.verify_attributes();
+
+                    self.num_of_args = 2;
+                    self.b0 = self.b;
+                    self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
+                },
                 _ => {}
             };
         }

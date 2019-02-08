@@ -4,7 +4,7 @@ use prolog_parser::string_list::*;
 use prolog::instructions::*;
 use prolog::and_stack::*;
 use prolog::copier::*;
-use prolog::machine::IndexStore;
+use prolog::machine::{AttrVarInitializer, IndexStore};
 use prolog::machine::machine_errors::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
 use prolog::or_stack::*;
@@ -206,7 +206,7 @@ pub struct MachineState {
     pub(super) e: usize,
     pub(super) num_of_args: usize,
     pub(super) cp: LocalCodePtr,
-    pub(super) special_form_cp: CodePtr,
+    pub(super) attr_var_init: AttrVarInitializer,
     pub(super) fail: bool,
     pub(crate) heap: Heap,
     pub(super) mode: MachineMode,
@@ -231,14 +231,14 @@ impl MachineState {
         self.cp.assign_if_local(self.p.clone() + 1);
         self.num_of_args = arity;
         self.b0 = self.b;
-        self.p  = dir_entry!(p);
+        self.p = dir_entry!(p);
     }
 
     fn execute_at_index(&mut self, arity: usize, p: usize)
     {
         self.num_of_args = arity;
         self.b0 = self.b;
-        self.p  = dir_entry!(p);
+        self.p = dir_entry!(p);
     }
 
     pub(super)
@@ -246,8 +246,8 @@ impl MachineState {
                      last_call: bool)
                      -> CallResult
     {
-        let (name, arity) = key;        
-        
+        let (name, arity) = key;
+
         if let Some(ref idx) = indices.get_code_index((name.clone(), arity), module_name.clone())
         {
             if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
@@ -256,15 +256,15 @@ impl MachineState {
                 } else {
                     self.call_at_index(arity, compiled_tl_index);
                 }
-                
+
                 return Ok(());
             }
         }
 
         let h = self.heap.h;
-        let stub = MachineError::functor_stub(name.clone(), arity);        
-        let err = MachineError::module_resolution_error(h, module_name, name, arity);        
-        
+        let stub = MachineError::functor_stub(name.clone(), arity);
+        let err = MachineError::module_resolution_error(h, module_name, name, arity);
+
         return Err(self.error_form(err, stub));
     }
 }
@@ -615,7 +615,7 @@ pub(crate) trait CallPolicy: Any {
                 list.sort_unstable_by(|a1, a2| machine_st.compare_term_test(a1, a2));
                 machine_st.term_dedup(&mut list);
 
-                let heap_addr = Addr::HeapCell(machine_st.to_list(list.into_iter()));
+                let heap_addr = Addr::HeapCell(machine_st.heap.to_list(list.into_iter()));
 
                 let r2 = machine_st[temp_v!(2)].clone();
                 machine_st.unify(r2, heap_addr);
@@ -637,7 +637,7 @@ pub(crate) trait CallPolicy: Any {
                 key_pairs.sort_by(|a1, a2| machine_st.compare_term_test(&a1.0, &a2.0));
 
                 let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
-                let heap_addr = Addr::HeapCell(machine_st.to_list(key_pairs));
+                let heap_addr = Addr::HeapCell(machine_st.heap.to_list(key_pairs));
 
                 let r2 = machine_st[temp_v!(2)].clone();
                 machine_st.unify(r2, heap_addr);

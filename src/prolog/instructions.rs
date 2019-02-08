@@ -216,7 +216,6 @@ pub struct CodeRepo {
     pub(super) term_expanders: Code,
     pub(super) code: Code,
     pub(super) in_situ_code: Code,
-    pub(super) verify_attrs_code: Code,
     pub(super) term_dir: TermDir
 }
 
@@ -924,7 +923,8 @@ impl From<(usize, ClauseName)> for CodeIndex {
 pub enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
     CallN(usize, LocalCodePtr), // arity, local.
-    Local(LocalCodePtr)
+    Local(LocalCodePtr),
+    VerifyAttrInterrupt(usize) // location of the verify attribute interrupt code in the CodeDir.
 }
 
 impl CodePtr {
@@ -932,7 +932,8 @@ impl CodePtr {
         match self {
             &CodePtr::BuiltInClause(_, ref local)
           | &CodePtr::CallN(_, ref local)
-          | &CodePtr::Local(ref local) => local.clone()
+          | &CodePtr::Local(ref local) => local.clone(),
+            &CodePtr::VerifyAttrInterrupt(p) => LocalCodePtr::DirEntry(p)
         }
     }
 }
@@ -946,7 +947,7 @@ pub enum LocalCodePtr {
     UserTermExpansion(usize)
 }
 
-impl LocalCodePtr {
+impl LocalCodePtr {    
     pub fn assign_if_local(&mut self, cp: CodePtr) {
         match cp {
             CodePtr::Local(local) => *self = local,
@@ -1023,6 +1024,7 @@ impl Add<usize> for CodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
+            p @ CodePtr::VerifyAttrInterrupt(_) => p,
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
             CodePtr::CallN(_, local) | CodePtr::BuiltInClause(_, local) => CodePtr::Local(local + rhs),
         }
@@ -1032,6 +1034,7 @@ impl Add<usize> for CodePtr {
 impl AddAssign<usize> for CodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
+            &mut CodePtr::VerifyAttrInterrupt(_) => {},
             &mut CodePtr::Local(ref mut local) => *local += rhs,
             _ => *self = CodePtr::Local(self.local() + rhs)
         }
@@ -1072,6 +1075,20 @@ impl Heap {
     pub fn clear(&mut self) {
         self.heap.clear();
         self.h = 0;
+    }
+
+    pub fn to_list<Iter: Iterator<Item=Addr>>(&mut self, values: Iter) -> usize {
+        let head_addr = self.h;
+
+        for value in values {
+            let h = self.h;
+
+            self.push(HeapCellValue::Addr(Addr::Lis(h+1)));
+            self.push(HeapCellValue::Addr(value));
+        }
+
+        self.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
+        head_addr
     }
 }
 

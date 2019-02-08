@@ -143,7 +143,7 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession
                 Err(e) => EvalSession::from(e)
             },
         TopLevelPacket::Decl(TopLevel::Declaration(decl), _) => {
-            let mut compiler = ListingCompiler::new(&wam.code_repo, wam.code_size());
+            let mut compiler = ListingCompiler::new(&wam.code_repo);
             let indices = try_eval_session!(compile_decl(wam, &mut compiler, decl));
 
             try_eval_session!(compiler.add_code(wam, vec![], indices));
@@ -162,7 +162,6 @@ struct GatherResult {
 }
 
 pub struct ListingCompiler {
-    code_size_offset: usize,
     non_counted_bt_preds: HashSet<PredicateKey>,
     module: Option<Module>,
     user_term_dir: TermDir,
@@ -172,9 +171,8 @@ pub struct ListingCompiler {
 
 impl ListingCompiler {
     #[inline]
-    pub fn new(code_repo: &CodeRepo, code_size_offset: usize) -> Self {
+    pub fn new(code_repo: &CodeRepo) -> Self {
         ListingCompiler {
-            code_size_offset,
             non_counted_bt_preds: HashSet::new(),
             module: None,
             user_term_dir: TermDir::new(),
@@ -252,7 +250,7 @@ impl ListingCompiler {
 
             let non_counted_bt = self.non_counted_bt_preds.contains(&(name.clone(), arity));
 
-            let p = code.len() + self.code_size_offset;
+            let p = code.len() + wam.code_size();
             let mut decl_code = compile_relation(&TopLevel::Predicate(decl), non_counted_bt,
                                                  wam.machine_flags())?;
 
@@ -468,7 +466,7 @@ pub fn compile_special_form<R: Read>(wam: &mut Machine, src: R) -> Result<Code, 
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     setup_indices(wam, &mut indices)?;
 
-    let mut compiler = ListingCompiler::new(&wam.code_repo, 0);
+    let mut compiler = ListingCompiler::new(&wam.code_repo);
     let results = compiler.gather_items(wam, src, &mut indices)?;
 
     compiler.generate_code(results.worker_results, wam, &mut indices.code_dir)
@@ -477,7 +475,7 @@ pub fn compile_special_form<R: Read>(wam: &mut Machine, src: R) -> Result<Code, 
 #[inline]
 pub fn compile_listing<R: Read>(wam: &mut Machine, src: R, indices: IndexStore) -> EvalSession
 {
-    let mut compiler = ListingCompiler::new(&wam.code_repo, wam.code_size());
+    let mut compiler = ListingCompiler::new(&wam.code_repo);
 
     match compile_work(&mut compiler, wam, src, indices) {
         EvalSession::Error(e) => EvalSession::Error(compiler.drop_expansions(wam, e)),
