@@ -24,7 +24,7 @@
 '$get_from_list'([L|Ls], Attr) :-
     nonvar(L),
     ( L \= Attr -> nonvar(Ls), '$get_from_list'(Ls, Attr)
-    ; copy_term(L, L0), L0 = Attr
+    ; L = Attr
     ; '$get_from_list'(Ls, Attr)
     ).
 

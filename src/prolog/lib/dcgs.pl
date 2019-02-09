@@ -56,13 +56,13 @@ expand_body(Term0, ModTerm, N0, N) :-
     expand_body_term(Term0, ModTerm, N0, N).
 
 /* unfurl_commas(?ModTerm, -ModTerms, -ModTerms1) :
-   sets  ModTerms = (ModTermI0, ModTermI1, ..., ModTermIN, ModTerms1) 
+   sets  ModTerms = (ModTermI0, ModTermI1, ..., ModTermIN, ModTerms1)
    where ModTerm  = (ModTermI0, ModTermI1, ..., ModTermIN) */
 unfurl_commas(ModTerm, ModTerms, ModTerms1) :-
     nonvar(ModTerm),
     ModTerm  = (ModTermI0, ModTermIs),
     !,
-    ModTerms = (ModTermI0, ModTerms2),    
+    ModTerms = (ModTermI0, ModTerms2),
     unfurl_commas(ModTermIs, ModTerms2, ModTerms1).
 unfurl_commas(ModTermIN, (ModTermIN, ModTerms1), ModTerms1).
 
@@ -75,8 +75,20 @@ expand_body_term((P -> Q), (PModTerm -> QModTerm), N0, N) :-
     !, expand_body(P, PModTerm, N0, N1),
     expand_body(Q, QModTerm, N1, N).
 expand_body_term((P ; Q), (PModTerm ; QModTerm), N0, N) :-
-    !, expand_body(P, PModTerm, N0, N),
-    expand_body(Q, QModTerm, N0, N).
+    !, expand_body(P, PModTerm0, N0, N1),
+    expand_body(Q, QModTerm0, N0, N2),
+    ( N1 == N2 -> PModTerm = PModTerm0,
+		  QModTerm = QModTerm0,
+		  N = N1
+    ; N1 < N2  -> unfurl_commas(PModTerm0, PModTerm, Hole),
+		  Hole = ('$VAR'(N1) = '$VAR'(N2) ),
+		  QModTerm = QModTerm0,
+		  N = N2
+    ; N1 > N2  -> unfurl_commas(QModTerm0, QModTerm, Hole),
+		  Hole = ('$VAR'(N1) = '$VAR'(N2) ),
+		  PModTerm = PModTerm0,
+		  N = N1
+    ).
 expand_body_term(CommaTerm, ModTerm, N, N) :-
     CommaTerm =.. [{} | BodyTerms], !,
     comma_ify(BodyTerms, ModTerm).
@@ -88,4 +100,4 @@ expand_body_term(GrammarRule, ModTerm, N0, N) :-
 
 comma_ify([Term], Term) :- !.
 comma_ify([Term | Args], (Term, Terms)) :-
-    comma_ify(Terms, Args).
+    comma_ify(Args, Terms).

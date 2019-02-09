@@ -1620,11 +1620,18 @@ impl MachineState {
                         return Ordering::Less;
                     },
                 (HeapCellValue::Addr(Addr::HeapCell(hc1)),
-                 HeapCellValue::Addr(Addr::HeapCell(hc2))) =>
+                 HeapCellValue::Addr(Addr::HeapCell(hc2)))
+              | (HeapCellValue::Addr(Addr::AttrVar(hc1)),
+                 HeapCellValue::Addr(Addr::HeapCell(hc2)))
+              | (HeapCellValue::Addr(Addr::HeapCell(hc1)),
+                 HeapCellValue::Addr(Addr::AttrVar(hc2)))
+              | (HeapCellValue::Addr(Addr::AttrVar(hc1)),
+                 HeapCellValue::Addr(Addr::AttrVar(hc2))) =>                    
                     if hc1 != hc2 {
                         return hc1.cmp(&hc2);
                     },
-                (HeapCellValue::Addr(Addr::HeapCell(_)), _) =>
+                (HeapCellValue::Addr(Addr::HeapCell(_)), _)
+              | (HeapCellValue::Addr(Addr::AttrVar(_)), _) =>
                     return Ordering::Less,
                 (HeapCellValue::Addr(Addr::StackCell(fr1, sc1)),
                  HeapCellValue::Addr(Addr::StackCell(fr2, sc2))) =>
@@ -1636,12 +1643,16 @@ impl MachineState {
                         return Ordering::Greater;
                     },
                 (HeapCellValue::Addr(Addr::StackCell(..)),
-                 HeapCellValue::Addr(Addr::HeapCell(_))) =>
+                 HeapCellValue::Addr(Addr::HeapCell(_)))
+              | (HeapCellValue::Addr(Addr::StackCell(..)),
+                 HeapCellValue::Addr(Addr::AttrVar(_))) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::StackCell(..)), _) =>
                     return Ordering::Less,
                 (HeapCellValue::Addr(Addr::Con(Constant::Number(..))),
-                 HeapCellValue::Addr(Addr::HeapCell(_))) =>
+                 HeapCellValue::Addr(Addr::HeapCell(_)))
+              | (HeapCellValue::Addr(Addr::Con(Constant::Number(..))),
+                 HeapCellValue::Addr(Addr::AttrVar(_))) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::Number(..))),
                  HeapCellValue::Addr(Addr::StackCell(..))) =>
@@ -1654,7 +1665,9 @@ impl MachineState {
                 (HeapCellValue::Addr(Addr::Con(Constant::Number(_))), _) =>
                     return Ordering::Less,
                 (HeapCellValue::Addr(Addr::Con(Constant::String(..))),
-                 HeapCellValue::Addr(Addr::HeapCell(_))) =>
+                 HeapCellValue::Addr(Addr::HeapCell(_)))
+              | (HeapCellValue::Addr(Addr::Con(Constant::String(..))),
+                 HeapCellValue::Addr(Addr::AttrVar(_))) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::String(..))),
                  HeapCellValue::Addr(Addr::StackCell(..))) =>
@@ -1680,7 +1693,9 @@ impl MachineState {
                 (HeapCellValue::Addr(Addr::Con(Constant::String(_))), _) =>
                     return Ordering::Less,
                 (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
-                 HeapCellValue::Addr(Addr::HeapCell(_))) =>
+                 HeapCellValue::Addr(Addr::HeapCell(_)))
+              | (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
+                 HeapCellValue::Addr(Addr::AttrVar(_))) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
                  HeapCellValue::Addr(Addr::StackCell(..))) =>
@@ -2075,7 +2090,12 @@ impl MachineState {
                     },
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
                     continue,
-                (HeapCellValue::Addr(v1 @ Addr::HeapCell(_)), HeapCellValue::Addr(v2 @ Addr::HeapCell(_)))
+                (HeapCellValue::Addr(v1 @ Addr::HeapCell(_)), HeapCellValue::Addr(v2 @ Addr::AttrVar(_)))
+              | (HeapCellValue::Addr(v1 @ Addr::StackCell(..)), HeapCellValue::Addr(v2 @ Addr::AttrVar(_)))
+              | (HeapCellValue::Addr(v1 @ Addr::AttrVar(_)), HeapCellValue::Addr(v2 @ Addr::AttrVar(_)))
+              | (HeapCellValue::Addr(v1 @ Addr::AttrVar(_)), HeapCellValue::Addr(v2 @ Addr::HeapCell(_)))
+              | (HeapCellValue::Addr(v1 @ Addr::AttrVar(_)), HeapCellValue::Addr(v2 @ Addr::StackCell(..)))
+              | (HeapCellValue::Addr(v1 @ Addr::HeapCell(_)), HeapCellValue::Addr(v2 @ Addr::HeapCell(_)))
               | (HeapCellValue::Addr(v1 @ Addr::HeapCell(_)), HeapCellValue::Addr(v2 @ Addr::StackCell(..)))
               | (HeapCellValue::Addr(v1 @ Addr::StackCell(..)), HeapCellValue::Addr(v2 @ Addr::StackCell(..)))
               | (HeapCellValue::Addr(v1 @ Addr::StackCell(..)), HeapCellValue::Addr(v2 @ Addr::HeapCell(_))) =>

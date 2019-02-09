@@ -4,9 +4,8 @@ pub static VERIFY_ATTRS: &str = "
 iterate([Var|VarBindings], [Value|ValueBindings]) :-
     '$get_attr_list'(Var, Ls),
     call_verify_attributes(Ls, Var, Value),
-    iterate(VarBindings, ValueBindings),
-    '$restore_p_from_sfcp'.
-iterate([], []).
+    iterate(VarBindings, ValueBindings).
+iterate([], []) :- '$restore_p_from_sfcp'.
 
 call_verify_attributes(Attrs, _, _) :-
     var(Attrs), !.
@@ -21,8 +20,7 @@ call_verify_attributes([Attr|Attrs], Var, Value) :-
 call_verify_attributes_goals(Goals) :-
     var(Goals), throw(error(instantiation_error, call_verify_attributes_goals/1)).
 call_verify_attributes_goals([Goal|Goals]) :-
-    call(Goal), !,
-    call_verify_attributes_goals(Goals).
+    call(Goal), !, call_verify_attributes_goals(Goals).
 call_verify_attributes_goals([]).
 ";
 
@@ -66,13 +64,13 @@ impl MachineState {
     pub(super)
     fn verify_attributes(&mut self)
     {
-        /* STEP 1: Undo bindings in machine (DONE)
-           STEP 2: Write the list of bindings to two lists in the heap, one for vars, one for values. (DONE)
-           STEP 3: Swap the machine's Registers for attr_var_init's Registers. (DONE)
-           STEP 4: Pass the addresses of the lists to iterate in the attr_vars special form. (DONE)
-           STEP 5: Restore AttrVarInitializer::special_form_cp to self.p (DONE).
-           STEP 6: Swap the bindings' Registers back for the machine's Registers. (DONE)
-           STEP 7: Redo the bindings. (DONE)
+        /* STEP 1: Undo bindings in machine.
+           STEP 2: Write the list of bindings to two lists in the heap, one for vars, one for values.
+           STEP 3: Swap the machine's Registers for attr_var_init's Registers.
+           STEP 4: Pass the addresses of the lists to iterate in the attr_vars special form.
+           STEP 5: Restore AttrVarInitializer::special_form_cp to self.p.
+           STEP 6: Swap the bindings' Registers back for the machine's Registers.
+           STEP 7: Redo the bindings.
            STEP 8: Continue.
          */
 

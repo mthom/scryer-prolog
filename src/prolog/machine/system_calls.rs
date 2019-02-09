@@ -451,7 +451,16 @@ impl MachineState {
                 mem::swap(&mut bindings, &mut self.attr_var_init.bindings);
 
                 for (h, addr) in bindings {
-                    self.heap[h] = HeapCellValue::Addr(addr);
+                    let deref_h = self.store(self.deref(Addr::AttrVar(h)));
+
+                    if &Addr::AttrVar(h) != &deref_h {
+                        if &deref_h != &addr {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    } else {
+                        self.heap[h] = HeapCellValue::Addr(addr);
+                    }
                 }
 
                 return Ok(());
