@@ -15,8 +15,8 @@ call_verify_attributes(Attrs, _, _, []) :-
 call_verify_attributes([Attr|Attrs], Var, Value, [Goals|ListOfGoalLists]) :-
     '$module_of'(M, Attr), % write the owning module Attr to M.
     catch(M:verify_attributes(Var, Value, Goals),
-          error(evaluation_error((M:verify_attributes)/3), call_verify_attributes/3),
-          true),
+          error(evaluation_error((M:verify_attributes)/3), verify_attributes/3),
+          Goals = []),
     call_verify_attributes(Attrs, Var, Value, ListOfGoalLists).
 
 call_goals([ListOfGoalLists | ListsCubed]) :-
