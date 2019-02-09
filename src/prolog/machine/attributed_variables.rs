@@ -1,35 +1,13 @@
 use prolog::machine::*;
 
-pub static VERIFY_ATTRS: &str = "
-iterate([Var|VarBindings], [Value|ValueBindings]) :-
-    '$get_attr_list'(Var, Ls),
-    call_verify_attributes(Ls, Var, Value),
-    iterate(VarBindings, ValueBindings).
-iterate([], []) :- '$restore_p_from_sfcp'.
-
-call_verify_attributes(Attrs, _, _) :-
-    var(Attrs), !.
-call_verify_attributes([Attr|Attrs], Var, Value) :-
-    '$module_of'(M, Attr), % write the owning module Attr to M.
-    catch(M:verify_attributes(Var, Value, Goals),
-          error(evaluation_error((M:verify_attributes)/3), verify_attributes/3),
-          true),
-    call_verify_attributes_goals(Goals),
-    call_verify_attributes(Attrs, Var, Value).
-
-call_verify_attributes_goals(Goals) :-
-    var(Goals), throw(error(instantiation_error, call_verify_attributes_goals/1)).
-call_verify_attributes_goals([Goal|Goals]) :-
-    call(Goal), !, call_verify_attributes_goals(Goals).
-call_verify_attributes_goals([]).
-";
+pub static VERIFY_ATTRS: &str = include_str!("attributed_variables.pl");
 
 pub(super) type Bindings = Vec<(usize, Addr)>;
 
 pub(super) struct AttrVarInitializer {
     pub(super) bindings: Bindings,
+    cp_stack: Vec<CodePtr>,
     pub(super) registers: Registers,
-    pub(super) special_form_cp: CodePtr,
     pub(super) verify_attrs_loc: usize
 }
 
@@ -38,27 +16,42 @@ impl AttrVarInitializer {
         AttrVarInitializer {
             bindings: vec![],
             verify_attrs_loc: p,
-            special_form_cp: CodePtr::VerifyAttrInterrupt(p),
+            cp_stack: vec![],
             registers: vec![Addr::HeapCell(0); MAX_ARITY + 1]
         }
     }
 
+    #[inline]
+    pub(super) fn pop_code_ptr(&mut self) -> CodePtr {
+        self.cp_stack.pop().unwrap()
+    }
+
+    #[inline]
     pub(super) fn reset(&mut self) {
-        self.special_form_cp = CodePtr::VerifyAttrInterrupt(self.verify_attrs_loc);
+        self.cp_stack.clear();
+        self.bindings.clear();
     }
 }
 
 impl MachineState {
-    pub(super) fn add_attr_var_binding(&mut self, h: usize, addr: Addr)
+    pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: Addr)
     {
-        self.attr_var_init.bindings.push((h, addr));
-
-        if let &CodePtr::VerifyAttrInterrupt(_) = &self.p {
-            return;
+        if self.attr_var_init.bindings.is_empty() {
+            self.attr_var_init.cp_stack.push(self.p.clone() + 1);
+            self.p = CodePtr::VerifyAttrInterrupt(self.attr_var_init.verify_attrs_loc);
         }
 
-        mem::swap(&mut self.attr_var_init.special_form_cp, &mut self.p);
-        self.attr_var_init.special_form_cp += 1;
+        self.attr_var_init.bindings.push((h, addr));
+    }
+
+    fn populate_var_and_value_lists(&mut self) -> (Addr, Addr) {
+        let iter = self.attr_var_init.bindings.iter().map(|(ref h, _)| Addr::AttrVar(*h));
+        let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
+
+        let iter = self.attr_var_init.bindings.iter().map(|(_, ref addr)| addr.clone());
+        let value_list_addr = Addr::HeapCell(self.heap.to_list(iter));
+
+        (var_list_addr, value_list_addr)
     }
 
     pub(super)
@@ -68,28 +61,24 @@ impl MachineState {
            STEP 2: Write the list of bindings to two lists in the heap, one for vars, one for values.
            STEP 3: Swap the machine's Registers for attr_var_init's Registers.
            STEP 4: Pass the addresses of the lists to iterate in the attr_vars special form.
-           STEP 5: Restore AttrVarInitializer::special_form_cp to self.p.
-           STEP 6: Swap the bindings' Registers back for the machine's Registers.
-           STEP 7: Redo the bindings.
-           STEP 8: Continue.
+                   Call verify_attributes/3 wherever applicable.
+           STEP 5: Redo the bindings.
+           STEP 6: Call the goals.
+           STEP 7: Pop the top of AttrVarInitializer::cp_stack to self.p.
+           STEP 8: Swap the AttrVarInitializer's Registers back for the machine's Registers.
          */
 
+        // STEP 1.
         for (h, _) in &self.attr_var_init.bindings {
             self.heap[*h] = HeapCellValue::Addr(Addr::AttrVar(*h));
         }
 
-        let (var_list_addr, value_list_addr) = {
-            let iter = self.attr_var_init.bindings.iter().map(|(ref h, _)| Addr::AttrVar(*h));
-            let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
-
-            let iter = self.attr_var_init.bindings.iter().map(|(_, ref addr)| addr.clone());
-            let value_list_addr = Addr::HeapCell(self.heap.to_list(iter));
-
-            (var_list_addr, value_list_addr)
-        };
-
+        // STEP 2.
+        let (var_list_addr, value_list_addr) = self.populate_var_and_value_lists();
+        // STEP 3.
         mem::swap(&mut self.registers, &mut self.attr_var_init.registers);
 
+        // STEP 4.
         self[temp_v!(1)] = var_list_addr;
         self[temp_v!(2)] = value_list_addr;
     }

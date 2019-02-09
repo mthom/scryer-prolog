@@ -39,6 +39,10 @@ Extend rusty-wam to include the following, among other features:
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
   is straightforward with attributed variables (_in progress_).
+     - [x] Support for `verify_attributes/3` in modules
+     - [ ] Support for `attribute_goals/2` at toplevel and
+       `project_attributes/2` in modules     
+     - [ ] `call_residue_vars/2`
 * An occurs check.
 * Mode declarations.
 * Extensions for clp(FD).
@@ -245,7 +249,7 @@ rusty-wam supports dynamic operators. Using the built-in
 arithmetic operators with the usual precedences,
 
 ```
-prolog> ?- display(-5 + 3 - (2 * 4) // 8).
+prolog> ?- writeq(-5 + 3 - (2 * 4) // 8).
 '-'('+'('-'(5), 3), '//'('*'(2, 4), 8))
 true.
 ```

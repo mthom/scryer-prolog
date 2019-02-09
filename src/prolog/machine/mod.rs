@@ -325,10 +325,9 @@ impl Machine {
         match compile_special_form(self, VERIFY_ATTRS.as_bytes()) {
             Ok(code) => {
                 self.machine_st.attr_var_init.verify_attrs_loc = self.code_repo.code.len();
-                self.machine_st.attr_var_init.reset();                
                 self.code_repo.code.extend(code.into_iter());
             },
-            Err(_e)  => panic!("Machine::compile_special_forms() failed")
+            Err(_)  => panic!("Machine::compile_special_forms() failed")
         }
     }
 

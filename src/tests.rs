@@ -2164,11 +2164,6 @@ fn test_queries_on_attributed_variables()
    				  	 get_atts(V, my_mod, L).",
                            [["A = _69", "L = [dif(1), frozen(a)]", "V = _27"],
                             ["A = _69", "L = [dif(1), dif(2)]", "V = _27"]]);
-//    assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a)]),
-//   				       ( put_atts(V, my_mod, -dif(2)), V = f(a)
-//                                       ; put_atts(V, my_mod, -frozen(_)), get_atts(V, my_mod, L) ).",
-//                           [["L = _69", "V = f(a)"],
-//                            ["L = [dif(1), dif(2)]", "V = _27"]]);
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
    				       ( put_atts(V, my_mod, -dif(2)) ; put_atts(V, my_mod, -frozen(A)) ),
    				  	 get_atts(V, my_mod, L).",
@@ -2188,4 +2183,22 @@ fn test_queries_on_attributed_variables()
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), frozen(a), dif(2), frozen(b)]),
                                          put_atts(V, my_mod, -dif(A)), get_atts(V, my_mod, Ls).",
                            [["A = _98", "Ls = [frozen(a), frozen(b)]", "V = _31"]]);
+
+    submit(&mut wam, include_str!("./prolog/lib/minatotask.pl"));
+    submit(&mut wam, ":- use_module(library(zdd)).");
+
+    assert_prolog_failure!(&mut wam, "?- ZDD = ( X -> b(true) ; ( Y -> b(true) ; b(false) ) ),
+                                         Vs = [X,Y],
+                                         variables_set_zdd(Vs, ZDD),
+                                         Vs = [1,1].");
+    assert_prolog_success!(&mut wam, "?- ZDD = ( X -> b(true) ; ( Y -> b(true) ; b(false) ) ),
+      					 Vs = [X,Y],
+      					 variables_set_zdd(Vs, ZDD),
+      					 X = 1.",
+                           [["X = 1", "Y = 0", "Vs = [1, 0]", "ZDD = 1->b(true);0->b(true);b(false)"]]);
+    assert_prolog_success!(&mut wam, "?- ZDD = ( X -> b(true) ; ( Y -> b(true) ; b(false) ) ),
+      					 Vs = [X,Y],
+      					 variables_set_zdd(Vs, ZDD),
+      					 X = 0.",
+                           [["Vs = [0, _59]", "X = 0", "Y = _59", "ZDD = 0->b(true);_59->b(true);b(false)"]]);
 }

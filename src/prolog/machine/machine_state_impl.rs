@@ -109,7 +109,7 @@ impl MachineState {
                 self.trail(TrailRef::Ref(Ref::StackCell(fr, sc)));
             },
             _ => {
-                self.add_attr_var_binding(h, addr.clone());
+                self.push_attr_var_binding(h, addr.clone());
                 self.heap[h] = HeapCellValue::Addr(addr);
                 self.trail(TrailRef::Ref(Ref::AttrVar(h)));
             }
@@ -2260,7 +2260,7 @@ impl MachineState {
                                    self.tr,
                                    self.pstr_tr,
                                    self.heap.h,
-                                   self.b0,
+                                   self.b0,                                   
                                    self.num_of_args);
 
                 self.b = self.or_stack.len();

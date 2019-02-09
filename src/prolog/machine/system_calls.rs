@@ -399,6 +399,13 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &SystemClauseType::RedoAttrVarBindings => {
+                let mut bindings = mem::replace(&mut self.attr_var_init.bindings, vec![]);
+
+                for (h, addr) in bindings {
+                    self.heap[h] = HeapCellValue::Addr(addr);
+                }
+            },
             &SystemClauseType::RemoveCallPolicyCheck => {
                 let restore_default =
                     match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
@@ -443,25 +450,8 @@ impl MachineState {
                                     CWILCallPolicy.")
                 },
             &SystemClauseType::RestoreCodePtrFromSpecialFormCP => {
-                self.p = mem::replace(&mut self.attr_var_init.special_form_cp,
-                                      CodePtr::VerifyAttrInterrupt(self.attr_var_init.verify_attrs_loc));
+                self.p = self.attr_var_init.pop_code_ptr();
                 mem::swap(&mut self.registers, &mut self.attr_var_init.registers);
-
-                let mut bindings = vec![];
-                mem::swap(&mut bindings, &mut self.attr_var_init.bindings);
-
-                for (h, addr) in bindings {
-                    let deref_h = self.store(self.deref(Addr::AttrVar(h)));
-
-                    if &Addr::AttrVar(h) != &deref_h {
-                        if &deref_h != &addr {
-                            self.fail = true;
-                            return Ok(());
-                        }
-                    } else {
-                        self.heap[h] = HeapCellValue::Addr(addr);
-                    }
-                }
 
                 return Ok(());
             },
@@ -639,8 +629,6 @@ impl MachineState {
             }
         };
 
-        self.set_p();
-
-        Ok(())
+        Ok(self.set_p())
     }
 }

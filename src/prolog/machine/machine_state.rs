@@ -378,7 +378,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
 
         machine_st.heap.truncate(machine_st.or_stack[b].h);
-
+        
         machine_st.hb = machine_st.heap.h;
         machine_st.p += offset;
 
