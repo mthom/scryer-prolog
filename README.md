@@ -46,7 +46,7 @@ Extend rusty-wam to include the following, among other features:
 * `if_` and related predicates, following the developments of the
   paper "Indexing `dif/2`".     
 * All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`).
-* Clause creation and destruction (`asserta/1`, `assertz/1`, `retract/1`, abolish/1`) with logical update semantics.
+* Clause creation and destruction (`asserta/1`, `assertz/1`, `retract/1`, `abolish/1`) with logical update semantics.
 * Streams and predicates for stream control.
 * Mode declarations.
 * Extensions for clp(FD).
