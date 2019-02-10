@@ -1,6 +1,7 @@
 driver(Vars, Values) :-
     iterate(Vars, Values, ListOfListsOfGoalLists),
-    '$redo_attr_var_bindings', %% the bindings list is emptied here.
+    '$redo_attr_var_bindings', % the bindings list is emptied here.
+    !,
     call_goals(ListOfListsOfGoalLists),
     '$restore_p_from_sfcp'.
 
@@ -13,7 +14,7 @@ iterate([], [], []).
 call_verify_attributes(Attrs, _, _, []) :-
     var(Attrs), !.
 call_verify_attributes([Attr|Attrs], Var, Value, [Goals|ListOfGoalLists]) :-
-    '$module_of'(M, Attr), % write the owning module Attr to M.
+    '$module_of'(M, Attr),     % write the owning module of Attr to M.
     catch(M:verify_attributes(Var, Value, Goals),
           error(evaluation_error((M:verify_attributes)/3), verify_attributes/3),
           Goals = []),
