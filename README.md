@@ -43,12 +43,13 @@ Extend rusty-wam to include the following, among other features:
      - [ ] Support for `attribute_goals/2` at toplevel and
        `project_attributes/2` in modules     
      - [ ] `call_residue_vars/2`
-* An occurs check.
+* `if_` and related predicates, following the developments of the
+  paper "Indexing `dif/2`".     
+* All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`).
+* Clause creation and destruction (`asserta/1`, `assertz/1`, `retract/1`, abolish/1`) with logical update semantics.
+* Streams and predicates for stream control.
 * Mode declarations.
 * Extensions for clp(FD).
-* `if_` and related predicates, following the developments of the
-  paper "Indexing `dif/2`".
-* Strings, blobs, and other data types.
 
 ## Phase 3
 
@@ -249,8 +250,8 @@ rusty-wam supports dynamic operators. Using the built-in
 arithmetic operators with the usual precedences,
 
 ```
-prolog> ?- writeq(-5 + 3 - (2 * 4) // 8).
-'-'('+'('-'(5), 3), '//'('*'(2, 4), 8))
+prolog> ?- write_canonical(-5 + 3 - (2 * 4) // 8).
+-(+(-(5), 3), //(*(2, 4), 8))
 true.
 ```
 
