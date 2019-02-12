@@ -13,6 +13,23 @@ fn error_string(e: &String) -> String {
     format!("error: exception thrown: {}", e)
 }
 
+impl fmt::Display for LocalCodePtr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            LocalCodePtr::DirEntry(p) =>
+                write!(f, "LocalCodePtr::DirEntry({})", p),
+            LocalCodePtr::InSituDirEntry(p) =>
+                write!(f, "LocalCodePtr::InSituDirEntry({})", p),
+            LocalCodePtr::TopLevel(cn, p) =>
+                write!(f, "LocalCodePtr::TopLevel({}, {})", cn, p),
+            LocalCodePtr::UserGoalExpansion(p) =>
+                write!(f, "LocalCodePtr::UserGoalExpansion({})", p),
+            LocalCodePtr::UserTermExpansion(p) =>
+                write!(f, "LocalCodePtr::UserTermExpansion({})", p),
+        }
+    }
+}
+
 impl fmt::Display for IndexPtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

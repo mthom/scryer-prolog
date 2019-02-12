@@ -450,9 +450,15 @@ impl MachineState {
                                     CWILCallPolicy.")
                 },
             &SystemClauseType::RestoreCodePtrFromSpecialFormCP => {
-                self.p = self.attr_var_init.pop_code_ptr();
-                mem::swap(&mut self.registers, &mut self.attr_var_init.registers);
+                let e = self.e;
+                
+                for i in 1 .. self.and_stack[e].len() + 1 {
+                    self[RegType::Temp(i)] = self.and_stack[e][i].clone();
+                }
 
+                self.p = CodePtr::Local(self.and_stack[e].special_form_cp);
+                self.deallocate();
+                
                 return Ok(());
             },
             &SystemClauseType::RestoreCutPolicy => {

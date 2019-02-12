@@ -8,6 +8,7 @@ pub struct Frame {
     pub global_index: usize,
     pub e: usize,
     pub cp: LocalCodePtr,
+    pub special_form_cp: LocalCodePtr,
     perms: Vec<Addr>
 }
 
@@ -17,8 +18,14 @@ impl Frame {
             global_index,
             e: e,
             cp: cp,
+            special_form_cp: LocalCodePtr::default(),
             perms: (1 .. n+1).map(|i| Addr::StackCell(fr, i)).collect()
         }
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.perms.len()
     }
 }
 

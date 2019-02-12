@@ -586,6 +586,17 @@ impl MachineState {
                 CodePtr::Local(_) =>
                     break,
                 CodePtr::VerifyAttrInterrupt(p) => {
+                    let rs  = self.calculate_register_threshold();
+
+                    self.allocate(rs); // store temp vars in perm vars slots.
+
+                    let e = self.e;
+                    self.and_stack[e].special_form_cp = self.attr_var_init.cp;
+
+                    for i in 1 .. self.and_stack[e].len() + 1 {
+                        self.and_stack[e][i] = self[RegType::Temp(i)].clone();
+                    }
+
                     self.verify_attributes();
 
                     self.num_of_args = 2;

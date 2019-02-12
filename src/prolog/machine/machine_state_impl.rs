@@ -2175,7 +2175,7 @@ impl MachineState {
         self.e = self.and_stack.len() - 1;
     }
 
-    fn deallocate(&mut self) {
+    pub(super) fn deallocate(&mut self) {
         let e = self.e;
 
         self.cp = self.and_stack[e].cp.clone();
