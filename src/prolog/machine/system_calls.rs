@@ -451,9 +451,19 @@ impl MachineState {
                 },
             &SystemClauseType::RestoreCodePtrFromSpecialFormCP => {
                 let e = self.e;
+
+                let frame_len = self.and_stack[e].len();
                 
-                for i in 1 .. self.and_stack[e].len() + 1 {
+                for i in 1 .. frame_len - 1 { 
                     self[RegType::Temp(i)] = self.and_stack[e][i].clone();
+                }                
+                
+                if let &Addr::Con(Constant::Usize(b0)) = &self.and_stack[e][frame_len - 1] {
+                    self.b0 = b0;
+                }
+
+                if let &Addr::Con(Constant::Usize(num_of_args)) = &self.and_stack[e][frame_len] {
+                    self.num_of_args = num_of_args;
                 }
 
                 self.p = CodePtr::Local(self.and_stack[e].special_form_cp);
@@ -576,6 +586,8 @@ impl MachineState {
 
                     for item in iter {
                         match item {
+                            HeapCellValue::Addr(Addr::AttrVar(h)) =>
+                                vars.push(Ref::AttrVar(h)),
                             HeapCellValue::Addr(Addr::HeapCell(h)) =>
                                 vars.push(Ref::HeapCell(h)),
                             HeapCellValue::Addr(Addr::StackCell(fr, sc)) =>

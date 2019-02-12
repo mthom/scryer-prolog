@@ -41,11 +41,6 @@ impl AndStack {
         self.0.push(Frame::new(global_index, len, e, cp, n));
     }
 
-    #[allow(dead_code)]
-    pub fn top(&self) -> Option<&Frame> {
-        self.0.last()
-    }
-
     pub fn len(&self) -> usize {
         self.0.len()
     }
