@@ -104,8 +104,7 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         post_order_iter(term)
     }
 
-    fn to_structure(ct: ClauseType, arity: usize, r: RegType) -> Self
-    {
+    fn to_structure(ct: ClauseType, arity: usize, r: RegType) -> Self {
         QueryInstruction::PutStructure(ct, arity, r)
     }
 

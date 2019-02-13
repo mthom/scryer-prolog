@@ -18,7 +18,7 @@ gather_modules([Attr|Attrs], [Module|Modules]) :-
 
 verify_attrs([Module|Modules], Var, Value, [Goals|ListOfGoalLists]) :-
     catch(Module:verify_attributes(Var, Value, Goals),
-          error(evaluation_error((M:verify_attributes)/3), verify_attrs/3),
+          error(evaluation_error((Module:verify_attributes)/3), verify_attributes/3),
           Goals = []),
     verify_attrs(Modules, Var, Value, ListOfGoalLists).
 verify_attrs([], _, _, []).

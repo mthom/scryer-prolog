@@ -950,7 +950,7 @@ pub enum LocalCodePtr {
     UserTermExpansion(usize)
 }
 
-impl LocalCodePtr {    
+impl LocalCodePtr {
     pub fn assign_if_local(&mut self, cp: CodePtr) {
         match cp {
             CodePtr::Local(local) => *self = local,

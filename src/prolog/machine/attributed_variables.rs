@@ -1,21 +1,24 @@
 use prolog::machine::*;
 
-pub static VERIFY_ATTRS: &str = include_str!("attributed_variables.pl");
+pub static VERIFY_ATTRS: &str  = include_str!("attributed_variables.pl");
+pub static PROJECT_ATTRS: &str = include_str!("project_attributes.pl");
 
 pub(super) type Bindings = Vec<(usize, Addr)>;
 
 pub(super) struct AttrVarInitializer {    
     pub(super) bindings: Bindings,
     pub(super) cp: LocalCodePtr,
-    pub(super) verify_attrs_loc: usize
+    pub(super) verify_attrs_loc: usize,
+    pub(super) project_attrs_loc: usize
 }
 
 impl AttrVarInitializer {
-    pub(super) fn new(p: usize) -> Self {
+    pub(super) fn new(verify_attrs_loc: usize, project_attrs_loc: usize) -> Self {
         AttrVarInitializer {
             bindings: vec![],
             cp: LocalCodePtr::default(),
-            verify_attrs_loc: p,
+            verify_attrs_loc,
+            project_attrs_loc
         }
     }
 

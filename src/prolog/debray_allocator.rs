@@ -175,14 +175,14 @@ impl DebrayAllocator {
         let mut final_index = 0;
 
         for index in self.temp_lb .. {
-            if !self.in_use.contains(&index) {
+            if !self.in_use.contains(&index) {                
                 final_index = index;
                 break;
             }
         }
 
+        self.in_use.insert(final_index);
         self.temp_lb = final_index + 1;
-
         final_index
     }
 
@@ -245,7 +245,10 @@ impl<'a> Allocator<'a> for DebrayAllocator
                 RegType::Temp(k)
             },
             _ if r.reg_num() == 0 => RegType::Temp(self.alloc_reg_to_non_var()),
-            _ => r
+            _ => {
+                self.in_use.insert(r.reg_num());
+                r
+            }
         };
 
         cell.set(r);

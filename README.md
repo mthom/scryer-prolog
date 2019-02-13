@@ -146,6 +146,7 @@ The following predicates are built-in to rusty-wam.
 * `compound/1`
 * `copy_term/2`
 * `cyclic_term/1`
+* `dif/2`
 * `expand_goal/2`
 * `expand_term/2`
 * `false/0`

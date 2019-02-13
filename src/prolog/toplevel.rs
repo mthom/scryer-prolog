@@ -349,7 +349,7 @@ fn mark_cut_variables(terms: &mut Vec<Term>) -> bool {
     let mut found_cut_var = false;
 
     for item in terms.iter_mut() {
-        found_cut_var = mark_cut_variable(item);
+        found_cut_var = mark_cut_variable(item) || found_cut_var;
     }
 
     found_cut_var
@@ -437,21 +437,15 @@ impl RelationWorker {
 
     fn fabricate_disjunct(&self, body_term: Term) -> (JumpStub, VecDeque<Term>)
     {
-        let mut cut_var_found = false;
-
-        let mut vars = self.compute_head(&body_term);
+        let vars = self.compute_head(&body_term);
         let clauses: Vec<_> = unfold_by_str(body_term, ";").into_iter()
             .map(|term| {
                 let mut subterms = unfold_by_str(term, ",");
-                cut_var_found = mark_cut_variables(&mut subterms);
+                mark_cut_variables(&mut subterms);
 
                 let term = subterms.pop().unwrap();
                 fold_by_str(subterms.into_iter(), term, clause_name!(","))
             }).collect();
-
-        if cut_var_found {
-            vars.push(Term::Var(Cell::default(), rc_atom!("!")));
-        }
 
         let results = clauses.into_iter()
             .map(|clause| self.fabricate_rule_body(&vars, clause))

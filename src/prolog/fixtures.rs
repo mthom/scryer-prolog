@@ -124,11 +124,10 @@ impl<'a> VariableFixtures<'a>
                 status.1.push(cell);
 
                 match status.0 {
-                    VarStatus::Temp(cn, ref mut tvd) if cn == chunk_num => {
+                    VarStatus::Temp(cn, ref mut tvd) if cn == chunk_num =>
                         if let Level::Shallow = lvl {
                             self.record_temp_info(tvd, arg_c, term_loc);
-                        }
-                    },
+                        },
                     _ => status.0 = VarStatus::Perm(chunk_num)
                 };
 

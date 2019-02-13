@@ -176,7 +176,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         };
     }
 
-    fn compile_target<Target, Iter>(&mut self, iter: Iter, term_loc: GenContext, is_exposed: bool) -> Vec<Target>
+    fn compile_target<Target, Iter>(&mut self, iter: Iter, term_loc: GenContext, is_exposed: bool)
+                                    -> Vec<Target>
         where Target: CompilationTarget<'a>, Iter: Iterator<Item=TermRef<'a>>
     {
         let mut target = Vec::new();
@@ -489,6 +490,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         })
     }
 
+    #[inline]
+    fn compile_unblocked_cut(&mut self, code: &mut Code, cell: &'a Cell<VarReg>)
+    {
+        let r = self.marker.get(Rc::new(String::from("!")));
+        cell.set(VarReg::Norm(r));
+        code.push(set_cp!(cell.get().norm()));
+    }
+
     fn compile_seq(&mut self, iter: ChunkedIterator<'a>, conjunct_info: &ConjunctInfo<'a>,
                    code: &mut Code, is_exposed: bool)
                    -> Result<(), ParserError>
@@ -518,7 +527,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                         code.push(get_level_and_unify!(cell.get().norm()));
                     },
                     &QueryTerm::UnblockedCut(ref cell) =>
-                        code.push(set_cp!(cell.get().norm())),
+                        self.compile_unblocked_cut(code, cell),
                     &QueryTerm::BlockedCut =>
                         code.push(if chunk_num == 0 {
                             Line::Cut(CutInstruction::NeckCut)

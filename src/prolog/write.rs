@@ -134,6 +134,8 @@ impl fmt::Display for CompareTermQT {
 impl fmt::Display for ClauseType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &ClauseType::System(SystemClauseType::SetCutPoint(r)) =>
+                write!(f, "$set_cp({})", r),
             &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(OpDecl(.., ref name), ref idx) =>
             {
                 let idx = idx.0.borrow();

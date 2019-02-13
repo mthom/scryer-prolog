@@ -319,6 +319,7 @@ static ERROR: &str    = include_str!("../lib/error.pl");
 static TERMS: &str    = include_str!("../lib/terms.pl");
 static DCGS: &str     = include_str!("../lib/dcgs.pl");
 static ATTS: &str     = include_str!("../lib/atts.pl");
+static DIF: &str      = include_str!("../lib/dif.pl");
 
 impl Machine {
     fn compile_special_forms(&mut self) {
@@ -327,8 +328,27 @@ impl Machine {
                 self.machine_st.attr_var_init.verify_attrs_loc = self.code_repo.code.len();
                 self.code_repo.code.extend(code.into_iter());
             },
-            Err(_)  => panic!("Machine::compile_special_forms() failed")
+            Err(_) => panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS")
         }
+
+        match compile_special_form(self, PROJECT_ATTRS.as_bytes()) {
+            Ok(code) => {
+                self.machine_st.attr_var_init.project_attrs_loc = self.code_repo.code.len();
+                self.code_repo.code.extend(code.into_iter());
+            },
+            Err(_) => panic!("Machine::compile_special_forms() failed at PROJECT_ATTRS")
+        }
+    }
+
+    fn compile_libraries(&mut self) {
+        compile_user_module(self, LISTS.as_bytes());
+        compile_user_module(self, CONTROL.as_bytes());
+        compile_user_module(self, QUEUES.as_bytes());
+        compile_user_module(self, ERROR.as_bytes());
+	compile_user_module(self, TERMS.as_bytes());
+        compile_user_module(self, DCGS.as_bytes());
+        compile_user_module(self, ATTS.as_bytes());
+        compile_user_module(self, DIF.as_bytes());
     }
 
     pub fn new() -> Self {
@@ -344,15 +364,9 @@ impl Machine {
         compile_listing(&mut wam, BUILTINS.as_bytes(),
                         default_index_store!(atom_tbl.clone()));
 
-        compile_user_module(&mut wam, LISTS.as_bytes());
-        compile_user_module(&mut wam, CONTROL.as_bytes());
-        compile_user_module(&mut wam, QUEUES.as_bytes());
-        compile_user_module(&mut wam, ERROR.as_bytes());
-	compile_user_module(&mut wam, TERMS.as_bytes());
-        compile_user_module(&mut wam, DCGS.as_bytes());
-        compile_user_module(&mut wam, ATTS.as_bytes());
-
+        wam.compile_libraries();
         wam.compile_special_forms();
+
         wam
     }
 
@@ -608,7 +622,7 @@ impl MachineState {
         for i in 1 .. rs + 1 {
             self.and_stack[e][i] = self[RegType::Temp(i)].clone();
         }
-        
+
         self.and_stack[e][rs + 1] = Addr::Con(Constant::Usize(self.b0));
         self.and_stack[e][rs + 2] = Addr::Con(Constant::Usize(self.num_of_args));
 
