@@ -64,7 +64,7 @@ false :- '$fail'.
 
 Module : Predicate :-
     ( atom(Module) -> '$module_call'(Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)))
+    ; throw(error(type_error(atom, Module), (:)/2))
     ).
 
 % flags.
