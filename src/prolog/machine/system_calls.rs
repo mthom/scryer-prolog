@@ -30,20 +30,7 @@ impl MachineState {
     // a step in Brent's algorithm.
     fn brents_alg_step(&self, brent_st: &mut BrentAlgState) -> Option<CycleSearchResult>
     {
-        match self.heap[brent_st.hare].clone() {
-            HeapCellValue::Addr(Addr::Lis(l)) => {
-                brent_st.hare = l + 1;
-                brent_st.steps += 1;
-
-                if brent_st.tortoise == brent_st.hare {
-                    return Some(CycleSearchResult::NotList);
-                } else if brent_st.steps == brent_st.power {
-                    brent_st.tortoise = brent_st.hare;
-                    brent_st.power <<= 1;
-                }
-
-                None
-            },
+        match self.heap[brent_st.hare].clone() {            
             HeapCellValue::NamedStr(..) =>
                 Some(CycleSearchResult::NotList),
             HeapCellValue::Addr(addr) =>
@@ -52,6 +39,19 @@ impl MachineState {
                         Some(CycleSearchResult::ProperList(brent_st.steps)),
                     Addr::HeapCell(_) | Addr::StackCell(..) =>
                         Some(CycleSearchResult::PartialList(brent_st.steps, brent_st.hare)),
+                    Addr::Lis(l) => {
+                        brent_st.hare = l + 1;
+                        brent_st.steps += 1;
+                        
+                        if brent_st.tortoise == brent_st.hare {
+                            return Some(CycleSearchResult::NotList);
+                        } else if brent_st.steps == brent_st.power {
+                            brent_st.tortoise = brent_st.hare;
+                            brent_st.power <<= 1;
+                        }
+                        
+                        None
+                    },
                     _ =>
                         Some(CycleSearchResult::NotList)
                 }
@@ -203,6 +203,10 @@ impl MachineState {
                     Addr::Con(Constant::Usize(old_b)) if self.b <= old_b + 2 => {},
                     _ => self.fail = true
                 };
+            },
+            &SystemClauseType::Deallocate => {
+                self.deallocate();
+                return Ok(());
             },
             &SystemClauseType::DeleteAttribute => {
                 let ls0 = self.store(self.deref(self[temp_v!(1)].clone()));
@@ -453,11 +457,11 @@ impl MachineState {
                 let e = self.e;
 
                 let frame_len = self.and_stack[e].len();
-                
-                for i in 1 .. frame_len - 1 { 
+
+                for i in 1 .. frame_len - 1 {
                     self[RegType::Temp(i)] = self.and_stack[e][i].clone();
-                }                
-                
+                }
+
                 if let &Addr::Con(Constant::Usize(b0)) = &self.and_stack[e][frame_len - 1] {
                     self.b0 = b0;
                 }
@@ -468,7 +472,7 @@ impl MachineState {
 
                 self.p = CodePtr::Local(self.and_stack[e].special_form_cp);
                 self.deallocate();
-                
+
                 return Ok(());
             },
             &SystemClauseType::RestoreCutPolicy => {
@@ -643,7 +647,7 @@ impl MachineState {
                 }
 
                 let mut output  = printer.print(addr);
-                println!("{}", output.result());
+                print!("{}", output.result());
             }
         };
 

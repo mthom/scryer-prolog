@@ -36,22 +36,23 @@ verify_attributes(Var, Value, Goals) :-
 % suggestions for improvement.
 
 dif(X, Y) :- (   X \= Y -> true
-	     ;   term_variables(X, XVars), term_variables(Y, YVars),
-		 (   XVars == [], YVars == [] -> false
+             ;   term_variables(X, XVars), term_variables(Y, YVars),
+		 (   XVars == [], YVars == [] -> true
 		 ;   dif_set_variables(XVars, X, Y),
 		     dif_set_variables(YVars, X, Y)
 		 )
 	     ).
 
-gather_dif_goals(Attrs, Goal, Goal) :-
+gather_dif_goals(Attrs, _) :-
     var(Attrs), !.
-gather_dif_goals([dif(X, Y)|Attrs], OldGoal, Goal) :-
-    (   var(OldGoal), !, gather_dif_goals(Attrs, dif(X, Y), Goal)
-    ;   !, gather_dif_goals(Attrs, (dif(X, Y), OldGoal), Goal)
-    ).
-gather_dif_goals([_|Attrs], OldGoal, Goal) :-
-    gather_dif_goals(Attrs, OldGoal, Goal).
+gather_dif_goals([dif(X, Y) | Attrs], Goal) :-
+    gather_dif_goals(Attrs, OldGoal),
+    (   var(OldGoal), !, Goal = dif(X, Y)
+    ;   !, Goal = (dif(X, Y), OldGoal)
+    ).	
+gather_dif_goals([_ | Attrs], Goal) :-
+    gather_dif_goals(Attrs, Goal).
 
 attribute_goals(X, Goal) :-
     '$get_attr_list'(X, Attrs),
-    gather_dif_goals(Attrs, _, Goal).
+    gather_dif_goals(Attrs, Goal).

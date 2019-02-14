@@ -163,6 +163,7 @@ The following predicates are built-in to rusty-wam.
 * `member/2`
 * `memberchk/2`
 * `must_be/2`
+* `nl/0`
 * `nonvar/1`
 * `numbervars/2`
 * `once/1`

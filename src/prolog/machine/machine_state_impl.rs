@@ -152,7 +152,7 @@ impl MachineState {
     fn print_var_eq<Outputter>(&self, var: Rc<Var>, addr: Addr, var_dir: &HeapVarDict,
                                mut output: Outputter)
                                -> Outputter
-    where Outputter: HCValueOutputter
+      where Outputter: HCValueOutputter
     {
         let orig_len = output.len();
 
@@ -180,7 +180,7 @@ impl MachineState {
     pub(super)
     fn print_exception<Outputter>(&self, addr: Addr, var_dir: &HeapVarDict, output: Outputter)
                                   -> Outputter
-    where Outputter: HCValueOutputter
+      where Outputter: HCValueOutputter
     {
         let printer = HCPrinter::from_heap_locs(&self, output, var_dir);
         printer.print(addr)
@@ -1626,7 +1626,7 @@ impl MachineState {
               | (HeapCellValue::Addr(Addr::HeapCell(hc1)),
                  HeapCellValue::Addr(Addr::AttrVar(hc2)))
               | (HeapCellValue::Addr(Addr::AttrVar(hc1)),
-                 HeapCellValue::Addr(Addr::AttrVar(hc2))) =>                    
+                 HeapCellValue::Addr(Addr::AttrVar(hc2))) =>
                     if hc1 != hc2 {
                         return hc1.cmp(&hc2);
                     },
@@ -2260,7 +2260,7 @@ impl MachineState {
                                    self.tr,
                                    self.pstr_tr,
                                    self.heap.h,
-                                   self.b0,                                   
+                                   self.b0,
                                    self.num_of_args);
 
                 self.b = self.or_stack.len();

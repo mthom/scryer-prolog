@@ -12,13 +12,13 @@ use prolog::or_stack::*;
 use downcast::Any;
 
 use std::cmp::Ordering;
-use std::io::stdin;
+use std::io::{Write, stdin, stdout};
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
 
 pub(super) struct Ball {
-    pub(super) boundary: usize, // ball.0
+    pub(super) boundary: usize,   // ball.0
     pub(super) stub: MachineStub, // ball.1
 }
 
@@ -378,7 +378,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
 
         machine_st.heap.truncate(machine_st.or_stack[b].h);
-        
+
         machine_st.hb = machine_st.heap.h;
         machine_st.p += offset;
 
@@ -545,6 +545,13 @@ pub(crate) trait CallPolicy: Any {
             &BuiltInClauseType::CyclicTerm => {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = !machine_st.is_cyclic_term(addr);
+                return_from_clause!(machine_st.last_call, machine_st)
+            },
+            &BuiltInClauseType::Nl => {
+                let mut stdout = stdout();
+
+                write!(stdout, "\n\r").unwrap();
+                stdout.flush().unwrap();
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Read => {

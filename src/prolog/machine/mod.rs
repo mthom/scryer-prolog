@@ -502,7 +502,7 @@ impl Machine {
         for (var, addr) in sorted_vars {
             output = self.machine_st.print_var_eq(var.clone(), addr.clone(), var_dir, output);
         }
-
+        
         output
     }
 
@@ -604,34 +604,7 @@ impl MachineState {
                 _ => {}
             };
         }
-    }
-
-    fn verify_attr_interrupt(&mut self, p: usize) {
-        let rs = self.calculate_register_threshold();
-
-        // store temp vars in perm vars slots along with
-        // self.b0 and self.num_of_args. why self.bo? if we return to a
-        // NeckCut after finishing the interrupt, it won't
-        // work correctly if self.b == self.b0. we must
-        // change it back when we return, as if nothing happened.
-        self.allocate(rs + 2);
-
-        let e = self.e;
-        self.and_stack[e].special_form_cp = self.attr_var_init.cp;
-
-        for i in 1 .. rs + 1 {
-            self.and_stack[e][i] = self[RegType::Temp(i)].clone();
-        }
-
-        self.and_stack[e][rs + 1] = Addr::Con(Constant::Usize(self.b0));
-        self.and_stack[e][rs + 2] = Addr::Con(Constant::Usize(self.num_of_args));
-
-        self.verify_attributes();
-
-        self.num_of_args = 2;
-        self.b0 = self.b;
-        self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
-    }
+    }    
 
     fn record_var_places(&self, chunk_num: usize, alloc_locs: &AllocVarDict,
                          heap_locs: &mut HeapVarDict)

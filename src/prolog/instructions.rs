@@ -238,6 +238,7 @@ pub struct Module {
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
     CheckCutPoint,
+    Deallocate,
     DeleteAttribute,
     DeleteHeadAttribute,
     DynamicModuleResolution,
@@ -279,6 +280,7 @@ impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
+            &SystemClauseType::Deallocate => clause_name!("$deallocate"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
             &SystemClauseType::DynamicModuleResolution => clause_name!("$module_call"),
@@ -320,6 +322,7 @@ impl SystemClauseType {
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
+            ("$deallocate", 0) => Some(SystemClauseType::Deallocate),
             ("$del_attr_non_head", 1) => Some(SystemClauseType::DeleteAttribute),
             ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),
             ("$module_call", 2) => Some(SystemClauseType::DynamicModuleResolution),
@@ -372,6 +375,7 @@ pub enum BuiltInClauseType {
     Ground,
     Is(RegType, ArithmeticTerm),
     KeySort,
+    Nl,
     NotEq,
     PartialString,
     Read,
@@ -450,6 +454,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Ground  => clause_name!("ground"),
             &BuiltInClauseType::Is(..)  => clause_name!("is"),
             &BuiltInClauseType::KeySort => clause_name!("keysort"),
+            &BuiltInClauseType::Nl => clause_name!("nl"),
             &BuiltInClauseType::NotEq => clause_name!("\\=="),
             &BuiltInClauseType::Read => clause_name!("read"),
             &BuiltInClauseType::Sort => clause_name!("sort"),
@@ -471,6 +476,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Is(..) => 2,
             &BuiltInClauseType::KeySort => 2,
             &BuiltInClauseType::NotEq => 2,
+            &BuiltInClauseType::Nl => 0,
             &BuiltInClauseType::Read => 1,
             &BuiltInClauseType::Sort => 2,
             &BuiltInClauseType::PartialString => 1,
@@ -495,6 +501,7 @@ impl BuiltInClauseType {
             ("ground", 1) => Some(BuiltInClauseType::Ground),
             ("is", 2) => Some(BuiltInClauseType::Is(temp_v!(1), ArithmeticTerm::Reg(temp_v!(2)))),
             ("keysort", 2) => Some(BuiltInClauseType::KeySort),
+            ("nl", 0) => Some(BuiltInClauseType::Nl),
             ("\\==", 2) => Some(BuiltInClauseType::NotEq),
             ("sort", 2) => Some(BuiltInClauseType::Sort),
             ("read", 1) => Some(BuiltInClauseType::Read),
@@ -927,7 +934,7 @@ pub enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
     CallN(usize, LocalCodePtr), // arity, local.
     Local(LocalCodePtr),
-    VerifyAttrInterrupt(usize) // location of the verify attribute interrupt code in the CodeDir.
+    VerifyAttrInterrupt(usize), // location of the verify attribute interrupt code in the CodeDir.
 }
 
 impl CodePtr {
@@ -936,7 +943,7 @@ impl CodePtr {
             &CodePtr::BuiltInClause(_, ref local)
           | &CodePtr::CallN(_, ref local)
           | &CodePtr::Local(ref local) => local.clone(),
-            &CodePtr::VerifyAttrInterrupt(p) => LocalCodePtr::DirEntry(p)
+            &CodePtr::VerifyAttrInterrupt(p) => LocalCodePtr::DirEntry(p),
         }
     }
 }

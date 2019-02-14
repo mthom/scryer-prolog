@@ -360,18 +360,20 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                 write!(stdout, "{}", bindings).unwrap();
                 stdout.flush().unwrap();
 
+                wam.attribute_goals(&heap_locs);
+
                 if !wam.or_stack_is_empty() {
                     stdout.flush().unwrap();
 
                     for c in stdin.keys() {
                         match c.unwrap() {
                             Key::Char(' ') | Key::Char(';') => {
-                                write!(stdout, " ;\n\r").unwrap();
+                                write!(stdout, " ;\r\n").unwrap();
                                 result = wam.continue_query(&alloc_locs, &mut heap_locs);
                                 break;
                             },
                             Key::Char('.') => {
-                                write!(stdout, " .\n\r").unwrap();
+                                write!(stdout, " .\r\n").unwrap();
                                 return;
                             },
                             _ => {}
@@ -380,14 +382,14 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
 
                     if let &EvalSession::Error(SessionError::QueryFailure) = &result
                     {
-                        write!(stdout, "false.\n\r").unwrap();
+                        write!(stdout, "false.\r\n").unwrap();
                         stdout.flush().unwrap();
                         return;
                     }
 
                     if let &EvalSession::Error(SessionError::QueryFailureWithException(ref e)) = &result
                     {
-                        write!(stdout, "{}\n\r", error_string(e)).unwrap();
+                        write!(stdout, "{}\r\n", error_string(e)).unwrap();
                         stdout.flush().unwrap();
                         return;
                     }
