@@ -35,9 +35,10 @@ verify_attributes(Var, Value, Goals) :-
 % Probably the world's worst dif/2 implementation. I'm open to
 % suggestions for improvement.
 
-dif(X, Y) :- (   X \= Y -> true
+dif(X, Y) :- X \== Y,
+             (   X \= Y -> true
              ;   term_variables(X, XVars), term_variables(Y, YVars),
-		 (   XVars == [], YVars == [] -> true
+		 (   XVars == [], YVars == [] -> false
 		 ;   dif_set_variables(XVars, X, Y),
 		     dif_set_variables(YVars, X, Y)
 		 )
