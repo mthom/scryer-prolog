@@ -38,10 +38,8 @@ verify_attributes(Var, Value, Goals) :-
 dif(X, Y) :- X \== Y,
              (   X \= Y -> true
              ;   term_variables(X, XVars), term_variables(Y, YVars),
-		 (   XVars == [], YVars == [] -> false
-		 ;   dif_set_variables(XVars, X, Y),
-		     dif_set_variables(YVars, X, Y)
-		 )
+	         dif_set_variables(XVars, X, Y),
+		 dif_set_variables(YVars, X, Y)
 	     ).
 
 gather_dif_goals(Attrs, _) :-
@@ -50,7 +48,7 @@ gather_dif_goals([dif(X, Y) | Attrs], Goal) :-
     gather_dif_goals(Attrs, OldGoal),
     (   var(OldGoal), !, Goal = dif(X, Y)
     ;   !, Goal = (dif(X, Y), OldGoal)
-    ).	
+    ).
 gather_dif_goals([_ | Attrs], Goal) :-
     gather_dif_goals(Attrs, Goal).
 
