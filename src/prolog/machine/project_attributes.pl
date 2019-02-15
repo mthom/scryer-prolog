@@ -4,7 +4,23 @@ driver(QueryVars, AttrVars) :-
     call_project_attributes(Modules, QueryVars, AttrVars),
     call_attribute_goals(Modules, QueryVars),
     call_attribute_goals(Modules, AttrVars),
-    '$deallocate'.
+    '$return_from_attribute_goals'.
+
+enqueue_goal(Goals0) :-
+    nonvar(Goals0), Goals0 = [Goal | Goals], !,
+    enqueue_goals(Goals0). % enqueue lists of goals separately.
+enqueue_goal(Goal) :-
+    nonvar(Goal),
+    '$enqueue_attribute_goal'(Goal).  % enqueue the goal for printing to the toplevel.
+
+enqueue_goals(Goals0) :-
+    nonvar(Goals0),
+    Goals0 = [Goal | Goals],
+    nonvar(Goal),
+    !,
+    '$enqueue_attribute_goal'(Goal),
+    enqueue_goals(Goals).
+enqueue_goals(_).
 
 call_project_attributes([], _, _).
 call_project_attributes([Module|Modules], QueryVars, AttrVars) :-
@@ -25,7 +41,7 @@ call_goals([AttrVar|AttrVars], Module) :-
     (   catch(Module:attribute_goals(AttrVar, Goal),
 	      error(evaluation_error((Module:attribute_goals)/2), attribute_goals/2),
 	      true),
-	nonvar(Goal) -> nl, writeq(Goal)
+	nonvar(Goal) -> enqueue_goal(Goal)
     ;   true
     ),
     call_goals(AttrVars, Module).

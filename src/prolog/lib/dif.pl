@@ -44,13 +44,10 @@ dif(X, Y) :- X \== Y,
 
 gather_dif_goals(Attrs, _) :-
     var(Attrs), !.
-gather_dif_goals([dif(X, Y) | Attrs], Goal) :-
-    gather_dif_goals(Attrs, OldGoal),
-    (   var(OldGoal), !, Goal = dif(X, Y)
-    ;   !, Goal = (dif(X, Y), OldGoal)
-    ).
-gather_dif_goals([_ | Attrs], Goal) :-
-    gather_dif_goals(Attrs, Goal).
+gather_dif_goals([dif(X, Y) | Attrs], [dif(X, Y) | Goals]) :-
+    gather_dif_goals(Attrs, Goals).
+gather_dif_goals([_ | Attrs], Goals) :-
+    gather_dif_goals(Attrs, Goals).
 
 attribute_goals(X, Goal) :-
     '$get_attr_list'(X, Attrs),

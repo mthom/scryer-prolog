@@ -149,7 +149,7 @@ impl MachineState {
     }
 
     pub(super)
-    fn print_var_eq<Outputter>(&self, var: Rc<Var>, addr: Addr, var_dir: &HeapVarDict,
+    fn print_var_eq<Outputter>(&self, var: Rc<Var>, addr: Addr, var_dict: &HeapVarDict,
                                mut output: Outputter)
                                -> Outputter
       where Outputter: HCValueOutputter
@@ -161,7 +161,7 @@ impl MachineState {
         output.append(var.as_str());
         output.append(" = ");
 
-        let mut printer = HCPrinter::from_heap_locs(&self, output, var_dir);
+        let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
 
         printer.numbervars = false;
         printer.quoted = true;
@@ -178,11 +178,11 @@ impl MachineState {
     }
 
     pub(super)
-    fn print_exception<Outputter>(&self, addr: Addr, var_dir: &HeapVarDict, output: Outputter)
+    fn print_exception<Outputter>(&self, addr: Addr, var_dict: &HeapVarDict, output: Outputter)
                                   -> Outputter
       where Outputter: HCValueOutputter
     {
-        let printer = HCPrinter::from_heap_locs(&self, output, var_dir);
+        let printer = HCPrinter::from_heap_locs(&self, output, var_dict);
         printer.print(addr)
     }
 
@@ -1562,9 +1562,9 @@ impl MachineState {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
 
-        let iter = self.zipped_acyclic_pre_order_iter(a1, a2);
+        let mut iter = self.zipped_acyclic_pre_order_iter(a1, a2);
 
-        for (v1, v2) in iter {
+        while let Some((v1, v2)) = iter.next() {
             match (v1, v2) {
                 (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
                     if ar1 != ar2 || n1 != n2 {
@@ -1580,13 +1580,14 @@ impl MachineState {
             }
         }
 
-        false
+        // did the two iterators expire at the same step?
+        iter.first_to_expire != Ordering::Equal
     }
 
     pub(super) fn compare_term_test(&self, a1: &Addr, a2: &Addr) -> Ordering {
-        let iter = self.zipped_acyclic_pre_order_iter(a1.clone(), a2.clone());
+        let mut iter = self.zipped_acyclic_pre_order_iter(a1.clone(), a2.clone());
 
-        for (v1, v2) in iter {
+        while let Some((v1, v2)) = iter.next() {
             match (v1, v2) {
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Con(Constant::String(_))))
               | (HeapCellValue::Addr(Addr::Con(Constant::String(_))), HeapCellValue::Addr(Addr::Lis(_)))
@@ -1742,7 +1743,7 @@ impl MachineState {
             }
         };
 
-        Ordering::Equal
+        iter.first_to_expire
     }
 
     pub(super) fn reset_block(&mut self, addr: Addr) {

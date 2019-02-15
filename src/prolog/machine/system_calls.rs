@@ -203,11 +203,7 @@ impl MachineState {
                     Addr::Con(Constant::Usize(old_b)) if self.b <= old_b + 2 => {},
                     _ => self.fail = true
                 };
-            },
-            &SystemClauseType::Deallocate => {
-                self.deallocate();
-                return Ok(());
-            },
+            },            
             &SystemClauseType::DeleteAttribute => {
                 let ls0 = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -263,6 +259,10 @@ impl MachineState {
                         }
                     }
                 };
+            },
+            &SystemClauseType::EnqueueAttributeGoal => {
+                let addr = self[temp_v!(1)].clone();
+                self.attr_var_init.attribute_goals.push(addr);
             },
             &SystemClauseType::ExpandGoal => {
                 self.p = CodePtr::Local(LocalCodePtr::UserGoalExpansion(0));
@@ -453,7 +453,12 @@ impl MachineState {
                     None => panic!("remove_inference_counter: requires \\
                                     CWILCallPolicy.")
                 },
-            &SystemClauseType::RestoreCodePtrFromSpecialFormCP => {
+            &SystemClauseType::ReturnFromAttributeGoals => {
+                self.deallocate();
+                self.p = CodePtr::Local(LocalCodePtr::TopLevel(0, 0));
+                return Ok(());
+            },
+            &SystemClauseType::ReturnFromVerifyAttr => {
                 let e = self.e;
 
                 let frame_len = self.and_stack[e].len();

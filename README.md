@@ -40,7 +40,7 @@ Extend rusty-wam to include the following, among other features:
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
   is straightforward with attributed variables (_in progress_).
      - [x] Support for `verify_attributes/3` in modules
-     - [ ] Support for `attribute_goals/2` at toplevel and
+     - [x] Support for `attribute_goals/2` at toplevel and
        `project_attributes/2` in modules     
      - [ ] `call_residue_vars/2`
 * `if_` and related predicates, following the developments of the

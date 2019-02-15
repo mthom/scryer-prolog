@@ -3,7 +3,7 @@ driver(Vars, Values) :-
     '$redo_attr_var_bindings', % the bindings list is emptied here.
     !,
     call_goals(ListOfListsOfGoalLists),
-    '$restore_p_from_sfcp'.
+    '$return_from_verify_attr'.
 
 iterate([Var|VarBindings], [Value|ValueBindings], [ListOfGoalLists | ListsCubed]) :-
     '$get_attr_list'(Var, Ls),

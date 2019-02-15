@@ -3,6 +3,7 @@ use prolog_parser::ast::*;
 use prolog::instructions::*;
 use prolog::machine::machine_state::*;
 
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::vec::Vec;
@@ -216,13 +217,15 @@ impl<HCIter> Iterator for HCAcyclicIterator<HCIter>
 pub struct HCZippedAcyclicIterator<HCIter> {
     i1: HCIter,
     i2: HCIter,
-    seen: HashSet<(Addr, Addr)>
+    seen: HashSet<(Addr, Addr)>,
+    pub first_to_expire: Ordering
 }
 
 impl<HCIter: MutStackHCIterator> HCZippedAcyclicIterator<HCIter>
 {
     pub fn new(i1: HCIter, i2: HCIter) -> Self {
-        HCZippedAcyclicIterator { i1, i2, seen: HashSet::new() }
+        HCZippedAcyclicIterator { i1, i2, seen: HashSet::new(),
+                                  first_to_expire: Ordering::Equal }
     }
 }
 
@@ -242,10 +245,18 @@ impl<HCIter> Iterator for HCZippedAcyclicIterator<HCIter>
             }
         }
 
-        if let (Some(v1), Some(v2)) = (self.i1.next(), self.i2.next()) {
-            Some((v1, v2))
-        } else {
-            None
+        match (self.i1.next(), self.i2.next()) {
+            (Some(v1), Some(v2)) =>
+                Some((v1, v2)),
+            (Some(_), None) => {
+                self.first_to_expire = Ordering::Greater;
+                None
+            },
+            (None, Some(_)) => {
+                self.first_to_expire = Ordering::Less;
+                None
+            },
+            _ => None
         }
-    }
+    }    
 }
