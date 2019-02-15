@@ -39,14 +39,14 @@ Extend rusty-wam to include the following, among other features:
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
   is straightforward with attributed variables (_in progress_).
-     - [x] Support for `verify_attributes/3` in modules
-     - [x] Support for `attribute_goals/2` at toplevel and
-       `project_attributes/2` in modules     
-     - [ ] `call_residue_vars/2`
+     - [x] Support for `verify_attributes/3`
+     - [x] Support for `attribute_goals/2` and `project_attributes/2`
+     - [ ] `call_residue/2` and `call_residue_vars/2`
 * `if_` and related predicates, following the developments of the
-  paper "Indexing `dif/2`".     
+  paper "Indexing `dif/2`".
 * All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`).
-* Clause creation and destruction (`asserta/1`, `assertz/1`, `retract/1`, `abolish/1`) with logical update semantics.
+* Clause creation and destruction (`asserta/1`, `assertz/1`,
+  `retract/1`, `abolish/1`) with logical update semantics.
 * Streams and predicates for stream control.
 * Mode declarations.
 * Extensions for clp(FD).
