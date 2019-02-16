@@ -21,13 +21,13 @@ freeze(X, Goal) :-
     put_atts(Fresh, frozen(Goal)),
     Fresh = X.
 
-gather_freeze_goals(Attrs, _) :-
+gather_freeze_goals(Attrs, _, _) :-
     var(Attrs), !.
-gather_freeze_goals([frozen(X) | Attrs], [frozen(X) | Goals]) :-
-    gather_freeze_goals(Attrs, Goals).
-gather_freeze_goals([_ | Attrs], Goals) :-
-    gather_freeze_goals(Attrs, Goals).
+gather_freeze_goals([frozen(X) | Attrs], Var, [frozen(Var, X) | Goals]) :-
+    gather_freeze_goals(Attrs, Var, Goals).
+gather_freeze_goals([_ | Attrs], Var, Goals) :-
+    gather_freeze_goals(Attrs, Var, Goals).
 
 attribute_goals(X, Goals) :-
     '$get_attr_list'(X, Attrs),
-    gather_freeze_goals(Attrs, Goals).
+    gather_freeze_goals(Attrs, X, Goals).

@@ -1,7 +1,6 @@
 :- module(dif, [dif/2]).
 
 :- use_module(library(atts)).
-:- use_module(library(control), [(\=)/2]).
 
 :- attribute dif/2.
 
