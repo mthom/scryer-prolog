@@ -48,6 +48,8 @@ Extend rusty-wam to include the following, among other features:
 * Clause creation and destruction (`asserta/1`, `assertz/1`,
   `retract/1`, `abolish/1`) with logical update semantics.
 * Streams and predicates for stream control.
+* An incremental compacting garbage collector satisfying the five
+  properties of "Precise Garbage Collection in Prolog."
 * Mode declarations.
 * Extensions for clp(FD).
 
@@ -77,14 +79,12 @@ Gustafson's book "The End of Error."
 3. Add support for shift/reset delimited continuations, see "Delimited
 Continuations for Prolog."
 
-4. Add an incremental compacting garbage collector for the heap.
-
-5. Add concurrent tables to manage shared references to atoms and
+4. Add concurrent tables to manage shared references to atoms and
 strings.
 
-6. Add optional SLG resolution for fast memoization of predicates.
+5. Add optional SLG resolution for fast memoization of predicates.
 
-7. Add some form of JIT predicate indexing.
+6. Add some form of JIT predicate indexing.
 
 ## Installing rusty-wam
 
@@ -151,6 +151,7 @@ The following predicates are built-in to rusty-wam.
 * `expand_term/2`
 * `false/0`
 * `float/1`
+* `freeze/2`
 * `functor/3`
 * `goal_expansion/2`
 * `ground/1`

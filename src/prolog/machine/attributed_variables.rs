@@ -83,14 +83,14 @@ impl MachineState {
         self[temp_v!(2)] = value_list_addr;
     }
 
-    fn gather_attr_vars_created_since(&mut self, h: usize) -> IntoIter<Addr> {
+    fn gather_attr_vars_created_since(&self, h: usize) -> IntoIter<Addr> {
         let mut attr_vars = HashSet::new();
 
-        for i in h .. self.heap.len() {
+        for i in h .. self.heap.h {
             let addr = self.heap[i].as_addr(i);
 
-            match self.store(self.deref(addr)) {
-                Addr::AttrVar(h) => {
+            match addr {
+                Addr::AttrVar(h) if i == h => {
                     attr_vars.insert(Addr::AttrVar(h));
                 },
                 _ => {}
@@ -162,13 +162,13 @@ impl MachineState {
         if attr_goals.is_empty() {
             return;
         }
-        
+
         let mut output = PrinterOutputter::new();
 
         for goal_addr in attr_goals {
             let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
             printer.see_all_locs();
-            
+
             printer.numbervars = false;
             printer.quoted = true;
 
@@ -179,7 +179,7 @@ impl MachineState {
         // cut trailing ", "
         let output_len = output.len();
         output.truncate(output_len - 2);
-        
+
         println!("\r\n{}\r", output.result());
     }
 }
