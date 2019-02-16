@@ -382,6 +382,7 @@ pub enum BuiltInClauseType {
     NotEq,
     PartialString,
     Read,
+    ReifySwitch,
     Sort,
 }
 
@@ -459,9 +460,10 @@ impl BuiltInClauseType {
             &BuiltInClauseType::KeySort => clause_name!("keysort"),
             &BuiltInClauseType::Nl => clause_name!("nl"),
             &BuiltInClauseType::NotEq => clause_name!("\\=="),
+            &BuiltInClauseType::PartialString => clause_name!("partial_string"),
             &BuiltInClauseType::Read => clause_name!("read"),
+            &BuiltInClauseType::ReifySwitch => clause_name!("$reify_switch"),
             &BuiltInClauseType::Sort => clause_name!("sort"),
-            &BuiltInClauseType::PartialString => clause_name!("partial_string")
         }
     }
 
@@ -480,9 +482,10 @@ impl BuiltInClauseType {
             &BuiltInClauseType::KeySort => 2,
             &BuiltInClauseType::NotEq => 2,
             &BuiltInClauseType::Nl => 0,
-            &BuiltInClauseType::Read => 1,
-            &BuiltInClauseType::Sort => 2,
             &BuiltInClauseType::PartialString => 1,
+            &BuiltInClauseType::Read => 1,
+            &BuiltInClauseType::ReifySwitch => 3,
+            &BuiltInClauseType::Sort => 2,
         }
     }
 
@@ -506,9 +509,10 @@ impl BuiltInClauseType {
             ("keysort", 2) => Some(BuiltInClauseType::KeySort),
             ("nl", 0) => Some(BuiltInClauseType::Nl),
             ("\\==", 2) => Some(BuiltInClauseType::NotEq),
-            ("sort", 2) => Some(BuiltInClauseType::Sort),
-            ("read", 1) => Some(BuiltInClauseType::Read),
             ("partial_string", 2) => Some(BuiltInClauseType::PartialString),
+            ("read", 1) => Some(BuiltInClauseType::Read),
+            ("$reify_switch", 3) => Some(BuiltInClauseType::ReifySwitch),
+            ("sort", 2) => Some(BuiltInClauseType::Sort),
             _ => None
         }
     }

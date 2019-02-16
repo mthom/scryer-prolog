@@ -114,6 +114,7 @@ impl MachineError {
 pub enum ValidType {
     Atom,
     Atomic,
+    Boolean,
 //    Byte,
     Callable,
 //    Character,
@@ -134,6 +135,7 @@ impl ValidType {
         match self {
             ValidType::Atom => "atom",
             ValidType::Atomic => "atomic",
+            ValidType::Boolean => "boolean",
 //            ValidType::Byte => "byte",
             ValidType::Callable => "callable",
 //            ValidType::Character => "character",

@@ -156,11 +156,13 @@ impl MachineState {
 
     fn print_attribute_goals(&mut self, var_dict: &HeapVarDict)
     {
-        let attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
+        let mut attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
 
         if attr_goals.is_empty() {
             return;
         }
+
+        self.term_dedup(&mut attr_goals);
 
         let mut output = PrinterOutputter::new();
 

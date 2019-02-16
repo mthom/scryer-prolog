@@ -572,6 +572,48 @@ pub(crate) trait CallPolicy: Any {
 
                 return_from_clause!(machine_st.last_call, machine_st)
             },
+            &BuiltInClauseType::ReifySwitch => {
+                let truth_value = machine_st[temp_v!(1)].clone();
+                let truth_value = machine_st.store(machine_st.deref(truth_value));
+
+                match truth_value {
+                    Addr::Con(Constant::Atom(atom, spec)) =>
+                        match atom.as_str() {
+                            "true"  => {
+                                let t_branch = machine_st[temp_v!(2)].clone();
+
+                                machine_st[temp_v!(1)] = t_branch;
+                                self.call_n(machine_st, 1, indices)
+                            },
+                            "false" => {
+                                let f_branch = machine_st[temp_v!(3)].clone();
+
+                                machine_st[temp_v!(1)] = f_branch;
+                                self.call_n(machine_st, 1, indices)
+                            }
+                            _ => {
+                                let truth_value = Addr::Con(Constant::Atom(atom, spec));
+
+                                let stub = MachineError::functor_stub(clause_name!("if_"), 3);
+                                let err  = MachineError::type_error(ValidType::Boolean, truth_value);
+
+                                Err(machine_st.error_form(err, stub))
+                            }
+                        },
+                    ref addr if addr.is_ref() => {
+                        let stub = MachineError::functor_stub(clause_name!("if_"), 3);
+                        let err = MachineError::instantiation_error();
+                        
+                        Err(machine_st.error_form(err, stub))
+                    },
+                    addr => {
+                        let stub = MachineError::functor_stub(clause_name!("if_"), 3);
+                        let err = MachineError::type_error(ValidType::Boolean, addr);
+                        
+                        Err(machine_st.error_form(err, stub))
+                    }
+                }
+            },
             &BuiltInClauseType::CopyTerm => {
                 machine_st.duplicate_term();
                 return_from_clause!(machine_st.last_call, machine_st)

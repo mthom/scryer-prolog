@@ -457,16 +457,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 
         Ok(match terms[0].as_ref() {
             &Term::Var(ref vr, ref name) => {
-                let mut target = Vec::new();
+                let mut target = vec![];
 
                 self.marker.reset_arg(2);
                 self.marker.mark_var(name.clone(), Level::Shallow, vr,
                                      term_loc, &mut target);
 
                 if !target.is_empty() {
-                    for query_instr in target {
-                        code.push(Line::Query(query_instr));
-                    }
+                    code.extend(target.into_iter().map(Line::Query));
                 }
 
                 if use_default_call_policy {
@@ -476,9 +474,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 }
             },
             &Term::Constant(_, ref c @ Constant::Number(_)) => {
-                code.push(Line::Query(put_constant!(Level::Shallow,
-                                                    c.clone(),
-                                                    temp_v!(1))));
+                code.push(Line::Query(put_constant!(Level::Shallow, c.clone(), temp_v!(1))));
 
                 if use_default_call_policy {
                     code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))))
@@ -510,7 +506,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
             code.extend(target.into_iter().map(|query_instr| Line::Query(query_instr)));
         }
 
-        code.push(get_level_and_unify!(cell.get().norm()));        
+        code.push(get_level_and_unify!(cell.get().norm()));
     }
 
     fn compile_seq(&mut self, iter: ChunkedIterator<'a>, conjunct_info: &ConjunctInfo<'a>,

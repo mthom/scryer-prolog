@@ -409,7 +409,7 @@ impl MachineState {
                 for (h, addr) in bindings {
                     self.heap[h] = HeapCellValue::Addr(addr);
                 }
-            },
+            },            
             &SystemClauseType::RemoveCallPolicyCheck => {
                 let restore_default =
                     match call_policy.downcast_mut::<CWILCallPolicy>().ok() {

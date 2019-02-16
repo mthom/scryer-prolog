@@ -43,7 +43,7 @@ Extend rusty-wam to include the following, among other features:
      - [x] Support for `attribute_goals/2` and `project_attributes/2`
      - [ ] `call_residue/2` and `call_residue_vars/2`
 * `if_` and related predicates, following the developments of the
-  paper "Indexing `dif/2`".
+  paper "Indexing `dif/2`" (_in progress_).
 * All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`).
 * Clause creation and destruction (`asserta/1`, `assertz/1`,
   `retract/1`, `abolish/1`) with logical update semantics.
