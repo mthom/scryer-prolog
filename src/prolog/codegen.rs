@@ -498,6 +498,21 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         code.push(set_cp!(cell.get().norm()));
     }
 
+    fn compile_get_level_and_unify(&mut self, code: &mut Code, cell: &'a Cell<VarReg>,
+                                   var: Rc<Var>, term_loc: GenContext)
+    {
+        let mut target = Vec::new();
+
+        self.marker.reset_arg(1);
+        self.marker.mark_var(var, Level::Shallow, cell, term_loc, &mut target);
+
+        if !target.is_empty() {
+            code.extend(target.into_iter().map(|query_instr| Line::Query(query_instr)));
+        }
+
+        code.push(get_level_and_unify!(cell.get().norm()));        
+    }
+
     fn compile_seq(&mut self, iter: ChunkedIterator<'a>, conjunct_info: &ConjunctInfo<'a>,
                    code: &mut Code, is_exposed: bool)
                    -> Result<(), ParserError>
@@ -511,21 +526,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 };
 
                 match *term {
-                    &QueryTerm::GetLevelAndUnify(ref cell, ref var) => {
-                        let mut target = Vec::new();
-
-                        self.marker.reset_arg(1);
-                        self.marker.mark_var(var.clone(), Level::Shallow, cell,
-                                             term_loc, &mut target);
-
-                        if !target.is_empty() {
-                            for query_instr in target {
-                                code.push(Line::Query(query_instr));
-                            }
-                        }
-
-                        code.push(get_level_and_unify!(cell.get().norm()));
-                    },
+                    &QueryTerm::GetLevelAndUnify(ref cell, ref var) =>
+                        self.compile_get_level_and_unify(code, cell, var.clone(), term_loc),
                     &QueryTerm::UnblockedCut(ref cell) =>
                         self.compile_unblocked_cut(code, cell),
                     &QueryTerm::BlockedCut =>

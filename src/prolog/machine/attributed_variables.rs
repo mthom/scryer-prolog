@@ -70,7 +70,6 @@ impl MachineState {
         count
     }
 
-    pub(super)
     fn verify_attributes(&mut self)
     {
         for (h, _) in &self.attr_var_init.bindings {
