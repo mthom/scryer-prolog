@@ -2,7 +2,7 @@ use prolog::instructions::*;
 use prolog::heap_print::*;
 use prolog::machine::*;
 
-use termion::raw::IntoRawMode;
+use termion::raw::{IntoRawMode, RawTerminal};
 use termion::input::TermRead;
 use termion::event::Key;
 
@@ -336,6 +336,32 @@ impl fmt::Display for Level {
     }
 }
 
+enum ContinueResult {
+    ContinueQuery,
+    Conclude
+}
+
+fn next_step(mut stdout: RawTerminal<std::io::Stdout>) -> ContinueResult
+{
+    let stdin = stdin();
+
+    for c in stdin.keys() {
+        match c.unwrap() {
+            Key::Char(' ') | Key::Char(';') => {
+                write!(stdout, " ;\r\n").unwrap();
+                return ContinueResult::ContinueQuery;
+            },
+            Key::Char('.') => {
+                write!(stdout, " .\r\n").unwrap();
+                return ContinueResult::Conclude;
+            },
+            _ => {}
+        }
+    }
+
+    ContinueResult::Conclude
+}
+
 pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
         EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
@@ -349,48 +375,39 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
             }
 
             loop {
-                let mut result = EvalSession::from(SessionError::QueryFailure);
                 let mut output = PrinterOutputter::new();
 
                 let bindings = wam.heap_view(&heap_locs, output).result();
+                let mut raw_stdout = stdout().into_raw_mode().unwrap();
 
-                let stdin = stdin();
-                let mut stdout = stdout().into_raw_mode().unwrap();
-
-                write!(stdout, "{}", bindings).unwrap();
-                stdout.flush().unwrap();
+                write!(raw_stdout, "{}", bindings).unwrap();
+                raw_stdout.flush().unwrap();
 
                 wam.attribute_goals(&heap_locs);
 
                 if !wam.or_stack_is_empty() {
-                    stdout.flush().unwrap();
+                    raw_stdout.flush().unwrap();
 
-                    for c in stdin.keys() {
-                        match c.unwrap() {
-                            Key::Char(' ') | Key::Char(';') => {
-                                write!(stdout, " ;\r\n").unwrap();
-                                result = wam.continue_query(&alloc_locs, &mut heap_locs);
-                                break;
-                            },
-                            Key::Char('.') => {
-                                write!(stdout, " .\r\n").unwrap();
-                                return;
-                            },
-                            _ => {}
-                        }
-                    }
+                    let result = match next_step(raw_stdout) {
+                        ContinueResult::ContinueQuery =>
+                            wam.continue_query(&alloc_locs, &mut heap_locs),
+                        ContinueResult::Conclude =>
+                            return
+                    };
+
+                    let mut raw_stdout = stdout().into_raw_mode().unwrap();
 
                     if let &EvalSession::Error(SessionError::QueryFailure) = &result
                     {
-                        write!(stdout, "false.\r\n").unwrap();
-                        stdout.flush().unwrap();
+                        write!(raw_stdout, "false.\r\n").unwrap();
+                        raw_stdout.flush().unwrap();
                         return;
                     }
 
                     if let &EvalSession::Error(SessionError::QueryFailureWithException(ref e)) = &result
                     {
-                        write!(stdout, "{}\r\n", error_string(e)).unwrap();
-                        stdout.flush().unwrap();
+                        write!(raw_stdout, "{}\r\n", error_string(e)).unwrap();
+                        raw_stdout.flush().unwrap();
                         return;
                     }
                 } else {
