@@ -137,7 +137,7 @@ fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
 }
 
 impl MachineState {
-    pub fn numbervar(&self, addr: Addr) -> Option<Var> {
+    pub fn numbervar(&self, offset: &BigInt, addr: Addr) -> Option<Var> {
         static CHAR_CODES: [char; 26] = ['A','B','C','D','E','F','G','H','I','J',
                                          'K','L','M','N','O','P','Q','R','S','T',
                                          'U','V','W','X','Y','Z'];
@@ -145,6 +145,8 @@ impl MachineState {
         match self.store(self.deref(addr)) {
             Addr::Con(Constant::Number(Number::Integer(ref n)))
                 if !n.is_negative() => {
+                    let n = offset + n.as_ref();
+                    
                     let i = n.mod_floor(&BigInt::from(26)).to_usize().unwrap();
                     let j = n.div_floor(&BigInt::from(26));
 
@@ -168,6 +170,7 @@ pub struct HCPrinter<'a, Outputter> {
     heap_locs:    ReverseHeapVarDict,
     printed_vars: HashSet<Addr>,
     last_item_idx: usize,
+    pub(crate) numbervars_offset: BigInt,
     pub(crate) numbervars:   bool,
     pub(crate) quoted:       bool,
     pub(crate) ignore_ops:   bool
@@ -275,6 +278,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     printed_vars: HashSet::new(),
                     last_item_idx: 0,
                     numbervars: false,
+                    numbervars_offset: BigInt::zero(),
                     quoted: false,
                     ignore_ops: false }
     }
@@ -349,7 +353,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             let addr = iter.stack().last().cloned().unwrap();
 
             // 7.10.4
-            if let Some(var) = iter.machine_st().numbervar(addr) {
+            if let Some(var) = iter.machine_st().numbervar(&self.numbervars_offset, addr) {
                 iter.stack().pop();
                 self.state_stack.push(TokenOrRedirect::NumberedVar(var));
                 return;

@@ -3,6 +3,7 @@ use prolog_parser::parser::*;
 
 use prolog::instructions::HeapCellValue;
 use prolog::machine::*;
+use prolog::num::*;
 use prolog::read::*;
 
 use std::cell::Cell;
@@ -287,12 +288,20 @@ impl<'a, R: Read> TermStream<'a, R> {
 }
 
 impl MachineState {
-    fn print_with_locs(&self, target: usize, var_dict: &HeapVarDict) -> PrinterOutputter {
+    fn print_with_locs(&self, target: usize, max_var_length: usize, var_dict: &HeapVarDict)
+                       -> PrinterOutputter
+    {
         let output = PrinterOutputter::new();
         let mut printer = HCPrinter::from_heap_locs(&self, output, &var_dict);
 
         printer.quoted = true;
         printer.numbervars = true;
+        // the purpose of the offset is to avoid clashes with variable names that might
+        // occur after the addresses in the expanded term are substituted with the variable
+        // names in the pre-expansion term. This formula ensures that all generated "numbervars"-
+        // style variable names will be longer than the keys of the var_dict, and therefore
+        // not equal to any of them.
+        printer.numbervars_offset = pow(BigInt::from(10), max_var_length) * 26;
 
         printer.see_all_locs();
 
@@ -303,10 +312,10 @@ impl MachineState {
                        code_repo: &mut CodeRepo, term: &Term, hook: CompileTimeHook)
                        -> Option<String>
     {
-        let (term_h, var_dict) = write_term_to_heap(term, self);
+        let term_write_result = write_term_to_heap(term, self);
         let h = self.heap.h;
 
-        self[temp_v!(1)] = Addr::HeapCell(term_h);
+        self[temp_v!(1)] = Addr::HeapCell(term_write_result.heap_loc);
         self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
         self[temp_v!(2)] = Addr::HeapCell(h);
 
@@ -319,7 +328,8 @@ impl MachineState {
             self.reset();
             None
         } else {
-            let mut output = self.print_with_locs(h, &var_dict);
+            let &TermWriteResult { heap_loc: _, max_var_length, ref var_dict } = &term_write_result;
+            let mut output = self.print_with_locs(h, max_var_length, var_dict);
 
             output.push_char('.');
             self.reset();

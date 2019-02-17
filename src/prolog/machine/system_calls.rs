@@ -10,6 +10,7 @@ use prolog::num::{ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt};
 
 use std::collections::HashSet;
+use std::io::{stdout, Write};
 use std::mem;
 use std::rc::Rc;
 
@@ -653,6 +654,7 @@ impl MachineState {
 
                 let mut output  = printer.print(addr);
                 print!("{}", output.result());
+                stdout().flush().unwrap();
             }
         };
 

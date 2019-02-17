@@ -603,13 +603,13 @@ pub(crate) trait CallPolicy: Any {
                     ref addr if addr.is_ref() => {
                         let stub = MachineError::functor_stub(clause_name!("if_"), 3);
                         let err = MachineError::instantiation_error();
-                        
+
                         Err(machine_st.error_form(err, stub))
                     },
                     addr => {
                         let stub = MachineError::functor_stub(clause_name!("if_"), 3);
                         let err = MachineError::type_error(ValidType::Boolean, addr);
-                        
+
                         Err(machine_st.error_form(err, stub))
                     }
                 }

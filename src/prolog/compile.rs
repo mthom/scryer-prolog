@@ -255,7 +255,7 @@ impl ListingCompiler {
 
             compile_appendix(&mut decl_code, &queue, non_counted_bt, wam.machine_flags())?;
 
-            let idx = code_dir.entry((name, arity)).or_insert(CodeIndex::default());
+            let idx = code_dir.entry((name.clone(), arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
 
             code.extend(decl_code.into_iter());
