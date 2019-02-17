@@ -5,18 +5,18 @@
 :- use_module(library(control), [(\=)/2]).
 :- use_module(library(dif)).
 
-/* in essence, '$reify_switch'(T, Then_0, Else_0) is this:
+/* in essence, '$reify_switch'(T, Then_0, Else_0) is semantically this:
     (  T == true -> call(Then_0)
     ;  T == false -> call(Else_0)
     ;  nonvar(T) -> throw(error(type_error(boolean, T), _))
     ;  throw(error(instantiation_error, _))
     ).
-    but without creating choice points.
+    but it does not create choice points.
 */
 
 if_(If_1, Then_0, Else_0) :-
     call(If_1, T),
-    '$reify_switch'(T, Then_0, Else_0).
+    '$call_with_default_policy'('$reify_switch'(T, Then_0, Else_0)).
 
 =(X, Y, T) :-
     (  X == Y -> T = true
