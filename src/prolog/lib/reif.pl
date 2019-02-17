@@ -5,7 +5,7 @@
 :- use_module(library(control), [(\=)/2]).
 :- use_module(library(dif)).
 
-/* in essence, '$reify_switch'(T, Then_0, Else_0) is semantically this:
+/* in essence, '$reify_switch'(T, Then_0, Else_0) is semantically this,
     (  T == true -> call(Then_0)
     ;  T == false -> call(Else_0)
     ;  nonvar(T) -> throw(error(type_error(boolean, T), _))

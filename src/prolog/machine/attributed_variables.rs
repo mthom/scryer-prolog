@@ -162,6 +162,7 @@ impl MachineState {
             return;
         }
 
+        attr_goals.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
         self.term_dedup(&mut attr_goals);
 
         let mut output = PrinterOutputter::new();
