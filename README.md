@@ -41,7 +41,7 @@ Extend rusty-wam to include the following, among other features:
   is straightforward with attributed variables (_in progress_).
      - [x] Support for `verify_attributes/3`
      - [x] Support for `attribute_goals/2` and `project_attributes/2`
-     - [ ] `call_residue/2` and `call_residue_vars/2`
+     - [x] `call_residue_vars/2`
 * `if_` and related predicates, following the developments of the
   paper "Indexing `dif/2`" (_in progress_).
 * All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`).
@@ -140,6 +140,7 @@ The following predicates are built-in to rusty-wam.
 * `call/1..62`
 * `call_cleanup/2`
 * `call_with_inference_limit/3`
+* `call_residue_vars/2`
 * `can_be/2`
 * `catch/3`
 * `compare/3`

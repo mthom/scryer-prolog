@@ -7,6 +7,7 @@ pub struct Frame {
     pub global_index: usize,
     pub e: usize,
     pub cp: LocalCodePtr,
+    pub attr_var_init_b: usize,
     pub b: usize,    
     pub bp: CodePtr,
     pub tr: usize,
@@ -20,6 +21,7 @@ impl Frame {
     fn new(global_index: usize,
            e: usize,
            cp: LocalCodePtr,
+           attr_var_init_b: usize,
            b: usize,
            bp: CodePtr,
            tr: usize,
@@ -33,6 +35,7 @@ impl Frame {
             global_index,
             e,
             cp,
+            attr_var_init_b,
             b,
             bp,
             tr,
@@ -59,6 +62,7 @@ impl OrStack {
                 global_index: usize,
                 e: usize,
                 cp: LocalCodePtr,
+                attr_var_init_b: usize,
                 b: usize,
                 bp: CodePtr,
                 tr: usize,
@@ -67,7 +71,7 @@ impl OrStack {
                 b0: usize,
                 n: usize)
     {
-        self.0.push(Frame::new(global_index, e, cp, b, bp, tr, pstr_tr, h, b0, n));
+        self.0.push(Frame::new(global_index, e, cp, attr_var_init_b, b, bp, tr, pstr_tr, h, b0, n));
     }
 
     pub fn len(&self) -> usize {

@@ -31,7 +31,7 @@ impl MachineState {
     // a step in Brent's algorithm.
     fn brents_alg_step(&self, brent_st: &mut BrentAlgState) -> Option<CycleSearchResult>
     {
-        match self.heap[brent_st.hare].clone() {            
+        match self.heap[brent_st.hare].clone() {
             HeapCellValue::NamedStr(..) =>
                 Some(CycleSearchResult::NotList),
             HeapCellValue::Addr(addr) =>
@@ -43,14 +43,14 @@ impl MachineState {
                     Addr::Lis(l) => {
                         brent_st.hare = l + 1;
                         brent_st.steps += 1;
-                        
+
                         if brent_st.tortoise == brent_st.hare {
                             return Some(CycleSearchResult::NotList);
                         } else if brent_st.steps == brent_st.power {
                             brent_st.tortoise = brent_st.hare;
                             brent_st.power <<= 1;
                         }
-                        
+
                         None
                     },
                     _ =>
@@ -204,7 +204,7 @@ impl MachineState {
                     Addr::Con(Constant::Usize(old_b)) if self.b <= old_b + 2 => {},
                     _ => self.fail = true
                 };
-            },            
+            },
             &SystemClauseType::DeleteAttribute => {
                 let ls0 = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -265,6 +265,15 @@ impl MachineState {
                 let addr = self[temp_v!(1)].clone();
                 self.attr_var_init.attribute_goals.push(addr);
             },
+            &SystemClauseType::EnqueueAttributedVar => {
+                let addr = self[temp_v!(1)].clone();
+
+                match self.store(self.deref(addr)) {
+                    Addr::AttrVar(h) =>
+                        self.attr_var_init.attr_var_queue.push(h),
+                    _ => {}
+                }
+            },
             &SystemClauseType::ExpandGoal => {
                 self.p = CodePtr::Local(LocalCodePtr::UserGoalExpansion(0));
                 return Ok(());
@@ -295,6 +304,35 @@ impl MachineState {
 
                 let list_addr = self[temp_v!(2)].clone();
                 self.unify(Addr::HeapCell(attr_var_list), list_addr);
+            },
+            &SystemClauseType::GetAttrVarQueueDelimiter => {
+                let addr  = self[temp_v!(1)].clone();
+                let value = Addr::Con(Constant::Usize(self.attr_var_init.attr_var_queue.len()));
+
+                self.unify(addr, value);
+            },
+            &SystemClauseType::GetAttrVarQueueBeyond => {
+                let addr = self[temp_v!(1)].clone();
+
+                match self.store(self.deref(addr)) {
+                    Addr::Con(Constant::Usize(b)) => {
+                        let mut attr_vars: Vec<_> = self.attr_var_init.attr_var_queue[b ..]
+                            .iter().filter_map(|h|
+                                match self.store(self.deref(Addr::HeapCell(*h))) {
+                                    Addr::AttrVar(h) => Some(Addr::AttrVar(h)),
+                                    _ => None
+                                }).collect();
+
+                        attr_vars.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
+
+                        self.term_dedup(&mut attr_vars);
+                        let var_list_addr = Addr::HeapCell(self.heap.to_list(attr_vars.into_iter()));
+
+                        let list_addr = self[temp_v!(2)].clone();
+                        self.unify(var_list_addr, list_addr);
+                    },
+                    _ => self.fail = true
+                }
             },
             &SystemClauseType::GetDoubleQuotes => {
                 let a1 = self[temp_v!(1)].clone();
@@ -410,7 +448,7 @@ impl MachineState {
                 for (h, addr) in bindings {
                     self.heap[h] = HeapCellValue::Addr(addr);
                 }
-            },            
+            },
             &SystemClauseType::RemoveCallPolicyCheck => {
                 let restore_default =
                     match call_policy.downcast_mut::<CWILCallPolicy>().ok() {

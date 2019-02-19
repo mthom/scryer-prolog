@@ -11,6 +11,7 @@ pub(super) type Bindings = Vec<(usize, Addr)>;
 
 pub(super) struct AttrVarInitializer {
     pub(super) attribute_goals: Vec<Addr>,
+    pub(super) attr_var_queue: Vec<usize>,
     pub(super) bindings: Bindings,
     pub(super) cp: LocalCodePtr,
     pub(super) verify_attrs_loc: usize,
@@ -21,6 +22,7 @@ impl AttrVarInitializer {
     pub(super) fn new(verify_attrs_loc: usize, project_attrs_loc: usize) -> Self {
         AttrVarInitializer {
             attribute_goals: vec![],
+            attr_var_queue: vec![],
             bindings: vec![],
             cp: LocalCodePtr::default(),
             verify_attrs_loc,
@@ -30,6 +32,7 @@ impl AttrVarInitializer {
 
     #[inline]
     pub(super) fn reset(&mut self) {
+        self.attr_var_queue.clear();
         self.bindings.clear();
     }
 }

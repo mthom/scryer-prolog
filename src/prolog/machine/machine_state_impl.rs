@@ -2256,6 +2256,7 @@ impl MachineState {
                 self.or_stack.push(gi,
                                    self.e,
                                    self.cp.clone(),
+                                   self.attr_var_init.attr_var_queue.len(),
                                    self.b,
                                    self.p.clone() + 1,
                                    self.tr,
@@ -2288,10 +2289,11 @@ impl MachineState {
             &ChoiceInstruction::TryMeElse(offset) => {
                 let n = self.num_of_args;
                 let gi = self.next_global_index();
-
+                
                 self.or_stack.push(gi,
                                    self.e,
                                    self.cp.clone(),
+                                   self.attr_var_init.attr_var_queue.len(),
                                    self.b,
                                    self.p.clone() + offset,
                                    self.tr,
