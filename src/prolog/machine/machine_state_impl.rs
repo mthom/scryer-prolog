@@ -1348,9 +1348,7 @@ impl MachineState {
     pub(super) fn set_ball(&mut self) {
         let addr = self[temp_v!(1)].clone();
         self.ball.boundary = self.heap.h;
-
-        let duplicator = CopyBallTerm::new(self);
-        copy_term(duplicator, addr);
+        copy_term(CopyBallTerm::new(self), addr);
     }
 
     pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
@@ -2029,13 +2027,7 @@ impl MachineState {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
 
-        // drop the mutable references contained in gadget
-        // once the term has been duplicated.
-        {
-            let gadget = CopyTerm::new(self);
-            copy_term(gadget, a1);
-        }
-
+        copy_term(CopyTerm::new(self), a1);
         self.unify(Addr::HeapCell(old_h), a2);
     }
 
@@ -2290,7 +2282,7 @@ impl MachineState {
             &ChoiceInstruction::TryMeElse(offset) => {
                 let n = self.num_of_args;
                 let gi = self.next_global_index();
-                
+
                 self.or_stack.push(gi,
                                    self.e,
                                    self.cp.clone(),
