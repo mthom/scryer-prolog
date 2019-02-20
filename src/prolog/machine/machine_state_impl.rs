@@ -182,7 +182,8 @@ impl MachineState {
                                   -> Outputter
       where Outputter: HCValueOutputter
     {
-        let printer = HCPrinter::from_heap_locs(&self, output, var_dict);
+        let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
+        printer.see_all_locs();
         printer.print(addr)
     }
 
@@ -1348,8 +1349,8 @@ impl MachineState {
         let addr = self[temp_v!(1)].clone();
         self.ball.boundary = self.heap.h;
 
-        let mut duplicator = DuplicateBallTerm::new(self);
-        duplicator.duplicate_term(addr);
+        let duplicator = CopyBallTerm::new(self);
+        copy_term(duplicator, addr);
     }
 
     pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
@@ -2031,8 +2032,8 @@ impl MachineState {
         // drop the mutable references contained in gadget
         // once the term has been duplicated.
         {
-            let mut gadget = DuplicateTerm::new(self);
-            gadget.duplicate_term(a1);
+            let gadget = CopyTerm::new(self);
+            copy_term(gadget, a1);
         }
 
         self.unify(Addr::HeapCell(old_h), a2);

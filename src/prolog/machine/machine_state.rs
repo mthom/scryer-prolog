@@ -33,17 +33,17 @@ impl Ball {
     }
 }
 
-pub(super) struct DuplicateTerm<'a> {
+pub(super) struct CopyTerm<'a> {
     state: &'a mut MachineState
 }
 
-impl<'a> DuplicateTerm<'a> {
+impl<'a> CopyTerm<'a> {
     pub(super) fn new(state: &'a mut MachineState) -> Self {
-        DuplicateTerm { state: state }
+        CopyTerm { state: state }
     }
 }
 
-impl<'a> Index<usize> for DuplicateTerm<'a> {
+impl<'a> Index<usize> for CopyTerm<'a> {
     type Output = HeapCellValue;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -51,14 +51,14 @@ impl<'a> Index<usize> for DuplicateTerm<'a> {
     }
 }
 
-impl<'a> IndexMut<usize> for DuplicateTerm<'a> {
+impl<'a> IndexMut<usize> for CopyTerm<'a> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.state.heap[index]
     }
 }
 
 // the ordinary, heap term copier, used by duplicate_term.
-impl<'a> CopierTarget for DuplicateTerm<'a> {
+impl<'a> CopierTarget for CopyTerm<'a> {
     fn source(&self) -> usize {
         self.state.heap.h
     }
@@ -84,19 +84,19 @@ impl<'a> CopierTarget for DuplicateTerm<'a> {
     }
 }
 
-pub(super) struct DuplicateBallTerm<'a> {
+pub(super) struct CopyBallTerm<'a> {
     state: &'a mut MachineState,
     heap_boundary: usize
 }
 
-impl<'a> DuplicateBallTerm<'a> {
+impl<'a> CopyBallTerm<'a> {
     pub(super) fn new(state: &'a mut MachineState) -> Self {
         let hb = state.heap.len();
-        DuplicateBallTerm { state, heap_boundary: hb }
+        CopyBallTerm { state, heap_boundary: hb }
     }
 }
 
-impl<'a> Index<usize> for DuplicateBallTerm<'a> {
+impl<'a> Index<usize> for CopyBallTerm<'a> {
     type Output = HeapCellValue;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -109,7 +109,7 @@ impl<'a> Index<usize> for DuplicateBallTerm<'a> {
     }
 }
 
-impl<'a> IndexMut<usize> for DuplicateBallTerm<'a> {
+impl<'a> IndexMut<usize> for CopyBallTerm<'a> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         if index < self.heap_boundary {
             &mut self.state.heap[index]
@@ -121,7 +121,7 @@ impl<'a> IndexMut<usize> for DuplicateBallTerm<'a> {
 }
 
 // the ordinary, heap term copier, used by duplicate_term.
-impl<'a> CopierTarget for DuplicateBallTerm<'a> {
+impl<'a> CopierTarget for CopyBallTerm<'a> {
     fn source(&self) -> usize {
         self.heap_boundary
     }
