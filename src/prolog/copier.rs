@@ -195,7 +195,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         for (r, value) in self.trail.drain(0 ..) {
             match r {
                 Ref::AttrVar(h) | Ref::HeapCell(h) =>
-                    self.target[h] = value.clone(),
+                    self.target[h] = value,
                 Ref::StackCell(fr, sc) =>
                     self.target.stack()[fr][sc] = value.as_addr(0)
             }
