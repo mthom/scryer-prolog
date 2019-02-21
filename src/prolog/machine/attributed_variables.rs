@@ -2,7 +2,7 @@ use prolog::heap_iter::*;
 use prolog::machine::*;
 
 use std::collections::HashSet;
-use std::collections::hash_set::IntoIter;
+use std::vec::IntoIter;
 
 pub static VERIFY_ATTRS: &str  = include_str!("attributed_variables.pl");
 pub static PROJECT_ATTRS: &str = include_str!("project_attributes.pl");
@@ -85,20 +85,19 @@ impl MachineState {
         self[temp_v!(2)] = value_list_addr;
     }
 
-    fn gather_attr_vars_created_since(&self, h: usize) -> IntoIter<Addr> {
-        let mut attr_vars = HashSet::new();
+    pub(super)
+    fn gather_attr_vars_created_since(&self, b: usize) -> IntoIter<Addr>
+    {
+        let mut attr_vars: Vec<_> = self.attr_var_init.attr_var_queue[b ..]
+            .iter().filter_map(|h|
+                               match self.store(self.deref(Addr::HeapCell(*h))) {
+                                   Addr::AttrVar(h) => Some(Addr::AttrVar(h)),
+                                   _ => None
+                               }).collect();
 
-        for i in h .. self.heap.h {
-            let addr = self.heap[i].as_addr(i);
+        attr_vars.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
 
-            match addr {
-                Addr::AttrVar(h) if i == h => {
-                    attr_vars.insert(Addr::AttrVar(h));
-                },
-                _ => {}
-            }
-        }
-
+        self.term_dedup(&mut attr_vars);
         attr_vars.into_iter()
     }
 

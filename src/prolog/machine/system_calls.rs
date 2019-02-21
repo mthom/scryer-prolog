@@ -316,20 +316,12 @@ impl MachineState {
 
                 match self.store(self.deref(addr)) {
                     Addr::Con(Constant::Usize(b)) => {
-                        let mut attr_vars: Vec<_> = self.attr_var_init.attr_var_queue[b ..]
-                            .iter().filter_map(|h|
-                                match self.store(self.deref(Addr::HeapCell(*h))) {
-                                    Addr::AttrVar(h) => Some(Addr::AttrVar(h)),
-                                    _ => None
-                                }).collect();
-
-                        attr_vars.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
-
-                        self.term_dedup(&mut attr_vars);
-                        let var_list_addr = Addr::HeapCell(self.heap.to_list(attr_vars.into_iter()));
-
+                        let iter = self.gather_attr_vars_created_since(b);
+                        
+                        let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));                        
                         let list_addr = self[temp_v!(2)].clone();
-                        self.unify(var_list_addr, list_addr);
+                        
+                        self.unify(var_list_addr, list_addr);                        
                     },
                     _ => self.fail = true
                 }
