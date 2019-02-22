@@ -4,6 +4,7 @@ use prolog_parser::string_list::*;
 use prolog::instructions::*;
 use prolog::and_stack::*;
 use prolog::copier::*;
+use prolog::heap::*;
 use prolog::machine::{AttrVarInitializer, IndexStore};
 use prolog::machine::machine_errors::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
@@ -59,10 +60,6 @@ impl<'a> IndexMut<usize> for CopyTerm<'a> {
 
 // the ordinary, heap term copier, used by duplicate_term.
 impl<'a> CopierTarget for CopyTerm<'a> {
-    fn source(&self) -> usize {
-        self.state.heap.h
-    }
-
     fn threshold(&self) -> usize {
         self.state.heap.h
     }
@@ -85,14 +82,17 @@ impl<'a> CopierTarget for CopyTerm<'a> {
 }
 
 pub(super) struct CopyBallTerm<'a> {
-    state: &'a mut MachineState,
-    heap_boundary: usize
+    and_stack: &'a mut AndStack,
+    heap: &'a mut Heap,
+    heap_boundary: usize,
+    stub: &'a mut MachineStub,    
 }
 
 impl<'a> CopyBallTerm<'a> {
-    pub(super) fn new(state: &'a mut MachineState) -> Self {
-        let hb = state.heap.len();
-        CopyBallTerm { state, heap_boundary: hb }
+    pub(super) fn new(and_stack: &'a mut AndStack, heap: &'a mut Heap, stub: &'a mut MachineStub) -> Self
+    {
+        let hb = heap.len();
+        CopyBallTerm { and_stack, heap, heap_boundary: hb, stub }
     }
 }
 
@@ -101,10 +101,10 @@ impl<'a> Index<usize> for CopyBallTerm<'a> {
 
     fn index(&self, index: usize) -> &Self::Output {
         if index < self.heap_boundary {
-            &self.state.heap[index]
+            &self.heap[index]
         } else {
             let index = index - self.heap_boundary;
-            &self.state.ball.stub[index]
+            &self.stub[index]
         }
     }
 }
@@ -112,38 +112,34 @@ impl<'a> Index<usize> for CopyBallTerm<'a> {
 impl<'a> IndexMut<usize> for CopyBallTerm<'a> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         if index < self.heap_boundary {
-            &mut self.state.heap[index]
+            &mut self.heap[index]
         } else {
             let index = index - self.heap_boundary;
-            &mut self.state.ball.stub[index]
+            &mut self.stub[index]
         }
     }
 }
 
 // the ordinary, heap term copier, used by duplicate_term.
 impl<'a> CopierTarget for CopyBallTerm<'a> {
-    fn source(&self) -> usize {
-        self.heap_boundary
-    }
-
     fn threshold(&self) -> usize {
-        self.heap_boundary + self.state.ball.stub.len()
+        self.heap_boundary + self.stub.len()
     }
 
-    fn push(&mut self, hcv: HeapCellValue) {
-        self.state.ball.stub.push(hcv);
+    fn push(&mut self, value: HeapCellValue) {
+        self.stub.push(value);
     }
 
     fn store(&self, addr: Addr) -> Addr {
         match addr {
-            Addr::HeapCell(hc) if hc < self.heap_boundary =>
-                self.state.heap[hc].as_addr(hc),
-            Addr::HeapCell(hc) => {
-                let index = hc - self.heap_boundary;
-                self.state.ball.stub[index].as_addr(hc)
+            Addr::HeapCell(h) | Addr::AttrVar(h) if h < self.heap_boundary =>
+                self.heap[h].as_addr(h),
+            Addr::HeapCell(h) | Addr::AttrVar(h) => {
+                let index = h - self.heap_boundary;
+                self.stub[index].as_addr(h)
             },
             Addr::StackCell(fr, sc) =>
-                self.state.and_stack[fr][sc].clone(),
+                self.and_stack[fr][sc].clone(),
             addr => addr
         }
     }
@@ -162,7 +158,7 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
     }
 
     fn stack(&mut self) -> &mut AndStack {
-        &mut self.state.and_stack
+        self.and_stack
     }
 }
 
@@ -220,6 +216,7 @@ pub struct MachineState {
     pub(super) hb: usize,
     pub(super) block: usize, // an offset into the OR stack.
     pub(super) ball: Ball,
+    pub(super) lifted_heap: Vec<HeapCellValue>,
     pub(super) interms: Vec<Number>, // intermediate numbers.
     pub(super) last_call: bool,
     pub(crate) flags: MachineFlags
@@ -626,7 +623,7 @@ pub(crate) trait CallPolicy: Any {
                 }
             },
             &BuiltInClauseType::CopyTerm => {
-                machine_st.duplicate_term();
+                machine_st.copy_term();
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Eq => {

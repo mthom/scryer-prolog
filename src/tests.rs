@@ -1711,6 +1711,20 @@ fn test_queries_on_builtins()
                            [["X = f(((a,b),c))"]]);
     assert_prolog_success!(&mut wam, "?- X = f(((a,b),(c, d))).",
                            [["X = f(((a,b),c,d))"]]);
+
+    assert_prolog_success!(&mut wam, "?- findall(X, (X = 1 ; X = 2), S).",
+                           [["S = [1, 2]", "X = _0"]]);
+    assert_prolog_success!(&mut wam, "?- findall(X+Y, (X = 1), S).",
+                           [["S = [1+_18]", "X = _1", "Y = _2"]]);
+    assert_prolog_success!(&mut wam, "?- findall(X, false, S).",
+                           [["S = []", "X = _0"]]);
+    assert_prolog_success!(&mut wam, "?- findall(X, (X = 1 ; X = 1), S).",
+                           [["S = [1, 1]", "X = _0"]]);
+    assert_prolog_failure!(&mut wam, "?- findall(X, (X = 2 ; X = 1), [1, 2]).");
+    assert_prolog_success!(&mut wam, "?- findall(X, (X = 1 ; X = 2), [X, Y]).",
+                           [["X = 1", "Y = 2"]]);
+    assert_prolog_success!(&mut wam, "?- catch(findall(X, 4, S), error(type_error(callable, 4), _), true).",
+                           [["S = _3", "X = _1"]]);
 }
 
 #[test]

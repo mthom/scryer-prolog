@@ -1,5 +1,6 @@
 use prolog_parser::ast::*;
 
+use prolog::copier::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
 use prolog::instructions::*;
@@ -190,13 +191,34 @@ impl MachineState {
         }
     }
 
-    pub(super) fn system_call(&mut self, ct: &SystemClauseType,
+    fn copy_findall_solution(&mut self, lh_offset: usize, copy_target: Addr) -> usize
+    {
+        let threshold = self.lifted_heap.len() - lh_offset;
+        let mut copy_ball_term = CopyBallTerm::new(&mut self.and_stack, &mut self.heap,
+                                                   &mut self.lifted_heap);
+
+        copy_ball_term.push(HeapCellValue::Addr(Addr::Lis(threshold + 1)));
+        copy_ball_term.push(HeapCellValue::Addr(Addr::HeapCell(threshold + 3)));
+        copy_ball_term.push(HeapCellValue::Addr(Addr::HeapCell(threshold + 2)));
+
+        copy_term(copy_ball_term, copy_target);
+        threshold + lh_offset + 2
+    }
+
+    pub(super) fn system_call(&mut self,
+                              ct: &SystemClauseType,
                               indices: &IndexStore,
                               call_policy: &mut Box<CallPolicy>,
                               cut_policy:  &mut Box<CutPolicy>)
                               -> CallResult
     {
         match ct {
+            &SystemClauseType::LiftedHeapLength => {
+                let a1 = self[temp_v!(1)].clone();
+                let lh_len = Addr::Con(Constant::Usize(self.lifted_heap.len()));
+
+                self.unify(a1, lh_len);
+            },
             &SystemClauseType::CheckCutPoint => {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -205,6 +227,27 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &SystemClauseType::CopyToLiftedHeap =>
+                // now, stagger everything down by the length of the heap + lh offset.
+                match self.store(self.deref(self[temp_v!(1)].clone())) {
+                    Addr::Con(Constant::Usize(lh_offset)) => {
+                        let copy_target = self[temp_v!(2)].clone();
+
+                        let old_threshold = self.copy_findall_solution(lh_offset, copy_target);
+                        let new_threshold = self.lifted_heap.len() - lh_offset;
+
+                        self.lifted_heap[old_threshold] = HeapCellValue::Addr(Addr::HeapCell(new_threshold));
+
+                        for index in old_threshold + 1 .. self.lifted_heap.len() {
+                            match &mut self.lifted_heap[index] {
+                                &mut HeapCellValue::Addr(ref mut addr) =>
+                                    *addr -= self.heap.len() + lh_offset,
+                                _ => {}
+                            }
+                        }
+                    },
+                    _ => self.fail = true
+                },
             &SystemClauseType::DeleteAttribute => {
                 let ls0 = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -282,6 +325,18 @@ impl MachineState {
                 self.p = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
                 return Ok(());
             },
+            &SystemClauseType::TruncateIfNoLiftedHeapGrowth =>
+                match self.store(self.deref(self[temp_v!(1)].clone())) {
+                    Addr::Con(Constant::Usize(lh_offset)) => {
+                        if lh_offset >= self.lifted_heap.len() {
+                            self.lifted_heap.truncate(lh_offset);
+                        } else {
+                            self.lifted_heap.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
+                        }
+                    },
+                    _ =>
+                        self.fail = true
+                },
             &SystemClauseType::GetAttributedVariableList => {
                 let attr_var = self.store(self.deref(self[temp_v!(1)].clone()));
                 let mut attr_var_list = match attr_var {
@@ -317,12 +372,40 @@ impl MachineState {
                 match self.store(self.deref(addr)) {
                     Addr::Con(Constant::Usize(b)) => {
                         let iter = self.gather_attr_vars_created_since(b);
-                        
-                        let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));                        
+
+                        let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
                         let list_addr = self[temp_v!(2)].clone();
-                        
-                        self.unify(var_list_addr, list_addr);                        
+
+                        self.unify(var_list_addr, list_addr);
                     },
+                    _ => self.fail = true
+                }
+            },
+            &SystemClauseType::GetLiftedHeapFromOffset => {
+                let lh_offset = self[temp_v!(1)].clone();                
+
+                match self.store(self.deref(lh_offset)) {
+                    Addr::Con(Constant::Usize(lh_offset)) =>
+                        if lh_offset >= self.lifted_heap.len() {
+                            let solutions = self[temp_v!(2)].clone();
+                            self.unify(solutions, Addr::Con(Constant::EmptyList));
+                        } else {
+                            let h = self.heap.h;
+                        
+                            for index in lh_offset .. self.lifted_heap.len() {
+                                match self.lifted_heap[index].clone() {
+                                    HeapCellValue::Addr(addr) =>
+                                        self.heap.push(HeapCellValue::Addr(addr + h)),
+                                    value =>
+                                        self.heap.push(value)
+                                }
+                            }
+
+                            self.lifted_heap.truncate(lh_offset);
+                            
+                            let solutions = self[temp_v!(2)].clone();
+                            self.unify(Addr::HeapCell(h), solutions);
+                        },
                     _ => self.fail = true
                 }
             },
@@ -574,7 +657,7 @@ impl MachineState {
                 let h = self.heap.h;
 
                 if self.ball.stub.len() > 0 {
-                    self.copy_and_align_ball_to_heap();
+                    self.copy_and_align_ball_to_heap(0);
                 } else {
                     self.fail = true;
                     return Ok(());

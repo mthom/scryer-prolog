@@ -446,7 +446,7 @@ impl Machine {
     {
         if self.machine_st.ball.stub.len() > 0 {
             let h = self.machine_st.heap.h;
-            self.machine_st.copy_and_align_ball_to_heap();
+            self.machine_st.copy_and_align_ball_to_heap(0);
 
             let error_str = self.machine_st.print_exception(Addr::HeapCell(h),
                                                             &heap_locs,

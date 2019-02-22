@@ -4,6 +4,7 @@ use prolog_parser::string_list::StringList;
 use prolog::instructions::*;
 use prolog::and_stack::*;
 use prolog::copier::*;
+use prolog::heap::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
 use prolog::machine::{AttrVarInitializer, IndexStore};
@@ -42,7 +43,7 @@ impl MachineState {
             cp: LocalCodePtr::default(),
             attr_var_init: AttrVarInitializer::new(0, 0),
             fail: false,
-            heap: Heap::with_capacity(256),
+            heap: Heap::with_capacity(1024),
             mode: MachineMode::Write,
             and_stack: AndStack::new(),
             or_stack: OrStack::new(),
@@ -54,6 +55,7 @@ impl MachineState {
             hb: 0,
             block: 0,
             ball: Ball::new(),
+            lifted_heap: Vec::with_capacity(1024),
             interms: vec![Number::default(); 256],
             last_call: false,
             flags: MachineFlags::default()
@@ -1348,7 +1350,7 @@ impl MachineState {
     pub(super) fn set_ball(&mut self) {
         let addr = self[temp_v!(1)].clone();
         self.ball.boundary = self.heap.h;
-        copy_term(CopyBallTerm::new(self), addr);
+        copy_term(CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut self.ball.stub), addr);
     }
 
     pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey>
@@ -1416,10 +1418,12 @@ impl MachineState {
         }
     }
 
-    pub(super) fn copy_and_align_ball_to_heap(&mut self) -> usize {
+    pub(super) fn copy_and_align_ball_to_heap(&mut self, from: usize) -> usize {
         let diff = self.heap_ball_boundary_diff();
 
-        for heap_value in self.ball.stub.iter().cloned() {
+        for index in from .. self.ball.stub.len() {
+            let heap_value = self.ball.stub[index].clone();
+            
             self.heap.push(match heap_value {
                 HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
                 _ => heap_value
@@ -2021,7 +2025,7 @@ impl MachineState {
         }
     }
 
-    pub(super) fn duplicate_term(&mut self) {
+    pub(super) fn copy_term(&mut self) {
         let old_h = self.heap.h;
 
         let a1 = self[temp_v!(1)].clone();
@@ -2380,5 +2384,6 @@ impl MachineState {
         self.block = 0;
 
         self.ball.reset();
+        self.lifted_heap.clear();
     }
 }

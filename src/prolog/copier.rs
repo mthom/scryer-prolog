@@ -7,7 +7,6 @@ type Trail = Vec<(Ref, HeapCellValue)>;
 
 pub(crate) trait CopierTarget: IndexMut<usize, Output=HeapCellValue>
 {
-    fn source(&self) -> usize;
     fn threshold(&self) -> usize;
     fn push(&mut self, HeapCellValue);
     fn store(&self, Addr) -> Addr;
@@ -33,7 +32,7 @@ impl<T: CopierTarget> CopyTermState<T> {
     fn new(target: T) -> Self {
         CopyTermState {
             trail: vec![],
-            scan:  target.source(),
+            scan:  0,
             old_h: target.threshold(),
             target
         }
@@ -168,6 +167,7 @@ impl<T: CopierTarget> CopyTermState<T> {
     }
 
     fn copy_term_impl(&mut self, addr: Addr) {
+        self.scan = self.target.threshold();
         self.target.push(HeapCellValue::Addr(addr));
 
         while self.scan < self.target.threshold() {

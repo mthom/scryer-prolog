@@ -7,9 +7,9 @@
 	(=..)/2, (==)/2, (\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2,
 	(=@=)/2, (\=@=)/2, (:)/2, call_with_inference_limit/3,
 	catch/3, current_prolog_flag/2, expand_goal/2, expand_term/2,
-	set_prolog_flag/2, setup_call_cleanup/3, term_variables/2,
-	throw/1, true/0, false/0, write/1, write_canonical/1,
-	writeq/1, write_term/2]).
+	findall/3, set_prolog_flag/2, setup_call_cleanup/3,
+	term_variables/2, throw/1, true/0, false/0, write/1,
+	write_canonical/1, writeq/1, write_term/2]).
 
 /* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
    and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
@@ -351,3 +351,20 @@ handle_ball(C, C, R) :- !, '$erase_ball', call(R).
 handle_ball(_, _, _) :- '$unwind_stack'.
 
 throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
+
+:- non_counted_backtracking '$iterate_find_all'/4.
+'$iterate_find_all'(Template, Goal, _, LhOffset) :-
+    call(Goal),
+    '$copy_to_lh'(LhOffset, Template),
+    '$fail'.
+'$iterate_find_all'(_, _, Solutions, LhOffset) :-
+    '$truncate_if_no_lh_growth'(LhOffset),
+    '$get_lh_from_offset'(LhOffset, Solutions).
+
+findall(Template, Goal, Solutions) :-
+    '$skip_max_list'(_, -1, Solutions, R),
+    (  nonvar(R), R \== [], throw(error(type_error(list, Solutions), findall/3))
+    ;  true
+    ),
+    '$lh_length'(LhLength),
+    '$call_with_default_policy'('$iterate_find_all'(Template, Goal, Solutions, LhLength)).

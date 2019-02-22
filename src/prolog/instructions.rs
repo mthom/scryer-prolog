@@ -4,7 +4,7 @@ use prolog_parser::tabled_rc::*;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::cmp::Ordering;
-use std::ops::{Add, AddAssign, Index, IndexMut, Sub};
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::rc::Rc;
 
 #[derive(Clone, PartialEq)]
@@ -238,6 +238,7 @@ pub struct Module {
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
     CheckCutPoint,
+    CopyToLiftedHeap,
     DeleteAttribute,
     DeleteHeadAttribute,
     DynamicModuleResolution,
@@ -245,13 +246,16 @@ pub enum SystemClauseType {
     EnqueueAttributedVar,
     ExpandGoal,
     ExpandTerm,
+    TruncateIfNoLiftedHeapGrowth,
     GetAttributedVariableList,
     GetAttrVarQueueDelimiter,
-    GetAttrVarQueueBeyond,
+    GetAttrVarQueueBeyond,    
     GetBValue,
+    GetLiftedHeapFromOffset,
     GetSCCCleaner,
     InstallSCCCleaner,
     InstallInferenceCounter,
+    LiftedHeapLength,
     ModuleOf,
     RedoAttrVarBindings,
     RemoveCallPolicyCheck,
@@ -282,8 +286,9 @@ pub enum SystemClauseType {
 
 impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
-        match self {
+        match self {            
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
+            &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
             &SystemClauseType::DynamicModuleResolution => clause_name!("$module_call"),
@@ -291,14 +296,17 @@ impl SystemClauseType {
             &SystemClauseType::EnqueueAttributedVar => clause_name!("$enqueue_attr_var"),
             &SystemClauseType::ExpandTerm => clause_name!("$expand_term"),
             &SystemClauseType::ExpandGoal => clause_name!("$expand_goal"),
+            &SystemClauseType::TruncateIfNoLiftedHeapGrowth => clause_name!("$truncate_if_no_lh_growth"),
             &SystemClauseType::GetAttributedVariableList => clause_name!("$get_attr_list"),
             &SystemClauseType::GetAttrVarQueueDelimiter => clause_name!("$get_attr_var_queue_delim"),
             &SystemClauseType::GetAttrVarQueueBeyond => clause_name!("$get_attr_var_queue_beyond"),
+            &SystemClauseType::GetLiftedHeapFromOffset => clause_name!("$get_lh_from_offset"),
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
             &SystemClauseType::GetDoubleQuotes => clause_name!("$get_double_quotes"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
             &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
             &SystemClauseType::InstallInferenceCounter => clause_name!("$install_inference_counter"),
+            &SystemClauseType::LiftedHeapLength => clause_name!("$lh_length"),
             &SystemClauseType::ModuleOf => clause_name!("$module_of"),
             &SystemClauseType::RedoAttrVarBindings => clause_name!("$redo_attr_var_bindings"),
             &SystemClauseType::RemoveCallPolicyCheck => clause_name!("$remove_call_policy_check"),
@@ -328,8 +336,9 @@ impl SystemClauseType {
     }
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
-        match (name, arity) {
+        match (name, arity) {            
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
+            ("$copy_to_lh", 2) => Some(SystemClauseType::CopyToLiftedHeap),
             ("$del_attr_non_head", 1) => Some(SystemClauseType::DeleteAttribute),
             ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),            
             ("$module_call", 2) => Some(SystemClauseType::DynamicModuleResolution),
@@ -337,12 +346,15 @@ impl SystemClauseType {
             ("$enqueue_attr_var", 1) => Some(SystemClauseType::EnqueueAttributedVar),
             ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
+            ("$truncate_if_no_lh_growth", 1) => Some(SystemClauseType::TruncateIfNoLiftedHeapGrowth),
             ("$get_attr_list", 2) => Some(SystemClauseType::GetAttributedVariableList),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
+            ("$get_lh_from_offset", 2) => Some(SystemClauseType::GetLiftedHeapFromOffset),
             ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
             ("$install_scc_cleaner", 2) => Some(SystemClauseType::InstallSCCCleaner),
             ("$install_inference_counter", 3) => Some(SystemClauseType::InstallInferenceCounter),
+            ("$lh_length", 1) => Some(SystemClauseType::LiftedHeapLength),
             ("$module_of", 2) => Some(SystemClauseType::ModuleOf),
             ("$redo_attr_var_bindings", 0) => Some(SystemClauseType::RedoAttrVarBindings),
             ("$remove_call_policy_check", 1) => Some(SystemClauseType::RemoveCallPolicyCheck),
@@ -834,6 +846,12 @@ impl Sub<usize> for Addr {
     }
 }
 
+impl SubAssign<usize> for Addr {
+    fn sub_assign(&mut self, rhs: usize) {
+        *self = self.clone() - rhs;
+    }
+}
+
 impl From<Ref> for Addr {
     fn from(r: Ref) -> Self {
         match r {
@@ -1064,71 +1082,6 @@ impl AddAssign<usize> for CodePtr {
             &mut CodePtr::Local(ref mut local) => *local += rhs,
             _ => *self = CodePtr::Local(self.local() + rhs)
         }
-    }
-}
-
-pub struct Heap {
-    heap: Vec<HeapCellValue>,
-    pub h: usize
-}
-
-impl Heap {
-    pub fn with_capacity(cap: usize) -> Self {
-        Heap { heap: Vec::with_capacity(cap), h: 0 }
-    }
-
-    pub fn push(&mut self, val: HeapCellValue) {
-        self.heap.push(val);
-        self.h += 1;
-    }
-
-    pub fn truncate(&mut self, h: usize) {
-        self.h = h;
-        self.heap.truncate(h);
-    }
-
-    pub fn len(&self) -> usize {
-        self.heap.len()
-    }
-
-    pub fn append(&mut self, vals: Vec<HeapCellValue>) {
-        let n = vals.len();
-
-        self.heap.extend(vals.into_iter());
-        self.h += n;
-    }
-
-    pub fn clear(&mut self) {
-        self.heap.clear();
-        self.h = 0;
-    }
-
-    pub fn to_list<Iter: Iterator<Item=Addr>>(&mut self, values: Iter) -> usize {
-        let head_addr = self.h;
-
-        for value in values {
-            let h = self.h;
-
-            self.push(HeapCellValue::Addr(Addr::Lis(h+1)));
-            self.push(HeapCellValue::Addr(value));
-        }
-
-        self.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
-        head_addr
-    }
-}
-
-impl Index<usize> for Heap {
-    type Output = HeapCellValue;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.heap[index]
-    }
-}
-
-impl IndexMut<usize> for Heap {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.heap[index]
     }
 }
 
