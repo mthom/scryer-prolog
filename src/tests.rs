@@ -1725,6 +1725,64 @@ fn test_queries_on_builtins()
                            [["X = 1", "Y = 2"]]);
     assert_prolog_success!(&mut wam, "?- catch(findall(X, 4, S), error(type_error(callable, 4), _), true).",
                            [["S = _3", "X = _1"]]);
+
+    assert_prolog_success!(&mut wam, "?- bagof(X, (X=Y; X=Z), S).",
+                           [["S = [_3, _6]", "X = _0", "Y = _3", "Z = _6"]]);
+    assert_prolog_success!(&mut wam, "?- bagof(X, (X=1 ; X = 2), X).",
+                           [["X = [1, 2]"]]);
+    assert_prolog_success!(&mut wam, "?- bagof(X, (X=1 ; X = 2), S).",
+                           [["S = [1, 2]", "X = _0"]]);
+    assert_prolog_success!(&mut wam, "?- bagof(1, (Y=1 ; Y=2), L).",
+                           [["L = [1]", "Y = 1"],
+                            ["L = [1]", "Y = 2"]]);
+
+    submit(&mut wam, "b(1, 1). b(1, 1). b(1, 2). b(2, 1). b(2, 2). b(2, 2).");
+
+    assert_prolog_success!(&mut wam, "?- bagof(X, b(X, Y), L).",
+                           [["L = [1, Y, 2]", "X = _0", "Y = 1"],
+                            ["L = [1, 2, Y]", "X = _0", "Y = 2"]]);
+
+    assert_prolog_success!(&mut wam, "?- bagof(X, (X=Y; X=Z; Y=1), L).",
+                           [["L = [_3, _6]", "X = _0", "Y = _3", "Z = _6"],
+                            ["L = [_174]", "X = _0", "Y = 1", "Z = _6"]]);
+
+    submit(&mut wam, "a(1, f(_)). a(2, f(_)).");
+
+    assert_prolog_success!(&mut wam, "?- bagof(X, a(X, Y), L).",
+                           [["L = [1, 2]", "X = _0", "Y = f(_140)"]]);
+
+    assert_prolog_success!(&mut wam, "?- setof(X, (X = 1 ; X = 2), S).",
+                           [["S = [1, 2]", "X = _0"]]);
+    assert_prolog_success!(&mut wam, "?- setof(X, (X=Y ; X=Z), S).",
+                           [["S = [_3, _6]", "X = _0", "Y = _3", "Z = _6"]]);
+    assert_prolog_failure!(&mut wam, "?- setof(X, false, S).");
+    assert_prolog_success!(&mut wam, "?- setof(1, (Y=1 ; Y=2), L).",
+                           [["L = [1]", "Y = 1"],
+                            ["L = [1]", "Y = 2"]]);
+    assert_prolog_success!(&mut wam, "?- setof(X, (X=Y; X=Z; Y=1), L).",
+                           [["L = [_3, _6]", "X = _0", "Y = _3", "Z = _6"],
+                            ["L = [_173]", "X = _0", "Y = 1", "Z = _6"]]);
+    assert_prolog_failure!(&mut wam, "?- setof(X, member(X, [f(U,b),f(V,c)]), [f(a,c),f(a,b)]).");
+    assert_prolog_success!(&mut wam, "?- setof(X, member(X, [f(U,b),f(V,c)]), [f(a,b),f(a,c)]).",
+                           [["U = a", "V = a", "X = _0"]]);
+    assert_prolog_success!(&mut wam, "?- setof(X, member(X, [V,U,f(U),f(V)]), L).",
+                           [["L = [_2, _4, f(U), f(V)]", "U = _2", "V = _4", "X = _0"]]);
+    assert_prolog_success!(&mut wam, "?- setof(X, member(X, [V,U,f(U),f(V)]), [a,b,f(a),f(b)]).",
+                           [["U = a", "V = b", "X = _0"]]);
+
+    assert_prolog_success!(&mut wam, "?- findall(X, (X = 1 ; X = 2), S0, S1).",
+                           [["S0 = [1, 2 | _11]", "S1 = _11", "X = _0"]]);
+    assert_prolog_success!(&mut wam, "?- findall(X+Y, (X = 1), S0, S1).",
+                           [["S0 = [1+_34 | _7]", "S1 = _7", "X = _1", "Y = _2"]]);
+    assert_prolog_success!(&mut wam, "?- findall(X, false, S, _).",
+                           [["S = []", "X = _0"]]);
+    assert_prolog_success!(&mut wam, "?- findall(X, (X = 1 ; X = 1), S0, S1).",
+                           [["S0 = [1, 1 | _11]", "S1 = _11", "X = _0"]]);
+    assert_prolog_failure!(&mut wam, "?- findall(X, (X = 2 ; X = 1), [1, 2 | S], S).");
+    assert_prolog_success!(&mut wam, "?- findall(X, (X = 1 ; X = 2), [X, Y | S], S).",
+                           [["S = _11", "X = 1", "Y = 2"]]);
+    assert_prolog_success!(&mut wam, "?- catch(findall(X, 4, S0, S1), error(type_error(callable, 4), _), true).",
+                           [["S0 = _3", "S1 = _4", "X = _1"]]);
 }
 
 #[test]

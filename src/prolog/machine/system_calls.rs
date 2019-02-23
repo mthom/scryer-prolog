@@ -205,6 +205,23 @@ impl MachineState {
         threshold + lh_offset + 2
     }
 
+    fn truncate_if_no_lifted_heap_diff<AddrConstr>(&mut self, addr_constr: AddrConstr)
+       where AddrConstr: Fn(usize) -> Addr
+    {
+        match self.store(self.deref(self[temp_v!(1)].clone())) {
+            Addr::Con(Constant::Usize(lh_offset)) => {
+                if lh_offset >= self.lifted_heap.len() {
+                    self.lifted_heap.truncate(lh_offset);
+                } else {
+                    let threshold = self.lifted_heap.len() - lh_offset;
+                    self.lifted_heap.push(HeapCellValue::Addr(addr_constr(threshold)));
+                }
+            },
+            _ =>
+                self.fail = true
+        }
+    }
+
     pub(super) fn system_call(&mut self,
                               ct: &SystemClauseType,
                               indices: &IndexStore,
@@ -325,18 +342,10 @@ impl MachineState {
                 self.p = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
                 return Ok(());
             },
+            &SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff =>
+                self.truncate_if_no_lifted_heap_diff(|h| Addr::HeapCell(h)),
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth =>
-                match self.store(self.deref(self[temp_v!(1)].clone())) {
-                    Addr::Con(Constant::Usize(lh_offset)) => {
-                        if lh_offset >= self.lifted_heap.len() {
-                            self.lifted_heap.truncate(lh_offset);
-                        } else {
-                            self.lifted_heap.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
-                        }
-                    },
-                    _ =>
-                        self.fail = true
-                },
+                self.truncate_if_no_lifted_heap_diff(|_| Addr::Con(Constant::EmptyList)),
             &SystemClauseType::GetAttributedVariableList => {
                 let attr_var = self.store(self.deref(self[temp_v!(1)].clone()));
                 let mut attr_var_list = match attr_var {
@@ -381,8 +390,44 @@ impl MachineState {
                     _ => self.fail = true
                 }
             },
+            &SystemClauseType::GetLiftedHeapFromOffsetDiff => {
+                let lh_offset = self[temp_v!(1)].clone();
+
+                match self.store(self.deref(lh_offset)) {
+                    Addr::Con(Constant::Usize(lh_offset)) =>
+                        if lh_offset >= self.lifted_heap.len() {
+                            let solutions = self[temp_v!(2)].clone();
+                            let diff = self[temp_v!(3)].clone();
+
+                            self.unify(solutions, Addr::Con(Constant::EmptyList));
+                            self.unify(diff, Addr::Con(Constant::EmptyList));
+                        } else {
+                            let h = self.heap.h;
+
+                            for index in lh_offset .. self.lifted_heap.len() {
+                                match self.lifted_heap[index].clone() {
+                                    HeapCellValue::Addr(addr) =>
+                                        self.heap.push(HeapCellValue::Addr(addr + h)),
+                                    value =>
+                                        self.heap.push(value)
+                                }
+                            }
+
+                            if let Some(HeapCellValue::Addr(addr)) = self.heap.last().cloned() {
+                                let diff = self[temp_v!(3)].clone();
+                                self.unify(diff, addr);
+                            }
+
+                            self.lifted_heap.truncate(lh_offset);
+
+                            let solutions = self[temp_v!(2)].clone();
+                            self.unify(Addr::HeapCell(h), solutions);
+                        },
+                    _ => self.fail = true
+                }
+            },
             &SystemClauseType::GetLiftedHeapFromOffset => {
-                let lh_offset = self[temp_v!(1)].clone();                
+                let lh_offset = self[temp_v!(1)].clone();
 
                 match self.store(self.deref(lh_offset)) {
                     Addr::Con(Constant::Usize(lh_offset)) =>
@@ -391,7 +436,7 @@ impl MachineState {
                             self.unify(solutions, Addr::Con(Constant::EmptyList));
                         } else {
                             let h = self.heap.h;
-                        
+
                             for index in lh_offset .. self.lifted_heap.len() {
                                 match self.lifted_heap[index].clone() {
                                     HeapCellValue::Addr(addr) =>
@@ -402,7 +447,7 @@ impl MachineState {
                             }
 
                             self.lifted_heap.truncate(lh_offset);
-                            
+
                             let solutions = self[temp_v!(2)].clone();
                             self.unify(Addr::HeapCell(h), solutions);
                         },

@@ -15,16 +15,24 @@ impl Heap {
                h: 0 }
     }
 
+    #[inline]
     pub fn push(&mut self, val: HeapCellValue) {
         self.heap.push(val);
         self.h += 1;
     }
 
+    #[inline]
     pub fn truncate(&mut self, h: usize) {
         self.h = h;
         self.heap.truncate(h);
     }
 
+    #[inline]
+    pub fn last(&self) -> Option<&HeapCellValue> {
+        self.heap.last()
+    }
+
+    #[inline]
     pub fn len(&self) -> usize {
         self.heap.len()
     }

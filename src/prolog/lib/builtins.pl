@@ -5,9 +5,9 @@
 	(rdiv)/2, (<<)/2, (>>)/2, (mod)/2, (rem)/2, (>)/2, (<)/2,
 	(=\=)/2, (=:=)/2, (-)/1, (>=)/2, (=<)/2, (,)/2, (->)/2, (;)/2,
 	(=..)/2, (==)/2, (\==)/2, (@=<)/2, (@>=)/2, (@<)/2, (@>)/2,
-	(=@=)/2, (\=@=)/2, (:)/2, call_with_inference_limit/3,
+	(=@=)/2, (\=@=)/2, (:)/2, bagof/3, call_with_inference_limit/3,
 	catch/3, current_prolog_flag/2, expand_goal/2, expand_term/2,
-	findall/3, set_prolog_flag/2, setup_call_cleanup/3,
+	findall/3, findall/4, set_prolog_flag/2, setof/3, setup_call_cleanup/3,
 	term_variables/2, throw/1, true/0, false/0, write/1,
 	write_canonical/1, writeq/1, write_term/2]).
 
@@ -363,12 +363,84 @@ throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
 
 truncate_lh_to(LhLength) :- '$truncate_lh_to'(LhLength).
 
-findall(Template, Goal, Solutions) :-
-    '$skip_max_list'(_, -1, Solutions, R),
-    (  nonvar(R), R \== [], throw(error(type_error(list, Solutions), findall/3))
+check_for_compat_list(L) :-
+    '$skip_max_list'(_, -1, L, R),
+    (  nonvar(R), R \== [], throw(error(type_error(list, L), findall/3))
     ;  true
-    ),
+    ).
+
+findall(Template, Goal, Solutions) :-
+    check_for_compat_list(Solutions),
     '$lh_length'(LhLength),
     '$call_with_default_policy'(catch('$iterate_find_all'(Template, Goal, Solutions, LhLength),
 				      Error,
 				      ( truncate_lh_to(LhLength), throw(Error) ))).
+
+:- non_counted_backtracking '$iterate_find_all_diff'/4.
+'$iterate_find_all_diff'(Template, Goal, _, _, LhOffset) :-
+    call(Goal),
+    '$copy_to_lh'(LhOffset, Template),
+    '$fail'.
+'$iterate_find_all_diff'(_, _, Solutions0, Solutions1, LhOffset) :-
+    '$truncate_if_no_lh_growth_diff'(LhOffset, Solutions1),
+    '$get_lh_from_offset_diff'(LhOffset, Solutions0, Solutions1).
+
+
+findall(Template, Goal, Solutions0, Solutions1) :-
+    check_for_compat_list(Solutions0),
+    check_for_compat_list(Solutions1),
+    '$lh_length'(LhLength),
+    '$call_with_default_policy'(catch('$iterate_find_all_diff'(Template, Goal, Solutions0,
+							       Solutions1, LhLength),
+				      Error,
+				      ( truncate_lh_to(LhLength), throw(Error) ))).
+
+set_difference([X|Xs], [Y|Ys], Zs) :-
+    X == Y, !, set_difference(Xs, [Y|Ys], Zs).
+set_difference([X|Xs], [Y|Ys], [X|Zs]) :-
+    X @< Y, !, set_difference(Xs, [Y|Ys], Zs).
+set_difference([X|Xs], [Y|Ys], Zs) :-
+    X @> Y, !, set_difference([X|Xs], Ys, Zs).
+set_difference([], _, []) :- !.
+set_difference(Xs, [], Xs).
+
+group_by_variant([V2-S2 | Pairs], V1-S1, [S2 | Solutions], Pairs0) :-
+    V1 =@= V2, !, V1 = V2, group_by_variant(Pairs, V2-S2, Solutions, Pairs0).
+group_by_variant(Pairs, _, [], Pairs).
+
+group_by_variants([V-S|Pairs], [V-Solution|Solutions]) :-
+    group_by_variant([V-S|Pairs], V-S, Solution, Pairs0),
+    group_by_variants(Pairs0, Solutions).
+group_by_variants([], []).
+
+iterate_variants([V-Solution|GroupSolutions], V, Solution).
+iterate_variants([_|GroupSolutions], Ws, Solution) :-
+    iterate_variants(GroupSolutions, Ws, Solution).
+
+bagof(Template, Goal, Solution) :-
+    check_for_compat_list(Solution),
+    term_variables(Template, TemplateVars0),
+    term_variables(Goal, GoalVars0),
+    sort(TemplateVars0, TemplateVars),
+    sort(GoalVars0, GoalVars),
+    set_difference(GoalVars, TemplateVars, Witnesses),
+    findall(Witnesses-Template, Goal, PairedSolutions0),
+    keysort(PairedSolutions0, PairedSolutions),
+    group_by_variants(PairedSolutions, GroupedSolutions),
+    iterate_variants(GroupedSolutions, Witnesses, Solution).
+
+iterate_variants_and_sort([V-Solution0|GroupSolutions], V, Solution) :-
+    sort(Solution0, Solution).
+iterate_variants_and_sort([_|GroupSolutions], Ws, Solution) :-
+    iterate_variants_and_sort(GroupSolutions, Ws, Solution).
+
+setof(Template, Goal, Solution) :-
+    term_variables(Template, TemplateVars0),
+    term_variables(Goal, GoalVars0),
+    sort(TemplateVars0, TemplateVars),
+    sort(GoalVars0, GoalVars),
+    set_difference(GoalVars, TemplateVars, Witnesses),
+    findall(Witnesses-Template, Goal, PairedSolutions0),
+    keysort(PairedSolutions0, PairedSolutions),
+    group_by_variants(PairedSolutions, GroupedSolutions),
+    iterate_variants_and_sort(GroupedSolutions, Witnesses, Solution).

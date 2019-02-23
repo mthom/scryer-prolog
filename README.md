@@ -38,15 +38,15 @@ Extend rusty-wam to include the following, among other features:
 * Definite Clause Grammars (_done_).
 * Attributed variables using the SICStus Prolog interface and
   semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
-  is straightforward with attributed variables (_in progress_).
+  is straightforward with attributed variables (_done_).
      - [x] Support for `verify_attributes/3`
      - [x] Support for `attribute_goals/2` and `project_attributes/2`
      - [x] `call_residue_vars/2`
 * `if_` and related predicates, following the developments of the
-  paper "Indexing `dif/2`" (_in progress_).
-* All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`).
+  paper "Indexing `dif/2`" (_done_).
+* All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`) (_done_).
 * Clause creation and destruction (`asserta/1`, `assertz/1`,
-  `retract/1`, `abolish/1`) with logical update semantics.
+  `retract/1`, `abolish/1`) with logical update semantics (_in progress_).
 * Streams and predicates for stream control.
 * An incremental compacting garbage collector satisfying the five
   properties of "Precise Garbage Collection in Prolog."
@@ -136,6 +136,7 @@ The following predicates are built-in to rusty-wam.
 * `arg/3`
 * `atom/1`
 * `atomic/1`
+* `bagof/3`
 * `between/3`
 * `call/1..62`
 * `call_cleanup/2`
@@ -151,6 +152,7 @@ The following predicates are built-in to rusty-wam.
 * `expand_goal/2`
 * `expand_term/2`
 * `false/0`
+* `findall/{3,4}`
 * `float/1`
 * `freeze/2`
 * `functor/3`
@@ -176,6 +178,7 @@ The following predicates are built-in to rusty-wam.
 * `repeat/0`
 * `reverse/2`
 * `select/3`
+* `setof/3`
 * `setup_call_cleanup/3`
 * `sort/2`
 * `string/1`
