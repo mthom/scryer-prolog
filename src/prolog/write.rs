@@ -365,9 +365,12 @@ fn next_step(mut stdout: RawTerminal<std::io::Stdout>) -> ContinueResult
 pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
         EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
-            if wam.or_stack_is_empty() && heap_locs.is_empty() {
+            if wam.or_stack_is_empty() {
                 println!("true.");
-                return;
+
+                if heap_locs.is_empty() {
+                    return;
+                }
             }
 
             if !wam.or_stack_is_empty() {
