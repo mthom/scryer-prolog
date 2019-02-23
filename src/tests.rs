@@ -1715,7 +1715,7 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- findall(X, (X = 1 ; X = 2), S).",
                            [["S = [1, 2]", "X = _0"]]);
     assert_prolog_success!(&mut wam, "?- findall(X+Y, (X = 1), S).",
-                           [["S = [1+_18]", "X = _1", "Y = _2"]]);
+                           [["S = [1+_31]", "X = _1", "Y = _2"]]);
     assert_prolog_success!(&mut wam, "?- findall(X, false, S).",
                            [["S = []", "X = _0"]]);
     assert_prolog_success!(&mut wam, "?- findall(X, (X = 1 ; X = 1), S).",

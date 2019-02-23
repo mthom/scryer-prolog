@@ -1,4 +1,3 @@
-use prolog::heap_iter::*;
 use prolog::machine::*;
 
 use std::collections::HashSet;
@@ -107,7 +106,7 @@ impl MachineState {
         let attr_vars = self.gather_attr_vars_created_since(0);
 
         for (_, addr) in var_dict {
-            let iter = HCPreOrderIterator::new(&self, addr.clone());
+            let iter = self.acyclic_pre_order_iter(addr.clone());
 
             for value in iter {
                 match value {
@@ -156,12 +155,12 @@ impl MachineState {
         self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
     }
 
-    fn print_attribute_goals(&mut self, var_dict: &HeapVarDict)
+    fn print_attribute_goals_string(&mut self, var_dict: &HeapVarDict) -> String
     {
         let mut attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
 
         if attr_goals.is_empty() {
-            return;
+            return String::from("");
         }
 
         attr_goals.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
@@ -184,13 +183,13 @@ impl MachineState {
         let output_len = output.len();
         output.truncate(output_len - 2);
 
-        println!("\r\n{}\r", output.result());
+        output.result()
     }
 }
 
 impl Machine {
     pub
-    fn attribute_goals(&mut self, var_dict: &HeapVarDict)
+    fn attribute_goals(&mut self, var_dict: &HeapVarDict) -> String
     {
         let p = self.machine_st.attr_var_init.project_attrs_loc;
         let (query_vars, attr_vars) = self.machine_st.populate_project_attr_lists(var_dict);
@@ -203,6 +202,6 @@ impl Machine {
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
         self.machine_st.query_stepper(&mut self.indices, &mut self.policies, &mut self.code_repo);
 
-        self.machine_st.print_attribute_goals(var_dict);
+        self.machine_st.print_attribute_goals_string(var_dict)
     }
 }

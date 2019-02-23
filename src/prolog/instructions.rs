@@ -249,7 +249,7 @@ pub enum SystemClauseType {
     TruncateIfNoLiftedHeapGrowth,
     GetAttributedVariableList,
     GetAttrVarQueueDelimiter,
-    GetAttrVarQueueBeyond,    
+    GetAttrVarQueueBeyond,
     GetBValue,
     GetLiftedHeapFromOffset,
     GetSCCCleaner,
@@ -280,13 +280,14 @@ pub enum SystemClauseType {
     SkipMaxList,
     Succeed,
     TermVariables,
+    TruncateLiftedHeapTo,
     UnwindStack,
     WriteTerm
 }
 
 impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
-        match self {            
+        match self {
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
@@ -330,17 +331,18 @@ impl SystemClauseType {
             &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::TermVariables => clause_name!("$term_variables"),
+            &SystemClauseType::TruncateLiftedHeapTo => clause_name!("$truncate_lh_to"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
             &SystemClauseType::WriteTerm => clause_name!("$write_term"),
         }
     }
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
-        match (name, arity) {            
+        match (name, arity) {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
             ("$copy_to_lh", 2) => Some(SystemClauseType::CopyToLiftedHeap),
             ("$del_attr_non_head", 1) => Some(SystemClauseType::DeleteAttribute),
-            ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),            
+            ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),
             ("$module_call", 2) => Some(SystemClauseType::DynamicModuleResolution),
             ("$enqueue_attribute_goal", 1) => Some(SystemClauseType::EnqueueAttributeGoal),
             ("$enqueue_attr_var", 1) => Some(SystemClauseType::EnqueueAttributedVar),
@@ -379,6 +381,7 @@ impl SystemClauseType {
             ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$term_variables", 2) => Some(SystemClauseType::TermVariables),
+            ("$truncate_lh_to", 1) => Some(SystemClauseType::TruncateLiftedHeapTo),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             ("$write_term", 4) => Some(SystemClauseType::WriteTerm),
             _ => None

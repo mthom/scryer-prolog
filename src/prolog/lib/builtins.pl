@@ -361,10 +361,14 @@ throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
     '$truncate_if_no_lh_growth'(LhOffset),
     '$get_lh_from_offset'(LhOffset, Solutions).
 
+truncate_lh_to(LhLength) :- '$truncate_lh_to'(LhLength).
+
 findall(Template, Goal, Solutions) :-
     '$skip_max_list'(_, -1, Solutions, R),
     (  nonvar(R), R \== [], throw(error(type_error(list, Solutions), findall/3))
     ;  true
     ),
     '$lh_length'(LhLength),
-    '$call_with_default_policy'('$iterate_find_all'(Template, Goal, Solutions, LhLength)).
+    '$call_with_default_policy'(catch('$iterate_find_all'(Template, Goal, Solutions, LhLength),
+				      Error,
+				      ( truncate_lh_to(LhLength), throw(Error) ))).

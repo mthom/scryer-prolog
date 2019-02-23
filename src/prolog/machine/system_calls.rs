@@ -743,6 +743,12 @@ impl MachineState {
                 let a2 = self[temp_v!(2)].clone();
                 self.unify(a2, outcome);
             },
+            &SystemClauseType::TruncateLiftedHeapTo =>
+                match self.store(self.deref(self[temp_v!(1)].clone())) {
+                    Addr::Con(Constant::Usize(lh_offset)) =>
+                        self.lifted_heap.truncate(lh_offset),
+                    _ => self.fail = true
+                },
             &SystemClauseType::UnwindStack => self.unwind_stack(),
             &SystemClauseType::WriteTerm => {
                 let addr = self[temp_v!(1)].clone();
