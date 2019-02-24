@@ -45,7 +45,7 @@ repeat_integer(N0) :-
     N0 > 0, N1 is N0 - 1, repeat_integer(N1).
 
 repeat(N) :-
-    must_be(integer, N), N > 0, repeat_integer(N).
+    must_be(integer, N), repeat_integer(N).
 
 numlist(Upper, List) :-
     (  integer(Upper) -> findall(X, between(1, Upper, X), List)
