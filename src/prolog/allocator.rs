@@ -11,7 +11,7 @@ pub trait Allocator<'a>
 {
     fn new() -> Self;
 
-    fn mark_anon_var<Target>(&mut self, Level, &mut Vec<Target>)
+    fn mark_anon_var<Target>(&mut self, Level, GenContext, &mut Vec<Target>)
         where Target: CompilationTarget<'a>;
     fn mark_non_var<Target>(&mut self, Level, GenContext, &'a Cell<RegType>, &mut Vec<Target>)
         where Target: CompilationTarget<'a>;

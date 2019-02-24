@@ -343,7 +343,7 @@ impl Machine {
     }
 
     fn compile_libraries(&mut self) {
-        compile_user_module(self, LISTS.as_bytes());        
+        compile_user_module(self, LISTS.as_bytes());
         compile_user_module(self, QUEUES.as_bytes());
         compile_user_module(self, ERROR.as_bytes());
         compile_user_module(self, BETWEEN.as_bytes());
@@ -506,7 +506,7 @@ impl Machine {
         for (var, addr) in sorted_vars {
             output = self.machine_st.print_var_eq(var.clone(), addr.clone(), var_dir, output);
         }
-        
+
         output
     }
 
@@ -608,7 +608,7 @@ impl MachineState {
                 _ => {}
             };
         }
-    }    
+    }
 
     fn record_var_places(&self, chunk_num: usize, alloc_locs: &AllocVarDict,
                          heap_locs: &mut HeapVarDict)

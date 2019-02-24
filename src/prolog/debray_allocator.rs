@@ -211,7 +211,7 @@ impl<'a> Allocator<'a> for DebrayAllocator
         }
     }
 
-    fn mark_anon_var<Target>(&mut self, lvl: Level, target: &mut Vec<Target>)
+    fn mark_anon_var<Target>(&mut self, lvl: Level, term_loc: GenContext, target: &mut Vec<Target>)
         where Target: CompilationTarget<'a>
     {
         let r = RegType::Temp(self.alloc_reg_to_non_var());
@@ -220,8 +220,13 @@ impl<'a> Allocator<'a> for DebrayAllocator
             Level::Deep => target.push(Target::subterm_to_variable(r)),
             Level::Root | Level::Shallow => {
                 let k = self.arg_c;
-                self.arg_c += 1;
 
+                if let GenContext::Last(chunk_num) = term_loc {
+                    self.evacuate_arg(chunk_num, target);
+                }
+
+                self.arg_c += 1;
+                
                 target.push(Target::argument_to_variable(r, k));
             }
         };

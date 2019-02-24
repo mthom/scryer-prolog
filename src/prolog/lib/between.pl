@@ -84,7 +84,7 @@ diag_ints(M, N, M0, N0) :-
     diag_nats_signs(M, N, M0, N0).
 
 diag_ints(M, N) :-
-    diag_ints(M0, N0, M, N).
+    diag_ints(_, _, M, N).
 
 gen_ints(L, U) :-
     can_be(integer, L), can_be(integer, U),

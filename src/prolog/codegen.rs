@@ -158,7 +158,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
     {
         match subterm {
             &Term::AnonVar if is_exposed =>
-                self.marker.mark_anon_var(Level::Deep, target),
+                self.marker.mark_anon_var(Level::Deep, term_loc, target),
             &Term::AnonVar =>
                 Self::add_or_increment_void_instr(target),
             &Term::Cons(ref cell, _, _) | &Term::Clause(ref cell, _, _, _) => {
@@ -207,7 +207,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                     if let GenContext::Head = term_loc {
                         self.marker.advance_arg();
                     } else {
-                        self.marker.mark_anon_var(lvl, &mut target);
+                        self.marker.mark_anon_var(lvl, term_loc, &mut target);
                     },
                 TermRef::Var(lvl @ Level::Shallow, cell, ref var) if var.as_str() == "!" => {
                     if self.marker.is_unbound(var.clone()) {
