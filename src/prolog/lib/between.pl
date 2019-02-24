@@ -18,11 +18,10 @@ enumerate_nats(I0, N) :-
     enumerate_nats(I1, N).
 
 gen_nat(N) :-
-    integer(N), !, N >= 0.
-gen_nat(N) :-
-    var(N), !, enumerate_nats(0, N).
-gen_nat(N) :-
-    throw(error(type_error(integer, N), gen_nat/1)).
+    can_be(integer, N),
+    (   var(N) -> enumerate_nats(0, N)
+    ;   true
+    ).
 
 enumerate_ints(I, I).
 enumerate_ints(I0, N) :-
@@ -33,11 +32,10 @@ enumerate_ints(I0, N) :-
     enumerate_ints(I1, N).
 
 gen_int(N) :-
-    integer(N), !.
-gen_int(N) :-
-    var(N), !, enumerate_ints(0, N).
-gen_int(N) :-
-    throw(error(type_error(integer, N), gen_int/1)).
+    can_be(integer, N),
+    (   var(N) -> enumerate_ints(0, N)
+    ;   true
+    ).
 
 repeat_integer(N) :-
     N > 0.
