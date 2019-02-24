@@ -172,7 +172,7 @@ The following predicates are built-in to rusty-wam.
 * `nl/0`
 * `nonvar/1`
 * `numbervars/2`
-* `numlist/2`
+* `numlist/{2,3}`
 * `once/1`
 * `partial_string/2`
 * `phrase/{2,3}`
