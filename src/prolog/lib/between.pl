@@ -3,6 +3,7 @@
 %% TODO: numlist/5.
 
 :- use_module(library(lists), [length/2]).
+:- use_module(library(error)).
 
 between(Lower, Upper, Lower) :-
     Lower =< Upper.
@@ -19,7 +20,9 @@ enumerate_nats(I0, N) :-
 gen_nat(N) :-
     integer(N), !, N >= 0.
 gen_nat(N) :-
-    var(N), enumerate_nats(0, N).
+    var(N), !, enumerate_nats(0, N).
+gen_nat(N) :-
+    throw(error(type_error(integer, N), gen_nat/1)).
 
 enumerate_ints(I, I).
 enumerate_ints(I0, N) :-
@@ -32,7 +35,9 @@ enumerate_ints(I0, N) :-
 gen_int(N) :-
     integer(N), !.
 gen_int(N) :-
-    var(N), enumerate_ints(0, N).
+    var(N), !, enumerate_ints(0, N).
+gen_int(N) :-
+    throw(error(type_error(integer, N), gen_int/1)).
 
 repeat_integer(N) :-
     N > 0.
@@ -40,7 +45,7 @@ repeat_integer(N0) :-
     N0 > 0, N1 is N0 - 1, repeat_integer(N1).
 
 repeat(N) :-
-    integer(N), N > 0, repeat_integer(N).
+    must_be(integer, N), N > 0, repeat_integer(N).
 
 numlist(Upper, List) :-
     (  integer(Upper) -> findall(X, between(1, Upper, X), List)
@@ -48,14 +53,14 @@ numlist(Upper, List) :-
     ).
 
 diag_nats(M, N, M, N).
+diag_nats(M, 0, M1, N1) :-
+    !,
+    M0 is M+1,
+    diag_nats(0, M0, M1, N1).
 diag_nats(M, N, M1, N1) :-
-    N > 0, !,
     M0 is M+1,
     N0 is N-1,
     diag_nats(M0, N0, M1, N1).
-diag_nats(M, 0, M1, N1) :-
-    M0 is M+1,
-    diag_nats(0, M0, M1, N1).
 
 diag_nats(0, 0).
 diag_nats(M, N) :-
@@ -82,6 +87,7 @@ diag_ints(M, N) :-
     diag_ints(M0, N0, M, N).
 
 gen_ints(L, U) :-
+    can_be(integer, L), can_be(integer, U),
     (  integer(L), integer(U), !
     ;  integer(L) -> gen_int(U)
     ;  integer(U) -> gen_int(L)

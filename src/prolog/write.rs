@@ -389,7 +389,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                 let attr_goals = wam.attribute_goals(&heap_locs);
 
                 if !attr_goals.is_empty() {
-                    write!(raw_stdout, "\r\n{}\r", attr_goals).unwrap();
+                    write!(raw_stdout, "\r\n{}\r\n", attr_goals).unwrap();
                 }
 
                 if !wam.or_stack_is_empty() {
