@@ -312,8 +312,8 @@ impl SubModuleUser for IndexStore {
 }
 
 static BUILTINS: &str = include_str!("../lib/builtins.pl");
+static BETWEEN: &str  = include_str!("../lib/between.pl");
 static LISTS: &str    = include_str!("../lib/lists.pl");
-static CONTROL: &str  = include_str!("../lib/control.pl");
 static QUEUES: &str   = include_str!("../lib/queues.pl");
 static ERROR: &str    = include_str!("../lib/error.pl");
 static TERMS: &str    = include_str!("../lib/terms.pl");
@@ -344,7 +344,7 @@ impl Machine {
 
     fn compile_libraries(&mut self) {
         compile_user_module(self, LISTS.as_bytes());
-        compile_user_module(self, CONTROL.as_bytes());
+        compile_user_module(self, BETWEEN.as_bytes());
         compile_user_module(self, QUEUES.as_bytes());
         compile_user_module(self, ERROR.as_bytes());
 	compile_user_module(self, TERMS.as_bytes());

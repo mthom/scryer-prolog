@@ -156,6 +156,8 @@ The following predicates are built-in to rusty-wam.
 * `float/1`
 * `freeze/2`
 * `functor/3`
+* `gen_int/1`
+* `gen_nat/1`
 * `goal_expansion/2`
 * `ground/1`
 * `integer/1`
@@ -170,12 +172,13 @@ The following predicates are built-in to rusty-wam.
 * `nl/0`
 * `nonvar/1`
 * `numbervars/2`
+* `numlist/2`
 * `once/1`
 * `partial_string/2`
 * `phrase/{2,3}`
 * `rational/1`
 * `read/1`
-* `repeat/0`
+* `repeat/{0,1}`
 * `reverse/2`
 * `select/3`
 * `setof/3`
