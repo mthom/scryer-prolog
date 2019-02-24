@@ -82,11 +82,12 @@ diag_ints(M, N) :-
     diag_ints(M0, N0, M, N).
 
 gen_ints(L, U) :-
-    integer(L), !, gen_int(U), L =< U.
-gen_ints(L, U) :-
-    integer(U), !, gen_int(L), L =< U.
-gen_ints(L, U) :-
-    diag_ints(L, U), L =< U.
+    (  integer(L), integer(U), !
+    ;  integer(L) -> gen_int(U)
+    ;  integer(U) -> gen_int(L)
+    ;  diag_ints(L, U)
+    ),
+    L =< U.
 
 numlist(Lower, Upper, List) :-
     gen_ints(Lower, Upper), findall(X, between(Lower, Upper, X), List).
