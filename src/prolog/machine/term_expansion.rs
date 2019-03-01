@@ -288,11 +288,16 @@ impl<'a, R: Read> TermStream<'a, R> {
 }
 
 impl MachineState {
-    fn print_with_locs(&self, target: usize, max_var_length: usize, var_dict: &HeapVarDict)
-                       -> PrinterOutputter
+    pub(super)
+    fn print_with_locs(&self, addr: Addr, var_dict: &HeapVarDict) -> PrinterOutputter
     {
         let output = PrinterOutputter::new();
-        let mut printer = HCPrinter::from_heap_locs(&self, output, &var_dict);
+        let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
+        let mut max_var_length = 0;
+
+        for var in var_dict.keys() {
+            max_var_length = std::cmp::max(var.len(), max_var_length);
+        }
 
         printer.quoted = true;
         printer.numbervars = true;
@@ -302,10 +307,12 @@ impl MachineState {
         // style variable names will be longer than the keys of the var_dict, and therefore
         // not equal to any of them.
         printer.numbervars_offset = pow(BigInt::from(10), max_var_length) * 26;
-
         printer.see_all_locs();
 
-        printer.print(Addr::HeapCell(target))
+        let mut output = printer.print(addr);
+
+        output.push_char('.');
+        output
     }
 
     fn try_expand_term(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
@@ -322,16 +329,15 @@ impl MachineState {
         let code = vec![call_clause!(ClauseType::Hook(hook), 2, 0, true)];
 
         code_repo.cached_query = code;
-        self.run_query(indices, policies, code_repo, &AllocVarDict::new(), &mut HeapVarDict::new());
+        self.query_stepper(indices, policies, code_repo);
 
         if self.fail {
             self.reset();
             None
         } else {
-            let &TermWriteResult { heap_loc: _, max_var_length, ref var_dict } = &term_write_result;
-            let mut output = self.print_with_locs(h, max_var_length, var_dict);
+            let &TermWriteResult { heap_loc: _, ref var_dict } = &term_write_result;
+            let output = self.print_with_locs(Addr::HeapCell(h), var_dict);
 
-            output.push_char('.');
             self.reset();
             Some(output.result())
         }

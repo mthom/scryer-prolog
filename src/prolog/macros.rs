@@ -213,6 +213,7 @@ macro_rules! index_store {
     ($atom_tbl:expr, $code_dir:expr, $op_dir:expr, $modules:expr) => (
         IndexStore { atom_tbl: $atom_tbl,
                      code_dir: $code_dir,
+                     dynamic_code_dir: DynamicCodeDir::new(),
                      in_situ_code_dir: InSituCodeDir::new(),
                      op_dir: $op_dir,                     
                      modules: $modules }

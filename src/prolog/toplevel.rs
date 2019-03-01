@@ -9,7 +9,7 @@ use prolog::machine::term_expansion::*;
 use prolog::num::*;
 
 use std::borrow::BorrowMut;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::cell::Cell;
 use std::io::Read;
 use std::mem;
@@ -58,9 +58,9 @@ impl<'a, 'b> CompositeIndices<'a, 'b>
     fn get_clause_type(&mut self, name: ClauseName, arity: usize, spec: Option<(usize, Specifier)>) -> ClauseType
     {
         match ClauseType::from(name, arity, spec) {
-            ClauseType::Named(name, _) => {
+            ClauseType::Named(name, arity, _) => {
                 let idx = self.get_code_index(name.clone(), arity);
-                ClauseType::Named(name, idx.clone())
+                ClauseType::Named(name, arity, idx.clone())
             },
             ClauseType::Op(op_decl, _) => {
                 let idx = self.get_code_index(op_decl.2.clone(), arity);
@@ -112,16 +112,6 @@ fn is_compile_time_hook(name: &ClauseName, terms: &Vec<Box<Term>>) -> Option<Com
 
 type CompileTimeHookCompileInfo = (CompileTimeHook, PredicateClause, VecDeque<TopLevel>);
 
-fn setup_fact(term: Term) -> Result<Term, ParserError>
-{
-    match term {
-        Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) =>
-            Ok(term),
-        _ =>
-            Err(ParserError::InadmissibleFact)
-    }
-}
-
 fn setup_op_decl(mut terms: Vec<Box<Term>>) -> Result<OpDecl, ParserError>
 {
     let name = match *terms.pop().unwrap() {
@@ -155,7 +145,7 @@ fn setup_op_decl(mut terms: Vec<Box<Term>>) -> Result<OpDecl, ParserError>
     }
 }
 
-fn setup_predicate_export(mut term: Term) -> Result<PredicateKey, ParserError>
+fn setup_predicate_indicator(mut term: Term) -> Result<PredicateKey, ParserError>
 {
     match term {
         Term::Clause(_, ref name, ref mut terms, Some(_))
@@ -185,7 +175,7 @@ fn setup_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleDecl, ParserErro
     let mut exports = Vec::new();
 
     while let Term::Cons(_, t1, t2) = export_list {
-        exports.push(setup_predicate_export(*t1)?);
+        exports.push(setup_predicate_indicator(*t1)?);
         export_list = *t2;
     }
 
@@ -227,7 +217,7 @@ fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, 
     let mut exports = Vec::new();
 
     while let Term::Cons(_, t1, t2) = export_list {
-        exports.push(setup_predicate_export(*t1)?);
+        exports.push(setup_predicate_indicator(*t1)?);
         export_list = *t2;
     }
 
@@ -252,8 +242,11 @@ fn setup_declaration(term: Term) -> Result<Declaration, ParserError>
                 let (name, exports) = setup_qualified_import(terms)?;
                 Ok(Declaration::UseQualifiedModule(name, exports))
             } else if name.as_str() == "non_counted_backtracking" && terms.len() == 1 {
-                let (name, arity) = setup_predicate_export(*terms.pop().unwrap())?;
+                let (name, arity) = setup_predicate_indicator(*terms.pop().unwrap())?;
                 Ok(Declaration::NonCountedBacktracking(name, arity))
+            } else if name.as_str() == "dynamic" && terms.len() == 1 {
+                let (name, arity) = setup_predicate_indicator(*terms.pop().unwrap())?;
+                Ok(Declaration::Dynamic(name, arity))
             } else {
                 Err(ParserError::InconsistentEntry)
             },
@@ -387,12 +380,29 @@ pub enum TopLevelPacket {
 }
 
 struct RelationWorker {
+    dynamic_clauses: Vec<(Term, Term)>, // Head, Body.
     queue: VecDeque<VecDeque<Term>>,
 }
 
 impl RelationWorker {
     fn new() -> Self {
-        RelationWorker { queue: VecDeque::new() }
+        RelationWorker { dynamic_clauses: vec![],
+                         queue: VecDeque::new() }
+    }
+
+    fn setup_fact(&mut self, term: Term) -> Result<Term, ParserError>
+    {
+        match term {
+            Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) => {
+                let tail = Term::Constant(Cell::default(),
+                                          Constant::Atom(clause_name!("true"), None));
+
+                self.dynamic_clauses.push((term.clone(), tail));
+                Ok(term)
+            },
+            _ =>
+                Err(ParserError::InadmissibleFact)
+        }
     }
 
     fn compute_head(&self, term: &Term) -> Vec<Term>
@@ -617,7 +627,7 @@ impl RelationWorker {
         match flatten_hook(term) {
             Term::Clause(r, name, terms, _) =>
                 if name == hook.name() && terms.len() == hook.arity() {
-                    let term = setup_fact(Term::Clause(r, name, terms, None))?;
+                    let term = self.setup_fact(Term::Clause(r, name, terms, None))?;
                     Ok((hook, PredicateClause::Fact(term), VecDeque::from(vec![])))
                 } else if name.as_str() == ":-" && terms.len() == 2 {
                     let rule = self.setup_rule(indices, terms, true)?;
@@ -635,8 +645,14 @@ impl RelationWorker {
                   blocks_cuts: bool)
                   -> Result<Rule, ParserError>
     {
-        let post_head_terms = terms.drain(1..).collect();
-        let mut query_terms = try!(self.setup_query(indices, post_head_terms, blocks_cuts));
+        let post_head_terms: Vec<_> = terms.drain(1 ..).collect();
+
+        let head = *terms.first().cloned().unwrap();
+        let tail = *post_head_terms.first().cloned().unwrap();
+
+        self.dynamic_clauses.push((head, tail));
+
+        let mut query_terms = self.setup_query(indices, post_head_terms, blocks_cuts)?;
         let clauses = query_terms.drain(1 ..).collect();
         let qt = query_terms.pop().unwrap();
 
@@ -668,9 +684,9 @@ impl RelationWorker {
                     Ok(TopLevel::Declaration(try!(setup_declaration(term))))
                 } else {
                     let term = Term::Clause(r, name, terms, fixity);
-                    Ok(TopLevel::Fact(try!(setup_fact(term))))
+                    Ok(TopLevel::Fact(try!(self.setup_fact(term))))
                 },
-            term => Ok(TopLevel::Fact(try!(setup_fact(term))))
+            term => Ok(TopLevel::Fact(try!(self.setup_fact(term))))
         }
     }
 
@@ -701,6 +717,7 @@ impl RelationWorker {
 
     fn absorb(&mut self, other: RelationWorker) {
         self.queue.extend(other.queue.into_iter());
+        self.dynamic_clauses.extend(other.dynamic_clauses.into_iter());
     }
 
     fn expand_queue_contents<'a, R>(&mut self, term_stream: &mut TermStream<'a, R>, op_dir: &OpDir)
@@ -731,7 +748,8 @@ fn term_to_toplevel<'a, R>(term_stream: &mut TermStream<'a, R>, code_dir: &mut C
     let mut rel_worker = RelationWorker::new();
     let mut indices = composite_indices!(false, term_stream.indices, code_dir);
 
-    Ok((rel_worker.try_term_to_tl(&mut indices, term, true)?, rel_worker))
+    let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
+    Ok((tl, rel_worker))
 }
 
 pub
@@ -757,10 +775,13 @@ fn string_to_toplevel<R: Read>(src: R, buffer: String, wam: &mut Machine)
     Ok(deque_to_packet(tl, queue))
 }
 
+pub type DynamicClauseMap = HashMap<(ClauseName, usize), Vec<(Term, Term)>>;
+
 pub struct TopLevelBatchWorker<'a, R: Read> {
     pub(crate) term_stream: TermStream<'a, R>,
     rel_worker: RelationWorker,
     pub(crate) results: Vec<(Predicate, VecDeque<TopLevel>)>,
+    pub(crate) dynamic_clause_map: DynamicClauseMap,
     pub(crate) in_module: bool
 }
 
@@ -776,6 +797,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         TopLevelBatchWorker { term_stream,
                               rel_worker: RelationWorker::new(),
                               results: vec![],
+                              dynamic_clause_map: HashMap::new(),
                               in_module: false }
     }
 
@@ -790,7 +812,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
     }
 
     fn process_result(&mut self, indices: &mut IndexStore, preds: &mut Vec<PredicateClause>)
-                      -> Result<(Predicate, VecDeque<TopLevel>), SessionError>
+                      -> Result<(), SessionError>
     {
         self.rel_worker.expand_queue_contents(&mut self.term_stream, &indices.op_dir)?;
 
@@ -805,7 +827,26 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         self.term_stream.code_repo.add_in_situ_result(&result, in_situ_code_dir,
                                                       self.term_stream.flags)?;
 
-        Ok(result)
+        Ok(self.results.push(result))
+    }
+
+    fn take_dynamic_clauses(&mut self) {
+        let (name, arity) = match self.rel_worker.dynamic_clauses.first() {
+            Some((head, tail)) =>
+                (head.name().unwrap(), head.arity()),
+            None =>
+                return
+        };
+
+        match self.dynamic_clause_map.get_mut(&(name.clone(), arity)) {
+            Some(ref mut entry) => {
+                entry.clear(); // don't treat dynamic predicates as if they're discontiguous.
+                entry.extend(self.rel_worker.dynamic_clauses.drain(0 ..));
+            },
+            _ => {
+                self.rel_worker.dynamic_clauses.clear();
+            }
+        }
     }
 
     pub fn consume(&mut self, indices: &mut IndexStore) -> Result<Option<Declaration>, SessionError>
@@ -818,8 +859,8 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
 
             // if is_consistent is false, preds is non-empty.
             if !is_consistent(&tl, &preds) {
-                let result = self.process_result(indices, &mut preds)?;
-                self.results.push(result);
+                self.process_result(indices, &mut preds)?;
+                self.take_dynamic_clauses();
             }
 
             self.rel_worker.absorb(new_rel_worker);
@@ -834,8 +875,8 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         }
 
         if !preds.is_empty() {
-            let result = self.process_result(indices, &mut preds)?;
-            self.results.push(result);
+            self.process_result(indices, &mut preds)?;
+            self.take_dynamic_clauses();
         }
 
         Ok(None)

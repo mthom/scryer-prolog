@@ -244,6 +244,21 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &SystemClauseType::HeadIsDynamic => {
+                let head = self[temp_v!(1)].clone();
+
+                self.fail = !match self.store(self.deref(head)) {
+                    Addr::Str(s) =>
+                        match self.heap[s].clone() {
+                            HeapCellValue::NamedStr(arity, name, ..) =>
+                                indices.get_clause_subsection(name, arity).is_some(),
+                            _ => unreachable!()
+                        },
+                    Addr::Con(Constant::Atom(name, _)) =>
+                        indices.get_clause_subsection(name, 0).is_some(),
+                    _ => unreachable!()
+                };
+            },
             &SystemClauseType::CopyToLiftedHeap =>
                 // now, stagger everything down by the length of the heap + lh offset.
                 match self.store(self.deref(self[temp_v!(1)].clone())) {
@@ -562,6 +577,26 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &SystemClauseType::NoSuchPredicate => {
+                let head = self[temp_v!(1)].clone();
+
+                self.fail = match self.store(self.deref(head)) {
+                    Addr::Str(s) =>
+                        match self.heap[s].clone() {
+                            HeapCellValue::NamedStr(arity, name, op_spec) =>
+                                indices.predicate_exists(name, arity, op_spec),
+                            _ => unreachable!()
+                        },
+                    Addr::Con(Constant::Atom(name, op_spec)) =>
+                        indices.predicate_exists(name, 0, op_spec),
+                    head => {
+                        let err = MachineError::type_error(ValidType::Callable, head);
+                        let stub = MachineError::functor_stub(clause_name!("clause"), 2);
+
+                        return Err(self.error_form(err, stub));
+                    }
+                };
+            },
             &SystemClauseType::RedoAttrVarBindings => {
                 let mut bindings = mem::replace(&mut self.attr_var_init.bindings, vec![]);
 
@@ -726,6 +761,30 @@ impl MachineState {
                 let a2 = Addr::Con(Constant::Usize(self.b));
 
                 self.unify(a1, a2);
+            },
+            &SystemClauseType::GetClause => {
+                let head = self[temp_v!(1)].clone();
+                let body = self[temp_v!(2)].clone();
+
+                let subsection = match self.store(self.deref(head)) {
+                    Addr::Str(s) =>
+                        match self.heap[s].clone() {
+                            HeapCellValue::NamedStr(arity, name, ..) =>
+                                indices.get_clause_subsection(name, arity),
+                            _ => unreachable!()
+                        },
+                    Addr::Con(Constant::Atom(name, _)) =>
+                        indices.get_clause_subsection(name, 0),
+                    _ => unreachable!()
+                };
+
+                match subsection {
+                    Some(dynamic_predicate_info) => {
+                        self.execute_at_index(2, dynamic_predicate_info.clauses_subsection_p);
+                        return Ok(());
+                    },
+                    _ => unreachable!()
+                }
             },
             &SystemClauseType::GetCutPoint => {
                 let a1 = self[temp_v!(1)].clone();

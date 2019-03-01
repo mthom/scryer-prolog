@@ -136,7 +136,8 @@ impl fmt::Display for ClauseType {
         match self {
             &ClauseType::System(SystemClauseType::SetCutPoint(r)) =>
                 write!(f, "$set_cp({})", r),
-            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(OpDecl(.., ref name), ref idx) =>
+            &ClauseType::Named(ref name, _, ref idx)
+          | &ClauseType::Op(OpDecl(.., ref name), ref idx) =>
             {
                 let idx = idx.0.borrow();
                 write!(f, "{}:{}/{}", idx.1, name, idx.0)

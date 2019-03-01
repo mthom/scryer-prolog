@@ -162,12 +162,20 @@ pub struct Rule {
 pub struct Predicate(pub Vec<PredicateClause>);
 
 impl Predicate {
+    #[inline]
     pub fn new() -> Self {
         Predicate(vec![])
     }
 
+    #[inline]
     pub fn clauses(self) -> Vec<PredicateClause> {
         self.0
+    }
+
+    #[inline]
+    pub fn predicate_indicator(&self) -> Option<(ClauseName, usize)> {
+        self.0.first()
+            .and_then(|clause| clause.name().map(|name| (name, clause.arity())))
     }
 }
 
@@ -252,13 +260,16 @@ pub enum SystemClauseType {
     GetAttrVarQueueDelimiter,
     GetAttrVarQueueBeyond,
     GetBValue,
+    GetClause,
     GetLiftedHeapFromOffset,
     GetLiftedHeapFromOffsetDiff,
     GetSCCCleaner,
+    HeadIsDynamic,
     InstallSCCCleaner,
     InstallInferenceCounter,
     LiftedHeapLength,
     ModuleOf,
+    NoSuchPredicate,
     RedoAttrVarBindings,
     RemoveCallPolicyCheck,
     RemoveInferenceCounter,
@@ -307,12 +318,15 @@ impl SystemClauseType {
             &SystemClauseType::GetLiftedHeapFromOffset => clause_name!("$get_lh_from_offset"),
             &SystemClauseType::GetLiftedHeapFromOffsetDiff => clause_name!("$get_lh_from_offset_diff"),
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
+            &SystemClauseType::GetClause => clause_name!("$get_clause"),
             &SystemClauseType::GetDoubleQuotes => clause_name!("$get_double_quotes"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
+            &SystemClauseType::HeadIsDynamic => clause_name!("$head_is_dynamic"),
             &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
             &SystemClauseType::InstallInferenceCounter => clause_name!("$install_inference_counter"),
             &SystemClauseType::LiftedHeapLength => clause_name!("$lh_length"),
             &SystemClauseType::ModuleOf => clause_name!("$module_of"),
+            &SystemClauseType::NoSuchPredicate => clause_name!("$no_such_predicate"),
             &SystemClauseType::RedoAttrVarBindings => clause_name!("$redo_attr_var_bindings"),
             &SystemClauseType::RemoveCallPolicyCheck => clause_name!("$remove_call_policy_check"),
             &SystemClauseType::RemoveInferenceCounter => clause_name!("$remove_inference_counter"),
@@ -356,14 +370,17 @@ impl SystemClauseType {
             ("$truncate_if_no_lh_growth_diff", 2) => Some(SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff),
             ("$get_attr_list", 2) => Some(SystemClauseType::GetAttributedVariableList),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
+            ("$get_clause", 2) => Some(SystemClauseType::GetClause),
             ("$get_lh_from_offset", 2) => Some(SystemClauseType::GetLiftedHeapFromOffset),
             ("$get_lh_from_offset_diff", 3) => Some(SystemClauseType::GetLiftedHeapFromOffsetDiff),
             ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
+            ("$head_is_dynamic", 1) => Some(SystemClauseType::HeadIsDynamic),
             ("$install_scc_cleaner", 2) => Some(SystemClauseType::InstallSCCCleaner),
             ("$install_inference_counter", 3) => Some(SystemClauseType::InstallInferenceCounter),
             ("$lh_length", 1) => Some(SystemClauseType::LiftedHeapLength),
             ("$module_of", 2) => Some(SystemClauseType::ModuleOf),
+            ("$no_such_predicate", 1) => Some(SystemClauseType::NoSuchPredicate),
             ("$redo_attr_var_bindings", 0) => Some(SystemClauseType::RedoAttrVarBindings),
             ("$remove_call_policy_check", 1) => Some(SystemClauseType::RemoveCallPolicyCheck),
             ("$remove_inference_counter", 2) => Some(SystemClauseType::RemoveInferenceCounter),
@@ -469,7 +486,7 @@ pub enum ClauseType {
     CallN,
     Hook(CompileTimeHook),
     Inlined(InlinedClauseType),
-    Named(ClauseName, CodeIndex),
+    Named(ClauseName, usize, CodeIndex), // name, arity, index.
     Op(OpDecl, CodeIndex),
     System(SystemClauseType)
 }
@@ -591,7 +608,7 @@ impl ClauseType {
                                 } else if name.as_str() == "call" {
                                     ClauseType::CallN
                                 } else {
-                                    ClauseType::Named(name, CodeIndex::default())
+                                    ClauseType::Named(name, arity, CodeIndex::default())
                                 }
                             })
                     })
@@ -972,11 +989,33 @@ impl From<(usize, ClauseName)> for CodeIndex {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum DynamicAssertPlace {
+    Back, Front
+}
+
+impl DynamicAssertPlace {
+    pub fn predicate_name(self) -> ClauseName {
+        match self {
+            DynamicAssertPlace::Back  => clause_name!("assertz"),
+            DynamicAssertPlace::Front => clause_name!("asserta")
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum DynamicTransactionType {
+    Abolish,
+    Assert(DynamicAssertPlace),
+    Retract(usize) // dynamic index of the clause to remove.
+}
+
 #[derive(Clone, PartialEq)]
 pub enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
     CallN(usize, LocalCodePtr), // arity, local.
     Local(LocalCodePtr),
+    DynamicTransaction(DynamicTransactionType, LocalCodePtr), // the type of transaction, the return pointer.
     VerifyAttrInterrupt(usize), // location of the verify attribute interrupt code in the CodeDir.
 }
 
@@ -987,6 +1026,7 @@ impl CodePtr {
           | &CodePtr::CallN(_, ref local)
           | &CodePtr::Local(ref local) => local.clone(),
             &CodePtr::VerifyAttrInterrupt(p) => LocalCodePtr::DirEntry(p),
+            &CodePtr::DynamicTransaction(_, p) => p
         }
     }
 }
@@ -1077,9 +1117,10 @@ impl Add<usize> for CodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            p @ CodePtr::VerifyAttrInterrupt(_) => p,
+            p @ CodePtr::VerifyAttrInterrupt(_)
+          | p @ CodePtr::DynamicTransaction(..) => p,
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
-            CodePtr::CallN(_, local) | CodePtr::BuiltInClause(_, local) => CodePtr::Local(local + rhs),
+            CodePtr::CallN(_, local) | CodePtr::BuiltInClause(_, local) => CodePtr::Local(local + rhs)
         }
     }
 }
@@ -1115,7 +1156,7 @@ impl<'a> TermIterState<'a> {
                     let op_decl = OpDecl(spec.0, spec.1, name.clone());
                     ClauseType::Op(op_decl, CodeIndex::default())
                 } else {
-                    ClauseType::Named(name.clone(), CodeIndex::default())
+                    ClauseType::Named(name.clone(), subterms.len(), CodeIndex::default())
                 };
 
                 TermIterState::Clause(lvl, 0, cell, ct, subterms)
@@ -1346,6 +1387,7 @@ impl SubModuleUser for Module {
 
 #[derive(Clone)]
 pub enum Declaration {
+    Dynamic(ClauseName, usize), // name, arity
     Hook(CompileTimeHook, PredicateClause, VecDeque<TopLevel>),
     Module(ModuleDecl),
     NonCountedBacktracking(ClauseName, usize), // name, arity
@@ -1520,6 +1562,16 @@ impl OpDecl {
     #[inline]
     pub fn name(&self) -> ClauseName {
         self.2.clone()
+    }
+
+    pub fn arity(&self) -> usize {
+        let spec = self.1;
+
+        if (spec | XFX != 0) || (spec | XFY != 0) || (spec | YFX != 0) {
+            2
+        } else {
+            1
+        }
     }
 
     pub fn submit(&self, module: ClauseName, op_dir: &mut OpDir) -> Result<(), SessionError>

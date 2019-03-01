@@ -5,9 +5,10 @@ use prolog::instructions::*;
 use prolog::debray_allocator::*;
 use prolog::codegen::*;
 use prolog::machine::*;
-use prolog::machine::term_expansion::{ExpansionAdditionResult, TermStream};
+use prolog::machine::term_expansion::{ExpansionAdditionResult};
 use prolog::toplevel::*;
 
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Read;
 use std::mem;
@@ -36,7 +37,7 @@ fn print_code(code: &Code) {
     }
 }
 
-type PredicateCompileQueue = (Predicate, VecDeque<TopLevel>);
+pub type PredicateCompileQueue = (Predicate, VecDeque<TopLevel>);
 
 // throw errors if declaration or query found.
 fn compile_relation(tl: &TopLevel, non_counted_bt: bool, flags: MachineFlags)
@@ -153,8 +154,9 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession
     }
 }
 
-struct GatherResult {
-    worker_results: Vec<PredicateCompileQueue>,
+pub struct GatherResult {
+    dynamic_clause_map: DynamicClauseMap,
+    pub(crate) worker_results: Vec<PredicateCompileQueue>,
     toplevel_results: Vec<PredicateCompileQueue>,
     toplevel_indices: IndexStore,
     addition_results: ExpansionAdditionResult
@@ -177,6 +179,32 @@ impl ListingCompiler {
             user_term_dir: TermDir::new(),
             orig_term_expansion_lens: code_repo.term_dir_entry_len((clause_name!("term_expansion"), 2)),
             orig_goal_expansion_lens: code_repo.term_dir_entry_len((clause_name!("goal_expansion"), 2)),
+        }
+    }
+
+    /*
+    Replace calls to self with a localized index cell, not available to the global CodeIndex.
+    This is done to implement logical update semantics for dynamic database updates.
+     */
+    fn localize_self_calls(&mut self, name: ClauseName, arity: usize, code: &mut Code, p: usize)
+    {
+        let self_idx = CodeIndex::default();
+        set_code_index!(self_idx, IndexPtr::Index(p), self.get_module_name());
+
+        for instr in code.iter_mut() {
+            if let &mut Line::Control(ControlInstruction::CallClause(ref mut ct, ..)) = instr {
+                match ct {
+                    &mut ClauseType::Named(ref ct_name, ct_arity, ref mut idx)
+                        if ct_name == &name && arity == ct_arity => {
+                            *idx = self_idx.clone();
+                        },
+                    &mut ClauseType::Op(ref op_decl, ref mut idx)
+                        if op_decl.name() == name && op_decl.arity() == arity => {
+                            *idx = self_idx.clone();
+                        },
+                    _ => {}
+                }
+            }
         }
     }
 
@@ -235,6 +263,49 @@ impl ListingCompiler {
             .unwrap_or(ClauseName::BuiltIn("user"))
     }
 
+    fn add_clause_code(&mut self, dynamic_clause_map: DynamicClauseMap, wam: &mut Machine)
+                       -> Result<(), SessionError>
+    {
+        let mut code = vec![];
+        let mut pi_to_loc = HashMap::new();
+
+        // the name of this function is misleading. first we generate the clause code..
+        for ((name, arity), heads_and_tails) in dynamic_clause_map {
+            if heads_and_tails.is_empty() {
+                continue;
+            }
+
+            let predicate = Predicate(heads_and_tails.into_iter().map(|(head, tail)| {
+                let clause = Term::Clause(Cell::default(), clause_name!("clause"),
+                                          vec![Box::new(head), Box::new(tail)],
+                                          None);
+                PredicateClause::Fact(clause)
+            }).collect());
+
+            let p = code.len() + wam.code_size();
+            let mut decl_code = compile_relation(&TopLevel::Predicate(predicate), false,
+                                                 wam.machine_flags())?;
+
+            compile_appendix(&mut decl_code, &VecDeque::new(), false, wam.machine_flags())?;
+            
+            pi_to_loc.insert((name, arity), p);
+            code.extend(decl_code.into_iter());
+        }
+
+        // now that we've reached this point without error, we are free to add to the WAM.
+        wam.code_repo.code.extend(code.into_iter());
+
+        // ... then we add it to the wam.
+        for ((name, arity), p) in pi_to_loc {
+            let entry = wam.indices.dynamic_code_dir.entry((name, arity))
+                           .or_insert(DynamicPredicateInfo::default());
+            entry.clauses_subsection_p = p;
+        }
+
+        Ok(())
+    }
+
+    pub(crate)
     fn generate_code(&mut self, decls: Vec<PredicateCompileQueue>, wam: &Machine,
                      code_dir: &mut CodeDir)
                      -> Result<Code, SessionError>
@@ -242,11 +313,7 @@ impl ListingCompiler {
         let mut code = vec![];
 
         for (decl, queue) in decls {
-            let (name, arity) = decl.0.first().and_then(|cl| {
-                let arity = cl.arity();
-                cl.name().map(|name| (name, arity))
-            }).ok_or(SessionError::NamelessEntry)?;
-
+            let (name, arity) = decl.predicate_indicator().ok_or(SessionError::NamelessEntry)?;
             let non_counted_bt = self.non_counted_bt_preds.contains(&(name.clone(), arity));
 
             let p = code.len() + wam.code_size();
@@ -257,7 +324,8 @@ impl ListingCompiler {
 
             let idx = code_dir.entry((name.clone(), arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
-            
+
+            self.localize_self_calls(name, arity, &mut decl_code, p);
             code.extend(decl_code.into_iter());
         }
 
@@ -354,26 +422,32 @@ impl ListingCompiler {
                     Ok(self.module = Some(Module::new(module_decl, atom_tbl)))
                 } else {
                     Err(SessionError::from(ParserError::InvalidModuleDecl))
-                }
+                },
+            Declaration::Dynamic(..) => Ok(())
         }
     }
 
     fn process_and_commit_decl<'a, R: Read>(&mut self, decl: Declaration,
-                                            term_stream: &mut TermStream<'a, R>,
+                                            worker: &mut TopLevelBatchWorker<'a, R>,
                                             indices: &mut IndexStore, flags: MachineFlags)
                                             -> Result<(), SessionError>
     {
         match &decl {
+            &Declaration::Dynamic(ref name, arity) => {
+                worker.dynamic_clause_map.entry((name.clone(), arity)).or_insert(vec![]);
+            },
             &Declaration::Hook(hook, _, ref queue) if self.module.is_none() =>
-                term_stream.incr_expansion_lens(hook.user_scope(), 1, queue.len()),
+                worker.term_stream.incr_expansion_lens(hook.user_scope(), 1, queue.len()),
             &Declaration::Hook(hook, _, ref queue) if !hook.has_module_scope() =>
-                term_stream.incr_expansion_lens(hook, 1, queue.len()),
+                worker.term_stream.incr_expansion_lens(hook, 1, queue.len()),
             _ => {}
         };
 
-        self.process_decl(decl, term_stream.code_repo, term_stream.indices, indices, flags)
+        self.process_decl(decl, &mut worker.term_stream.code_repo,
+                          &mut worker.term_stream.indices, indices, flags)
     }
 
+    pub(crate)
     fn gather_items<R: Read>(&mut self, wam: &mut Machine, src: R, indices: &mut IndexStore)
                              -> Result<GatherResult, SessionError>
     {
@@ -392,15 +466,13 @@ impl ListingCompiler {
                 mem::swap(&mut worker.results, &mut toplevel_results);
                 worker.in_module = true;
 
-                self.process_and_commit_decl(decl, &mut worker.term_stream,
-                                             indices, flags)?;
+                self.process_and_commit_decl(decl, &mut worker, indices, flags)?;
 
                 if let &Some(ref module) = &self.module {
                     worker.term_stream.set_atom_tbl(module.atom_tbl.clone());
                 }
             } else {
-                self.process_and_commit_decl(decl, &mut worker.term_stream,
-                                             indices, flags)?;
+                self.process_and_commit_decl(decl, &mut worker, indices, flags)?;
             }
         }
 
@@ -408,25 +480,23 @@ impl ListingCompiler {
 
         Ok(GatherResult {
             worker_results: worker.results,
+            dynamic_clause_map: worker.dynamic_clause_map,
             toplevel_results,
             toplevel_indices,
             addition_results
         })
     }
 
-    fn drop_expansions(&self, wam: &mut Machine, err: SessionError) -> SessionError {
+    fn drop_expansions(&self, flags: MachineFlags, code_repo: &mut CodeRepo)
+    {
         let (te_len, te_queue_len) = self.orig_term_expansion_lens;
         let (ge_len, ge_queue_len) = self.orig_goal_expansion_lens;
 
-        let flags = wam.machine_flags();
+        code_repo.truncate_terms((clause_name!("term_expansion"), 2), te_len, te_queue_len);
+        code_repo.truncate_terms((clause_name!("goal_expansion"), 2), ge_len, ge_queue_len);
 
-        wam.code_repo.truncate_terms((clause_name!("term_expansion"), 2), te_len, te_queue_len);
-        wam.code_repo.truncate_terms((clause_name!("goal_expansion"), 2), ge_len, ge_queue_len);
-
-        discard_result!(wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags));
-        discard_result!(wam.code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags));
-
-        err
+        discard_result!(code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags));
+        discard_result!(code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags));
     }
 }
 
@@ -434,7 +504,7 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src:
                          mut indices: IndexStore)
                          -> EvalSession
 {
-    let mut results  = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
+    let mut results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
 
     let module_code = try_eval_session!(compiler.generate_code(results.worker_results, wam,
                                                                &mut indices.code_dir));
@@ -446,14 +516,16 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src:
         module.goal_expansions = results.addition_results.take_goal_expansions();
     }
 
-    try_eval_session!(compiler.add_code(wam, module_code, indices));
-    try_eval_session!(compiler.add_code(wam, toplvl_code, results.toplevel_indices));
-
     let flags = wam.machine_flags();
 
     try_eval_session!(wam.code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags));
     try_eval_session!(wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags));
 
+    try_eval_session!(compiler.add_code(wam, module_code, indices));
+    try_eval_session!(compiler.add_code(wam, toplvl_code, results.toplevel_indices));
+
+    try_eval_session!(compiler.add_clause_code(results.dynamic_clause_map, wam));    
+    
     EvalSession::EntrySuccess
 }
 
@@ -477,7 +549,10 @@ pub fn compile_listing<R: Read>(wam: &mut Machine, src: R, indices: IndexStore) 
     let mut compiler = ListingCompiler::new(&wam.code_repo);
 
     match compile_work(&mut compiler, wam, src, indices) {
-        EvalSession::Error(e) => EvalSession::Error(compiler.drop_expansions(wam, e)),
+        EvalSession::Error(e) => {
+            compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo);
+            EvalSession::Error(e)
+        },
         result => result
     }
 }

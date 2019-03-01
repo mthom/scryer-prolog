@@ -129,7 +129,7 @@ impl HCValueOutputter for PrinterOutputter {
 
 #[inline]
 fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
-    arity == 1 && if let &ClauseType::Named(ref name, _) = ct {
+    arity == 1 && if let &ClauseType::Named(ref name, ..) = ct {
         name.as_str() == "$VAR"
     } else {
         false

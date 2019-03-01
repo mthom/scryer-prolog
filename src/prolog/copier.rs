@@ -175,10 +175,12 @@ impl<T: CopierTarget> CopyTermState<T> {
                 HeapCellValue::NamedStr(..) =>
                     self.scan += 1,
                 HeapCellValue::Addr(addr) =>
-                    match addr.clone() {
+                    match addr {
                         Addr::Lis(addr) =>
                             self.copy_list(addr),
-                        Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(..) =>
+                        addr @ Addr::AttrVar(_)
+                      | addr @ Addr::HeapCell(_)
+                      | addr @ Addr::StackCell(..) =>
                             self.copy_var(addr),
                         Addr::Str(addr) =>
                             self.copy_structure(addr),

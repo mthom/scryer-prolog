@@ -231,6 +231,7 @@ impl MachineState {
         self.p = dir_entry!(p);
     }
 
+    pub(super)
     fn execute_at_index(&mut self, arity: usize, p: usize)
     {
         self.num_of_args = arity;

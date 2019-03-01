@@ -23,11 +23,27 @@ use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
 
-pub type InSituCodeDir = HashMap<PredicateKey, usize>;
+//pub type DynamicPredicateClauses = VecDeque<(PredicateClause, VecDeque<TopLevel>)>;
+
+#[derive(Copy, Clone)]
+pub struct DynamicPredicateInfo {
+    pub(super) clauses_subsection_p: usize, // a LocalCodePtr::DirEntry value.
+//    clauses: DynamicPredicateClauses
+}
+
+impl Default for DynamicPredicateInfo {
+    fn default() -> Self {
+        DynamicPredicateInfo { clauses_subsection_p: 0 }
+    }
+}
+
+pub type InSituCodeDir  = HashMap<PredicateKey, usize>;
+pub type DynamicCodeDir = HashMap<PredicateKey, DynamicPredicateInfo>;
 
 pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,
     pub(super) code_dir: CodeDir,
+    pub(super) dynamic_code_dir: DynamicCodeDir,
     pub(super) in_situ_code_dir: InSituCodeDir,
     pub(super) op_dir: OpDir,
     pub(super) modules: ModuleDir,
@@ -48,6 +64,24 @@ impl<'a, T> RefOrOwned<'a, T> {
 }
 
 impl IndexStore {
+    pub fn predicate_exists(&self, name: ClauseName, arity: usize,
+                            op_spec: Option<(usize, Specifier)>)
+                            -> bool
+    {
+        match ClauseType::from(name, arity, op_spec) {
+            ClauseType::Named(name, arity, _) => 
+                self.code_dir.contains_key(&(name, arity)),
+            ClauseType::Op(op_decl, ..) =>
+                self.code_dir.contains_key(&(op_decl.name(), op_decl.arity())),
+            _ => true
+        }
+    }
+    
+    #[inline]
+    pub fn get_clause_subsection(&self, name: ClauseName, arity: usize) -> Option<DynamicPredicateInfo> {
+        self.dynamic_code_dir.get(&(name, arity)).cloned()
+    }
+    
     #[inline]
     pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
         self.modules.remove(&name)
@@ -63,6 +97,7 @@ impl IndexStore {
         IndexStore {
             atom_tbl: TabledData::new(Rc::new("user".to_string())),
             code_dir: CodeDir::new(),
+            dynamic_code_dir: DynamicCodeDir::new(),
             in_situ_code_dir: InSituCodeDir::new(),
             op_dir: default_op_dir(),
             modules: ModuleDir::new(),
@@ -204,7 +239,8 @@ impl CodeRepo {
             },
             &CodePtr::VerifyAttrInterrupt(p) =>
                 Some(RefOrOwned::Borrowed(&self.code[p])),
-
+            &CodePtr::DynamicTransaction(..) =>
+                None
         }
     }
 }
@@ -395,11 +431,11 @@ impl Machine {
                 // ensure we don't try to overwrite an existing predicate from a different module.
                 if !existing_idx.is_undefined() && !idx.is_undefined() {
                     // allow the overwriting of user-level predicates by all other predicates.
-                    if existing_idx.module_name().as_str() == "user" {
+                    if existing_idx.module_name() == key.0.owning_module() {
                         continue;
                     }
 
-                    if existing_idx.module_name().as_str() != idx.module_name().as_str() {
+                    if existing_idx.module_name() != idx.module_name() {
                         let err_str = format!("{}/{} from module {}", key.0, key.1,
                                               existing_idx.module_name().as_str());
                         return Err(SessionError::CannotOverwriteImport(err_str));
@@ -464,13 +500,73 @@ impl Machine {
         let mut heap_locs = HashMap::new();
 
         self.code_repo.cached_query = code;
-        self.machine_st.run_query(&mut self.indices, &mut self.policies, &mut self.code_repo,
-                                  &alloc_locs, &mut heap_locs);
+        self.run_query(&alloc_locs, &mut heap_locs);
 
         if self.machine_st.fail {
             self.fail(&heap_locs)
         } else {
             EvalSession::InitialQuerySuccess(alloc_locs, heap_locs)
+        }
+    }
+
+    fn record_var_places(&self, chunk_num: usize, alloc_locs: &AllocVarDict,
+                         heap_locs: &mut HeapVarDict)
+    {
+        for (var, var_data) in alloc_locs {
+            match var_data {
+                &VarData::Perm(p) if p > 0 =>
+                    if !heap_locs.contains_key(var) {
+                        let e = self.machine_st.e;
+                        let r = var_data.as_reg_type().reg_num();
+                        let addr = self.machine_st.and_stack[e][r].clone();
+
+                        heap_locs.insert(var.clone(), addr);
+                    },
+                &VarData::Temp(cn, _, _) if cn == chunk_num => {
+                    let r = var_data.as_reg_type();
+
+                    if r.reg_num() != 0 {
+                        let addr = self.machine_st[r].clone();
+                        heap_locs.insert(var.clone(), addr);
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+
+    pub(super)
+    fn run_query(&mut self, alloc_locs: &AllocVarDict, heap_locs: &mut HeapVarDict)
+    {
+        let end_ptr = top_level_code_ptr!(0, self.code_repo.size_of_cached_query());
+
+        while self.machine_st.p < end_ptr {
+            if let CodePtr::Local(LocalCodePtr::TopLevel(mut cn, p)) = self.machine_st.p {
+                match &self.code_repo[LocalCodePtr::TopLevel(cn, p)] {
+                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
+                        self.record_var_places(cn, alloc_locs, heap_locs);
+                        cn += 1;
+                    },
+                    _ => {}
+                }
+
+                self.machine_st.p = top_level_code_ptr!(cn, p);
+            }
+
+            self.machine_st.query_stepper(&mut self.indices, &mut self.policies, &mut self.code_repo);
+
+            match self.machine_st.p {
+                CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {},
+                CodePtr::DynamicTransaction(trans_type, p) => {},
+//                  self.dynamic_transaction(trans_type, p),
+                _ => {
+                    if heap_locs.is_empty() {
+                        self.record_var_places(0, alloc_locs, heap_locs);
+                    }
+
+                    break;
+                }
+            };
         }
     }
 
@@ -484,8 +580,7 @@ impl Machine {
                 return EvalSession::from(SessionError::QueryFailure);
             }
 
-            self.machine_st.run_query(&mut self.indices, &mut self.policies, &mut self.code_repo,
-                                      alloc_l, heap_l);
+            self.run_query(alloc_l, heap_l);
 
             if self.machine_st.fail {
                 self.fail(&heap_l)
@@ -601,73 +696,12 @@ impl MachineState {
                     self.fail = true,
                 CodePtr::Local(LocalCodePtr::InSituDirEntry(p))
                     if p < code_repo.in_situ_code.len() => {},
-                CodePtr::Local(_) =>
+                CodePtr::Local(_) | CodePtr::DynamicTransaction(..) =>
                     break,
                 CodePtr::VerifyAttrInterrupt(p) =>
                     self.verify_attr_interrupt(p),
                 _ => {}
-            };
-        }
-    }
-
-    fn record_var_places(&self, chunk_num: usize, alloc_locs: &AllocVarDict,
-                         heap_locs: &mut HeapVarDict)
-    {
-        for (var, var_data) in alloc_locs {
-            match var_data {
-                &VarData::Perm(p) if p > 0 =>
-                    if !heap_locs.contains_key(var) {
-                        let e = self.e;
-                        let r = var_data.as_reg_type().reg_num(); // crashes here.
-                        let addr = self.and_stack[e][r].clone();
-
-                        heap_locs.insert(var.clone(), addr);
-                    },
-                &VarData::Temp(cn, _, _) if cn == chunk_num => {
-                    let r = var_data.as_reg_type();
-
-                    if r.reg_num() != 0 {
-                        let addr = self[r].clone();
-                        heap_locs.insert(var.clone(), addr);
-                    }
-                },
-                _ => {}
             }
-        }
-    }
-
-    pub(super)
-    fn run_query(&mut self, indices: &mut IndexStore,
-                 policies: &mut MachinePolicies, code_repo: &mut CodeRepo,
-                 alloc_locs: &AllocVarDict, heap_locs: &mut HeapVarDict)
-    {
-        let end_ptr = top_level_code_ptr!(0, code_repo.size_of_cached_query());
-
-        while self.p < end_ptr {
-            if let CodePtr::Local(LocalCodePtr::TopLevel(mut cn, p)) = self.p {
-                match &code_repo[LocalCodePtr::TopLevel(cn, p)] {
-                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
-                        self.record_var_places(cn, alloc_locs, heap_locs);
-                        cn += 1;
-                    },
-                    _ => {}
-                }
-
-                self.p = top_level_code_ptr!(cn, p);
-            }
-
-            self.query_stepper(indices, policies, code_repo);
-
-            match self.p {
-                CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {},
-                _ => {
-                    if heap_locs.is_empty() {
-                        self.record_var_places(0, alloc_locs, heap_locs);
-                    }
-
-                    break;
-                }
-            };
         }
     }
 }

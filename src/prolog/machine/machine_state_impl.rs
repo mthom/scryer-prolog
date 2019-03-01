@@ -2208,7 +2208,7 @@ impl MachineState {
                 try_or_fail!(self, call_policy.compile_hook(self, hook)),
             &ClauseType::Inlined(ref ct) =>
                 self.execute_inlined(ct),
-            &ClauseType::Named(ref name, ref idx) | &ClauseType::Op(OpDecl(.., ref name), ref idx) =>
+            &ClauseType::Named(ref name, _, ref idx) | &ClauseType::Op(OpDecl(.., ref name), ref idx) =>
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
                                                             indices)),
             &ClauseType::System(ref ct) =>

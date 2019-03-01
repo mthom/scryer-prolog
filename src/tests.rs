@@ -1783,6 +1783,38 @@ fn test_queries_on_builtins()
                            [["S = _11", "X = 1", "Y = 2"]]);
     assert_prolog_success!(&mut wam, "?- catch(findall(X, 4, S0, S1), error(type_error(callable, 4), _), true).",
                            [["S0 = _3", "S1 = _4", "X = _1"]]);
+
+    submit(&mut wam, "
+:- dynamic(cat/0).
+cat.
+
+:- dynamic(dog/0).
+dog :- true.
+
+elk(X) :- moose(X).
+
+:- dynamic(legs/2).
+legs(A, 6) :- insect(A).
+legs(A, 7) :- A, call(A).
+
+:- dynamic(insect/1).
+insect(ant).
+insect(bee).");
+
+    assert_prolog_success!(&mut wam, "?- clause(cat, true).");
+    assert_prolog_success!(&mut wam, "?- clause(dog, true).");
+    assert_prolog_success!(&mut wam, "?- clause(legs(I, 6), Body).",
+                           [["I = _1", "Body = insect(_1)"]]);
+    assert_prolog_success!(&mut wam, "?- clause(legs(C, 7), Body).",
+                           [["C = _1", "Body = ','(_1, call(C))"]]);
+    assert_prolog_success!(&mut wam, "?- clause(insect(I), T).",
+                           [["I = ant", "T = true"],
+                            ["I = bee", "T = true"]]);
+    assert_prolog_failure!(&mut wam, "?- clause(x, Body).");
+    assert_prolog_success!(&mut wam, "?- catch(clause(_, _), error(instantiation_error, _), true).");
+    assert_prolog_success!(&mut wam, "?- catch(clause(4, _), error(type_error(callable, 4), _), true).");
+    assert_prolog_success!(&mut wam, "?- catch(clause(elk(N), _), error(permission_error(access, private_procedure, elk/1), _), true).");
+    assert_prolog_success!(&mut wam, "?- catch(clause(atom(N), _), error(permission_error(access, private_procedure, atom/1), _), true).");
 }
 
 #[test]

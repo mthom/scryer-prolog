@@ -6,11 +6,12 @@
 	(>)/2, (<)/2, (=\=)/2, (=:=)/2, (-)/1, (>=)/2, (=<)/2, (,)/2,
 	(->)/2, (;)/2, (=..)/2, (==)/2, (\==)/2, (@=<)/2, (@>=)/2,
 	(@<)/2, (@>)/2, (=@=)/2, (\=@=)/2, (:)/2, bagof/3,
-	call_with_inference_limit/3, catch/3, current_prolog_flag/2,
-	expand_goal/2, expand_term/2, findall/3, findall/4, once/1,
-	repeat/0, set_prolog_flag/2, setof/3, setup_call_cleanup/3,
-	term_variables/2, throw/1, true/0, false/0, write/1,
-	write_canonical/1, writeq/1, write_term/2]).
+	call_with_inference_limit/3, catch/3, clause/2,
+	current_prolog_flag/2, expand_goal/2, expand_term/2,
+	findall/3, findall/4, once/1, repeat/0, set_prolog_flag/2,
+	setof/3, setup_call_cleanup/3, term_variables/2, throw/1,
+	true/0, false/0, write/1, write_canonical/1, writeq/1,
+	write_term/2]).
 
 /* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
    and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
@@ -372,7 +373,7 @@ throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
 
 truncate_lh_to(LhLength) :- '$truncate_lh_to'(LhLength).
 
-check_for_compat_list(L, PI) :-    
+check_for_compat_list(L, PI) :-
     (  nonvar(L), L \= [_|_], throw(error(type_error(list, L), PI))
     ;  true
     ).
@@ -453,3 +454,26 @@ setof(Template, Goal, Solution) :-
     keysort(PairedSolutions0, PairedSolutions),
     group_by_variants(PairedSolutions, GroupedSolutions),
     iterate_variants_and_sort(GroupedSolutions, Witnesses, Solution).
+
+% Clause retrieval and information.
+
+'$clause_body_is_valid'(B) :-
+    (  var(B) -> true
+    ;  functor(B, Name, _) -> (  Name == '.' -> throw(error(type_error(callable, B), clause/2))
+			      ;  true
+			      )
+    ;  throw(error(type_error(callable, B), clause/2))
+    ).
+
+clause(H, B) :-
+    (  var(H) -> throw(error(instantiation_error, clause/2))
+    ;  functor(H, Name, Arity) -> (  Name == '.' -> throw(error(type_error(callable, H), clause/2))
+				  %% '$no_such_predicate' fails if H is not callable.
+				  ;  '$no_such_predicate'(H) -> '$fail'
+				  ;  '$head_is_dynamic'(H) -> '$clause_body_is_valid'(B),
+							      '$get_clause'(H, B)
+				  ;  throw(error(permission_error(access, private_procedure, Name/Arity),
+						 clause/2))
+				  )
+    ;  throw(error(type_error(callable, H), clause/2))
+    ).

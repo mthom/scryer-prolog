@@ -75,15 +75,13 @@ fn modify_head_of_queue(machine_st: &mut MachineState, queue: &mut SubtermDeque,
 
 pub(crate) struct TermWriteResult {
     pub(crate) heap_loc: usize,
-    pub(crate) max_var_length: usize, // maximum length of the variable names encountered.
-    pub(crate) var_dict: HeapVarDict,        
+    pub(crate) var_dict: HeapVarDict,
 }
 
 pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteResult
 {
     let heap_loc = machine_st.heap.h;
 
-    let mut max_var_length = 0;
     let mut queue = SubtermDeque::new();
     let mut var_dict = HeapVarDict::new();
 
@@ -118,10 +116,8 @@ pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> 
             },
             &TermRef::AnonVar(Level::Root) | &TermRef::Constant(Level::Root, ..) =>
                 machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h))),
-            &TermRef::Var(Level::Root, _, ref name) => {
-                max_var_length = std::cmp::max(max_var_length, name.len());                
-                machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h)));
-            },
+            &TermRef::Var(Level::Root, _, ref name) =>
+                machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h))),
             &TermRef::AnonVar(_) => {
                 if let Some((arity, site_h)) = queue.pop_front() {
                     if arity > 1 {
@@ -144,7 +140,6 @@ pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> 
                     }
                 }
 
-                max_var_length = std::cmp::max(max_var_length, var.len());
                 continue;
             },
             _ => {}
@@ -153,5 +148,5 @@ pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> 
         modify_head_of_queue(machine_st, &mut queue, term, h);
     }
 
-    TermWriteResult { heap_loc, var_dict, max_var_length }
+    TermWriteResult { heap_loc, var_dict }
 }
