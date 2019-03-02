@@ -183,6 +183,7 @@ impl MachineState {
     }
 
     #[inline]
+    pub(super)
     fn set_p(&mut self) {
         if self.last_call {
             self.p = CodePtr::Local(self.cp.clone());
@@ -230,6 +231,13 @@ impl MachineState {
                               -> CallResult
     {
         match ct {
+            &SystemClauseType::AbolishClause => {
+                let p = self.cp;
+                let trans_type = DynamicTransactionType::Abolish;
+
+                self.p = CodePtr::DynamicTransaction(trans_type, p);
+                return Ok(());
+            },
             &SystemClauseType::AssertDynamicPredicateToFront => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Front);
@@ -369,6 +377,24 @@ impl MachineState {
             &SystemClauseType::ExpandTerm => {
                 self.p = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
                 return Ok(());
+            },
+            &SystemClauseType::GetCurrentPredicateList => {
+                let mut addrs = vec![];
+                
+                for (name, arity) in indices.code_dir.keys().cloned() {
+                    let h = self.heap.h;
+
+                    self.heap.push(HeapCellValue::NamedStr(2, clause_name!("/"), Some((400, YFX))));
+                    self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Atom(name, None))));
+                    self.heap.push(heap_integer!(arity));
+                    
+                    addrs.push(Addr::Str(h));
+                }
+
+                let list_addr   = Addr::HeapCell(self.heap.to_list(addrs.into_iter()));
+                let target_addr = self[temp_v!(1)].clone();
+
+                self.unify(list_addr, target_addr);
             },
             &SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff =>
                 self.truncate_if_no_lifted_heap_diff(|h| Addr::HeapCell(h)),
@@ -660,6 +686,13 @@ impl MachineState {
                     None => panic!("remove_inference_counter: requires \\
                                     CWILCallPolicy.")
                 },
+            &SystemClauseType::RetractClause => {
+                let p = self.cp;
+                let trans_type = DynamicTransactionType::Retract;
+
+                self.p = CodePtr::DynamicTransaction(trans_type, p);
+                return Ok(());
+            },
             &SystemClauseType::ReturnFromAttributeGoals => {
                 self.deallocate();
                 self.p = CodePtr::Local(LocalCodePtr::TopLevel(0, 0));

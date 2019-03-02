@@ -245,6 +245,7 @@ pub struct Module {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
+    AbolishClause,
     AssertDynamicPredicateToBack,    
     AssertDynamicPredicateToFront,
     CheckCutPoint,
@@ -263,6 +264,7 @@ pub enum SystemClauseType {
     GetAttrVarQueueBeyond,
     GetBValue,
     GetClause,
+    GetCurrentPredicateList,
     GetLiftedHeapFromOffset,
     GetLiftedHeapFromOffsetDiff,
     GetSCCCleaner,
@@ -275,6 +277,7 @@ pub enum SystemClauseType {
     RedoAttrVarBindings,
     RemoveCallPolicyCheck,
     RemoveInferenceCounter,
+    RetractClause,
     RestoreCutPolicy,
     SetCutPoint(RegType),
     InferenceLevel,
@@ -303,6 +306,7 @@ pub enum SystemClauseType {
 impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
+            &SystemClauseType::AbolishClause => clause_name!("$abolish_clause"),
             &SystemClauseType::AssertDynamicPredicateToBack => clause_name!("$asserta"),
             &SystemClauseType::AssertDynamicPredicateToFront => clause_name!("$assertz"),
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
@@ -321,6 +325,7 @@ impl SystemClauseType {
             &SystemClauseType::GetAttrVarQueueBeyond => clause_name!("$get_attr_var_queue_beyond"),
             &SystemClauseType::GetLiftedHeapFromOffset => clause_name!("$get_lh_from_offset"),
             &SystemClauseType::GetLiftedHeapFromOffsetDiff => clause_name!("$get_lh_from_offset_diff"),
+            &SystemClauseType::GetCurrentPredicateList => clause_name!("$get_current_predicate_list"),
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
             &SystemClauseType::GetClause => clause_name!("$get_clause"),
             &SystemClauseType::GetDoubleQuotes => clause_name!("$get_double_quotes"),
@@ -344,6 +349,7 @@ impl SystemClauseType {
             &SystemClauseType::GetCutPoint => clause_name!("$get_cp"),
             &SystemClauseType::GetCurrentBlock => clause_name!("$get_current_block"),
             &SystemClauseType::InstallNewBlock => clause_name!("$install_new_block"),
+            &SystemClauseType::RetractClause => clause_name!("$retract_clause"),
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
             &SystemClauseType::ReturnFromAttributeGoals => clause_name!("$return_from_attribute_goals"),
             &SystemClauseType::ReturnFromVerifyAttr => clause_name!("$return_from_verify_attr"),
@@ -361,6 +367,7 @@ impl SystemClauseType {
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
+            ("$abolish_clause", 2) => Some(SystemClauseType::AbolishClause),
             ("$asserta", 4) => Some(SystemClauseType::AssertDynamicPredicateToFront),
             ("$assertz", 4) => Some(SystemClauseType::AssertDynamicPredicateToBack),
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
@@ -377,6 +384,7 @@ impl SystemClauseType {
             ("$get_attr_list", 2) => Some(SystemClauseType::GetAttributedVariableList),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
             ("$get_clause", 2) => Some(SystemClauseType::GetClause),
+            ("$get_current_predicate_list", 1) => Some(SystemClauseType::GetCurrentPredicateList),
             ("$get_lh_from_offset", 2) => Some(SystemClauseType::GetLiftedHeapFromOffset),
             ("$get_lh_from_offset_diff", 3) => Some(SystemClauseType::GetLiftedHeapFromOffsetDiff),
             ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
@@ -403,6 +411,7 @@ impl SystemClauseType {
             ("$get_cp", 1) => Some(SystemClauseType::GetCutPoint),
             ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
+            ("$retract_clause", 4) => Some(SystemClauseType::RetractClause),
             ("$return_from_attribute_goals", 0) => Some(SystemClauseType::ReturnFromAttributeGoals),
             ("$return_from_verify_attr", 0) => Some(SystemClauseType::ReturnFromVerifyAttr),
             ("$set_ball", 1) => Some(SystemClauseType::SetBall),
@@ -1022,7 +1031,7 @@ impl DynamicAssertPlace {
 pub enum DynamicTransactionType {
     Abolish,
     Assert(DynamicAssertPlace),
-    Retract(usize) // dynamic index of the clause to remove.
+    Retract // dynamic index of the clause to remove.
 }
 
 #[derive(Clone, PartialEq)]
@@ -1533,15 +1542,15 @@ pub type HeapVarDict  = HashMap<Rc<Var>, Addr>;
 pub type AllocVarDict = HashMap<Rc<Var>, VarData>;
 
 pub enum SessionError {
-    CannotOverwriteBuiltIn(String),
-    CannotOverwriteImport(String),
+    CannotOverwriteBuiltIn(ClauseName),
+    CannotOverwriteImport(ClauseName),
     ModuleDoesNotContainExport,
     ModuleNotFound,
     NamelessEntry,
     OpIsInfixAndPostFix,
     ParserError(ParserError),
     QueryFailure,
-    QueryFailureWithException(String),
+    QueryFailureWithException(ClauseName),
     UserPrompt
 }
 

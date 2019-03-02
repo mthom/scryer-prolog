@@ -60,6 +60,36 @@ impl MachineError {
         MachineError { stub, from: ErrorProvenance::Constructed }
     }
 
+    // so far, this function is only called wrt dynamic database
+    // transactions. their inapplicable error cases have been left
+    // unhandled.
+    pub(super) fn session_error(h: usize, err: SessionError) -> Self {
+        match err {
+            SessionError::ParserError(err) => Self::syntax_error(h, err),
+            SessionError::CannotOverwriteBuiltIn(pred_str)
+          | SessionError::CannotOverwriteImport(pred_str) =>
+                Self::permission_error(PermissionError::Modify, pred_str),
+            SessionError::ModuleDoesNotContainExport =>
+                Self::permission_error(PermissionError::Access,
+                                      clause_name!("module_does_not_contain_claimed_export")),
+            SessionError::ModuleNotFound =>
+                Self::permission_error(PermissionError::Access,
+                                       clause_name!("module_does_not_exist")),
+            _ => unreachable!()
+        }
+    }
+
+    pub(super) fn permission_error(err: PermissionError, pred_str: ClauseName) -> Self {
+        let pred_str = HeapCellValue::Addr(Addr::Con(Constant::Atom(pred_str, None)));
+        
+        let err = vec![heap_atom!(err.as_str()), pred_str];
+        let mut stub = functor!("permission_error", 2);
+        
+        stub.extend(err.into_iter());
+
+        MachineError { stub, from: ErrorProvenance::Constructed }
+    }
+    
     pub(super) fn syntax_error(h: usize, err: ParserError) -> Self {
         let err = vec![heap_atom!(err.as_str())];        
 
@@ -109,6 +139,21 @@ impl MachineError {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum PermissionError {
+    Access,
+    Modify,
+}
+
+impl PermissionError {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PermissionError::Access => "access",
+            PermissionError::Modify => "modify"
+        }
+    }
+}
+    
 // from 7.12.2 b) of 13211-1:1995
 #[derive(Clone, Copy)]
 pub enum ValidType {

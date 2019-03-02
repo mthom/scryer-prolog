@@ -9,8 +9,8 @@ use termion::event::Key;
 use std::io::{Write, stdin, stdout};
 use std::fmt;
 
-fn error_string(e: &String) -> String {
-    format!("error: exception thrown: {}", e)
+fn error_string<StringT: AsRef<str>>(e: &StringT) -> String {
+    format!("error: exception thrown: {}", e.as_ref())
 }
 
 impl fmt::Display for LocalCodePtr {
@@ -375,7 +375,11 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
             }
 
             if !wam.or_stack_is_empty() {
-                println!("true .");
+                print!("true .");
+
+                if !heap_locs.is_empty() {
+                    println!("\r");
+                }
             }
 
             loop {
@@ -384,13 +388,15 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                 let bindings = wam.heap_view(&heap_locs, output).result();
                 let mut raw_stdout = stdout().into_raw_mode().unwrap();
 
-                write!(raw_stdout, "{}", bindings).unwrap();
-                raw_stdout.flush().unwrap();
-
-                let attr_goals = wam.attribute_goals(&heap_locs);
-
-                if !attr_goals.is_empty() {
-                    write!(raw_stdout, "\r\n{}\r\n", attr_goals).unwrap();
+                if !heap_locs.is_empty() {
+                    write!(raw_stdout, "{}", bindings).unwrap();
+                    raw_stdout.flush().unwrap();
+                    
+                    let attr_goals = wam.attribute_goals(&heap_locs);
+                    
+                    if !attr_goals.is_empty() {
+                        write!(raw_stdout, "\r\n{}\r\n", attr_goals).unwrap();
+                    }
                 }
 
                 if !wam.or_stack_is_empty() {
@@ -419,11 +425,15 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                         return;
                     }
                 } else {
+                    if heap_locs.is_empty() {
+                        write!(raw_stdout, "true.\r\n").unwrap();
+                    } else {
+                        write!(raw_stdout, ".\r\n").unwrap();
+                    }
+                    
                     break;
                 }
             }
-
-            write!(stdout(), ".\n").unwrap();
         },
         EvalSession::Error(e) => println!("{}", e),
         _ => {}

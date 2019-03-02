@@ -3,15 +3,15 @@
 :- module(builtins, [(=)/2, (\=)/2, (\+)/1, (+)/1, (+)/2, (**)/2,
 	(*)/2, (-)/1, (-)/2, (/)/2, (/\)/2, (\/)/2, (is)/2, (xor)/2,
 	(div)/2, (//)/2, (rdiv)/2, (<<)/2, (>>)/2, (mod)/2, (rem)/2,
-	(>)/2, (<)/2, (=\=)/2, (=:=)/2, (-)/1, (>=)/2, (=<)/2, (,)/2,
-	(->)/2, (;)/2, (=..)/2, (==)/2, (\==)/2, (@=<)/2, (@>=)/2,
-	(@<)/2, (@>)/2, (=@=)/2, (\=@=)/2, (:)/2, asserta/1,
+	(>)/2, (<)/2, (=\=)/2, (=:=)/2, (>=)/2, (=<)/2, (,)/2, (->)/2,
+	(;)/2, (=..)/2, (==)/2, (\==)/2, (@=<)/2, (@>=)/2, (@<)/2,
+	(@>)/2, (=@=)/2, (\=@=)/2, (:)/2, abolish/1, asserta/1,
 	assertz/1, bagof/3, call_with_inference_limit/3, catch/3,
-	clause/2, current_prolog_flag/2, expand_goal/2, expand_term/2,
-	findall/3, findall/4, once/1, repeat/0, set_prolog_flag/2,
-	setof/3, setup_call_cleanup/3, term_variables/2, throw/1,
-	true/0, false/0, write/1, write_canonical/1, writeq/1,
-	write_term/2]).
+	clause/2, current_predicate/1, current_prolog_flag/2,
+	expand_goal/2, expand_term/2, findall/3, findall/4, once/1,
+	repeat/0, retract/1, set_prolog_flag/2, setof/3,
+	setup_call_cleanup/3, term_variables/2, throw/1, true/0,
+	false/0, write/1, write_canonical/1, writeq/1, write_term/2]).
 
 /* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
    and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
@@ -495,8 +495,8 @@ asserta_clause(Head, Body) :-
     ).
 
 asserta(Clause) :-
-    ( Clause \= (_ :- _) -> Head = Clause, Body = true, asserta_clause(Head, Body)
-    ; Clause = (Head :- Body) -> asserta_clause(Head, Body)
+    (  Clause \= (_ :- _) -> Head = Clause, Body = true, asserta_clause(Head, Body)
+    ;  Clause = (Head :- Body) -> asserta_clause(Head, Body)
     ).
 
 call_assertz(Head, Body, Name, Arity) :-
@@ -516,6 +516,179 @@ assertz_clause(Head, Body) :-
     ).
 
 assertz(Clause) :-
-    ( Clause \= (_ :- _) -> Head = Clause, Body = true, assertz_clause(Head, Body)
-    ; Clause = (Head :- Body) -> assertz_clause(Head, Body)
+    (  Clause \= (_ :- _) -> Head = Clause, Body = true, assertz_clause(Head, Body)
+    ;  Clause = (Head :- Body) -> assertz_clause(Head, Body)
+    ).
+
+first_match_index([Clause0 | Clauses], Clause1, N0, N) :-
+    (  Clause0 \= Clause1 -> N1 is N0 + 1,
+			     first_match_index(Clauses, Clause1, N1, N)
+    ;  N0 = N, Clause0 = Clause1
+    ).
+
+retract_clauses([Clause|Clauses0], Head, Body, Name, Arity) :-
+    functor(VarHead, Name, Arity),
+    findall((VarHead :- VarBody), clause(VarHead, VarBody), Clauses1),
+    first_match_index(Clauses1, (Head :- Body), 0, N),
+    (  Clauses0 == [] -> !
+    ;  true
+    ),
+    '$retract_clause'(Name, Arity, N, Clauses1).
+retract_clauses([_|Clauses0], Head, Body, Name, Arity) :-
+    retract_clauses(Clauses0, Head, Body, Name, Arity).
+
+call_retract(Head, Body, Name, Arity) :-
+    findall((Head :- Body), clause(Head, Body), Clauses),
+    retract_clauses(Clauses, Head, Body, Name, Arity).
+
+retract_clause(Head, Body) :-
+    (  var(Head) -> throw(error(instantiation_error, retract/1))
+    ;  functor(Head, Name, Arity), atom(Name), Name \== '.' ->
+       ( '$head_is_dynamic'(Head) -> call_retract(Head, Body, Name, Arity)
+       ; '$no_such_predicate'(Head) -> '$fail'
+       ; throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
+       )
+    ;  throw(error(type_error(callable, Head), retract/1))
+    ).
+
+retract(Clause) :-
+    (  Clause \= (_ :- _) -> Head = Clause, Body = true, retract_clause(Head, Body)
+    ;  Clause = (Head :- Body) -> retract_clause(Head, Body)
+    ).
+
+abolish(Pred) :-
+    (  var(Pred) -> throw(error(instantiation_error), abolish/1)
+    ;  Pred = Name/Arity ->
+       (  var(Name)  -> throw(error(instantiation_error, abolish/1))
+       ;  var(Arity) -> throw(error(instantiation_error, abolish/1))
+       ;  integer(Arity) ->
+	  ( \+ atom(Name) -> throw(error(type_error(atom, Name), abolish/1))
+	  ; Arity < 0 -> throw(domain_error(not_less_than_zero, Arity), abolish/1)
+	  ; max_arity(N), Arity > N -> throw(representation_error(max_arity), abolish/1)
+	  ; functor(Head, Name, Arity) ->
+	    (  '$no_such_predicate'(Head) -> true
+	    ;  '$head_is_dynamic'(Head) -> '$abolish_clause'(Name, Arity)
+	    ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
+	    )
+	  )
+       ;  throw(error(type_error(integer, Arity), abolish/1))
+       )
+    ;  throw(error(type_error(predicate_indicator, Pred), abolish/1))
+    ).
+
+match_builtins(acyclic_term, 1).
+match_builtins(arg, 3).
+match_builtins(compare, 3).
+match_builtins(cyclic_term, 1).
+match_builtins(@>, 2).
+match_builtins(@<, 2).
+match_builtins(@>=, 2).
+match_builtins(@=<, 2).
+match_builtins(\\=@=, 2).
+match_builtins(=@=, 2).
+match_builtins(copy_term, 2).
+match_builtins(==, 2).
+match_builtins(functor, 3).
+match_builtins(ground, 1).
+match_builtins(is, 2).
+match_builtins(keysort, 2).
+match_builtins(nl, 0).
+match_builtins(\\==, 2).
+match_builtins(is_partial_string, 1).
+match_builtins(partial_string, 2).
+match_builtins(read, 1).
+match_builtins(sort, 2).
+match_builtins(>, 2).
+match_builtins(<, 2).
+match_builtins(>=, 2).
+match_builtins(=<, 2).
+match_builtins(=\\=, 2).
+match_builtins(=:=, 2).
+match_builtins(atom, 1).
+match_builtins(atomic, 1).
+match_builtins(compound, 1).
+match_builtins(integer, 1).
+match_builtins(rational, 1).
+match_builtins(string, 1).
+match_builtins(float, 1).
+match_builtins(nonvar, 1).
+match_builtins(var, 1).
+match_builtins(call, 0).
+match_builtins(call, 1).
+match_builtins(call, 2).
+match_builtins(call, 3).
+match_builtins(call, 4).
+match_builtins(call, 5).
+match_builtins(call, 6).
+match_builtins(call, 7).
+match_builtins(call, 8).
+match_builtins(call, 9).
+match_builtins(call, 10).
+match_builtins(call, 11).
+match_builtins(call, 12).
+match_builtins(call, 13).
+match_builtins(call, 14).
+match_builtins(call, 15).
+match_builtins(call, 16).
+match_builtins(call, 17).
+match_builtins(call, 18).
+match_builtins(call, 19).
+match_builtins(call, 20).
+match_builtins(call, 21).
+match_builtins(call, 22).
+match_builtins(call, 23).
+match_builtins(call, 24).
+match_builtins(call, 25).
+match_builtins(call, 26).
+match_builtins(call, 27).
+match_builtins(call, 28).
+match_builtins(call, 29).
+match_builtins(call, 30).
+match_builtins(call, 31).
+match_builtins(call, 32).
+match_builtins(call, 33).
+match_builtins(call, 34).
+match_builtins(call, 35).
+match_builtins(call, 36).
+match_builtins(call, 37).
+match_builtins(call, 38).
+match_builtins(call, 39).
+match_builtins(call, 40).
+match_builtins(call, 41).
+match_builtins(call, 42).
+match_builtins(call, 43).
+match_builtins(call, 44).
+match_builtins(call, 45).
+match_builtins(call, 46).
+match_builtins(call, 47).
+match_builtins(call, 48).
+match_builtins(call, 49).
+match_builtins(call, 50).
+match_builtins(call, 51).
+match_builtins(call, 52).
+match_builtins(call, 53).
+match_builtins(call, 54).
+match_builtins(call, 55).
+match_builtins(call, 56).
+match_builtins(call, 57).
+match_builtins(call, 58).
+match_builtins(call, 59).
+match_builtins(call, 60).
+match_builtins(call, 61).
+match_builtins(call, 62).
+match_builtins(call, 63).
+
+'$iterate_predicate_list'([Name/Arity|Preds], Name/Arity).
+'$iterate_predicate_list'([_|Preds], Pred) :-
+    '$iterate_predicate_list'(Preds, Pred).
+'$iterate_predicate_list'([], Name/Arity) :-
+    match_builtins(Name, Arity).
+
+current_predicate(Pred) :-
+    (  var(Pred) -> throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
+    ;  Pred = _ / _ ->
+       (  '$get_current_predicate_list'(Ls),
+	  '$iterate_predicate_list'(Ls, Pred)
+       )
+    ;  throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ).

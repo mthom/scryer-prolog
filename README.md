@@ -46,8 +46,8 @@ Extend rusty-wam to include the following, among other features:
   paper "Indexing `dif/2`" (_done_).
 * All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`) (_done_).
 * Clause creation and destruction (`asserta/1`, `assertz/1`,
-  `retract/1`, `abolish/1`) with logical update semantics (_in progress_).
-* Streams and predicates for stream control.
+  `retract/1`, `abolish/1`) with logical update semantics (_done_).
+* Streams and predicates for stream control (_in progress_).
 * An incremental compacting garbage collector satisfying the five
   properties of "Precise Garbage Collection in Prolog."
 * Mode declarations.
@@ -131,6 +131,7 @@ The following predicates are built-in to rusty-wam.
 * `(=..)/2`
 * `(->)/2`
 * `(;)/2`
+* `abolish/1`
 * `acyclic_term/2`
 * `append/3`
 * `arg/3`
@@ -150,6 +151,7 @@ The following predicates are built-in to rusty-wam.
 * `compare/3`
 * `compound/1`
 * `copy_term/2`
+* `current_predicate/1`
 * `cyclic_term/1`
 * `dif/2`
 * `expand_goal/2`
@@ -182,6 +184,7 @@ The following predicates are built-in to rusty-wam.
 * `rational/1`
 * `read/1`
 * `repeat/{0,1}`
+* `retract/1`
 * `reverse/2`
 * `select/3`
 * `setof/3`

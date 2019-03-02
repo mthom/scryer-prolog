@@ -1423,7 +1423,7 @@ impl MachineState {
 
         for index in from .. self.ball.stub.len() {
             let heap_value = self.ball.stub[index].clone();
-            
+
             self.heap.push(match heap_value {
                 HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
                 _ => heap_value
@@ -1768,7 +1768,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Atom(..)) | Addr::Con(Constant::Char(_)) => self.p += 1,
+                    Addr::Con(Constant::Atom(..)) | Addr::Con(Constant::Char(_)) => {},
                     _ => self.fail = true
                 };
             },
@@ -1776,7 +1776,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(_) => self.p += 1,
+                    Addr::Con(_) => {},
                     _ => self.fail = true
                 };
             },
@@ -1784,7 +1784,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Number(Number::Integer(_))) => self.p += 1,
+                    Addr::Con(Constant::Number(Number::Integer(_))) => {},
                     _ => self.fail = true
                 };
             },
@@ -1792,7 +1792,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Str(_) | Addr::Lis(_) => self.p += 1,
+                    Addr::Str(_) | Addr::Lis(_) => {},
                     _ => self.fail = true
                 };
             },
@@ -1800,7 +1800,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Number(Number::Float(_))) => self.p += 1,
+                    Addr::Con(Constant::Number(Number::Float(_))) => {},
                     _ => self.fail = true
                 };
             },
@@ -1808,7 +1808,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Number(Number::Rational(_))) => self.p += 1,
+                    Addr::Con(Constant::Number(Number::Rational(_))) => {},
                     _ => self.fail = true
                 };
             },
@@ -1816,7 +1816,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::String(_)) => self.p += 1,
+                    Addr::Con(Constant::String(_)) => {},
                     _ => self.fail = true
                 };
             },
@@ -1825,14 +1825,14 @@ impl MachineState {
 
                 match d {
                     Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(..) => self.fail = true,
-                    _ => self.p += 1
+                    _ => {}
                 };
             },
             &InlinedClauseType::IsVar(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_,_) => self.p += 1,
+                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_,_) => {},
                     _ => self.fail = true
                 };
             },
@@ -1840,11 +1840,13 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::String(ref s)) if s.is_expandable() => self.p += 1,
+                    Addr::Con(Constant::String(ref s)) if s.is_expandable() => {},
                     _ => self.fail = true
                 };
             }
         }
+
+        self.set_p();
     }
 
     fn try_functor_unify_components(&mut self, name: Addr, arity: Addr) {

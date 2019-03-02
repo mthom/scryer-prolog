@@ -24,12 +24,10 @@ use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
 
-//pub type DynamicPredicateClauses = VecDeque<(PredicateClause, VecDeque<TopLevel>)>;
 
 #[derive(Copy, Clone)]
 pub struct DynamicPredicateInfo {
     pub(super) clauses_subsection_p: usize, // a LocalCodePtr::DirEntry value.
-//    clauses: DynamicPredicateClauses
 }
 
 impl Default for DynamicPredicateInfo {
@@ -424,6 +422,8 @@ impl Machine {
                 _ => {
                     // ensure we don't try to overwrite the name/arity of a builtin.
                     let err_str = format!("{}/{}", key.0, key.1);
+                    let err_str = clause_name!(err_str, self.indices.atom_tbl());
+                    
                     return Err(SessionError::CannotOverwriteBuiltIn(err_str));
                 }
             };
@@ -439,6 +439,7 @@ impl Machine {
                     if existing_idx.module_name() != idx.module_name() {
                         let err_str = format!("{}/{} from module {}", key.0, key.1,
                                               existing_idx.module_name().as_str());
+                        let err_str = clause_name!(err_str, self.indices.atom_tbl());
                         return Err(SessionError::CannotOverwriteImport(err_str));
                     }
                 }
@@ -479,18 +480,19 @@ impl Machine {
         self.code_repo.code.len()
     }
 
-    fn fail(&mut self, heap_locs: &HeapVarDict) -> EvalSession
+    fn fail(&mut self) -> EvalSession
     {
         if self.machine_st.ball.stub.len() > 0 {
             let h = self.machine_st.heap.h;
             self.machine_st.copy_and_align_ball_to_heap(0);
 
-            let error_str = self.machine_st.print_exception(Addr::HeapCell(h),
-                                                            &heap_locs,
-                                                            PrinterOutputter::new())
-                                .result();
+            let err_str = self.machine_st.print_exception(Addr::HeapCell(h),
+                                                          &HeapVarDict::new(),
+                                                          PrinterOutputter::new())
+                .result();
 
-            EvalSession::from(SessionError::QueryFailureWithException(error_str))
+            let err_str = clause_name!(err_str, self.indices.atom_tbl());            
+            EvalSession::from(SessionError::QueryFailureWithException(err_str))
         } else {
             EvalSession::from(SessionError::QueryFailure)
         }
@@ -504,7 +506,7 @@ impl Machine {
         self.run_query(&alloc_locs, &mut heap_locs);
 
         if self.machine_st.fail {
-            self.fail(&heap_locs)
+            self.fail()
         } else {
             EvalSession::InitialQuerySuccess(alloc_locs, heap_locs)
         }
@@ -599,7 +601,7 @@ impl Machine {
             self.run_query(alloc_l, heap_l);
 
             if self.machine_st.fail {
-                self.fail(&heap_l)
+                self.fail()
             } else {
                 EvalSession::SubsequentQuerySuccess
             }

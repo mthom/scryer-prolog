@@ -1856,6 +1856,61 @@ insect(bee).");
     assert_prolog_failure!(&mut wam, "?- assertz( (foo :- 4) ).");
     assert_prolog_success!(&mut wam, "?- catch(assertz( (atom(_) :- true) ), error(permission_error(modify, static_procedure, atom/1), _), true).");
     assert_prolog_failure!(&mut wam, "?- assertz( (atom(_) :- true) ).");
+
+    submit(&mut wam, "
+:- dynamic(legs/2).
+legs(A, 4) :- animal(A).
+legs(octopus, 8).
+legs(A, 6) :- insect(A).
+legs(spider, 8).
+legs(B, 2) :- bird(B).
+
+:- dynamic(insect/1).
+insect(ant).
+insect(bee).
+
+:- dynamic(foo/1).
+foo(X) :- call(X), call(X).
+foo(X) :- call(X) -> call(X).");
+
+    assert_prolog_success!(&mut wam, "?- retract(legs(octopus, 8)).");
+    assert_prolog_failure!(&mut wam, "?- retract(legs(spider, 6)).");
+    assert_prolog_success!(&mut wam, "?- retract( (legs(X, 2) :- T) ).",
+                           [["X = _1", "T = bird(_1)"]]);
+    assert_prolog_success!(&mut wam, "?- retract( (legs(X, Y) :- Z) ).",
+                           [["X = _1", "Y = 4", "Z = animal(_1)"],
+                            ["X = _1", "Y = 6", "Z = insect(_1)"],
+                            ["X = spider", "Y = 8", "Z = true"]]);
+    assert_prolog_failure!(&mut wam, "?- retract( (legs(X, Y) :- Z) ).");
+    assert_prolog_success!(&mut wam, "?- retract(insect(I)).",
+                           [["I = ant"],
+                            ["I = bee"]]);
+    assert_prolog_success!(&mut wam, "?- retract(( foo(A) :- A, call(A) )).",
+                           [["A = call(A)"]]);
+    assert_prolog_success!(&mut wam, "?- foo(atom(atom)).");
+    assert_prolog_success!(&mut wam, "?- retract(( foo(C) :- A -> B )).",
+                           [["A = call(_1)", "B = call(_1)", "C = _1"]]);
+    assert_prolog_failure!(&mut wam, "?- retract( (X :- in_eec(Y)) ).");
+    assert_prolog_success!(&mut wam, "?- catch(retract( (X :- in_eec(Y)) ), error(instantiation_error, _), true).");
+    assert_prolog_failure!(&mut wam, "?- retract( (4 :- X) ).");
+    assert_prolog_success!(&mut wam, "?- catch(retract( (4 :- X) ), error(type_error(callable, 4), _), true).");
+    assert_prolog_failure!(&mut wam, "?- retract( (atom(X) :- X == '[]') ).");
+    assert_prolog_success!(&mut wam, "?- catch(retract( (atom(X) :- X == '[]') ), error(permission_error(modify, static_procedure, atom/1), _), true).");
+
+    submit(&mut wam, "
+:- dynamic(foo/1).
+foo(X) :- call(X), call(X).
+foo(X) :- call(X) -> call(X).");
+
+    assert_prolog_success!(&mut wam, "?- abolish(foo/2).");
+    assert_prolog_failure!(&mut wam, "?- abolish(foo/_).");
+    assert_prolog_success!(&mut wam, "?- catch(abolish(foo/_), error(instantiation_error, abolish/1), true).");
+    assert_prolog_failure!(&mut wam, "?- abolish(foo).");
+    assert_prolog_success!(&mut wam, "?- catch(abolish(foo), error(type_error(predicate_indicator, foo), abolish/1), true).");
+    assert_prolog_failure!(&mut wam, "?- abolish(foo(_)).");
+    assert_prolog_success!(&mut wam, "?- catch(abolish(foo(_)), error(type_error(predicate_indicator, foo(_)), abolish/1), true).");
+    assert_prolog_failure!(&mut wam, "?- abolish(abolish/1).");
+    assert_prolog_success!(&mut wam, "?- catch(abolish(abolish/1), error(permission_error(modify, static_procedure, abolish/1), abolish/1), true).");
 }
 
 
