@@ -8,6 +8,7 @@ use prolog::heap_print::*;
 use prolog::instructions::*;
 
 mod attributed_variables;
+mod dynamic_database;
 mod machine_errors;
 pub(super) mod machine_state;
 pub(super) mod term_expansion;
@@ -69,19 +70,19 @@ impl IndexStore {
                             -> bool
     {
         match ClauseType::from(name, arity, op_spec) {
-            ClauseType::Named(name, arity, _) => 
+            ClauseType::Named(name, arity, _) =>
                 self.code_dir.contains_key(&(name, arity)),
             ClauseType::Op(op_decl, ..) =>
                 self.code_dir.contains_key(&(op_decl.name(), op_decl.arity())),
             _ => true
         }
     }
-    
+
     #[inline]
     pub fn get_clause_subsection(&self, name: ClauseName, arity: usize) -> Option<DynamicPredicateInfo> {
         self.dynamic_code_dir.get(&(name, arity)).cloned()
     }
-    
+
     #[inline]
     pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
         self.modules.remove(&name)
@@ -557,8 +558,23 @@ impl Machine {
 
             match self.machine_st.p {
                 CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {},
-                CodePtr::DynamicTransaction(trans_type, p) => {},
-//                  self.dynamic_transaction(trans_type, p),
+                CodePtr::DynamicTransaction(trans_type, p) => {
+                    // self.code_repo.cached_query is about to be overwritten by the term expander,
+                    // so hold onto it locally and restore it after the compiler has finished.
+                    let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
+                    self.dynamic_transaction(trans_type, p);
+
+                    if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
+                        if heap_locs.is_empty() {
+                            self.record_var_places(0, alloc_locs, heap_locs);
+                        }
+
+                        self.code_repo.cached_query = cached_query;
+                        break;
+                    }
+
+                    self.code_repo.cached_query = cached_query;
+                },
                 _ => {
                     if heap_locs.is_empty() {
                         self.record_var_places(0, alloc_locs, heap_locs);

@@ -245,6 +245,8 @@ pub struct Module {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
+    AssertDynamicPredicateToBack,    
+    AssertDynamicPredicateToFront,
     CheckCutPoint,
     CopyToLiftedHeap,
     DeleteAttribute,
@@ -301,6 +303,8 @@ pub enum SystemClauseType {
 impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
+            &SystemClauseType::AssertDynamicPredicateToBack => clause_name!("$asserta"),
+            &SystemClauseType::AssertDynamicPredicateToFront => clause_name!("$assertz"),
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
@@ -357,6 +361,8 @@ impl SystemClauseType {
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
+            ("$asserta", 4) => Some(SystemClauseType::AssertDynamicPredicateToFront),
+            ("$assertz", 4) => Some(SystemClauseType::AssertDynamicPredicateToBack),
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
             ("$copy_to_lh", 2) => Some(SystemClauseType::CopyToLiftedHeap),
             ("$del_attr_non_head", 1) => Some(SystemClauseType::DeleteAttribute),
@@ -995,10 +1001,19 @@ pub enum DynamicAssertPlace {
 }
 
 impl DynamicAssertPlace {
+    #[inline]
     pub fn predicate_name(self) -> ClauseName {
         match self {
             DynamicAssertPlace::Back  => clause_name!("assertz"),
             DynamicAssertPlace::Front => clause_name!("asserta")
+        }
+    }
+
+    #[inline]
+    pub fn push_to_queue(self, addrs: &mut VecDeque<Addr>, new_addr: Addr) {
+        match self {
+            DynamicAssertPlace::Back  => addrs.push_back(new_addr),
+            DynamicAssertPlace::Front => addrs.push_front(new_addr)
         }
     }
 }

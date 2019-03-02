@@ -116,7 +116,7 @@ pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> 
             },
             &TermRef::AnonVar(Level::Root) | &TermRef::Constant(Level::Root, ..) =>
                 machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h))),
-            &TermRef::Var(Level::Root, _, ref name) =>
+            &TermRef::Var(Level::Root, ..) =>
                 machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h))),
             &TermRef::AnonVar(_) => {
                 if let Some((arity, site_h)) = queue.pop_front() {

@@ -134,6 +134,8 @@ The following predicates are built-in to rusty-wam.
 * `acyclic_term/2`
 * `append/3`
 * `arg/3`
+* `asserta/1`
+* `assertz/1`
 * `atom/1`
 * `atomic/1`
 * `bagof/3`
@@ -144,6 +146,7 @@ The following predicates are built-in to rusty-wam.
 * `call_residue_vars/2`
 * `can_be/2`
 * `catch/3`
+* `clause/2`
 * `compare/3`
 * `compound/1`
 * `copy_term/2`

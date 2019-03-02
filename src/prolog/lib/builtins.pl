@@ -5,9 +5,9 @@
 	(div)/2, (//)/2, (rdiv)/2, (<<)/2, (>>)/2, (mod)/2, (rem)/2,
 	(>)/2, (<)/2, (=\=)/2, (=:=)/2, (-)/1, (>=)/2, (=<)/2, (,)/2,
 	(->)/2, (;)/2, (=..)/2, (==)/2, (\==)/2, (@=<)/2, (@>=)/2,
-	(@<)/2, (@>)/2, (=@=)/2, (\=@=)/2, (:)/2, bagof/3,
-	call_with_inference_limit/3, catch/3, clause/2,
-	current_prolog_flag/2, expand_goal/2, expand_term/2,
+	(@<)/2, (@>)/2, (=@=)/2, (\=@=)/2, (:)/2, asserta/1,
+	assertz/1, bagof/3, call_with_inference_limit/3, catch/3,
+	clause/2, current_prolog_flag/2, expand_goal/2, expand_term/2,
 	findall/3, findall/4, once/1, repeat/0, set_prolog_flag/2,
 	setof/3, setup_call_cleanup/3, term_variables/2, throw/1,
 	true/0, false/0, write/1, write_canonical/1, writeq/1,
@@ -459,8 +459,8 @@ setof(Template, Goal, Solution) :-
 
 '$clause_body_is_valid'(B) :-
     (  var(B) -> true
-    ;  functor(B, Name, _) -> (  Name == '.' -> throw(error(type_error(callable, B), clause/2))
-			      ;  true
+    ;  functor(B, Name, _) -> (  atom(Name), Name \= '.' -> true
+			      ;  throw(error(type_error(callable, B), clause/2))
 			      )
     ;  throw(error(type_error(callable, B), clause/2))
     ).
@@ -476,4 +476,46 @@ clause(H, B) :-
 						 clause/2))
 				  )
     ;  throw(error(type_error(callable, H), clause/2))
+    ).
+
+call_asserta(Head, Body, Name, Arity) :-
+    '$clause_body_is_valid'(Body),
+    functor(VarHead, Name, Arity),
+    findall((VarHead :- VarBody), clause(VarHead, VarBody), Clauses),
+    '$asserta'((Head :- Body), Clauses, Name, Arity).
+
+asserta_clause(Head, Body) :-
+    (  var(Head) -> throw(error(instantiation_error, asserta/1))
+    ;  functor(Head, Name, Arity), atom(Name), Name \== '.' ->
+       ( '$no_such_predicate'(Head) -> call_asserta(Head, Body, Name, Arity)
+       ; '$head_is_dynamic'(Head) -> call_asserta(Head, Body, Name, Arity)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
+       )
+    ;  throw(error(type_error(callable, Head), asserta/1))
+    ).
+
+asserta(Clause) :-
+    ( Clause \= (_ :- _) -> Head = Clause, Body = true, asserta_clause(Head, Body)
+    ; Clause = (Head :- Body) -> asserta_clause(Head, Body)
+    ).
+
+call_assertz(Head, Body, Name, Arity) :-
+    '$clause_body_is_valid'(Body),
+    functor(VarHead, Name, Arity),
+    findall((VarHead :- VarBody), clause(VarHead, VarBody), Clauses),
+    '$assertz'((Head :- Body), Clauses, Name, Arity).
+
+assertz_clause(Head, Body) :-
+    (  var(Head) -> throw(error(instantiation_error, assertz/1))
+    ;  functor(Head, Name, Arity), atom(Name), Name \== '.' ->
+       ( '$no_such_predicate'(Head) -> call_assertz(Head, Body, Name, Arity)
+       ; '$head_is_dynamic'(Head) -> call_assertz(Head, Body, Name, Arity)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), assertz/1))
+       )
+    ;  throw(error(type_error(callable, Head), assertz/1))
+    ).
+
+assertz(Clause) :-
+    ( Clause \= (_ :- _) -> Head = Clause, Body = true, assertz_clause(Head, Body)
+    ; Clause = (Head :- Body) -> assertz_clause(Head, Body)
     ).

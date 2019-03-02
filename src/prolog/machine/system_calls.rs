@@ -230,6 +230,20 @@ impl MachineState {
                               -> CallResult
     {
         match ct {
+            &SystemClauseType::AssertDynamicPredicateToFront => {
+                let p = self.cp;
+                let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Front);
+
+                self.p = CodePtr::DynamicTransaction(trans_type, p);
+                return Ok(());
+            },
+            &SystemClauseType::AssertDynamicPredicateToBack => {
+                let p = self.cp;
+                let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Back);
+
+                self.p = CodePtr::DynamicTransaction(trans_type, p);
+                return Ok(());
+            },
             &SystemClauseType::LiftedHeapLength => {
                 let a1 = self[temp_v!(1)].clone();
                 let lh_len = Addr::Con(Constant::Usize(self.lifted_heap.len()));
@@ -260,7 +274,6 @@ impl MachineState {
                 };
             },
             &SystemClauseType::CopyToLiftedHeap =>
-                // now, stagger everything down by the length of the heap + lh offset.
                 match self.store(self.deref(self[temp_v!(1)].clone())) {
                     Addr::Con(Constant::Usize(lh_offset)) => {
                         let copy_target = self[temp_v!(2)].clone();
@@ -304,10 +317,10 @@ impl MachineState {
                                 self.heap[h+1] = HeapCellValue::Addr(Addr::HeapCell(l+1));
                                 self.trail(TrailRef::AttrVarLink(h+1, Addr::Lis(l)));
                             },
-                            _ => {}
+                            _ => unreachable!()
                         }
                     },
-                    _ => {}
+                    _ => unreachable!()
                 }
             },
             &SystemClauseType::DynamicModuleResolution => {
@@ -764,7 +777,6 @@ impl MachineState {
             },
             &SystemClauseType::GetClause => {
                 let head = self[temp_v!(1)].clone();
-                let body = self[temp_v!(2)].clone();
 
                 let subsection = match self.store(self.deref(head)) {
                     Addr::Str(s) =>

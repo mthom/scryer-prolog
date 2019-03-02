@@ -25,13 +25,6 @@ impl MachineError {
         functor!("/", 2, [name, heap_integer!(arity)], (400, YFX))
     }
 
-    pub(super) fn static_modification_error(perm_error: PermissionError, culprit: Addr) -> Self {
-        let stub = functor!("permission_error", 3, [heap_atom!(perm_error.as_str()),
-                                                    heap_atom!("static_procedure"),
-                                                    HeapCellValue::Addr(culprit)]);
-        MachineError { stub, from: ErrorProvenance::Received }
-    }
-
     pub(super) fn evaluation_error(eval_error: EvalError) -> Self {
         let stub = functor!("evaluation_error", 1, [heap_atom!(eval_error.as_str())]);
         MachineError { stub, from: ErrorProvenance::Received }
@@ -156,19 +149,6 @@ impl ValidType {
             ValidType::Pair => "pair",
 //            ValidType::PredicateIndicator => "predicate_indicator",
 //            ValidType::Variable => "variable"
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum PermissionError {
-    Modify
-}
-
-impl PermissionError {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            PermissionError::Modify => "modify"
         }
     }
 }

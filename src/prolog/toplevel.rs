@@ -832,7 +832,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
 
     fn take_dynamic_clauses(&mut self) {
         let (name, arity) = match self.rel_worker.dynamic_clauses.first() {
-            Some((head, tail)) =>
+            Some((head, _)) =>
                 (head.name().unwrap(), head.arity()),
             None =>
                 return

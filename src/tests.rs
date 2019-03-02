@@ -1815,7 +1815,49 @@ insect(bee).");
     assert_prolog_success!(&mut wam, "?- catch(clause(4, _), error(type_error(callable, 4), _), true).");
     assert_prolog_success!(&mut wam, "?- catch(clause(elk(N), _), error(permission_error(access, private_procedure, elk/1), _), true).");
     assert_prolog_success!(&mut wam, "?- catch(clause(atom(N), _), error(permission_error(access, private_procedure, atom/1), _), true).");
+
+    assert_prolog_success!(&mut wam, "?- asserta(legs(octopus, 8)).");
+    assert_prolog_success!(&mut wam, "?- asserta( (legs(A, 4) :- animal(A)) ).");
+    assert_prolog_success!(&mut wam, "?- asserta( (foo(X) :- X, call(X)) ).");
+    assert_prolog_success!(&mut wam, "?- catch(asserta(_), error(instantiation_error, _), true).");
+    assert_prolog_failure!(&mut wam, "?- asserta(_).");
+    assert_prolog_success!(&mut wam, "?- catch(asserta(4), error(type_error(callable, 4), _), true).");
+    assert_prolog_failure!(&mut wam, "?- asserta(4).");
+    assert_prolog_success!(&mut wam, "?- catch(asserta( (foo :- 4) ), error(type_error(callable, 4), _), true).");
+    assert_prolog_failure!(&mut wam, "?- asserta( (foo :- 4) ).");
+    assert_prolog_success!(&mut wam, "?- catch(asserta( (atom(_) :- true) ), error(permission_error(modify, static_procedure, atom/1), _), true).");
+    assert_prolog_failure!(&mut wam, "?- asserta( (atom(_) :- true) ).");
+
+    submit(&mut wam, "
+:- dynamic(cat/0).
+cat.
+
+:- dynamic(dog/0).
+dog :- true.
+
+elk(X) :- moose(X).
+
+:- dynamic(legs/2).
+legs(A, 6) :- insect(A).
+legs(A, 7) :- A, call(A).
+
+:- dynamic(insect/1).
+insect(ant).
+insect(bee).");
+
+    assert_prolog_success!(&mut wam, "?- assertz(legs(octopus, 8)).");
+    assert_prolog_success!(&mut wam, "?- assertz( (legs(A, 4) :- animal(A)) ).");
+    assert_prolog_success!(&mut wam, "?- assertz( (foo(X) :- X, call(X)) ).");
+    assert_prolog_success!(&mut wam, "?- catch(assertz(_), error(instantiation_error, _), true).");
+    assert_prolog_failure!(&mut wam, "?- assertz(_).");
+    assert_prolog_success!(&mut wam, "?- catch(assertz(4), error(type_error(callable, 4), _), true).");
+    assert_prolog_failure!(&mut wam, "?- assertz(4).");
+    assert_prolog_success!(&mut wam, "?- catch(assertz( (foo :- 4) ), error(type_error(callable, 4), _), true).");
+    assert_prolog_failure!(&mut wam, "?- assertz( (foo :- 4) ).");
+    assert_prolog_success!(&mut wam, "?- catch(assertz( (atom(_) :- true) ), error(permission_error(modify, static_procedure, atom/1), _), true).");
+    assert_prolog_failure!(&mut wam, "?- assertz( (atom(_) :- true) ).");
 }
+
 
 #[test]
 fn test_queries_on_setup_call_cleanup()
