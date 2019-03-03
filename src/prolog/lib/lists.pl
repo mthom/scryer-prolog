@@ -41,7 +41,10 @@ append([X|L], R, [X|S]) :- append(L, R, S).
 
 memberchk(X, Xs) :- member(X, Xs), !.
 
-reverse(Xs, Ys) :- reverse(Xs, Ys, [], [], Xs).
+reverse(Xs, Ys) :-
+    (  var(Ys) -> reverse(Xs, Ys, [], [], Xs)
+    ;  reverse(Ys, Xs, [], [], Ys)
+    ).
 
 reverse([], [], XsRev, YsRev, YsRev).
 reverse([X1|Xs], [Y1|Ys], XsPreludeRev, YsPreludeRev, Xss) :-
