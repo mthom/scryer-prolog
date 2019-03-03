@@ -1768,7 +1768,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Atom(..)) | Addr::Con(Constant::Char(_)) => {},
+                    Addr::Con(Constant::Atom(..)) | Addr::Con(Constant::Char(_)) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1776,7 +1776,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(_) => {},
+                    Addr::Con(_) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1784,7 +1784,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Number(Number::Integer(_))) => {},
+                    Addr::Con(Constant::Number(Number::Integer(_))) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1792,7 +1792,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Str(_) | Addr::Lis(_) => {},
+                    Addr::Str(_) | Addr::Lis(_) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1800,7 +1800,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Number(Number::Float(_))) => {},
+                    Addr::Con(Constant::Number(Number::Float(_))) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1808,7 +1808,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Number(Number::Rational(_))) => {},
+                    Addr::Con(Constant::Number(Number::Rational(_))) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1816,7 +1816,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::String(_)) => {},
+                    Addr::Con(Constant::String(_)) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1825,14 +1825,14 @@ impl MachineState {
 
                 match d {
                     Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(..) => self.fail = true,
-                    _ => {}
+                    _ => self.p += 1
                 };
             },
             &InlinedClauseType::IsVar(r1) => {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_,_) => {},
+                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_,_) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -1840,13 +1840,11 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::String(ref s)) if s.is_expandable() => {},
+                    Addr::Con(Constant::String(ref s)) if s.is_expandable() => self.p += 1,
                     _ => self.fail = true
                 };
             }
         }
-
-        self.set_p();
     }
 
     fn try_functor_unify_components(&mut self, name: Addr, arity: Addr) {
@@ -2208,8 +2206,13 @@ impl MachineState {
                 try_or_fail!(self, call_policy.call_n(self, arity, indices)),
             &ClauseType::Hook(ref hook) =>
                 try_or_fail!(self, call_policy.compile_hook(self, hook)),
-            &ClauseType::Inlined(ref ct) =>
-                self.execute_inlined(ct),
+            &ClauseType::Inlined(ref ct) => {
+                self.execute_inlined(ct);
+                
+                if lco {
+                    self.p = CodePtr::Local(self.cp);
+                }
+            },
             &ClauseType::Named(ref name, _, ref idx) | &ClauseType::Op(OpDecl(.., ref name), ref idx) =>
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
                                                             indices)),

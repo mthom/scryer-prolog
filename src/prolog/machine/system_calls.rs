@@ -186,7 +186,7 @@ impl MachineState {
     pub(super)
     fn set_p(&mut self) {
         if self.last_call {
-            self.p = CodePtr::Local(self.cp.clone());
+            self.p = CodePtr::Local(self.cp);
         } else {
             self.p += 1;
         }

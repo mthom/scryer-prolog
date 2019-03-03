@@ -747,8 +747,13 @@ pub(crate) trait CallPolicy: Any {
                     machine_st.setup_built_in_call(built_in.clone());
                     self.call_builtin(machine_st, &built_in, indices)?;
                 },
-                ClauseType::Inlined(inlined) =>
-                    machine_st.execute_inlined(&inlined),
+                ClauseType::Inlined(inlined) => {
+                    machine_st.execute_inlined(&inlined);
+
+                    if machine_st.last_call {
+                        machine_st.p = CodePtr::Local(machine_st.cp);
+                    }
+                },
                 ClauseType::Op(..) | ClauseType::Named(..) => {
                     let module = name.owning_module();
 
