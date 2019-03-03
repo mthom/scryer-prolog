@@ -614,7 +614,8 @@ match_builtins(float, 1).
 match_builtins(nonvar, 1).
 match_builtins(var, 1).
 match_builtins(call, N) :-
-    between:between(0, 63, N).
+    max_arity(Max),
+    between:between(0, Max, N).
 
 '$iterate_predicate_list'([Name/Arity|Preds], Name/Arity).
 '$iterate_predicate_list'([_|Preds], Pred) :-
