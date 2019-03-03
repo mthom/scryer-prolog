@@ -182,16 +182,6 @@ impl MachineState {
         self.block
     }
 
-    #[inline]
-    pub(super)
-    fn set_p(&mut self) {
-        if self.last_call {
-            self.p = CodePtr::Local(self.cp);
-        } else {
-            self.p += 1;
-        }
-    }
-
     fn copy_findall_solution(&mut self, lh_offset: usize, copy_target: Addr) -> usize
     {
         let threshold = self.lifted_heap.len() - lh_offset;
@@ -529,9 +519,7 @@ impl MachineState {
 
                                 if let Some(r) = dest.as_var() {
                                     self.bind(r, addr.clone());
-                                    self.set_p();
-
-                                    return Ok(());
+                                    return return_from_clause!(self.last_call, self);
                                 }
                             } else {
                                 sgc_policy.push_cont_pt(addr, b_cutoff, prev_b);
@@ -926,6 +914,6 @@ impl MachineState {
             }
         };
 
-        Ok(self.set_p())
+        return_from_clause!(self.last_call, self)
     }
 }
