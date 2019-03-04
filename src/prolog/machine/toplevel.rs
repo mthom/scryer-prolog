@@ -1,9 +1,12 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::instructions::*;
+use prolog::forms::*;
 use prolog::iterators::*;
 use prolog::machine::*;
+use prolog::machine::code_repo::*;
+use prolog::machine::machine_errors::*;
+use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::MachineState;
 use prolog::machine::term_expansion::*;
 use prolog::num::*;
@@ -756,7 +759,7 @@ pub
 fn string_to_toplevel<R: Read>(src: R, buffer: String, wam: &mut Machine)
                                -> Result<TopLevelPacket, SessionError>
 {
-    let mut term_stream = TermStream::new(src, wam.indices.atom_tbl.clone(),
+    let mut term_stream = TermStream::new(src, wam.indices.atom_tbl(),
                                           wam.machine_flags(), &mut wam.indices,
                                           &mut wam.policies, &mut wam.code_repo);
 

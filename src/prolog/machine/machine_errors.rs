@@ -1,6 +1,6 @@
 use prolog_parser::ast::*;
 
-use prolog::instructions::*;
+use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
 use prolog::num::bigint::BigInt;
 
@@ -81,26 +81,26 @@ impl MachineError {
 
     pub(super) fn permission_error(err: PermissionError, pred_str: ClauseName) -> Self {
         let pred_str = HeapCellValue::Addr(Addr::Con(Constant::Atom(pred_str, None)));
-        
+
         let err = vec![heap_atom!(err.as_str()), pred_str];
         let mut stub = functor!("permission_error", 2);
-        
+
         stub.extend(err.into_iter());
 
         MachineError { stub, from: ErrorProvenance::Constructed }
     }
-    
+
     pub(super) fn syntax_error(h: usize, err: ParserError) -> Self {
-        let err = vec![heap_atom!(err.as_str())];        
+        let err = vec![heap_atom!(err.as_str())];
 
         let mut stub = if err.len() == 1 {
-            functor!("syntax_error", 1)            
+            functor!("syntax_error", 1)
         } else {
             functor!("syntax_error", 1, [heap_str!(h + 2)])
         };
-        
+
         stub.extend(err.into_iter());
-        
+
         MachineError { stub, from: ErrorProvenance::Constructed }
     }
 
@@ -153,7 +153,7 @@ impl PermissionError {
         }
     }
 }
-    
+
 // from 7.12.2 b) of 13211-1:1995
 #[derive(Clone, Copy)]
 pub enum ValidType {
@@ -325,7 +325,7 @@ impl MachineState {
 
     // see 8.4.4 of Draft Technical Corrigendum 2.
     pub(super) fn check_keysort_errors(&self) -> CallResult {
-        let stub   = MachineError::functor_stub(clause_name!("keysort"), 2);        
+        let stub   = MachineError::functor_stub(clause_name!("keysort"), 2);
         let pairs  = self.store(self.deref(self[temp_v!(1)].clone()));
         let sorted = self.store(self.deref(self[temp_v!(2)].clone()));
 
@@ -364,5 +364,43 @@ impl MachineState {
 
         self.set_ball();
         self.unwind_stack();
+    }
+}
+
+pub enum SessionError {
+    CannotOverwriteBuiltIn(ClauseName),
+    CannotOverwriteImport(ClauseName),
+    ModuleDoesNotContainExport,
+    ModuleNotFound,
+    NamelessEntry,
+    OpIsInfixAndPostFix,
+    ParserError(ParserError),
+    QueryFailure,
+    QueryFailureWithException(ClauseName),
+    UserPrompt
+}
+
+pub enum EvalSession {
+    EntrySuccess,
+    Error(SessionError),
+    InitialQuerySuccess(AllocVarDict, HeapVarDict),
+    SubsequentQuerySuccess,
+}
+
+impl From<SessionError> for EvalSession {
+    fn from(err: SessionError) -> Self {
+        EvalSession::Error(err)
+    }
+}
+
+impl From<ParserError> for SessionError {
+    fn from(err: ParserError) -> Self {
+        SessionError::ParserError(err)
+    }
+}
+
+impl From<ParserError> for EvalSession {
+    fn from(err: ParserError) -> Self {
+        EvalSession::from(SessionError::ParserError(err))
     }
 }

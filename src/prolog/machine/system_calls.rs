@@ -1,11 +1,11 @@
 use prolog_parser::ast::*;
 
-use prolog::copier::*;
+use prolog::clause_types::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
-use prolog::instructions::*;
-use prolog::machine::IndexStore;
+use prolog::machine::copier::*;
 use prolog::machine::machine_errors::*;
+use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt};

@@ -1,14 +1,78 @@
 use prolog_parser::ast::*;
 
+use prolog::forms::*;
 use prolog::instructions::*;
 use prolog::iterators::*;
 
 use std::cell::Cell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::collections::btree_map::{IntoIter, IterMut, Values};
 use std::mem::swap;
 use std::rc::Rc;
 use std::vec::Vec;
+
+// labeled with chunk numbers.
+pub enum VarStatus {
+    Perm(usize), Temp(usize, TempVarData) // Perm(chunk_num) | Temp(chunk_num, _)
+}
+
+pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
+
+// Perm: 0 initially, a stack register once processed.
+// Temp: labeled with chunk_num and temp offset (unassigned if 0).
+pub enum VarData {
+    Perm(usize), Temp(usize, usize, TempVarData)
+}
+
+impl VarData {
+    pub fn as_reg_type(&self) -> RegType {
+        match self {
+            &VarData::Temp(_, r, _) => RegType::Temp(r),
+            &VarData::Perm(r) => RegType::Perm(r)
+        }
+    }
+}
+
+pub struct TempVarData {
+    pub last_term_arity: usize,
+    pub use_set: OccurrenceSet,
+    pub no_use_set: BTreeSet<usize>,
+    pub conflict_set: BTreeSet<usize>
+}
+
+impl TempVarData {
+    pub fn new(last_term_arity: usize) -> Self {
+        TempVarData {
+            last_term_arity: last_term_arity,
+            use_set: BTreeSet::new(),
+            no_use_set: BTreeSet::new(),
+            conflict_set: BTreeSet::new()
+        }
+    }
+
+    pub fn uses_reg(&self, reg: usize) -> bool {
+        for &(_, nreg) in self.use_set.iter() {
+            if reg == nreg {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    pub fn populate_conflict_set(&mut self) {
+        if self.last_term_arity > 0 {
+            let arity = self.last_term_arity;
+            let mut conflict_set : BTreeSet<usize> = (1..arity).collect();
+
+            for &(_, reg) in self.use_set.iter() {
+                conflict_set.remove(&reg);
+            }
+
+            self.conflict_set = conflict_set;
+        }
+    }
+}
 
 type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
 pub struct VariableFixtures<'a>(BTreeMap<Rc<Var>, VariableFixture<'a>>);

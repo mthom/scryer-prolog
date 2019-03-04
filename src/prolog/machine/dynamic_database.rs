@@ -1,9 +1,8 @@
 use prolog_parser::ast::*;
 
-use prolog::compile::*;
 use prolog::heap_print::*;
-use prolog::instructions::*;
 use prolog::machine::*;
+use prolog::machine::compile::*;
 use prolog::machine::machine_errors::*;
 use prolog::num::ToPrimitive;
 

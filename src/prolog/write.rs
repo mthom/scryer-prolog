@@ -1,6 +1,10 @@
-use prolog::instructions::*;
+use prolog::clause_types::*;
+use prolog::forms::*;
 use prolog::heap_print::*;
+use prolog::instructions::*;
 use prolog::machine::*;
+use prolog::machine::machine_errors::*;
+use prolog::machine::machine_indices::*;
 
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::input::TermRead;

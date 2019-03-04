@@ -1,19 +1,22 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::StringList;
 
-use prolog::instructions::*;
-use prolog::and_stack::*;
-use prolog::copier::*;
-use prolog::heap::*;
+use prolog::clause_types::*;
+use prolog::forms::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
-use prolog::machine::{AttrVarInitializer, IndexStore};
+use prolog::instructions::*;
+use prolog::machine::attributed_variables::*;
+use prolog::machine::and_stack::*;
+use prolog::machine::copier::*;
+use prolog::machine::heap::*;
+use prolog::machine::or_stack::*;
 use prolog::machine::machine_errors::*;
+use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
 use prolog::num::{Integer, Signed, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
-use prolog::or_stack::*;
 
 use std::cmp::{max, Ordering};
 use std::collections::{HashMap, HashSet};

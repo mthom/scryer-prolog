@@ -1,7 +1,9 @@
 use prolog_parser::ast::*;
 
-use prolog::instructions::*;
 use prolog::allocator::*;
+use prolog::forms::*;
+use prolog::fixtures::*;
+use prolog::machine::machine_indices::*;
 use prolog::targets::*;
 
 use std::cell::Cell;

@@ -1,6 +1,9 @@
 use prolog_parser::ast::*;
 
-use prolog::instructions::*;
+use prolog::clause_types::*;
+use prolog::forms::*;
+use prolog::machine::machine_indices::*;
+
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::iter::*;
@@ -24,6 +27,40 @@ impl<'a> TermRef<'a> {
           | TermRef::Constant(lvl, ..)
           | TermRef::Var(lvl, ..)
           | TermRef::Clause(lvl, ..) => lvl
+        }
+    }
+}
+
+pub enum TermIterState<'a> {
+    AnonVar(Level),
+    Constant(Level, &'a Cell<RegType>, &'a Constant),
+    Clause(Level, usize, &'a Cell<RegType>, ClauseType, &'a Vec<Box<Term>>),
+    InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
+    FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
+    Var(Level, &'a Cell<VarReg>, Rc<Var>)
+}
+
+impl<'a> TermIterState<'a> {
+    pub fn subterm_to_state(lvl: Level, term: &'a Term) -> TermIterState<'a> {
+        match term {
+            &Term::AnonVar =>
+                TermIterState::AnonVar(lvl),
+            &Term::Clause(ref cell, ref name, ref subterms, spec) => {
+                let ct = if let Some(spec) = spec {
+                    let op_decl = OpDecl(spec.0, spec.1, name.clone());
+                    ClauseType::Op(op_decl, CodeIndex::default())
+                } else {
+                    ClauseType::Named(name.clone(), subterms.len(), CodeIndex::default())
+                };
+
+                TermIterState::Clause(lvl, 0, cell, ct, subterms)
+            },
+            &Term::Cons(ref cell, ref head, ref tail) =>
+                TermIterState::InitialCons(lvl, cell, head.as_ref(), tail.as_ref()),
+            &Term::Constant(ref cell, ref constant) =>
+                TermIterState::Constant(lvl, cell, constant),
+            &Term::Var(ref cell, ref var) =>
+                TermIterState::Var(lvl, cell, var.clone())
         }
     }
 }

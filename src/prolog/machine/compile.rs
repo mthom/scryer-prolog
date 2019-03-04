@@ -2,11 +2,14 @@ use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::TabledData;
 
 use prolog::instructions::*;
-use prolog::debray_allocator::*;
 use prolog::codegen::*;
+use prolog::debray_allocator::*;
+use prolog::forms::*;
 use prolog::machine::*;
+use prolog::machine::machine_errors::*;
+use prolog::machine::machine_indices::*;
 use prolog::machine::term_expansion::{ExpansionAdditionResult};
-use prolog::toplevel::*;
+use prolog::machine::toplevel::*;
 
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -269,7 +272,6 @@ impl ListingCompiler {
         let mut code = vec![];
         let mut pi_to_loc = HashMap::new();
 
-        // the name of this function is misleading. first we generate the clause code..
         for ((name, arity), heads_and_tails) in dynamic_clause_map {
             if heads_and_tails.is_empty() {
                 continue;
@@ -292,10 +294,8 @@ impl ListingCompiler {
             code.extend(decl_code.into_iter());
         }
 
-        // now that we've reached this point without error, we are free to add to the WAM.
         wam.code_repo.code.extend(code.into_iter());
 
-        // ... then we add it to the wam.
         for ((name, arity), p) in pi_to_loc {
             let entry = wam.indices.dynamic_code_dir.entry((name, arity))
                            .or_insert(DynamicPredicateInfo::default());
@@ -451,7 +451,7 @@ impl ListingCompiler {
     fn gather_items<R: Read>(&mut self, wam: &mut Machine, src: R, indices: &mut IndexStore)
                              -> Result<GatherResult, SessionError>
     {
-        let flags = wam.machine_flags();
+        let flags      = wam.machine_flags();
         let atom_tbl   = wam.indices.atom_tbl.clone();
         let mut worker = TopLevelBatchWorker::new(src, atom_tbl.clone(), flags,
                                                   &mut wam.indices, &mut wam.policies,

@@ -2,8 +2,9 @@ use prolog_parser::ast::*;
 use prolog_parser::parser::*;
 use prolog_parser::tabled_rc::TabledData;
 
-use prolog::instructions::*;
+use prolog::forms::*;
 use prolog::iterators::*;
+use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::MachineState;
 
 use std::collections::VecDeque;

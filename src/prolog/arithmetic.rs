@@ -1,6 +1,13 @@
 use prolog_parser::ast::*;
 
+use prolog::clause_types::*;
+use prolog::fixtures::*;
+use prolog::forms::*;
 use prolog::instructions::*;
+use prolog::iterators::*;
+
+use prolog::machine::machine_indices::*;
+
 use std::cell::Cell;
 use std::cmp::{min, max};
 use std::rc::Rc;

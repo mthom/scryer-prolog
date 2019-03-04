@@ -1,14 +1,17 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::*;
 
-use prolog::instructions::*;
-use prolog::and_stack::*;
-use prolog::copier::*;
-use prolog::heap::*;
-use prolog::machine::{AttrVarInitializer, IndexStore};
+use prolog::clause_types::*;
+use prolog::forms::*;
+use prolog::machine::and_stack::*;
+use prolog::machine::attributed_variables::*;
+use prolog::machine::copier::*;
+use prolog::machine::heap::*;
 use prolog::machine::machine_errors::*;
+use prolog::machine::machine_indices::*;
+use prolog::machine::modules::*;
+use prolog::machine::or_stack::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
-use prolog::or_stack::*;
 
 use downcast::Any;
 
@@ -187,6 +190,8 @@ impl IndexMut<RegType> for MachineState {
         }
     }
 }
+
+pub type Registers = Vec<Addr>;
 
 #[derive(Clone, Copy)]
 pub(super) enum MachineMode {

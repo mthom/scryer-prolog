@@ -1,6 +1,6 @@
 use prolog_parser::ast::*;
 
-use prolog::instructions::*;
+use prolog::machine::machine_indices::*;
 
 use std::ops::{Index, IndexMut};
 

@@ -2,14 +2,13 @@
 #[macro_use] extern crate prolog_parser;
 extern crate termion;
 
-use prolog::instructions::*;
-
 mod prolog;
 
-use prolog::compile::*;
 use prolog::machine::*;
+use prolog::machine::compile::*;
+use prolog::machine::machine_errors::*;
+use prolog::machine::toplevel::string_to_toplevel;
 use prolog::read::*;
-use prolog::toplevel::string_to_toplevel;
 use prolog::write::*;
 
 use std::io::{Write, stdin, stdout};

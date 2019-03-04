@@ -1,8 +1,8 @@
 use prolog_parser::ast::*;
 use prolog_parser::parser::*;
 
-use prolog::instructions::HeapCellValue;
 use prolog::machine::*;
+use prolog::machine::machine_indices::HeapCellValue;
 use prolog::num::*;
 use prolog::read::*;
 

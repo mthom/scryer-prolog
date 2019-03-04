@@ -1,8 +1,9 @@
 use prolog::heap_print::*;
-use prolog::instructions::*;
-use prolog::compile::*;
 use prolog::machine::*;
-use prolog::toplevel::*;
+use prolog::machine::compile::*;
+use prolog::machine::machine_errors::*;
+use prolog::machine::machine_indices::*;
+use prolog::machine::toplevel::*;
 
 use std::collections::HashSet;
 use std::io::empty;

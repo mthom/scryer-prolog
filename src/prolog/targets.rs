@@ -1,5 +1,7 @@
 use prolog_parser::ast::*;
 
+use prolog::clause_types::*;
+use prolog::forms::*;
 use prolog::instructions::*;
 use prolog::iterators::*;
 

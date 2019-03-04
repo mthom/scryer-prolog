@@ -1,15 +1,24 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::codegen::*;
-use prolog::compile::*;
-use prolog::debray_allocator::*;
+use prolog::clause_types::*;
+use prolog::fixtures::*;
+use prolog::forms::*;
 use prolog::heap_print::*;
 use prolog::instructions::*;
 
+pub mod machine_indices;
+pub mod heap;
+mod and_stack;
+mod or_stack;
 mod attributed_variables;
+mod copier;
 mod dynamic_database;
-mod machine_errors;
+pub mod machine_errors;
+pub mod toplevel;
+pub mod compile;
+pub(super) mod code_repo;
+pub mod modules;
 pub(super) mod machine_state;
 pub(super) mod term_expansion;
 
@@ -17,232 +26,17 @@ pub(super) mod term_expansion;
 mod system_calls;
 
 use prolog::machine::attributed_variables::*;
+use prolog::machine::compile::*;
+use prolog::machine::code_repo::*;
+use prolog::machine::machine_errors::*;
+use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
+use prolog::machine::modules::*;
 
 use std::collections::{HashMap, VecDeque};
 use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
-
-
-#[derive(Copy, Clone)]
-pub struct DynamicPredicateInfo {
-    pub(super) clauses_subsection_p: usize, // a LocalCodePtr::DirEntry value.
-}
-
-impl Default for DynamicPredicateInfo {
-    fn default() -> Self {
-        DynamicPredicateInfo { clauses_subsection_p: 0 }
-    }
-}
-
-pub type InSituCodeDir  = HashMap<PredicateKey, usize>;
-pub type DynamicCodeDir = HashMap<PredicateKey, DynamicPredicateInfo>;
-
-pub struct IndexStore {
-    pub(super) atom_tbl: TabledData<Atom>,
-    pub(super) code_dir: CodeDir,
-    pub(super) dynamic_code_dir: DynamicCodeDir,
-    pub(super) in_situ_code_dir: InSituCodeDir,
-    pub(super) op_dir: OpDir,
-    pub(super) modules: ModuleDir,
-}
-
-enum RefOrOwned<'a, T: 'a> {
-    Borrowed(&'a T),
-    Owned(T)
-}
-
-impl<'a, T> RefOrOwned<'a, T> {
-    fn as_ref(&'a self) -> &'a T {
-        match self {
-            &RefOrOwned::Borrowed(r) => r,
-            &RefOrOwned::Owned(ref r) => r
-        }
-    }
-}
-
-impl IndexStore {
-    pub fn predicate_exists(&self, name: ClauseName, arity: usize,
-                            op_spec: Option<(usize, Specifier)>)
-                            -> bool
-    {
-        match ClauseType::from(name, arity, op_spec) {
-            ClauseType::Named(name, arity, _) =>
-                self.code_dir.contains_key(&(name, arity)),
-            ClauseType::Op(op_decl, ..) =>
-                self.code_dir.contains_key(&(op_decl.name(), op_decl.arity())),
-            _ => true
-        }
-    }
-
-    #[inline]
-    pub fn get_clause_subsection(&self, name: ClauseName, arity: usize) -> Option<DynamicPredicateInfo> {
-        self.dynamic_code_dir.get(&(name, arity)).cloned()
-    }
-
-    #[inline]
-    pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
-        self.modules.remove(&name)
-    }
-
-    #[inline]
-    pub fn insert_module(&mut self, module: Module) {
-        self.modules.insert(module.module_decl.name.clone(), module);
-    }
-
-    #[inline]
-    pub(super) fn new() -> Self {
-        IndexStore {
-            atom_tbl: TabledData::new(Rc::new("user".to_string())),
-            code_dir: CodeDir::new(),
-            dynamic_code_dir: DynamicCodeDir::new(),
-            in_situ_code_dir: InSituCodeDir::new(),
-            op_dir: default_op_dir(),
-            modules: ModuleDir::new(),
-        }
-    }
-
-    #[inline]
-    pub(super) fn copy_and_swap(&mut self, other: &mut IndexStore) {
-        self.code_dir = other.code_dir.clone();
-        self.op_dir = other.op_dir.clone();
-
-        mem::swap(&mut self.code_dir, &mut other.code_dir);
-        mem::swap(&mut self.op_dir, &mut other.op_dir);
-        mem::swap(&mut self.modules, &mut other.modules);
-    }
-
-    #[inline]
-    fn get_internal(&self, name: ClauseName, arity: usize, in_mod: ClauseName)
-                    -> Option<ModuleCodeIndex>
-    {
-        self.modules.get(&in_mod)
-            .and_then(|ref module| module.code_dir.get(&(name, arity)))
-            .cloned()
-    }
-
-    pub(super) fn get_cleaner_sites(&self) -> (usize, usize) {
-        let r_w_h  = clause_name!("run_cleaners_with_handling");
-        let r_wo_h = clause_name!("run_cleaners_without_handling");
-
-        let builtins = clause_name!("builtins");
-
-        let r_w_h  = self.get_internal(r_w_h, 0, builtins.clone()).and_then(|item| item.local());
-        let r_wo_h = self.get_internal(r_wo_h, 1, builtins).and_then(|item| item.local());
-
-        if let Some(r_w_h) = r_w_h {
-            if let Some(r_wo_h) = r_wo_h {
-                return (r_w_h, r_wo_h);
-            }
-        }
-
-        return (0, 0);
-    }
-}
-
-pub type CompiledResult = (Predicate, VecDeque<TopLevel>);
-
-impl CodeRepo {
-    #[inline]
-    fn new() -> Self {
-        CodeRepo {
-            cached_query: vec![],
-            goal_expanders: Code::new(),
-            term_expanders: Code::new(),
-            code: Code::new(),
-            in_situ_code: Code::new(),
-            term_dir: TermDir::new()
-        }
-    }
-
-    #[inline]
-    pub fn term_dir_entry_len(&self, key: PredicateKey) -> (usize, usize) {
-        self.term_dir.get(&key)
-            .map(|entry| ((entry.0).0.len(), entry.1.len()))
-            .unwrap_or((0,0))
-    }
-
-    #[inline]
-    pub fn truncate_terms(&mut self, key: PredicateKey, len: usize, queue_len: usize)
-                          -> (Predicate, VecDeque<TopLevel>)
-    {
-        self.term_dir.get_mut(&key)
-            .map(|entry| (Predicate((entry.0).0.drain(len ..).collect()),
-                          entry.1.drain(queue_len ..).collect()))
-            .unwrap_or((Predicate::new(), VecDeque::from(vec![])))
-    }
-
-    pub fn add_in_situ_result(&mut self, result: &CompiledResult, in_situ_code_dir: &mut InSituCodeDir,
-                              flags: MachineFlags)
-                              -> Result<(), SessionError>
-    {
-        let (ref decl, ref queue) = result;
-        let (name, arity) = decl.0.first().and_then(|cl| {
-            let arity = cl.arity();
-            cl.name().map(|name| (name, arity))
-        }).ok_or(SessionError::NamelessEntry)?;
-
-        let p = self.in_situ_code.len();
-        in_situ_code_dir.insert((name, arity), p);
-
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(true, flags);
-        // clone the decl to avoid the need to wipe its register cells later.
-        let mut decl_code = cg.compile_predicate(&decl.0.clone())?;
-
-        compile_appendix(&mut decl_code, queue, true, flags)?;
-
-        self.in_situ_code.extend(decl_code.into_iter());
-        Ok(())
-    }
-
-    #[inline]
-    fn size_of_cached_query(&self) -> usize {
-        self.cached_query.len()
-    }
-
-    fn lookup_instr<'a>(&'a self, last_call: bool, p: &CodePtr) -> Option<RefOrOwned<'a, Line>>
-    {
-        match p {
-            &CodePtr::Local(LocalCodePtr::UserGoalExpansion(p)) =>
-                if p < self.goal_expanders.len() {
-                    Some(RefOrOwned::Borrowed(&self.goal_expanders[p]))
-                } else {
-                    None
-                },
-            &CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) =>
-                if p < self.term_expanders.len() {
-                    Some(RefOrOwned::Borrowed(&self.term_expanders[p]))
-                } else {
-                    None
-                },
-            &CodePtr::Local(LocalCodePtr::TopLevel(_, p)) =>
-                if p < self.cached_query.len() {
-                    Some(RefOrOwned::Borrowed(&self.cached_query[p]))
-                } else {
-                    None
-                },
-            &CodePtr::Local(LocalCodePtr::InSituDirEntry(p)) =>
-                Some(RefOrOwned::Borrowed(&self.in_situ_code[p])),
-            &CodePtr::Local(LocalCodePtr::DirEntry(p)) =>
-                Some(RefOrOwned::Borrowed(&self.code[p])),
-            &CodePtr::BuiltInClause(ref built_in, _) => {
-                let call_clause = call_clause!(ClauseType::BuiltIn(built_in.clone()),
-                                               built_in.arity(),
-                                               0, last_call);
-                Some(RefOrOwned::Owned(call_clause))
-            },
-            &CodePtr::CallN(arity, _) => {
-                let call_clause = call_clause!(ClauseType::CallN, arity, 0, last_call);
-                Some(RefOrOwned::Owned(call_clause))
-            },
-            &CodePtr::VerifyAttrInterrupt(p) =>
-                Some(RefOrOwned::Borrowed(&self.code[p])),
-            &CodePtr::DynamicTransaction(..) =>
-                None
-        }
-    }
-}
 
 pub struct MachinePolicies {
     call_policy: Box<CallPolicy>,
