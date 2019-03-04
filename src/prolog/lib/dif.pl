@@ -37,8 +37,7 @@ verify_attributes(Var, Value, Goals) :-
 % suggestions for improvement.
 
 dif(X, Y) :- X \== Y,
-             (   X \= Y -> true
-	     ;   term_variables(X, XVars), term_variables(Y, YVars),
+             (   term_variables(X, XVars), term_variables(Y, YVars),
 	         dif_set_variables(XVars, X, Y),
 		 dif_set_variables(YVars, X, Y)
 	     ).
