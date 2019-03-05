@@ -371,12 +371,16 @@ impl MachineState {
             &SystemClauseType::GetCurrentPredicateList => {
                 let mut addrs = vec![];
                 
-                for (name, arity) in indices.code_dir.keys().cloned() {
+                for ((name, arity), idx) in indices.code_dir.iter() {
+                    if idx.is_undefined() {
+                        continue;
+                    }
+                    
                     let h = self.heap.h;
 
                     self.heap.push(HeapCellValue::NamedStr(2, clause_name!("/"), Some((400, YFX))));
-                    self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Atom(name, None))));
-                    self.heap.push(heap_integer!(arity));
+                    self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Atom(name.clone(), None))));
+                    self.heap.push(heap_integer!(*arity));
                     
                     addrs.push(Addr::Str(h));
                 }
