@@ -208,9 +208,9 @@ impl Machine {
         self.machine_st.flags
     }
 
-    pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir) -> Result<(), SessionError>
+    pub fn check_toplevel_code(&self, indices: &IndexStore) -> Result<(), SessionError>
     {
-        for (ref key, ref idx) in code_dir.iter() {
+        for (key, idx) in &indices.code_dir {
             match ClauseType::from(key.0.clone(), key.1, None) {
                 ClauseType::Named(..) | ClauseType::Op(..) => {},
                 _ => {
@@ -234,12 +234,18 @@ impl Machine {
                         let err_str = format!("{}/{} from module {}", key.0, key.1,
                                               existing_idx.module_name().as_str());
                         let err_str = clause_name!(err_str, self.indices.atom_tbl());
+                        
                         return Err(SessionError::CannotOverwriteImport(err_str));
                     }
                 }
             }
         }
 
+        Ok(())
+    }
+    
+    pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir)
+    {
         // error detection has finished, so update the master index of keys.
         for (key, idx) in code_dir {
             if let Some(ref mut master_idx) = self.indices.code_dir.get_mut(&key) {
@@ -252,11 +258,10 @@ impl Machine {
                 continue;
             }
 
-            self.indices.code_dir.insert(key.clone(), idx.clone());
+            self.indices.code_dir.insert(key, idx);
         }
 
         self.code_repo.code.extend(code.into_iter());
-        Ok(())
     }
 
     #[inline]
