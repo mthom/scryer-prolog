@@ -584,7 +584,7 @@ match_builtins(@>, 2).
 match_builtins(@<, 2).
 match_builtins(@>=, 2).
 match_builtins(@=<, 2).
-match_builtins(\\=@=, 2).
+match_builtins(\=@=, 2).
 match_builtins(=@=, 2).
 match_builtins(copy_term, 2).
 match_builtins(==, 2).
@@ -593,7 +593,7 @@ match_builtins(ground, 1).
 match_builtins(is, 2).
 match_builtins(keysort, 2).
 match_builtins(nl, 0).
-match_builtins(\\==, 2).
+match_builtins(\==, 2).
 match_builtins(is_partial_string, 1).
 match_builtins(partial_string, 2).
 match_builtins(read, 1).
@@ -602,7 +602,7 @@ match_builtins(>, 2).
 match_builtins(<, 2).
 match_builtins(>=, 2).
 match_builtins(=<, 2).
-match_builtins(=\\=, 2).
+match_builtins(=\=, 2).
 match_builtins(=:=, 2).
 match_builtins(atom, 1).
 match_builtins(atomic, 1).
