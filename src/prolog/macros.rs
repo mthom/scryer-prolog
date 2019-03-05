@@ -244,6 +244,15 @@ macro_rules! get_level_and_unify {
     )
 }
 
+macro_rules! unwind_protect {
+    ($e: expr, $protected: expr) => (
+        match $e {
+            Err(e) => { $protected; return Err(e); },
+            _ => {}
+        }
+    )
+}
+
 macro_rules! discard_result {
     ($f: expr) => (
         match $f {

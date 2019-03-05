@@ -1898,6 +1898,20 @@ foo(X) :- call(X) -> call(X).");
     assert_prolog_failure!(&mut wam, "?- retract( (atom(X) :- X == '[]') ).");
     assert_prolog_success!(&mut wam, "?- catch(retract( (atom(X) :- X == '[]') ), error(permission_error(modify, static_procedure, atom/1), _), true).");
 
+    /* This example shows why machine::compile::localize_self_calls is necessary. */
+submit(&mut wam, "
+:- dynamic(p/1).
+
+p(a).
+p(b).
+p(c) :- p(d).
+p(d).");
+
+    assert_prolog_success!(&mut wam, "?- p(X), retract(p(_)).",
+                           [["X = a"],
+                            ["X = a"],
+                            ["X = a"]]);
+    
     submit(&mut wam, "
 :- dynamic(foo/1).
 foo(X) :- call(X), call(X).

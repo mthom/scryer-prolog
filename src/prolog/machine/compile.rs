@@ -219,11 +219,13 @@ impl ListingCompiler {
         let mod_name = self.get_module_name();
 
         if let Some(mut submodule) = wam_indices.take_module(submodule) {
-            indices.use_module(code_repo, flags, &submodule)?;
+            unwind_protect!(indices.use_module(code_repo, flags, &submodule),
+                            wam_indices.insert_module(submodule));
 
             if let &mut Some(ref mut module) = &mut self.module {
                 module.remove_module(mod_name, &submodule);
-                module.use_module(code_repo, flags, &submodule)?;
+                unwind_protect!(module.use_module(code_repo, flags, &submodule),
+                                wam_indices.insert_module(submodule));
             } else {
                 submodule.inserted_expansions = true;
                 wam_indices.remove_module(clause_name!("user"), &submodule);
@@ -243,11 +245,13 @@ impl ListingCompiler {
         let mod_name = self.get_module_name();
 
         if let Some(mut submodule) = wam_indices.take_module(submodule) {
-            indices.use_qualified_module(code_repo, flags, &submodule, exports)?;
+            unwind_protect!(indices.use_qualified_module(code_repo, flags, &submodule, exports),
+                            wam_indices.insert_module(submodule));
 
             if let &mut Some(ref mut module) = &mut self.module {
                 module.remove_module(mod_name, &submodule);
-                module.use_qualified_module(code_repo, flags, &submodule, exports)?;
+                unwind_protect!(module.use_qualified_module(code_repo, flags, &submodule, exports),
+                                wam_indices.insert_module(submodule));
             } else {
                 submodule.inserted_expansions = true;
                 wam_indices.remove_module(clause_name!("user"), &submodule);
