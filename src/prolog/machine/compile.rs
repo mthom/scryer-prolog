@@ -246,6 +246,21 @@ fn add_module_code(wam: &mut Machine, mut module: Module, code: Code, mut indice
     wam.add_module(module, code);
 }
 
+fn add_non_module_code(wam: &mut Machine, dynamic_clause_map: DynamicClauseMap, code: Code,
+                       indices: IndexStore)
+                       -> Result<(), SessionError>
+{
+    let mut clause_code_generator = ClauseCodeGenerator::new(code.len());
+
+    clause_code_generator.generate_clause_code(dynamic_clause_map, wam)?;
+    wam.check_toplevel_code(&indices)?;
+
+    add_toplevel_code(wam, code, indices);
+    clause_code_generator.add_clause_code(wam);
+
+    Ok(())
+}
+
 impl ListingCompiler {
     #[inline]
     pub fn new(code_repo: &CodeRepo) -> Self {
@@ -541,23 +556,13 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src:
     try_eval_session!(wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags));
 
     if let Some(module) = compiler.module.take() {
-        let mut clause_code_generator = ClauseCodeGenerator::new(toplvl_code.len());
+        try_eval_session!(add_non_module_code(wam, results.dynamic_clause_map, toplvl_code,
+                                              results.toplevel_indices));
 
-        try_eval_session!(clause_code_generator.generate_clause_code(results.dynamic_clause_map, wam));
-        try_eval_session!(wam.check_toplevel_code(&results.toplevel_indices));
-
-        add_toplevel_code(wam, toplvl_code, results.toplevel_indices);
-        clause_code_generator.add_clause_code(wam);
         add_module_code(wam, module, module_code, indices);
     } else {
-        let mut clause_code_generator = ClauseCodeGenerator::new(module_code.len());
-
-        try_eval_session!(clause_code_generator.generate_clause_code(results.dynamic_clause_map, wam));
-        try_eval_session!(wam.check_toplevel_code(&indices));
-
-        // yes, in this case, module_code is actually toplevel code.
-        add_toplevel_code(wam, module_code, indices);
-        clause_code_generator.add_clause_code(wam);
+        try_eval_session!(add_non_module_code(wam, results.dynamic_clause_map, module_code,
+                                              indices));        
     }
 
     EvalSession::EntrySuccess
