@@ -566,7 +566,7 @@ abolish(Pred) :-
 	  ; Arity < 0 -> throw(domain_error(not_less_than_zero, Arity), abolish/1)
 	  ; max_arity(N), Arity > N -> throw(representation_error(max_arity), abolish/1)
 	  ; functor(Head, Name, Arity) ->
-	    (  '$no_such_predicate'(Head) -> true
+	    (  '$no_such_predicate'(Head) -> '$abolish_clause'(Name, Arity)
 	    ;  '$head_is_dynamic'(Head) -> '$abolish_clause'(Name, Arity)
 	    ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
 	    )

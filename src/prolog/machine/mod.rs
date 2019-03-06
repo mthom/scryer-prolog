@@ -103,11 +103,8 @@ impl SubModuleUser for IndexStore {
 
     fn remove_code_index(&mut self, key: PredicateKey)
     {
-        self.code_dir.remove(&key);
-
-        if self.dynamic_code_dir.contains_key(&key) {
-            self.dynamic_code_dir.remove(&key);
-        }
+        self.code_dir.remove(&key);        
+        self.dynamic_code_dir.remove(&key);
     }
 
     fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex)

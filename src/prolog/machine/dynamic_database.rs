@@ -69,8 +69,7 @@ impl Machine {
             set_code_index!(idx, IndexPtr::Undefined, clause_name!("user"));
         }
 
-        self.indices.code_dir.remove(&(name.clone(), arity));
-        self.indices.dynamic_code_dir.remove(&(name, arity));
+        self.indices.remove_code_index((name, arity));
     }
 
     fn handle_eval_result_from_dynamic_compile(&mut self, pred_str: String, name: ClauseName,
