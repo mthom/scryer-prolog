@@ -84,7 +84,6 @@ pub trait SubModuleUser
 
                     self.remove_code_index((name.clone(), arity));
 
-
                     // remove or respecify ops.
                     if arity == 2 {
                         if let Some((_, _, mod_name)) = self.op_dir().get(&(name.clone(), Fixity::In)).cloned()
@@ -115,7 +114,8 @@ pub trait SubModuleUser
     }
 
     // returns true on successful import.
-    fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool
+    fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module)
+                   -> bool
     {
         let name = name.defrock_brackets();
         let mut found_op = false;
@@ -156,7 +156,7 @@ pub trait SubModuleUser
 }
 
 pub fn use_qualified_module<User>(user: &mut User, submodule: &Module, exports: &Vec<PredicateKey>)
-                              -> Result<(), SessionError>
+                                  -> Result<(), SessionError>
   where User: SubModuleUser
 {
     for (name, arity) in exports.iter().cloned() {
@@ -172,8 +172,7 @@ pub fn use_qualified_module<User>(user: &mut User, submodule: &Module, exports: 
     Ok(())
 }
 
-pub fn use_module<User: SubModuleUser>(user: &mut User, submodule: &Module)
-                                       -> Result<(), SessionError>
+pub fn use_module<User: SubModuleUser>(user: &mut User, submodule: &Module) -> Result<(), SessionError>
 {
     for (name, arity) in submodule.module_decl.exports.iter().cloned() {
         if !user.import_decl(name, arity, submodule) {

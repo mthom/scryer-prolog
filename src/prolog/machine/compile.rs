@@ -216,14 +216,7 @@ impl ClauseCodeGenerator {
                 continue;
             }
 
-            if let Some(info) = wam.indices.dynamic_code_dir.get(&(name.clone(), arity)) {
-                if info.module_src != name.owning_module() {
-                    let err_str = format!("{}/{}", name.as_str(), arity);
-                    let err_str = clause_name!(err_str, wam.indices.atom_tbl());
-
-                    return Err(SessionError::CannotOverwriteDynamicClause(err_str));
-                }
-            }
+            wam.check_dynamic_clause_overwrite(name.clone(), arity)?;
 
             let predicate = Predicate(heads_and_tails.into_iter().map(|(head, tail)| {
                 let clause = Term::Clause(Cell::default(), clause_name!("clause"),

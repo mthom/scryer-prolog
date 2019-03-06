@@ -101,8 +101,13 @@ impl SubModuleUser for IndexStore {
         }
     }
 
-    fn remove_code_index(&mut self, key: PredicateKey) {
+    fn remove_code_index(&mut self, key: PredicateKey)
+    {
         self.code_dir.remove(&key);
+
+        if self.dynamic_code_dir.contains_key(&key) {
+            self.dynamic_code_dir.remove(&key);
+        }
     }
 
     fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex)
@@ -208,6 +213,21 @@ impl Machine {
         self.machine_st.flags
     }
 
+    pub fn check_dynamic_clause_overwrite(&self, name: ClauseName, arity: usize)
+                                          -> Result<(), SessionError>
+    {
+        if let Some(info) = self.indices.dynamic_code_dir.get(&(name.clone(), arity)) {
+            if info.module_src != name.owning_module() {
+                let err_str = format!("{}/{}", name.as_str(), arity);
+                let err_str = clause_name!(err_str, self.indices.atom_tbl());
+
+                return Err(SessionError::CannotOverwriteDynamicClause(err_str));
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn check_toplevel_code(&self, indices: &IndexStore) -> Result<(), SessionError>
     {
         for (key, idx) in &indices.code_dir {
@@ -222,6 +242,8 @@ impl Machine {
                 }
             };
 
+            self.check_dynamic_clause_overwrite(key.0.clone(), key.1)?;
+            
             if let Some(ref existing_idx) = self.indices.code_dir.get(&key) {
                 // ensure we don't try to overwrite an existing predicate from a different module.
                 if !existing_idx.is_undefined() && !idx.is_undefined() {
