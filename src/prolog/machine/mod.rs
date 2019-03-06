@@ -226,7 +226,7 @@ impl Machine {
                 // ensure we don't try to overwrite an existing predicate from a different module.
                 if !existing_idx.is_undefined() && !idx.is_undefined() {
                     // allow the overwriting of user-level predicates by all other predicates.
-                    if existing_idx.module_name() == key.0.owning_module() {
+                    if existing_idx.module_name().as_str() == "user" {
                         continue;
                     }
 

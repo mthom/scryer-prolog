@@ -369,6 +369,7 @@ impl MachineState {
 
 pub enum SessionError {
     CannotOverwriteBuiltIn(ClauseName),
+    CannotOverwriteDynamicClause(ClauseName),
     CannotOverwriteImport(ClauseName),
     ModuleDoesNotContainExport,
     ModuleNotFound,

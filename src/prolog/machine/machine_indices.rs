@@ -389,16 +389,27 @@ pub struct IndexStore {
 }
 
 impl IndexStore {
-    pub fn predicate_exists(&self, name: ClauseName, arity: usize,
+    pub fn predicate_exists(&self, name: ClauseName, module: ClauseName, arity: usize,
                             op_spec: Option<(usize, Specifier)>)
                             -> bool
     {
-        match ClauseType::from(name, arity, op_spec) {
-            ClauseType::Named(name, arity, _) =>
-                self.code_dir.contains_key(&(name, arity)),
-            ClauseType::Op(op_decl, ..) =>
-                self.code_dir.contains_key(&(op_decl.name(), op_decl.arity())),
-            _ => true
+        match self.modules.get(&module) {
+            Some(module) =>
+                match ClauseType::from(name, arity, op_spec) {
+                    ClauseType::Named(name, arity, _) =>
+                        module.code_dir.contains_key(&(name, arity)),
+                    ClauseType::Op(op_decl, ..) =>
+                        module.code_dir.contains_key(&(op_decl.name(), op_decl.arity())),
+                    _ => true
+                },
+            None =>
+                match ClauseType::from(name, arity, op_spec) {
+                    ClauseType::Named(name, arity, _) =>
+                        self.code_dir.contains_key(&(name, arity)),
+                    ClauseType::Op(op_decl, ..) =>
+                        self.code_dir.contains_key(&(op_decl.name(), op_decl.arity())),
+                    _ => true
+                }
         }
     }
 

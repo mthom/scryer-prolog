@@ -370,18 +370,18 @@ impl MachineState {
             },
             &SystemClauseType::GetCurrentPredicateList => {
                 let mut addrs = vec![];
-                
+
                 for ((name, arity), idx) in indices.code_dir.iter() {
                     if idx.is_undefined() {
                         continue;
                     }
-                    
+
                     let h = self.heap.h;
 
                     self.heap.push(HeapCellValue::NamedStr(2, clause_name!("/"), Some((400, YFX))));
                     self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Atom(name.clone(), None))));
                     self.heap.push(heap_integer!(*arity));
-                    
+
                     addrs.push(Addr::Str(h));
                 }
 
@@ -614,12 +614,16 @@ impl MachineState {
                 self.fail = match self.store(self.deref(head)) {
                     Addr::Str(s) =>
                         match self.heap[s].clone() {
-                            HeapCellValue::NamedStr(arity, name, op_spec) =>
-                                indices.predicate_exists(name, arity, op_spec),
+                            HeapCellValue::NamedStr(arity, name, op_spec) => {
+                                let module = name.owning_module();
+                                indices.predicate_exists(name, module, arity, op_spec)
+                            },
                             _ => unreachable!()
                         },
-                    Addr::Con(Constant::Atom(name, op_spec)) =>
-                        indices.predicate_exists(name, 0, op_spec),
+                    Addr::Con(Constant::Atom(name, op_spec)) => {
+                        let module = name.owning_module();
+                        indices.predicate_exists(name, module, 0, op_spec)
+                    },
                     head => {
                         let err = MachineError::type_error(ValidType::Callable, head);
                         let stub = MachineError::functor_stub(clause_name!("clause"), 2);
