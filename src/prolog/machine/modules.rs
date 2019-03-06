@@ -71,7 +71,8 @@ pub trait SubModuleUser
 
     fn insert_dir_entry(&mut self, ClauseName, usize, ModuleCodeIndex);
 
-    fn remove_module(&mut self, mod_name: ClauseName, module: &Module) {
+    fn remove_module(&mut self, mod_name: ClauseName, module: &Module)
+    {
         for (name, arity) in module.module_decl.exports.iter().cloned() {
             let name = name.defrock_brackets();
 
@@ -82,6 +83,7 @@ pub trait SubModuleUser
                     }
 
                     self.remove_code_index((name.clone(), arity));
+
 
                     // remove or respecify ops.
                     if arity == 2 {
@@ -113,7 +115,8 @@ pub trait SubModuleUser
     }
 
     // returns true on successful import.
-    fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
+    fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool
+    {
         let name = name.defrock_brackets();
         let mut found_op = false;
 

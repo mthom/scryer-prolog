@@ -365,14 +365,16 @@ impl AddAssign<usize> for CodePtr {
 pub type HeapVarDict  = HashMap<Rc<Var>, Addr>;
 pub type AllocVarDict = HashMap<Rc<Var>, VarData>;
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct DynamicPredicateInfo {
     pub(super) clauses_subsection_p: usize, // a LocalCodePtr::DirEntry value.
+    pub(super) module_src: ClauseName // the module the predicate is defined within.
 }
 
 impl Default for DynamicPredicateInfo {
     fn default() -> Self {
-        DynamicPredicateInfo { clauses_subsection_p: 0 }
+        DynamicPredicateInfo { clauses_subsection_p: 0,
+                               module_src: clause_name!("user") }
     }
 }
 
@@ -400,7 +402,8 @@ impl IndexStore {
                         module.code_dir.contains_key(&(name, arity)),
                     ClauseType::Op(op_decl, ..) =>
                         module.code_dir.contains_key(&(op_decl.name(), op_decl.arity())),
-                    _ => true
+                    _ =>
+                        true
                 },
             None =>
                 match ClauseType::from(name, arity, op_spec) {
@@ -408,7 +411,8 @@ impl IndexStore {
                         self.code_dir.contains_key(&(name, arity)),
                     ClauseType::Op(op_decl, ..) =>
                         self.code_dir.contains_key(&(op_decl.name(), op_decl.arity())),
-                    _ => true
+                    _ =>
+                        true
                 }
         }
     }

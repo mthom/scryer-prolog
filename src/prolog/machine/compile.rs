@@ -176,15 +176,15 @@ fn compile_into_module<R: Read>(wam: &mut Machine, src: R, name: ClauseName) -> 
 
     match wam.indices.modules.get_mut(&name.owning_module()) {
         Some(module) => {
-            let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());            
-            module.code_dir.extend(as_module_code_dir(code_dir));                        
+            let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
+            module.code_dir.extend(as_module_code_dir(code_dir));
         },
         _ => unreachable!()
     };
-    
+
     wam.code_repo.code.extend(module_code.into_iter());
     clause_code_generator.add_clause_code(wam);
-    
+
     EvalSession::EntrySuccess
 }
 
@@ -216,8 +216,8 @@ impl ClauseCodeGenerator {
                 continue;
             }
 
-            if let Some(idx) = wam.indices.code_dir.get(&(name.clone(), arity)) {
-                if !idx.is_undefined() && name.owning_module() != idx.module_name() {
+            if let Some(info) = wam.indices.dynamic_code_dir.get(&(name.clone(), arity)) {
+                if info.module_src != name.owning_module() {
                     let err_str = format!("{}/{}", name.as_str(), arity);
                     let err_str = clause_name!(err_str, wam.indices.atom_tbl());
 
@@ -249,9 +249,11 @@ impl ClauseCodeGenerator {
         wam.code_repo.code.extend(self.code.into_iter());
 
         for ((name, arity), p) in self.pi_to_loc {
-            let entry = wam.indices.dynamic_code_dir.entry((name, arity))
+            let entry = wam.indices.dynamic_code_dir.entry((name.clone(), arity))
                            .or_insert(DynamicPredicateInfo::default());
+
             entry.clauses_subsection_p = p;
+            entry.module_src = name.owning_module();
         }
     }
 }
@@ -525,7 +527,7 @@ impl ListingCompiler {
                              -> Result<GatherResult, SessionError>
     {
         let flags      = wam.machine_flags();
-        let atom_tbl   = wam.indices.atom_tbl.clone();
+        let atom_tbl   = indices.atom_tbl.clone();
         let mut worker = TopLevelBatchWorker::new(src, atom_tbl.clone(), flags,
                                                   &mut wam.indices, &mut wam.policies,
                                                   &mut wam.code_repo);
