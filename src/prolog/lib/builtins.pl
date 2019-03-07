@@ -459,15 +459,30 @@ setof(Template, Goal, Solution) :-
 
 '$clause_body_is_valid'(B) :-
     (  var(B) -> true
-    ;  functor(B, Name, _) -> (  atom(Name), Name \= '.' -> true
+    ;  functor(B, Name, _) -> (  atom(Name), Name \== '.' -> true
 			      ;  throw(error(type_error(callable, B), clause/2))
 			      )
     ;  throw(error(type_error(callable, B), clause/2))
     ).
 
+'$module_clause'(H, B, Module) :-
+    (  var(H) -> throw(error(instantiation_error, clause/2))
+    ;  functor(H, Name, Arity) -> (  Name == '.' -> throw(error(type_error(callable, H), clause/2))
+				  ;  '$head_is_dynamic'(H) -> '$clause_body_is_valid'(B),
+							      '$get_module_clause'(H, B, Module)
+				  ;  throw(error(permission_error(access, private_procedure, Name/Arity),
+						 clause/2))
+				  )
+    ;  throw(error(type_error(callable, H), clause/2))
+    ).
+
 clause(H, B) :-
     (  var(H) -> throw(error(instantiation_error, clause/2))
     ;  functor(H, Name, Arity) -> (  Name == '.' -> throw(error(type_error(callable, H), clause/2))
+				  ;  Name == (:), Arity =:= 2 ->
+				     arg(1, H, Module),
+				     arg(2, H, F),
+				     '$module_clause'(F, B, Module)
 				  %% '$no_such_predicate' fails if H is not callable.
 				  ;  '$no_such_predicate'(H) -> '$fail'
 				  ;  '$head_is_dynamic'(H) -> '$clause_body_is_valid'(B),
@@ -478,16 +493,35 @@ clause(H, B) :-
     ;  throw(error(type_error(callable, H), clause/2))
     ).
 
+call_module_asserta(Head, Body, Name, Arity, Module) :-
+    '$clause_body_is_valid'(Body),
+    functor(VarHead, Name, Arity),
+    findall((VarHead :- VarBody), clause(Module:VarHead, VarBody), Clauses),
+    '$module_asserta'((Head :- Body), Clauses, Name, Arity, Module).
+
 call_asserta(Head, Body, Name, Arity) :-
     '$clause_body_is_valid'(Body),
     functor(VarHead, Name, Arity),
     findall((VarHead :- VarBody), clause(VarHead, VarBody), Clauses),
     '$asserta'((Head :- Body), Clauses, Name, Arity).
 
+module_asserta_clause(Head, Body, Module) :-
+    (  var(Head) -> throw(error(instantiation_error, asserta/1))
+    ;  functor(Head, Name, Arity), atom(Name), Name \== '.' ->
+       (  '$head_is_dynamic'(Head) -> call_module_asserta(Head, Body, Name, Arity, Module)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
+       )
+    ;  throw(error(type_error(callable, Head), asserta/1))
+    ).
+
 asserta_clause(Head, Body) :-
     (  var(Head) -> throw(error(instantiation_error, asserta/1))
     ;  functor(Head, Name, Arity), atom(Name), Name \== '.' ->
-       ( '$no_such_predicate'(Head) -> call_asserta(Head, Body, Name, Arity)
+       ( Name == (:), Arity =:= 2 ->
+	 arg(1, Head, Module),
+	 arg(2, Head, F),
+	 module_asserta_clause(F, Body, Module)
+       ; '$no_such_predicate'(Head) -> call_asserta(Head, Body, Name, Arity)
        ; '$head_is_dynamic'(Head) -> call_asserta(Head, Body, Name, Arity)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
        )
@@ -499,16 +533,35 @@ asserta(Clause) :-
     ;  Clause = (Head :- Body) -> asserta_clause(Head, Body)
     ).
 
+call_module_assertz(Head, Body, Name, Arity, Module) :-
+    '$clause_body_is_valid'(Body),
+    functor(VarHead, Name, Arity),
+    findall((VarHead :- VarBody), clause(Module:VarHead, VarBody), Clauses),
+    '$module_assertz'((Head :- Body), Clauses, Name, Arity, Module).
+
 call_assertz(Head, Body, Name, Arity) :-
     '$clause_body_is_valid'(Body),
     functor(VarHead, Name, Arity),
     findall((VarHead :- VarBody), clause(VarHead, VarBody), Clauses),
     '$assertz'((Head :- Body), Clauses, Name, Arity).
 
+module_assertz_clause(Head, Body, Module) :-
+    (  var(Head) -> throw(error(instantiation_error, assertz/1))
+    ;  functor(Head, Name, Arity), atom(Name), Name \== '.' ->
+       (  '$head_is_dynamic'(Head) -> call_module_assertz(Head, Body, Name, Arity, Module)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), assertz/1))
+       )
+    ;  throw(error(type_error(callable, Head), assertz/1))
+    ).
+
 assertz_clause(Head, Body) :-
     (  var(Head) -> throw(error(instantiation_error, assertz/1))
     ;  functor(Head, Name, Arity), atom(Name), Name \== '.' ->
-       ( '$no_such_predicate'(Head) -> call_assertz(Head, Body, Name, Arity)
+       ( Name == (:), Arity =:= 2 ->
+	 arg(1, Head, Module),
+	 arg(2, Head, F),
+	 module_assertz_clause(F, Body, Module)
+       ; '$no_such_predicate'(Head) -> call_assertz(Head, Body, Name, Arity)
        ; '$head_is_dynamic'(Head) -> call_assertz(Head, Body, Name, Arity)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), assertz/1))
        )
@@ -541,10 +594,38 @@ call_retract(Head, Body, Name, Arity) :-
     findall((Head :- Body), clause(Head, Body), Clauses),
     retract_clauses(Clauses, Head, Body, Name, Arity).
 
+module_retract_clauses([Clause|Clauses0], Head, Body, Name, Arity, Module) :-
+    functor(VarHead, Name, Arity),
+    findall((VarHead :- VarBody), clause(Module:VarHead, VarBody), Clauses1),
+    first_match_index(Clauses1, (Head :- Body), 0, N),
+    (  Clauses0 == [] -> !
+    ;  true
+    ),
+    '$module_retract_clause'(Name, Arity, N, Clauses1, Module).
+module_retract_clauses([_|Clauses0], Head, Body, Name, Arity, Module) :-
+    module_retract_clauses(Clauses0, Head, Body, Name, Arity, Module).
+
+call_module_retract(Head, Body, Name, Arity, Module) :-
+    findall((Head :- Body), clause(Module:Head, Body), Clauses),
+    module_retract_clauses(Clauses, Head, Body, Name, Arity, Module).
+
+retract_module_clause(Head, Body, Module) :-
+    (  var(Head) -> throw(error(instantiation_error, retract/1))
+    ;  functor(Head, Name, Arity), atom(Name), Name \== '.' ->
+       ( '$head_is_dynamic'(Head) -> call_module_retract(Head, Body, Name, Arity, Module)
+       ; throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
+       )
+    ;  throw(error(type_error(callable, Head), retract/1))
+    ).
+
 retract_clause(Head, Body) :-
     (  var(Head) -> throw(error(instantiation_error, retract/1))
     ;  functor(Head, Name, Arity), atom(Name), Name \== '.' ->
-       ( '$head_is_dynamic'(Head) -> call_retract(Head, Body, Name, Arity)
+       ( Name == (:), Arity =:= 2 ->
+	 arg(1, Head, Module),
+	 arg(2, Head, F),
+	 retract_module_clause(F, Body, Module)
+       ; '$head_is_dynamic'(Head) -> call_retract(Head, Body, Name, Arity)
        ; '$no_such_predicate'(Head) -> '$fail'
        ; throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
        )
@@ -556,8 +637,27 @@ retract(Clause) :-
     ;  Clause = (Head :- Body) -> retract_clause(Head, Body)
     ).
 
+module_abolish(Pred, Module) :-
+    (  var(Pred) -> throw(error(instantiation_error), abolish/1)
+    ;  Pred = Name/Arity ->
+       (  var(Name)  -> throw(error(instantiation_error, abolish/1))
+       ;  integer(Arity) ->
+	  ( \+ atom(Name) -> throw(error(type_error(atom, Name), abolish/1))
+	  ; Arity < 0 -> throw(domain_error(not_less_than_zero, Arity), abolish/1)
+	  ; max_arity(N), Arity > N -> throw(representation_error(max_arity), abolish/1)
+	  ; functor(Head, Name, Arity) ->
+	    (  '$head_is_dynamic'(Head) -> '$abolish_module_clause'(Name, Arity, Module)
+	    ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
+	    )
+	  )
+       ;  throw(error(type_error(integer, Arity), abolish/1))
+       )
+    ; throw(error(type_error(predicate_indicator, Module:Pred), abolish/1))
+    ).
+
 abolish(Pred) :-
     (  var(Pred) -> throw(error(instantiation_error), abolish/1)
+    ;  Pred = Module:InnerPred -> module_abolish(InnerPred, Module)
     ;  Pred = Name/Arity ->
        (  var(Name)  -> throw(error(instantiation_error, abolish/1))
        ;  var(Arity) -> throw(error(instantiation_error, abolish/1))
@@ -566,7 +666,7 @@ abolish(Pred) :-
 	  ; Arity < 0 -> throw(domain_error(not_less_than_zero, Arity), abolish/1)
 	  ; max_arity(N), Arity > N -> throw(representation_error(max_arity), abolish/1)
 	  ; functor(Head, Name, Arity) ->
-	    (  '$no_such_predicate'(Head) -> '$abolish_clause'(Name, Arity)
+	    (  '$no_such_predicate'(Head) -> true
 	    ;  '$head_is_dynamic'(Head) -> '$abolish_clause'(Name, Arity)
 	    ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
 	    )

@@ -228,6 +228,13 @@ impl MachineState {
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
             },
+            &SystemClauseType::AbolishModuleClause => {
+                let p = self.cp;
+                let trans_type = DynamicTransactionType::ModuleAbolish;
+
+                self.p = CodePtr::DynamicTransaction(trans_type, p);
+                return Ok(());
+            },
             &SystemClauseType::AssertDynamicPredicateToFront => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Front);
@@ -238,6 +245,20 @@ impl MachineState {
             &SystemClauseType::AssertDynamicPredicateToBack => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Back);
+
+                self.p = CodePtr::DynamicTransaction(trans_type, p);
+                return Ok(());
+            },
+            &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
+                let p = self.cp;
+                let trans_type = DynamicTransactionType::ModuleAssert(DynamicAssertPlace::Front);
+
+                self.p = CodePtr::DynamicTransaction(trans_type, p);
+                return Ok(());
+            },
+            &SystemClauseType::ModuleAssertDynamicPredicateToBack => {
+                let p = self.cp;
+                let trans_type = DynamicTransactionType::ModuleAssert(DynamicAssertPlace::Back);
 
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
@@ -255,6 +276,44 @@ impl MachineState {
                     Addr::Con(Constant::Usize(old_b)) if self.b <= old_b + 2 => {},
                     _ => self.fail = true
                 };
+            },
+            &SystemClauseType::GetModuleClause => {
+                let module = self[temp_v!(3)].clone();
+                let head = self[temp_v!(1)].clone();
+
+                let module = match self.store(self.deref(module)) {
+                    Addr::Con(Constant::Atom(module, _)) =>
+                        module,
+                    _ => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                };
+
+                let subsection = match self.store(self.deref(head)) {
+                    Addr::Str(s) =>
+                        match self.heap[s].clone() {
+                            HeapCellValue::NamedStr(arity, name, ..) =>
+                                indices.get_clause_subsection(name, arity),
+                            _ => unreachable!()
+                        },
+                    Addr::Con(Constant::Atom(name, _)) =>
+                        indices.get_clause_subsection(name, 0),
+                    _ => unreachable!()
+                };
+
+                match subsection {
+                    Some(dynamic_predicate_info) => {
+                        if dynamic_predicate_info.module_src != module {
+                            self.fail = true;
+                        } else {
+                            self.execute_at_index(2, dynamic_predicate_info.clauses_subsection_p);
+                        }
+
+                        return Ok(());
+                    },
+                    None => self.fail = true
+                }
             },
             &SystemClauseType::HeadIsDynamic => {
                 let head = self[temp_v!(1)].clone();
@@ -682,6 +741,13 @@ impl MachineState {
                     None => panic!("remove_inference_counter: requires \\
                                     CWILCallPolicy.")
                 },
+            &SystemClauseType::ModuleRetractClause => {
+                let p = self.cp;
+                let trans_type = DynamicTransactionType::ModuleRetract;
+
+                self.p = CodePtr::DynamicTransaction(trans_type, p);
+                return Ok(());
+            },
             &SystemClauseType::RetractClause => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::Retract;

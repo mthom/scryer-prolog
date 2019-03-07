@@ -16,7 +16,7 @@ impl Machine {
             _ => self.indices.atom_tbl()
         }
     }
-    
+
     fn compile_into_machine<R: Read>(&mut self, src: R, name: ClauseName) -> EvalSession
     {
         match name.owning_module().as_str() {
@@ -72,6 +72,35 @@ impl Machine {
         self.indices.remove_code_index((name, arity));
     }
 
+    fn abolish_dynamic_clause_in_module(&mut self, name: RegType, arity: RegType, module: RegType)
+    {
+        let (name, arity) = self.get_predicate_key(name, arity);
+        let module_addr = self.machine_st[module].clone();
+        
+        let module_name = match self.machine_st.store(self.machine_st.deref(module_addr)) {
+            Addr::Con(Constant::Atom(module, _)) =>
+                match self.indices.modules.get_mut(&module) {
+                    Some(ref mut module) => {
+                        module.code_dir.remove(&(name.clone(), arity));
+                        module.module_decl.name.clone()
+                    },
+                    _ => {
+                        self.machine_st.fail = true;
+                        return;
+                    }
+                },
+            _ => unreachable!()
+        };
+        
+        if let Some(idx) = self.indices.code_dir.get(&(name.clone(), arity)) {
+            if idx.module_name() == module_name {
+                set_code_index!(idx, IndexPtr::Undefined, clause_name!("user"));
+            }
+        }
+
+        self.indices.remove_code_index((name, arity));
+    }
+    
     fn handle_eval_result_from_dynamic_compile(&mut self, pred_str: String, name: ClauseName,
                                                src: ClauseName)
     {
@@ -90,10 +119,9 @@ impl Machine {
         }
     }
 
-    fn recompile_dynamic_predicate(&mut self, place: DynamicAssertPlace)
+    fn recompile_dynamic_predicate_impl(&mut self, place: DynamicAssertPlace, name: ClauseName,
+                                        arity: usize)
     {
-        let (name, arity) = self.get_predicate_key(temp_v!(3), temp_v!(4));
-
         let stub = MachineError::functor_stub(place.predicate_name(), 1);
         let pred_str = match self.machine_st.try_from_list(temp_v!(2), stub) {
             Ok(addrs) => {
@@ -110,7 +138,44 @@ impl Machine {
         self.handle_eval_result_from_dynamic_compile(pred_str, name, place.predicate_name());
     }
 
-    fn retract_from_dynamic_predicate(&mut self)
+    fn set_module_atom_tbl(&mut self, module_addr: Addr, name: &mut ClauseName) -> bool
+    {
+        let atom_tbl = match self.machine_st.store(self.machine_st.deref(module_addr)) {
+            Addr::Con(Constant::Atom(module, _)) =>
+                match self.indices.modules.get(&module) {
+                    Some(ref module) => module.atom_tbl.clone(),
+                    None => {
+                        self.machine_st.fail = true;
+                        return false;
+                    }
+                },
+            _ => unreachable!()
+        };
+
+        if let &mut ClauseName::User(ref mut rc) = name {
+            rc.table = atom_tbl;
+        }
+
+        true
+    }
+
+    fn recompile_dynamic_predicate_in_module(&mut self, place: DynamicAssertPlace)
+    {
+        let (mut name, arity) = self.get_predicate_key(temp_v!(3), temp_v!(4));
+        let module_addr = self.machine_st[temp_v!(5)].clone();
+
+        if self.set_module_atom_tbl(module_addr, &mut name) {
+            self.recompile_dynamic_predicate_impl(place, name, arity);
+        }
+    }
+
+    fn recompile_dynamic_predicate(&mut self, place: DynamicAssertPlace)
+    {
+        let (name, arity) = self.get_predicate_key(temp_v!(3), temp_v!(4));
+        self.recompile_dynamic_predicate_impl(place, name, arity);
+    }
+
+    fn retract_from_dynamic_predicate_in_module(&mut self)
     {
         let index = self.machine_st[temp_v!(3)].clone();
         let index = match self.machine_st.store(self.machine_st.deref(index)) {
@@ -118,9 +183,30 @@ impl Machine {
             _ => unreachable!()
         };
 
-        let stub = MachineError::functor_stub(clause_name!("retract"), 1);
+        let (mut name, arity) = self.get_predicate_key(temp_v!(1), temp_v!(2));
+        let module_addr = self.machine_st[temp_v!(5)].clone();
+
+        if self.set_module_atom_tbl(module_addr, &mut name) {
+            self.retract_from_dynamic_predicate_impl(name, arity, index);
+        }
+    }
+
+    fn retract_from_dynamic_predicate(&mut self)
+    {
+        let index = self.machine_st[temp_v!(3)].clone();
+        let index = match self.machine_st.store(self.machine_st.deref(index)) {
+            Addr::Con(Constant::Number(Number::Integer(n))) => n.to_usize().unwrap(),
+            _ => unreachable!()
+        };
+        
         let (name, arity) = self.get_predicate_key(temp_v!(1), temp_v!(2));
 
+        self.retract_from_dynamic_predicate_impl(name, arity, index);
+    }
+
+    fn retract_from_dynamic_predicate_impl(&mut self, name: ClauseName, arity: usize, index: usize)
+    {
+        let stub = MachineError::functor_stub(clause_name!("retract"), 1);
         let pred_str = match self.machine_st.try_from_list(temp_v!(4), stub) {
             Ok(addrs) => {
                 let mut addrs = VecDeque::from(addrs);
@@ -148,6 +234,12 @@ impl Machine {
                 self.abolish_dynamic_clause(temp_v!(1), temp_v!(2)),
             DynamicTransactionType::Assert(place) =>
                 self.recompile_dynamic_predicate(place),
+            DynamicTransactionType::ModuleAbolish =>
+                self.abolish_dynamic_clause_in_module(temp_v!(1), temp_v!(2), temp_v!(3)),
+            DynamicTransactionType::ModuleAssert(place) =>
+                self.recompile_dynamic_predicate_in_module(place),
+            DynamicTransactionType::ModuleRetract =>
+                self.retract_from_dynamic_predicate_in_module(),
             DynamicTransactionType::Retract =>
                 self.retract_from_dynamic_predicate()
         }

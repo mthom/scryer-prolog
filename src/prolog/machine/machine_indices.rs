@@ -234,6 +234,9 @@ impl DynamicAssertPlace {
 pub enum DynamicTransactionType {
     Abolish,
     Assert(DynamicAssertPlace),
+    ModuleAbolish,
+    ModuleAssert(DynamicAssertPlace),
+    ModuleRetract,
     Retract // dynamic index of the clause to remove.
 }
 
@@ -421,7 +424,7 @@ impl IndexStore {
     pub fn get_clause_subsection(&self, name: ClauseName, arity: usize) -> Option<DynamicPredicateInfo> {
         self.dynamic_code_dir.get(&(name, arity)).cloned()
     }
-
+    
     #[inline]
     pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
         self.modules.remove(&name)

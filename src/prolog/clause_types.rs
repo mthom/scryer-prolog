@@ -136,8 +136,11 @@ impl InlinedClauseType {
 #[derive(Copy, Clone, PartialEq)]
 pub enum SystemClauseType {
     AbolishClause,
+    AbolishModuleClause,
     AssertDynamicPredicateToBack,
     AssertDynamicPredicateToFront,
+    ModuleAssertDynamicPredicateToFront,
+    ModuleAssertDynamicPredicateToBack,
     CheckCutPoint,
     CopyToLiftedHeap,
     DeleteAttribute,
@@ -155,6 +158,7 @@ pub enum SystemClauseType {
     GetBValue,
     GetClause,
     GetCurrentPredicateList,
+    GetModuleClause,
     GetLiftedHeapFromOffset,
     GetLiftedHeapFromOffsetDiff,
     GetSCCCleaner,
@@ -163,6 +167,7 @@ pub enum SystemClauseType {
     InstallInferenceCounter,
     LiftedHeapLength,
     ModuleOf,
+    ModuleRetractClause,
     NoSuchPredicate,
     RedoAttrVarBindings,
     RemoveCallPolicyCheck,
@@ -197,8 +202,11 @@ impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::AbolishClause => clause_name!("$abolish_clause"),
-            &SystemClauseType::AssertDynamicPredicateToBack => clause_name!("$asserta"),
-            &SystemClauseType::AssertDynamicPredicateToFront => clause_name!("$assertz"),
+            &SystemClauseType::AbolishModuleClause => clause_name!("$abolish_module_clause"),
+            &SystemClauseType::AssertDynamicPredicateToBack => clause_name!("$assertz"),
+            &SystemClauseType::AssertDynamicPredicateToFront => clause_name!("$asserta"),
+            &SystemClauseType::ModuleAssertDynamicPredicateToFront => clause_name!("$module_asserta"),
+            &SystemClauseType::ModuleAssertDynamicPredicateToBack => clause_name!("$module_assertz"),
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
@@ -219,6 +227,7 @@ impl SystemClauseType {
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
             &SystemClauseType::GetClause => clause_name!("$get_clause"),
             &SystemClauseType::GetDoubleQuotes => clause_name!("$get_double_quotes"),
+            &SystemClauseType::GetModuleClause => clause_name!("$get_module_clause"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
             &SystemClauseType::HeadIsDynamic => clause_name!("$head_is_dynamic"),
             &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
@@ -239,6 +248,7 @@ impl SystemClauseType {
             &SystemClauseType::GetCutPoint => clause_name!("$get_cp"),
             &SystemClauseType::GetCurrentBlock => clause_name!("$get_current_block"),
             &SystemClauseType::InstallNewBlock => clause_name!("$install_new_block"),
+            &SystemClauseType::ModuleRetractClause => clause_name!("$module_retract_clause"),
             &SystemClauseType::RetractClause => clause_name!("$retract_clause"),
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
             &SystemClauseType::ReturnFromAttributeGoals => clause_name!("$return_from_attribute_goals"),
@@ -254,10 +264,13 @@ impl SystemClauseType {
             &SystemClauseType::WriteTerm => clause_name!("$write_term"),
         }
     }
-
+    
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$abolish_clause", 2) => Some(SystemClauseType::AbolishClause),
+            ("$abolish_module_clause", 3) => Some(SystemClauseType::AbolishModuleClause),
+            ("$module_asserta", 5) => Some(SystemClauseType::ModuleAssertDynamicPredicateToFront),
+            ("$module_assertz", 5) => Some(SystemClauseType::ModuleAssertDynamicPredicateToBack),
             ("$asserta", 4) => Some(SystemClauseType::AssertDynamicPredicateToFront),
             ("$assertz", 4) => Some(SystemClauseType::AssertDynamicPredicateToBack),
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
@@ -274,6 +287,7 @@ impl SystemClauseType {
             ("$get_attr_list", 2) => Some(SystemClauseType::GetAttributedVariableList),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
             ("$get_clause", 2) => Some(SystemClauseType::GetClause),
+            ("$get_module_clause", 3) => Some(SystemClauseType::GetModuleClause),
             ("$get_current_predicate_list", 1) => Some(SystemClauseType::GetCurrentPredicateList),
             ("$get_lh_from_offset", 2) => Some(SystemClauseType::GetLiftedHeapFromOffset),
             ("$get_lh_from_offset_diff", 3) => Some(SystemClauseType::GetLiftedHeapFromOffsetDiff),
@@ -284,6 +298,7 @@ impl SystemClauseType {
             ("$install_inference_counter", 3) => Some(SystemClauseType::InstallInferenceCounter),
             ("$lh_length", 1) => Some(SystemClauseType::LiftedHeapLength),
             ("$module_of", 2) => Some(SystemClauseType::ModuleOf),
+            ("$module_retract_clause", 5) => Some(SystemClauseType::ModuleRetractClause),
             ("$no_such_predicate", 1) => Some(SystemClauseType::NoSuchPredicate),
             ("$redo_attr_var_bindings", 0) => Some(SystemClauseType::RedoAttrVarBindings),
             ("$remove_call_policy_check", 1) => Some(SystemClauseType::RemoveCallPolicyCheck),
