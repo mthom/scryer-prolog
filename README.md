@@ -1,6 +1,6 @@
-# rusty-wam
+# Scryer Prolog
 
-rusty-wam aims to become to ISO Prolog what GHC is to Haskell: an open
+Scryer Prolog aims to become to ISO Prolog what GHC is to Haskell: an open
 source industrial strength production environment that is also a
 testbed for bleeding edge research in logic and constraint
 programming, which is itself written in a high-level language.
@@ -12,13 +12,13 @@ according to the progression of languages in [Warren's Abstract
 Machine: A Tutorial
 Reconstruction](http://wambook.sourceforge.net/wambook.pdf).
 
-Phase 1 has been completed in that rusty-wam implements in some form
+Phase 1 has been completed in that Scryer Prolog implements in some form
 all of the WAM book, including lists, cuts, Debray allocation, first
 argument indexing, last call optimization and conjunctive queries.
 
 ## Phase 2
 
-Extend rusty-wam to include the following, among other features:
+Extend Scryer Prolog to include the following, among other features:
 
 * call/N as a built-in meta-predicate (_done_).
 * ISO Prolog compliant throw/catch (_done_).
@@ -59,14 +59,14 @@ Use the WAM code produced by the completed code generator to get
 JIT-compiled and -executed Prolog programs. The question of how to get
 assembly from WAM code is something I'm still considering.
 
-It's my hope to use rusty-wam as the logic engine of a low level (and
+It's my hope to use Scryer Prolog as the logic engine of a low level (and
 ideally, very fast) [Shen](http://shenlanguage.org) implementation.
 
 ## Nice to have features
 
 There are no current plans to implement any of these, but they might be
 nice to have in the future. They'd make a good project for anyone wanting
-to contribute code to rusty-wam.
+to contribute code to Scryer Prolog.
 
 1. Implement the global analysis techniques described in Peter van
 Roy's thesis, "Can Logic Programming Execute as Fast as Imperative
@@ -86,22 +86,22 @@ strings.
 
 6. Add some form of JIT predicate indexing.
 
-## Installing rusty-wam
+## Installing Scryer Prolog
 
 First, install the latest stable version of
 [Rust](https://www.rust-lang.org/en-US/install.html) using your
-preferred method. Then install the latest rusty-wam with cargo,
+preferred method. Then install the latest Scryer Prolog with cargo,
 like so:
 
 ```
 $> cargo install rusty-wam
 ```
 
-cargo will download and install the libraries rusty-wam uses
+cargo will download and install the libraries Scryer Prolog uses
 automatically. You can find the `rusty-wam` executable in
 `~/.cargo/bin`.
 
-Note on compatibility: rusty-wam should work on Linux, Mac OS X, and
+Note on compatibility: Scryer Prolog should work on Linux, Mac OS X, and
 FreeBSD. Windows support hinges on the Termion library working in
 Windows terminals, which isn't yet the case, although work is
 underway. See the relevant Termion
@@ -110,7 +110,7 @@ information.
 
 ## Built-in predicates
 
-The following predicates are built-in to rusty-wam.
+The following predicates are built-in to Scryer.
 
 * Arithmetic support:
     * `is/2` works for `(+)/2`, `(-)/{1,2}`, `(*)/2`, `(//)/2`, `(**)/2`, `(div)/2`, `(/)/2`, `(rdiv)/2`,
@@ -262,7 +262,7 @@ a number preceded by an underscore (`X = _0` in an example above).
 
 ### Dynamic operators
 
-rusty-wam supports dynamic operators. Using the built-in
+Scryper supports dynamic operators. Using the built-in
 arithmetic operators with the usual precedences,
 
 ```
@@ -275,7 +275,7 @@ New operators can be defined using the `op` declaration.
 
 ### Partial strings
 
-rusty-wam has two specialized, non-ISO builtin predicates for handling
+Scryer has two specialized, non-ISO builtin predicates for handling
 so-called "partial strings". Partial strings imitate difference lists
 of characters, but are much more space efficient. This efficiency
 comes at the cost of full generality -- you cannot unify the tail
@@ -294,7 +294,7 @@ another string, "def" in this case, produces the equations
 
 ### Modules
 
-rusty-wam has a simple predicate-based module system. It provides a
+Scryer has a simple predicate-based module system. It provides a
 way to separate units of code into distinct namespaces, for both
 predicates and operators. See the files `src/prolog/lib/*.pl` for
 examples.
