@@ -149,7 +149,7 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession
             let mut compiler = ListingCompiler::new(&wam.code_repo);
             let indices = try_eval_session!(compile_decl(wam, &mut compiler, decl));
 
-            try_eval_session!(wam.check_toplevel_code(&indices));
+            try_eval_session!(wam.check_toplevel_code(&indices, &DynamicClauseMap::new()));
             add_toplevel_code(wam, vec![], indices);
 
             EvalSession::EntrySuccess
@@ -181,9 +181,16 @@ fn compile_into_module<R: Read>(wam: &mut Machine, src: R, name: ClauseName, ari
             module.code_dir.extend(as_module_code_dir(code_dir));
 
             if module.module_decl.exports.contains(&(name.clone(), arity)) {
-                if let Some(idx) = wam.indices.code_dir.get(&(name.clone(), arity)) {
-                    let module = name.owning_module();
-                    set_code_index!(idx, IndexPtr::Index(wam.code_repo.code.len()), module);
+                if let Some(idx) = wam.indices.code_dir.get(&(name.clone(), arity)) {                    
+                    if module.module_decl.name == idx.0.borrow().1 {
+                        let module = module.module_decl.name.clone();
+
+                        if module_code.len() > 0 {
+                            set_code_index!(idx, IndexPtr::Index(wam.code_repo.code.len()), module);
+                        } else {
+                            set_code_index!(idx, IndexPtr::Undefined, module);
+                        }
+                    }
                 }
             }
         },
@@ -292,10 +299,10 @@ fn add_non_module_code(wam: &mut Machine, dynamic_clause_map: DynamicClauseMap, 
                        indices: IndexStore)
                        -> Result<(), SessionError>
 {
-    let mut clause_code_generator = ClauseCodeGenerator::new(code.len());
+    wam.check_toplevel_code(&indices, &dynamic_clause_map)?;
 
+    let mut clause_code_generator = ClauseCodeGenerator::new(code.len());
     clause_code_generator.generate_clause_code(dynamic_clause_map, wam)?;
-    wam.check_toplevel_code(&indices)?;
 
     add_toplevel_code(wam, code, indices);
     clause_code_generator.add_clause_code(wam);
@@ -601,8 +608,8 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src:
     if let Some(module) = compiler.module.take() {
         let mut clause_code_generator = ClauseCodeGenerator::new(module_code.len() + toplvl_code.len());
 
+        try_eval_session!(wam.check_toplevel_code(&results.toplevel_indices, &results.dynamic_clause_map));
         try_eval_session!(clause_code_generator.generate_clause_code(results.dynamic_clause_map, wam));
-        try_eval_session!(wam.check_toplevel_code(&results.toplevel_indices));
 
         add_module_code(wam, module, module_code, indices);
         add_toplevel_code(wam, toplvl_code, results.toplevel_indices);

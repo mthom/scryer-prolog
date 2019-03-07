@@ -32,6 +32,7 @@ use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
 use prolog::machine::modules::*;
+use prolog::machine::toplevel::*;
 
 use std::collections::{HashMap, VecDeque};
 use std::mem;
@@ -225,7 +226,8 @@ impl Machine {
         Ok(())
     }
 
-    pub fn check_toplevel_code(&self, indices: &IndexStore) -> Result<(), SessionError>
+    pub fn check_toplevel_code(&self, indices: &IndexStore, dynamic_clause_map: &DynamicClauseMap)
+                               -> Result<(), SessionError>
     {
         for (key, idx) in &indices.code_dir {
             match ClauseType::from(key.0.clone(), key.1, None) {
@@ -239,7 +241,9 @@ impl Machine {
                 }
             };
 
-            self.check_dynamic_clause_overwrite(key.0.clone(), key.1)?;
+            if dynamic_clause_map.contains_key(&key) {
+                self.check_dynamic_clause_overwrite(key.0.clone(), key.1)?;
+            }
             
             if let Some(ref existing_idx) = self.indices.code_dir.get(&key) {
                 // ensure we don't try to overwrite an existing predicate from a different module.
