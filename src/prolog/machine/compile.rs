@@ -159,7 +159,8 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession
 }
 
 pub(super)
-fn compile_into_module<R: Read>(wam: &mut Machine, src: R, name: ClauseName) -> EvalSession
+fn compile_into_module<R: Read>(wam: &mut Machine, src: R, name: ClauseName, arity: usize)
+                                -> EvalSession
 {
     let mut indices = default_index_store!(wam.atom_tbl_of(&name));
     try_eval_session!(setup_indices(wam, name.owning_module(), &mut indices));
@@ -178,6 +179,13 @@ fn compile_into_module<R: Read>(wam: &mut Machine, src: R, name: ClauseName) -> 
         Some(module) => {
             let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
             module.code_dir.extend(as_module_code_dir(code_dir));
+
+            if module.module_decl.exports.contains(&(name.clone(), arity)) {
+                if let Some(idx) = wam.indices.code_dir.get(&(name.clone(), arity)) {
+                    let module = name.owning_module();
+                    set_code_index!(idx, IndexPtr::Index(wam.code_repo.code.len()), module);
+                }
+            }
         },
         _ => unreachable!()
     };
@@ -225,7 +233,7 @@ impl ClauseCodeGenerator {
                 PredicateClause::Fact(clause)
             }).collect());
 
-            let p = self.code.len() + wam.code_size() + self.len_offset;
+            let p = self.code.len() + wam.code_repo.code.len() + self.len_offset;
             let mut decl_code = compile_relation(&TopLevel::Predicate(predicate), false,
                                                  wam.machine_flags())?;
 
@@ -403,7 +411,7 @@ impl ListingCompiler {
             let (name, arity) = decl.predicate_indicator().ok_or(SessionError::NamelessEntry)?;
             let non_counted_bt = self.non_counted_bt_preds.contains(&(name.clone(), arity));
 
-            let p = code.len() + wam.code_size() + code_offset;
+            let p = code.len() + wam.code_repo.code.len() + code_offset;
             let mut decl_code = compile_relation(&TopLevel::Predicate(decl), non_counted_bt,
                                                  wam.machine_flags())?;
 

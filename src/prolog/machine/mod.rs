@@ -294,10 +294,6 @@ impl Machine {
         self.code_repo.code.extend(code.into_iter());
     }
 
-    pub fn code_size(&self) -> usize {
-        self.code_repo.code.len()
-    }
-
     fn fail(&mut self) -> EvalSession
     {
         if self.machine_st.ball.stub.len() > 0 {

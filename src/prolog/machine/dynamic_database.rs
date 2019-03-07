@@ -17,11 +17,11 @@ impl Machine {
         }
     }
 
-    fn compile_into_machine<R: Read>(&mut self, src: R, name: ClauseName) -> EvalSession
+    fn compile_into_machine<R: Read>(&mut self, src: R, name: ClauseName, arity: usize) -> EvalSession
     {
         match name.owning_module().as_str() {
             "user" => compile_user_module(self, src),
-            _ => compile_into_module(self, src, name)
+            _ => compile_into_module(self, src, name, arity)
         }
     }
 
@@ -102,11 +102,11 @@ impl Machine {
     }
     
     fn handle_eval_result_from_dynamic_compile(&mut self, pred_str: String, name: ClauseName,
-                                               src: ClauseName)
+                                               arity: usize, src: ClauseName)
     {
         let machine_st = mem::replace(&mut self.machine_st, MachineState::new());
 
-        let result = self.compile_into_machine(pred_str.as_bytes(), name);
+        let result = self.compile_into_machine(pred_str.as_bytes(), name, arity);
         self.machine_st = machine_st;
 
         if let EvalSession::Error(err) = result {
@@ -135,7 +135,7 @@ impl Machine {
                 return self.machine_st.throw_exception(err)
         };
 
-        self.handle_eval_result_from_dynamic_compile(pred_str, name, place.predicate_name());
+        self.handle_eval_result_from_dynamic_compile(pred_str, name, arity, place.predicate_name());
     }
 
     fn set_module_atom_tbl(&mut self, module_addr: Addr, name: &mut ClauseName) -> bool
@@ -223,7 +223,7 @@ impl Machine {
                 return self.machine_st.throw_exception(err)
         };
 
-        self.handle_eval_result_from_dynamic_compile(pred_str, name, clause_name!("retract"));
+        self.handle_eval_result_from_dynamic_compile(pred_str, name, arity, clause_name!("retract"));
     }
 
     pub(super)
