@@ -80,11 +80,13 @@ impl MachineError {
         }
     }
 
-    pub(super) fn permission_error(err: PermissionError, pred_str: ClauseName) -> Self {
+    pub(super)
+    fn permission_error(err: PermissionError, pred_str: ClauseName) -> Self
+    {
         let pred_str = HeapCellValue::Addr(Addr::Con(Constant::Atom(pred_str, None)));
 
-        let err = vec![heap_atom!(err.as_str()), pred_str];
-        let mut stub = functor!("permission_error", 2);
+        let err = vec![heap_atom!(err.as_str()), heap_atom!("private_procedure"), pred_str];
+        let mut stub = functor!("permission_error", 3);
 
         stub.extend(err.into_iter());
 
