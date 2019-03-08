@@ -114,8 +114,7 @@ pub trait SubModuleUser
     }
 
     // returns true on successful import.
-    fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module)
-                   -> bool
+    fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool
     {
         let name = name.defrock_brackets();
         let mut found_op = false;
@@ -134,14 +133,17 @@ pub trait SubModuleUser
             } else if arity == 2 {
                 insert_op_dir(Fixity::In);
             }
-        }
+        }        
 
         if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
-            let name = name.with_table(submodule.atom_tbl.clone());
-
+            let name = name.with_table(submodule.atom_tbl.clone());            
             let mut atom_tbl = self.atom_tbl();
+            
             atom_tbl.borrow_mut().insert(name.to_rc());
-
+            
+            let mut code_data = code_data.clone();
+            code_data.1 = submodule.module_decl.name.clone();
+            
             self.insert_dir_entry(name, arity, code_data.clone());
             true
         } else {
@@ -172,7 +174,8 @@ pub fn use_qualified_module<User>(user: &mut User, submodule: &Module, exports: 
     Ok(())
 }
 
-pub fn use_module<User: SubModuleUser>(user: &mut User, submodule: &Module) -> Result<(), SessionError>
+pub fn use_module<User: SubModuleUser>(user: &mut User, submodule: &Module)
+                                       -> Result<(), SessionError>
 {
     for (name, arity) in submodule.module_decl.exports.iter().cloned() {
         if !user.import_decl(name, arity, submodule) {

@@ -211,11 +211,11 @@ impl Machine {
         self.machine_st.flags
     }
 
-    pub fn check_dynamic_clause_overwrite(&self, name: ClauseName, arity: usize)
+    pub fn check_dynamic_clause_overwrite(&self, name: ClauseName, arity: usize, module: ClauseName)
                                           -> Result<(), SessionError>
     {
         if let Some(info) = self.indices.dynamic_code_dir.get(&(name.clone(), arity)) {
-            if info.module_src != name.owning_module() {
+            if info.module_src != module {
                 let err_str = format!("{}/{}", name.as_str(), arity);
                 let err_str = clause_name!(err_str, self.indices.atom_tbl());
 
@@ -242,7 +242,8 @@ impl Machine {
             };
 
             if dynamic_clause_map.contains_key(&key) {
-                self.check_dynamic_clause_overwrite(key.0.clone(), key.1)?;
+                let module = idx.0.borrow().1.clone();
+                self.check_dynamic_clause_overwrite(key.0.clone(), key.1, module)?;
             }
             
             if let Some(ref existing_idx) = self.indices.code_dir.get(&key) {

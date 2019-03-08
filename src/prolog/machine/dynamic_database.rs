@@ -20,8 +20,18 @@ impl Machine {
     fn compile_into_machine<R: Read>(&mut self, src: R, name: ClauseName, arity: usize) -> EvalSession
     {
         match name.owning_module().as_str() {
-            "user" => compile_user_module(self, src),
-            _ => compile_into_module(self, src, name, arity)
+            "user" => match self.indices.code_dir.get(&(name.clone(), arity)).cloned() {
+                Some(idx) => {
+                    let module = idx.0.borrow().1.clone();
+
+                    match module.as_str() {
+                        "user" => compile_user_module(self, src),
+                        _ => compile_into_module(self, module, src, name, arity)
+                    }
+                },
+                None => compile_user_module(self, src)
+            },
+            _ => compile_into_module(self, name.owning_module(), src, name, arity)
         }
     }
 
@@ -76,7 +86,7 @@ impl Machine {
     {
         let (name, arity) = self.get_predicate_key(name, arity);
         let module_addr = self.machine_st[module].clone();
-        
+
         let module_name = match self.machine_st.store(self.machine_st.deref(module_addr)) {
             Addr::Con(Constant::Atom(module, _)) =>
                 match self.indices.modules.get_mut(&module) {
@@ -91,7 +101,7 @@ impl Machine {
                 },
             _ => unreachable!()
         };
-        
+
         if let Some(idx) = self.indices.code_dir.get(&(name.clone(), arity)) {
             if idx.module_name() == module_name {
                 set_code_index!(idx, IndexPtr::Undefined, clause_name!("user"));
@@ -100,7 +110,7 @@ impl Machine {
 
         self.indices.remove_code_index((name, arity));
     }
-    
+
     fn handle_eval_result_from_dynamic_compile(&mut self, pred_str: String, name: ClauseName,
                                                arity: usize, src: ClauseName)
     {
@@ -198,7 +208,7 @@ impl Machine {
             Addr::Con(Constant::Number(Number::Integer(n))) => n.to_usize().unwrap(),
             _ => unreachable!()
         };
-        
+
         let (name, arity) = self.get_predicate_key(temp_v!(1), temp_v!(2));
 
         self.retract_from_dynamic_predicate_impl(name, arity, index);

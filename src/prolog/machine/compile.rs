@@ -159,11 +159,12 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession
 }
 
 pub(super)
-fn compile_into_module<R: Read>(wam: &mut Machine, src: R, name: ClauseName, arity: usize)
+fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName, src: R,
+                                name: ClauseName, arity: usize)
                                 -> EvalSession
 {
     let mut indices = default_index_store!(wam.atom_tbl_of(&name));
-    try_eval_session!(setup_indices(wam, name.owning_module(), &mut indices));
+    try_eval_session!(setup_indices(wam, module_name.clone(), &mut indices));
 
     let mut compiler = ListingCompiler::new(&wam.code_repo);
 
@@ -172,23 +173,23 @@ fn compile_into_module<R: Read>(wam: &mut Machine, src: R, name: ClauseName, ari
                                                                &mut indices.code_dir, 0));
 
     let mut clause_code_generator = ClauseCodeGenerator::new(module_code.len());
-    try_eval_session!(clause_code_generator.generate_clause_code(results.dynamic_clause_map,
+    try_eval_session!(clause_code_generator.generate_clause_code(module_name.clone(),
+                                                                 results.dynamic_clause_map,
                                                                  wam));
 
-    match wam.indices.modules.get_mut(&name.owning_module()) {
+    match wam.indices.modules.get_mut(&module_name) {
         Some(module) => {
             let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
             module.code_dir.extend(as_module_code_dir(code_dir));
 
             if module.module_decl.exports.contains(&(name.clone(), arity)) {
-                if let Some(idx) = wam.indices.code_dir.get(&(name.clone(), arity)) {                    
+                if let Some(idx) = wam.indices.code_dir.get(&(name.clone(), arity)) {
                     if module.module_decl.name == idx.0.borrow().1 {
-                        let module = module.module_decl.name.clone();
-
                         if module_code.len() > 0 {
-                            set_code_index!(idx, IndexPtr::Index(wam.code_repo.code.len()), module);
+                            set_code_index!(idx, IndexPtr::Index(wam.code_repo.code.len()),
+                                            module_name.clone());
                         } else {
-                            set_code_index!(idx, IndexPtr::Undefined, module);
+                            set_code_index!(idx, IndexPtr::Undefined, module_name.clone());
                         }
                     }
                 }
@@ -198,7 +199,7 @@ fn compile_into_module<R: Read>(wam: &mut Machine, src: R, name: ClauseName, ari
     };
 
     wam.code_repo.code.extend(module_code.into_iter());
-    clause_code_generator.add_clause_code(wam);
+    clause_code_generator.add_clause_code(module_name, wam);
 
     EvalSession::EntrySuccess
 }
@@ -223,7 +224,8 @@ impl ClauseCodeGenerator {
         ClauseCodeGenerator { len_offset, code: vec![], pi_to_loc: HashMap::new() }
     }
 
-    fn generate_clause_code(&mut self, dynamic_clause_map: DynamicClauseMap, wam: &Machine)
+    fn generate_clause_code(&mut self, module: ClauseName, dynamic_clause_map: DynamicClauseMap,
+                            wam: &Machine)
                             -> Result<(), SessionError>
     {
         for ((name, arity), heads_and_tails) in dynamic_clause_map {
@@ -231,7 +233,7 @@ impl ClauseCodeGenerator {
                 continue;
             }
 
-            wam.check_dynamic_clause_overwrite(name.clone(), arity)?;
+            wam.check_dynamic_clause_overwrite(name.clone(), arity, module.clone())?;
 
             let predicate = Predicate(heads_and_tails.into_iter().map(|(head, tail)| {
                 let clause = Term::Clause(Cell::default(), clause_name!("clause"),
@@ -253,15 +255,15 @@ impl ClauseCodeGenerator {
         Ok(())
     }
 
-    fn add_clause_code(self, wam: &mut Machine) {
+    fn add_clause_code(self, module: ClauseName, wam: &mut Machine) {
         wam.code_repo.code.extend(self.code.into_iter());
 
         for ((name, arity), p) in self.pi_to_loc {
-            let entry = wam.indices.dynamic_code_dir.entry((name.clone(), arity))
+            let entry = wam.indices.dynamic_code_dir.entry((name, arity))
                            .or_insert(DynamicPredicateInfo::default());
 
             entry.clauses_subsection_p = p;
-            entry.module_src = name.owning_module();
+            entry.module_src = module.clone();
         }
     }
 }
@@ -302,10 +304,10 @@ fn add_non_module_code(wam: &mut Machine, dynamic_clause_map: DynamicClauseMap, 
     wam.check_toplevel_code(&indices, &dynamic_clause_map)?;
 
     let mut clause_code_generator = ClauseCodeGenerator::new(code.len());
-    clause_code_generator.generate_clause_code(dynamic_clause_map, wam)?;
+    clause_code_generator.generate_clause_code(clause_name!("user"), dynamic_clause_map, wam)?;
 
     add_toplevel_code(wam, code, indices);
-    clause_code_generator.add_clause_code(wam);
+    clause_code_generator.add_clause_code(clause_name!("user"), wam);
 
     Ok(())
 }
@@ -607,14 +609,17 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src:
 
     if let Some(module) = compiler.module.take() {
         let mut clause_code_generator = ClauseCodeGenerator::new(module_code.len() + toplvl_code.len());
+        let module_name = module.module_decl.name.clone();
 
         try_eval_session!(wam.check_toplevel_code(&results.toplevel_indices, &results.dynamic_clause_map));
-        try_eval_session!(clause_code_generator.generate_clause_code(results.dynamic_clause_map, wam));
+        try_eval_session!(clause_code_generator.generate_clause_code(module_name.clone(),
+                                                                     results.dynamic_clause_map,
+                                                                     wam));
 
         add_module_code(wam, module, module_code, indices);
         add_toplevel_code(wam, toplvl_code, results.toplevel_indices);
 
-        clause_code_generator.add_clause_code(wam);
+        clause_code_generator.add_clause_code(module_name, wam);
     } else {
         try_eval_session!(add_non_module_code(wam, results.dynamic_clause_map, module_code,
                                               indices));
