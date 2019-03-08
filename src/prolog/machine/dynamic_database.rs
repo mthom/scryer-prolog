@@ -79,7 +79,8 @@ impl Machine {
             set_code_index!(idx, IndexPtr::Undefined, clause_name!("user"));
         }
 
-        self.indices.remove_code_index((name, arity));
+        self.indices.remove_code_index((name.clone(), arity));
+        self.indices.dynamic_code_dir.remove(&(name, arity));
     }
 
     fn abolish_dynamic_clause_in_module(&mut self, name: RegType, arity: RegType, module: RegType)
@@ -108,7 +109,8 @@ impl Machine {
             }
         }
 
-        self.indices.remove_code_index((name, arity));
+        self.indices.remove_code_index((name.clone(), arity));
+        self.indices.dynamic_code_dir.remove(&(name, arity));
     }
 
     fn handle_eval_result_from_dynamic_compile(&mut self, pred_str: String, name: ClauseName,
@@ -197,7 +199,26 @@ impl Machine {
         let module_addr = self.machine_st[temp_v!(5)].clone();
 
         if self.set_module_atom_tbl(module_addr, &mut name) {
-            self.retract_from_dynamic_predicate_impl(name, arity, index);
+            let stub = MachineError::functor_stub(clause_name!("retract"), 1);
+            let pred_str = match self.machine_st.try_from_list(temp_v!(4), stub) {
+                Ok(addrs) => {
+                    let mut addrs = VecDeque::from(addrs);
+                    addrs.remove(index);
+
+                    if addrs.is_empty() {
+                        self.abolish_dynamic_clause_in_module(temp_v!(1), temp_v!(2),
+                                                              temp_v!(5));
+                        return;
+                    }
+
+                    self.print_new_dynamic_clause(addrs, name.clone(), arity)
+                },
+                Err(err) =>
+                    return self.machine_st.throw_exception(err)
+            };
+
+            self.handle_eval_result_from_dynamic_compile(pred_str, name, arity,
+                                                         clause_name!("retract"));
         }
     }
 
@@ -211,11 +232,6 @@ impl Machine {
 
         let (name, arity) = self.get_predicate_key(temp_v!(1), temp_v!(2));
 
-        self.retract_from_dynamic_predicate_impl(name, arity, index);
-    }
-
-    fn retract_from_dynamic_predicate_impl(&mut self, name: ClauseName, arity: usize, index: usize)
-    {
         let stub = MachineError::functor_stub(clause_name!("retract"), 1);
         let pred_str = match self.machine_st.try_from_list(temp_v!(4), stub) {
             Ok(addrs) => {
@@ -233,7 +249,8 @@ impl Machine {
                 return self.machine_st.throw_exception(err)
         };
 
-        self.handle_eval_result_from_dynamic_compile(pred_str, name, arity, clause_name!("retract"));
+        self.handle_eval_result_from_dynamic_compile(pred_str, name, arity,
+                                                     clause_name!("retract"));
     }
 
     pub(super)
