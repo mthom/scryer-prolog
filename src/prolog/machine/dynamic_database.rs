@@ -26,12 +26,12 @@ impl Machine {
 
                     match module.as_str() {
                         "user" => compile_user_module(self, src),
-                        _ => compile_into_module(self, module, src, name, arity)
+                        _ => compile_into_module(self, module, src, name)
                     }
                 },
                 None => compile_user_module(self, src)
             },
-            _ => compile_into_module(self, name.owning_module(), src, name, arity)
+            _ => compile_into_module(self, name.owning_module(), src, name)
         }
     }
 

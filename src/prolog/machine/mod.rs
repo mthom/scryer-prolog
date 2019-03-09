@@ -113,7 +113,7 @@ impl SubModuleUser for IndexStore {
                 println!("warning: overwriting {}/{}", &name, arity);
             }
 
-            let (p, module_name) = idx.0.borrow().clone();
+            let (p, module_name) = idx.0.borrow().clone();            
             set_code_index!(code_idx, p, module_name);
             return;
         }

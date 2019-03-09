@@ -121,7 +121,7 @@ pub trait SubModuleUser
         if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
             let name = name.with_table(submodule.atom_tbl.clone());            
             let mut atom_tbl = self.atom_tbl();
-            
+
             atom_tbl.borrow_mut().insert(name.to_rc());
             
             self.insert_dir_entry(name, arity, code_data.clone());
@@ -176,7 +176,7 @@ impl SubModuleUser for Module {
     }
 
     fn get_code_index(&self, key: PredicateKey, _: ClauseName) -> Option<CodeIndex> {
-        self.code_dir.get(&key).cloned().map(CodeIndex::from)
+        self.code_dir.get(&key).cloned()
     }
 
     fn remove_code_index(&mut self, key: PredicateKey) {

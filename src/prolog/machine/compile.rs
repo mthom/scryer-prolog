@@ -159,8 +159,7 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession
 }
 
 pub(super)
-fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName, src: R,
-                                name: ClauseName, arity: usize)
+fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName, src: R, name: ClauseName)
                                 -> EvalSession
 {
     let mut indices = default_index_store!(wam.atom_tbl_of(&name));
@@ -178,21 +177,15 @@ fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName, src:
 
     match wam.indices.modules.get_mut(&module_name) {
         Some(module) => {
-            let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
-            module.code_dir.extend(code_dir);
+            let mut code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
 
-            if module.module_decl.exports.contains(&(name.clone(), arity)) {
-                if let Some(idx) = wam.indices.code_dir.get(&(name.clone(), arity)) {
-                    if module.module_decl.name == module_name {
-                        if module_code.len() > 0 {
-                            set_code_index!(idx, IndexPtr::Index(wam.code_repo.code.len()),
-                                            module_name.clone());
-                        } else {
-                            set_code_index!(idx, IndexPtr::Undefined, module_name.clone());
-                        }
-                    }
-                }
+            // replace the "user" module src's in the indices with module_name.
+            for (_, idx) in code_dir.iter_mut() {
+                let p = idx.0.borrow().0;
+                set_code_index!(idx, p, module_name.clone());
             }
+            
+            module.code_dir.extend(code_dir);            
         },
         _ => unreachable!()
     };
