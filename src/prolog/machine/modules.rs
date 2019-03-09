@@ -12,6 +12,8 @@ use std::collections::{VecDeque};
 impl Module {
     pub fn new(module_decl: ModuleDecl, atom_tbl: TabledData<Atom>) -> Self {
         Module { module_decl, atom_tbl,
+                 user_term_expansions: (Predicate::new(), VecDeque::from(vec![])),
+                 user_goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
                  term_expansions: (Predicate::new(), VecDeque::from(vec![])),
                  goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
                  code_dir: CodeDir::new(),
@@ -26,22 +28,37 @@ impl Module {
             let te = code_repo.term_dir.entry((clause_name!("term_expansion"), 2))
                 .or_insert((Predicate::new(), VecDeque::from(vec![])));
 
-            (te.0).0.extend((self.term_expansions.0).0.iter().cloned());
-            te.1.extend(self.term_expansions.1.iter().cloned());
+            (te.0).0.extend((self.user_term_expansions.0).0.iter().cloned());
+            te.1.extend(self.user_term_expansions.1.iter().cloned());
         }
 
         {
             let ge = code_repo.term_dir.entry((clause_name!("goal_expansion"), 2))
                 .or_insert((Predicate::new(), VecDeque::from(vec![])));
 
-            (ge.0).0.extend((self.goal_expansions.0).0.iter().cloned());
-            ge.1.extend(self.goal_expansions.1.iter().cloned());
+            (ge.0).0.extend((self.user_goal_expansions.0).0.iter().cloned());
+            ge.1.extend(self.user_goal_expansions.1.iter().cloned());
         }
 
         code_repo.compile_hook(CompileTimeHook::TermExpansion, flags)?;
         code_repo.compile_hook(CompileTimeHook::GoalExpansion, flags)?;
 
         Ok(())
+    }
+
+    pub fn add_module_expansion_record(&mut self, hook: CompileTimeHook, clause: PredicateClause,
+                                   queue: VecDeque<TopLevel>)
+    {
+        match hook {
+            CompileTimeHook::TermExpansion | CompileTimeHook::UserTermExpansion => {
+                (self.term_expansions.0).0.push(clause);
+                self.term_expansions.1.extend(queue.into_iter());
+            },
+            CompileTimeHook::GoalExpansion | CompileTimeHook::UserGoalExpansion => {
+                (self.goal_expansions.0).0.push(clause);
+                self.goal_expansions.1.extend(queue.into_iter());
+            }
+        }
     }
 }
 
@@ -116,14 +133,14 @@ pub trait SubModuleUser
             } else if arity == 2 {
                 insert_op_dir(Fixity::In);
             }
-        }        
+        }
 
         if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
-            let name = name.with_table(submodule.atom_tbl.clone());            
+            let name = name.with_table(submodule.atom_tbl.clone());
             let mut atom_tbl = self.atom_tbl();
 
             atom_tbl.borrow_mut().insert(name.to_rc());
-            
+
             self.insert_dir_entry(name, arity, code_data.clone());
             true
         } else {
@@ -193,11 +210,11 @@ impl SubModuleUser for Module {
     {
         use_qualified_module(self, submodule, exports)?;
 
-        (self.term_expansions.0).0.extend((submodule.term_expansions.0).0.iter().cloned());
-        self.term_expansions.1.extend(submodule.term_expansions.1.iter().cloned());
+        (self.user_term_expansions.0).0.extend((submodule.term_expansions.0).0.iter().cloned());
+        self.user_term_expansions.1.extend(submodule.term_expansions.1.iter().cloned());
 
-        (self.goal_expansions.0).0.extend((submodule.goal_expansions.0).0.iter().cloned());
-        self.goal_expansions.1.extend(submodule.goal_expansions.1.iter().cloned());
+        (self.user_goal_expansions.0).0.extend((submodule.goal_expansions.0).0.iter().cloned());
+        self.user_goal_expansions.1.extend(submodule.goal_expansions.1.iter().cloned());
 
         Ok(())
     }
@@ -207,11 +224,11 @@ impl SubModuleUser for Module {
     {
         use_module(self, submodule)?;
 
-        (self.term_expansions.0).0.extend((submodule.term_expansions.0).0.iter().cloned());
-        self.term_expansions.1.extend(submodule.term_expansions.1.iter().cloned());
+        (self.user_term_expansions.0).0.extend((submodule.term_expansions.0).0.iter().cloned());
+        self.user_term_expansions.1.extend(submodule.term_expansions.1.iter().cloned());
 
-        (self.goal_expansions.0).0.extend((submodule.goal_expansions.0).0.iter().cloned());
-        self.goal_expansions.1.extend(submodule.goal_expansions.1.iter().cloned());
+        (self.user_goal_expansions.0).0.extend((submodule.goal_expansions.0).0.iter().cloned());
+        self.user_goal_expansions.1.extend(submodule.goal_expansions.1.iter().cloned());
 
         Ok(())
     }

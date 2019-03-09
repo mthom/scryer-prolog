@@ -162,15 +162,15 @@ fn update_module_indices(wam: &Machine, module_name: ClauseName, mut indices: In
 {
     match wam.indices.modules.get(&module_name) {
         Some(module) => {
-            let mut code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
+            let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
 
             // replace the "user" module src's in the indices with module_name.
-            for (key, idx) in code_dir.iter_mut() {
+            for (key, idx) in code_dir.iter() {
                 let p = idx.0.borrow().0;
 
                 match module.code_dir.get(&key) {
                     Some(idx) => set_code_index!(idx, p, module_name.clone()),
-                    _ => unreachable!()
+                    _ => {}
                 }
 
                 match wam.indices.code_dir.get(&key) {
@@ -179,10 +179,37 @@ fn update_module_indices(wam: &Machine, module_name: ClauseName, mut indices: In
                     },
                     _ => {}
                 }
-            }           
+            }
         },
         _ => unreachable!()
-    };    
+    };
+}
+
+fn add_hooks_to_mockup(code_repo: &mut CodeRepo, hook: CompileTimeHook,
+                       expansions: (Predicate, VecDeque<TopLevel>))
+{
+    let key = (hook.name(), hook.arity());
+    let preds = code_repo.term_dir.entry(key.clone())
+        .or_insert((Predicate::new(), VecDeque::from(vec![])));
+
+    (preds.0).0.extend((expansions.0).0.iter().cloned());
+    preds.1.extend(expansions.1.iter().cloned());
+}
+
+fn setup_module_expansions(wam: &mut Machine, module_name: ClauseName)
+{
+    match wam.indices.modules.get(&module_name) {
+        Some(module) => {
+            let term_expansions = module.term_expansions.clone();
+            let goal_expansions = module.goal_expansions.clone();
+
+            add_hooks_to_mockup(&mut wam.code_repo, CompileTimeHook::TermExpansion,
+                                term_expansions);
+            add_hooks_to_mockup(&mut wam.code_repo, CompileTimeHook::GoalExpansion,
+                                goal_expansions);
+        },
+        _ => unreachable!()
+    }
 }
 
 pub(super)
@@ -194,20 +221,39 @@ fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName, src:
 
     let mut compiler = ListingCompiler::new(&wam.code_repo);
 
-    let results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
-    let module_code = try_eval_session!(compiler.generate_code(results.worker_results, wam,
-                                                               &mut indices.code_dir, 0));
+    match compile_into_module_impl(wam, &mut compiler, module_name, src, indices) {
+        Ok(()) => EvalSession::EntrySuccess,
+        Err(e) => {
+            compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo);            
+            EvalSession::from(e)
+        }
+    }
+}
+    
+fn compile_into_module_impl<R: Read>(wam: &mut Machine, compiler: &mut ListingCompiler,
+                                     module_name: ClauseName, src: R, mut indices: IndexStore)
+                                     -> Result<(), SessionError>
+{   
+    setup_module_expansions(wam, module_name.clone());
+
+    let flags = wam.machine_flags();
+    
+    wam.code_repo.compile_hook(CompileTimeHook::TermExpansion, flags)?;
+    wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion, flags)?;
+    
+    let results = compiler.gather_items(wam, src, &mut indices)?;
+    let module_code = compiler.generate_code(results.worker_results, wam,
+                                             &mut indices.code_dir, 0)?;
 
     let mut clause_code_generator = ClauseCodeGenerator::new(module_code.len());
-    try_eval_session!(clause_code_generator.generate_clause_code(results.dynamic_clause_map,
-                                                                 wam));
+    clause_code_generator.generate_clause_code(results.dynamic_clause_map, wam)?;
 
     update_module_indices(wam, module_name, indices);
-
+    
     wam.code_repo.code.extend(module_code.into_iter());
     clause_code_generator.add_clause_code(wam);
 
-    EvalSession::EntrySuccess
+    Ok(compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo))
 }
 
 pub struct GatherResult {
@@ -455,6 +501,10 @@ impl ListingCompiler {
             let module_preds = self.user_term_dir.entry(key.clone())
                 .or_insert((Predicate::new(), VecDeque::from(vec![])));
 
+            if let Some(ref mut module) = &mut self.module {
+                module.add_module_expansion_record(hook, clause.clone(), queue.clone());
+            }
+            
             (module_preds.0).0.push(clause);
             module_preds.1.extend(queue.into_iter());
 
@@ -600,8 +650,8 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src:
                                                                module_code.len()));
 
     if let Some(ref mut module) = &mut compiler.module {
-        module.term_expansions = results.addition_results.take_term_expansions();
-        module.goal_expansions = results.addition_results.take_goal_expansions();
+        module.user_term_expansions = results.addition_results.take_term_expansions();
+        module.user_goal_expansions = results.addition_results.take_goal_expansions();
     }
 
     let flags = wam.machine_flags();

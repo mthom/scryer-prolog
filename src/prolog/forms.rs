@@ -237,5 +237,7 @@ pub struct Module {
     pub op_dir: OpDir,
     pub term_expansions: (Predicate, VecDeque<TopLevel>),
     pub goal_expansions: (Predicate, VecDeque<TopLevel>),
+    pub user_term_expansions: (Predicate, VecDeque<TopLevel>), // term expansions inherited from the user scope.
+    pub user_goal_expansions: (Predicate, VecDeque<TopLevel>), // same for goal_expansions.
     pub inserted_expansions: bool // has the module been successfully inserted into toplevel??
 }
