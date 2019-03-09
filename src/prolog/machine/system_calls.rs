@@ -294,26 +294,46 @@ impl MachineState {
                     Addr::Str(s) =>
                         match self.heap[s].clone() {
                             HeapCellValue::NamedStr(arity, name, ..) =>
-                                indices.get_clause_subsection(name, arity),
+                                indices.get_clause_subsection(module, name, arity),
                             _ => unreachable!()
                         },
                     Addr::Con(Constant::Atom(name, _)) =>
-                        indices.get_clause_subsection(name, 0),
+                        indices.get_clause_subsection(module, name, 0),
                     _ => unreachable!()
                 };
 
                 match subsection {
                     Some(dynamic_predicate_info) => {
-                        if dynamic_predicate_info.module_src != module {
-                            self.fail = true;
-                        } else {
-                            self.execute_at_index(2, dynamic_predicate_info.clauses_subsection_p);
-                        }
-
+                        self.execute_at_index(2, dynamic_predicate_info.clauses_subsection_p);
                         return Ok(());
                     },
                     None => self.fail = true
                 }
+            },
+            &SystemClauseType::ModuleHeadIsDynamic => {
+                let module = self[temp_v!(2)].clone();
+                let head = self[temp_v!(1)].clone();
+
+                let module = match self.store(self.deref(module)) {
+                    Addr::Con(Constant::Atom(module, _)) =>
+                        module,
+                    _ => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                };
+                
+                self.fail = !match self.store(self.deref(head)) {
+                    Addr::Str(s) =>
+                        match self.heap[s].clone() {
+                            HeapCellValue::NamedStr(arity, name, ..) =>
+                                indices.get_clause_subsection(module, name, arity).is_some(),
+                            _ => unreachable!()
+                        },
+                    Addr::Con(Constant::Atom(name, _)) =>
+                        indices.get_clause_subsection(module, name, 0).is_some(),
+                    _ => unreachable!()
+                };                
             },
             &SystemClauseType::HeadIsDynamic => {
                 let head = self[temp_v!(1)].clone();
@@ -322,11 +342,11 @@ impl MachineState {
                     Addr::Str(s) =>
                         match self.heap[s].clone() {
                             HeapCellValue::NamedStr(arity, name, ..) =>
-                                indices.get_clause_subsection(name, arity).is_some(),
+                                indices.get_clause_subsection(name.owning_module(), name, arity).is_some(),
                             _ => unreachable!()
                         },
                     Addr::Con(Constant::Atom(name, _)) =>
-                        indices.get_clause_subsection(name, 0).is_some(),
+                        indices.get_clause_subsection(name.owning_module(), name, 0).is_some(),
                     _ => unreachable!()
                 };
             },
@@ -877,11 +897,11 @@ impl MachineState {
                     Addr::Str(s) =>
                         match self.heap[s].clone() {
                             HeapCellValue::NamedStr(arity, name, ..) =>
-                                indices.get_clause_subsection(name, arity),
+                                indices.get_clause_subsection(name.owning_module(), name, arity),
                             _ => unreachable!()
                         },
                     Addr::Con(Constant::Atom(name, _)) =>
-                        indices.get_clause_subsection(name, 0),
+                        indices.get_clause_subsection(name.owning_module(), name, 0),
                     _ => unreachable!()
                 };
 

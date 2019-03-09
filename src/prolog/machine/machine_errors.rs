@@ -66,8 +66,7 @@ impl MachineError {
     pub(super) fn session_error(h: usize, err: SessionError) -> Self {
         match err {
             SessionError::ParserError(err) => Self::syntax_error(h, err),
-            SessionError::CannotOverwriteDynamicClause(pred_str)
-          | SessionError::CannotOverwriteBuiltIn(pred_str)
+            SessionError::CannotOverwriteBuiltIn(pred_str)
           | SessionError::CannotOverwriteImport(pred_str) =>
                 Self::permission_error(PermissionError::Modify, pred_str),
             SessionError::ModuleDoesNotContainExport =>
@@ -372,7 +371,6 @@ impl MachineState {
 
 pub enum SessionError {
     CannotOverwriteBuiltIn(ClauseName),
-    CannotOverwriteDynamicClause(ClauseName),
     CannotOverwriteImport(ClauseName),
     ModuleDoesNotContainExport,
     ModuleNotFound,

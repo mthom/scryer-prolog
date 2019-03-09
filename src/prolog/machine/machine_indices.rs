@@ -193,6 +193,13 @@ impl CodeIndex {
     pub fn module_name(&self) -> ClauseName {
         self.0.borrow().1.clone()
     }
+
+    pub fn local(&self) -> Option<usize> {
+        match self.0.borrow().0 {
+            IndexPtr::Index(i) => Some(i),
+            _ => None
+        }
+    }
 }
 
 impl Default for CodeIndex {
@@ -371,18 +378,17 @@ pub type AllocVarDict = HashMap<Rc<Var>, VarData>;
 #[derive(Clone)]
 pub struct DynamicPredicateInfo {
     pub(super) clauses_subsection_p: usize, // a LocalCodePtr::DirEntry value.
-    pub(super) module_src: ClauseName // the module the predicate is defined within.
 }
 
 impl Default for DynamicPredicateInfo {
     fn default() -> Self {
-        DynamicPredicateInfo { clauses_subsection_p: 0,
-                               module_src: clause_name!("user") }
+        DynamicPredicateInfo { clauses_subsection_p: 0 }
     }
 }
 
 pub type InSituCodeDir  = HashMap<PredicateKey, usize>;
-pub type DynamicCodeDir = HashMap<PredicateKey, DynamicPredicateInfo>;
+// key type: module name, predicate indicator.
+pub type DynamicCodeDir = HashMap<(ClauseName, ClauseName, usize), DynamicPredicateInfo>;
 
 pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,
@@ -421,10 +427,18 @@ impl IndexStore {
     }
 
     #[inline]
-    pub fn get_clause_subsection(&self, name: ClauseName, arity: usize) -> Option<DynamicPredicateInfo> {
-        self.dynamic_code_dir.get(&(name, arity)).cloned()
+    pub fn remove_clause_subsection(&mut self, module: ClauseName, name: ClauseName, arity: usize)
+    {
+        self.dynamic_code_dir.remove(&(module, name, arity));
     }
-    
+
+    #[inline]
+    pub fn get_clause_subsection(&self, module: ClauseName, name: ClauseName, arity: usize)
+                                 -> Option<DynamicPredicateInfo>
+    {
+        self.dynamic_code_dir.get(&(module, name, arity)).cloned()
+    }
+
     #[inline]
     pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
         self.modules.remove(&name)
@@ -458,8 +472,7 @@ impl IndexStore {
     }
 
     #[inline]
-    fn get_internal(&self, name: ClauseName, arity: usize, in_mod: ClauseName)
-                    -> Option<ModuleCodeIndex>
+    fn get_internal(&self, name: ClauseName, arity: usize, in_mod: ClauseName) -> Option<CodeIndex>
     {
         self.modules.get(&in_mod)
             .and_then(|ref module| module.code_dir.get(&(name, arity)))

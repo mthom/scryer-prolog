@@ -222,7 +222,6 @@ impl OpDecl {
     }
 }
 
-pub type ModuleCodeDir = HashMap<PredicateKey, ModuleCodeIndex>;
 pub type ModuleDir = HashMap<ClauseName, Module>;
 
 #[derive(Clone)]
@@ -234,12 +233,9 @@ pub struct ModuleDecl {
 pub struct Module {
     pub atom_tbl: TabledData<Atom>,
     pub module_decl: ModuleDecl,
-    pub code_dir: ModuleCodeDir,
+    pub code_dir: CodeDir,
     pub op_dir: OpDir,
     pub term_expansions: (Predicate, VecDeque<TopLevel>),
     pub goal_expansions: (Predicate, VecDeque<TopLevel>),
     pub inserted_expansions: bool // has the module been successfully inserted into toplevel??
 }
-
-#[derive(Clone)]
-pub struct ModuleCodeIndex(pub IndexPtr, pub ClauseName);

@@ -45,12 +45,6 @@ impl fmt::Display for IndexPtr {
     }
 }
 
-impl fmt::Display for ModuleCodeIndex {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 impl fmt::Display for FactInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -249,8 +243,6 @@ impl fmt::Display for IndexingInstruction {
 impl fmt::Display for SessionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &SessionError::CannotOverwriteDynamicClause(ref msg) =>
-                write!(f, "cannot overwrite dynamic predicate {}", msg),
             &SessionError::CannotOverwriteBuiltIn(ref msg) =>
                 write!(f, "cannot overwrite {}", msg),
             &SessionError::CannotOverwriteImport(ref msg) =>

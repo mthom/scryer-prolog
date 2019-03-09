@@ -80,7 +80,7 @@ impl Machine {
         }
 
         self.indices.remove_code_index((name.clone(), arity));
-        self.indices.dynamic_code_dir.remove(&(name, arity));
+        self.indices.remove_clause_subsection(name.owning_module(), name, arity);
     }
 
     fn abolish_dynamic_clause_in_module(&mut self, name: RegType, arity: RegType, module: RegType)
@@ -110,7 +110,7 @@ impl Machine {
         }
 
         self.indices.remove_code_index((name.clone(), arity));
-        self.indices.dynamic_code_dir.remove(&(name, arity));
+        self.indices.remove_clause_subsection(module_name, name, arity);
     }
 
     fn handle_eval_result_from_dynamic_compile(&mut self, pred_str: String, name: ClauseName,

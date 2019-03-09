@@ -6,24 +6,7 @@ use prolog::machine::code_repo::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 
-use std::cell::RefCell;
 use std::collections::{VecDeque};
-use std::rc::Rc;
-
-impl ModuleCodeIndex {
-    pub fn local(&self) -> Option<usize> {
-        match self.0 {
-            IndexPtr::Index(i) => Some(i),
-            _ => None
-        }
-    }
-}
-
-impl From<ModuleCodeIndex> for CodeIndex {
-    fn from(value: ModuleCodeIndex) -> Self {
-        CodeIndex(Rc::new(RefCell::new((value.0, value.1))))
-    }
-}
 
 // Module's and related types are defined in forms.
 impl Module {
@@ -31,7 +14,7 @@ impl Module {
         Module { module_decl, atom_tbl,
                  term_expansions: (Predicate::new(), VecDeque::from(vec![])),
                  goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
-                 code_dir: ModuleCodeDir::new(),
+                 code_dir: CodeDir::new(),
                  op_dir: default_op_dir(),
                  inserted_expansions: false }
     }
@@ -69,7 +52,7 @@ pub trait SubModuleUser
     fn remove_code_index(&mut self, PredicateKey);
     fn get_code_index(&self, PredicateKey, ClauseName) -> Option<CodeIndex>;
 
-    fn insert_dir_entry(&mut self, ClauseName, usize, ModuleCodeIndex);
+    fn insert_dir_entry(&mut self, ClauseName, usize, CodeIndex);
 
     fn remove_module(&mut self, mod_name: ClauseName, module: &Module)
     {
@@ -141,9 +124,6 @@ pub trait SubModuleUser
             
             atom_tbl.borrow_mut().insert(name.to_rc());
             
-            let mut code_data = code_data.clone();
-            code_data.1 = submodule.module_decl.name.clone();
-            
             self.insert_dir_entry(name, arity, code_data.clone());
             true
         } else {
@@ -203,7 +183,7 @@ impl SubModuleUser for Module {
         self.code_dir.remove(&key);
     }
 
-    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: ModuleCodeIndex) {
+    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: CodeIndex) {
         self.code_dir.insert((name, arity), idx);
     }
 
@@ -235,13 +215,4 @@ impl SubModuleUser for Module {
 
         Ok(())
     }
-}
-
-pub fn as_module_code_dir(code_dir: CodeDir) -> ModuleCodeDir {
-    code_dir.into_iter()
-        .map(|(k, code_idx)| {
-            let (idx, module_name) = code_idx.0.borrow().clone();
-            (k, ModuleCodeIndex(idx, module_name))
-        })
-        .collect()
 }
