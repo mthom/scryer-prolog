@@ -158,6 +158,33 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession
     }
 }
 
+fn update_module_indices(wam: &Machine, module_name: ClauseName, mut indices: IndexStore)
+{
+    match wam.indices.modules.get(&module_name) {
+        Some(module) => {
+            let mut code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
+
+            // replace the "user" module src's in the indices with module_name.
+            for (key, idx) in code_dir.iter_mut() {
+                let p = idx.0.borrow().0;
+
+                match module.code_dir.get(&key) {
+                    Some(idx) => set_code_index!(idx, p, module_name.clone()),
+                    _ => unreachable!()
+                }
+
+                match wam.indices.code_dir.get(&key) {
+                    Some(idx) => if idx.0.borrow().1 == module_name {
+                        set_code_index!(idx, p, module_name.clone());
+                    },
+                    _ => {}
+                }
+            }           
+        },
+        _ => unreachable!()
+    };    
+}
+
 pub(super)
 fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName, src: R, name: ClauseName)
                                 -> EvalSession
@@ -175,20 +202,7 @@ fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName, src:
     try_eval_session!(clause_code_generator.generate_clause_code(results.dynamic_clause_map,
                                                                  wam));
 
-    match wam.indices.modules.get_mut(&module_name) {
-        Some(module) => {
-            let mut code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
-
-            // replace the "user" module src's in the indices with module_name.
-            for (_, idx) in code_dir.iter_mut() {
-                let p = idx.0.borrow().0;
-                set_code_index!(idx, p, module_name.clone());
-            }
-            
-            module.code_dir.extend(code_dir);            
-        },
-        _ => unreachable!()
-    };
+    update_module_indices(wam, module_name, indices);
 
     wam.code_repo.code.extend(module_code.into_iter());
     clause_code_generator.add_clause_code(wam);
