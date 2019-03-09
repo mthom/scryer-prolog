@@ -104,7 +104,6 @@ impl SubModuleUser for IndexStore {
     fn remove_code_index(&mut self, key: PredicateKey)
     {
         self.code_dir.remove(&key);
-        self.dynamic_code_dir.remove(&(key.0.owning_module(), key.0, key.1));
     }
 
     fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: CodeIndex)
@@ -222,11 +221,11 @@ impl Machine {
                     // ensure we don't try to overwrite the name/arity of a builtin.
                     let err_str = format!("{}/{}", key.0, key.1);
                     let err_str = clause_name!(err_str, self.indices.atom_tbl());
-                    
+
                     return Err(SessionError::CannotOverwriteBuiltIn(err_str));
                 }
             };
-            
+
             if let Some(ref existing_idx) = self.indices.code_dir.get(&key) {
                 // ensure we don't try to overwrite an existing predicate from a different module.
                 if !existing_idx.is_undefined() && !idx.is_undefined() {
@@ -239,7 +238,7 @@ impl Machine {
                         let err_str = format!("{}/{} from module {}", key.0, key.1,
                                               existing_idx.module_name().as_str());
                         let err_str = clause_name!(err_str, self.indices.atom_tbl());
-                        
+
                         return Err(SessionError::CannotOverwriteImport(err_str));
                     }
                 }
@@ -248,7 +247,7 @@ impl Machine {
 
         Ok(())
     }
-    
+
     pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir)
     {
         // error detection has finished, so update the master index of keys.
@@ -291,7 +290,7 @@ impl Machine {
                                                           PrinterOutputter::new())
                 .result();
 
-            let err_str = clause_name!(err_str, self.indices.atom_tbl());            
+            let err_str = clause_name!(err_str, self.indices.atom_tbl());
             EvalSession::from(SessionError::QueryFailureWithException(err_str))
         } else {
             EvalSession::from(SessionError::QueryFailure)
