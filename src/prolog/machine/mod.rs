@@ -154,6 +154,7 @@ static ATTS: &str     = include_str!("../lib/atts.pl");
 static DIF: &str      = include_str!("../lib/dif.pl");
 static FREEZE: &str   = include_str!("../lib/freeze.pl");
 static REIF: &str     = include_str!("../lib/reif.pl");
+static ASSOC: &str    = include_str!("../lib/assoc.pl");
 
 impl Machine {
     fn compile_special_forms(&mut self) {
@@ -185,6 +186,7 @@ impl Machine {
         compile_user_module(self, DIF.as_bytes());
         compile_user_module(self, FREEZE.as_bytes());
         compile_user_module(self, REIF.as_bytes());
+        compile_user_module(self, ASSOC.as_bytes());
     }
 
     pub fn new() -> Self {

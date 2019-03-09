@@ -536,11 +536,14 @@ pub(crate) trait CallPolicy: Any {
                 let a2 = machine_st[temp_v!(2)].clone();
                 let a3 = machine_st[temp_v!(3)].clone();
 
-                let c = Addr::Con(match machine_st.compare_term_test(&a2, &a3) {
-                    Ordering::Greater => atom!(">"),
-                    Ordering::Equal   => atom!("="),
-                    Ordering::Less    => atom!("<")
-                });
+                let c = match machine_st.compare_term_test(&a2, &a3) {
+                    Ordering::Greater => Addr::Con(Constant::Atom(clause_name!(">"),
+                                                                  Some((700, XFX)))),
+                    Ordering::Equal   => Addr::Con(Constant::Atom(clause_name!("="),
+                                                                  Some((700, XFX)))),
+                    Ordering::Less    => Addr::Con(Constant::Atom(clause_name!("<"),
+                                                                  Some((700, XFX))))
+                };
 
                 machine_st.unify(a1, c);
                 return_from_clause!(machine_st.last_call, machine_st)

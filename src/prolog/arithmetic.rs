@@ -127,6 +127,7 @@ impl<'a> ArithmeticEvaluator<'a>
             "-"    => Ok(ArithmeticInstruction::Sub(a1, a2, t)),
             "/"    => Ok(ArithmeticInstruction::Div(a1, a2, t)),
             "//"   => Ok(ArithmeticInstruction::IDiv(a1, a2, t)),
+            "max"  => Ok(ArithmeticInstruction::Max(a1, a2, t)),
             "div"  => Ok(ArithmeticInstruction::FIDiv(a1, a2, t)),
             "rdiv" => Ok(ArithmeticInstruction::RDiv(a1, a2, t)),
             "*"    => Ok(ArithmeticInstruction::Mul(a1, a2, t)),

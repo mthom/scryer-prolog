@@ -620,7 +620,7 @@ impl MachineState {
 
         for heap_val in self.post_order_iter(a) {
             match heap_val {
-                HeapCellValue::NamedStr(2, name, Some(_)) => {
+                HeapCellValue::NamedStr(2, name, _) => {
                     let a2 = interms.pop().unwrap();
                     let a1 = interms.pop().unwrap();
 
@@ -628,8 +628,9 @@ impl MachineState {
                         "+" => interms.push(a1 + a2),
                         "-" => interms.push(a1 - a2),
                         "*" => interms.push(a1 * a2),
-                        "/" => interms.push(self.div(a1, a2)?),
+                        "/" => interms.push(self.div(a1, a2)?),                        
                         "**" => interms.push(self.pow(a1, a2)?),
+                        "max"  => interms.push(self.max(a1, a2)?),
                         "rdiv" => {
                             let r1 = self.get_rational(&ArithmeticTerm::Number(a1), &caller)?;
                             let r2 = self.get_rational(&ArithmeticTerm::Number(a2), &caller)?;
@@ -650,7 +651,7 @@ impl MachineState {
                                                             caller))
                     }
                 },
-                HeapCellValue::NamedStr(1, name, Some(_)) => {
+                HeapCellValue::NamedStr(1, name, _) => {
                     let a1 = interms.pop().unwrap();
 
                     match name.as_str() {
@@ -849,6 +850,10 @@ impl MachineState {
         }
     }
 
+    fn max(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {        
+        Ok(max(n1, n2))
+    }
+    
     fn remainder(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(rem)"), 2);
@@ -912,6 +917,13 @@ impl MachineState {
 
                 self.interms[t - 1] = n1 * n2;
                 self.p += 1;
+            },
+            &ArithmeticInstruction::Max(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                self.interms[t - 1] = try_or_fail!(self, self.max(n1, n2));
+                self.p += 1;                
             },
             &ArithmeticInstruction::Pow(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));

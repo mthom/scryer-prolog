@@ -423,8 +423,11 @@ impl ListingCompiler {
 
             let idx = code_dir.entry((name.clone(), arity)).or_insert(CodeIndex::default());
             set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
-
-            self.localize_self_calls(name, arity, &mut decl_code, p);
+/*
+            println!("{}/{}:", name.as_str(), arity);
+            print_code(&decl_code);
+  */          
+            self.localize_self_calls(name, arity, &mut decl_code, p);            
             code.extend(decl_code.into_iter());
         }
 
