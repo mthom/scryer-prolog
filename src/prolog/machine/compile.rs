@@ -224,23 +224,23 @@ fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName, src:
     match compile_into_module_impl(wam, &mut compiler, module_name, src, indices) {
         Ok(()) => EvalSession::EntrySuccess,
         Err(e) => {
-            compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo);            
+            compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo);
             EvalSession::from(e)
         }
     }
 }
-    
+
 fn compile_into_module_impl<R: Read>(wam: &mut Machine, compiler: &mut ListingCompiler,
                                      module_name: ClauseName, src: R, mut indices: IndexStore)
                                      -> Result<(), SessionError>
-{   
+{
     setup_module_expansions(wam, module_name.clone());
 
     let flags = wam.machine_flags();
-    
+
     wam.code_repo.compile_hook(CompileTimeHook::TermExpansion, flags)?;
     wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion, flags)?;
-    
+
     let results = compiler.gather_items(wam, src, &mut indices)?;
     let module_code = compiler.generate_code(results.worker_results, wam,
                                              &mut indices.code_dir, 0)?;
@@ -249,7 +249,7 @@ fn compile_into_module_impl<R: Read>(wam: &mut Machine, compiler: &mut ListingCo
     clause_code_generator.generate_clause_code(results.dynamic_clause_map, wam)?;
 
     update_module_indices(wam, module_name, indices);
-    
+
     wam.code_repo.code.extend(module_code.into_iter());
     clause_code_generator.add_clause_code(wam);
 
@@ -341,10 +341,12 @@ fn add_module_code(wam: &mut Machine, mut module: Module, code: Code, mut indice
 
     module.code_dir.extend(code_dir);
     module.op_dir.extend(op_dir.into_iter());
-
-    for (name, arity) in module.code_dir.keys().cloned() {
-        wam.indices.dynamic_code_dir.remove(&(name.owning_module(), name, arity));
-    }
+    
+    for (name, arity) in indices.code_dir.keys().cloned() {
+        if name.owning_module() == module.module_decl.name {
+            wam.indices.dynamic_code_dir.remove(&(name.owning_module(), name, arity));
+        }
+    }    
     
     wam.add_module(module, code);
 }
@@ -357,7 +359,7 @@ fn add_non_module_code(wam: &mut Machine, dynamic_clause_map: DynamicClauseMap, 
 
     let mut clause_code_generator = ClauseCodeGenerator::new(code.len());
     clause_code_generator.generate_clause_code(dynamic_clause_map, wam)?;
-    
+
     add_toplevel_code(wam, code, indices);
     clause_code_generator.add_clause_code(wam);
 
@@ -508,7 +510,7 @@ impl ListingCompiler {
             if let Some(ref mut module) = &mut self.module {
                 module.add_module_expansion_record(hook, clause.clone(), queue.clone());
             }
-            
+
             (module_preds.0).0.push(clause);
             module_preds.1.extend(queue.into_iter());
 
@@ -669,7 +671,7 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src:
         try_eval_session!(wam.check_toplevel_code(&results.toplevel_indices));
         try_eval_session!(clause_code_generator.generate_clause_code(results.dynamic_clause_map,
                                                                      wam));
-        
+
         add_module_code(wam, module, module_code, indices);
         add_toplevel_code(wam, toplvl_code, results.toplevel_indices);
 

@@ -393,14 +393,17 @@ impl RelationWorker {
                          queue: VecDeque::new() }
     }
 
-    fn setup_fact(&mut self, term: Term) -> Result<Term, ParserError>
+    fn setup_fact(&mut self, term: Term, assume_dyn: bool) -> Result<Term, ParserError>
     {
         match term {
             Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) => {
                 let tail = Term::Constant(Cell::default(),
                                           Constant::Atom(clause_name!("true"), None));
 
-                self.dynamic_clauses.push((term.clone(), tail));
+                if assume_dyn {
+                    self.dynamic_clauses.push((term.clone(), tail));
+                }
+                
                 Ok(term)
             },
             _ =>
@@ -630,10 +633,10 @@ impl RelationWorker {
         match flatten_hook(term) {
             Term::Clause(r, name, terms, _) =>
                 if name == hook.name() && terms.len() == hook.arity() {
-                    let term = self.setup_fact(Term::Clause(r, name, terms, None))?;
+                    let term = self.setup_fact(Term::Clause(r, name, terms, None), false)?;
                     Ok((hook, PredicateClause::Fact(term), VecDeque::from(vec![])))
                 } else if name.as_str() == ":-" && terms.len() == 2 {
-                    let rule = self.setup_rule(indices, terms, true)?;
+                    let rule = self.setup_rule(indices, terms, true, false)?;
                     let results_queue = self.parse_queue(indices)?;
 
                     Ok((hook, PredicateClause::Rule(rule), results_queue))
@@ -645,7 +648,7 @@ impl RelationWorker {
     }
 
     fn setup_rule(&mut self, indices: &mut CompositeIndices, mut terms: Vec<Box<Term>>,
-                  blocks_cuts: bool)
+                  blocks_cuts: bool, assume_dyn: bool)
                   -> Result<Rule, ParserError>
     {
         let post_head_terms: Vec<_> = terms.drain(1 ..).collect();
@@ -653,7 +656,9 @@ impl RelationWorker {
         let head = *terms.first().cloned().unwrap();
         let tail = *post_head_terms.first().cloned().unwrap();
 
-        self.dynamic_clauses.push((head, tail));
+        if assume_dyn {
+            self.dynamic_clauses.push((head, tail));
+        }
 
         let mut query_terms = self.setup_query(indices, post_head_terms, blocks_cuts)?;
         let clauses = query_terms.drain(1 ..).collect();
@@ -681,15 +686,15 @@ impl RelationWorker {
                 } else if name.as_str() == "?-" {
                     Ok(TopLevel::Query(try!(self.setup_query(indices, terms, blocks_cuts))))
                 } else if name.as_str() == ":-" && terms.len() > 1 {
-                    Ok(TopLevel::Rule(try!(self.setup_rule(indices, terms, blocks_cuts))))
+                    Ok(TopLevel::Rule(try!(self.setup_rule(indices, terms, blocks_cuts, true))))
                 } else if name.as_str() == ":-" && terms.len() == 1 {
                     let term = *terms.pop().unwrap();
                     Ok(TopLevel::Declaration(try!(setup_declaration(term))))
                 } else {
                     let term = Term::Clause(r, name, terms, fixity);
-                    Ok(TopLevel::Fact(try!(self.setup_fact(term))))
+                    Ok(TopLevel::Fact(try!(self.setup_fact(term, true))))
                 },
-            term => Ok(TopLevel::Fact(try!(self.setup_fact(term))))
+            term => Ok(TopLevel::Fact(try!(self.setup_fact(term, true))))
         }
     }
 
