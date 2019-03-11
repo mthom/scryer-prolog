@@ -192,8 +192,8 @@ fn add_hooks_to_mockup(code_repo: &mut CodeRepo, hook: CompileTimeHook,
     let preds = code_repo.term_dir.entry(key.clone())
         .or_insert((Predicate::new(), VecDeque::from(vec![])));
 
-    (preds.0).0.extend((expansions.0).0.iter().cloned());
-    preds.1.extend(expansions.1.iter().cloned());
+    (preds.0).0.extend((expansions.0).0.into_iter());
+    preds.1.extend(expansions.1.into_iter());
 }
 
 fn setup_module_expansions(wam: &mut Machine, module_name: ClauseName)
