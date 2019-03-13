@@ -215,7 +215,7 @@ impl MachineState {
 
     pub(super) fn system_call(&mut self,
                               ct: &SystemClauseType,
-                              indices: &IndexStore,
+                              indices: &mut IndexStore,
                               call_policy: &mut Box<CallPolicy>,
                               cut_policy:  &mut Box<CutPolicy>)
                               -> CallResult
@@ -277,6 +277,21 @@ impl MachineState {
                     _ => self.fail = true
                 };
             },
+            &SystemClauseType::FetchGlobalVar => {
+                let key = self[temp_v!(1)].clone();
+
+                let key = match self.store(self.deref(key)) {
+                    Addr::Con(Constant::Atom(atom, _)) => atom,
+                    _ => unreachable!()
+                };
+
+                let addr = self[temp_v!(2)].clone();
+
+                match indices.global_variables.get(&key).cloned() {
+                    Some(sought_addr) => self.unify(addr, sought_addr),
+                    None => self.fail = true
+                };
+            },
             &SystemClauseType::GetModuleClause => {
                 let module = self[temp_v!(3)].clone();
                 let head = self[temp_v!(1)].clone();
@@ -322,7 +337,7 @@ impl MachineState {
                         return Ok(());
                     }
                 };
-                
+
                 self.fail = !match self.store(self.deref(head)) {
                     Addr::Str(s) =>
                         match self.heap[s].clone() {
@@ -333,7 +348,7 @@ impl MachineState {
                     Addr::Con(Constant::Atom(name, _)) =>
                         indices.get_clause_subsection(module, name, 0).is_some(),
                     _ => unreachable!()
-                };                
+                };
             },
             &SystemClauseType::HeadIsDynamic => {
                 let head = self[temp_v!(1)].clone();
@@ -718,6 +733,16 @@ impl MachineState {
                     self.heap[h] = HeapCellValue::Addr(addr);
                 }
             },
+            &SystemClauseType::ResetGlobalVarAtKey => {
+                let key = self[temp_v!(1)].clone();
+
+                let key = match self.store(self.deref(key)) {
+                    Addr::Con(Constant::Atom(atom, _)) => atom,
+                    _ => unreachable!()
+                };
+
+                indices.global_variables.remove(&key);
+            },
             &SystemClauseType::RemoveCallPolicyCheck => {
                 let restore_default =
                     match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
@@ -930,6 +955,18 @@ impl MachineState {
             &SystemClauseType::SkipMaxList => if let Err(err) = self.skip_max_list() {
                 return Err(err);
             },
+            &SystemClauseType::StoreGlobalVar => {
+                let key = self[temp_v!(1)].clone();
+
+                let key = match self.store(self.deref(key)) {
+                    Addr::Con(Constant::Atom(atom, _)) => atom,
+                    _ => unreachable!()
+                };
+
+                let value = self[temp_v!(2)].clone();
+
+                indices.global_variables.insert(key, value);
+            }
             &SystemClauseType::Succeed => {},
             &SystemClauseType::TermVariables => {
                 let a1 = self[temp_v!(1)].clone();

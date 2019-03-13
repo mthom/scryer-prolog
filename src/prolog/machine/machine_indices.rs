@@ -390,13 +390,16 @@ pub type InSituCodeDir  = HashMap<PredicateKey, usize>;
 // key type: module name, predicate indicator.
 pub type DynamicCodeDir = HashMap<(ClauseName, ClauseName, usize), DynamicPredicateInfo>;
 
+pub type GlobalVarDir = HashMap<ClauseName, Addr>;
+
 pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,
     pub(super) code_dir: CodeDir,
     pub(super) dynamic_code_dir: DynamicCodeDir,
+    pub(super) global_variables: GlobalVarDir,
     pub(super) in_situ_code_dir: InSituCodeDir,
-    pub(super) op_dir: OpDir,
     pub(super) modules: ModuleDir,
+    pub(super) op_dir: OpDir,    
 }
 
 impl IndexStore {
@@ -455,6 +458,7 @@ impl IndexStore {
             atom_tbl: TabledData::new(Rc::new("user".to_string())),
             code_dir: CodeDir::new(),
             dynamic_code_dir: DynamicCodeDir::new(),
+            global_variables: GlobalVarDir::new(),
             in_situ_code_dir: InSituCodeDir::new(),
             op_dir: default_op_dir(),
             modules: ModuleDir::new(),

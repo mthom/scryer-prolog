@@ -6,12 +6,13 @@
 	(>)/2, (<)/2, (=\=)/2, (=:=)/2, (>=)/2, (=<)/2, (,)/2, (->)/2,
 	(;)/2, (=..)/2, (==)/2, (\==)/2, (@=<)/2, (@>=)/2, (@<)/2,
 	(@>)/2, (=@=)/2, (\=@=)/2, (:)/2, abolish/1, asserta/1,
-	assertz/1, bagof/3, call_with_inference_limit/3, catch/3,
-	clause/2, current_predicate/1, current_prolog_flag/2,
-	expand_goal/2, expand_term/2, findall/3, findall/4, once/1,
-	repeat/0, retract/1, set_prolog_flag/2, setof/3,
-	setup_call_cleanup/3, term_variables/2, throw/1, true/0,
-	false/0, write/1, write_canonical/1, writeq/1, write_term/2]).
+	assertz/1, bagof/3, bb_get/2, bb_put/2, call_cleanup/2,
+	call_with_inference_limit/3, catch/3, clause/2,
+	current_predicate/1, current_prolog_flag/2, expand_goal/2,
+	expand_term/2, findall/3, findall/4, once/1, repeat/0,
+	retract/1, set_prolog_flag/2, setof/3, setup_call_cleanup/3,
+	term_variables/2, throw/1, true/0, false/0, write/1,
+	write_canonical/1, writeq/1, write_term/2]).
 
 /* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
    and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
@@ -298,6 +299,8 @@ run_cleaners_without_handling(Cp) :-
     '$call_with_default_policy'(run_cleaners_without_handling(Cp)).
 run_cleaners_without_handling(Cp) :-
     '$set_cp_by_default'(Cp), '$restore_cut_policy'.
+
+call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
 % call_with_inference_limit
 
@@ -734,3 +737,18 @@ current_predicate(Pred) :-
        )
     ;  throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ).
+
+bb_put(Key, Value) :- bb_put(Key, _, Value).
+
+store_global_var(Key, Value) :- '$store_global_var'(Key, Value).
+
+reset_global_var_at_key(Key) :- '$reset_global_var_at_key'(Key).
+
+bb_put(Key, OldValue, NewValue) :-
+    (  bb_get(Key, OldValue) ->
+       call_cleanup((store_global_var(Key, NewValue) ; false), store_global_var(Key, OldValue))
+    ;  call_cleanup((store_global_var(Key, NewValue) ; false), reset_global_var_at_key(Key))
+    ).
+
+bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
+bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).
