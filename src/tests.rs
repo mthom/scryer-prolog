@@ -2363,42 +2363,41 @@ fn test_queries_on_attributed_variables()
 
     assert_prolog_success!(&mut wam, "?- ( put_atts(V, my_mod, dif(1)) ; put_atts(V, my_mod, dif(2)) ),
                                          get_atts(V, my_mod, L).",
-                           [["L = [dif(1)]", "V = _12"],
-                            ["L = [dif(2)]", "V = _12"]]);
+                           [["L = [dif(1)]", "V = _10"],
+                            ["L = [dif(2)]", "V = _10"]]);
 
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, frozen(a)),
    				       ( put_atts(V, my_mod, dif(1))
    				       ; put_atts(V, my_mod, -frozen(a)), put_atts(V, my_mod, dif(2))
    				       ; put_atts(V, my_mod, dif(different)) ),
    				       get_atts(V, my_mod, Ls).",
-                           [["Ls = [frozen(a), dif(1)]", "V = _12"],
-                            ["Ls = [dif(2)]", "V = _12"],
-                            ["Ls = [frozen(a), dif(different)]", "V = _12"]]);
+                           [["Ls = [frozen(a), dif(1)]", "V = _10"],
+                            ["Ls = [dif(2)]", "V = _10"],
+                            ["Ls = [frozen(a), dif(different)]", "V = _10"]]);
 
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a)]),
    				       ( put_atts(V, my_mod, -dif(2)); put_atts(V, my_mod, -frozen(A)) ),
    				  	 get_atts(V, my_mod, L).",
-                           [["A = _69", "L = [dif(1), frozen(a)]", "V = _27"],
-                            ["A = _69", "L = [dif(1), dif(2)]", "V = _27"]]);
+                           [["A = _71", "L = [frozen(a)]", "V = _25"],
+                            ["A = _71", "L = [dif(2)]", "V = _25"]]);
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
    				       ( put_atts(V, my_mod, -dif(2)) ; put_atts(V, my_mod, -frozen(A)) ),
    				  	 get_atts(V, my_mod, L).",
-                           [["A = _97", "L = [dif(1), frozen(a), frozen(b)]", "V = _31"],
-                            ["A = _97", "L = [dif(1), dif(2)]", "V = _31"]]);
-    assert_prolog_failure!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
+                           [["A = _111", "L = [frozen(b)]", "V = _29"],
+                            ["A = _111", "L = [dif(2)]", "V = _29"]]);
+    assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
                                          get_atts(V, my_mod, -dif(1)).");
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
                                          get_atts(V, my_mod, -dif(3)).");
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
                                          get_atts(V, my_mod, dif(X)).",
-                           [["X = 1", "V = _31"],
-                            ["X = 2", "V = _31"]]);
+                           [["X = 2", "V = _29"]]);
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), dif(2), frozen(a), frozen(b)]),
                                          put_atts(V, my_mod, -dif(A)), get_atts(V, my_mod, Ls).",
-                           [["A = _98", "Ls = [frozen(a), frozen(b)]", "V = _31"]]);
+                           [["A = _112", "Ls = [frozen(b)]", "V = _29"]]);
     assert_prolog_success!(&mut wam, "?- put_atts(V, my_mod, [dif(1), frozen(a), dif(2), frozen(b)]),
                                          put_atts(V, my_mod, -dif(A)), get_atts(V, my_mod, Ls).",
-                           [["A = _98", "Ls = [frozen(a), frozen(b)]", "V = _31"]]);
+                           [["A = _114", "Ls = [frozen(b)]", "V = _29"]]);
 
     submit(&mut wam, include_str!("./prolog/examples/minatotask.pl"));
     submit(&mut wam, ":- use_module(library(zdd)).");
@@ -2416,5 +2415,5 @@ fn test_queries_on_attributed_variables()
       					 Vs = [X,Y],
       					 variables_set_zdd(Vs, ZDD),
       					 X = 0.",
-                           [["Vs = [0, _59]", "X = 0", "Y = _59", "ZDD = 0->b(true);_59->b(true);b(false)"]]);
+                           [["Vs = [0, _58]", "X = 0", "Y = _58", "ZDD = 0->b(true);_58->b(true);b(false)"]]);
 }

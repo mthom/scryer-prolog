@@ -8,8 +8,7 @@ verify_attributes(Var, Other, Goals) :-
         get_atts(Var, frozen(Fa)), !,       % are we involved?
         (   var(Other) ->                   % must be attributed then
             (   get_atts(Other,  frozen(Fb)) % has a pending goal?
-            ->  put_atts(Other, -frozen(Fb)),
-	        put_atts(Other,  frozen((Fb,Fa))) % rescue conjunction
+            ->  put_atts(Other,  frozen((Fb,Fa))) % rescue conjunction
             ;   put_atts(Other,  frozen(Fa)) % rescue the pending goal
             ),
             Goals = []
@@ -23,8 +22,8 @@ freeze(X, Goal) :-
 
 gather_freeze_goals(Attrs, _, _) :-
     var(Attrs), !.
-gather_freeze_goals([frozen(X) | Attrs], Var, [frozen(Var, X) | Goals]) :-
-    gather_freeze_goals(Attrs, Var, Goals).
+gather_freeze_goals([frozen(X) | _], Var, [frozen(Var, X) | _]) :-
+    !.
 gather_freeze_goals([_ | Attrs], Var, Goals) :-
     gather_freeze_goals(Attrs, Var, Goals).
 

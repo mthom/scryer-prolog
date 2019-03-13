@@ -106,8 +106,10 @@ put_attr(Name, Arity) -->
     { functor(Attr, Name, Arity),
       numbervars(Attr, 0, Arity),
       V = '$VAR'(Arity) },
-    [(put_atts(V, +Attr) :- !, functor(Attr, _, _), '$put_attr'(V, Attr)),
-     (put_atts(V,  Attr) :- !, functor(Attr, _, _), '$put_attr'(V, Attr)),
+    [(put_atts(V, +Attr) :- !, functor(Attr, Head, Arity), functor(AttrForm, Head, Arity),
+			    '$get_attr_list'(V, Ls), '$del_attr'(Ls, V, AttrForm), '$put_attr'(V, Attr)),
+     (put_atts(V,  Attr) :- !, functor(Attr, Head, Arity), functor(AttrForm, Head, Arity),
+			    '$get_attr_list'(V, Ls), '$del_attr'(Ls, V, AttrForm), '$put_attr'(V, Attr)),
      (put_atts(V, -Attr) :- !, functor(Attr, _, _), '$get_attr_list'(V, Ls), '$del_attr'(Ls, V, Attr))].
 
 get_attr(Name, Arity) -->
