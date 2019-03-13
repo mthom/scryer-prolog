@@ -738,17 +738,15 @@ current_predicate(Pred) :-
     ;  throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ).
 
-bb_put(Key, Value) :- bb_put(Key, _, Value).
-
-store_global_var(Key, Value) :- '$store_global_var'(Key, Value).
-
-reset_global_var_at_key(Key) :- '$reset_global_var_at_key'(Key).
-
-bb_put(Key, OldValue, NewValue) :-
+bb_put(Key, NewValue) :- 
     (  bb_get(Key, OldValue) ->
        call_cleanup((store_global_var(Key, NewValue) ; false), store_global_var(Key, OldValue))
     ;  call_cleanup((store_global_var(Key, NewValue) ; false), reset_global_var_at_key(Key))
     ).
+
+store_global_var(Key, Value) :- '$store_global_var'(Key, Value).
+
+reset_global_var_at_key(Key) :- '$reset_global_var_at_key'(Key).
 
 bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
 bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).
