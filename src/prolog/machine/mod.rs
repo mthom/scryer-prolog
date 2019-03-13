@@ -113,7 +113,7 @@ impl SubModuleUser for IndexStore {
                 println!("warning: overwriting {}/{}", &name, arity);
             }
 
-            let (p, module_name) = idx.0.borrow().clone();            
+            let (p, module_name) = idx.0.borrow().clone();
             set_code_index!(code_idx, p, module_name);
             return;
         }
@@ -183,7 +183,7 @@ impl Machine {
 	compile_user_module(self, TERMS.as_bytes());
         compile_user_module(self, DCGS.as_bytes());
         compile_user_module(self, ATTS.as_bytes());
-        compile_user_module(self, ORDSETS.as_bytes());        
+        compile_user_module(self, ORDSETS.as_bytes());
         compile_user_module(self, DIF.as_bytes());
         compile_user_module(self, FREEZE.as_bytes());
         compile_user_module(self, REIF.as_bytes());

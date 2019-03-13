@@ -46,8 +46,10 @@ Extend Scryer Prolog to include the following, among other features:
   paper "Indexing `dif/2`" (_done_).
 * All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`) (_done_).
 * Clause creation and destruction (`asserta/1`, `assertz/1`,
-  `retract/1`, `abolish/1`) with logical update semantics (_done_).
-* Backtrackable global variables via `bb_get/2` and `bb_put/2` (_done_).
+  `retract/1`, `abolish/1`) with logical update semantics (_done_).  
+* Backtrackable and non-backtrackable global variables via `bb_get/2`
+  `bb_put/2` (non-backtrackable) and `b_bb_put/2`
+  (backtrackable).  (_done_).
 * Streams and predicates for stream control (_in progress_).
 * An incremental compacting garbage collector satisfying the five
   properties of "Precise Garbage Collection in Prolog."
