@@ -48,7 +48,7 @@ Extend Scryer Prolog to include the following, among other features:
 * Clause creation and destruction (`asserta/1`, `assertz/1`,
   `retract/1`, `abolish/1`) with logical update semantics (_done_).  
 * Backtrackable and non-backtrackable global variables via `bb_get/2`
-  `bb_put/2` (non-backtrackable) and `b_bb_put/2`
+  `bb_put/2` (non-backtrackable) and `bb_b_put/2`
   (backtrackable).  (_done_).
 * Streams and predicates for stream control (_in progress_).
 * An incremental compacting garbage collector satisfying the five
@@ -143,6 +143,7 @@ The following predicates are built-in to Scryer.
 * `atom/1`
 * `atomic/1`
 * `bagof/3`
+* `bb_b_put/2`
 * `bb_get/2`
 * `bb_put/2`
 * `between/3`
