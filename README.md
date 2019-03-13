@@ -95,11 +95,11 @@ preferred method. Then install the latest Scryer Prolog with cargo,
 like so:
 
 ```
-$> cargo install rusty-wam
+$> cargo install scryer-prolog
 ```
 
 cargo will download and install the libraries Scryer Prolog uses
-automatically. You can find the `rusty-wam` executable in
+automatically. You can find the `scryer-prolog` executable in
 `~/.cargo/bin`.
 
 Note on compatibility: Scryer Prolog should work on Linux, Mac OS X, and

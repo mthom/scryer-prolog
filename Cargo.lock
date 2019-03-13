@@ -110,8 +110,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "rusty-wam"
-version = "0.8.1"
+name = "scryer-prolog"
+version = "0.8.2"
 dependencies = [
  "downcast 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
