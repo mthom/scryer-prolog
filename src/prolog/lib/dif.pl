@@ -1,18 +1,15 @@
 :- module(dif, [dif/2]).
 
 :- use_module(library(atts)).
+:- use_module(library(ordsets)).
 
 :- attribute dif/1.
 
-non_unif_member([X \== Y | Z], V, W) :-
-    (   X == V, Y == W -> true
-    ;   non_unif_member(Z, V, W)
-    ).
-
 put_dif_att(Var, X, Y) :-
     (   get_atts(Var, +dif(Z)) ->
-	(   non_unif_member(Z, X, Y) -> true
-	;   put_atts(Var, +dif([X \== Y | Z]))
+	ord_add_element(Z, X \== Y, NewZ),
+	(   Z == NewZ -> true
+	;   put_atts(Var, +dif(NewZ))
 	)
     ;   put_atts(Var, +dif([X \== Y]))
     ).
