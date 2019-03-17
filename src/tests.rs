@@ -147,7 +147,7 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>
 {
     wam.reset();
 
-    match string_to_toplevel(String::from(buffer), wam) {
+    match string_to_toplevel(buffer.as_bytes(), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
@@ -164,7 +164,7 @@ pub fn submit_query_without_results(wam: &mut Machine, buffer: &str) -> bool
 {
     wam.reset();
 
-    match string_to_toplevel(String::from(buffer), wam) {
+    match string_to_toplevel(buffer.as_bytes(), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(..)
@@ -182,7 +182,7 @@ pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
 {
     wam.reset();
 
-    match string_to_toplevel(String::from(buffer), wam) {
+    match string_to_toplevel(buffer.as_bytes(), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>

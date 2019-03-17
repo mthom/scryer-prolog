@@ -30,7 +30,7 @@ pub enum Input {
     Quit,
     Clear,
     Batch,
-    TermString(String)
+    TermString(&'static str)
 }
 
 #[derive(Clone, Copy)]
@@ -107,9 +107,9 @@ pub fn readline_initialize() {
     bind_keyseq_rl("\\C-d", bind_end_chord);
 }
 
-pub fn read_line(prompt: &str) -> Result<String, SessionError> {
+pub fn read_line(prompt: &str) -> Result<&'static str, SessionError> {
     match readline_rl(prompt) {
-        Some(input) => Ok(input.to_string()),
+        Some(input) => Ok(input),
         None => Err(SessionError::UserPrompt)
     }
 }

@@ -24,7 +24,7 @@ fn prolog_repl() {
 
         match toplevel_read_line() {
             Ok(Input::TermString(buffer)) => {
-                let result = match string_to_toplevel(buffer, &mut wam) {
+                let result = match string_to_toplevel(buffer.as_bytes(), &mut wam) {
                     Ok(packet) => compile_term(&mut wam, packet),
                     Err(e) => EvalSession::from(e)
                 };
