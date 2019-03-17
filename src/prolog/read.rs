@@ -50,8 +50,8 @@ pub fn set_line_mode(mode: LineMode) {
     }
 }
 
-fn is_directive(buf: &String) -> bool {
-    match buf.as_str() {
+fn is_directive(buf: &str) -> bool {
+    match buf {
         "[user]" | "quit" | "clear" => true,
         _ => false
     }
@@ -80,7 +80,7 @@ unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {
         println!("");
         rl_done = 1;
     } else {
-        if let Some(ref buf) = rl_line_buffer_as_string() {
+        if let Some(buf) = rl_line_buffer_as_str() {
             if is_directive(buf) {
                 println!("");
                 rl_done = 1;
