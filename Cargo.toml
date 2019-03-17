@@ -11,7 +11,7 @@ downcast = "0.9.1"
 num = "0.2"
 ordered-float = "0.5.0"
 prolog_parser = "0.8.1"
-readline_rs = { package = "readline-rs", version = "*" }
+readline_rs = { package = "readline-rs", version = "0.1.0" }
 
 [dependencies.termion]
 version = "1.4.0"
