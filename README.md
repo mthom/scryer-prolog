@@ -174,6 +174,7 @@ The following predicates are built-in to Scryer.
 * `gen_nat/1`
 * `goal_expansion/2`
 * `ground/1`
+* `halt/0`
 * `integer/1`
 * `is_list/1`
 * `is_partial_string/1`

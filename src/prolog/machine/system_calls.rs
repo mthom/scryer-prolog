@@ -628,6 +628,8 @@ impl MachineState {
 
                 self.fail = true;
             },
+            &SystemClauseType::Halt =>
+                std::process::exit(0),
             &SystemClauseType::InstallSCCCleaner => {
                 let addr = self[temp_v!(1)].clone();
                 let b = self.b;

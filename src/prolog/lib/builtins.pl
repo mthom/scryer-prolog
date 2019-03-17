@@ -9,8 +9,8 @@
 	assertz/1, bagof/3, bb_b_put/2, bb_get/2, bb_put/2,
 	call_cleanup/2, call_with_inference_limit/3, catch/3,
 	clause/2, current_predicate/1, current_prolog_flag/2,
-	expand_goal/2, expand_term/2, findall/3, findall/4, once/1,
-	repeat/0, retract/1, set_prolog_flag/2, setof/3,
+	expand_goal/2, expand_term/2, findall/3, findall/4, halt/0,
+	once/1, repeat/0, retract/1, set_prolog_flag/2, setof/3,
 	setup_call_cleanup/3, term_variables/2, throw/1, true/0,
 	false/0, write/1, write_canonical/1, writeq/1, write_term/2]).
 
@@ -753,3 +753,5 @@ reset_global_var_at_key(Key) :- '$reset_global_var_at_key'(Key).
 
 bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
 bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).
+
+halt :- '$halt'.
