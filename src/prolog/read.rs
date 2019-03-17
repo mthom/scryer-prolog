@@ -4,11 +4,14 @@ use prolog_parser::tabled_rc::TabledData;
 
 use prolog::forms::*;
 use prolog::iterators::*;
+use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::MachineState;
 
 use std::collections::VecDeque;
-use std::io::{Read, stdin};
+use std::io::Read;
+
+use readline_sys::readline::*;
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
@@ -30,21 +33,99 @@ pub enum Input {
     TermString(String)
 }
 
-pub fn toplevel_read_line() -> Result<Input, ParserError> {
-    let mut buffer = String::new();
+#[derive(Clone, Copy)]
+pub enum LineMode {
+    Single,
+    Multi
+}
 
-    let stdin = stdin();
-    stdin.read_line(&mut buffer).unwrap();
+static mut LINE_MODE: LineMode = LineMode::Single;
+static mut END_OF_LINE: bool = false;
 
-    match &*buffer.trim() {
-        "quit"   => Ok(Input::Quit),
-        "clear"  => Ok(Input::Clear),
+pub fn set_line_mode(mode: LineMode) {
+    unsafe {
+        LINE_MODE = mode;
+        END_OF_LINE = false;
+        rl_done = 0;
+    }
+}
+
+fn is_directive(buf: &String) -> bool {
+    match buf.as_str() {
+        "[user]" | "quit" | "clear" => true,
+        _ => false
+    }
+}
+
+unsafe extern "C" fn bind_end_chord(_: i32, _: i32) -> i32 {
+    if let LineMode::Multi = LINE_MODE {
+        rl_done = 1;
+    }
+
+    0
+}
+
+unsafe extern "C" fn bind_end_key(_: i32, _: i32) -> i32 {
+    insert_text_rl(".");
+
+    if let LineMode::Single = LINE_MODE {
+        END_OF_LINE = true;
+    }
+
+    0
+}
+
+unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {    
+    if END_OF_LINE {
+        println!("");
+        rl_done = 1;
+    } else {
+        if let Some(ref buf) = rl_line_buffer_as_string() {
+            if is_directive(buf) {
+                println!("");
+                rl_done = 1;
+                return 0;
+            }
+        }
+        
+        insert_text_rl("\n");
+    }
+
+    0
+}
+
+pub fn readline_initialize() {
+    let rc = initialize_rl(); // initialize editline.
+
+    if rc != 0 {
+        panic!("initialize_rl() failed with return code {}", rc);
+    }
+
+    bind_key_rl('.' as i32, bind_end_key);
+    bind_key_rl('\n' as i32, bind_cr);
+    bind_key_rl('\r' as i32, bind_cr);
+    bind_keyseq_rl("\\C-d", bind_end_chord);
+}
+
+pub fn read_line(prompt: &str) -> Result<String, SessionError> {
+    match readline_rl(prompt) {
+        Some(input) => Ok(input.to_string()),
+        None => Err(SessionError::UserPrompt)
+    }
+}
+
+pub fn toplevel_read_line() -> Result<Input, SessionError> {
+    let buffer = read_line("prolog> ")?;
+
+    Ok(match &*buffer.trim() {
+        "quit"   => Input::Quit,
+        "clear"  => Input::Clear,
         "[user]" => {
             println!("(type Enter + Ctrl-D to terminate the stream when finished)");
-            Ok(Input::Batch)
+            Input::Batch
         },
-        _ => Ok(Input::TermString(buffer))
-    }
+        _ => Input::TermString(buffer)
+    })
 }
 
 impl MachineState {

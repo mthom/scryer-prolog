@@ -6,7 +6,6 @@ use prolog::machine::machine_indices::*;
 use prolog::machine::toplevel::*;
 
 use std::collections::HashSet;
-use std::io::empty;
 use std::mem::swap;
 use std::ops::{Range, RangeFrom};
 
@@ -148,7 +147,7 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>
 {
     wam.reset();
 
-    match string_to_toplevel(empty(), String::from(buffer), wam) {
+    match string_to_toplevel(String::from(buffer), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
@@ -165,7 +164,7 @@ pub fn submit_query_without_results(wam: &mut Machine, buffer: &str) -> bool
 {
     wam.reset();
 
-    match string_to_toplevel(empty(), String::from(buffer), wam) {
+    match string_to_toplevel(String::from(buffer), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(..)
@@ -183,7 +182,7 @@ pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
 {
     wam.reset();
 
-    match string_to_toplevel(empty(), String::from(buffer), wam) {
+    match string_to_toplevel(String::from(buffer), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
                 EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>

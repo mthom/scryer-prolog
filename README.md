@@ -101,8 +101,11 @@ $> cargo install scryer-prolog
 ```
 
 cargo will download and install the libraries Scryer Prolog uses
-automatically. You can find the `scryer-prolog` executable in
-`~/.cargo/bin`.
+automatically, save for the C library readline. It will search the
+system library paths for readline without taking further steps to
+install it if it is not found.
+
+You can find the `scryer-prolog` executable in `~/.cargo/bin`.
 
 Note on compatibility: Scryer Prolog should work on Linux, Mac OS X, and
 FreeBSD. Windows support hinges on the Termion library working in

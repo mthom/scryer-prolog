@@ -1,6 +1,6 @@
 [package]
 name = "scryer-prolog"
-version = "0.8.3"
+version = "0.8.4"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
 repository = "https://github.com/mthom/scryer-prolog"
 description = "A modern Prolog implementation written mostly in Rust."
@@ -11,6 +11,10 @@ downcast = "0.9.1"
 num = "0.2"
 ordered-float = "0.5.0"
 prolog_parser = "0.8.1"
+readline-sys = "0.1.0"
+
+[patch.crates-io]
+readline-sys = { git = 'https://github.com/mthom/readline-sys' }
 
 [dependencies.termion]
 version = "1.4.0"

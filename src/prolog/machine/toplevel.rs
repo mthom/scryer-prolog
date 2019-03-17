@@ -761,14 +761,11 @@ fn term_to_toplevel<'a, R>(term_stream: &mut TermStream<'a, R>, code_dir: &mut C
 }
 
 pub
-fn string_to_toplevel<R: Read>(src: R, buffer: String, wam: &mut Machine)
-                               -> Result<TopLevelPacket, SessionError>
+fn string_to_toplevel(buffer: String, wam: &mut Machine) -> Result<TopLevelPacket, SessionError>
 {
-    let mut term_stream = TermStream::new(src, wam.indices.atom_tbl(),
+    let mut term_stream = TermStream::new(buffer.as_bytes(), wam.indices.atom_tbl(),
                                           wam.machine_flags(), &mut wam.indices,
                                           &mut wam.policies, &mut wam.code_repo);
-
-    term_stream.add_to_top(buffer.as_str());
 
     let term = term_stream.read_term(&OpDir::new())?;
     let mut code_dir = CodeDir::new();

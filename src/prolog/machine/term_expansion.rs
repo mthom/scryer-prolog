@@ -150,11 +150,6 @@ impl<'a, R: Read> TermStream<'a, R> {
     }
 
     #[inline]
-    pub fn add_to_top(&mut self, buf: &str) {
-        self.parser.add_to_top(buf);
-    }
-
-    #[inline]
     pub fn eof(&mut self) -> Result<bool, ParserError> {
         Ok(self.stack.is_empty() && self.parser.eof()?)
     }

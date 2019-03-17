@@ -1,5 +1,7 @@
 #[macro_use] extern crate downcast;
 #[macro_use] extern crate prolog_parser;
+
+extern crate readline_sys;
 extern crate termion;
 
 mod prolog;
@@ -11,22 +13,18 @@ use prolog::machine::toplevel::string_to_toplevel;
 use prolog::read::*;
 use prolog::write::*;
 
-use std::io::{Write, stdin, stdout};
-
 #[cfg(test)]
 mod tests;
 
 fn prolog_repl() {
     let mut wam = Machine::new();
-    
+
     loop {
-        print!("prolog> ");
-        stdout().flush().unwrap();
-        
+        set_line_mode(LineMode::Single);
+
         match toplevel_read_line() {
             Ok(Input::TermString(buffer)) => {
-                let stdin  = stdin();
-                let result = match string_to_toplevel(stdin.lock(), buffer, &mut wam) {
+                let result = match string_to_toplevel(buffer, &mut wam) {
                     Ok(packet) => compile_term(&mut wam, packet),
                     Err(e) => EvalSession::from(e)
                 };
@@ -34,9 +32,17 @@ fn prolog_repl() {
                 print(&mut wam, result)
             },
             Ok(Input::Batch) => {
-                let stdin  = stdin();
-                let result = compile_user_module(&mut wam, stdin.lock());
+                set_line_mode(LineMode::Multi);
+
+                let src = match read_line("") {
+                    Ok(src) => src,
+                    Err(e) => {
+                        println!("{}", e);
+                        continue;
+                    }
+                };
                 
+                let result = compile_user_module(&mut wam, src.as_bytes());
                 print(&mut wam, result);
             },
             Ok(Input::Quit) => break,
@@ -52,5 +58,6 @@ fn prolog_repl() {
 }
 
 fn main() {
+    readline_initialize();
     prolog_repl();
 }
