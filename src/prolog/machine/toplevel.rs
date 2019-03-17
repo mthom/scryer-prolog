@@ -231,8 +231,10 @@ fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, 
     }
 }
 
-fn setup_declaration(term: Term) -> Result<Declaration, ParserError>
+fn setup_declaration(mut terms: Vec<Box<Term>>) -> Result<Declaration, ParserError>
 {
+    let term = *terms.pop().unwrap();
+    
     match term {
         Term::Clause(_, name, mut terms, _) =>
             if name.as_str() == "op" && terms.len() == 3 {
@@ -592,11 +594,12 @@ impl RelationWorker {
         }
     }
 
-    fn setup_query(&mut self, indices: &mut CompositeIndices, terms: Vec<Box<Term>>, blocks_cuts: bool)
+    fn setup_query(&mut self, indices: &mut CompositeIndices, terms: Vec<Box<Term>>,
+                   blocks_cuts: bool)
                    -> Result<Vec<QueryTerm>, ParserError>
     {
         let mut query_terms = vec![];
-        let mut work_queue  = VecDeque::from(terms);
+        let mut work_queue = VecDeque::from(terms);
 
         while let Some(term) = work_queue.pop_front() {
             let mut term = *term;
@@ -651,9 +654,9 @@ impl RelationWorker {
                   blocks_cuts: bool, assume_dyn: bool)
                   -> Result<Rule, ParserError>
     {
-        let post_head_terms: Vec<_> = terms.drain(1 ..).collect();
-
         let head = *terms.first().cloned().unwrap();
+        let post_head_terms: Vec<_> = terms.drain(1 .. ).collect();
+
         let tail = *post_head_terms.first().cloned().unwrap();
 
         if assume_dyn {
@@ -677,19 +680,23 @@ impl RelationWorker {
                       -> Result<TopLevel, ParserError>
     {
         match term {
-            Term::Clause(r, name, mut terms, fixity) =>
+            Term::Clause(r, name, terms, fixity) =>
                 if let Some(hook) = is_compile_time_hook(&name, &terms) {
                     let term = Term::Clause(r, name, terms, fixity);
                     let (hook, clause, queue) = self.setup_hook(hook, indices, term)?;
 
                     Ok(TopLevel::Declaration(Declaration::Hook(hook, clause, queue)))
                 } else if name.as_str() == "?-" {
-                    Ok(TopLevel::Query(try!(self.setup_query(indices, terms, blocks_cuts))))
-                } else if name.as_str() == ":-" && terms.len() > 1 {
-                    Ok(TopLevel::Rule(try!(self.setup_rule(indices, terms, blocks_cuts, true))))
+                    match setup_declaration(terms.iter().cloned().collect()) {
+                        Ok(decl) => return Ok(TopLevel::Declaration(decl)),
+                        _ => {}
+                    };
+                    
+                    Ok(TopLevel::Query(self.setup_query(indices, terms, blocks_cuts)?))
+                } else if name.as_str() == ":-" && terms.len() == 2 {
+                    Ok(TopLevel::Rule(self.setup_rule(indices, terms, blocks_cuts, true)?))
                 } else if name.as_str() == ":-" && terms.len() == 1 {
-                    let term = *terms.pop().unwrap();
-                    Ok(TopLevel::Declaration(try!(setup_declaration(term))))
+                    Ok(TopLevel::Declaration(setup_declaration(terms)?))
                 } else {
                     let term = Term::Clause(r, name, terms, fixity);
                     Ok(TopLevel::Fact(try!(self.setup_fact(term, true))))

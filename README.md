@@ -218,11 +218,11 @@ To enter a multi-clause predicate, the directive "[user]" is used.
 
 For example,
 ```
-prolog> [user]
+?- [user].
 (type Enter + Ctrl-D to terminate the stream when finished)
 p(f(f(X)), h(W), Y) :- g(W), h(W), f(X).
 p(X, Y, Z) :- h(Y), z(Z).
-prolog> [user]
+?- [user].
 (type Enter + Ctrl-D to terminate the stream when finished)
 h(x). h(y).
 h(z).
@@ -232,7 +232,7 @@ input stream. The instructive message is always printed.
 
 Queries are issued as
 ```
-prolog> ?- p(X, Y, Z).
+?- p(X, Y, Z).
 ```
 
 Pressing `SPACE` will backtrack through other possible answers, if any exist.
@@ -241,10 +241,11 @@ Pressing `.` will abort the search and return to the prompt.
 Wildcards work as well:
 
 ```
-prolog> [user]
+?- [user].
+(type Enter + Ctrl-D to terminate the stream when finished)
 member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
-prolog> ?- member(X, [a, b, c]).
+?- member(X, [a, b, c]).
 true .
 X = a ;
 X = b ;
@@ -253,13 +254,12 @@ false.
 ```
 and so do conjunctive queries:
 ```
-prolog> [user]
+?- [user].
+(type Enter + Ctrl-D to terminate the stream when finished)
 f(X) :- g(X).
-prolog> [user]
 g(x). g(y). g(z).
-prolog> [user]
 h(call(f, X)).
-prolog> ?- h(X), X.
+?- h(X), X.
 true .
 X = call(f, x) ;
 X = call(f, y) ;
@@ -270,13 +270,18 @@ Note that the values of variables belonging to successful queries are
 printed out, on one line each. Uninstantiated variables are denoted by
 a number preceded by an underscore (`X = _0` in an example above).
 
+To quit scryer-prolog, type
+```
+?- halt.
+```
+
 ### Dynamic operators
 
 Scryper supports dynamic operators. Using the built-in
 arithmetic operators with the usual precedences,
 
 ```
-prolog> ?- write_canonical(-5 + 3 - (2 * 4) // 8).
+?- write_canonical(-5 + 3 - (2 * 4) // 8).
 -(+(-(5), 3), //(*(2, 4), 8))
 true.
 ```
@@ -314,15 +319,16 @@ operators and predicates are hidden in their own modules that have not
 been exported to the toplevel. To export them, write
 
 ```
-prolog> :- use_module(library(lists)).
-prolog> :- use_module(library(control)).
+?- use_module(library(lists)).
+?- use_module(library(control)).
 ```
 
 The [user] prompt can also be used to define modules inline at the
 REPL:
 
 ```
-prolog> [user]
+?- [user].
+(type Enter + Ctrl-D to terminate the stream when finished)
 :- module(test, [local_member/2]).
 :- use_module(library(lists)).
 
@@ -332,7 +338,7 @@ local_member(X, Xs) :- member(X, Xs).
 `use_module` directives can be qualified by adding a list of imports:
 
 ```
-prolog> :- use_module(library(lists), [member/2]).
+?- use_module(library(lists), [member/2]).
 ```
 
 A qualified `use_module` can be used to remove imports from the
@@ -342,5 +348,5 @@ The `(:)/2` operator resolves calls to predicates that might not be
 imported to the current working namespace:
 
 ```
-prolog> ?- lists:member(X, Xs).
+?- lists:member(X, Xs).
 ```

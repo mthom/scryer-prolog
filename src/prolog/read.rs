@@ -11,7 +11,7 @@ use prolog::machine::machine_state::MachineState;
 use std::collections::VecDeque;
 use std::io::Read;
 
-use readline_rs::readline::*;
+use readline_rs_compat::readline::*;
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
@@ -27,7 +27,6 @@ impl<'a> TermRef<'a> {
 }
 
 pub enum Input {
-    Quit,
     Clear,
     Batch,
     TermString(&'static str)
@@ -52,7 +51,7 @@ pub fn set_line_mode(mode: LineMode) {
 
 fn is_directive(buf: &str) -> bool {
     match buf {
-        "[user]" | "quit" | "clear" => true,
+        "?- [user]." | "?- [clear]." => true,
         _ => false
     }
 }
@@ -77,9 +76,6 @@ unsafe extern "C" fn bind_end_key(_: i32, _: i32) -> i32 {
 
 unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {    
     if END_OF_LINE {
-        println!("");
-        rl_done = 1;
-    } else {
         if let Some(buf) = rl_line_buffer_as_str() {
             if is_directive(buf) {
                 println!("");
@@ -88,6 +84,9 @@ unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {
             }
         }
         
+        println!("");
+        rl_done = 1;
+    } else {                
         insert_text_rl("\n");
     }
 
@@ -107,20 +106,46 @@ pub fn readline_initialize() {
     bind_keyseq_rl("\\C-d", bind_end_chord);
 }
 
-pub fn read_line(prompt: &str) -> Result<&'static str, SessionError> {
+pub fn read_batch(prompt: &str) -> Result<&'static str, SessionError> {
+    unsafe {
+        use std::ptr::null;
+        use std::mem;
+
+        // deactivate the startup hook that emits a "?- " to the
+        // beginning of the readline buffer.
+        let p: *const i8 = null();
+        rl_startup_hook = mem::transmute(p);
+    }
+    
     match readline_rl(prompt) {
         Some(input) => Ok(input),
         None => Err(SessionError::UserPrompt)
     }
 }
 
-pub fn toplevel_read_line() -> Result<Input, SessionError> {
-    let buffer = read_line("prolog> ")?;
+fn read_line(prompt: &str) -> Result<&'static str, SessionError> {    
+    match readline_rl(prompt) {
+        Some(input) => Ok(input),
+        None => Err(SessionError::UserPrompt)
+    }
+}
 
+unsafe extern "C" fn insert_query_prompt() -> i32 {
+    insert_text_rl("?- ");
+    0
+}
+
+pub fn toplevel_read_line() -> Result<Input, SessionError>
+{
+    unsafe {
+        rl_startup_hook = insert_query_prompt;
+    }
+    
+    let buffer = read_line("")?;
+    
     Ok(match &*buffer.trim() {
-        "quit"   => Input::Quit,
-        "clear"  => Input::Clear,
-        "[user]" => {
+        "?- [clear]." => Input::Clear,
+        "?- [user]." => {
             println!("(type Enter + Ctrl-D to terminate the stream when finished)");
             Input::Batch
         },

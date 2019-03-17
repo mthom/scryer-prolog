@@ -1,7 +1,7 @@
 #[macro_use] extern crate downcast;
 #[macro_use] extern crate prolog_parser;
 
-extern crate readline_rs;
+extern crate readline_rs_compat;
 extern crate termion;
 
 mod prolog;
@@ -34,7 +34,7 @@ fn prolog_repl() {
             Ok(Input::Batch) => {
                 set_line_mode(LineMode::Multi);
 
-                let src = match read_line("") {
+                let src = match read_batch("") {
                     Ok(src) => src,
                     Err(e) => {
                         println!("{}", e);
@@ -45,7 +45,6 @@ fn prolog_repl() {
                 let result = compile_user_module(&mut wam, src.as_bytes());
                 print(&mut wam, result);
             },
-            Ok(Input::Quit) => break,
             Ok(Input::Clear) => {
                 wam.clear();
                 continue;
