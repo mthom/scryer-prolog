@@ -97,9 +97,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "readline-sys"
+name = "readline-rs"
 version = "0.1.0"
-source = "git+https://github.com/mthom/readline-sys#e529b03ae3c723fc45b06784b1c67aa0b4c322ae"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "redox_syscall"
@@ -122,7 +122,7 @@ dependencies = [
  "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ordered-float 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "prolog_parser 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "readline-sys 0.1.0 (git+https://github.com/mthom/readline-sys)",
+ "readline-rs 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "termion 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -162,7 +162,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "0b3a5d7cc97d6d30d8b9bc8fa19bf45349ffe46241e8816f50f62f6d6aaabee1"
 "checksum ordered-float 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7eb5259643245d3f292c7a146b2df53bba24d7eab159410e648eb73dc164669d"
 "checksum prolog_parser 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)" = "6da85e0cfa5a604edf65f753e629db37bfd04af93a09a1df5576d2197a2f7af3"
-"checksum readline-sys 0.1.0 (git+https://github.com/mthom/readline-sys)" = "<none>"
+"checksum readline-rs 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "eff1a6cf9fa562f0c40ec31d3f50b2e2a1924801926e706c932d616037fe199d"
 "checksum redox_syscall 0.1.51 (registry+https://github.com/rust-lang/crates.io-index)" = "423e376fffca3dfa06c9e9790a9ccd282fafb3cc6e6397d01dbf64f9bacc6b85"
 "checksum redox_termios 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7e891cfe48e9100a70a3b6eb652fef28920c117d366339687bd5576160db0f76"
 "checksum termion 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "689a3bdfaab439fd92bc87df5c4c78417d3cbe537487274e9b0b2dce76e92096"

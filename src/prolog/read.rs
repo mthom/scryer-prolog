@@ -11,7 +11,7 @@ use prolog::machine::machine_state::MachineState;
 use std::collections::VecDeque;
 use std::io::Read;
 
-use readline_sys::readline::*;
+use readline_rs::readline::*;
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 

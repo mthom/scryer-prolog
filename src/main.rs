@@ -1,7 +1,7 @@
 #[macro_use] extern crate downcast;
 #[macro_use] extern crate prolog_parser;
 
-extern crate readline_sys;
+extern crate readline_rs;
 extern crate termion;
 
 mod prolog;

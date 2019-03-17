@@ -11,10 +11,7 @@ downcast = "0.9.1"
 num = "0.2"
 ordered-float = "0.5.0"
 prolog_parser = "0.8.1"
-readline-sys = "0.1.0"
-
-[patch.crates-io]
-readline-sys = { git = 'https://github.com/mthom/readline-sys' }
+readline_rs = { package = "readline-rs", version = "*" }
 
 [dependencies.termion]
 version = "1.4.0"
