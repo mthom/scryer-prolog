@@ -341,13 +341,13 @@ fn add_module_code(wam: &mut Machine, mut module: Module, code: Code, mut indice
 
     module.code_dir.extend(code_dir);
     module.op_dir.extend(op_dir.into_iter());
-    
+
     for (name, arity) in indices.code_dir.keys().cloned() {
         if name.owning_module() == module.module_decl.name {
             wam.indices.dynamic_code_dir.remove(&(name.owning_module(), name, arity));
         }
-    }    
-    
+    }
+
     wam.add_module(module, code);
 }
 

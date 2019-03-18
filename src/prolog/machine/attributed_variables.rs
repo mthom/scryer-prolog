@@ -59,17 +59,10 @@ impl MachineState {
 
     pub(super)
     fn calculate_register_threshold(&self) -> usize {
-        let mut count = 0;
-
-        for r in 1 .. MAX_ARITY + 1 {
-            if let &Addr::HeapCell(0) = &self[RegType::Temp(r)] {
-                break;
-            }
-
-            count += 1;
-        }
-
-        count
+        /* for all we know, all registers might be valid when we
+         * return from the verify_attributes interrupt. we currently
+         * lack a more precise way of determining this. */
+        MAX_ARITY
     }
 
     fn verify_attributes(&mut self)
