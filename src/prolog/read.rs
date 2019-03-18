@@ -74,7 +74,7 @@ unsafe extern "C" fn bind_end_key(_: i32, _: i32) -> i32 {
     0
 }
 
-unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {    
+unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {
     if END_OF_LINE {
         if let Some(buf) = rl_line_buffer_as_str() {
             if is_directive(buf) {
@@ -83,10 +83,10 @@ unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {
                 return 0;
             }
         }
-        
+
         println!("");
         rl_done = 1;
-    } else {                
+    } else {
         insert_text_rl("\n");
     }
 
@@ -107,23 +107,13 @@ pub fn readline_initialize() {
 }
 
 pub fn read_batch(prompt: &str) -> Result<&'static str, SessionError> {
-    unsafe {
-        use std::ptr::null;
-        use std::mem;
-
-        // deactivate the startup hook that emits a "?- " to the
-        // beginning of the readline buffer.
-        let p: *const i8 = null();
-        rl_startup_hook = mem::transmute(p);
-    }
-    
     match readline_rl(prompt) {
         Some(input) => Ok(input),
         None => Err(SessionError::UserPrompt)
     }
 }
 
-fn read_line(prompt: &str) -> Result<&'static str, SessionError> {    
+fn read_line(prompt: &str) -> Result<&'static str, SessionError> {
     match readline_rl(prompt) {
         Some(input) => Ok(input),
         None => Err(SessionError::UserPrompt)
@@ -131,7 +121,10 @@ fn read_line(prompt: &str) -> Result<&'static str, SessionError> {
 }
 
 unsafe extern "C" fn insert_query_prompt() -> i32 {
-    insert_text_rl("?- ");
+    if let LineMode::Single = LINE_MODE {
+        insert_text_rl("?- ");
+    }
+
     0
 }
 
@@ -140,9 +133,9 @@ pub fn toplevel_read_line() -> Result<Input, SessionError>
     unsafe {
         rl_startup_hook = insert_query_prompt;
     }
-    
+
     let buffer = read_line("")?;
-    
+
     Ok(match &*buffer.trim() {
         "?- [clear]." => Input::Clear,
         "?- [user]." => {
