@@ -270,6 +270,11 @@ Note that the values of variables belonging to successful queries are
 printed out, on one line each. Uninstantiated variables are denoted by
 a number preceded by an underscore (`X = _0` in an example above).
 
+To clear the database, type
+```
+?- [clear].
+```
+
 To quit scryer-prolog, type
 ```
 ?- halt.
@@ -320,7 +325,6 @@ been exported to the toplevel. To export them, write
 
 ```
 ?- use_module(library(lists)).
-?- use_module(library(control)).
 ```
 
 The [user] prompt can also be used to define modules inline at the
