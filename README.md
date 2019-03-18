@@ -101,18 +101,25 @@ $> cargo install scryer-prolog
 ```
 
 cargo will download and install the libraries Scryer Prolog uses
-automatically, save for the C library readline. It will search the
-system library paths for readline without taking further steps to
-install it if it is not found.
+automatically, save for the C library readline. The
+`readline_rs_compat` crate on which Scryer depends (and which is built
+and maintained by myself) will search the following library paths for
+readline:
+
+```
+/lib
+/usr/lib
+/usr/local/lib
+/lib/x86_64-linux-gnu
+/opt/local/lib
+```
 
 You can find the `scryer-prolog` executable in `~/.cargo/bin`.
 
-Note on compatibility: Scryer Prolog should work on Linux, Mac OS X, and
-FreeBSD. Windows support hinges on the Termion library working in
-Windows terminals, which isn't yet the case, although work is
-underway. See the relevant Termion
-[issue](https://github.com/ticki/termion/issues/103) for more
-information.
+Note on compatibility: Scryer Prolog should work on Linux, Mac OS X,
+and BSD variants on which Rust runs. Windows support hinges on
+readline and Termion being fully functional in that environment, which
+to my knowledge is not currently the case.
 
 ## Built-in predicates
 
