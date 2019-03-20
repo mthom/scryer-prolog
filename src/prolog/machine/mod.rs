@@ -364,6 +364,7 @@ impl Machine {
                 CodePtr::DynamicTransaction(trans_type, p) => {
                     // self.code_repo.cached_query is about to be overwritten by the term expander,
                     // so hold onto it locally and restore it after the compiler has finished.
+                    self.machine_st.fail = false;
                     let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
                     self.dynamic_transaction(trans_type, p);
 
@@ -515,10 +516,17 @@ impl MachineState {
                     self.fail = true,
                 CodePtr::Local(LocalCodePtr::InSituDirEntry(p))
                     if p < code_repo.in_situ_code.len() => {},
-                CodePtr::Local(_) | CodePtr::DynamicTransaction(..) =>
+                CodePtr::Local(_) =>
                     break,
                 CodePtr::VerifyAttrInterrupt(p) =>
                     self.verify_attr_interrupt(p),
+                CodePtr::DynamicTransaction(..) => {
+                    // prevent use of dynamic transactions from
+                    // succeeding in expansions. this will be toggled
+                    // back to true later.
+                    self.fail = true; 
+                    break;
+                },
                 _ => {}
             }
         }
