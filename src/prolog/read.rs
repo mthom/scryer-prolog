@@ -11,8 +11,6 @@ use prolog::machine::machine_state::MachineState;
 use std::collections::VecDeque;
 use std::io::Read;
 
-use readline_rs_compat::readline::*;
-
 type SubtermDeque = VecDeque<(usize, usize)>;
 
 impl<'a> TermRef<'a> {
@@ -29,112 +27,161 @@ impl<'a> TermRef<'a> {
 pub enum Input {
     Clear,
     Batch,
-    TermString(&'static str)
+    TermString(String)
 }
 
-#[derive(Clone, Copy)]
-pub enum LineMode {
-    Single,
-    Multi
-}
+#[cfg(feature = "readline_rs_compat")]
+pub mod readline
+{
+    use readline_rs_compat::readline::*;
 
-static mut LINE_MODE: LineMode = LineMode::Single;
-static mut END_OF_LINE: bool = false;
+    #[derive(Clone, Copy)]
+    pub enum LineMode {
+        Single,
+        Multi
+    }
+    
+    static mut LINE_MODE: LineMode = LineMode::Single;
+    static mut END_OF_LINE: bool = false;
 
-pub fn set_line_mode(mode: LineMode) {
-    unsafe {
-        LINE_MODE = mode;
-        END_OF_LINE = false;
-        rl_done = 0;
+    pub fn set_line_mode(mode: LineMode) {
+        unsafe {
+            LINE_MODE = mode;
+            END_OF_LINE = false;
+            rl_done = 0;
+        }
+    }
+
+    fn is_directive(buf: &str) -> bool {
+        match buf {
+            "?- [user]." | "?- [clear]." => true,
+            _ => false
+        }
+    }
+
+    unsafe extern "C" fn bind_end_chord(_: i32, _: i32) -> i32 {
+        if let LineMode::Multi = LINE_MODE {
+            rl_done = 1;
+        }
+
+        0
+    }
+
+    unsafe extern "C" fn bind_end_key(_: i32, _: i32) -> i32 {
+        insert_text_rl(".");
+
+        if let LineMode::Single = LINE_MODE {
+            END_OF_LINE = true;
+        }
+
+        0
+    }
+
+    unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {
+        if END_OF_LINE {
+            if let Some(buf) = rl_line_buffer_as_str() {
+                if is_directive(buf) {
+                    println!("");
+                    rl_done = 1;
+                    return 0;
+                }
+            }
+
+            println!("");
+            rl_done = 1;
+        } else {
+            insert_text_rl("\n");
+        }
+
+        0
+    }
+
+    pub fn readline_initialize() {
+        let rc = initialize_rl(); // initialize editline.
+
+        if rc != 0 {
+            panic!("initialize_rl() failed with return code {}", rc);
+        }
+
+        unsafe {
+            rl_startup_hook = insert_query_prompt;
+        }
+
+        bind_key_rl('.' as i32, bind_end_key);
+        bind_key_rl('\n' as i32, bind_cr);
+        bind_key_rl('\r' as i32, bind_cr);
+        bind_keyseq_rl("\\C-d", bind_end_chord);
+    }
+
+    unsafe extern "C" fn insert_query_prompt() -> i32 {
+        if let LineMode::Single = LINE_MODE {
+            insert_text_rl("?- ");
+        }
+
+        0
+    }
+
+    pub fn read_batch(prompt: &str) -> Result<Vec<u8>, ::SessionError> {
+        match readline_rl(prompt) {
+            Some(input) => Ok(Vec::from(input.as_bytes())),
+            None => Err(::SessionError::UserPrompt)
+        }
+    }
+
+    pub fn read_line(prompt: &str) -> Result<String, ::SessionError> {
+        match readline_rl(prompt) {
+            Some(input) => Ok(String::from(input)),
+            None => Err(::SessionError::UserPrompt)
+        }
     }
 }
 
-fn is_directive(buf: &str) -> bool {
-    match buf {
-        "?- [user]." | "?- [clear]." => true,
-        _ => false
-    }
-}
+#[cfg(not(feature = "readline_rs_compat"))]
+pub mod readline
+{
+    use std::io::{BufRead, Read, stdin, stdout, Write};
+    
+    pub fn read_batch(_: &str) -> Result<Vec<u8>, ::SessionError> {
+        let mut buf = vec![];
 
-unsafe extern "C" fn bind_end_chord(_: i32, _: i32) -> i32 {
-    if let LineMode::Multi = LINE_MODE {
-        rl_done = 1;
-    }
+        let stdin = stdin();
+        let mut stdin = stdin.lock();
 
-    0
-}
-
-unsafe extern "C" fn bind_end_key(_: i32, _: i32) -> i32 {
-    insert_text_rl(".");
-
-    if let LineMode::Single = LINE_MODE {
-        END_OF_LINE = true;
+        match stdin.read_to_end(&mut buf) {
+            Ok(_) => Ok(buf),
+            _ => Err(::SessionError::UserPrompt)
+        }
     }
 
-    0
-}
+    pub fn read_line(_: &str) -> Result<String, ::SessionError> {
+        print!("?- ");
+        stdout().flush().unwrap();
 
-unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {
-    if END_OF_LINE {
-        if let Some(buf) = rl_line_buffer_as_str() {
-            if is_directive(buf) {
-                println!("");
-                rl_done = 1;
-                return 0;
+        let stdin = stdin();
+        let stdin = stdin.lock();
+        
+        let mut buf = "?- ".to_string();
+        
+        for line in stdin.lines() {
+            match line {
+                Ok(line) => {
+                    buf += &line;
+                    
+                    if line.trim().ends_with(".") {
+                        break;
+                    }
+                },
+                _ => return Err(::SessionError::UserPrompt)
             }
         }
 
-        println!("");
-        rl_done = 1;
-    } else {
-        insert_text_rl("\n");
+        Ok(buf)
     }
-
-    0
-}
-
-pub fn readline_initialize() {
-    let rc = initialize_rl(); // initialize editline.
-
-    if rc != 0 {
-        panic!("initialize_rl() failed with return code {}", rc);
-    }
-
-    bind_key_rl('.' as i32, bind_end_key);
-    bind_key_rl('\n' as i32, bind_cr);
-    bind_key_rl('\r' as i32, bind_cr);
-    bind_keyseq_rl("\\C-d", bind_end_chord);
-}
-
-pub fn read_batch(prompt: &str) -> Result<&'static str, SessionError> {
-    match readline_rl(prompt) {
-        Some(input) => Ok(input),
-        None => Err(SessionError::UserPrompt)
-    }
-}
-
-fn read_line(prompt: &str) -> Result<&'static str, SessionError> {
-    match readline_rl(prompt) {
-        Some(input) => Ok(input),
-        None => Err(SessionError::UserPrompt)
-    }
-}
-
-unsafe extern "C" fn insert_query_prompt() -> i32 {
-    if let LineMode::Single = LINE_MODE {
-        insert_text_rl("?- ");
-    }
-
-    0
 }
 
 pub fn toplevel_read_line() -> Result<Input, SessionError>
 {
-    unsafe {
-        rl_startup_hook = insert_query_prompt;
-    }
-
-    let buffer = read_line("")?;
+    let buffer = readline::read_line("")?;
 
     Ok(match &*buffer.trim() {
         "?- [clear]." => Input::Clear,

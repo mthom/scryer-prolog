@@ -114,6 +114,13 @@ readline:
 /opt/local/lib
 ```
 
+If you'd like to disable readline (and the need for linking to it),
+install with the line
+
+```
+cargo install scryer-prolog --no-default-features
+```
+
 You can find the `scryer-prolog` executable in `~/.cargo/bin`.
 
 Note on compatibility: Scryer Prolog should work on Linux, Mac OS X,

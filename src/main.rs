@@ -1,7 +1,13 @@
+#[macro_use] extern crate cfg_if;
 #[macro_use] extern crate downcast;
 #[macro_use] extern crate prolog_parser;
 
-extern crate readline_rs_compat;
+cfg_if! {
+    if #[cfg(feature = "readline_rs_compat")] {
+        extern crate readline_rs_compat;
+    }
+}
+
 extern crate termion;
 
 mod prolog;
@@ -20,7 +26,8 @@ fn prolog_repl() {
     let mut wam = Machine::new();
 
     loop {
-        set_line_mode(LineMode::Single);
+        #[cfg(feature = "readline_rs_compat")]
+        readline::set_line_mode(readline::LineMode::Single);
 
         match toplevel_read_line() {
             Ok(Input::TermString(buffer)) => {
@@ -32,17 +39,18 @@ fn prolog_repl() {
                 print(&mut wam, result)
             },
             Ok(Input::Batch) => {
-                set_line_mode(LineMode::Multi);
+                #[cfg(feature = "readline_rs_compat")]
+                readline::set_line_mode(readline::LineMode::Multi);
 
-                let src = match read_batch("") {
+                let src = match readline::read_batch("") {
                     Ok(src) => src,
                     Err(e) => {
                         println!("{}", e);
                         continue;
                     }
                 };
-                
-                let result = compile_user_module(&mut wam, src.as_bytes());
+
+                let result = compile_user_module(&mut wam, &src[0 ..]);
                 print(&mut wam, result);
             },
             Ok(Input::Clear) => {
@@ -57,6 +65,7 @@ fn prolog_repl() {
 }
 
 fn main() {
-    readline_initialize();
+    #[cfg(feature = "readline_rs_compat")]
+    readline::readline_initialize();
     prolog_repl();
 }
