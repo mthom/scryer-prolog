@@ -371,35 +371,29 @@ fn next_step(mut stdout: RawTerminal<std::io::Stdout>) -> ContinueResult
 
 pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
-        EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
-            if wam.or_stack_is_empty() {
-                println!("true.");
-
-                if heap_locs.is_empty() {
-                    return;
-                }
-            }
-
-            if !wam.or_stack_is_empty() {
-                print!("true .");
-
-                if !heap_locs.is_empty() {
-                    println!("\r");
-                }
-            }
-
+        EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {            
             loop {
-                let mut output = PrinterOutputter::new();
-
-                let bindings = wam.heap_view(&heap_locs, output).result();
+                if wam.or_stack_is_empty() {
+                    if heap_locs.is_empty() {
+                        println!("true.");
+                        return;
+                    }
+                } else if heap_locs.is_empty() {
+                    print!("true");
+                    stdout().flush().unwrap();
+                }
+                
                 let mut raw_stdout = stdout().into_raw_mode().unwrap();
 
                 if !heap_locs.is_empty() {
+                    let mut output = PrinterOutputter::new();                    
+                    let bindings = wam.heap_view(&heap_locs, output).result();
+                    
                     write!(raw_stdout, "{}", bindings).unwrap();
                     raw_stdout.flush().unwrap();
-                    
+
                     let attr_goals = wam.attribute_goals(&heap_locs);
-                    
+
                     if !attr_goals.is_empty() {
                         write!(raw_stdout, "\r\n{}\r\n", attr_goals).unwrap();
                     }
@@ -429,14 +423,14 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                         write!(raw_stdout, "{}\r\n", error_string(e)).unwrap();
                         raw_stdout.flush().unwrap();
                         return;
-                    }
+                    }                    
                 } else {
                     if heap_locs.is_empty() {
                         write!(raw_stdout, "true.\r\n").unwrap();
                     } else {
                         write!(raw_stdout, ".\r\n").unwrap();
                     }
-                    
+
                     break;
                 }
             }
