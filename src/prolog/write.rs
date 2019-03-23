@@ -373,6 +373,8 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
         EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {            
             loop {
+                wam.remove_unbound_vars(&mut heap_locs);
+                
                 if wam.or_stack_is_empty() {
                     if heap_locs.is_empty() {
                         println!("true.");

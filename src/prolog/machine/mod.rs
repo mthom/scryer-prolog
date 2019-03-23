@@ -249,7 +249,18 @@ impl Machine {
 
         Ok(())
     }
-
+    
+    pub fn remove_unbound_vars(&self, heap_locs: &mut HeapVarDict) {
+        for (var, addr) in heap_locs.clone() {
+            match self.machine_st.store(self.machine_st.deref(addr.clone())) {
+                new_addr =>
+                    if addr.is_ref() && new_addr == addr {
+                        heap_locs.remove(&var);
+                    }
+            }
+        }
+    }
+    
     pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir)
     {
         // error detection has finished, so update the master index of keys.
