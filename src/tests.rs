@@ -1080,7 +1080,7 @@ fn test_queries_on_arithmetic()
     assert_prolog_success!(&mut wam, "?- X is (-1 rdiv 27) ** -3, X ~ -19683.");
 
     assert_prolog_success!(&mut wam, "?- X is 0.0 ** 0.",
-                           [["X = 1"]]);
+                           [["X = 1.0"]]);
     assert_prolog_success!(&mut wam, "?- catch(_ is 0.0 ** -2342, error(E, _), true).",
                            [["E = evaluation_error(no_roots)"]]);
     assert_prolog_success!(&mut wam, "?- X is 0.0 ** 2342.",
@@ -1112,7 +1112,7 @@ fn test_queries_on_arithmetic()
     assert_prolog_success!(&mut wam, "?- X is (-0 rdiv 5) ** 5.",
                            [["X = 0"]]);
     assert_prolog_success!(&mut wam, "?- X is (0 rdiv 5) ** 0.",
-                           [["X = 1"]]);
+                           [["X = 1.0"]]);
     assert_prolog_success!(&mut wam, "?- catch(_ is (0 rdiv 0) ** 5, error(E, _), true).",
                            [["E = evaluation_error(zero_divisor)"]]);
 }
