@@ -373,10 +373,15 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
         EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) =>
             loop {
-                if wam.or_stack_is_empty() {
-                    if heap_locs.is_empty() {
-                        let attr_goals = wam.attribute_goals(&heap_locs);
+                let bindings = {
+                    let mut output = PrinterOutputter::new();
+                    wam.toplevel_heap_view(&heap_locs, output).result()
+                };
 
+                let attr_goals = wam.attribute_goals(&heap_locs);
+
+                if wam.or_stack_is_empty() {
+                    if bindings.is_empty() {
                         if !attr_goals.is_empty() {
                             println!("{}.", attr_goals);
                         } else {
@@ -385,21 +390,12 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
 
                         return;
                     }
-                } else if heap_locs.is_empty() {
+                } else if bindings.is_empty() && attr_goals.is_empty() {
                     print!("true");
                     stdout().flush().unwrap();
                 }
 
                 let mut raw_stdout = stdout().into_raw_mode().unwrap();
-
-                let bindings = if !heap_locs.is_empty() {
-                    let mut output = PrinterOutputter::new();
-                    wam.toplevel_heap_view(&heap_locs, output).result()
-                } else {
-                    "".to_string()
-                };
-
-                let attr_goals = wam.attribute_goals(&heap_locs);
 
                 if !attr_goals.is_empty() {
                     if bindings.is_empty() {
@@ -407,7 +403,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                     } else {
                         write!(raw_stdout, "{}, {}", bindings, attr_goals).unwrap();
                     }
-                } else {
+                } else if !bindings.is_empty() {
                     write!(raw_stdout, "{}", bindings).unwrap();
                 }
 
@@ -445,7 +441,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
 
                     break;
                 }
-            },        
+            },
         EvalSession::Error(e) => println!("{}", e),
         _ => {}
     };
