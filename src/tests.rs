@@ -1682,7 +1682,7 @@ fn test_queries_on_builtins()
                            [["X = '\\b\\r\\f\\t\\n'"]]);
 
     assert_prolog_success!(&mut wam, "?- X = ((*)=(*)).",
-                           [["X = (*)=(*)"]]);
+                           [["X = ((*)=(*))"]]);
     assert_prolog_success!(&mut wam, "?- X = [.,.(.,.,.)].",
                            [["X = ['.', '.'('.', '.', '.')]"]]);
     assert_prolog_success!(&mut wam, "?- X = a+(b*c).",
@@ -1696,9 +1696,9 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- X = (-)-(-).",
                            [["X = (-)-(-)"]]);
     assert_prolog_success!(&mut wam, "?- X = ((:-):-(:-)).",
-                           [["X = (:-):-(:-)"]]);
+                           [["X = ((:-):-(:-))"]]);
     assert_prolog_success!(&mut wam, "?- X = (a:-b,c).",
-                           [["X = a:-b,c"]]);
+                           [["X = (a:-b,c)"]]);
     assert_prolog_success!(&mut wam, "?- X = f((f:-a,b,c)).",
                            [["X = f((f:-a,b,c))"]]);
     assert_prolog_success!(&mut wam, "?- X = f((f:-a,(b,c))).",
@@ -2409,10 +2409,10 @@ fn test_queries_on_attributed_variables()
       					 Vs = [X,Y],
       					 variables_set_zdd(Vs, ZDD),
       					 X = 1.",
-                           [["X = 1", "Y = 0", "Vs = [1, 0]", "ZDD = 1->b(true);0->b(true);b(false)"]]);
+                           [["X = 1", "Y = 0", "Vs = [1, 0]", "ZDD = (1->b(true);0->b(true);b(false))"]]);
     assert_prolog_success!(&mut wam, "?- ZDD = ( X -> b(true) ; ( Y -> b(true) ; b(false) ) ),
       					 Vs = [X,Y],
       					 variables_set_zdd(Vs, ZDD),
       					 X = 0.",
-                           [["Vs = [0, _58]", "X = 0", "Y = _58", "ZDD = 0->b(true);_58->b(true);b(false)"]]);
+                           [["Vs = [0, _58]", "X = 0", "Y = _58", "ZDD = (0->b(true);_58->b(true);b(false))"]]);
 }

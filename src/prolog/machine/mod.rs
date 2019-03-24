@@ -411,11 +411,11 @@ impl Machine {
             EvalSession::from(SessionError::QueryFailure)
         }
     }
-
+    
     pub fn toplevel_heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter) -> Outputter
        where Outputter: HCValueOutputter
     {
-        let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = var_dir.iter().collect();
+        let mut sorted_vars: Vec<_> = var_dir.iter().collect();
         sorted_vars.sort_by_key(|ref v| v.0);
 
         for (var, addr) in sorted_vars {
@@ -424,7 +424,7 @@ impl Machine {
             if addr.is_ref() {
                 continue;
             }
-            
+
             output = self.machine_st.print_var_eq(var.clone(), addr, var_dir, output);
         }
 

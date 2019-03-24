@@ -147,7 +147,7 @@ impl MachineState {
             Addr::Con(Constant::Number(Number::Integer(ref n)))
                 if !n.is_negative() => {
                     let n = offset + n.as_ref();
-                    
+
                     let i = n.mod_floor(&BigInt::from(26)).to_usize().unwrap();
                     let j = n.div_floor(&BigInt::from(26));
 
@@ -168,6 +168,7 @@ pub struct HCPrinter<'a, Outputter> {
     outputter:    Outputter,
     machine_st:   &'a MachineState,
     state_stack:  Vec<TokenOrRedirect>,
+    toplevel_spec: Option<DirectedOp>,
     heap_locs:    ReverseHeapVarDict,
     printed_vars: HashSet<Addr>,
     last_item_idx: usize,
@@ -276,6 +277,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     machine_st,
                     state_stack: vec![],
                     heap_locs: ReverseHeapVarDict::new(),
+                    toplevel_spec: None,
                     printed_vars: HashSet::new(),
                     last_item_idx: 0,
                     numbervars: false,
@@ -290,7 +292,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     {
         let mut printer = Self::new(machine_st, output);
 
+        printer.toplevel_spec = Some(DirectedOp::Right(clause_name!("="), (700, XFX)));
         printer.heap_locs = reverse_heap_locs(machine_st, heap_locs);
+
         printer
     }
 
@@ -512,7 +516,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
                     push_space_if_amb!(self, &output_str, {
                         self.append_str(&output_str.trim());
-                    });                
+                    });
                 },
             Constant::Number(n) => {
                 let output_str = format!("{}", n);
@@ -670,7 +674,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                         self.append_str(", ")
                 }
             } else if !iter.stack().is_empty() {
-                self.handle_heap_term(&mut iter, None, false);
+                let spec = self.toplevel_spec.take();
+                self.handle_heap_term(&mut iter, spec, false);
             } else {
                 break;
             }
