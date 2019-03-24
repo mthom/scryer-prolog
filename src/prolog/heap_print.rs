@@ -507,11 +507,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                         self.append_str("0");
                     });
                 } else {
-                    let output_str = format!("{}", fl);
+                    let OrderedFloat(fl) = fl;
+                    let output_str = format!("{0:<20?}", fl);
 
                     push_space_if_amb!(self, &output_str, {
-                        self.append_str(&output_str);
-                    });
+                        self.append_str(&output_str.trim());
+                    });                
                 },
             Constant::Number(n) => {
                 let output_str = format!("{}", n);
