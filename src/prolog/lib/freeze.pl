@@ -22,7 +22,7 @@ freeze(X, Goal) :-
 
 gather_freeze_goals(Attrs, _, _) :-
     var(Attrs), !.
-gather_freeze_goals([frozen(X) | _], Var, [frozen(Var, X) | _]) :-
+gather_freeze_goals([frozen(X) | _], Var, [freeze(Var, X) | _]) :-
     !.
 gather_freeze_goals([_ | Attrs], Var, Goals) :-
     gather_freeze_goals(Attrs, Var, Goals).

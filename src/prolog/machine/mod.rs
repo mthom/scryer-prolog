@@ -250,13 +250,12 @@ impl Machine {
         Ok(())
     }
     
-    pub fn remove_unbound_vars(&self, heap_locs: &mut HeapVarDict) {
-        for (var, addr) in heap_locs.clone() {
+    pub fn remove_unbound_vars(&self, orig_heap_locs: &HeapVarDict, heap_locs: &mut HeapVarDict) {
+        for (var, addr) in orig_heap_locs.iter() {
             match self.machine_st.store(self.machine_st.deref(addr.clone())) {
-                new_addr =>
-                    if addr.is_ref() && new_addr == addr {
-                        heap_locs.remove(&var);
-                    }
+                new_addr => if new_addr.is_ref() {
+                    heap_locs.remove(var);
+                }
             }
         }
     }
