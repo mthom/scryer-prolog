@@ -86,12 +86,12 @@ pub fn collect_test_output(wam: &mut Machine, alloc_locs: AllocVarDict, mut heap
 {
     let mut output = TestOutputter::new();
 
-    output = wam.heap_view(&heap_locs, output);
+    output = wam.test_heap_view(&heap_locs, output);
     output.cache();
 
     while let EvalSession::SubsequentQuerySuccess = wam.continue_query(&alloc_locs, &mut heap_locs)
     {
-        output = wam.heap_view(&heap_locs, output);
+        output = wam.test_heap_view(&heap_locs, output);
         output.cache();
     }
 
@@ -104,7 +104,7 @@ pub fn collect_test_output_with_limit(wam: &mut Machine, alloc_locs: AllocVarDic
 {
     let mut output = TestOutputter::new();
 
-    output = wam.heap_view(&heap_locs, output);
+    output = wam.test_heap_view(&heap_locs, output);
     output.cache();
 
     let mut count  = 1;
@@ -115,7 +115,7 @@ pub fn collect_test_output_with_limit(wam: &mut Machine, alloc_locs: AllocVarDic
 
     while let EvalSession::SubsequentQuerySuccess = wam.continue_query(&alloc_locs, &mut heap_locs)
     {
-        output = wam.heap_view(&heap_locs, output);
+        output = wam.test_heap_view(&heap_locs, output);
         output.cache();
 
         count += 1;

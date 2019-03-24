@@ -249,17 +249,7 @@ impl Machine {
 
         Ok(())
     }
-    
-    pub fn remove_unbound_vars(&self, orig_heap_locs: &HeapVarDict, heap_locs: &mut HeapVarDict) {
-        for (var, addr) in orig_heap_locs.iter() {
-            match self.machine_st.store(self.machine_st.deref(addr.clone())) {
-                new_addr => if new_addr.is_ref() {
-                    heap_locs.remove(var);
-                }
-            }
-        }
-    }
-    
+        
     pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir)
     {
         // error detection has finished, so update the master index of keys.
@@ -422,7 +412,27 @@ impl Machine {
         }
     }
 
-    pub fn heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter) -> Outputter
+    pub fn toplevel_heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter) -> Outputter
+       where Outputter: HCValueOutputter
+    {
+        let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = var_dir.iter().collect();
+        sorted_vars.sort_by_key(|ref v| v.0);
+
+        for (var, addr) in sorted_vars {
+            let addr = self.machine_st.store(self.machine_st.deref(addr.clone()));
+
+            if addr.is_ref() {
+                continue;
+            }
+            
+            output = self.machine_st.print_var_eq(var.clone(), addr, var_dir, output);
+        }
+
+        output
+    }
+
+    #[cfg(test)]
+    pub fn test_heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter) -> Outputter
        where Outputter: HCValueOutputter
     {
         let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = var_dir.iter().collect();

@@ -371,15 +371,11 @@ fn next_step(mut stdout: RawTerminal<std::io::Stdout>) -> ContinueResult
 
 pub fn print(wam: &mut Machine, result: EvalSession) {
     match result {
-        EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) => {
-            let orig_heap_locs = heap_locs.clone();
-
+        EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) =>
             loop {
-                wam.remove_unbound_vars(&orig_heap_locs, &mut heap_locs);
-
                 if wam.or_stack_is_empty() {
                     if heap_locs.is_empty() {
-                        let attr_goals = wam.attribute_goals(&orig_heap_locs);
+                        let attr_goals = wam.attribute_goals(&heap_locs);
 
                         if !attr_goals.is_empty() {
                             println!("{}.", attr_goals);
@@ -389,29 +385,30 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
 
                         return;
                     }
-                } else if heap_locs.is_empty() && orig_heap_locs.is_empty() {
+                } else if heap_locs.is_empty() {
                     print!("true");
                     stdout().flush().unwrap();
                 }
 
                 let mut raw_stdout = stdout().into_raw_mode().unwrap();
 
-                if !heap_locs.is_empty() {
+                let bindings = if !heap_locs.is_empty() {
                     let mut output = PrinterOutputter::new();
-                    let bindings = wam.heap_view(&heap_locs, output).result();
+                    wam.toplevel_heap_view(&heap_locs, output).result()
+                } else {
+                    "".to_string()
+                };
 
-                    write!(raw_stdout, "{}", bindings).unwrap();
-                    raw_stdout.flush().unwrap();
-                }
-
-                let attr_goals = wam.attribute_goals(&orig_heap_locs);
+                let attr_goals = wam.attribute_goals(&heap_locs);
 
                 if !attr_goals.is_empty() {
-                    if heap_locs.is_empty() {
+                    if bindings.is_empty() {
                         write!(raw_stdout, "{}", attr_goals).unwrap();
                     } else {
-                        write!(raw_stdout, ", {}", attr_goals).unwrap();
+                        write!(raw_stdout, "{}, {}", bindings, attr_goals).unwrap();
                     }
+                } else {
+                    write!(raw_stdout, "{}", bindings).unwrap();
                 }
 
                 if !wam.or_stack_is_empty() {
@@ -440,7 +437,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
                         return;
                     }
                 } else {
-                    if heap_locs.is_empty() && attr_goals.is_empty() {
+                    if bindings.is_empty() && attr_goals.is_empty() {
                         write!(raw_stdout, "true.\r\n").unwrap();
                     } else {
                         write!(raw_stdout, ".\r\n").unwrap();
@@ -448,8 +445,7 @@ pub fn print(wam: &mut Machine, result: EvalSession) {
 
                     break;
                 }
-            }
-        },
+            },        
         EvalSession::Error(e) => println!("{}", e),
         _ => {}
     };
