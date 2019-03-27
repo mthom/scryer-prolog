@@ -261,3 +261,9 @@ macro_rules! discard_result {
         }
     )
 }
+
+macro_rules! ar_reg {
+    ($r: expr) => (
+        ArithmeticTerm::Reg($r)
+    )
+}

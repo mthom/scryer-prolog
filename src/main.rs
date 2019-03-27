@@ -1,6 +1,7 @@
 #[macro_use] extern crate cfg_if;
 #[macro_use] extern crate downcast;
 #[macro_use] extern crate prolog_parser;
+#[macro_use] extern crate ref_thread_local;
 
 cfg_if! {
     if #[cfg(feature = "readline_rs_compat")] {

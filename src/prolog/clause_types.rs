@@ -3,7 +3,11 @@ use prolog_parser::ast::*;
 use prolog::forms::OpDecl;
 use prolog::machine::machine_indices::*;
 
-#[derive(Clone, Copy, PartialEq)]
+use ref_thread_local::RefThreadLocal;
+
+use std::collections::BTreeMap;
+
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum CompareNumberQT {
     GreaterThan,
     LessThan,
@@ -26,7 +30,7 @@ impl CompareNumberQT {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CompareTermQT {
     LessThan,
     LessThanOrEqual,
@@ -49,7 +53,7 @@ impl CompareTermQT {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ArithmeticTerm {
     Reg(RegType),
     Interm(usize),
@@ -66,7 +70,7 @@ impl ArithmeticTerm {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, Ord, PartialOrd, PartialEq)]
 pub enum InlinedClauseType {
     CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
     IsAtom(RegType),
@@ -79,6 +83,58 @@ pub enum InlinedClauseType {
     IsNonVar(RegType),
     IsPartialString(RegType),
     IsVar(RegType)
+}
+
+ref_thread_local! {
+    static managed CLAUSE_TYPE_FORMS: BTreeMap<(&'static str, usize), ClauseType> = {
+        let mut m = BTreeMap::new();
+
+        let r1 = temp_v!(1);
+        let r2 = temp_v!(2);
+
+        m.insert((">", 2),
+                 ClauseType::Inlined(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThan, ar_reg!(r1), ar_reg!(r2))));
+        m.insert(("<", 2),
+                 ClauseType::Inlined(InlinedClauseType::CompareNumber(CompareNumberQT::LessThan, ar_reg!(r1), ar_reg!(r2))));
+        m.insert((">=", 2), ClauseType::Inlined(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThanOrEqual, ar_reg!(r1), ar_reg!(r2))));
+        m.insert(("=<", 2), ClauseType::Inlined(InlinedClauseType::CompareNumber(CompareNumberQT::LessThanOrEqual, ar_reg!(r1), ar_reg!(r2))));
+        m.insert(("=:=", 2), ClauseType::Inlined(InlinedClauseType::CompareNumber(CompareNumberQT::Equal, ar_reg!(r1), ar_reg!(r2))));
+        m.insert(("=\\=", 2), ClauseType::Inlined(InlinedClauseType::CompareNumber(CompareNumberQT::NotEqual, ar_reg!(r1), ar_reg!(r2))));
+        m.insert(("atom", 1), ClauseType::Inlined(InlinedClauseType::IsAtom(r1)));
+        m.insert(("atomic", 1), ClauseType::Inlined(InlinedClauseType::IsAtomic(r1)));
+        m.insert(("compound", 1), ClauseType::Inlined(InlinedClauseType::IsCompound(r1)));
+        m.insert(("integer", 1), ClauseType::Inlined(InlinedClauseType::IsInteger(r1)));
+        m.insert(("rational", 1), ClauseType::Inlined(InlinedClauseType::IsRational(r1)));
+        m.insert(("string", 1), ClauseType::Inlined(InlinedClauseType::IsString(r1)));
+        m.insert(("float", 1), ClauseType::Inlined(InlinedClauseType::IsFloat(r1)));
+        m.insert(("nonvar", 1), ClauseType::Inlined(InlinedClauseType::IsNonVar(r1)));
+        m.insert(("is_partial_string", 1), ClauseType::Inlined(InlinedClauseType::IsPartialString(r1)));
+        m.insert(("var", 1), ClauseType::Inlined(InlinedClauseType::IsVar(r1)));
+        m.insert(("acyclic_term", 1), ClauseType::BuiltIn(BuiltInClauseType::AcyclicTerm));
+        m.insert(("arg", 3), ClauseType::BuiltIn(BuiltInClauseType::Arg));
+        m.insert(("compare", 3), ClauseType::BuiltIn(BuiltInClauseType::Compare));
+        m.insert(("@>", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThan)));
+        m.insert(("@<", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::LessThan)));
+        m.insert(("@>=", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual)));
+        m.insert(("@=<", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::LessThanOrEqual)));
+        m.insert(("\\=@=", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::NotEqual)));
+        m.insert(("=@=", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::Equal)));
+        m.insert(("copy_term", 2), ClauseType::BuiltIn(BuiltInClauseType::CopyTerm));
+        m.insert(("cyclic_term", 1), ClauseType::BuiltIn(BuiltInClauseType::CyclicTerm));
+        m.insert(("==", 2), ClauseType::BuiltIn(BuiltInClauseType::Eq));
+        m.insert(("functor", 3), ClauseType::BuiltIn(BuiltInClauseType::Functor));
+        m.insert(("ground", 1), ClauseType::BuiltIn(BuiltInClauseType::Ground));
+        m.insert(("is", 2), ClauseType::BuiltIn(BuiltInClauseType::Is(r1, ar_reg!(r2))));
+        m.insert(("keysort", 2), ClauseType::BuiltIn(BuiltInClauseType::KeySort));
+        m.insert(("nl", 0), ClauseType::BuiltIn(BuiltInClauseType::Nl));
+        m.insert(("\\==", 2), ClauseType::BuiltIn(BuiltInClauseType::NotEq));
+        m.insert(("partial_string", 2), ClauseType::BuiltIn(BuiltInClauseType::PartialString));
+        m.insert(("read", 1), ClauseType::BuiltIn(BuiltInClauseType::Read));
+        m.insert(("$reify_switch", 3), ClauseType::BuiltIn(BuiltInClauseType::ReifySwitch));
+        m.insert(("sort", 2), ClauseType::BuiltIn(BuiltInClauseType::Sort));
+
+        m
+    };
 }
 
 impl InlinedClauseType {
@@ -97,43 +153,9 @@ impl InlinedClauseType {
             &InlinedClauseType::IsVar(..) => "var",
         }
     }
-
-    pub fn from(name: &str, arity: usize) -> Option<Self> {
-        let r1 = temp_v!(1);
-        let r2 = temp_v!(2);
-
-        let a1 = ArithmeticTerm::Reg(r1);
-        let a2 = ArithmeticTerm::Reg(r2);
-
-        match (name, arity) {
-            (">", 2) =>
-                Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThan, a1, a2)),
-            ("<", 2) =>
-                Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThan, a1, a2)),
-            (">=", 2) =>
-                Some(InlinedClauseType::CompareNumber(CompareNumberQT::GreaterThanOrEqual,a1, a2)),
-            ("=<", 2) =>
-                Some(InlinedClauseType::CompareNumber(CompareNumberQT::LessThanOrEqual, a1, a2)),
-            ("=\\=", 2) =>
-                Some(InlinedClauseType::CompareNumber(CompareNumberQT::NotEqual, a1, a2)),
-            ("=:=", 2) =>
-                Some(InlinedClauseType::CompareNumber(CompareNumberQT::Equal, a1, a2)),
-            ("atom", 1) => Some(InlinedClauseType::IsAtom(r1)),
-            ("atomic", 1) => Some(InlinedClauseType::IsAtomic(r1)),
-            ("compound", 1) => Some(InlinedClauseType::IsCompound(r1)),
-            ("integer", 1) => Some(InlinedClauseType::IsInteger(r1)),
-            ("rational", 1) => Some(InlinedClauseType::IsRational(r1)),
-            ("string", 1) => Some(InlinedClauseType::IsString(r1)),
-            ("float", 1) => Some(InlinedClauseType::IsFloat(r1)),
-            ("nonvar", 1) => Some(InlinedClauseType::IsNonVar(r1)),
-            ("var", 1) => Some(InlinedClauseType::IsVar(r1)),
-            ("is_partial_string", 1) => Some(InlinedClauseType::IsPartialString(r1)),
-            _ => None
-        }
-    }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SystemClauseType {
     AbolishClause,
     AbolishModuleClause,
@@ -274,7 +296,7 @@ impl SystemClauseType {
             &SystemClauseType::WriteTerm => clause_name!("$write_term"),
         }
     }
-    
+
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$abolish_clause", 2) => Some(SystemClauseType::AbolishClause),
@@ -347,7 +369,7 @@ impl SystemClauseType {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum BuiltInClauseType {
     AcyclicTerm,
     Arg,
@@ -368,7 +390,7 @@ pub enum BuiltInClauseType {
     Sort,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub enum ClauseType {
     BuiltIn(BuiltInClauseType),
     CallN,
@@ -423,34 +445,6 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Sort => 2,
         }
     }
-
-    pub fn from(name: &str, arity: usize) -> Option<Self> {
-        match (name, arity) {
-            ("acyclic_term", 1) => Some(BuiltInClauseType::AcyclicTerm),
-            ("arg", 3) => Some(BuiltInClauseType::Arg),
-            ("compare", 3) => Some(BuiltInClauseType::Compare),
-            ("cyclic_term", 1) => Some(BuiltInClauseType::CyclicTerm),
-            ("@>", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThan)),
-            ("@<", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::LessThan)),
-            ("@>=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual)),
-            ("@=<", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::LessThanOrEqual)),
-            ("\\=@=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::NotEqual)),
-            ("=@=", 2) => Some(BuiltInClauseType::CompareTerm(CompareTermQT::Equal)),
-            ("copy_term", 2) => Some(BuiltInClauseType::CopyTerm),
-            ("==", 2) => Some(BuiltInClauseType::Eq),
-            ("functor", 3) => Some(BuiltInClauseType::Functor),
-            ("ground", 1) => Some(BuiltInClauseType::Ground),
-            ("is", 2) => Some(BuiltInClauseType::Is(temp_v!(1), ArithmeticTerm::Reg(temp_v!(2)))),
-            ("keysort", 2) => Some(BuiltInClauseType::KeySort),
-            ("nl", 0) => Some(BuiltInClauseType::Nl),
-            ("\\==", 2) => Some(BuiltInClauseType::NotEq),
-            ("partial_string", 2) => Some(BuiltInClauseType::PartialString),
-            ("read", 1) => Some(BuiltInClauseType::Read),
-            ("$reify_switch", 3) => Some(BuiltInClauseType::ReifySwitch),
-            ("sort", 2) => Some(BuiltInClauseType::Sort),
-            _ => None
-        }
-    }
 }
 
 impl ClauseType {
@@ -481,26 +475,19 @@ impl ClauseType {
     }
 
     pub fn from(name: ClauseName, arity: usize, spec: Option<(usize, Specifier)>) -> Self {
-        InlinedClauseType::from(name.as_str(), arity)
-            .map(ClauseType::Inlined)
-            .unwrap_or_else(|| {
-                BuiltInClauseType::from(name.as_str(), arity)
-                    .map(ClauseType::BuiltIn)
-                    .unwrap_or_else(|| {
-                        SystemClauseType::from(name.as_str(), arity)
-                            .map(ClauseType::System)
-                            .unwrap_or_else(|| {
-                                if let Some(spec) = spec {
-                                    let op_decl = OpDecl(spec.0, spec.1, name);
-                                    ClauseType::Op(op_decl, CodeIndex::default())
-                                } else if name.as_str() == "call" {
-                                    ClauseType::CallN
-                                } else {
-                                    ClauseType::Named(name, arity, CodeIndex::default())
-                                }
-                            })
-                    })
-            })
+        CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), arity)).cloned()
+            .unwrap_or_else(||
+                SystemClauseType::from(name.as_str(), arity)
+                    .map(ClauseType::System)
+                    .unwrap_or_else(||
+                        if let Some(spec) = spec {
+                            let op_decl = OpDecl(spec.0, spec.1, name);
+                            ClauseType::Op(op_decl, CodeIndex::default())
+                        } else if name.as_str() == "call" {
+                            ClauseType::CallN
+                        } else {
+                            ClauseType::Named(name, arity, CodeIndex::default())
+                        }))
     }
 }
 

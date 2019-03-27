@@ -167,7 +167,7 @@ impl Declaration {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct OpDecl(pub usize, pub Specifier, pub ClauseName);
 
 impl OpDecl {

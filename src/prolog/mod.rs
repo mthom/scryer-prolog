@@ -3,8 +3,8 @@ extern crate ordered_float;
 extern crate prolog_parser;
 
 pub mod instructions;
-mod clause_types;
 #[macro_use] mod macros;
+mod clause_types;
 #[macro_use] mod allocator;
 mod fixtures;
 pub mod machine;

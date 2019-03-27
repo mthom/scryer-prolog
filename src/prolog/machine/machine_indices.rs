@@ -168,13 +168,13 @@ impl HeapCellValue {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexPtr {
     Undefined,
     Index(usize),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct CodeIndex(pub Rc<RefCell<(IndexPtr, ClauseName)>>);
 
 impl CodeIndex {
@@ -505,7 +505,7 @@ impl IndexStore {
 pub type CodeDir = HashMap<PredicateKey, CodeIndex>;
 pub type TermDir = HashMap<PredicateKey, (Predicate, VecDeque<TopLevel>)>;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 pub enum CompileTimeHook {
     GoalExpansion,
     TermExpansion,
