@@ -730,12 +730,10 @@ match_builtins(call, N) :-
     match_builtins(Name, Arity).
 
 current_predicate(Pred) :-
-    (  var(Pred) -> throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
-    ;  Pred = _ / _ ->
-       (  '$get_current_predicate_list'(Ls),
-	  '$iterate_predicate_list'(Ls, Pred)
-       )
-    ;  throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
+    (  nonvar(Pred), Pred \= _ / _
+    -> throw(error(type_error(predicate_indicator,Pred), current_predicate/1))
+    ;  '$get_current_predicate_list'(Ls),
+       '$iterate_predicate_list'(Ls, Pred)
     ).
 
 bb_put(Key, Value) :- atom(Key), !, '$store_global_var'(Key, Value).
