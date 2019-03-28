@@ -7,8 +7,10 @@ use prolog::machine::copier::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
-use prolog::num::{ToPrimitive, Zero};
+use prolog::num::{FromPrimitive, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt};
+
+use ref_thread_local::RefThreadLocal;
 
 use std::collections::HashSet;
 use std::io::{stdout, Write};
@@ -210,6 +212,57 @@ impl MachineState {
             },
             _ =>
                 self.fail = true
+        }
+    }
+
+    fn get_next_db_ref(&mut self, db_ref: &DBRef, code_dir: &CodeDir) {
+        match db_ref {
+            &DBRef::BuiltInPred(ref name, arity) => {
+                let key = (name.as_str(), arity);
+
+                match CLAUSE_TYPE_FORMS.borrow().range(&key ..).skip(1).next() {
+                    Some(((_, arity), ct)) => {
+                        let a2 = self[temp_v!(2)].clone();
+
+                        if let Some(r) = a2.as_var() {
+                            self.bind(r, Addr::DBRef(DBRef::BuiltInPred(ct.name(), *arity)));
+                        } else {
+                            self.fail = true;
+                        }
+                    },
+                    None => 
+                        match code_dir.iter().next() {
+                            Some(((ref name, arity), _)) => {
+                                let a2 = self[temp_v!(2)].clone();
+
+                                if let Some(r) = a2.as_var() {
+                                    self.bind(r, Addr::DBRef(DBRef::NamedPred(name.clone(), *arity)));
+                                } else {
+                                    self.fail = true;
+                                }
+                            },
+                            None => {
+                                self.fail = true;
+                            }
+                        }
+                }
+            },
+            &DBRef::NamedPred(ref name, arity) => {
+                let key = (name.clone(), arity);
+
+                match code_dir.range(key ..).skip(1).next() {
+                    Some(((name, arity), _)) => {
+                        let a2 = self[temp_v!(2)].clone();
+
+                        if let Some(r) = a2.as_var() {
+                            self.bind(r, Addr::DBRef(DBRef::NamedPred(name.clone(), *arity)));
+                        } else {
+                            self.fail = true;
+                        }
+                    },
+                    None => self.fail = true
+                }
+            }
         }
     }
 
@@ -462,27 +515,53 @@ impl MachineState {
                 self.p = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
                 return Ok(());
             },
-            &SystemClauseType::GetCurrentPredicateList => {
-                let mut addrs = vec![];
+            &SystemClauseType::GetNextDBRef => {
+                let a1 = self[temp_v!(1)].clone();
 
-                for ((name, arity), idx) in indices.code_dir.iter() {
-                    if idx.is_undefined() {
-                        continue;
+                match self.store(self.deref(a1)) {
+                    addr @ Addr::HeapCell(_)
+                  | addr @ Addr::StackCell(..)
+                  | addr @ Addr::AttrVar(_) =>
+                      match CLAUSE_TYPE_FORMS.borrow().iter().next() {
+                          Some(((_, arity), ct)) => {
+                              let db_ref = DBRef::BuiltInPred(ct.name(), *arity);
+                              let r = addr.as_var().unwrap();
+
+                              self.bind(r, Addr::DBRef(db_ref));
+                          },
+                          None => {
+                              self.fail = true;
+                              return Ok(());
+                          }
+                      },
+                    Addr::DBRef(ref db_ref) =>
+                      self.get_next_db_ref(db_ref, &indices.code_dir),
+                    _ => {
+                      self.fail = true;
                     }
+                };
+            },
+            &SystemClauseType::LookupDBRef => {
+                let a1 = self[temp_v!(1)].clone();
 
-                    let h = self.heap.h;
+                match self.store(self.deref(a1)) {
+                    Addr::DBRef(db_ref) =>
+                        match db_ref {
+                            DBRef::BuiltInPred(name, arity) | DBRef::NamedPred(name, arity) => {
+                                let a2 = self[temp_v!(2)].clone();
+                                let a3 = self[temp_v!(3)].clone();
 
-                    self.heap.push(HeapCellValue::NamedStr(2, clause_name!("/"), Some((400, YFX))));
-                    self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Atom(name.clone(), None))));
-                    self.heap.push(heap_integer!(*arity));
+                                let arity = Number::Integer(Rc::new(BigInt::from_usize(arity).unwrap()));
 
-                    addrs.push(Addr::Str(h));
+                                self.unify(a2, Addr::Con(Constant::Atom(name, None)));
+
+                                if !self.fail {
+                                    self.unify(a3, Addr::Con(Constant::Number(arity)));
+                                }
+                            }
+                        },
+                    _ => self.fail = true
                 }
-
-                let list_addr   = Addr::HeapCell(self.heap.to_list(addrs.into_iter()));
-                let target_addr = self[temp_v!(1)].clone();
-
-                self.unify(list_addr, target_addr);
             },
             &SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff =>
                 self.truncate_if_no_lifted_heap_diff(|h| Addr::HeapCell(h)),

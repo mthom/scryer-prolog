@@ -7,15 +7,22 @@ use prolog::forms::*;
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::mem;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::rc::Rc;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
+pub enum DBRef {
+    BuiltInPred(ClauseName, usize),
+    NamedPred(ClauseName, usize)
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Addr {
     AttrVar(usize),
     Con(Constant),
+    DBRef(DBRef),
     Lis(usize),
     HeapCell(usize),
     StackCell(usize, usize),
@@ -502,7 +509,7 @@ impl IndexStore {
     }
 }
 
-pub type CodeDir = HashMap<PredicateKey, CodeIndex>;
+pub type CodeDir = BTreeMap<PredicateKey, CodeIndex>;
 pub type TermDir = HashMap<PredicateKey, (Predicate, VecDeque<TopLevel>)>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]

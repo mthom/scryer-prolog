@@ -628,7 +628,7 @@ impl MachineState {
                         "+" => interms.push(a1 + a2),
                         "-" => interms.push(a1 - a2),
                         "*" => interms.push(a1 * a2),
-                        "/" => interms.push(self.div(a1, a2)?),                        
+                        "/" => interms.push(self.div(a1, a2)?),
                         "**" => interms.push(self.pow(a1, a2)?),
                         "max"  => interms.push(self.max(a1, a2)?),
                         "rdiv" => {
@@ -850,10 +850,10 @@ impl MachineState {
         }
     }
 
-    fn max(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {        
+    fn max(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
         Ok(max(n1, n2))
     }
-    
+
     fn remainder(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(rem)"), 2);
@@ -923,7 +923,7 @@ impl MachineState {
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
                 self.interms[t - 1] = try_or_fail!(self, self.max(n1, n2));
-                self.p += 1;                
+                self.p += 1;
             },
             &ArithmeticInstruction::Pow(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
@@ -1208,6 +1208,10 @@ impl MachineState {
                     Addr::Con(_) => c,
                     Addr::Lis(_) => l,
                     Addr::Str(_) => s,
+                    Addr::DBRef(_) => {
+                        self.fail = true;
+                        return;
+                    }
                 };
 
                 match offset {
@@ -1885,6 +1889,8 @@ impl MachineState {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
         match a1.clone() {
+            Addr::DBRef(_) =>
+                self.fail = true,
             Addr::Con(_) =>
                 self.try_functor_unify_components(a1, Addr::Con(integer!(0))),
             Addr::Str(o) =>
@@ -2223,7 +2229,7 @@ impl MachineState {
                 try_or_fail!(self, call_policy.compile_hook(self, hook)),
             &ClauseType::Inlined(ref ct) => {
                 self.execute_inlined(ct);
-                
+
                 if lco {
                     self.p = CodePtr::Local(self.cp);
                 }

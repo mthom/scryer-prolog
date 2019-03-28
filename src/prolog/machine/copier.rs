@@ -184,7 +184,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                             self.copy_var(addr),
                         Addr::Str(addr) =>
                             self.copy_structure(addr),
-                        Addr::Con(_) =>
+                        Addr::Con(_) | Addr::DBRef(_) =>
                             self.scan += 1
                     }
             }

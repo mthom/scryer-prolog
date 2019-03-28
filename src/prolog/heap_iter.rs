@@ -47,7 +47,7 @@ impl<'a> HCPreOrderIterator<'a> {
     {
         let da = self.machine_st.store(self.machine_st.deref(addr));
 
-        match da {
+        match da {            
             Addr::Con(Constant::String(ref s))
                 if self.machine_st.machine_flags().double_quotes.is_chars() => {
                     if let Some(c) = s.head() {
@@ -59,7 +59,7 @@ impl<'a> HCPreOrderIterator<'a> {
 
                     Addr::Con(Constant::String(s.clone()))
                 },
-            Addr::Con(_) => da,
+            Addr::Con(_) | Addr::DBRef(_) => da,
             Addr::Lis(a) => {
                 self.state_stack.push(Addr::HeapCell(a + 1));
                 self.state_stack.push(Addr::HeapCell(a));

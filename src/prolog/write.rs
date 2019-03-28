@@ -159,10 +159,20 @@ impl fmt::Display for HeapCellValue {
     }
 }
 
+impl fmt::Display for DBRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &DBRef::BuiltInPred(ref name, arity) => write!(f, "db_ref:builtin:{}/{}", name, arity),
+            &DBRef::NamedPred(ref name, arity) =>   write!(f, "db_ref:named:{}/{}", name, arity)
+        }
+    }
+}
+
 impl fmt::Display for Addr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Addr::Con(ref c) => write!(f, "Addr::Con({})", c),
+            &Addr::DBRef(ref db_ref) => write!(f, "Addr::DBRef({})", db_ref),
             &Addr::Lis(l) => write!(f, "Addr::Lis({})", l),
             &Addr::AttrVar(h) => write!(f, "Addr::AttrVar({})", h),
             &Addr::HeapCell(h) => write!(f, "Addr::HeapCell({})", h),

@@ -682,58 +682,20 @@ abolish(Pred) :-
     ;  throw(error(type_error(predicate_indicator, Pred), abolish/1))
     ).
 
-match_builtins(acyclic_term, 1).
-match_builtins(arg, 3).
-match_builtins(compare, 3).
-match_builtins(cyclic_term, 1).
-match_builtins(@>, 2).
-match_builtins(@<, 2).
-match_builtins(@>=, 2).
-match_builtins(@=<, 2).
-match_builtins(\=@=, 2).
-match_builtins(=@=, 2).
-match_builtins(copy_term, 2).
-match_builtins(==, 2).
-match_builtins(functor, 3).
-match_builtins(ground, 1).
-match_builtins(is, 2).
-match_builtins(keysort, 2).
-match_builtins(nl, 0).
-match_builtins(\==, 2).
-match_builtins(is_partial_string, 1).
-match_builtins(partial_string, 2).
-match_builtins(read, 1).
-match_builtins(sort, 2).
-match_builtins(>, 2).
-match_builtins(<, 2).
-match_builtins(>=, 2).
-match_builtins(=<, 2).
-match_builtins(=\=, 2).
-match_builtins(=:=, 2).
-match_builtins(atom, 1).
-match_builtins(atomic, 1).
-match_builtins(compound, 1).
-match_builtins(integer, 1).
-match_builtins(rational, 1).
-match_builtins(string, 1).
-match_builtins(float, 1).
-match_builtins(nonvar, 1).
-match_builtins(var, 1).
-match_builtins(call, N) :-
-    max_arity(Max),
-    between:between(0, Max, N).
-
-'$iterate_predicate_list'([Name/Arity|Preds], Name/Arity).
-'$iterate_predicate_list'([_|Preds], Pred) :-
-    '$iterate_predicate_list'(Preds, Pred).
-'$iterate_predicate_list'([], Name/Arity) :-
-    match_builtins(Name, Arity).
+'$iterate_db_refs'(Ref, Name/Arity) :-
+    '$lookup_db_ref'(Ref, Name, Arity).
+'$iterate_db_refs'(Ref, Name/Arity) :-
+    '$get_next_db_ref'(Ref, NextRef),
+    '$iterate_db_refs'(NextRef, Name/Arity).
 
 current_predicate(Pred) :-
     (  nonvar(Pred), Pred \= _ / _
-    -> throw(error(type_error(predicate_indicator,Pred), current_predicate/1))
-    ;  '$get_current_predicate_list'(Ls),
-       '$iterate_predicate_list'(Ls, Pred)
+    -> throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
+    ;  '$get_next_db_ref'(Ref, _),
+       '$iterate_db_refs'(Ref, Pred)
+    ;  Pred = call/N,
+       max_arity(Max),
+       between:between(0, Max, N)
     ).
 
 bb_put(Key, Value) :- atom(Key), !, '$store_global_var'(Key, Value).

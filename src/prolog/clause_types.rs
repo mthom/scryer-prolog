@@ -86,7 +86,7 @@ pub enum InlinedClauseType {
 }
 
 ref_thread_local! {
-    static managed CLAUSE_TYPE_FORMS: BTreeMap<(&'static str, usize), ClauseType> = {
+    pub static managed CLAUSE_TYPE_FORMS: BTreeMap<(&'static str, usize), ClauseType> = {
         let mut m = BTreeMap::new();
 
         let r1 = temp_v!(1);
@@ -180,8 +180,9 @@ pub enum SystemClauseType {
     GetAttrVarQueueBeyond,
     GetBValue,
     GetClause,
-    GetCurrentPredicateList,
     GetModuleClause,
+    GetNextDBRef,
+    LookupDBRef,
     Halt,
     ModuleHeadIsDynamic,
     GetLiftedHeapFromOffset,
@@ -251,9 +252,10 @@ impl SystemClauseType {
             &SystemClauseType::GetAttrVarQueueBeyond => clause_name!("$get_attr_var_queue_beyond"),
             &SystemClauseType::GetLiftedHeapFromOffset => clause_name!("$get_lh_from_offset"),
             &SystemClauseType::GetLiftedHeapFromOffsetDiff => clause_name!("$get_lh_from_offset_diff"),
-            &SystemClauseType::GetCurrentPredicateList => clause_name!("$get_current_predicate_list"),
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
             &SystemClauseType::GetClause => clause_name!("$get_clause"),
+            &SystemClauseType::GetNextDBRef => clause_name!("$get_next_db_ref"),
+            &SystemClauseType::LookupDBRef => clause_name!("$lookup_db_ref"),
             &SystemClauseType::GetDoubleQuotes => clause_name!("$get_double_quotes"),
             &SystemClauseType::GetModuleClause => clause_name!("$get_module_clause"),
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
@@ -309,6 +311,8 @@ impl SystemClauseType {
             ("$copy_to_lh", 2) => Some(SystemClauseType::CopyToLiftedHeap),
             ("$del_attr_non_head", 1) => Some(SystemClauseType::DeleteAttribute),
             ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),
+            ("$get_next_db_ref", 2) => Some(SystemClauseType::GetNextDBRef),
+            ("$lookup_db_ref", 3) => Some(SystemClauseType::LookupDBRef),
             ("$module_call", 2) => Some(SystemClauseType::DynamicModuleResolution),
             ("$enqueue_attribute_goal", 1) => Some(SystemClauseType::EnqueueAttributeGoal),
             ("$enqueue_attr_var", 1) => Some(SystemClauseType::EnqueueAttributedVar),
@@ -321,7 +325,6 @@ impl SystemClauseType {
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
             ("$get_clause", 2) => Some(SystemClauseType::GetClause),
             ("$get_module_clause", 3) => Some(SystemClauseType::GetModuleClause),
-            ("$get_current_predicate_list", 1) => Some(SystemClauseType::GetCurrentPredicateList),
             ("$get_lh_from_offset", 2) => Some(SystemClauseType::GetLiftedHeapFromOffset),
             ("$get_lh_from_offset_diff", 3) => Some(SystemClauseType::GetLiftedHeapFromOffsetDiff),
             ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
