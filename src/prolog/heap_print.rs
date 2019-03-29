@@ -204,6 +204,8 @@ fn continues_with_append(atom: &str, op: &str) -> bool {
                 alpha_numeric_char!(oc)
             } else if capital_letter_char!(ac) {
                 alpha_numeric_char!(oc)
+            } else if sign_char!(ac) {
+                sign_char!(oc) || decimal_digit_char!(oc)
             } else {
                 false
             }
@@ -437,25 +439,27 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     }
 
     fn print_atom(&mut self, atom: &ClauseName, spec: Option<(usize, Specifier)>) {
-        match atom.as_str() {
-            "" => self.append_str("''"),
-            ";" | "!" => self.append_str(atom.as_str()),
-            s => if spec.is_some() || !self.quoted || non_quoted_token(s.chars()) {
-                self.append_str(atom.as_str())
-            } else {
-                if self.quoted {
-                    self.push_char('\'');
-                }
+        push_space_if_amb!(self, atom.as_str(), {
+            match atom.as_str() {
+                "" => self.append_str("''"),
+                ";" | "!" => self.append_str(atom.as_str()),
+                s => if spec.is_some() || !self.quoted || non_quoted_token(s.chars()) {
+                    self.append_str(atom.as_str());
+                } else {
+                    if self.quoted {
+                        self.push_char('\'');
+                    }
 
-                for c in atom.as_str().chars() {
-                    self.print_char(c);
-                }
+                    for c in atom.as_str().chars() {
+                        self.print_char(c);
+                    }
 
-                if self.quoted {
-                    self.push_char('\'');
+                    if self.quoted {
+                        self.push_char('\'');
+                    }
                 }
             }
-        }
+        });
     }
 
     fn print_char(&mut self, c: char) {
@@ -468,7 +472,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             '\u{08}' => self.append_str("\\b"), // UTF-8 backspace
             '\u{07}' => self.append_str("\\a"), // UTF-8 alert
             '\x20' ... '\x7e' => self.push_char(c),
-            _ => self.append_str(&format!("\\x{:x}", c as u32))
+            _ => self.append_str(&format!("\\x{:x}\\", c as u32))
         };
     }
 
@@ -518,7 +522,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                         self.append_str(&output_str.trim());
                     });
                 },
-            Constant::Number(n) => {
+            Constant::Number(n) => {                
                 let output_str = format!("{}", n);
 
                 push_space_if_amb!(self, &output_str, {
@@ -600,7 +604,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     let ct = ClauseType::from(name, 0, fixity);
                     self.format_clause(iter, 0, ct);
                 }),
-            HeapCellValue::NamedStr(arity, name, fixity) => {
+            HeapCellValue::NamedStr(arity, name, fixity) => {                    
                 let ct = ClauseType::from(name, arity, fixity);
                 self.format_clause(iter, arity, ct);
             },
