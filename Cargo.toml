@@ -11,7 +11,7 @@ default = ["readline_rs_compat"]
 
 [dependencies]
 cfg-if = "0.1.7"
-downcast = "0.9.1"
+downcast = "0.10.0"
 num = "0.2"
 ordered-float = "0.5.0"
 prolog_parser = "0.8.3"
