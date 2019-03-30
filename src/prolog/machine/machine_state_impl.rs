@@ -1747,7 +1747,7 @@ impl MachineState {
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
                     continue,
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::NamedStr(ar, n, _))
-                    | (HeapCellValue::NamedStr(ar, n, _), HeapCellValue::Addr(Addr::Lis(_))) =>
+              | (HeapCellValue::NamedStr(ar, n, _), HeapCellValue::Addr(Addr::Lis(_))) =>
                     if ar == 2 && n.as_str() == "." {
                         continue;
                     } else if ar < 2 {
@@ -1932,12 +1932,12 @@ impl MachineState {
                     match name {
                         Addr::Con(_) if arity == 0 =>
                             self.unify(a1, name),
-                        Addr::Con(Constant::Atom(name, _)) => {
+                        Addr::Con(Constant::Atom(name, spec)) => {
                             let f_a = if name.as_str() == "." && arity == 2 {
                                 Addr::Lis(self.heap.h)
                             } else {
                                 let h = self.heap.h;
-                                self.heap.push(HeapCellValue::NamedStr(arity as usize, name, None));
+                                self.heap.push(HeapCellValue::NamedStr(arity as usize, name, spec));
                                 Addr::Str(h)
                             };
 

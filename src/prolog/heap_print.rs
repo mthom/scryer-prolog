@@ -181,11 +181,7 @@ impl HCValueOutputter for PrinterOutputter {
 
 #[inline]
 fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
-    arity == 1 && if let &ClauseType::Named(ref name, ..) = ct {
-        name.as_str() == "$VAR"
-    } else {
-        false
-    }
+    arity == 1 && ct.name().as_str() == "$VAR"
 }
 
 #[inline]
@@ -435,26 +431,40 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.state_stack.push(TokenOrRedirect::LeftCurly);
     }
 
+    fn format_numbered_vars(&mut self, iter: &mut HCPreOrderIterator) -> bool
+    {
+        let addr = iter.stack().last().cloned().unwrap();
+
+        // 7.10.4
+        if let Some(var) = iter.machine_st().numbervar(&self.numbervars_offset, addr) {
+            iter.stack().pop();
+            self.state_stack.push(TokenOrRedirect::NumberedVar(var));
+            return true;
+        }
+
+        false
+    }
+    
     fn format_clause(&mut self, iter: &mut HCPreOrderIterator, arity: usize, ct: ClauseType)
     {
         if let Some(spec) = ct.spec() {
+            if self.numbervars && is_numbered_var(&ct, arity) {
+                if self.format_numbered_vars(iter) {
+                    return;
+                }
+            }
+            
             if !self.ignore_ops {
                 return self.enqueue_op(ct, spec);
             }
         } else if self.numbervars && is_numbered_var(&ct, arity) {
-            let addr = iter.stack().last().cloned().unwrap();
-
-            // 7.10.4
-            if let Some(var) = iter.machine_st().numbervar(&self.numbervars_offset, addr) {
-                iter.stack().pop();
-                self.state_stack.push(TokenOrRedirect::NumberedVar(var));
+            if self.format_numbered_vars(iter) {
                 return;
             }
         }
 
         match (ct.name().as_str(), arity) {
-            ("-", 1) => self.format_negated_operand(),
-            ("{}", 1) => self.format_curly_braces(),
+            ("{}", 1) if !self.ignore_ops => self.format_curly_braces(),
             _ =>  self.format_struct(arity, ct.name())
         };
     }
