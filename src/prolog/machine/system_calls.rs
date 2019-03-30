@@ -1,4 +1,5 @@
 use prolog_parser::ast::*;
+use prolog_parser::parser::get_clause_spec;
 
 use prolog::clause_types::*;
 use prolog::heap_iter::*;
@@ -215,9 +216,9 @@ impl MachineState {
         }
     }
 
-    fn get_next_db_ref(&mut self, db_ref: &DBRef, code_dir: &CodeDir) {
+    fn get_next_db_ref(&mut self, indices: &IndexStore, db_ref: &DBRef) {
         match db_ref {
-            &DBRef::BuiltInPred(ref name, arity) => {
+            &DBRef::BuiltInPred(ref name, arity, _) => {
                 let key = (name.as_str(), arity);
 
                 match CLAUSE_TYPE_FORMS.borrow().range(&key ..).skip(1).next() {
@@ -225,18 +226,20 @@ impl MachineState {
                         let a2 = self[temp_v!(2)].clone();
 
                         if let Some(r) = a2.as_var() {
-                            self.bind(r, Addr::DBRef(DBRef::BuiltInPred(ct.name(), *arity)));
+                            self.bind(r, Addr::DBRef(DBRef::BuiltInPred(ct.name(), *arity, ct.spec())));
                         } else {
                             self.fail = true;
                         }
                     },
-                    None => 
-                        match code_dir.iter().next() {
+                    None =>
+                        match indices.code_dir.iter().next() {
                             Some(((ref name, arity), _)) => {
                                 let a2 = self[temp_v!(2)].clone();
 
                                 if let Some(r) = a2.as_var() {
-                                    self.bind(r, Addr::DBRef(DBRef::NamedPred(name.clone(), *arity)));
+                                    let spec = get_clause_spec(name.clone(), *arity,
+                                                               composite_op!(&indices.op_dir));
+                                    self.bind(r, Addr::DBRef(DBRef::NamedPred(name.clone(), *arity, spec)));
                                 } else {
                                     self.fail = true;
                                 }
@@ -247,15 +250,17 @@ impl MachineState {
                         }
                 }
             },
-            &DBRef::NamedPred(ref name, arity) => {
+            &DBRef::NamedPred(ref name, arity, _) => {
                 let key = (name.clone(), arity);
 
-                match code_dir.range(key ..).skip(1).next() {
+                match indices.code_dir.range(key ..).skip(1).next() {
                     Some(((name, arity), _)) => {
                         let a2 = self[temp_v!(2)].clone();
 
                         if let Some(r) = a2.as_var() {
-                            self.bind(r, Addr::DBRef(DBRef::NamedPred(name.clone(), *arity)));
+                            let spec = get_clause_spec(name.clone(), *arity,
+                                                       composite_op!(&indices.op_dir));
+                            self.bind(r, Addr::DBRef(DBRef::NamedPred(name.clone(), *arity, spec)));
                         } else {
                             self.fail = true;
                         }
@@ -524,7 +529,7 @@ impl MachineState {
                   | addr @ Addr::AttrVar(_) =>
                       match CLAUSE_TYPE_FORMS.borrow().iter().next() {
                           Some(((_, arity), ct)) => {
-                              let db_ref = DBRef::BuiltInPred(ct.name(), *arity);
+                              let db_ref = DBRef::BuiltInPred(ct.name(), *arity, ct.spec());
                               let r = addr.as_var().unwrap();
 
                               self.bind(r, Addr::DBRef(db_ref));
@@ -535,7 +540,7 @@ impl MachineState {
                           }
                       },
                     Addr::DBRef(ref db_ref) =>
-                      self.get_next_db_ref(db_ref, &indices.code_dir),
+                      self.get_next_db_ref(&indices, db_ref),
                     _ => {
                       self.fail = true;
                     }
@@ -547,13 +552,13 @@ impl MachineState {
                 match self.store(self.deref(a1)) {
                     Addr::DBRef(db_ref) =>
                         match db_ref {
-                            DBRef::BuiltInPred(name, arity) | DBRef::NamedPred(name, arity) => {
+                            DBRef::BuiltInPred(name, arity, spec) | DBRef::NamedPred(name, arity, spec) => {
                                 let a2 = self[temp_v!(2)].clone();
                                 let a3 = self[temp_v!(3)].clone();
 
                                 let arity = Number::Integer(Rc::new(BigInt::from_usize(arity).unwrap()));
 
-                                self.unify(a2, Addr::Con(Constant::Atom(name, None)));
+                                self.unify(a2, Addr::Con(Constant::Atom(name, spec)));
 
                                 if !self.fail {
                                     self.unify(a3, Addr::Con(Constant::Number(arity)));

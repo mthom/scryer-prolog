@@ -14,8 +14,8 @@ use std::rc::Rc;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum DBRef {
-    BuiltInPred(ClauseName, usize),
-    NamedPred(ClauseName, usize)
+    BuiltInPred(ClauseName, usize, Option<(usize, Specifier)>),
+    NamedPred(ClauseName, usize, Option<(usize, Specifier)>)
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -409,7 +409,7 @@ pub struct IndexStore {
     pub(super) op_dir: OpDir,    
 }
 
-impl IndexStore {
+impl IndexStore {    
     pub fn predicate_exists(&self, name: ClauseName, module: ClauseName, arity: usize,
                             op_spec: Option<(usize, Specifier)>)
                             -> bool
