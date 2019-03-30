@@ -56,7 +56,7 @@ impl<'a> HCPreOrderIterator<'a> {
     /*
      * descend into the subtree where the iterator is currently parked
      * and check that the leftmost leaf is a number, with every node
-     * encountered on the way an infix or postfix operator, and not blocked
+     * encountered on the way an infix or postfix operator, unblocked
      * by brackets.
      */
     fn leftmost_leaf_is_positive_number(&self) -> bool {

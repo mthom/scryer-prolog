@@ -234,7 +234,7 @@ fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, 
 fn setup_declaration(mut terms: Vec<Box<Term>>) -> Result<Declaration, ParserError>
 {
     let term = *terms.pop().unwrap();
-    
+
     match term {
         Term::Clause(_, name, mut terms, _) =>
             if name.as_str() == "op" && terms.len() == 3 {
@@ -405,7 +405,7 @@ impl RelationWorker {
                 if assume_dyn {
                     self.dynamic_clauses.push((term.clone(), tail));
                 }
-                
+
                 Ok(term)
             },
             _ =>
@@ -691,7 +691,7 @@ impl RelationWorker {
                         Ok(decl) => return Ok(TopLevel::Declaration(decl)),
                         _ => {}
                     };
-                    
+
                     Ok(TopLevel::Query(self.setup_query(indices, terms, blocks_cuts)?))
                 } else if name.as_str() == ":-" && terms.len() == 2 {
                     Ok(TopLevel::Rule(self.setup_rule(indices, terms, blocks_cuts, true)?))

@@ -376,13 +376,8 @@ throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
 
 truncate_lh_to(LhLength) :- '$truncate_lh_to'(LhLength).
 
-check_for_compat_list(L, PI) :-
-    (  nonvar(L), L \= [_|_], throw(error(type_error(list, L), PI))
-    ;  true
-    ).
-
 findall(Template, Goal, Solutions) :-
-    check_for_compat_list(Solutions, findall/3),
+    error:can_be(list, Solutions),
     '$lh_length'(LhLength),
     '$call_with_default_policy'(catch('$iterate_find_all'(Template, Goal, Solutions, LhLength),
 				      Error,
@@ -399,8 +394,8 @@ findall(Template, Goal, Solutions) :-
 
 
 findall(Template, Goal, Solutions0, Solutions1) :-
-    check_for_compat_list(Solutions0, findall/4),
-    check_for_compat_list(Solutions1, findall/4),
+    error:can_be(list, Solutions0),
+    error:can_be(list, Solutions1),
     '$lh_length'(LhLength),
     '$call_with_default_policy'(catch('$iterate_find_all_diff'(Template, Goal, Solutions0,
 							       Solutions1, LhLength),
@@ -430,7 +425,7 @@ iterate_variants([_|GroupSolutions], Ws, Solution) :-
     iterate_variants(GroupSolutions, Ws, Solution).
 
 bagof(Template, Goal, Solution) :-
-    check_for_compat_list(Solution, bagof/3),
+    error:can_be(list, Solution),
     term_variables(Template, TemplateVars0),
     term_variables(Goal, GoalVars0),
     sort(TemplateVars0, TemplateVars),
@@ -447,7 +442,7 @@ iterate_variants_and_sort([_|GroupSolutions], Ws, Solution) :-
     iterate_variants_and_sort(GroupSolutions, Ws, Solution).
 
 setof(Template, Goal, Solution) :-
-    check_for_compat_list(Solution, setof/3),
+    error:can_be(list, Solution),
     term_variables(Template, TemplateVars0),
     term_variables(Goal, GoalVars0),
     sort(TemplateVars0, TemplateVars),
