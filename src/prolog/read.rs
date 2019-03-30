@@ -117,7 +117,7 @@ pub mod readline
         if let LineMode::Single = LINE_MODE {
             insert_text_rl("?- ");
         }
-
+        
         0
     }
 

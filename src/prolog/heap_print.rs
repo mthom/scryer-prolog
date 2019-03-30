@@ -28,9 +28,18 @@ impl DirectedOp {
                 name.as_str()
         }
     }
+
+    #[inline]
+    fn is_negative_sign(&self) -> bool {
+        match self {
+            &DirectedOp::Left(ref name, (_, spec)) | &DirectedOp::Right(ref name, (_, spec)) =>
+                name.as_str() == "-" && is_prefix!(spec)
+        }
+    }
 }
 
-fn needs_bracketing(child_spec: (usize, Specifier), op: &DirectedOp) -> bool {
+fn needs_bracketing(child_spec: (usize, Specifier), op: &DirectedOp) -> bool
+{
     match op {
         &DirectedOp::Left(_, (priority, spec)) => {
             let is_strict_right = is_yfx!(spec) || is_xfx!(spec) || is_fx!(spec);
@@ -39,6 +48,45 @@ fn needs_bracketing(child_spec: (usize, Specifier), op: &DirectedOp) -> bool {
         &DirectedOp::Right(_, (priority, spec)) => {
             let is_strict_left = is_xfx!(spec) || is_xfy!(spec) || is_xf!(spec);
             child_spec.0 > priority || (child_spec.0 == priority && is_strict_left)
+        }
+    }
+}
+
+impl<'a> HCPreOrderIterator<'a> {
+    /*
+     * descend into the subtree where the iterator is currently parked
+     * and check that the leftmost leaf is a number, with every node
+     * encountered on the way an infix or postfix operator, and not blocked
+     * by brackets.
+     */
+    fn leftmost_leaf_is_positive_number(&self) -> bool {
+        let mut addr = match self.state_stack.last().cloned() {
+            Some(addr) => addr,
+            None => return false
+        };
+
+        let mut parent_spec = DirectedOp::Left(clause_name!("-"), (200, FY));
+
+        loop {
+            match self.machine_st.store(self.machine_st.deref(addr)) {
+                Addr::Str(s) =>
+                    match &self.machine_st.heap[s] {
+                        &HeapCellValue::NamedStr(_, ref name, Some(spec))
+                            if is_postfix!(spec.1) || is_infix!(spec.1) =>
+                                if needs_bracketing(spec, &parent_spec) {
+                                    return false;
+                                } else {
+                                    addr = Addr::HeapCell(s+1);
+                                    parent_spec = DirectedOp::Right(name.clone(), spec);
+                                },
+                        _ =>
+                            return false
+                    },
+                Addr::Con(Constant::Number(n)) =>
+                    return n.is_positive(),
+                _ =>
+                    return false
+            }
         }
     }
 }
@@ -53,6 +101,9 @@ pub enum TokenOrRedirect {
     Open,
     Close,
     Comma,
+    Space,
+    LeftCurly,
+    RightCurly,
     OpenList(Rc<Cell<bool>>),
     CloseList(Rc<Cell<bool>>),
     HeadTailSeparator,
@@ -137,6 +188,16 @@ fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
     }
 }
 
+#[inline]
+fn negated_op_needs_bracketing(iter: &HCPreOrderIterator, op: &Option<DirectedOp>) -> bool
+{
+    if let &Some(ref op) = op {
+        op.is_negative_sign() && iter.leftmost_leaf_is_positive_number()
+    } else {
+        false
+    }
+}
+
 impl MachineState {
     pub fn numbervar(&self, offset: &BigInt, addr: Addr) -> Option<Var> {
         static CHAR_CODES: [char; 26] = ['A','B','C','D','E','F','G','H','I','J',
@@ -181,8 +242,10 @@ pub struct HCPrinter<'a, Outputter> {
 macro_rules! push_space_if_amb {
     ($self:expr, $atom:expr, $action:block) => (
         if $self.ambiguity_check($atom) {
-            if !$self.outputter.range(0 .. $self.last_item_idx).ends_with(" ") {
-                $self.outputter.insert($self.last_item_idx, ' ');
+            if $self.last_item_idx > 1 {
+                if !$self.outputter.range(0 .. $self.last_item_idx).ends_with(" ") {
+                    $self.outputter.insert($self.last_item_idx, ' ');
+                }
             }
 
             $self.outputter.push_char(' ');
@@ -314,6 +377,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         continues_with_append(tail, atom)
     }
 
+    // TODO: create a DirectedOp factory method. Use it here, and above.
     fn enqueue_op(&mut self, ct: ClauseType, spec: (usize, Specifier)) {
         if is_postfix!(spec.1) {
             let right_directed_op = DirectedOp::Right(ct.name(), spec);
@@ -321,6 +385,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(right_directed_op));
         } else if is_prefix!(spec.1) {
+            if ct.name().as_str() == "-" {
+                self.format_negated_operand();
+                return;
+            }
+
             let left_directed_op = DirectedOp::Left(ct.name(), spec);
 
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
@@ -350,6 +419,22 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
+    fn format_negated_operand(&mut self)
+    {
+        let op = DirectedOp::Left(clause_name!("-"), (200, FY));
+
+        self.state_stack.push(TokenOrRedirect::CompositeRedirect(op));
+        self.state_stack.push(TokenOrRedirect::Space);
+        self.state_stack.push(TokenOrRedirect::Atom(clause_name!("-")));
+    }
+
+    fn format_curly_braces(&mut self)
+    {
+        self.state_stack.push(TokenOrRedirect::RightCurly);
+        self.state_stack.push(TokenOrRedirect::FunctorRedirect);
+        self.state_stack.push(TokenOrRedirect::LeftCurly);
+    }
+
     fn format_clause(&mut self, iter: &mut HCPreOrderIterator, arity: usize, ct: ClauseType)
     {
         if let Some(spec) = ct.spec() {
@@ -367,7 +452,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             }
         }
 
-        self.format_struct(arity, ct.name());
+        match (ct.name().as_str(), arity) {
+            ("-", 1) => self.format_negated_operand(),
+            ("{}", 1) => self.format_curly_braces(),
+            _ =>  self.format_struct(arity, ct.name())
+        };
     }
 
     #[inline]
@@ -476,6 +565,45 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         };
     }
 
+    fn print_number(&mut self, n: Number, op: &Option<DirectedOp>) {
+        let add_brackets = if let Some(op) = op {
+            op.is_negative_sign() && n.is_positive()
+        } else {
+            false
+        };
+
+        if add_brackets {
+            self.push_char('(');
+        }
+
+        match n {
+            Number::Float(fl) =>
+                if &fl == &OrderedFloat(0f64) {
+                    push_space_if_amb!(self, "0", {
+                        self.append_str("0");
+                    });
+                } else {
+                    let OrderedFloat(fl) = fl;
+                    let output_str = format!("{0:<20?}", fl);
+
+                    push_space_if_amb!(self, &output_str, {
+                        self.append_str(&output_str.trim());
+                    });
+                },
+            n => {
+                let output_str = format!("{}", n);
+
+                push_space_if_amb!(self, &output_str, {
+                    self.append_str(&output_str);
+                });
+            }
+        }
+
+        if add_brackets {
+            self.push_char(')');
+        }
+    }
+
     fn print_constant(&mut self, c: Constant, op: &Option<DirectedOp>) {
         match c {
             Constant::Atom(ref atom, Some(spec)) => {
@@ -509,26 +637,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                 },
             Constant::EmptyList =>
                 self.append_str("[]"),
-            Constant::Number(Number::Float(fl)) =>
-                if &fl == &OrderedFloat(0f64) {
-                    push_space_if_amb!(self, "0", {
-                        self.append_str("0");
-                    });
-                } else {
-                    let OrderedFloat(fl) = fl;
-                    let output_str = format!("{0:<20?}", fl);
-
-                    push_space_if_amb!(self, &output_str, {
-                        self.append_str(&output_str.trim());
-                    });
-                },
-            Constant::Number(n) => {                
-                let output_str = format!("{}", n);
-
-                push_space_if_amb!(self, &output_str, {
-                    self.append_str(&output_str);
-                });
-            },
+            Constant::Number(n) =>
+                self.print_number(n, op),
             Constant::String(s) =>
                 if self.machine_st.machine_flags().double_quotes.is_chars() {
                     if !s.is_empty() {
@@ -571,6 +681,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     fn handle_heap_term(&mut self, iter: &mut HCPreOrderIterator, op: Option<DirectedOp>,
                         is_functor_redirect: bool)
     {
+        let add_brackets = negated_op_needs_bracketing(iter, &op);
+
         let heap_val = match self.check_for_seen(iter) {
             Some(heap_val) => heap_val,
             None => return
@@ -579,7 +691,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         match heap_val {
             HeapCellValue::NamedStr(arity, ref name, Some(spec)) => {
                 let add_brackets = if !self.ignore_ops {
-                    if let Some(ref op) = &op {
+                    add_brackets || if let Some(ref op) = &op {
                         needs_bracketing(spec, op)
                     } else {
                         is_functor_redirect && spec.0 >= 1000
@@ -604,7 +716,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     let ct = ClauseType::from(name, 0, fixity);
                     self.format_clause(iter, 0, ct);
                 }),
-            HeapCellValue::NamedStr(arity, name, fixity) => {                    
+            HeapCellValue::NamedStr(arity, name, fixity) => {
                 let ct = ClauseType::from(name, arity, fixity);
                 self.format_clause(iter, arity, ct);
             },
@@ -675,7 +787,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     TokenOrRedirect::HeadTailSeparator =>
                         self.append_str(" | "),
                     TokenOrRedirect::Comma =>
-                        self.append_str(", ")
+                        self.append_str(", "),
+                    TokenOrRedirect::Space =>
+                        self.push_char(' '),
+                    TokenOrRedirect::LeftCurly =>
+                        self.push_char('{'),
+                    TokenOrRedirect::RightCurly =>
+                        self.push_char('}'),
                 }
             } else if !iter.stack().is_empty() {
                 let spec = self.toplevel_spec.take();

@@ -9,8 +9,8 @@ use std::ops::Deref;
 use std::vec::Vec;
 
 pub struct HCPreOrderIterator<'a> {
-    machine_st: &'a MachineState,
-    state_stack: Vec<Addr>
+    pub machine_st: &'a MachineState,
+    pub state_stack: Vec<Addr>
 }
 
 impl<'a> HCPreOrderIterator<'a> {
@@ -24,7 +24,7 @@ impl<'a> HCPreOrderIterator<'a> {
     pub fn machine_st(&self) -> &MachineState {
         &self.machine_st
     }
-    
+
     fn follow_heap(&mut self, h: usize) -> Addr
     {
         match &self.machine_st.heap[h] {
