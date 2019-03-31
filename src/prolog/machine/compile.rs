@@ -559,17 +559,8 @@ impl ListingCompiler {
                 
                     get_desc(op_decl.name(), comp_ops)
                 };
-
-                if op_decl.0 == 0 {
-                    // remove all instances of the operator.
-                    if self.module.is_none() {
-                        op_decl.remove(&mut wam_indices.op_dir);                        
-                    }
-
-                    Ok(())
-                } else {
-                    op_decl.submit(self.get_module_name(), existing_desc, &mut indices.op_dir)
-                }
+                
+                op_decl.submit(self.get_module_name(), existing_desc, &mut indices.op_dir)
             },
             Declaration::UseModule(name) =>
                 self.use_module(name, code_repo, flags, wam_indices, indices),

@@ -188,7 +188,10 @@ impl MachineState {
       where Outputter: HCValueOutputter
     {
         let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
+        
         printer.see_all_locs();
+        printer.quoted = true;
+        
         printer.print(addr)
     }
 

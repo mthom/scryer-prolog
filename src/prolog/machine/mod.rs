@@ -272,7 +272,13 @@ impl Machine {
 
     #[inline]
     pub fn add_batched_ops(&mut self, op_dir: OpDir) {
-        self.indices.op_dir.extend(op_dir.into_iter());
+        for ((name, fixity), info) in op_dir {
+            if info.1 == 0 {
+                self.indices.op_dir.remove(&(name, fixity));
+            } else {
+                self.indices.op_dir.insert((name, fixity), info);
+            }
+        }
     }
 
     #[inline]

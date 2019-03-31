@@ -537,29 +537,40 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         })
     }
 
-    fn print_atom(&mut self, atom: &ClauseName, spec: Option<(usize, Specifier)>) {
+    fn print_atom(&mut self, atom: &ClauseName) {
         push_space_if_amb!(self, atom.as_str(), {
             match atom.as_str() {
                 "" => self.append_str("''"),
-                "," if spec.is_some() => self.append_str(atom.as_str()),
-                ";" | "!" => self.append_str(atom.as_str()),
-                s => if !self.quoted || non_quoted_token(s.chars()) {
-                    self.append_str(atom.as_str());
-                } else {
-                    if self.quoted {
-                        self.push_char('\'');
-                    }
-
-                    for c in atom.as_str().chars() {
-                        self.print_char(c);
-                    }
-
-                    if self.quoted {
-                        self.push_char('\'');
-                    }
-                }
+                //"," => self.append_str("(,)"),                
+                s => self.print_op_addendum(s)
             }
         });
+    }
+
+    fn print_op_addendum(&mut self, atom: &str) {
+        if !self.quoted || non_quoted_token(atom.chars()) {
+            self.append_str(atom);
+        } else {
+            if self.quoted {
+                self.push_char('\'');
+            }
+
+            for c in atom.chars() {
+                self.print_char(c);
+            }
+
+            if self.quoted {
+                self.push_char('\'');
+            }
+        }            
+    }
+    
+    fn print_op(&mut self, atom: &str) {
+        if atom == "," {
+            self.push_char(',');
+        } else {
+            self.print_op_addendum(atom);
+        }
     }
 
     fn print_char(&mut self, c: char) {
@@ -617,7 +628,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
     fn print_constant(&mut self, c: Constant, op: &Option<DirectedOp>) {
         match c {
-            Constant::Atom(ref atom, Some(spec)) => {
+            Constant::Atom(ref atom, Some(_)) => {
                 if let Some(ref op) = op {
                     if self.outputter.ends_with(&format!(" {}", op.as_str())) {
                         self.push_char(' ');
@@ -626,7 +637,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     self.push_char('(');
                 }
 
-                self.print_atom(atom, Some(spec));
+                self.print_atom(atom);
 
                 if op.is_some() {
                     self.push_char(')');
@@ -634,7 +645,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             },
             Constant::Atom(ref atom, None) =>
                 push_space_if_amb!(self, atom.as_str(), {
-                    self.print_atom(atom, None);
+                    self.print_atom(atom);
                 }),
             Constant::Char(c) if non_quoted_token(once(c)) =>
                 self.print_char(c),
@@ -772,9 +783,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
                     TokenOrRedirect::Atom(atom) =>
-                        self.print_atom(&atom, None),
-                    TokenOrRedirect::Op(atom, spec) =>
-                        self.print_atom(&atom, Some(spec)),
+                        self.print_atom(&atom),
+                    TokenOrRedirect::Op(atom, _) =>
+                        self.print_op(atom.as_str()),
                     TokenOrRedirect::NumberedVar(num_var) =>
                         self.append_str(num_var.as_str()),
                     TokenOrRedirect::CompositeRedirect(op) =>
