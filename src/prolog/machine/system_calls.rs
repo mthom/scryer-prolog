@@ -1,5 +1,6 @@
 use prolog_parser::ast::*;
 use prolog_parser::parser::{get_desc, get_clause_spec};
+use prolog_parser::tabled_rc::*;
 
 use prolog::clause_types::*;
 use prolog::heap_iter::*;
@@ -586,6 +587,8 @@ impl MachineState {
 
                 let op = match self.store(self.deref(op)) {
                     Addr::Con(Constant::Atom(name, _)) => name,
+                    Addr::Con(Constant::Char(c)) =>
+                        clause_name!(c.to_string(), indices.atom_tbl),
                     _ => unreachable!()
                 };
 

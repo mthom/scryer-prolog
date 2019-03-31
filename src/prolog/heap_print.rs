@@ -541,8 +541,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         push_space_if_amb!(self, atom.as_str(), {
             match atom.as_str() {
                 "" => self.append_str("''"),
+                "," if spec.is_some() => self.append_str(atom.as_str()),
                 ";" | "!" => self.append_str(atom.as_str()),
-                s => if spec.is_some() || !self.quoted || non_quoted_token(s.chars()) {
+                s => if !self.quoted || non_quoted_token(s.chars()) {
                     self.append_str(atom.as_str());
                 } else {
                     if self.quoted {

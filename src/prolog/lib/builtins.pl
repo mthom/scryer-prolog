@@ -718,8 +718,8 @@ op_specifier(OpSpec) :- atom(OpSpec),
 op_specifier(OpSpec) :- throw(error(type_error(atom, OpSpec), op/3)).
 
 valid_op(Op) :- atom(Op),
-    (  Op \== ',' -> true
-    ;  throw(error(permission_error(modify, operator, ','), op/3)) % 8.14.3.3 j), k).
+    (  Op \== (,) -> true
+    ;  throw(error(permission_error(modify, operator, (,)), op/3)) % 8.14.3.3 j), k).
     ).
 
 op_(Priority, OpSpec, Op) :- '$op'(Priority, OpSpec, Op).
