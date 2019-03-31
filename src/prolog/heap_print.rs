@@ -444,28 +444,24 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
         false
     }
-    
+
     fn format_clause(&mut self, iter: &mut HCPreOrderIterator, arity: usize, ct: ClauseType)
     {
-        if let Some(spec) = ct.spec() {
-            if self.numbervars && is_numbered_var(&ct, arity) {
-                if self.format_numbered_vars(iter) {
-                    return;
-                }
-            }
-            
-            if !self.ignore_ops {
-                return self.enqueue_op(ct, spec);
-            }
-        } else if self.numbervars && is_numbered_var(&ct, arity) {
+        if self.numbervars && is_numbered_var(&ct, arity) {
             if self.format_numbered_vars(iter) {
                 return;
             }
         }
 
+        if let Some(spec) = ct.spec() {
+            if !self.ignore_ops {
+                return self.enqueue_op(ct, spec);
+            }
+        }
+
         match (ct.name().as_str(), arity) {
             ("{}", 1) if !self.ignore_ops => self.format_curly_braces(),
-            _ =>  self.format_struct(arity, ct.name())
+            _ => self.format_struct(arity, ct.name())
         };
     }
 
@@ -541,7 +537,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         push_space_if_amb!(self, atom.as_str(), {
             match atom.as_str() {
                 "" => self.append_str("''"),
-                //"," => self.append_str("(,)"),                
                 s => self.print_op_addendum(s)
             }
         });
@@ -562,9 +557,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             if self.quoted {
                 self.push_char('\'');
             }
-        }            
+        }
     }
-    
+
     fn print_op(&mut self, atom: &str) {
         if atom == "," {
             self.push_char(',');
