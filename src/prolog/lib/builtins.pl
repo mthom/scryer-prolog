@@ -10,7 +10,7 @@
 	call_cleanup/2, call_with_inference_limit/3, catch/3,
 	clause/2, current_predicate/1, current_prolog_flag/2,
 	expand_goal/2, expand_term/2, findall/3, findall/4, halt/0,
-	once/1, repeat/0, retract/1, set_prolog_flag/2, setof/3,
+	once/1, op/3, repeat/0, retract/1, set_prolog_flag/2, setof/3,
 	setup_call_cleanup/3, term_variables/2, throw/1, true/0,
 	false/0, write/1, write_canonical/1, writeq/1, write_term/2]).
 
@@ -692,6 +692,50 @@ current_predicate(Pred) :-
        max_arity(Max),
        between:between(0, Max, N)
     ).
+
+list_of_op_atoms(Var) :-
+    var(Var), throw(error(instantiation_error, op/3)). % 8.14.3.3 c)
+list_of_op_atoms([Atom|Atoms]) :-
+    ( valid_op(Atom) -> list_of_op_atoms(Atoms) % 8.14.3.3 k).
+    ; var(Atom) -> throw(error(instantiation_error, op/3)) % 8.14.3.3 c)
+    ; throw(error(type_error(atom, Atom), op/3)) % 8.14.3.3 g)
+    ).
+list_of_op_atoms([]).
+
+op_priority(Priority) :-
+    integer(Priority), !,
+    (  ( Priority < 0 ; Priority > 1200 ) ->
+       throw(error(domain_error(operator_priority, Priority))) % 8.14.3.3 h)
+    ;  true
+    ).
+op_priority(Priority) :-
+    throw(error(type_error(integer, Priority), op/3)). % 8.14.3.3 d)
+
+op_specifier(OpSpec) :- atom(OpSpec),
+    (  lists:member(OpSpec, [yfx, xfy, xfx, yf, fy, xf, fx]), !
+    ;  throw(error(domain_error(operator_specifier, OpSpec), op/3)) % 8.14.3.3 i)
+    ).
+op_specifier(OpSpec) :- throw(error(type_error(atom, OpSpec), op/3)).
+
+valid_op(Op) :- atom(Op),
+    (  Op \== ',' -> true
+    ;  throw(error(permission_error(modify, operator, ','), op/3)) % 8.14.3.3 j), k).
+    ).
+
+op_(Priority, OpSpec, Op) :- '$op'(Priority, OpSpec, Op).
+
+op(Priority, OpSpec, Op) :-
+    (  var(Priority) -> throw(error(instantiation_error, op/3)) % 8.14.3.3 a)
+    ;  var(OpSpec)   -> throw(error(instantiation_error, op/3)) % 8.14.3.3 b)
+    ;  var(Op)       -> throw(error(instantiation_error, op/3)) % 8.14.3.3 c)
+    ;  valid_op(Op), op_priority(Priority), op_specifier(OpSpec) ->
+       '$op'(Priority, OpSpec, Op)
+    ;  list_of_op_atoms(Op), op_priority(Priority), op_specifier(OpSpec) ->
+       lists:maplist(op_(Priority, OpSpec), Op), !
+    ;  throw(error(type_error(list, Op), op/3)) % 8.14.3.3 f)
+    ).
+
+%% (non-)backtrackable global variables.
 
 bb_put(Key, Value) :- atom(Key), !, '$store_global_var'(Key, Value).
 bb_put(Key, _) :- throw(error(type_error(atom, Key), bb_put/2)).

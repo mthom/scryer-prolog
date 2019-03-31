@@ -264,7 +264,7 @@ impl fmt::Display for SessionError {
                 write!(f, "false."),
             &SessionError::QueryFailureWithException(ref e) =>
                 write!(f, "{}", error_string(e)),
-            &SessionError::OpIsInfixAndPostFix =>
+            &SessionError::OpIsInfixAndPostFix(_) =>
                 write!(f, "cannot define an op to be both postfix and infix."),
             &SessionError::NamelessEntry =>
                 write!(f, "the predicate head is not an atom or clause."),

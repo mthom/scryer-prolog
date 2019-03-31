@@ -115,6 +115,20 @@ fn is_compile_time_hook(name: &ClauseName, terms: &Vec<Box<Term>>) -> Option<Com
 
 type CompileTimeHookCompileInfo = (CompileTimeHook, PredicateClause, VecDeque<TopLevel>);
 
+pub fn to_op_decl(prec: usize, spec: &str, name: ClauseName) -> Result<OpDecl, ParserError>
+{
+    match spec {
+        "xfx" => Ok(OpDecl(prec, XFX, name)),
+        "xfy" => Ok(OpDecl(prec, XFY, name)),
+        "yfx" => Ok(OpDecl(prec, YFX, name)),
+        "fx"  => Ok(OpDecl(prec, FX, name)),
+        "fy"  => Ok(OpDecl(prec, FY, name)),
+        "xf"  => Ok(OpDecl(prec, XF, name)),
+        "yf"  => Ok(OpDecl(prec, YF, name)),
+        _     => Err(ParserError::InconsistentEntry)
+    }
+}
+
 fn setup_op_decl(mut terms: Vec<Box<Term>>) -> Result<OpDecl, ParserError>
 {
     let name = match *terms.pop().unwrap() {
@@ -136,16 +150,7 @@ fn setup_op_decl(mut terms: Vec<Box<Term>>) -> Result<OpDecl, ParserError>
         _ => return Err(ParserError::InconsistentEntry)
     };
 
-    match spec.as_str() {
-        "xfx" => Ok(OpDecl(prec, XFX, name)),
-        "xfy" => Ok(OpDecl(prec, XFY, name)),
-        "yfx" => Ok(OpDecl(prec, YFX, name)),
-        "fx"  => Ok(OpDecl(prec, FX, name)),
-        "fy"  => Ok(OpDecl(prec, FY, name)),
-        "xf"  => Ok(OpDecl(prec, XF, name)),
-        "yf"  => Ok(OpDecl(prec, YF, name)),
-        _     => Err(ParserError::InconsistentEntry)
-    }
+    to_op_decl(prec, spec.as_str(), name)
 }
 
 fn setup_predicate_indicator(mut term: Term) -> Result<PredicateKey, ParserError>

@@ -1,4 +1,5 @@
 use prolog_parser::ast::*;
+use prolog_parser::parser::get_desc;
 use prolog_parser::tabled_rc::TabledData;
 
 use prolog::instructions::*;
@@ -551,8 +552,25 @@ impl ListingCompiler {
             },
             Declaration::NonCountedBacktracking(name, arity) =>
                 Ok(self.add_non_counted_bt_flag(name, arity)),
-            Declaration::Op(op_decl) =>
-                op_decl.submit(self.get_module_name(), &mut indices.op_dir),
+            Declaration::Op(op_decl) => {
+                let existing_desc = {
+                    let comp_ops = composite_op!(self.module.is_some(), &wam_indices.op_dir,
+                                                 &mut indices.op_dir);
+                
+                    get_desc(op_decl.name(), comp_ops)
+                };
+
+                if op_decl.0 == 0 {
+                    // remove all instances of the operator.
+                    if self.module.is_none() {
+                        op_decl.remove(&mut wam_indices.op_dir);                        
+                    }
+
+                    Ok(())
+                } else {
+                    op_decl.submit(self.get_module_name(), existing_desc, &mut indices.op_dir)
+                }
+            },
             Declaration::UseModule(name) =>
                 self.use_module(name, code_repo, flags, wam_indices, indices),
             Declaration::UseQualifiedModule(name, exports) =>

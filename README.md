@@ -203,6 +203,7 @@ The following predicates are built-in to Scryer.
 * `numbervars/2`
 * `numlist/{2,3}`
 * `once/1`
+* `op/3`
 * `partial_string/2`
 * `phrase/{2,3}`
 * `rational/1`

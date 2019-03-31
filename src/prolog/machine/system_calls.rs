@@ -1,5 +1,5 @@
 use prolog_parser::ast::*;
-use prolog_parser::parser::get_clause_spec;
+use prolog_parser::parser::{get_desc, get_clause_spec};
 
 use prolog::clause_types::*;
 use prolog::heap_iter::*;
@@ -8,6 +8,7 @@ use prolog::machine::copier::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
+use prolog::machine::toplevel::to_op_decl;
 use prolog::num::{FromPrimitive, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt};
 
@@ -567,6 +568,51 @@ impl MachineState {
                         },
                     _ => self.fail = true
                 }
+            },
+            &SystemClauseType::OpDeclaration => {
+                let priority = self[temp_v!(1)].clone();
+                let specifier = self[temp_v!(2)].clone();
+                let op = self[temp_v!(3)].clone();
+
+                let priority = match self.store(self.deref(priority)) {
+                    Addr::Con(Constant::Number(Number::Integer(n))) => n.to_usize().unwrap(),
+                    _ => unreachable!()
+                };
+
+                let specifier = match self.store(self.deref(specifier)) {
+                    Addr::Con(Constant::Atom(name, _)) => name,
+                    _ => unreachable!()
+                };
+
+                let op = match self.store(self.deref(op)) {
+                    Addr::Con(Constant::Atom(name, _)) => name,
+                    _ => unreachable!()
+                };
+
+                let module  = op.owning_module();
+
+                let result = to_op_decl(priority, specifier.as_str(), op)
+                    .map_err(SessionError::from)
+                    .and_then(|op_decl| {                        
+                        if op_decl.0 == 0 {
+                            Ok(op_decl.remove(&mut indices.op_dir))
+                        } else {
+                            let desc = get_desc(op_decl.name(), composite_op!(&indices.op_dir));
+                            op_decl.submit(module, desc, &mut indices.op_dir)
+                        }
+                    });
+
+                match result {
+                    Ok(()) => {},
+                    Err(e) => {
+                        // 8.14.3.3 l)
+                        let e = MachineError::session_error(self.heap.h, e);
+                        let stub = MachineError::functor_stub(clause_name!("op"), 3);
+                        let permission_error = self.error_form(e, stub);
+
+                        return Err(permission_error);
+                    }
+                };
             },
             &SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff =>
                 self.truncate_if_no_lifted_heap_diff(|h| Addr::HeapCell(h)),

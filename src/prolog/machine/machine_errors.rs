@@ -68,23 +68,29 @@ impl MachineError {
             SessionError::ParserError(err) => Self::syntax_error(h, err),
             SessionError::CannotOverwriteBuiltIn(pred_str)
           | SessionError::CannotOverwriteImport(pred_str) =>
-                Self::permission_error(PermissionError::Modify, pred_str),
+                Self::permission_error(PermissionError::Modify, "private_procedure", pred_str),
             SessionError::ModuleDoesNotContainExport =>
                 Self::permission_error(PermissionError::Access,
+                                       "private_procedure",
                                       clause_name!("module_does_not_contain_claimed_export")),
             SessionError::ModuleNotFound =>
                 Self::permission_error(PermissionError::Access,
+                                       "private_procedure",
                                        clause_name!("module_does_not_exist")),
+            SessionError::OpIsInfixAndPostFix(op) =>
+                Self::permission_error(PermissionError::Create,
+                                       "operator",
+                                       op),                                       
             _ => unreachable!()
         }
     }
 
     pub(super)
-    fn permission_error(err: PermissionError, pred_str: ClauseName) -> Self
+    fn permission_error(err: PermissionError, index_str: &'static str, pred_str: ClauseName) -> Self
     {
         let pred_str = HeapCellValue::Addr(Addr::Con(Constant::Atom(pred_str, None)));
 
-        let err = vec![heap_atom!(err.as_str()), heap_atom!("private_procedure"), pred_str];
+        let err = vec![heap_atom!(err.as_str()), heap_atom!(index_str), pred_str];
         let mut stub = functor!("permission_error", 3);
 
         stub.extend(err.into_iter());
@@ -144,6 +150,7 @@ impl MachineError {
 #[derive(Clone, Copy)]
 pub enum PermissionError {
     Access,
+    Create,
     Modify,
 }
 
@@ -151,6 +158,7 @@ impl PermissionError {
     pub fn as_str(self) -> &'static str {
         match self {
             PermissionError::Access => "access",
+            PermissionError::Create => "create",
             PermissionError::Modify => "modify"
         }
     }
@@ -375,7 +383,7 @@ pub enum SessionError {
     ModuleDoesNotContainExport,
     ModuleNotFound,
     NamelessEntry,
-    OpIsInfixAndPostFix,
+    OpIsInfixAndPostFix(ClauseName),
     ParserError(ParserError),
     QueryFailure,
     QueryFailureWithException(ClauseName),
