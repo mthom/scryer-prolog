@@ -693,6 +693,7 @@ impl RelationWorker {
                     Ok(TopLevel::Declaration(Declaration::Hook(hook, clause, queue)))
                 } else if name.as_str() == "?-" {
                     match setup_declaration(terms.iter().cloned().collect()) {
+                        Ok(Declaration::Op(..)) => {}, // this is now a predicate call in the query context.
                         Ok(decl) => return Ok(TopLevel::Declaration(decl)),
                         _ => {}
                     };
