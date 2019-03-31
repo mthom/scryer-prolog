@@ -1880,8 +1880,10 @@ impl MachineState {
         }
     }
 
-    fn try_functor_compound_case(&mut self, name: ClauseName, arity: usize) {
-        let name  = Addr::Con(Constant::Atom(name, None));
+    fn try_functor_compound_case(&mut self, name: ClauseName, arity: usize,
+                                 spec: Option<(usize, Specifier)>)
+    {
+        let name  = Addr::Con(Constant::Atom(name, spec));
         let arity = Addr::Con(integer!(arity));
 
         self.try_functor_unify_components(name, arity);
@@ -1898,12 +1900,12 @@ impl MachineState {
                 self.try_functor_unify_components(a1, Addr::Con(integer!(0))),
             Addr::Str(o) =>
                 match self.heap[o].clone() {
-                    HeapCellValue::NamedStr(arity, name, _) =>
-                        self.try_functor_compound_case(name, arity),
+                    HeapCellValue::NamedStr(arity, name, spec) =>
+                        self.try_functor_compound_case(name, arity, spec),
                     _ => self.fail = true
                 },
             Addr::Lis(_) =>
-                self.try_functor_compound_case(clause_name!("."), 2),
+                self.try_functor_compound_case(clause_name!("."), 2, None),
             Addr::AttrVar(..) | Addr::HeapCell(_) | Addr::StackCell(..) => {
                 let name  = self.store(self.deref(self[temp_v!(2)].clone()));
                 let arity = self.store(self.deref(self[temp_v!(3)].clone()));
