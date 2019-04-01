@@ -714,6 +714,7 @@ impl MachineState {
                         "*" => interms.push(a1 * a2),
                         "/" => interms.push(self.div(a1, a2)?),
                         "**" => interms.push(self.pow(a1, a2)?),
+                        "^"  => interms.push(self.pow(a1, a2)?),
                         "max"  => interms.push(self.max(a1, a2)?),
                         "rdiv" => {
                             let r1 = self.get_rational(&ArithmeticTerm::Number(a1), &caller)?;
@@ -1009,13 +1010,20 @@ impl MachineState {
                 self.interms[t - 1] = try_or_fail!(self, self.max(n1, n2));
                 self.p += 1;
             },
-            &ArithmeticInstruction::Pow(ref a1, ref a2, t) => {
+            &ArithmeticInstruction::IntPow(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
                 self.interms[t - 1] = try_or_fail!(self, self.pow(n1, n2));
                 self.p += 1;
             },
+            &ArithmeticInstruction::Pow(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                self.interms[t - 1] = try_or_fail!(self, self.pow(n1, n2));
+                self.p += 1;
+            },            
             &ArithmeticInstruction::RDiv(ref a1, ref a2, t) => {
                 let stub = MachineError::functor_stub(clause_name!("(rdiv)"), 2);
 

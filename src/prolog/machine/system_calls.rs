@@ -3,7 +3,6 @@ use prolog_parser::parser::{get_desc, get_clause_spec};
 use prolog_parser::tabled_rc::*;
 
 use prolog::clause_types::*;
-use prolog::heap_iter::*;
 use prolog::heap_print::*;
 use prolog::machine::copier::*;
 use prolog::machine::machine_errors::*;
@@ -1112,7 +1111,7 @@ impl MachineState {
                 let mut vars = Vec::new();
 
                 {
-                    let iter = HCPreOrderIterator::new(self, a1);
+                    let iter = self.acyclic_pre_order_iter(a1);
 
                     for item in iter {
                         match item {

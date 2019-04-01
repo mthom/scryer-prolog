@@ -298,7 +298,9 @@ impl fmt::Display for ArithmeticInstruction {
             &ArithmeticInstruction::Mul(ref a1, ref a2, ref t) =>
                 write!(f, "mul {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Pow(ref a1, ref a2, ref t) =>
-                write!(f, "pow {}, {}, @{}", a1, a2, t),
+                write!(f, "** {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::IntPow(ref a1, ref a2, ref t) =>
+                write!(f, "^ {}, {}, @{}", a1, a2, t),            
             &ArithmeticInstruction::Div(ref a1, ref a2, ref t) =>
                 write!(f, "div {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::IDiv(ref a1, ref a2, ref t) =>

@@ -59,6 +59,7 @@ pub enum ArithmeticInstruction {
     Sub(ArithmeticTerm, ArithmeticTerm, usize),
     Mul(ArithmeticTerm, ArithmeticTerm, usize),
     Pow(ArithmeticTerm, ArithmeticTerm, usize),
+    IntPow(ArithmeticTerm, ArithmeticTerm, usize),
     IDiv(ArithmeticTerm, ArithmeticTerm, usize),
     Max(ArithmeticTerm, ArithmeticTerm, usize),
     FIDiv(ArithmeticTerm, ArithmeticTerm, usize),
