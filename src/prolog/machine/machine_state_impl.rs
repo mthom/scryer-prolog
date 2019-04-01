@@ -1110,6 +1110,44 @@ impl MachineState {
         };
     }
 
+    fn get_char_list(&mut self, s: &StringList) {
+        let h = self.heap.h;
+
+        if let Some(c) = s.head() {
+            self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Char(c))));
+            self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(s.tail()))));
+
+            self.s = h;
+            self.mode = MachineMode::Read;
+        } else if s.is_expandable() {
+            self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(s.clone()))));
+
+            self.s = h;
+            self.mode = MachineMode::Read;
+        } else {
+            self.fail = true;
+        }
+    }
+
+    fn get_code_list(&mut self, s: &StringList) {
+        let h = self.heap.h;
+
+        if let Some(c) = s.head() {
+            self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::CharCode(c as u8))));
+            self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(s.tail()))));
+
+            self.s = h;
+            self.mode = MachineMode::Read;
+        } else if s.is_expandable() {
+            self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(s.clone()))));
+
+            self.s = h;
+            self.mode = MachineMode::Read;
+        } else {
+            self.fail = true;
+        }
+    }
+
     pub(super) fn execute_fact_instr(&mut self, instr: &FactInstruction) {
         match instr {
             &FactInstruction::GetConstant(_, ref c, reg) => {
@@ -1120,24 +1158,11 @@ impl MachineState {
                 let addr = self.store(self.deref(self[reg].clone()));
 
                 match addr {
-                    Addr::Con(Constant::String(ref s))
-                        if self.flags.double_quotes.is_chars() => {
-                            let h = self.heap.h;
-
-                            if let Some(c) = s.head() {
-                                self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Char(c))));
-                                self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(s.tail()))));
-
-                                self.s = h;
-                                self.mode = MachineMode::Read;
-                            } else if s.is_expandable() {
-                                self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(s.clone()))));
-
-                                self.s = h;
-                                self.mode = MachineMode::Read;
-                            } else {
-                                self.fail = true;
-                            }
+                    Addr::Con(Constant::String(ref s)) =>
+                        match self.flags.double_quotes {
+                            DoubleQuotes::Chars => self.get_char_list(s),
+                            DoubleQuotes::Codes => self.get_code_list(s),
+                            _ => self.fail = true
                         },
                     addr @ Addr::AttrVar(_) | addr @ Addr::StackCell(..) | addr @ Addr::HeapCell(_) => {
                         let h = self.heap.h;
@@ -1697,10 +1722,10 @@ impl MachineState {
             match (v1, v2) {
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Con(Constant::String(_))))
               | (HeapCellValue::Addr(Addr::Con(Constant::String(_))), HeapCellValue::Addr(Addr::Lis(_)))
-                    if self.flags.double_quotes.is_chars() => {},
+                    if !self.flags.double_quotes.is_atom() => {},
                 (HeapCellValue::Addr(Addr::Con(Constant::EmptyList)),
                  HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
-                    if self.flags.double_quotes.is_chars() => if s.is_empty() {
+                    if !self.flags.double_quotes.is_atom() => if s.is_empty() {
                         return Ordering::Equal;
                     } else {
                         return Ordering::Greater;
@@ -1721,7 +1746,7 @@ impl MachineState {
                     },
                 (HeapCellValue::Addr(Addr::Con(Constant::String(ref s))),
                  HeapCellValue::Addr(Addr::Con(Constant::EmptyList)))
-                    if self.flags.double_quotes.is_chars() => if s.is_empty() {
+                    if !self.flags.double_quotes.is_atom() => if s.is_empty() {
                         return Ordering::Equal;
                     } else {
                         return Ordering::Less;
@@ -2142,6 +2167,36 @@ impl MachineState {
         self.unify(Addr::HeapCell(old_h), a2);
     }
 
+    fn structural_char_list_test(&self, s: &StringList, list_offset: usize) -> bool {
+        if !s.is_empty() {
+            if let HeapCellValue::Addr(Addr::Con(constant)) = self.heap[list_offset].clone() {
+                if let Some(c) = s.head() {
+                    // checks equality on atoms, too.
+                    if constant == Constant::Char(c) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    fn structural_code_list_test(&self, s: &StringList, list_offset: usize) -> bool {
+        if !s.is_empty() {
+            if let HeapCellValue::Addr(Addr::Con(constant)) = self.heap[list_offset].clone() {
+                if let Some(c) = s.head() {
+                    // checks equality on integers, too.
+                    if constant == Constant::CharCode(c as u8) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
     // returns true on failure.
     pub(super) fn structural_eq_test(&self) -> bool
     {
@@ -2156,19 +2211,18 @@ impl MachineState {
             match (v1, v2) {
                 (HeapCellValue::Addr(Addr::Lis(l)), HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
               | (HeapCellValue::Addr(Addr::Con(Constant::String(ref s))), HeapCellValue::Addr(Addr::Lis(l)))
-                    if self.flags.double_quotes.is_chars() => if s.is_empty() {
-                        return true;
-                    } else {
-                        if let HeapCellValue::Addr(Addr::Con(constant)) = self.heap[l].clone() {
-                            if let Some(c) = s.head() {
-                                // checks equality on atoms, too.
-                                if constant == Constant::Char(c) {
+                    if !self.flags.double_quotes.is_atom() => {
+                        match self.flags.double_quotes {
+                            DoubleQuotes::Chars =>
+                                if self.structural_char_list_test(s, l) {
                                     continue;
-                                }
-                            }
+                                },
+                            DoubleQuotes::Codes =>
+                                if self.structural_code_list_test(s, l) {
+                                    continue;
+                                },
+                            DoubleQuotes::Atom  => unreachable!()
                         }
-
-                        return true;
                     },
                (HeapCellValue::Addr(Addr::Con(Constant::String(ref s1))),
                 HeapCellValue::Addr(Addr::Con(Constant::String(ref s2)))) =>
@@ -2186,7 +2240,7 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::Con(Constant::EmptyList)))
               | (HeapCellValue::Addr(Addr::Con(Constant::EmptyList)),
                  HeapCellValue::Addr(Addr::Con(Constant::String(ref s))))
-                    if self.flags.double_quotes.is_chars() => if !s.is_empty() {
+                    if !self.flags.double_quotes.is_atom() => if !s.is_empty() {
                         return true;
                     },
                 (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
