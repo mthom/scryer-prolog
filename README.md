@@ -20,41 +20,41 @@ argument indexing, last call optimization and conjunctive queries.
 
 Extend Scryer Prolog to include the following, among other features:
 
-* call/N as a built-in meta-predicate (_done_).
-* ISO Prolog compliant throw/catch (_done_).
-* Built-in and user-defined operators of all fixities, with custom
-  associativity and precedence (_done_).
-* Bignum, rational number and floating point arithmetic (_done_).
-* Built-in control operators (`,`, `;`, `->`, etc.) (_done_).
-* A revised, not-terrible module system (_done, I think_).
-* Built-in predicates for list processing and top-level declarative
-  control (`setup_call_cleanup/3`, `call_with_inference_limit/3`,
-  etc.) (_done_)
-* Default representation of strings as list of chars, using a packed
-  internal representation (_done_).
-    - A representation of 'partial strings' as difference lists
-      of characters (_done_).
-* `term_expansion/2` and `goal_expansion/2` (_done_).
-* Definite Clause Grammars (_done_).
-* Attributed variables using the SICStus Prolog interface and
-  semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
-  is straightforward with attributed variables (_done_).
-     - [x] Support for `verify_attributes/3`
-     - [x] Support for `attribute_goals/2` and `project_attributes/2`
-     - [x] `call_residue_vars/2`
-* `if_` and related predicates, following the developments of the
-  paper "Indexing `dif/2`" (_done_).
-* All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`) (_done_).
-* Clause creation and destruction (`asserta/1`, `assertz/1`,
-  `retract/1`, `abolish/1`) with logical update semantics (_done_).  
-* Backtrackable and non-backtrackable global variables via `bb_get/2`
-  `bb_put/2` (non-backtrackable) and `bb_b_put/2`
-  (backtrackable).  (_done_).
-* Streams and predicates for stream control (_in progress_).
-* An incremental compacting garbage collector satisfying the five
-  properties of "Precise Garbage Collection in Prolog."
-* Mode declarations.
-* Extensions for clp(FD).
+- [x] call/N as a built-in meta-predicate.
+- [x] ISO Prolog compliant throw/catch.
+- [x] Built-in and user-defined operators of all fixities, with custom
+      associativity and precedence.
+- [x] Bignum, rational number and floating point arithmetic.
+- [x] Built-in control operators (`,`, `;`, `->`, etc.).
+- [x] A revised, not-terrible module system.
+- [x] Built-in predicates for list processing and top-level declarative
+      control (`setup_call_cleanup/3`, `call_with_inference_limit/3`,
+      etc.)
+- [x] Default representation of strings as list of chars, using a packed
+      internal representation.
+        - A representation of 'partial strings' as difference lists
+          of characters.
+- [x] `term_expansion/2` and `goal_expansion/2`.
+- [x] Definite Clause Grammars.
+- [x] Attributed variables using the SICStus Prolog interface and
+      semantics. Adding coroutines like `dif/2`, `freeze/2`, etc.
+      is straightforward with attributed variables.
+         - [x] Support for `verify_attributes/3`
+         - [x] Support for `attribute_goals/2` and `project_attributes/2`
+         - [x] `call_residue_vars/2`
+- [x] `if_` and related predicates, following the developments of the
+      paper "Indexing `dif/2`".
+- [x] All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`).
+- [x] Clause creation and destruction (`asserta/1`, `assertz/1`,
+      `retract/1`, `abolish/1`) with logical update semantics.
+- [x] Backtrackable and non-backtrackable global variables via `bb_get/2`
+      `bb_put/2` (non-backtrackable) and `bb_b_put/2`
+      (backtrackable).
+- [ ] Streams and predicates for stream control (_in progress_).
+- [ ] An incremental compacting garbage collector satisfying the five
+      properties of "Precise Garbage Collection in Prolog."
+- [ ] Mode declarations.
+- [ ] Extensions for clp(FD).
 
 ## Phase 3
 
