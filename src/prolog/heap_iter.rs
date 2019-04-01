@@ -47,18 +47,28 @@ impl<'a> HCPreOrderIterator<'a> {
     {
         let da = self.machine_st.store(self.machine_st.deref(addr));
 
-        match da {            
-            Addr::Con(Constant::String(ref s))
-                if self.machine_st.machine_flags().double_quotes.is_chars() => {
-                    if let Some(c) = s.head() {
-                        let tail = s.tail();
+        match da {
+            Addr::Con(Constant::String(ref s)) => {
+                match self.machine_st.machine_flags().double_quotes {
+                    DoubleQuotes::Chars =>
+                        if let Some(c) = s.head() {
+                            let tail = s.tail();
 
-                        self.state_stack.push(Addr::Con(Constant::String(tail)));
-                        self.state_stack.push(Addr::Con(Constant::Char(c)));
-                    }
+                            self.state_stack.push(Addr::Con(Constant::String(tail)));
+                            self.state_stack.push(Addr::Con(Constant::Char(c)));
+                        },
+                    DoubleQuotes::Codes =>
+                        if let Some(c) = s.head() {
+                            let tail = s.tail();
 
-                    Addr::Con(Constant::String(s.clone()))
-                },
+                            self.state_stack.push(Addr::Con(Constant::String(tail)));
+                            self.state_stack.push(Addr::Con(Constant::CharCode(c as u8)));
+                        },
+                    _ => {}
+                }
+
+                Addr::Con(Constant::String(s.clone()))
+            },
             Addr::Con(_) | Addr::DBRef(_) => da,
             Addr::Lis(a) => {
                 self.state_stack.push(Addr::HeapCell(a + 1));
@@ -147,7 +157,7 @@ impl<HCIter: Iterator<Item=HeapCellValue>> Iterator for HCPostOrderIterator<HCIt
 
 pub type HCProperPostOrderIterator<'a> = HCPostOrderIterator<HCPreOrderIterator<'a>>;
 
-impl MachineState { 
+impl MachineState {
     pub fn pre_order_iter<'a>(&'a self, a: Addr) -> HCPreOrderIterator<'a> {
         HCPreOrderIterator::new(self, a)
     }
@@ -189,7 +199,7 @@ impl<HCIter: MutStackHCIterator> HCAcyclicIterator<HCIter>
 
 impl<HCIter> Deref for HCAcyclicIterator<HCIter> {
     type Target = HCIter;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.iter
     }
@@ -258,5 +268,5 @@ impl<HCIter> Iterator for HCZippedAcyclicIterator<HCIter>
             },
             _ => None
         }
-    }    
+    }
 }

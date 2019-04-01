@@ -188,15 +188,15 @@ impl MachineState {
       where Outputter: HCValueOutputter
     {
         let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
-        
+
         printer.see_all_locs();
         printer.quoted = true;
-        
+
         printer.print(addr)
     }
 
     pub(super)
-    fn unify_string(&mut self, pdl: &mut Vec<Addr>, s1: &mut StringList, s2: &mut StringList) -> bool
+    fn unify_strings(&mut self, pdl: &mut Vec<Addr>, s1: &mut StringList, s2: &mut StringList) -> bool
     {
         if let Some(c1) = s1.head() {
             if let Some(c2) = s2.head() {
@@ -240,6 +240,86 @@ impl MachineState {
         false
     }
 
+    fn deconstruct_chars(&mut self, s: &mut StringList, offset: usize, pdl: &mut Vec<Addr>) -> bool
+    {
+        if let Some(c) = s.head() {
+            pdl.push(Addr::Con(Constant::String(s.tail())));
+            pdl.push(Addr::HeapCell(offset + 1));
+
+            pdl.push(Addr::Con(Constant::Char(c)));
+            pdl.push(Addr::HeapCell(offset));
+
+            return true;
+        } else if s.is_expandable() {
+            let prev_s = s.clone();
+
+            let mut stepper = |c| {
+                let new_s = s.push_char(c);
+
+                pdl.push(Addr::HeapCell(offset + 1));
+                pdl.push(Addr::Con(Constant::String(new_s)));
+            };
+
+            match self.heap[offset].clone() {
+                HeapCellValue::Addr(Addr::Con(Constant::Char(c))) => {
+                    self.pstr_trail(prev_s);
+                    stepper(c);
+                    return true;
+                },
+                HeapCellValue::Addr(Addr::Con(Constant::Atom(ref a, _))) =>
+                    if let Some(c) = a.as_str().chars().next() {
+                        if c.len_utf8() == a.as_str().len() {
+                            self.pstr_trail(prev_s);
+                            stepper(c);
+                            return true;
+                        }
+                    },
+                _ => {}
+            }
+        }
+
+        false
+    }
+
+    fn deconstruct_codes(&mut self, s: &mut StringList, offset: usize, pdl: &mut Vec<Addr>) -> bool
+    {
+        if let Some(c) = s.head() {
+            pdl.push(Addr::Con(Constant::String(s.tail())));
+            pdl.push(Addr::HeapCell(offset + 1));
+
+            pdl.push(Addr::Con(Constant::CharCode(c as u8)));
+            pdl.push(Addr::HeapCell(offset));
+
+            return true;
+        } else if s.is_expandable() {
+            let prev_s = s.clone();
+
+            let mut stepper = |c| {
+                let new_s = s.push_char(c);
+
+                pdl.push(Addr::HeapCell(offset + 1));
+                pdl.push(Addr::Con(Constant::String(new_s)));
+            };
+
+            match self.heap[offset].clone() {
+                HeapCellValue::Addr(Addr::Con(Constant::CharCode(c))) => {
+                    self.pstr_trail(prev_s);
+                    stepper(c as char);
+                    return true;
+                },
+                HeapCellValue::Addr(Addr::Con(Constant::Number(Number::Integer(n)))) =>
+                    if let Some(c) = n.to_u8() {
+                        self.pstr_trail(prev_s);
+                        stepper(c as char);
+                        return true;
+                    },
+                _ => {}
+            }
+        }
+
+        false
+    }
+
     pub(super) fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
 
@@ -277,49 +357,20 @@ impl MachineState {
                         self.fail = true;
                     },
                     (Addr::Lis(a1), Addr::Con(Constant::String(ref mut s)))
-                        | (Addr::Con(Constant::String(ref mut s)), Addr::Lis(a1))
-                        if self.flags.double_quotes.is_chars() => {
-                            if let Some(c) = s.head() {
-                                pdl.push(Addr::Con(Constant::String(s.tail())));
-                                pdl.push(Addr::HeapCell(a1 + 1));
+                  | (Addr::Con(Constant::String(ref mut s)), Addr::Lis(a1)) => {
+                      if match self.flags.double_quotes {
+                          DoubleQuotes::Chars => self.deconstruct_chars(s, a1, &mut pdl),
+                          DoubleQuotes::Codes => self.deconstruct_codes(s, a1, &mut pdl),
+                          DoubleQuotes::Atom  => false
+                      } {
+                          continue;
+                      }
 
-                                pdl.push(Addr::Con(Constant::Char(c)));
-                                pdl.push(Addr::HeapCell(a1));
-
-                                continue;
-                            } else if s.is_expandable() {
-                                let prev_s = s.clone();
-
-                                let mut stepper = |c| {
-                                    let new_s = s.push_char(c);
-
-                                    pdl.push(Addr::HeapCell(a1 + 1));
-                                    pdl.push(Addr::Con(Constant::String(new_s)));
-                                };
-
-                                match self.heap[a1].clone() {
-                                    HeapCellValue::Addr(Addr::Con(Constant::Char(c))) => {
-                                        self.pstr_trail(prev_s);
-                                        stepper(c);
-                                        continue;
-                                    },
-                                    HeapCellValue::Addr(Addr::Con(Constant::Atom(ref a, _))) =>
-                                        if let Some(c) = a.as_str().chars().next() {
-                                            if c.len_utf8() == a.as_str().len() {
-                                                self.pstr_trail(prev_s);
-                                                stepper(c);
-                                                continue;
-                                            }
-                                        },
-                                    _ => {}
-                                };
-                            }
-
-                            self.fail = true;
-                        },
+                      self.fail = true;
+                    },
                     (Addr::Con(Constant::EmptyList), Addr::Con(Constant::String(ref s)))
-                        | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
-                        if self.flags.double_quotes.is_chars() => {
+                  | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
+                        if !self.flags.double_quotes.is_atom() => {
                             if s.is_expandable() && s.is_empty() {
                                 self.pstr_trail(s.clone());
                                 s.set_expandable(false);
@@ -337,8 +388,8 @@ impl MachineState {
                     },
                     (Addr::Con(Constant::String(ref mut s1)),
                      Addr::Con(Constant::String(ref mut s2))) =>
-                        self.fail = !(self.unify_string(&mut pdl, s1, s2)
-                                      || self.unify_string(&mut pdl, s2, s1)),
+                        self.fail = !(self.unify_strings(&mut pdl, s1, s2)
+                                   || self.unify_strings(&mut pdl, s2, s1)),
                     (Addr::Con(ref c1), Addr::Con(ref c2)) =>
                         if c1 != c2 {
                             self.fail = true;
@@ -523,51 +574,81 @@ impl MachineState {
         false
     }
 
-    pub(super) fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
-        match self.store(self.deref(addr)) {
-            Addr::Con(Constant::String(ref mut s)) =>
-                self.fail = match c {
-                    Constant::EmptyList if self.flags.double_quotes.is_chars() =>
-                        !s.is_empty(),
-                    Constant::String(ref s2)
-                        if s.is_expandable() && s2.starts_with(s) => {
-                            self.pstr_trail(s.clone());
-                            s.append_suffix(s2);
-                            s.set_expandable(s2.is_expandable());
-                            false
-                        },
-                    Constant::String(s2) => *s != s2,
-                    Constant::Atom(ref a, _)
-                        if a.as_str().starts_with(&s.borrow()[s.cursor() ..]) =>
-                            if let Some(c) = a.as_str().chars().next() {
-                                if c.len_utf8() == a.as_str().len() {
-                                    // detect chars masquerading as atoms.
-                                    if s.is_empty() {
-                                        self.write_char_to_string(s, c);
-                                    }
+    fn write_constant_to_string(&mut self, s: &mut StringList, c: Constant) -> bool {
+        match c {
+            Constant::EmptyList if !self.flags.double_quotes.is_atom() =>
+                !s.is_empty(),
+            Constant::String(ref s2)
+                if s.is_expandable() && s2.starts_with(s) => {
+                    self.pstr_trail(s.clone());
+                    s.append_suffix(s2);
+                    s.set_expandable(s2.is_expandable());
+                    false
+                },
+            Constant::String(s2) =>
+                s.borrow()[s.cursor() ..] != s2.borrow()[s2.cursor() ..],
+            Constant::Atom(ref a, _)
+                if a.as_str().starts_with(&s.borrow()[s.cursor() ..]) =>
+                if let Some(c) = a.as_str().chars().next() {
+                    if c.len_utf8() == a.as_str().len() {
+                        // detect chars masquerading as atoms.
+                        if s.is_empty() {
+                            self.write_char_to_string(s, c);
+                        }
 
-                                    false
-                                } else {
-                                    true
-                                }
-                            } else {
-                                true
-                            },
-                    Constant::Char(ref c) if s.is_empty() && s.is_expandable() =>
-                        self.write_char_to_string(s, *c),
-                    Constant::Char(ref c) =>
+                        false
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                },
+            Constant::Char(ref c) if s.is_empty() && s.is_expandable() =>
+                match self.flags.double_quotes {
+                    DoubleQuotes::Chars => self.write_char_to_string(s, *c),
+                    _ => false
+                },
+            Constant::Char(ref c) =>
+                match self.flags.double_quotes {
+                    DoubleQuotes::Chars =>
                         if s.borrow().chars().next() == Some(*c) && c.len_utf8() == s.len() {
                             s.set_expandable(false);
                             false
                         } else {
                             true
                         },
-                    _ => true
+                    _ => false
                 },
+            Constant::CharCode(ref c) if s.is_empty() && s.is_expandable() =>
+                match self.flags.double_quotes {
+                    DoubleQuotes::Codes => self.write_char_to_string(s, *c as char),
+                    _ => false
+                },
+            Constant::CharCode(ref c) =>
+                match self.flags.double_quotes {
+                    DoubleQuotes::Codes =>
+                        if s.borrow().chars().next() == Some(*c as char) && 1 == s.len() {
+                            s.set_expandable(false);
+                            false
+                        } else {
+                            true
+                        },
+                    _ => false
+                },
+            _ => true
+        }
+    }
+
+    pub(super) fn write_constant_to_var(&mut self, addr: Addr, c: Constant) {
+        match self.store(self.deref(addr)) {
+            Addr::Con(Constant::String(ref mut s)) =>
+                self.fail = self.write_constant_to_string(s, c),
             Addr::Con(c1) =>
                 if c1 != c {
                     self.fail = true;
                 },
+            Addr::Lis(l) =>
+                self.unify(Addr::Lis(l), Addr::Con(c)),
             addr => if let Some(r) = addr.as_var() {
                 self.bind(r, Addr::Con(c));
             } else {
@@ -1207,7 +1288,7 @@ impl MachineState {
 
                 let offset = match addr {
                     Addr::HeapCell(_) | Addr::StackCell(..) | Addr::AttrVar(..) => v,
-                    Addr::Con(Constant::String(_)) if self.flags.double_quotes.is_chars() => l,
+                    Addr::Con(Constant::String(_)) if !self.flags.double_quotes.is_atom() => l,
                     Addr::Con(_) => c,
                     Addr::Lis(_) => l,
                     Addr::Str(_) => s,

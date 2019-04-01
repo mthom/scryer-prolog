@@ -736,7 +736,9 @@ impl MachineState {
                     DoubleQuotes::Chars =>
                         self.unify(a1, Addr::Con(atom!("chars"))),
                     DoubleQuotes::Atom =>
-                        self.unify(a1, Addr::Con(atom!("atom")))
+                        self.unify(a1, Addr::Con(atom!("atom"))),
+                    DoubleQuotes::Codes =>
+                        self.unify(a1, Addr::Con(atom!("codes")))
                 }
             },
             &SystemClauseType::GetSCCCleaner => {
@@ -985,6 +987,8 @@ impl MachineState {
                         self.flags.double_quotes = DoubleQuotes::Chars,
                     Addr::Con(Constant::Atom(ref atom, _)) if atom.as_str() == "atom" =>
                         self.flags.double_quotes = DoubleQuotes::Atom,
+                    Addr::Con(Constant::Atom(ref atom, _)) if atom.as_str() == "codes" =>
+                        self.flags.double_quotes = DoubleQuotes::Codes,
                     _ => self.fail = true
                 },
             &SystemClauseType::InferenceLevel => {

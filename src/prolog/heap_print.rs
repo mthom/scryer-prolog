@@ -1,4 +1,5 @@
 use prolog_parser::ast::*;
+use prolog_parser::string_list::*;
 
 use prolog::clause_types::*;
 use prolog::heap_iter::*;
@@ -652,34 +653,43 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                 } else {
                     self.print_char(c);
                 },
+            Constant::CharCode(c) =>
+                self.append_str(&format!("{}", c)),            
             Constant::EmptyList =>
                 self.append_str("[]"),
             Constant::Number(n) =>
                 self.print_number(n, op),
             Constant::String(s) =>
-                if self.machine_st.machine_flags().double_quotes.is_chars() {
-                    if !s.is_empty() {
-                        if self.ignore_ops {
-                            self.format_struct(2, clause_name!("."));
-                        } else {
-                            self.push_list();
-                        }
-                    } else if s.is_expandable() {
-                        if !self.at_cdr(" | _") {
-                            self.push_char('_');
-                        }
-                    } else if !self.at_cdr("") {
-                        self.append_str("[]");
-                    }
-                } else { // for now, == DoubleQuotes::Atom
-                    let borrowed_str = s.borrow();
-
-                    self.push_char('"');
-                    self.append_str(&borrowed_str[s.cursor() ..]);
-                    self.push_char('"');
-                },
+                self.print_string(s),
             Constant::Usize(i) =>
                 self.append_str(&format!("u{}", i))
+        }
+    }
+
+    fn print_string(&mut self, s: StringList) {
+        match self.machine_st.machine_flags().double_quotes {
+            DoubleQuotes::Chars | DoubleQuotes::Codes => {
+                if !s.is_empty() {
+                    if self.ignore_ops {
+                        self.format_struct(2, clause_name!("."));
+                    } else {
+                        self.push_list();
+                    }
+                } else if s.is_expandable() {
+                    if !self.at_cdr(" | _") {
+                        self.push_char('_');
+                    }
+                } else if !self.at_cdr("") {
+                    self.append_str("[]");
+                }
+            },
+            DoubleQuotes::Atom => {
+                let borrowed_str = s.borrow();
+
+                self.push_char('"');
+                self.append_str(&borrowed_str[s.cursor() ..]);
+                self.push_char('"');
+            }
         }
     }
 

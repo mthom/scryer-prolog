@@ -107,7 +107,9 @@ set_prolog_flag(integer_rounding_function, Value) :-
 set_prolog_flag(double_quotes, chars) :-
     !, '$set_double_quotes'(chars). % 7.11.2.5, list of one-char atoms.
 set_prolog_flag(double_quotes, atom) :-
-    !, '$set_double_quotes'(atom). % 7.11.2.5, list of one-char atoms.
+    !, '$set_double_quotes'(atom). % 7.11.2.5, list of char codes (UTF8).
+set_prolog_flag(double_quotes, codes) :-
+    !, '$set_double_quotes'(codes). 
 set_prolog_flag(double_quotes, Value) :-
     throw(error(domain_error(flag_value, double_quotes + Value),
 		set_prolog_flag/2)). % 8.17.1.3 e
