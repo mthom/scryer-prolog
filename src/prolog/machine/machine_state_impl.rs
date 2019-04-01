@@ -14,7 +14,7 @@ use prolog::machine::or_stack::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
-use prolog::num::{Integer, Signed, ToPrimitive, Zero};
+use prolog::num::{Integer, Signed, ToPrimitive, One, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
 
@@ -1913,6 +1913,13 @@ impl MachineState {
 
                 match d {
                     Addr::Con(Constant::Number(Number::Integer(_))) => self.p += 1,
+                    Addr::Con(Constant::CharCode(_)) => self.p += 1,
+                    Addr::Con(Constant::Number(Number::Rational(r))) =>
+                        if r.denom() == &BigInt::one() {
+                            self.p += 1;
+                        } else {
+                            self.fail = true;
+                        },
                     _ => self.fail = true
                 };
             },

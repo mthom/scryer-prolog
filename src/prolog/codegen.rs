@@ -408,7 +408,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 },
             &InlinedClauseType::IsInteger(..) =>
                 match terms[0].as_ref() {
-                    &Term::Constant(_, Constant::Number(Number::Integer(_))) => {
+                    &Term::Constant(_, Constant::CharCode(_))
+                  | &Term::Constant(_, Constant::Number(Number::Integer(_))) => {
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {

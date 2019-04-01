@@ -1,9 +1,9 @@
-:- module(dcgs, [(-->)/2, phrase/2, phrase/3]).
+:- op(1200, xfx, -->).
+
+:- module(dcgs, [phrase/2, phrase/3]).
 
 :- use_module(library(lists), [append/3]).
 :- use_module(library(terms)).
-
-:- op(1200, xfx, -->).
 
 phrase(G, G) :-
     nonvar(G), G = [_|_], !.

@@ -536,16 +536,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
     fn print_atom(&mut self, atom: &ClauseName) {
         push_space_if_amb!(self, atom.as_str(), {
-            match atom.as_str() {
-                "''" => self.append_str("''"),
-                s => self.print_op_addendum(s)
-            }
+            self.print_op_addendum(atom.as_str());
         });
     }
 
     fn print_op_addendum(&mut self, atom: &str) {
         if !self.quoted || non_quoted_token(atom.chars()) {
             self.append_str(atom);
+        } else if atom == "''" {
+            self.append_str("''");
         } else {
             if self.quoted {
                 self.push_char('\'');
