@@ -738,9 +738,10 @@ op_specifier(OpSpec) :- atom(OpSpec),
     ).
 op_specifier(OpSpec) :- throw(error(type_error(atom, OpSpec), op/3)).
 
-valid_op(Op) :- atom(Op),
+valid_op(Op) :- atom(Op),    
     (  Op == (,) -> throw(error(permission_error(modify, operator, (,)), op/3)) % 8.14.3.3 j), k).
-    ;  Op == '|' -> throw(error(permission_error(create, operator, (|)), op/3)) % www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing#72
+    ;  Op == {} -> throw(error(permission_error(create, operator, {}), op/3))
+    ;  Op == [] -> throw(error(permission_error(create, operator, []), op/3))
     ;  true
     ).
 
@@ -750,6 +751,10 @@ op(Priority, OpSpec, Op) :-
     (  var(Priority) -> throw(error(instantiation_error, op/3)) % 8.14.3.3 a)
     ;  var(OpSpec)   -> throw(error(instantiation_error, op/3)) % 8.14.3.3 b)
     ;  var(Op)       -> throw(error(instantiation_error, op/3)) % 8.14.3.3 c)
+    ;  Op == '|'     -> (  op_priority(Priority), op_specifier(OpSpec),
+			   lists:member(OpSpec, [xfx, xfy, yfx]), Priority >= 1001
+			-> '$op'(Priority, OpSpec, Op)
+			;  throw(error(permission_error(create, operator, (|)), op/3))) % www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing#72
     ;  valid_op(Op), op_priority(Priority), op_specifier(OpSpec) ->
        '$op'(Priority, OpSpec, Op)
     ;  list_of_op_atoms(Op), op_priority(Priority), op_specifier(OpSpec) ->
