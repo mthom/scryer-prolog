@@ -110,7 +110,7 @@ set_prolog_flag(double_quotes, chars) :-
 set_prolog_flag(double_quotes, atom) :-
     !, '$set_double_quotes'(atom). % 7.11.2.5, list of char codes (UTF8).
 set_prolog_flag(double_quotes, codes) :-
-    !, '$set_double_quotes'(codes). 
+    !, '$set_double_quotes'(codes).
 set_prolog_flag(double_quotes, Value) :-
     throw(error(domain_error(flag_value, double_quotes + Value),
 		set_prolog_flag/2)). % 8.17.1.3 e
@@ -427,14 +427,32 @@ iterate_variants([V-Solution|GroupSolutions], V, Solution).
 iterate_variants([_|GroupSolutions], Ws, Solution) :-
     iterate_variants(GroupSolutions, Ws, Solution).
 
+rightmost_power(Term, FinalTerm, Xs) :-
+    (  Term = X ^ Y
+    -> (  var(Y) -> FinalTerm = Y, Xs = [X]
+       ;  Xs = [X | Xss], rightmost_power(Y, FinalTerm, Xss)
+       )
+    ;  Xs = [], FinalTerm = Term
+    ).
+
+findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses) :-
+    (  nonvar(Goal), Goal = _ ^ _ ->
+       rightmost_power(Goal, Goal1, ExistentialVars0),
+       term_variables(ExistentialVars0, ExistentialVars),
+       set_difference(Witnesses0, ExistentialVars, Witnesses),
+       findall(Witnesses-Template, Goal1, PairedSolutions)
+    ;  Witnesses = Witnesses0,
+       findall(Witnesses-Template, Goal, PairedSolutions)
+    ).
+    
 bagof(Template, Goal, Solution) :-
     error:can_be(list, Solution),
     term_variables(Template, TemplateVars0),
     term_variables(Goal, GoalVars0),
     sort(TemplateVars0, TemplateVars),
     sort(GoalVars0, GoalVars),
-    set_difference(GoalVars, TemplateVars, Witnesses),
-    findall(Witnesses-Template, Goal, PairedSolutions0),
+    set_difference(GoalVars, TemplateVars, Witnesses0),
+    findall_with_existential(Template, Goal, PairedSolutions0, Witnesses0, Witnesses),
     keysort(PairedSolutions0, PairedSolutions),
     group_by_variants(PairedSolutions, GroupedSolutions),
     iterate_variants(GroupedSolutions, Witnesses, Solution).
@@ -450,8 +468,8 @@ setof(Template, Goal, Solution) :-
     term_variables(Goal, GoalVars0),
     sort(TemplateVars0, TemplateVars),
     sort(GoalVars0, GoalVars),
-    set_difference(GoalVars, TemplateVars, Witnesses),
-    findall(Witnesses-Template, Goal, PairedSolutions0),
+    set_difference(GoalVars, TemplateVars, Witnesses0),
+    findall_with_existential(Template, Goal, PairedSolutions0, Witnesses0, Witnesses),
     keysort(PairedSolutions0, PairedSolutions),
     group_by_variants(PairedSolutions, GroupedSolutions),
     iterate_variants_and_sort(GroupedSolutions, Witnesses, Solution).
@@ -721,8 +739,9 @@ op_specifier(OpSpec) :- atom(OpSpec),
 op_specifier(OpSpec) :- throw(error(type_error(atom, OpSpec), op/3)).
 
 valid_op(Op) :- atom(Op),
-    (  Op \== (,) -> true
-    ;  throw(error(permission_error(modify, operator, (,)), op/3)) % 8.14.3.3 j), k).
+    (  Op == (,) -> throw(error(permission_error(modify, operator, (,)), op/3)) % 8.14.3.3 j), k).
+    ;  Op == '|' -> throw(error(permission_error(create, operator, (|)), op/3)) % www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing#72
+    ;  true
     ).
 
 op_(Priority, OpSpec, Op) :- '$op'(Priority, OpSpec, Op).

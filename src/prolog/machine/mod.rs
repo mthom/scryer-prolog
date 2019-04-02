@@ -427,9 +427,9 @@ impl Machine {
         for (var, addr) in sorted_vars {
             let addr = self.machine_st.store(self.machine_st.deref(addr.clone()));
 
-            if addr.is_ref() {
-                continue;
-            }
+//            if addr.is_ref() {
+//                continue;
+//            }
 
             output = self.machine_st.print_var_eq(var.clone(), addr, var_dir, output);
         }
