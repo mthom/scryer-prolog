@@ -1802,6 +1802,13 @@ fn test_queries_on_builtins()
                            [["S = [_240, 1, 2]", "X = _0", "Y = _5"]]);
     assert_prolog_success!(&mut wam, "?- setof(X, (exists(U,V) ^ member(X, [V,U,f(U),f(V)])), [a,b,f(b),f(a)]).");
         
+    assert_prolog_failure!(&mut wam, "?- forall(true, fail).");
+    assert_prolog_success!(&mut wam, "?- forall(fail, true)");
+    assert_prolog_success!(&mut wam, "?- catch(forall(_, true), error(instantiation_error, _), true).");
+    assert_prolog_success!(&mut wam, "?- catch(forall(true, _), error(instantiation_error, _), true).");
+    assert_prolog_success!(&mut wam, "?- catch(forall(1, true), error(type_error(callable, 1), _), true).");
+    assert_prolog_success!(&mut wam, "?- catch(forall(true, 1), error(type_error(callable, 1), _), true).");
+
     submit(&mut wam, "
 :- dynamic(cat/0).
 cat.

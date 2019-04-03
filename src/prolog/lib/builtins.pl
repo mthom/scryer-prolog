@@ -10,7 +10,7 @@
 	bb_get/2, bb_put/2, call_cleanup/2,
 	call_with_inference_limit/3, catch/3, clause/2,
 	current_predicate/1, current_prolog_flag/2, expand_goal/2,
-	expand_term/2, findall/3, findall/4, halt/0, once/1, op/3,
+	expand_term/2, findall/3, findall/4, forall/2, halt/0, once/1, op/3,
 	repeat/0, retract/1, set_prolog_flag/2, setof/3,
 	setup_call_cleanup/3, term_variables/2, throw/1, true/0,
 	false/0, write/1, write_canonical/1, writeq/1, write_term/2]).
@@ -404,6 +404,9 @@ findall(Template, Goal, Solutions0, Solutions1) :-
 							       Solutions1, LhLength),
 				      Error,
 				      ( truncate_lh_to(LhLength), throw(Error) ))).
+
+forall(Generate, Test) :-
+    \+ (Generate, \+ Test).
 
 set_difference([X|Xs], [Y|Ys], Zs) :-
     X == Y, !, set_difference(Xs, [Y|Ys], Zs).

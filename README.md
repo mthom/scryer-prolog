@@ -44,7 +44,7 @@ Extend Scryer Prolog to include the following, among other features:
          - [x] `call_residue_vars/2`
 - [x] `if_` and related predicates, following the developments of the
       paper "Indexing `dif/2`".
-- [x] All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`).
+- [x] All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`, `forall/2`).
 - [x] Clause creation and destruction (`asserta/1`, `assertz/1`,
       `retract/1`, `abolish/1`) with logical update semantics.
 - [x] Backtrackable and non-backtrackable global variables via `bb_get/2`
@@ -182,6 +182,7 @@ The following predicates are built-in to Scryer.
 * `false/0`
 * `findall/{3,4}`
 * `float/1`
+* `forall/2`
 * `freeze/2`
 * `functor/3`
 * `gen_int/1`
