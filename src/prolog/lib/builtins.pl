@@ -81,6 +81,8 @@ current_prolog_flag(Flag, Value) :- Flag == double_quotes, !, '$get_double_quote
 current_prolog_flag(double_quotes, Value) :- '$get_double_quotes'(Value).
 current_prolog_flag(Flag, _) :- Flag == max_integer, !, '$fail'.
 current_prolog_flag(Flag, _) :- Flag == min_integer, !, '$fail'.
+current_prolog_flag(dialect, scryer). % Prolog Commons
+current_prolog_flag(version_data, scryer(0, 8, 39, [])). % Prolog Commons
 current_prolog_flag(Flag, _) :-
     atom(Flag),
     throw(error(domain_error(prolog_flag, Flag), current_prolog_flag/2)). % 8.17.2.3 b
@@ -104,7 +106,7 @@ set_prolog_flag(min_integer, Value) :-
 set_prolog_flag(integer_rounding_function, down) :- !. % 7.11.1.4
 set_prolog_flag(integer_rounding_function, Value) :-
     throw(error(domain_error(flag_value, integer_rounding_function + Value),
-		set_prolog_flag/2)). % 8.17.1.3 e
+        set_prolog_flag/2)). % 8.17.1.3 e
 set_prolog_flag(double_quotes, chars) :-
     !, '$set_double_quotes'(chars). % 7.11.2.5, list of one-char atoms.
 set_prolog_flag(double_quotes, atom) :-
@@ -113,7 +115,15 @@ set_prolog_flag(double_quotes, codes) :-
     !, '$set_double_quotes'(codes).
 set_prolog_flag(double_quotes, Value) :-
     throw(error(domain_error(flag_value, double_quotes + Value),
-		set_prolog_flag/2)). % 8.17.1.3 e
+        set_prolog_flag/2)). % 8.17.1.3 e
+set_prolog_flag(dialect, _) :- % Prolog Commons
+    throw(error(permission_error(modify, flag, dialect),
+        set_prolog_flag/2)). % 8.17.1.3 f
+set_prolog_flag(version_data, _) :- % Prolog Commons
+    throw(error(permission_error(modify, flag, version_data),
+        set_prolog_flag/2)). % 8.17.1.3 f
+
+
 set_prolog_flag(Flag, _) :-
     atom(Flag),
     throw(error(domain_error(prolog_flag, Flag), set_prolog_flag/2)). % 8.17.1.3 d

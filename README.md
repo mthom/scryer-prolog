@@ -175,6 +175,7 @@ The following predicates are built-in to Scryer.
 * `compound/1`
 * `copy_term/2`
 * `current_predicate/1`
+* `current_prolog_flag/2`
 * `cyclic_term/1`
 * `dif/2`
 * `expand_goal/2`
@@ -215,6 +216,7 @@ The following predicates are built-in to Scryer.
 * `select/3`
 * `setof/3`
 * `setup_call_cleanup/3`
+* `set_prolog_flag/2`
 * `sort/2`
 * `string/1`
 * `term_expansion/2`
