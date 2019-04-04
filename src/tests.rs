@@ -1801,9 +1801,11 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- setof(X, Y^((X = 1 ; Y = 1) ; (X = 2, Y = 2)), S).",
                            [["S = [_240, 1, 2]", "X = _0", "Y = _5"]]);
     assert_prolog_success!(&mut wam, "?- setof(X, (exists(U,V) ^ member(X, [V,U,f(U),f(V)])), [a,b,f(b),f(a)]).");
-        
-    assert_prolog_failure!(&mut wam, "?- forall(true, fail).");
-    assert_prolog_success!(&mut wam, "?- forall(fail, true)");
+
+    submit(&mut wam, ":- use_module(library(non_iso)).");
+    
+    assert_prolog_failure!(&mut wam, "?- forall(true, false).");
+    assert_prolog_success!(&mut wam, "?- forall(false, true).");
     assert_prolog_success!(&mut wam, "?- catch(forall(_, true), error(instantiation_error, _), true).");
     assert_prolog_success!(&mut wam, "?- catch(forall(true, _), error(instantiation_error, _), true).");
     assert_prolog_success!(&mut wam, "?- catch(forall(1, true), error(type_error(callable, 1), _), true).");

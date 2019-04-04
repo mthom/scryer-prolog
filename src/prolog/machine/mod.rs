@@ -143,6 +143,7 @@ impl SubModuleUser for IndexStore {
 }
 
 static BUILTINS: &str = include_str!("../lib/builtins.pl");
+static NON_ISO: &str  = include_str!("../lib/non_iso.pl");
 static LISTS: &str    = include_str!("../lib/lists.pl");
 static QUEUES: &str   = include_str!("../lib/queues.pl");
 static ERROR: &str    = include_str!("../lib/error.pl");
@@ -176,6 +177,7 @@ impl Machine {
     }
 
     fn compile_libraries(&mut self) {
+        compile_user_module(self, NON_ISO.as_bytes());
         compile_user_module(self, LISTS.as_bytes());
         compile_user_module(self, QUEUES.as_bytes());
         compile_user_module(self, ERROR.as_bytes());
