@@ -129,7 +129,6 @@ ref_thread_local! {
         m.insert(("\\==", 2), ClauseType::BuiltIn(BuiltInClauseType::NotEq));
         m.insert(("partial_string", 2), ClauseType::BuiltIn(BuiltInClauseType::PartialString));
         m.insert(("read", 1), ClauseType::BuiltIn(BuiltInClauseType::Read));
-        m.insert(("$reify_switch", 3), ClauseType::BuiltIn(BuiltInClauseType::ReifySwitch));
         m.insert(("sort", 2), ClauseType::BuiltIn(BuiltInClauseType::Sort));
 
         m
@@ -391,7 +390,6 @@ pub enum BuiltInClauseType {
     NotEq,
     PartialString,
     Read,
-    ReifySwitch,
     Sort,
 }
 
@@ -424,7 +422,6 @@ impl BuiltInClauseType {
             &BuiltInClauseType::NotEq => clause_name!("\\=="),
             &BuiltInClauseType::PartialString => clause_name!("partial_string"),
             &BuiltInClauseType::Read => clause_name!("read"),
-            &BuiltInClauseType::ReifySwitch => clause_name!("$reify_switch"),
             &BuiltInClauseType::Sort => clause_name!("sort"),
         }
     }
@@ -446,7 +443,6 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Nl => 0,
             &BuiltInClauseType::PartialString => 1,
             &BuiltInClauseType::Read => 1,
-            &BuiltInClauseType::ReifySwitch => 3,
             &BuiltInClauseType::Sort => 2,
         }
     }
