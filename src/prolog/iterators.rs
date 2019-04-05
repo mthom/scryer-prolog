@@ -45,10 +45,9 @@ impl<'a> TermIterState<'a> {
         match term {
             &Term::AnonVar =>
                 TermIterState::AnonVar(lvl),
-            &Term::Clause(ref cell, ref name, ref subterms, spec) => {
+            &Term::Clause(ref cell, ref name, ref subterms, ref spec) => {
                 let ct = if let Some(spec) = spec {
-                    let op_decl = OpDecl(spec.0, spec.1, name.clone());
-                    ClauseType::Op(op_decl, CodeIndex::default())
+                    ClauseType::Op(name.clone(), spec.clone(), CodeIndex::default())
                 } else {
                     ClauseType::Named(name.clone(), subterms.len(), CodeIndex::default())
                 };
@@ -86,9 +85,9 @@ impl<'a> QueryIterator<'a> {
         let state = match term {
             &Term::AnonVar =>
                 return QueryIterator { state_stack: vec![] },
-            &Term::Clause(ref r, ref name, ref terms, fixity) =>
+            &Term::Clause(ref r, ref name, ref terms, ref fixity) =>
                 TermIterState::Clause(Level::Root, 0, r,
-                                      ClauseType::from(name.clone(), terms.len(), fixity),
+                                      ClauseType::from(name.clone(), terms.len(), fixity.clone()),
                                       terms),
             &Term::Cons(..) =>
                 return QueryIterator { state_stack: vec![] },
@@ -200,8 +199,8 @@ impl<'a> FactIterator<'a> {
         let states = match term {
             &Term::AnonVar =>
                 vec![TermIterState::AnonVar(Level::Root)],
-            &Term::Clause(ref cell, ref name, ref terms, fixity) => {
-                let ct = ClauseType::from(name.clone(), terms.len(), fixity);
+            &Term::Clause(ref cell, ref name, ref terms, ref fixity) => {
+                let ct = ClauseType::from(name.clone(), terms.len(), fixity.clone());
                 vec![TermIterState::Clause(Level::Root, 0, cell, ct, terms)]
             },
             &Term::Cons(ref cell, ref head, ref tail) =>

@@ -28,8 +28,8 @@ impl<'a> ArithInstructionIterator<'a> {
         let state = match term {
             &Term::AnonVar =>
                 return Err(ArithmeticError::InvalidTerm),
-            &Term::Clause(ref cell, ref name, ref terms, fixity) =>
-                match ClauseType::from(name.clone(), terms.len(), fixity) {
+            &Term::Clause(ref cell, ref name, ref terms, ref fixity) =>
+                match ClauseType::from(name.clone(), terms.len(), fixity.clone()) {
                     ct @ ClauseType::Named(..) | ct @ ClauseType::Op(..) =>
                         Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms)),
                     _ => Err(ArithmeticError::InvalidOp)

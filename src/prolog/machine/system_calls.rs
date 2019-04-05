@@ -570,8 +570,8 @@ impl MachineState {
                 }
             },
             &SystemClauseType::OpDeclaration => {
-                let priority = self[temp_v!(1)].clone();
-                let specifier = self[temp_v!(2)].clone();
+                let priority  = self[temp_v!(1)].clone();
+                let specifier = self[temp_v!(2)].clone();                
                 let op = self[temp_v!(3)].clone();
 
                 let priority = match self.store(self.deref(priority)) {
@@ -599,8 +599,8 @@ impl MachineState {
                         if op_decl.0 == 0 {
                             Ok(op_decl.remove(&mut indices.op_dir))
                         } else {
-                            let desc = get_desc(op_decl.name(), composite_op!(&indices.op_dir));
-                            op_decl.submit(module, desc, &mut indices.op_dir)
+                            let spec = get_desc(op_decl.name(), composite_op!(&indices.op_dir));
+                            op_decl.submit(module, spec, &mut indices.op_dir)
                         }
                     });
 

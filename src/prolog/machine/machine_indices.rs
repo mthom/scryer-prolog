@@ -14,8 +14,8 @@ use std::rc::Rc;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum DBRef {
-    BuiltInPred(ClauseName, usize, Option<(usize, Specifier)>),
-    NamedPred(ClauseName, usize, Option<(usize, Specifier)>)
+    BuiltInPred(ClauseName, usize, Option<SharedOpDesc>),
+    NamedPred(ClauseName, usize, Option<SharedOpDesc>)
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -163,7 +163,7 @@ impl From<Ref> for TrailRef {
 #[derive(Clone, PartialEq)]
 pub enum HeapCellValue {
     Addr(Addr),
-    NamedStr(usize, ClauseName, Option<(usize, Specifier)>), // arity, name, precedence/Specifier if it has one.
+    NamedStr(usize, ClauseName, Option<SharedOpDesc>), // arity, name, precedence/Specifier if it has one.
 }
 
 impl HeapCellValue {
@@ -411,7 +411,7 @@ pub struct IndexStore {
 
 impl IndexStore {    
     pub fn predicate_exists(&self, name: ClauseName, module: ClauseName, arity: usize,
-                            op_spec: Option<(usize, Specifier)>)
+                            op_spec: Option<SharedOpDesc>)
                             -> bool
     {
         match self.modules.get(&module) {
@@ -419,8 +419,8 @@ impl IndexStore {
                 match ClauseType::from(name, arity, op_spec) {
                     ClauseType::Named(name, arity, _) =>
                         module.code_dir.contains_key(&(name, arity)),
-                    ClauseType::Op(op_decl, ..) =>
-                        module.code_dir.contains_key(&(op_decl.name(), op_decl.arity())),
+                    ClauseType::Op(name, spec, ..) =>
+                        module.code_dir.contains_key(&(name, spec.arity())),
                     _ =>
                         true
                 },
@@ -428,8 +428,8 @@ impl IndexStore {
                 match ClauseType::from(name, arity, op_spec) {
                     ClauseType::Named(name, arity, _) =>
                         self.code_dir.contains_key(&(name, arity)),
-                    ClauseType::Op(op_decl, ..) =>
-                        self.code_dir.contains_key(&(op_decl.name(), op_decl.arity())),
+                    ClauseType::Op(name, spec, ..) =>
+                        self.code_dir.contains_key(&(name, spec.arity())),
                     _ =>
                         true
                 }

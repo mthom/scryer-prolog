@@ -71,6 +71,11 @@ pub trait SubModuleUser
 
     fn insert_dir_entry(&mut self, ClauseName, usize, CodeIndex);
 
+    fn get_op_module_name(&mut self, name: ClauseName, fixity: Fixity) -> Option<ClauseName>
+    {
+        self.op_dir().get(&(name, fixity)).map(|op_val| op_val.owning_module())
+    }
+
     fn remove_module(&mut self, mod_name: ClauseName, module: &Module)
     {
         for (name, arity) in module.module_decl.exports.iter().cloned() {
@@ -86,21 +91,21 @@ pub trait SubModuleUser
 
                     // remove or respecify ops.
                     if arity == 2 {
-                        if let Some((_, _, mod_name)) = self.op_dir().get(&(name.clone(), Fixity::In)).cloned()
+                        if let Some(mod_name) = self.get_op_module_name(name.clone(), Fixity::In)
                         {
                             if mod_name == module.module_decl.name {
                                 self.op_dir().remove(&(name.clone(), Fixity::In));
                             }
                         }
                     } else if arity == 1 {
-                        if let Some((_, _, mod_name)) = self.op_dir().get(&(name.clone(), Fixity::Pre)).cloned()
+                        if let Some(mod_name) = self.get_op_module_name(name.clone(), Fixity::Pre)
                         {
                             if mod_name == module.module_decl.name {
                                 self.op_dir().remove(&(name.clone(), Fixity::Pre));
                             }
                         }
 
-                        if let Some((_, _, mod_name)) = self.op_dir().get(&(name.clone(), Fixity::Post)).cloned()
+                        if let Some(mod_name) = self.get_op_module_name(name.clone(), Fixity::Post)
                         {
                             if mod_name == module.module_decl.name {
                                 self.op_dir().remove(&(name.clone(), Fixity::Post));

@@ -177,30 +177,31 @@ impl OpDecl {
         self.2.clone()
     }
 
-    pub fn arity(&self) -> usize {
-        let spec = self.1;
-
-        if (spec | XFX != 0) || (spec | XFY != 0) || (spec | YFX != 0) {
-            2
-        } else {
-            1
-        }
-    }
-
+    #[inline]
     pub fn remove(&self, op_dir: &mut OpDir) {
+        self.insert_into_op_dir(clause_name!(""), op_dir, 0);
+    }
+    
+    fn insert_into_op_dir(&self, module: ClauseName, op_dir: &mut OpDir, prec: usize)
+    {
         let (spec, name) = (self.1, self.2.clone());
 
-        if is_prefix!(spec) {
-            op_dir.remove(&(name.clone(), Fixity::Pre));
+        let fixity = match spec {
+            XFY | XFX | YFX => Fixity::In,
+            XF | YF => Fixity::Post,
+            FX | FY => Fixity::Pre,
+            _ => return
+        };
+
+        match op_dir.get(&(name.clone(), fixity)) {
+            Some(cell) => {
+                cell.shared_op_desc().set(prec, spec);
+                return;
+            }
+            None => {}
         }
 
-        if is_infix!(spec) {
-            op_dir.remove(&(name.clone(), Fixity::In));
-        }
-
-        if is_postfix!(spec) {
-            op_dir.remove(&(name, Fixity::Post));
-        }
+        op_dir.insert((name, fixity), OpDirValue::new(spec, prec, module));
     }
 
     pub fn submit(&self, module: ClauseName, existing_desc: Option<OpDesc>, op_dir: &mut OpDir)
@@ -213,7 +214,7 @@ impl OpDecl {
                 if desc.post > 0 {
                     return Err(SessionError::OpIsInfixAndPostFix(name));
                 }
-            };
+            }
         }
 
         if is_postfix!(spec) {
@@ -221,23 +222,10 @@ impl OpDecl {
                 if desc.inf > 0 {
                     return Err(SessionError::OpIsInfixAndPostFix(name));
                 }
-            };
+            }
         }
 
-        match spec {
-            XFY | XFX | YFX => {
-                op_dir.insert((name.clone(), Fixity::In), (spec, prec, module.clone()));
-            },
-            XF | YF => {
-                op_dir.insert((name.clone(), Fixity::Post), (spec, prec, module.clone()));
-            },
-            FX | FY => {
-                op_dir.insert((name.clone(), Fixity::Pre), (spec, prec, module.clone()));
-            },
-            _ => {}
-        };
-
-        Ok(())
+        Ok(self.insert_into_op_dir(module, op_dir, prec))
     }
 }
 

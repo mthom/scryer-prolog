@@ -538,11 +538,11 @@ pub(crate) trait CallPolicy: Any {
 
                 let c = match machine_st.compare_term_test(&a2, &a3) {
                     Ordering::Greater => Addr::Con(Constant::Atom(clause_name!(">"),
-                                                                  Some((700, XFX)))),
+                                                                  Some(SharedOpDesc::new(700, XFX)))),
                     Ordering::Equal   => Addr::Con(Constant::Atom(clause_name!("="),
-                                                                  Some((700, XFX)))),
+                                                                  Some(SharedOpDesc::new(700, XFX)))),
                     Ordering::Less    => Addr::Con(Constant::Atom(clause_name!("<"),
-                                                                  Some((700, XFX))))
+                                                                  Some(SharedOpDesc::new(700, XFX))))
                 };
 
                 machine_st.unify(a1, c);

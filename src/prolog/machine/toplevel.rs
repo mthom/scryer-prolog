@@ -58,16 +58,16 @@ impl<'a, 'b> CompositeIndices<'a, 'b>
         }
     }
 
-    fn get_clause_type(&mut self, name: ClauseName, arity: usize, spec: Option<(usize, Specifier)>) -> ClauseType
+    fn get_clause_type(&mut self, name: ClauseName, arity: usize, spec: Option<SharedOpDesc>) -> ClauseType
     {
         match ClauseType::from(name, arity, spec) {
             ClauseType::Named(name, arity, _) => {
                 let idx = self.get_code_index(name.clone(), arity);
                 ClauseType::Named(name, arity, idx.clone())
             },
-            ClauseType::Op(op_decl, _) => {
-                let idx = self.get_code_index(op_decl.2.clone(), arity);
-                ClauseType::Op(op_decl, idx.clone())
+            ClauseType::Op(name, spec, _) => {
+                let idx = self.get_code_index(name.clone(), arity);
+                ClauseType::Op(name, spec, idx.clone())
             },
             ct => ct
         }
@@ -741,8 +741,8 @@ impl RelationWorker {
         self.dynamic_clauses.extend(other.dynamic_clauses.into_iter());
     }
 
-    fn expand_queue_contents<'a, R>(&mut self, term_stream: &mut TermStream<'a, R>, op_dir: &OpDir)
-                                    -> Result<(), SessionError>
+    fn expand_queue_contents<R>(&mut self, term_stream: &mut TermStream<R>, op_dir: &OpDir)
+                                -> Result<(), SessionError>
         where R: Read
     {
         let mut machine_st = MachineState::new();
@@ -762,8 +762,8 @@ impl RelationWorker {
     }
 }
 
-fn term_to_toplevel<'a, R>(term_stream: &mut TermStream<'a, R>, code_dir: &mut CodeDir, term: Term)
-                           -> Result<(TopLevel, RelationWorker), ParserError>
+fn term_to_toplevel<R>(term_stream: &mut TermStream<R>, code_dir: &mut CodeDir, term: Term)
+                       -> Result<(TopLevel, RelationWorker), ParserError>
     where R: Read
 {
     let mut rel_worker = RelationWorker::new();

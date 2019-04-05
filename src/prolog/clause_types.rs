@@ -1,6 +1,5 @@
 use prolog_parser::ast::*;
 
-use prolog::forms::OpDecl;
 use prolog::machine::machine_indices::*;
 
 use ref_thread_local::RefThreadLocal;
@@ -403,7 +402,7 @@ pub enum ClauseType {
     Hook(CompileTimeHook),
     Inlined(InlinedClauseType),
     Named(ClauseName, usize, CodeIndex), // name, arity, index.
-    Op(OpDecl, CodeIndex),
+    Op(ClauseName, SharedOpDesc, CodeIndex),
     System(SystemClauseType)
 }
 
@@ -454,16 +453,16 @@ impl BuiltInClauseType {
 }
 
 impl ClauseType {
-    pub fn spec(&self) -> Option<(usize, Specifier)> {
+    pub fn spec(&self) -> Option<SharedOpDesc> {
         match self {
-            &ClauseType::Op(ref op_decl, _) =>
-                Some((op_decl.0, op_decl.1)),
+            &ClauseType::Op(_, ref spec, _) =>
+                Some(spec.clone()),
             &ClauseType::Inlined(InlinedClauseType::CompareNumber(..))
           | &ClauseType::BuiltIn(BuiltInClauseType::Is(..))
           | &ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(_))
           | &ClauseType::BuiltIn(BuiltInClauseType::NotEq)
           | &ClauseType::BuiltIn(BuiltInClauseType::Eq) =>
-                Some((700, XFX)),
+                Some(SharedOpDesc::new(700, XFX)),
             _ => None
         }
     }
@@ -474,21 +473,20 @@ impl ClauseType {
             &ClauseType::BuiltIn(ref built_in) => built_in.name(),
             &ClauseType::Hook(ref hook) => hook.name(),
             &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
-            &ClauseType::Op(ref op_decl, ..) => op_decl.name(),
+            &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
             &ClauseType::System(ref system) => system.name(),
         }
     }
 
-    pub fn from(name: ClauseName, arity: usize, spec: Option<(usize, Specifier)>) -> Self {
+    pub fn from(name: ClauseName, arity: usize, spec: Option<SharedOpDesc>) -> Self {
         CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), arity)).cloned()
             .unwrap_or_else(||
                 SystemClauseType::from(name.as_str(), arity)
                     .map(ClauseType::System)
                     .unwrap_or_else(||
                         if let Some(spec) = spec {
-                            let op_decl = OpDecl(spec.0, spec.1, name);
-                            ClauseType::Op(op_decl, CodeIndex::default())
+                            ClauseType::Op(name, spec, CodeIndex::default())
                         } else if name.as_str() == "call" {
                             ClauseType::CallN
                         } else {

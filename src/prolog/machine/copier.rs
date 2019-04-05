@@ -149,7 +149,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                 self.target[addr] = HeapCellValue::Addr(Addr::Str(threshold));
 
                 self.trail.push((Ref::HeapCell(addr),
-                                 HeapCellValue::NamedStr(arity, name.clone(), fixity)));
+                                 HeapCellValue::NamedStr(arity, name.clone(), fixity.clone())));
 
                 self.target.push(HeapCellValue::NamedStr(arity, name, fixity));
 

@@ -135,7 +135,7 @@ impl fmt::Display for ClauseType {
             &ClauseType::System(SystemClauseType::SetCutPoint(r)) =>
                 write!(f, "$set_cp({})", r),
             &ClauseType::Named(ref name, _, ref idx)
-          | &ClauseType::Op(OpDecl(.., ref name), ref idx) =>
+          | &ClauseType::Op(ref name, _, ref idx) =>
             {
                 let idx = idx.0.borrow();
                 write!(f, "{}:{}/{}", idx.1, name, idx.0)
@@ -150,9 +150,9 @@ impl fmt::Display for HeapCellValue {
         match self {
             &HeapCellValue::Addr(ref addr) =>
                 write!(f, "{}", addr),
-            &HeapCellValue::NamedStr(arity, ref name, Some((priority, spec))) =>
+            &HeapCellValue::NamedStr(arity, ref name, Some(ref cell)) =>
                 write!(f, "{}/{} (op, priority: {}, spec: {})", name.as_str(), arity,
-                       priority, spec),
+                       cell.prec(), cell.assoc()),
             &HeapCellValue::NamedStr(arity, ref name, None) =>
                 write!(f, "{}/{}", name.as_str(), arity)
         }

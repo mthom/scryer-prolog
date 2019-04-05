@@ -395,8 +395,8 @@ impl ListingCompiler {
                         if ct_name == &name && arity == ct_arity => {
                             *idx = self_idx.clone();
                         },
-                    &mut ClauseType::Op(ref op_decl, ref mut idx)
-                        if op_decl.name() == name && op_decl.arity() == arity => {
+                    &mut ClauseType::Op(ref op_name, ref shared_op_desc, ref mut idx)
+                        if op_name == &name && shared_op_desc.arity() == arity => {
                             *idx = self_idx.clone();
                         },
                     _ => {}
@@ -553,14 +553,11 @@ impl ListingCompiler {
             Declaration::NonCountedBacktracking(name, arity) =>
                 Ok(self.add_non_counted_bt_flag(name, arity)),
             Declaration::Op(op_decl) => {
-                let existing_desc = {
-                    let comp_ops = composite_op!(self.module.is_some(), &wam_indices.op_dir,
-                                                 &mut indices.op_dir);
+                let spec = get_desc(op_decl.name(), composite_op!(self.module.is_some(),
+                                                                  &wam_indices.op_dir,
+                                                                  &mut indices.op_dir));
                 
-                    get_desc(op_decl.name(), comp_ops)
-                };
-                
-                op_decl.submit(self.get_module_name(), existing_desc, &mut indices.op_dir)
+                op_decl.submit(self.get_module_name(), spec, &mut indices.op_dir)
             },
             Declaration::UseModule(name) =>
                 self.use_module(name, code_repo, flags, wam_indices, indices),
@@ -579,10 +576,10 @@ impl ListingCompiler {
         }
     }
 
-    fn process_and_commit_decl<'a, R: Read>(&mut self, decl: Declaration,
-                                            worker: &mut TopLevelBatchWorker<'a, R>,
-                                            indices: &mut IndexStore, flags: MachineFlags)
-                                            -> Result<(), SessionError>
+    fn process_and_commit_decl<R: Read>(&mut self, decl: Declaration,
+                                        worker: &mut TopLevelBatchWorker<R>,
+                                        indices: &mut IndexStore, flags: MachineFlags)
+                                        -> Result<(), SessionError>
     {
         match &decl {
             &Declaration::Dynamic(ref name, arity) => {

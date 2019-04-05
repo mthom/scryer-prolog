@@ -1023,7 +1023,7 @@ impl MachineState {
 
                 self.interms[t - 1] = try_or_fail!(self, self.pow(n1, n2));
                 self.p += 1;
-            },            
+            },
             &ArithmeticInstruction::RDiv(ref a1, ref a2, t) => {
                 let stub = MachineError::functor_stub(clause_name!("(rdiv)"), 2);
 
@@ -2002,7 +2002,7 @@ impl MachineState {
     }
 
     fn try_functor_compound_case(&mut self, name: ClauseName, arity: usize,
-                                 spec: Option<(usize, Specifier)>)
+                                 spec: Option<SharedOpDesc>)
     {
         let name  = Addr::Con(Constant::Atom(name, spec));
         let arity = Addr::Con(integer!(arity));
@@ -2164,9 +2164,10 @@ impl MachineState {
                     HeapCellValue::NamedStr(2, ref name, Some(_))
                         if *name == clause_name!("-") =>
                            Ok(Addr::HeapCell(s+1)),
-                    _ => Err(self.error_form(MachineError::type_error(ValidType::Pair,
-                                                             self.heap[s].as_addr(s)),
-                                             stub))
+                    _ =>
+                        Err(self.error_form(MachineError::type_error(ValidType::Pair,
+                                                                     self.heap[s].as_addr(s)),
+                                            stub))
                 },
             a => Err(self.error_form(MachineError::type_error(ValidType::Pair, a), stub))
         }
@@ -2389,7 +2390,7 @@ impl MachineState {
                     self.p = CodePtr::Local(self.cp);
                 }
             },
-            &ClauseType::Named(ref name, _, ref idx) | &ClauseType::Op(OpDecl(.., ref name), ref idx) =>
+            &ClauseType::Named(ref name, _, ref idx) | &ClauseType::Op(ref name, _, ref idx) =>
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
                                                             indices)),
             &ClauseType::System(ref ct) =>

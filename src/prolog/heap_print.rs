@@ -17,8 +17,8 @@ use std::rc::Rc;
 /* contains the location, name, precision and Specifier of the parent op. */
 #[derive(Clone)]
 pub enum DirectedOp {
-    Left(ClauseName, (usize, Specifier)),
-    Right(ClauseName, (usize, Specifier)),
+    Left(ClauseName, SharedOpDesc),
+    Right(ClauseName, SharedOpDesc)
 }
 
 impl DirectedOp {
@@ -33,22 +33,33 @@ impl DirectedOp {
     #[inline]
     fn is_negative_sign(&self) -> bool {
         match self {
-            &DirectedOp::Left(ref name, (_, spec)) | &DirectedOp::Right(ref name, (_, spec)) =>
-                name.as_str() == "-" && is_prefix!(spec)
+            &DirectedOp::Left(ref name, ref cell) | &DirectedOp::Right(ref name, ref cell) =>
+                name.as_str() == "-" && is_prefix!(cell.assoc())
         }
     }
 }
 
-fn needs_bracketing(child_spec: (usize, Specifier), op: &DirectedOp) -> bool
+fn needs_bracketing(child_spec: &SharedOpDesc, op: &DirectedOp) -> bool
 {
     match op {
-        &DirectedOp::Left(_, (priority, spec)) => {
+        &DirectedOp::Left(ref name, ref cell) => {            
+            let (priority, spec) = cell.get();
+
+            if name.as_str() == "-" {
+                let child_assoc = child_spec.assoc();
+                if is_prefix!(spec) && (is_postfix!(child_assoc) || is_infix!(child_assoc)) {
+                    return true;
+                }
+            }
+            
             let is_strict_right = is_yfx!(spec) || is_xfx!(spec) || is_fx!(spec);
-            child_spec.0 > priority || (child_spec.0 == priority && is_strict_right)
+            child_spec.prec() > priority || (child_spec.prec() == priority && is_strict_right)
         },
-        &DirectedOp::Right(_, (priority, spec)) => {
+        &DirectedOp::Right(_, ref cell) => {
+            let (priority, spec) = cell.get();            
             let is_strict_left = is_xfx!(spec) || is_xfy!(spec) || is_xf!(spec);
-            child_spec.0 > priority || (child_spec.0 == priority && is_strict_left)
+            
+            child_spec.prec() > priority || (child_spec.prec() == priority && is_strict_left)
         }
     }
 }
@@ -66,19 +77,19 @@ impl<'a> HCPreOrderIterator<'a> {
             None => return false
         };
 
-        let mut parent_spec = DirectedOp::Left(clause_name!("-"), (200, FY));
+        let mut parent_spec = DirectedOp::Left(clause_name!("-"), SharedOpDesc::new(200, FY));
 
         loop {
             match self.machine_st.store(self.machine_st.deref(addr)) {
                 Addr::Str(s) =>
                     match &self.machine_st.heap[s] {
-                        &HeapCellValue::NamedStr(_, ref name, Some(spec))
-                            if is_postfix!(spec.1) || is_infix!(spec.1) =>
+                        &HeapCellValue::NamedStr(_, ref name, Some(ref spec))
+                            if is_postfix!(spec.assoc()) || is_infix!(spec.assoc()) =>
                                 if needs_bracketing(spec, &parent_spec) {
                                     return false;
                                 } else {
                                     addr = Addr::HeapCell(s+1);
-                                    parent_spec = DirectedOp::Right(name.clone(), spec);
+                                    parent_spec = DirectedOp::Right(name.clone(), spec.clone());
                                 },
                         _ =>
                             return false
@@ -95,7 +106,7 @@ impl<'a> HCPreOrderIterator<'a> {
 #[derive(Clone)]
 pub enum TokenOrRedirect {
     Atom(ClauseName),
-    Op(ClauseName, (usize, Specifier)),
+    Op(ClauseName, SharedOpDesc),
     NumberedVar(String),
     CompositeRedirect(DirectedOp),
     FunctorRedirect,
@@ -259,7 +270,7 @@ fn continues_with_append(atom: &str, op: &str) -> bool {
             if alpha_char!(ac) {
                 alpha_numeric_char!(oc)
             } else if graphic_token_char!(ac) {
-                graphic_char!(oc)
+                graphic_token_char!(oc)
             } else if variable_indicator_char!(ac) {
                 alpha_numeric_char!(oc)
             } else if capital_letter_char!(ac) {
@@ -354,7 +365,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     {
         let mut printer = Self::new(machine_st, output);
 
-        printer.toplevel_spec = Some(DirectedOp::Right(clause_name!("="), (700, XFX)));
+        printer.toplevel_spec = Some(DirectedOp::Right(clause_name!("="), SharedOpDesc::new(700, XFX)));
         printer.heap_locs = reverse_heap_locs(machine_st, heap_locs);
 
         printer
@@ -375,25 +386,25 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     }
 
     // TODO: create a DirectedOp factory method. Use it here, and above.
-    fn enqueue_op(&mut self, ct: ClauseType, spec: (usize, Specifier)) {
-        if is_postfix!(spec.1) {
-            let right_directed_op = DirectedOp::Right(ct.name(), spec);
+    fn enqueue_op(&mut self, ct: ClauseType, spec: SharedOpDesc) {
+        if is_postfix!(spec.assoc()) {
+            let right_directed_op = DirectedOp::Right(ct.name(), spec.clone());
 
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(right_directed_op));
-        } else if is_prefix!(spec.1) {
+        } else if is_prefix!(spec.assoc()) {
             if ct.name().as_str() == "-" {
-                self.format_negated_operand();
+                self.format_negated_operand(spec);
                 return;
             }
 
-            let left_directed_op = DirectedOp::Left(ct.name(), spec);
+            let left_directed_op = DirectedOp::Left(ct.name(), spec.clone());
 
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
-        } else { // if is_infix!(spec.1)
-            let left_directed_op  = DirectedOp::Left(ct.name(), spec);
-            let right_directed_op = DirectedOp::Right(ct.name(), spec);
+        } else { // if is_infix!(spec.assoc())
+            let left_directed_op  = DirectedOp::Left(ct.name(), spec.clone());
+            let right_directed_op = DirectedOp::Right(ct.name(), spec.clone());
 
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
@@ -416,10 +427,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
-    fn format_negated_operand(&mut self)
+    fn format_negated_operand(&mut self, spec: SharedOpDesc)
     {
-        let op = DirectedOp::Left(clause_name!("-"), (200, FY));
-
+        let op = DirectedOp::Left(clause_name!("-"), spec);
+            
         self.state_stack.push(TokenOrRedirect::CompositeRedirect(op));
         self.state_stack.push(TokenOrRedirect::Space);
         self.state_stack.push(TokenOrRedirect::Atom(clause_name!("-")));
@@ -452,10 +463,17 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             if self.format_numbered_vars(iter) {
                 return;
             }
-        }
-
+        }        
+        
         if let Some(spec) = ct.spec() {
-            if !self.ignore_ops {
+            if "." == ct.name().as_str() && is_infix!(spec.assoc()) {
+                if !self.ignore_ops {
+                    self.push_list();
+                    return;
+                }
+            }
+            
+            if !self.ignore_ops && spec.prec() > 0 {
                 return self.enqueue_op(ct, spec);
             }
         }
@@ -628,10 +646,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     if self.outputter.ends_with(&format!(" {}", op.as_str())) {
                         self.push_char(' ');
                     }
-
+                    
                     self.push_char('(');
                 }
-
+                
                 self.print_atom(atom);
 
                 if op.is_some() {
@@ -715,12 +733,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         };
 
         match heap_val {
-            HeapCellValue::NamedStr(arity, ref name, Some(spec)) => {
+            HeapCellValue::NamedStr(arity, name, Some(spec)) => {
                 let add_brackets = if !self.ignore_ops {
                     add_brackets || if let Some(ref op) = &op {
-                        needs_bracketing(spec, op)
+                        needs_bracketing(&spec, op)
                     } else {
-                        is_functor_redirect && spec.0 >= 1000
+                        is_functor_redirect && spec.prec() >= 1000
                     }
                 } else {
                     false
