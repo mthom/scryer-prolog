@@ -317,6 +317,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
             &InlinedClauseType::IsAtom(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::Char(_))
+                  | &Term::Constant(_, Constant::EmptyList)
                   | &Term::Constant(_, Constant::Atom(..)) => {
                         code.push(succeed!());
                     },

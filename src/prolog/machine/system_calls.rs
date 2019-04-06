@@ -362,7 +362,7 @@ impl MachineState {
                     },
                     ref addr if addr.is_ref() => {
                         let stub = MachineError::functor_stub(clause_name!("atom_chars"), 2);
-
+                        
                         match self.try_from_list(temp_v!(2), stub.clone()) {
                             Err(e) => return Err(e),
                             Ok(addrs) => {

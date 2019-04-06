@@ -1905,6 +1905,7 @@ impl MachineState {
 
                 match d {
                     Addr::Con(Constant::Atom(..)) | Addr::Con(Constant::Char(_)) => self.p += 1,
+                    Addr::Con(Constant::EmptyList) => self.p += 1,
                     _ => self.fail = true
                 };
             },

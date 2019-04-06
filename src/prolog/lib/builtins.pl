@@ -4,7 +4,7 @@
 	(+)/2, (**)/2, (*)/2, (-)/1, (-)/2, (/)/2, (/\)/2, (\/)/2,
 	(is)/2, (xor)/2, (div)/2, (//)/2, (rdiv)/2, (<<)/2, (>>)/2,
 	(mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2, (>=)/2,
-	(=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2, (==)/2, (\==)/2,
+	(=<)/2, (',')/2, (->)/2, (;)/2, (=..)/2, (==)/2, (\==)/2,
 	(@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2, (\=@=)/2, (:)/2,
 	abolish/1, asserta/1, assertz/1, atom_chars/2, atom_codes/2,
 	atom_length/2, bagof/3, bb_b_put/2, bb_get/2, bb_put/2,
@@ -137,10 +137,10 @@ repeat :- repeat.
 ','(G1, G2) :- '$get_b_value'(B), '$call_with_default_policy'(comma_errors(G1, G2, B)).
 
 :- non_counted_backtracking comma_errors/3.
-comma_errors(G1, G2, B) :- var(G1), throw(error(instantiation_error, (,)/2)).
+comma_errors(G1, G2, B) :- var(G1), throw(error(instantiation_error, (',')/2)).
 comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 
-:- non_counted_backtracking (,)/3.
+:- non_counted_backtracking (',')/3.
 ','(!, CF, B) :- compound(CF),
 		 '$call_with_default_policy'(CF = ','(G1, G2)),
 		 '$set_cp'(B),
@@ -256,12 +256,13 @@ expand_term(Term0, Term) :- '$expand_term'(Term0, Term).
 
 % term_variables.
 
-can_be(Type, Term) :- error:can_be(Type, Term).
+% ensures List is either a variable or a proper list.
+can_be_list(List, _)  :- var(List), !.
+can_be_list(List, _)  :- '$skip_max_list'(_, -1, List, Tail), Tail == [], !.
+can_be_list(List, PI) :- throw(error(type_error(list, List), PI)).
 
 term_variables(Term, Vars) :-
-    catch(can_be(list, Vars), error(E, Ctx),
-	  ( ( var(Ctx) -> Ctx = term_variables/2 ; true ),
-	    throw(error(E, Ctx)) ) ),
+    can_be_list(Vars, term_variables/2),
     '$term_variables'(Term, Vars).
 
 % setup_call_cleanup.
@@ -721,10 +722,15 @@ current_predicate(Pred) :-
     '$get_next_op_db_ref'(Ref, NextRef),
     '$iterate_op_db_refs'(NextRef, Priority, Spec, Op).
 
+can_be_op_priority(Priority) :- var(Priority).
+can_be_op_priority(Priority) :- op_priority(Priority).
+
+can_be_op_specifier(Spec) :- var(Spec).
+can_be_op_specifier(Spec) :- op_specifier(Spec).
+
 current_op(Priority, Spec, Op) :-
-    (  nonvar(Op), \+ atom(Op)
-    -> throw(error(type_error(atom, Op), current_op/3))
-    ;  '$get_next_op_db_ref'(Ref, _),
+    (  can_be_op_priority(Priority), can_be_op_specifier(Spec), error:can_be(atom, Op)
+    -> '$get_next_op_db_ref'(Ref, _),
        '$iterate_op_db_refs'(Ref, Priority, Spec, Op)
     ).
 
@@ -753,7 +759,7 @@ op_specifier(OpSpec) :- atom(OpSpec),
 op_specifier(OpSpec) :- throw(error(type_error(atom, OpSpec), op/3)).
 
 valid_op(Op) :- atom(Op),
-    (  Op == (,) -> throw(error(permission_error(modify, operator, (,)), op/3)) % 8.14.3.3 j), k).
+    (  Op == (',') -> throw(error(permission_error(modify, operator, (',')), op/3)) % 8.14.3.3 j), k).
     ;  Op == {} -> throw(error(permission_error(create, operator, {}), op/3))
     ;  Op == [] -> throw(error(permission_error(create, operator, []), op/3))
     ;  true
@@ -810,24 +816,20 @@ no_var_in_list([]).
 no_var_in_list([X|Xs]) :- var(X), !, '$fail'.
 no_var_in_list([_|Xs]) :- no_var_in_list(Xs).
 
-atom_chars(Atom, List) :-
-    error:can_be(list, List),
+atom_chars(Atom, List) :-    
     (  var(Atom) ->
        (  var(List) -> throw(error(instantiation_error, atom_chars/2))
-       ;  no_var_in_list(List) -> '$atom_chars'(Atom, List)
+       ;  can_be_list(List, atom_chars/3), no_var_in_list(List) -> '$atom_chars'(Atom, List)
        )
     ;  atom(Atom) -> '$atom_chars'(Atom, List)
-    ;  Atom == [] -> '$atom_chars'(Atom, List)
     ;  throw(error(type_error(atom, Atom), atom_chars/2))
     ).
 
-atom_codes(Atom, List) :-
-    error:can_be(list, List),
+atom_codes(Atom, List) :-    
     (  var(Atom) ->
        (  var(List) -> throw(error(instantiation_error, atom_codes/2))
-       ;  no_var_in_list(List) -> '$atom_codes'(Atom, List)
+       ;  can_be_list(List, atom_codes/3), no_var_in_list(List) -> '$atom_codes'(Atom, List)
        )
     ;  atom(Atom) -> '$atom_codes'(Atom, List)
-    ;  Atom == [] -> '$atom_codes'(Atom, List)
     ;  throw(error(type_error(atom, Atom), atom_codes/2))
     ).

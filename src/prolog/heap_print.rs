@@ -264,7 +264,7 @@ macro_rules! push_space_if_amb {
     )
 }
 
-fn continues_with_append(atom: &str, op: &str) -> bool {
+fn requires_space(atom: &str, op: &str) -> bool {
     match atom.chars().last() {
         Some(ac) => op.chars().next().map(|oc| {
             if alpha_char!(ac) {
@@ -277,6 +277,8 @@ fn continues_with_append(atom: &str, op: &str) -> bool {
                 alpha_numeric_char!(oc)
             } else if sign_char!(ac) {
                 sign_char!(oc) || decimal_digit_char!(oc)
+            } else if ac == '0' {
+                !non_quoted_token(op.chars())
             } else {
                 false
             }
@@ -382,7 +384,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     fn ambiguity_check(&self, atom: &str) -> bool
     {
         let tail = self.outputter.range_from(self.last_item_idx ..);
-        continues_with_append(tail, atom)
+        requires_space(tail, atom)
     }
 
     // TODO: create a DirectedOp factory method. Use it here, and above.
@@ -579,11 +581,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     }
 
     fn print_op(&mut self, atom: &str) {
-        if atom == "," {
-            self.push_char(',');
-        } else {
-            self.print_op_addendum(atom);
-        }
+        push_space_if_amb!(self, atom, {
+            if atom == "," {
+                self.push_char(',');
+            } else {
+                self.print_op_addendum(atom);
+            }
+        });
     }
 
     fn print_char(&mut self, c: char) {

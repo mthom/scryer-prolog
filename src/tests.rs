@@ -1413,7 +1413,7 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "?- atom(X).");
     assert_prolog_success!(&mut wam, "?- atom(a).");
     assert_prolog_failure!(&mut wam, "?- atom(\"string\").");
-    assert_prolog_failure!(&mut wam, "?- atom([]).");
+    assert_prolog_success!(&mut wam, "?- atom([]).");
     assert_prolog_failure!(&mut wam, "?- atom(1).");
     assert_prolog_failure!(&mut wam, "?- atom(0).");
     assert_prolog_failure!(&mut wam, "?- atom(0.0).");
@@ -1750,12 +1750,12 @@ fn test_queries_on_builtins()
 
     assert_prolog_success!(&mut wam, "?- bagof(X, (X=Y; X=Z; Y=1), L).",
                            [["L = [_3, _6]", "X = _0", "Y = _3", "Z = _6"],
-                            ["L = [_188]", "X = _0", "Y = 1", "Z = _6"]]);
+                            ["L = [_112]", "X = _0", "Y = 1", "Z = _6"]]);
 
     submit(&mut wam, "a(1, f(_)). a(2, f(_)).");
 
     assert_prolog_success!(&mut wam, "?- bagof(X, a(X, Y), L).",
-                           [["L = [1, 2]", "X = _0", "Y = f(_154)"]]);
+                           [["L = [1, 2]", "X = _0", "Y = f(_78)"]]);
 
     assert_prolog_success!(&mut wam, "?- setof(X, (X = 1 ; X = 2), S).",
                            [["S = [1, 2]", "X = _0"]]);
@@ -1767,7 +1767,7 @@ fn test_queries_on_builtins()
                             ["L = [1]", "Y = 2"]]);
     assert_prolog_success!(&mut wam, "?- setof(X, (X=Y; X=Z; Y=1), L).",
                            [["L = [_3, _6]", "X = _0", "Y = _3", "Z = _6"],
-                            ["L = [_188]", "Y = 1", "X = _0", "Y = 1", "Z = _6"]]);
+                            ["L = [_112]", "Y = 1", "X = _0", "Y = 1", "Z = _6"]]);
     assert_prolog_failure!(&mut wam, "?- setof(X, member(X, [f(U,b),f(V,c)]), [f(a,c),f(a,b)]).");
     assert_prolog_success!(&mut wam, "?- setof(X, member(X, [f(U,b),f(V,c)]), [f(a,b),f(a,c)]).",
                            [["U = a", "V = a", "X = _0"]]);
@@ -1794,12 +1794,12 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "?- bagof(X, Y^((X = 1, Y = 1; (X = 2, Y = 2))), S).",
                            [["S = [1, 2]", "X = _0", "Y = _5"]]);
     assert_prolog_success!(&mut wam, "?- bagof(X, Y^((X = 1 ; Y = 1) ; (X = 2, Y = 2)), S).",
-                           [["S = [1, _240, 2]", "X = _0", "Y = _5"]]);
+                           [["S = [1, _126, 2]", "X = _0", "Y = _5"]]);
 
     assert_prolog_success!(&mut wam, "?- setof(X, Y^((X = 1, Y = 1; (X = 2, Y = 2))), S).",
                            [["S = [1, 2]", "X = _0", "Y = _5"]]);
     assert_prolog_success!(&mut wam, "?- setof(X, Y^((X = 1 ; Y = 1) ; (X = 2, Y = 2)), S).",
-                           [["S = [_240, 1, 2]", "X = _0", "Y = _5"]]);
+                           [["S = [_126, 1, 2]", "X = _0", "Y = _5"]]);
     assert_prolog_success!(&mut wam, "?- setof(X, (exists(U,V) ^ member(X, [V,U,f(U),f(V)])), [a,b,f(b),f(a)]).");
 
     submit(&mut wam, ":- use_module(library(non_iso)).");

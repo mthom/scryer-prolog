@@ -1,4 +1,4 @@
-:- module(reif, [if_/3, (=)/3, (,)/3, (;)/3, cond_t/3, dif/3,
+:- module(reif, [if_/3, (=)/3, (',')/3, (;)/3, cond_t/3, dif/3,
 		 memberd_t/3, tfilter/3, tmember/2, tmember_t/3,
 		 tpartition/4]).
 
