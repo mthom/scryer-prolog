@@ -2107,8 +2107,8 @@ impl MachineState {
         *list = result;
     }
 
-    pub(super) fn try_from_list(&self, r: RegType, caller: MachineStub)
-                                -> Result<Vec<Addr>, MachineStub>
+    pub(super)
+    fn try_from_list(&self, r: RegType, caller: MachineStub) -> Result<Vec<Addr>, MachineStub>
     {
         let a1 = self.store(self.deref(self[r].clone()));
 

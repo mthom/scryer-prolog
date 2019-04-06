@@ -6,14 +6,15 @@
 	(mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2, (>=)/2,
 	(=<)/2, (,)/2, (->)/2, (;)/2, (=..)/2, (==)/2, (\==)/2,
 	(@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2, (\=@=)/2, (:)/2,
-	abolish/1, asserta/1, assertz/1, bagof/3, bb_b_put/2,
-	bb_get/2, bb_put/2, call_cleanup/2,
-	call_with_inference_limit/3, catch/3, clause/2,
-	current_predicate/1, current_op/3, current_prolog_flag/2,
-	expand_goal/2, expand_term/2, findall/3, findall/4, halt/0,
-	once/1, op/3, repeat/0, retract/1, set_prolog_flag/2, setof/3,
-	setup_call_cleanup/3, term_variables/2, throw/1, true/0,
-	false/0, write/1, write_canonical/1, writeq/1, write_term/2]).
+	abolish/1, asserta/1, assertz/1, atom_chars/2, atom_codes/2,
+	atom_length/2, bagof/3, bb_b_put/2, bb_get/2, bb_put/2,
+	call_cleanup/2, call_with_inference_limit/3, catch/3,
+	clause/2, current_predicate/1, current_op/3,
+	current_prolog_flag/2, expand_goal/2, expand_term/2,
+	findall/3, findall/4, halt/0, once/1, op/3, repeat/0,
+	retract/1, set_prolog_flag/2, setof/3, setup_call_cleanup/3,
+	term_variables/2, throw/1, true/0, false/0, write/1,
+	write_canonical/1, writeq/1, write_term/2]).
 
 /* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
    and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
@@ -444,7 +445,7 @@ findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses)
     ;  Witnesses = Witnesses0,
        findall(Witnesses-Template, Goal, PairedSolutions)
     ).
-    
+
 bagof(Template, Goal, Solution) :-
     error:can_be(list, Solution),
     term_variables(Template, TemplateVars0),
@@ -751,7 +752,7 @@ op_specifier(OpSpec) :- atom(OpSpec),
     ).
 op_specifier(OpSpec) :- throw(error(type_error(atom, OpSpec), op/3)).
 
-valid_op(Op) :- atom(Op),    
+valid_op(Op) :- atom(Op),
     (  Op == (,) -> throw(error(permission_error(modify, operator, (,)), op/3)) % 8.14.3.3 j), k).
     ;  Op == {} -> throw(error(permission_error(create, operator, {}), op/3))
     ;  Op == [] -> throw(error(permission_error(create, operator, []), op/3))
@@ -794,3 +795,45 @@ bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
 bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).
 
 halt :- '$halt'.
+
+atom_length(Atom, Length) :-
+    (  var(Atom)  -> throw(error(instantiation_error, atom_length/2)) % 8.16.1.3 a)
+    ;  atom(Atom) -> (  var(Length) -> '$atom_length'(Atom, Length)
+		     ;  integer(Length), Length >= 0 -> '$atom_length'(Atom, Length)
+		     ;  integer(Length) -> throw(domain_error(not_less_than_zero, Length), atom_length/2) % 8.16.1.3 d)
+		     ;  throw(error(type_error(integer, Length), atom_length/2)) % 8.16.1.3 c)
+		     )
+    ;  throw(error(type_error(atom, Atom), atom_length/2)) % 8.16.1.3 b)
+    ).
+
+no_var_in_list([]).
+no_var_in_list([X|Xs]) :- var(X), !, '$fail'.
+no_var_in_list([_|Xs]) :- no_var_in_list(Xs).
+
+atom_chars(Atom, List) :-
+    (  var(Atom), '$skip_max_list'(_, -1, List, Xs) ->
+       (  var(Xs) -> throw(error(instantiation_error, atom_chars/2))
+       ;  Xs == [] ->
+	  (  no_var_in_list(List) -> '$atom_chars'(Atom, List)
+	  ;  throw(error(instantiation_error, atom_chars/2))
+	  )
+       ;  throw(error(type_error(list, List), atom_chars/2))
+       )
+    ;  atom(Atom) -> '$atom_chars'(Atom, List)
+    ;  Atom == [] -> '$atom_chars'(Atom, List)
+    ;  throw(error(type_error(atom, Atom), atom_chars/2))
+    ).
+
+atom_codes(Atom, List) :-
+    (  var(Atom), '$skip_max_list'(_, -1, List, Xs) ->
+       (  var(Xs) -> throw(error(instantiation_error, atom_codes/2))
+       ;  Xs == [] ->
+	  (  no_var_in_list(List) -> '$atom_codes'(Atom, List)
+	  ;  throw(error(instantiation_error, atom_codes/2))
+	  )
+       ;  throw(error(type_error(list, List), atom_codes/2))
+       )
+    ;  atom(Atom) -> '$atom_codes'(Atom, List)
+    ;  Atom == [] -> '$atom_codes'(Atom, List)
+    ;  throw(error(type_error(atom, Atom), atom_codes/2))
+    ).

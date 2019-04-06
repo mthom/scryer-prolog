@@ -16,6 +16,7 @@ use ref_thread_local::RefThreadLocal;
 
 use std::collections::HashSet;
 use std::io::{stdout, Write};
+use std::iter::once;
 use std::mem;
 use std::rc::Rc;
 
@@ -332,6 +333,133 @@ impl MachineState {
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
             },
+            &SystemClauseType::AtomChars => {
+                let a1 = self[temp_v!(1)].clone();
+
+                match self.store(self.deref(a1)) {
+                    Addr::Con(Constant::Char(c)) => {
+                        let iter = once(Addr::Con(Constant::Char(c)));
+                        let list_of_chars = Addr::HeapCell(self.heap.to_list(iter));
+
+                        let a2 = self[temp_v!(2)].clone();
+                        self.unify(a2, list_of_chars);
+                    },
+                    Addr::Con(Constant::Atom(name, _)) => {
+                        let iter = name.as_str().chars().map(|c| Addr::Con(Constant::Char(c)));
+                        let list_of_chars = Addr::HeapCell(self.heap.to_list(iter));
+
+                        let a2 = self[temp_v!(2)].clone();
+                        self.unify(a2, list_of_chars);
+                    },
+                    Addr::Con(Constant::EmptyList) => {
+                        let a2 = self[temp_v!(2)].clone();
+                        let chars = vec![Addr::Con(Constant::Char('[')),
+                                         Addr::Con(Constant::Char(']'))];
+                        
+                        let list_of_chars = Addr::HeapCell(self.heap.to_list(chars.into_iter()));
+
+                        self.unify(a2, list_of_chars);
+                    },
+                    ref addr if addr.is_ref() => {
+                        let stub = MachineError::functor_stub(clause_name!("atom_chars"), 2);
+
+                        match self.try_from_list(temp_v!(2), stub.clone()) {
+                            Err(e) => return Err(e),
+                            Ok(addrs) => {
+                                let mut chars = String::new();
+
+                                for addr in addrs.iter() {
+                                    match addr {
+                                        &Addr::Con(Constant::Char(c)) =>
+                                            chars.push(c),
+                                        &Addr::Con(Constant::Atom(ref name, _))
+                                            if name.as_str().len() == 1 => {
+                                                chars += name.as_str();
+                                            },
+                                        _ => {
+                                            let err = MachineError::type_error(ValidType::Character,
+                                                                               addr.clone());
+                                            return Err(self.error_form(err, stub));
+                                        }
+                                    }
+                                }
+
+                                let chars = clause_name!(chars, indices.atom_tbl);
+                                self.unify(addr.clone(), Addr::Con(Constant::Atom(chars, None)));
+                            }
+                        }
+                    },
+                    _ => unreachable!()
+                };
+            },
+            &SystemClauseType::AtomCodes => {
+                let a1 = self[temp_v!(1)].clone();
+
+                match self.store(self.deref(a1)) {
+                    Addr::Con(Constant::Char(c)) => {
+                        let iter = once(Addr::Con(Constant::CharCode(c as u8)));
+                        let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
+
+                        let a2 = self[temp_v!(2)].clone();
+                        self.unify(a2, list_of_codes);
+                    },                    
+                    Addr::Con(Constant::Atom(name, _)) => {
+                        let iter = name.as_str().chars().map(|c| Addr::Con(Constant::CharCode(c as u8)));
+                        let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
+
+                        let a2 = self[temp_v!(2)].clone();
+
+                        self.unify(a2, list_of_codes);
+                    },
+                    Addr::Con(Constant::EmptyList) => {
+                        let a2 = self[temp_v!(2)].clone();
+                        let chars = vec![Addr::Con(Constant::CharCode('[' as u8)),
+                                         Addr::Con(Constant::CharCode(']' as u8))];
+                        
+                        let list_of_codes = Addr::HeapCell(self.heap.to_list(chars.into_iter()));
+
+                        self.unify(a2, list_of_codes);
+                    },
+                    ref addr if addr.is_ref() => {
+                        let stub = MachineError::functor_stub(clause_name!("atom_codes"), 2);
+
+                        match self.try_from_list(temp_v!(2), stub.clone()) {
+                            Err(e) => return Err(e),
+                            Ok(addrs) => {
+                                let mut chars = String::new();
+
+                                for addr in addrs.iter() {
+                                    match addr {
+                                        &Addr::Con(Constant::CharCode(c)) =>
+                                            chars.push(c as char),
+                                        _ => {
+                                            let err = MachineError::representation_error(RepFlag::CharacterCode);
+                                            return Err(self.error_form(err, stub));
+                                        }
+                                    }
+                                }
+
+                                let chars = clause_name!(chars, indices.atom_tbl);
+                                self.unify(addr.clone(), Addr::Con(Constant::Atom(chars, None)));
+                            }
+                        }
+                    },
+                    _ => unreachable!()
+                };
+            },
+            &SystemClauseType::AtomLength => {
+                let a1 = self[temp_v!(1)].clone();
+
+                let atom = match self.store(self.deref(a1)) {
+                    Addr::Con(Constant::Atom(name, _)) => name,
+                    _ => unreachable!()
+                };
+
+                let len = Number::Integer(Rc::new(BigInt::from_usize(atom.as_str().len()).unwrap()));
+                let a2  = self[temp_v!(2)].clone();
+                
+                self.unify(a2, Addr::Con(Constant::Number(len)));
+            },
             &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::ModuleAssert(DynamicAssertPlace::Front);
@@ -583,13 +711,13 @@ impl MachineState {
 
                       unossified_op_dir.extend(indices.op_dir.iter().filter_map(|(key, op_dir_val)| {
                           let (name, fixity) = key.clone();
-                          
+
                           let prec  = op_dir_val.shared_op_desc().prec();
 
                           if prec == 0 {
                               return None;
                           }
-                          
+
                           let assoc = op_dir_val.shared_op_desc().assoc();
 
                           Some((OrderedOpDirKey(name, fixity), (prec, assoc)))
@@ -651,8 +779,8 @@ impl MachineState {
                     Addr::DBRef(db_ref) =>
                         match db_ref {
                             DBRef::Op(priority, spec, name, _, shared_op_desc) => {
-                                
-                                
+
+
                                 let prec = self[temp_v!(2)].clone();
                                 let specifier = self[temp_v!(3)].clone();
                                 let op = self[temp_v!(4)].clone();

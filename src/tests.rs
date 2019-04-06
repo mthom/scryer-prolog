@@ -1952,6 +1952,19 @@ foo(X) :- call(X) -> call(X).");
     assert_prolog_success!(&mut wam, "?- catch(abolish(foo(_)), error(type_error(predicate_indicator, foo(_)), abolish/1), true).");
     assert_prolog_failure!(&mut wam, "?- abolish(abolish/1).");
     assert_prolog_success!(&mut wam, "?- catch(abolish(abolish/1), error(permission_error(modify, static_procedure, abolish/1), abolish/1), true).");
+
+    assert_prolog_success!(&mut wam, "?- atom_length('enchanted evening', N).",
+                           [["N = 17"]]);
+    assert_prolog_success!(&mut wam, r"?- atom_length('enchanted\
+ evening', N).",
+                           [["N = 17"]]);
+    assert_prolog_success!(&mut wam, "?- atom_length('', N).",
+                           [["N = 0"]]);
+    assert_prolog_failure!(&mut wam, "?- atom_length('scarlet', 5).");
+    assert_prolog_success!(&mut wam, "?- catch((atom_length(Atom, 4), false), error(instantiation_error, _), true).");
+    assert_prolog_success!(&mut wam, "?- catch((atom_length(1.23, 4), false), error(type_error(atom, 1.23), _), true).");
+    assert_prolog_success!(&mut wam, "?- catch((atom_length(atom, '4'), false), error(type_error(integer, '4'), _), true).");
+
 }
 
 

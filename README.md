@@ -159,6 +159,9 @@ The following predicates are built-in to Scryer.
 * `assertz/1`
 * `atom/1`
 * `atomic/1`
+* `atom_chars/2`
+* `atom_codes/2`
+* `atom_length/2`
 * `bagof/3`
 * `bb_b_put/2`
 * `bb_get/2`

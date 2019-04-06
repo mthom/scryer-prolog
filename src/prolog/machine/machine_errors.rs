@@ -172,7 +172,7 @@ pub enum ValidType {
 //    Boolean,
 //    Byte,
     Callable,
-//    Character,
+    Character,
     Compound,
 //    Evaluable,
 //    InByte,
@@ -193,7 +193,7 @@ impl ValidType {
 //            ValidType::Boolean => "boolean",
 //            ValidType::Byte => "byte",
             ValidType::Callable => "callable",
-//            ValidType::Character => "character",
+            ValidType::Character => "character",
             ValidType::Compound => "compound",
 //            ValidType::Evaluable => "evaluable",
 //            ValidType::InByte => "in_byte",
@@ -225,7 +225,7 @@ impl DomainError {
 #[derive(Clone, Copy)]
 pub enum RepFlag {
 //    Character,
-//    CharacterCode,
+    CharacterCode,
 //    InCharacterCode,
     MaxArity,
 //    MaxInteger,
@@ -236,7 +236,7 @@ impl RepFlag {
     pub fn as_str(self) -> &'static str {
         match self {
 //            RepFlag::Character => "character",
-//            RepFlag::CharacterCode => "character_code",
+            RepFlag::CharacterCode => "character_code",
 //            RepFlag::InCharacterCode => "in_character_code",
             RepFlag::MaxArity => "max_arity",
 //            RepFlag::MaxInteger => "max_integer",

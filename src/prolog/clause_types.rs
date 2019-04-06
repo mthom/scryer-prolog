@@ -130,7 +130,7 @@ ref_thread_local! {
         m.insert(("partial_string", 2), ClauseType::BuiltIn(BuiltInClauseType::PartialString));
         m.insert(("read", 1), ClauseType::BuiltIn(BuiltInClauseType::Read));
         m.insert(("sort", 2), ClauseType::BuiltIn(BuiltInClauseType::Sort));
-
+        
         m
     };
 }
@@ -159,6 +159,9 @@ pub enum SystemClauseType {
     AbolishModuleClause,
     AssertDynamicPredicateToBack,
     AssertDynamicPredicateToFront,
+    AtomChars,
+    AtomCodes,
+    AtomLength,
     ModuleAssertDynamicPredicateToFront,
     ModuleAssertDynamicPredicateToBack,
     CheckCutPoint,
@@ -231,9 +234,12 @@ impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::AbolishClause => clause_name!("$abolish_clause"),
-            &SystemClauseType::AbolishModuleClause => clause_name!("$abolish_module_clause"),
+            &SystemClauseType::AbolishModuleClause => clause_name!("$abolish_module_clause"),            
             &SystemClauseType::AssertDynamicPredicateToBack => clause_name!("$assertz"),
             &SystemClauseType::AssertDynamicPredicateToFront => clause_name!("$asserta"),
+            &SystemClauseType::AtomChars => clause_name!("$atom_chars"),
+            &SystemClauseType::AtomCodes => clause_name!("$atom_codes"),
+            &SystemClauseType::AtomLength => clause_name!("$atom_length"),
             &SystemClauseType::ModuleAssertDynamicPredicateToFront => clause_name!("$module_asserta"),
             &SystemClauseType::ModuleAssertDynamicPredicateToBack => clause_name!("$module_assertz"),
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
@@ -306,6 +312,9 @@ impl SystemClauseType {
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$abolish_clause", 2) => Some(SystemClauseType::AbolishClause),
+            ("$atom_chars", 2)  => Some(SystemClauseType::AtomChars),
+            ("$atom_codes", 2)  => Some(SystemClauseType::AtomCodes),
+            ("$atom_length", 2) => Some(SystemClauseType::AtomLength),
             ("$abolish_module_clause", 3) => Some(SystemClauseType::AbolishModuleClause),
             ("$module_asserta", 5) => Some(SystemClauseType::ModuleAssertDynamicPredicateToFront),
             ("$module_assertz", 5) => Some(SystemClauseType::ModuleAssertDynamicPredicateToBack),
@@ -382,7 +391,7 @@ impl SystemClauseType {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum BuiltInClauseType {
     AcyclicTerm,
-    Arg,
+    Arg, 
     Compare,
     CompareTerm(CompareTermQT),
     CyclicTerm,
