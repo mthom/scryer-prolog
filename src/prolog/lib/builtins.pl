@@ -766,7 +766,7 @@ op(Priority, OpSpec, Op) :-
     ;  var(OpSpec)   -> throw(error(instantiation_error, op/3)) % 8.14.3.3 b)
     ;  var(Op)       -> throw(error(instantiation_error, op/3)) % 8.14.3.3 c)
     ;  Op == '|'     -> (  op_priority(Priority), op_specifier(OpSpec),
-			   lists:member(OpSpec, [xfx, xfy, yfx]), Priority >= 1001
+			   lists:member(OpSpec, [xfx, xfy, yfx]), ( Priority >= 1001 ; Priority == 0 )
 			-> '$op'(Priority, OpSpec, Op)
 			;  throw(error(permission_error(create, operator, (|)), op/3))) % www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing#72
     ;  valid_op(Op), op_priority(Priority), op_specifier(OpSpec) ->
@@ -800,7 +800,7 @@ atom_length(Atom, Length) :-
     (  var(Atom)  -> throw(error(instantiation_error, atom_length/2)) % 8.16.1.3 a)
     ;  atom(Atom) -> (  var(Length) -> '$atom_length'(Atom, Length)
 		     ;  integer(Length), Length >= 0 -> '$atom_length'(Atom, Length)
-		     ;  integer(Length) -> throw(domain_error(not_less_than_zero, Length), atom_length/2) % 8.16.1.3 d)
+		     ;  integer(Length) -> throw(error(domain_error(not_less_than_zero, Length), atom_length/2)) % 8.16.1.3 d)
 		     ;  throw(error(type_error(integer, Length), atom_length/2)) % 8.16.1.3 c)
 		     )
     ;  throw(error(type_error(atom, Atom), atom_length/2)) % 8.16.1.3 b)
@@ -811,13 +811,10 @@ no_var_in_list([X|Xs]) :- var(X), !, '$fail'.
 no_var_in_list([_|Xs]) :- no_var_in_list(Xs).
 
 atom_chars(Atom, List) :-
-    (  var(Atom), '$skip_max_list'(_, -1, List, Xs) ->
-       (  var(Xs) -> throw(error(instantiation_error, atom_chars/2))
-       ;  Xs == [] ->
-	  (  no_var_in_list(List) -> '$atom_chars'(Atom, List)
-	  ;  throw(error(instantiation_error, atom_chars/2))
-	  )
-       ;  throw(error(type_error(list, List), atom_chars/2))
+    error:can_be(list, List),
+    (  var(Atom) ->
+       (  var(List) -> throw(error(instantiation_error, atom_chars/2))
+       ;  no_var_in_list(List) -> '$atom_chars'(Atom, List)
        )
     ;  atom(Atom) -> '$atom_chars'(Atom, List)
     ;  Atom == [] -> '$atom_chars'(Atom, List)
@@ -825,13 +822,10 @@ atom_chars(Atom, List) :-
     ).
 
 atom_codes(Atom, List) :-
-    (  var(Atom), '$skip_max_list'(_, -1, List, Xs) ->
-       (  var(Xs) -> throw(error(instantiation_error, atom_codes/2))
-       ;  Xs == [] ->
-	  (  no_var_in_list(List) -> '$atom_codes'(Atom, List)
-	  ;  throw(error(instantiation_error, atom_codes/2))
-	  )
-       ;  throw(error(type_error(list, List), atom_codes/2))
+    error:can_be(list, List),
+    (  var(Atom) ->
+       (  var(List) -> throw(error(instantiation_error, atom_codes/2))
+       ;  no_var_in_list(List) -> '$atom_codes'(Atom, List)
        )
     ;  atom(Atom) -> '$atom_codes'(Atom, List)
     ;  Atom == [] -> '$atom_codes'(Atom, List)
