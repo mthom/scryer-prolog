@@ -9,9 +9,9 @@
 	abolish/1, asserta/1, assertz/1, bagof/3, bb_b_put/2,
 	bb_get/2, bb_put/2, call_cleanup/2,
 	call_with_inference_limit/3, catch/3, clause/2,
-	current_predicate/1, current_prolog_flag/2, expand_goal/2,
-	expand_term/2, findall/3, findall/4, halt/0, once/1, op/3,
-	repeat/0, retract/1, set_prolog_flag/2, setof/3,
+	current_predicate/1, current_op/3, current_prolog_flag/2,
+	expand_goal/2, expand_term/2, findall/3, findall/4, halt/0,
+	once/1, op/3, repeat/0, retract/1, set_prolog_flag/2, setof/3,
 	setup_call_cleanup/3, term_variables/2, throw/1, true/0,
 	false/0, write/1, write_canonical/1, writeq/1, write_term/2]).
 
@@ -712,6 +712,19 @@ current_predicate(Pred) :-
     ;  Pred = call/N,
        max_arity(Max),
        between:between(0, Max, N)
+    ).
+
+'$iterate_op_db_refs'(Ref, Priority, Spec, Op) :-
+    '$lookup_op_db_ref'(Ref, Priority, Spec, Op).
+'$iterate_op_db_refs'(Ref, Priority, Spec, Op) :-
+    '$get_next_op_db_ref'(Ref, NextRef),
+    '$iterate_op_db_refs'(NextRef, Priority, Spec, Op).
+
+current_op(Priority, Spec, Op) :-
+    (  nonvar(Op), \+ atom(Op)
+    -> throw(error(type_error(atom, Op), current_op/3))
+    ;  '$get_next_op_db_ref'(Ref, _),
+       '$iterate_op_db_refs'(Ref, Priority, Spec, Op)
     ).
 
 list_of_op_atoms(Var) :-

@@ -162,8 +162,10 @@ impl fmt::Display for HeapCellValue {
 impl fmt::Display for DBRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &DBRef::BuiltInPred(ref name, arity, _) => write!(f, "db_ref:builtin:{}/{}", name, arity),
-            &DBRef::NamedPred(ref name, arity, _) =>   write!(f, "db_ref:named:{}/{}", name, arity)
+            &DBRef::BuiltInPred(ref name, arity, _) =>  write!(f, "db_ref:builtin:{}/{}", name, arity),
+            &DBRef::NamedPred(ref name, arity, _) =>    write!(f, "db_ref:named:{}/{}", name, arity),
+            &DBRef::Op(priority, spec, ref name, ..) => write!(f, "db_ref:op({}, {}, {})", priority,
+                                                               spec, name)
         }
     }
 }

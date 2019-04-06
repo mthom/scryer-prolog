@@ -268,6 +268,30 @@ impl MachineState {
                     },
                     None => self.fail = true
                 }
+            },
+            &DBRef::Op(_, spec, ref name, ref op_dir, _) => {
+                let fixity = match spec {
+                    XF | YF => Fixity::Post,
+                    FX | FY => Fixity::Pre,
+                    _ => Fixity::In
+                };
+
+                let key = OrderedOpDirKey(name.clone(), fixity);
+
+                match op_dir.range(key ..).skip(1).next() {
+                    Some((OrderedOpDirKey(name, _), (priority, spec))) => {
+                        let a2 = self[temp_v!(2)].clone();
+
+                        if let Some(r) = a2.as_var() {
+                            self.bind(r, Addr::DBRef(DBRef::Op(*priority, *spec, name.clone(),
+                                                               op_dir.clone(),
+                                                               SharedOpDesc::new(*priority, *spec))));
+                        } else {
+                            self.fail = true;
+                        }
+                    },
+                    None => self.fail = true
+                }
             }
         }
     }
@@ -540,12 +564,62 @@ impl MachineState {
                               return Ok(());
                           }
                       },
+                    Addr::DBRef(DBRef::Op(..)) => self.fail = true,
                     Addr::DBRef(ref db_ref) =>
                       self.get_next_db_ref(&indices, db_ref),
                     _ => {
                       self.fail = true;
                     }
                 };
+            },
+            &SystemClauseType::GetNextOpDBRef => {
+                let a1 = self[temp_v!(1)].clone();
+
+                match self.store(self.deref(a1)) {
+                    addr @ Addr::HeapCell(_)
+                  | addr @ Addr::StackCell(..)
+                  | addr @ Addr::AttrVar(_) =>  {
+                      let mut unossified_op_dir = OssifiedOpDir::new();
+
+                      unossified_op_dir.extend(indices.op_dir.iter().filter_map(|(key, op_dir_val)| {
+                          let (name, fixity) = key.clone();
+                          
+                          let prec  = op_dir_val.shared_op_desc().prec();
+
+                          if prec == 0 {
+                              return None;
+                          }
+                          
+                          let assoc = op_dir_val.shared_op_desc().assoc();
+
+                          Some((OrderedOpDirKey(name, fixity), (prec, assoc)))
+                      }));
+
+                      let ossified_op_dir = Rc::new(unossified_op_dir);
+
+                      match ossified_op_dir.iter().next() {
+                          Some((OrderedOpDirKey(name, _), (priority, spec))) => {
+                              let db_ref = DBRef::Op(*priority, *spec, name.clone(),
+                                                     ossified_op_dir.clone(),
+                                                     SharedOpDesc::new(*priority, *spec));
+                              let r = addr.as_var().unwrap();
+
+                              self.bind(r, Addr::DBRef(db_ref));
+                          },
+                          None => {
+                              self.fail = true;
+                              return Ok(());
+                          }
+                      }
+                    },
+                    Addr::DBRef(DBRef::BuiltInPred(..)) | Addr::DBRef(DBRef::NamedPred(..)) =>
+                        self.fail = true,
+                    Addr::DBRef(ref db_ref) =>
+                        self.get_next_db_ref(&indices, db_ref),
+                    _ => {
+                        self.fail = true;
+                    }
+                }
             },
             &SystemClauseType::LookupDBRef => {
                 let a1 = self[temp_v!(1)].clone();
@@ -564,14 +638,61 @@ impl MachineState {
                                 if !self.fail {
                                     self.unify(a3, Addr::Con(Constant::Number(arity)));
                                 }
-                            }
+                            },
+                            _ => self.fail = true
+                        },
+                    _ => self.fail = true
+                }
+            },
+            &SystemClauseType::LookupOpDBRef => {
+                let a1 = self[temp_v!(1)].clone();
+
+                match self.store(self.deref(a1)) {
+                    Addr::DBRef(db_ref) =>
+                        match db_ref {
+                            DBRef::Op(priority, spec, name, _, shared_op_desc) => {
+                                
+                                
+                                let prec = self[temp_v!(2)].clone();
+                                let specifier = self[temp_v!(3)].clone();
+                                let op = self[temp_v!(4)].clone();
+
+                                let spec = match spec {
+                                    FX => "fx",
+                                    FY => "fy",
+                                    XF => "xf",
+                                    YF => "yf",
+                                    XFX => "xfx",
+                                    XFY => "xfy",
+                                    YFX => "yfx",
+                                    _ => {
+                                        self.fail = true;
+                                        return Ok(());
+                                    }
+                                };
+
+                                let a2 = Number::Integer(Rc::new(BigInt::from_usize(priority).unwrap()));
+                                let a3 = Addr::Con(Constant::Atom(clause_name!(spec), None));
+                                let a4 = Addr::Con(Constant::Atom(name, Some(shared_op_desc)));
+
+                                self.unify(Addr::Con(Constant::Number(a2)), prec);
+
+                                if !self.fail {
+                                    self.unify(a3, specifier);
+                                }
+
+                                if !self.fail {
+                                    self.unify(a4, op);
+                                }
+                            },
+                            _ => self.fail = true
                         },
                     _ => self.fail = true
                 }
             },
             &SystemClauseType::OpDeclaration => {
                 let priority  = self[temp_v!(1)].clone();
-                let specifier = self[temp_v!(2)].clone();                
+                let specifier = self[temp_v!(2)].clone();
                 let op = self[temp_v!(3)].clone();
 
                 let priority = match self.store(self.deref(priority)) {
@@ -595,7 +716,7 @@ impl MachineState {
 
                 let result = to_op_decl(priority, specifier.as_str(), op)
                     .map_err(SessionError::from)
-                    .and_then(|op_decl| {                        
+                    .and_then(|op_decl| {
                         if op_decl.0 == 0 {
                             Ok(op_decl.remove(&mut indices.op_dir))
                         } else {

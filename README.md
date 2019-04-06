@@ -175,6 +175,7 @@ The following predicates are built-in to Scryer.
 * `compound/1`
 * `copy_term/2`
 * `current_predicate/1`
+* `current_op/3`
 * `cyclic_term/1`
 * `dif/2`
 * `expand_goal/2`

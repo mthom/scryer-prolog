@@ -12,10 +12,16 @@ use std::mem;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::rc::Rc;
 
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct OrderedOpDirKey(pub ClauseName, pub Fixity);
+
+pub type OssifiedOpDir = BTreeMap<OrderedOpDirKey, (usize, Specifier)>;
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum DBRef {
     BuiltInPred(ClauseName, usize, Option<SharedOpDesc>),
-    NamedPred(ClauseName, usize, Option<SharedOpDesc>)
+    NamedPred(ClauseName, usize, Option<SharedOpDesc>),
+    Op(usize, Specifier, ClauseName, Rc<OssifiedOpDir>, SharedOpDesc)
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
