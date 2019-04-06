@@ -42,7 +42,7 @@ impl DirectedOp {
 fn needs_bracketing(child_spec: &SharedOpDesc, op: &DirectedOp) -> bool
 {
     match op {
-        &DirectedOp::Left(ref name, ref cell) => {            
+        &DirectedOp::Left(ref name, ref cell) => {
             let (priority, spec) = cell.get();
 
             if name.as_str() == "-" {
@@ -51,15 +51,21 @@ fn needs_bracketing(child_spec: &SharedOpDesc, op: &DirectedOp) -> bool
                     return true;
                 }
             }
-            
+
             let is_strict_right = is_yfx!(spec) || is_xfx!(spec) || is_fx!(spec);
             child_spec.prec() > priority || (child_spec.prec() == priority && is_strict_right)
         },
         &DirectedOp::Right(_, ref cell) => {
-            let (priority, spec) = cell.get();            
+            let (priority, spec) = cell.get();
             let is_strict_left = is_xfx!(spec) || is_xfy!(spec) || is_xf!(spec);
-            
-            child_spec.prec() > priority || (child_spec.prec() == priority && is_strict_left)
+
+            if child_spec.prec() > priority || (child_spec.prec() == priority && is_strict_left) {
+                true
+            } else if (is_postfix!(spec) || is_infix!(spec)) && !is_postfix!(child_spec.assoc()) {
+                child_spec.prec() == priority
+            } else {
+                false
+            }
         }
     }
 }
@@ -100,6 +106,20 @@ impl<'a> HCPreOrderIterator<'a> {
                     return false
             }
         }
+    }
+}
+
+fn char_to_string(c: char) -> String {
+    match c {
+        '\n' => "\\n".to_string(),
+        '\r' => "\\r".to_string(),
+        '\t' => "\\t".to_string(),
+        '\u{0b}' => "\\v".to_string(), // UTF-8 vertical tab
+        '\u{0c}' => "\\f".to_string(), // UTF-8 form feed
+        '\u{08}' => "\\b".to_string(), // UTF-8 backspace
+        '\u{07}' => "\\a".to_string(), // UTF-8 alert
+        '\x20' ... '\x7e' => c.to_string(),
+        _ => format!("\\x{:x}\\", c as u32)
     }
 }
 
@@ -250,12 +270,6 @@ pub struct HCPrinter<'a, Outputter> {
 macro_rules! push_space_if_amb {
     ($self:expr, $atom:expr, $action:block) => (
         if $self.ambiguity_check($atom) {
-            if $self.last_item_idx > 1 {
-                if !$self.outputter.range(0 .. $self.last_item_idx).ends_with(" ") {
-                    $self.outputter.insert($self.last_item_idx, ' ');
-                }
-            }
-
             $self.outputter.push_char(' ');
             $action;
         } else {
@@ -277,8 +291,10 @@ fn requires_space(atom: &str, op: &str) -> bool {
                 alpha_numeric_char!(oc)
             } else if sign_char!(ac) {
                 sign_char!(oc) || decimal_digit_char!(oc)
+            } else if single_quote_char!(ac) {
+                single_quote_char!(oc)
             } else if ac == '0' {
-                !non_quoted_token(op.chars())
+                oc == 'b' || oc == 'x' || oc == 'o' || !non_quoted_token(op.chars())
             } else {
                 false
             }
@@ -432,7 +448,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     fn format_negated_operand(&mut self, spec: SharedOpDesc)
     {
         let op = DirectedOp::Left(clause_name!("-"), spec);
-            
+
         self.state_stack.push(TokenOrRedirect::CompositeRedirect(op));
         self.state_stack.push(TokenOrRedirect::Space);
         self.state_stack.push(TokenOrRedirect::Atom(clause_name!("-")));
@@ -465,8 +481,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             if self.format_numbered_vars(iter) {
                 return;
             }
-        }        
-        
+        }
+
         if let Some(spec) = ct.spec() {
             if "." == ct.name().as_str() && is_infix!(spec.assoc()) {
                 if !self.ignore_ops {
@@ -474,7 +490,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     return;
                 }
             }
-            
+
             if !self.ignore_ops && spec.prec() > 0 {
                 return self.enqueue_op(ct, spec);
             }
@@ -533,7 +549,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
                         if let Some(offset_str) = self.offset_as_string(addr) {
                             push_space_if_amb!(self, &offset_str, {
-                                self.append_str(offset_str.as_str());
+                                self.append_str(&offset_str);
                             });
                         }
 
@@ -555,53 +571,47 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     }
 
     fn print_atom(&mut self, atom: &ClauseName) {
-        push_space_if_amb!(self, atom.as_str(), {
-            self.print_op_addendum(atom.as_str());
+        let result = self.print_op_addendum(atom.as_str());
+
+        push_space_if_amb!(self, result.as_str(), {
+            self.append_str(&result);
         });
     }
 
-    fn print_op_addendum(&mut self, atom: &str) {
+    fn print_op_addendum(&mut self, atom: &str) -> String {
         if !self.quoted || non_quoted_token(atom.chars()) {
-            self.append_str(atom);
+            atom.to_string()
         } else if atom == "''" {
-            self.append_str("''");
+            "''".to_string()
         } else {
+            let mut result = String::new();
+
             if self.quoted {
-                self.push_char('\'');
+                result.push('\'');
             }
 
             for c in atom.chars() {
-                self.print_char(c);
+                result += &char_to_string(c);
             }
 
             if self.quoted {
-                self.push_char('\'');
+                result.push('\'');
             }
+
+            result
         }
     }
 
     fn print_op(&mut self, atom: &str) {
-        push_space_if_amb!(self, atom, {
-            if atom == "," {
-                self.push_char(',');
-            } else {
-                self.print_op_addendum(atom);
-            }
-        });
-    }
-
-    fn print_char(&mut self, c: char) {
-        match c {
-            '\n' => self.append_str("\\n"),
-            '\r' => self.append_str("\\r"),
-            '\t' => self.append_str("\\t"),
-            '\u{0b}' => self.append_str("\\v"), // UTF-8 vertical tab
-            '\u{0c}' => self.append_str("\\f"), // UTF-8 form feed
-            '\u{08}' => self.append_str("\\b"), // UTF-8 backspace
-            '\u{07}' => self.append_str("\\a"), // UTF-8 alert
-            '\x20' ... '\x7e' => self.push_char(c),
-            _ => self.append_str(&format!("\\x{:x}\\", c as u32))
+        let result = if atom == "," {
+            ",".to_string()
+        } else {
+            self.print_op_addendum(atom)
         };
+
+        push_space_if_amb!(self, &result, {
+            self.append_str(&result);
+        });
     }
 
     fn print_number(&mut self, n: Number, op: &Option<DirectedOp>) {
@@ -645,37 +655,49 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
     fn print_constant(&mut self, c: Constant, op: &Option<DirectedOp>) {
         match c {
-            Constant::Atom(ref atom, Some(_)) => {
+            Constant::Atom(ref atom, Some(ref spec)) if spec.prec() > 0 => {
                 if let Some(ref op) = op {
                     if self.outputter.ends_with(&format!(" {}", op.as_str())) {
                         self.push_char(' ');
                     }
-                    
+
                     self.push_char('(');
                 }
-                
+
                 self.print_atom(atom);
 
                 if op.is_some() {
                     self.push_char(')');
                 }
             },
-            Constant::Atom(ref atom, None) =>
+            Constant::Atom(ref atom, _) =>
                 push_space_if_amb!(self, atom.as_str(), {
                     self.print_atom(atom);
                 }),
-            Constant::Char(c) if non_quoted_token(once(c)) =>
-                self.print_char(c),
-            Constant::Char(c) =>
+            Constant::Char(c) if non_quoted_token(once(c)) => {
+                let c = char_to_string(c);
+
+                push_space_if_amb!(self, &c, {
+                    self.append_str(c.as_str());
+                });
+            },
+            Constant::Char(c) => {
+                let mut result = String::new();
+
                 if self.quoted {
-                    self.push_char('\'');
-                    self.print_char(c);
-                    self.push_char('\'');
+                    result.push('\'');
+                    result += &char_to_string(c);
+                    result.push('\'');
                 } else {
-                    self.print_char(c);
-                },
+                    result += &char_to_string(c);
+                }
+
+                push_space_if_amb!(self, &result, {
+                    self.append_str(result.as_str());
+                });
+            },
             Constant::CharCode(c) =>
-                self.append_str(&format!("{}", c)),            
+                self.append_str(&format!("{}", c)),
             Constant::EmptyList =>
                 self.append_str("[]"),
             Constant::Number(n) =>

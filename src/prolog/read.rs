@@ -40,7 +40,7 @@ pub mod readline
         Single,
         Multi
     }
-    
+
     static mut LINE_MODE: LineMode = LineMode::Single;
     static mut END_OF_LINE: bool = false;
 
@@ -117,7 +117,7 @@ pub mod readline
         if let LineMode::Single = LINE_MODE {
             insert_text_rl("?- ");
         }
-        
+
         0
     }
 
@@ -140,7 +140,7 @@ pub mod readline
 pub mod readline
 {
     use std::io::{BufRead, Read, stdin, stdout, Write};
-    
+
     pub fn read_batch(_: &str) -> Result<Vec<u8>, ::SessionError> {
         let mut buf = vec![];
 
@@ -159,14 +159,14 @@ pub mod readline
 
         let stdin = stdin();
         let stdin = stdin.lock();
-        
+
         let mut buf = "?- ".to_string();
-        
+
         for line in stdin.lines() {
             match line {
                 Ok(line) => {
                     buf += &line;
-                    
+
                     if line.trim().ends_with(".") {
                         break;
                     }

@@ -15,7 +15,7 @@ use prolog::num::bigint::{BigInt};
 use ref_thread_local::RefThreadLocal;
 
 use std::collections::HashSet;
-use std::io::{stdout, Write};
+use std::io::{stdout, Read, Write};
 use std::iter::once;
 use std::mem;
 use std::rc::Rc;
@@ -355,14 +355,14 @@ impl MachineState {
                         let a2 = self[temp_v!(2)].clone();
                         let chars = vec![Addr::Con(Constant::Char('[')),
                                          Addr::Con(Constant::Char(']'))];
-                        
+
                         let list_of_chars = Addr::HeapCell(self.heap.to_list(chars.into_iter()));
 
                         self.unify(a2, list_of_chars);
                     },
                     ref addr if addr.is_ref() => {
                         let stub = MachineError::functor_stub(clause_name!("atom_chars"), 2);
-                        
+
                         match self.try_from_list(temp_v!(2), stub.clone()) {
                             Err(e) => return Err(e),
                             Ok(addrs) => {
@@ -402,7 +402,7 @@ impl MachineState {
 
                         let a2 = self[temp_v!(2)].clone();
                         self.unify(a2, list_of_codes);
-                    },                    
+                    },
                     Addr::Con(Constant::Atom(name, _)) => {
                         let iter = name.as_str().chars().map(|c| Addr::Con(Constant::CharCode(c as u8)));
                         let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
@@ -415,7 +415,7 @@ impl MachineState {
                         let a2 = self[temp_v!(2)].clone();
                         let chars = vec![Addr::Con(Constant::CharCode('[' as u8)),
                                          Addr::Con(Constant::CharCode(']' as u8))];
-                        
+
                         let list_of_codes = Addr::HeapCell(self.heap.to_list(chars.into_iter()));
 
                         self.unify(a2, list_of_codes);
@@ -452,12 +452,14 @@ impl MachineState {
 
                 let atom = match self.store(self.deref(a1)) {
                     Addr::Con(Constant::Atom(name, _)) => name,
+                    Addr::Con(Constant::EmptyList) => clause_name!("[]"),
+                    Addr::Con(Constant::Char(c)) => clause_name!(c.to_string(), indices.atom_tbl),
                     _ => unreachable!()
                 };
 
                 let len = Number::Integer(Rc::new(BigInt::from_usize(atom.as_str().len()).unwrap()));
                 let a2  = self[temp_v!(2)].clone();
-                
+
                 self.unify(a2, Addr::Con(Constant::Number(len)));
             },
             &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
@@ -479,6 +481,42 @@ impl MachineState {
                 let lh_len = Addr::Con(Constant::Usize(self.lifted_heap.len()));
 
                 self.unify(a1, lh_len);
+            },
+            &SystemClauseType::CharCode => {
+                let a1 = self[temp_v!(1)].clone();
+
+                match self.store(self.deref(a1)) {
+                    Addr::Con(Constant::Atom(name, _)) => {
+                        let c = name.as_str().chars().next().unwrap();
+                        let a2 = self[temp_v!(2)].clone();
+
+                        self.unify(Addr::Con(Constant::CharCode(c as u8)), a2);
+                    },
+                    Addr::Con(Constant::Char(c)) => {
+                        let a2 = self[temp_v!(2)].clone();
+                        self.unify(Addr::Con(Constant::CharCode(c as u8)), a2);
+                    },
+                    ref addr if addr.is_ref() => {
+                        let a2 = self[temp_v!(2)].clone();
+                        
+                        match self.store(self.deref(a2)) {
+                            Addr::Con(Constant::CharCode(code)) =>
+                                self.unify(Addr::Con(Constant::Char(code as char)), addr.clone()),
+                            Addr::Con(Constant::Number(Number::Integer(n))) =>
+                                if let Some(c) = n.to_u8() {
+                                    self.unify(Addr::Con(Constant::Char(c as char)), addr.clone());
+                                } else {
+                                    let stub = MachineError::functor_stub(clause_name!("char_code"), 2);
+                                    let err = MachineError::representation_error(RepFlag::CharacterCode);
+                                    let err = self.error_form(err, stub);
+
+                                    return Err(err);
+                                },
+                            _ => self.fail = true
+                        };
+                    },
+                    _ => unreachable!()
+                };
             },
             &SystemClauseType::CheckCutPoint => {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));
@@ -502,6 +540,25 @@ impl MachineState {
                     Some(sought_addr) => self.unify(addr, sought_addr),
                     None => self.fail = true
                 };
+            },
+            &SystemClauseType::GetChar => {
+                let c = std::io::stdin()
+                    .bytes() 
+                    .next()
+                    .and_then(|result| result.ok());
+
+                let a1 = self[temp_v!(1)].clone();
+                
+                match c {
+                    Some(c) => self.unify(Addr::Con(Constant::Char(c as char)), a1),
+                    None => {
+                        let stub = MachineError::functor_stub(clause_name!("get_char"), 1);
+                        let err = MachineError::representation_error(RepFlag::Character);
+                        let err = self.error_form(err, stub);
+
+                        return Err(err);
+                    }
+                }                
             },
             &SystemClauseType::GetModuleClause => {
                 let module = self[temp_v!(3)].clone();
