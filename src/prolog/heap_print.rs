@@ -470,9 +470,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         let right_directed_op = DirectedOp::Right(name.clone(), spec.clone());
 
         self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
-        self.state_stack.push(TokenOrRedirect::Space);
-        self.state_stack.push(TokenOrRedirect::Op(name.clone(), spec));
-        self.state_stack.push(TokenOrRedirect::Space);
+        // self.state_stack.push(TokenOrRedirect::Op(name.clone(), spec));
+        self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
         self.state_stack.push(TokenOrRedirect::CompositeRedirect(right_directed_op));
     }
 
