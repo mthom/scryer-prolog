@@ -281,8 +281,8 @@ macro_rules! push_space_if_amb {
 fn requires_space(atom: &str, op: &str) -> bool {
     match atom.chars().last() {
         Some(ac) => op.chars().next().map(|oc| {
-            if alpha_char!(ac) {
-                alpha_numeric_char!(oc)
+            if alpha_numeric_char!(ac) {
+                oc == '(' || alpha_numeric_char!(oc)
             } else if graphic_token_char!(ac) {
                 graphic_token_char!(oc)
             } else if variable_indicator_char!(ac) {
@@ -423,14 +423,14 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
         } else { // if is_infix!(spec.assoc())
-            match ct.name().as_str() {                
+            match ct.name().as_str() {
                 "|" => {
                     self.format_infix_op_with_space(ct.name(), spec);
                     return;
                 },
                 _ => {}
             };
-            
+
             let left_directed_op  = DirectedOp::Left(ct.name(), spec.clone());
             let right_directed_op = DirectedOp::Right(ct.name(), spec.clone());
 
@@ -677,19 +677,25 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     fn print_constant(&mut self, c: Constant, op: &Option<DirectedOp>) {
         match c {
             Constant::Atom(ref atom, Some(ref spec)) if spec.prec() > 0 => {
+                let mut result = String::new();
+
                 if let Some(ref op) = op {
                     if self.outputter.ends_with(&format!(" {}", op.as_str())) {
-                        self.push_char(' ');
+                        result.push(' ');
                     }
 
-                    self.push_char('(');
+                    result.push('(');
                 }
 
-                self.print_atom(atom);
+                result += &self.print_op_addendum(atom.as_str());
 
                 if op.is_some() {
-                    self.push_char(')');
+                    result.push(')');
                 }
+
+                push_space_if_amb!(self, &result, {
+                    self.append_str(&result);
+                });
             },
             Constant::Atom(ref atom, _) =>
                 push_space_if_amb!(self, atom.as_str(), {
@@ -800,6 +806,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
                 if add_brackets {
                     self.state_stack.push(TokenOrRedirect::Open);
+
+                    if let Some(ref op) = &op {
+                        if requires_space(op.as_str(), "(") {
+                            self.state_stack.push(TokenOrRedirect::Space);
+                        }
+                    }
                 }
             },
             HeapCellValue::NamedStr(0, name, fixity) =>
