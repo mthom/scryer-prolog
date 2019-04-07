@@ -37,6 +37,15 @@ impl DirectedOp {
                 name.as_str() == "-" && is_prefix!(cell.assoc())
         }
     }
+
+    #[inline]
+    fn is_left(&self) -> bool {
+        if let &DirectedOp::Left(..) = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 fn needs_bracketing(child_spec: &SharedOpDesc, op: &DirectedOp) -> bool
@@ -62,7 +71,7 @@ fn needs_bracketing(child_spec: &SharedOpDesc, op: &DirectedOp) -> bool
             if child_spec.prec() > priority || (child_spec.prec() == priority && is_strict_left) {
                 true
             } else if (is_postfix!(spec) || is_infix!(spec)) && !is_postfix!(child_spec.assoc()) {
-                child_spec.prec() == priority
+                !SharedOpDesc::ptr_eq(&cell, &child_spec) && child_spec.prec() == priority
             } else {
                 false
             }
@@ -281,7 +290,9 @@ macro_rules! push_space_if_amb {
 fn requires_space(atom: &str, op: &str) -> bool {
     match atom.chars().last() {
         Some(ac) => op.chars().next().map(|oc| {
-            if alpha_numeric_char!(ac) {
+            if ac == '0' {
+                oc == 'b' || oc == 'x' || oc == 'o' || !non_quoted_token(op.chars())
+            } else if alpha_numeric_char!(ac) {
                 oc == '(' || alpha_numeric_char!(oc)
             } else if graphic_token_char!(ac) {
                 graphic_token_char!(oc)
@@ -293,8 +304,6 @@ fn requires_space(atom: &str, op: &str) -> bool {
                 sign_char!(oc) || decimal_digit_char!(oc)
             } else if single_quote_char!(ac) {
                 single_quote_char!(oc)
-            } else if ac == '0' {
-                oc == 'b' || oc == 'x' || oc == 'o' || !non_quoted_token(op.chars())
             } else {
                 false
             }
@@ -808,7 +817,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     self.state_stack.push(TokenOrRedirect::Open);
 
                     if let Some(ref op) = &op {
-                        if requires_space(op.as_str(), "(") {
+                        if op.is_left() && requires_space(op.as_str(), "(") {
                             self.state_stack.push(TokenOrRedirect::Space);
                         }
                     }
