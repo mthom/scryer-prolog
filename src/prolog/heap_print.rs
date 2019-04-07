@@ -403,7 +403,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         requires_space(tail, atom)
     }
 
-    // TODO: create a DirectedOp factory method. Use it here, and above.
     fn enqueue_op(&mut self, ct: ClauseType, spec: SharedOpDesc) {
         if is_postfix!(spec.assoc()) {
             let right_directed_op = DirectedOp::Right(ct.name(), spec.clone());
@@ -411,10 +410,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(right_directed_op));
         } else if is_prefix!(spec.assoc()) {
-            if ct.name().as_str() == "-" {
-                self.format_negated_operand(spec);
-                return;
-            }
+            match ct.name().as_str() {
+                "-" | "\\" => {
+                    self.format_prefix_op_with_space(ct.name(), spec);
+                    return;
+                },
+                _ => {}
+            };
 
             let left_directed_op = DirectedOp::Left(ct.name(), spec.clone());
 
@@ -445,13 +447,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
-    fn format_negated_operand(&mut self, spec: SharedOpDesc)
+    fn format_prefix_op_with_space(&mut self, name: ClauseName, spec: SharedOpDesc)
     {
-        let op = DirectedOp::Left(clause_name!("-"), spec);
+        let op = DirectedOp::Left(name.clone(), spec);
 
         self.state_stack.push(TokenOrRedirect::CompositeRedirect(op));
         self.state_stack.push(TokenOrRedirect::Space);
-        self.state_stack.push(TokenOrRedirect::Atom(clause_name!("-")));
+        self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
     fn format_curly_braces(&mut self)
