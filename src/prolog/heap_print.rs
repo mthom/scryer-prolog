@@ -438,7 +438,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         } else { // if is_infix!(spec.assoc())
             match ct.name().as_str() {
                 "|" => {
-                    self.format_infix_op_with_space(ct.name(), spec);
+                    self.format_bar_separator_op_with_space(ct.name(), spec);
                     return;
                 },
                 _ => {}
@@ -477,13 +477,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
-    fn format_infix_op_with_space(&mut self, name: ClauseName, spec: SharedOpDesc)
+    fn format_bar_separator_op_with_space(&mut self, name: ClauseName, spec: SharedOpDesc)
     {
         let left_directed_op  = DirectedOp::Left(name.clone(), spec.clone());
         let right_directed_op = DirectedOp::Right(name.clone(), spec.clone());
 
         self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
-        // self.state_stack.push(TokenOrRedirect::Op(name.clone(), spec));
         self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
         self.state_stack.push(TokenOrRedirect::CompositeRedirect(right_directed_op));
     }
@@ -516,7 +515,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                 return;
             }
         }
-
+        
         if let Some(spec) = ct.spec() {
             if "." == ct.name().as_str() && is_infix!(spec.assoc()) {
                 if !self.ignore_ops {

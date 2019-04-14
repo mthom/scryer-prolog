@@ -191,7 +191,7 @@ impl MachineState {
                                -> Outputter
       where Outputter: HCValueOutputter
     {
-        let orig_len = output.len();
+        let orig_len = output.len();        
 
         output.begin_new_var();
 
@@ -2027,7 +2027,7 @@ impl MachineState {
         self.try_functor_unify_components(name, arity);
     }
 
-    pub(super) fn try_functor(&mut self) -> CallResult {
+    pub(super) fn try_functor(&mut self, op_dir: &OpDir) -> CallResult {
         let stub = MachineError::functor_stub(clause_name!("functor"), 3);
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -2042,8 +2042,11 @@ impl MachineState {
                         self.try_functor_compound_case(name, arity, spec),
                     _ => self.fail = true
                 },
-            Addr::Lis(_) =>
-                self.try_functor_compound_case(clause_name!("."), 2, None),
+            Addr::Lis(_) => {
+                let shared_op_desc = op_dir.get(&(clause_name!("."), Fixity::In))
+                                           .map(|val| val.0.clone());
+                self.try_functor_compound_case(clause_name!("."), 2, shared_op_desc)
+            },
             Addr::AttrVar(..) | Addr::HeapCell(_) | Addr::StackCell(..) => {
                 let name  = self.store(self.deref(self[temp_v!(2)].clone()));
                 let arity = self.store(self.deref(self[temp_v!(3)].clone()));

@@ -208,13 +208,13 @@ impl Machine {
         compile_user_module(self, parsing_stream(ASSOC.as_bytes()));
     }
 
-    #[cfg(test)]    
+    #[cfg(test)]
     pub fn reset(&mut self) {
         self.prolog_stream = readline::input_stream();
         self.policies.cut_policy = Box::new(DefaultCutPolicy {});
         self.machine_st.reset();
     }
-    
+
     pub fn run_toplevel(&mut self) {
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
         self.run_query(&AllocVarDict::new(), &mut HeapVarDict::new());
@@ -413,7 +413,7 @@ impl Machine {
                             };
                         }
 
-                        let term_output = self.machine_st.print_with_locs(term, &var_dict);
+                        let term_output = self.machine_st.print_query(term, &var_dict);
                         term_output.result()
                     },
                     Err(err_stub) => {
@@ -496,7 +496,7 @@ impl Machine {
                             EvalSession::QueryFailure => {
                                 write!(raw_stdout, "false.\r\n").unwrap();
                                 raw_stdout.flush().unwrap();
-                                
+
                                 self.machine_st.absorb_snapshot(snapshot);
                                 return;
                             },
@@ -525,10 +525,10 @@ impl Machine {
             EvalSession::QueryFailure =>
                 if self.machine_st.ball.stub.len() > 0 {
                     let ball = self.machine_st.ball.take();
-                    
+
                     self.machine_st.absorb_snapshot(snapshot);
                     self.machine_st.ball = ball;
-                    
+
                     let stub = self.machine_st.copy_and_align_ball();
                     self.machine_st.throw_exception(stub);
 
@@ -654,6 +654,23 @@ impl Machine {
 
 
 impl MachineState {
+    fn print_query(&self, addr: Addr, var_dict: &HeapVarDict) -> PrinterOutputter
+    {
+        let output = PrinterOutputter::new();
+        let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
+
+        printer.quoted = true;
+        printer.numbervars = false;
+        printer.drop_toplevel_spec();
+
+        printer.see_all_locs();
+
+        let mut output = printer.print(addr);
+
+        output.push_char('.');
+        output
+    }
+
     fn execute_instr(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
                      code_repo: &CodeRepo, prolog_stream: &mut PrologStream)
     {
