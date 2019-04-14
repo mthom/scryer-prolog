@@ -385,8 +385,6 @@ pub enum SessionError {
     NamelessEntry,
     OpIsInfixAndPostFix(ClauseName),
     ParserError(ParserError),
-    QueryFailure,
-    QueryFailureWithException(ClauseName),
     UserPrompt
 }
 
@@ -394,6 +392,7 @@ pub enum EvalSession {
     EntrySuccess,
     Error(SessionError),
     InitialQuerySuccess(AllocVarDict, HeapVarDict),
+    QueryFailure,
     SubsequentQuerySuccess,
 }
 

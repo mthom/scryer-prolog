@@ -11,11 +11,12 @@ use prolog::machine::machine_state::*;
 use prolog::machine::toplevel::to_op_decl;
 use prolog::num::{FromPrimitive, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt};
+use prolog::read::{PrologStream, readline};
 
 use ref_thread_local::RefThreadLocal;
 
 use std::collections::HashSet;
-use std::io::{stdout, Read, Write};
+use std::io::{stdout, Write};
 use std::iter::once;
 use std::mem;
 use std::rc::Rc;
@@ -201,6 +202,17 @@ impl MachineState {
         threshold + lh_offset + 2
     }
 
+    fn repl_redirect(&mut self, repl_code_ptr: REPLCodePtr) -> CallResult {
+        let p = if self.last_call {
+            self.cp
+        } else {
+            self.p.local() + 1
+        };
+
+        self.p = CodePtr::REPL(repl_code_ptr, p);
+        return Ok(());
+    }
+
     fn truncate_if_no_lifted_heap_diff<AddrConstr>(&mut self, addr_constr: AddrConstr)
        where AddrConstr: Fn(usize) -> Addr
     {
@@ -301,7 +313,8 @@ impl MachineState {
                               ct: &SystemClauseType,
                               indices: &mut IndexStore,
                               call_policy: &mut Box<CallPolicy>,
-                              cut_policy:  &mut Box<CutPolicy>)
+                              cut_policy:  &mut Box<CutPolicy>,
+                              parsing_stream: &mut PrologStream)
                               -> CallResult
     {
         match ct {
@@ -498,7 +511,7 @@ impl MachineState {
                     },
                     ref addr if addr.is_ref() => {
                         let a2 = self[temp_v!(2)].clone();
-                        
+
                         match self.store(self.deref(a2)) {
                             Addr::Con(Constant::CharCode(code)) =>
                                 self.unify(Addr::Con(Constant::Char(code as char)), addr.clone()),
@@ -542,23 +555,21 @@ impl MachineState {
                 };
             },
             &SystemClauseType::GetChar => {
-                let c = std::io::stdin()
-                    .bytes() 
-                    .next()
-                    .and_then(|result| result.ok());
+                readline::toggle_prompt(false);
 
+                let result = parsing_stream.next();
                 let a1 = self[temp_v!(1)].clone();
-                
-                match c {
-                    Some(c) => self.unify(Addr::Con(Constant::Char(c as char)), a1),
-                    None => {
+
+                match result {
+                    Some(Ok(b)) => self.unify(Addr::Con(Constant::Char(b as char)), a1),
+                    _ => {
                         let stub = MachineError::functor_stub(clause_name!("get_char"), 1);
                         let err = MachineError::representation_error(RepFlag::Character);
                         let err = self.error_form(err, stub);
 
                         return Err(err);
                     }
-                }                
+                }
             },
             &SystemClauseType::GetModuleClause => {
                 let module = self[temp_v!(3)].clone();
@@ -1228,6 +1239,8 @@ impl MachineState {
                     None => panic!("remove_inference_counter: requires \\
                                     CWILCallPolicy.")
                 },
+            &SystemClauseType::REPL(repl_code_ptr) =>
+                return self.repl_redirect(repl_code_ptr),
             &SystemClauseType::ModuleRetractClause => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::ModuleRetract;
@@ -1249,7 +1262,6 @@ impl MachineState {
             },
             &SystemClauseType::ReturnFromVerifyAttr => {
                 let e = self.e;
-
                 let frame_len = self.and_stack[e].len();
 
                 for i in 1 .. frame_len - 1 {
@@ -1264,7 +1276,7 @@ impl MachineState {
                     self.num_of_args = num_of_args;
                 }
 
-                self.p = CodePtr::Local(self.and_stack[e].special_form_cp);
+                self.p = CodePtr::Local(self.and_stack[e].interrupt_cp);
                 self.deallocate();
 
                 return Ok(());
@@ -1334,7 +1346,8 @@ impl MachineState {
                 let h = self.heap.h;
 
                 if self.ball.stub.len() > 0 {
-                    self.copy_and_align_ball_to_heap(0);
+                    let stub = self.copy_and_align_ball();
+                    self.heap.append(stub);
                 } else {
                     self.fail = true;
                     return Ok(());
@@ -1391,6 +1404,51 @@ impl MachineState {
             &SystemClauseType::InstallNewBlock => {
                 self.install_new_block(temp_v!(1));
             },
+            &SystemClauseType::ReadTerm => {
+                readline::toggle_prompt(true);
+
+                match self.read(parsing_stream, indices.atom_tbl.clone(), &indices.op_dir) {
+                    Ok(term_write_result) => {
+                        let a1 = self[temp_v!(1)].clone();
+                        self.unify(Addr::HeapCell(term_write_result.heap_loc), a1);
+
+                        if self.fail {
+                            return Ok(());
+                        }
+
+                        let mut list_of_var_eqs = vec![];
+
+                        for (var, binding) in term_write_result.var_dict {
+                            let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
+                            let var_atom = Constant::Atom(var_atom, None);
+
+                            let h = self.heap.h;
+                            let op_desc = Some(SharedOpDesc::new(700, XFX));
+
+                            self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), op_desc));
+                            self.heap.push(HeapCellValue::Addr(Addr::Con(var_atom)));
+                            self.heap.push(HeapCellValue::Addr(binding));
+
+                            list_of_var_eqs.push(Addr::Str(h));
+                        }
+
+                        let a2 = self[temp_v!(2)].clone();
+                        let list_offset = Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
+
+                        self.unify(list_offset, a2);
+                    },
+                    Err(err) => {
+                        // reset the input stream after an input failure.
+                        *parsing_stream = readline::input_stream();
+
+                        let h = self.heap.h;
+                        let syntax_error = MachineError::syntax_error(h, err);
+                        let stub = MachineError::functor_stub(clause_name!("read_term"), 2);
+
+                        return Err(self.error_form(syntax_error, stub));
+                    }
+                }
+            },
             &SystemClauseType::ResetBlock => {
                 let addr = self.deref(self[temp_v!(1)].clone());
                 self.reset_block(addr);
@@ -1414,43 +1472,19 @@ impl MachineState {
             &SystemClauseType::Succeed => {},
             &SystemClauseType::TermVariables => {
                 let a1 = self[temp_v!(1)].clone();
-                let mut vars = Vec::new();
-
-                {
-                    let iter = self.acyclic_pre_order_iter(a1);
-
-                    for item in iter {
-                        match item {
-                            HeapCellValue::Addr(Addr::AttrVar(h)) =>
-                                vars.push(Ref::AttrVar(h)),
-                            HeapCellValue::Addr(Addr::HeapCell(h)) =>
-                                vars.push(Ref::HeapCell(h)),
-                            HeapCellValue::Addr(Addr::StackCell(fr, sc)) =>
-                                vars.push(Ref::StackCell(fr, sc)),
-                            _ => {}
-                        }
-                    }
-                }
-
-                let mut h = self.heap.h;
-                let outcome = Addr::HeapCell(h);
-
                 let mut seen_vars = HashSet::new();
 
-                for r in vars {
-                    if seen_vars.contains(&r) {
-                        continue;
+                for item in self.acyclic_pre_order_iter(a1) {
+                    match item {
+                        HeapCellValue::Addr(addr) =>
+                            if addr.is_ref() {
+                                seen_vars.insert(addr);
+                            },
+                        _ => {}
                     }
-
-                    self.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
-                    self.heap.push(HeapCellValue::Addr(r.as_addr()));
-
-                    h += 2;
-
-                    seen_vars.insert(r);
                 }
 
-                self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
+                let outcome = Addr::HeapCell(self.heap.to_list(seen_vars.into_iter()));
 
                 let a2 = self[temp_v!(2)].clone();
                 self.unify(a2, outcome);

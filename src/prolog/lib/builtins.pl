@@ -12,7 +12,7 @@
 	char_code/2, clause/2, current_predicate/1, current_op/3,
 	current_prolog_flag/2, expand_goal/2, expand_term/2,
 	findall/3, findall/4, get_char/1, halt/0, once/1, op/3,
-	repeat/0, retract/1, set_prolog_flag/2, setof/3,
+	read_term/2, repeat/0, retract/1, set_prolog_flag/2, setof/3,
 	setup_call_cleanup/3, term_variables/2, throw/1, true/0,
 	false/0, write/1, write_canonical/1, writeq/1, write_term/2]).
 
@@ -231,10 +231,23 @@ inst_member_or([X|Xs], Y, _) :-
     ; throw(instantiation_error) ). % 8.14.2.3 b)
 inst_member_or([], Y, Y).
 
+%% TODO: complete the predicate! Most read options are missing.
+read_term(Term, Options) :-
+    '$skip_max_list'(_, -1, Options, Options0),
+    (  Options0 == [] -> true
+    ;  var(Options0)  -> throw(error(instantiation_error, read_term/2)) % 8.14.1.3 b)
+    ;  throw(error(type_error(list, Options), read_term/2)) % 8.14.1.3 d)
+    ),
+    (  Options = [variable_names(VarList)] -> '$read_term'(Term, VarList)
+    ;  Options = [] -> read(Term)
+    ;  false
+    ).
+    
 write_term(Term, Options) :-
     '$skip_max_list'(_, -1, Options, Options0),
-    ( Options0 == [] -> true
-    ; throw(error(type_error(list, Options), write_term/2)) ), % 8.14.2.3 c)
+    (  Options0 == [] -> true
+    ;  throw(error(type_error(list, Options), write_term/2))
+    ), % 8.14.2.3 c)
     inst_member_or(Options, ignore_ops(IgnoreOps), ignore_ops(false)),
     inst_member_or(Options, numbervars(NumberVars), numbervars(false)),
     inst_member_or(Options, quoted(Quoted), quoted(false)),

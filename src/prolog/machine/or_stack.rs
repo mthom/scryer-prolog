@@ -1,5 +1,6 @@
 use prolog::machine::machine_indices::*;
 
+use std::mem;
 use std::ops::{Index, IndexMut};
 use std::vec::Vec;
 
@@ -72,6 +73,11 @@ impl OrStack {
                 n: usize)
     {
         self.0.push(Frame::new(global_index, e, cp, attr_var_init_b, b, bp, tr, pstr_tr, h, b0, n));
+    }
+
+    #[inline]
+    pub(crate) fn take(&mut self) -> Self {
+        OrStack(mem::replace(&mut self.0, vec![]))
     }
 
     pub fn len(&self) -> usize {

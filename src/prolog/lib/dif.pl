@@ -1,16 +1,13 @@
 :- module(dif, [dif/2]).
 
 :- use_module(library(atts)).
-:- use_module(library(ordsets)).
 
 :- attribute dif/1.
 
 put_dif_att(Var, X, Y) :-
     (   get_atts(Var, +dif(Z)) ->
-	ord_add_element(Z, X \== Y, NewZ),
-	(   Z == NewZ -> true
-	;   put_atts(Var, +dif(NewZ))
-	)
+	sort([X \== Y | Z], NewZ),
+	put_atts(Var, +dif(NewZ))
     ;   put_atts(Var, +dif([X \== Y]))
     ).
 

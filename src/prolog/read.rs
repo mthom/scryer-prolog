@@ -4,7 +4,6 @@ use prolog_parser::tabled_rc::TabledData;
 
 use prolog::forms::*;
 use prolog::iterators::*;
-use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::MachineState;
 
@@ -24,16 +23,14 @@ impl<'a> TermRef<'a> {
     }
 }
 
-pub enum Input {
-    Clear,
-    Batch,
-    TermString(String)
-}
+pub type PrologStream = ParsingStream<Box<Read>>;
 
 #[cfg(feature = "readline_rs_compat")]
 pub mod readline
 {
+    use prolog_parser::ast::*;
     use readline_rs_compat::readline::*;
+    use std::io::{Error, Read};
 
     #[derive(Clone, Copy)]
     pub enum LineMode {
@@ -41,21 +38,79 @@ pub mod readline
         Multi
     }
 
+    pub struct ReadlineStream {
+        pending_input: String
+    }
+
+    impl ReadlineStream {
+        #[inline]
+        fn new(pending_input: String) -> Self {
+            ReadlineStream { pending_input }
+        }
+
+        fn call_readline(&mut self, prompt: &str, buf: &mut [u8]) -> std::io::Result<usize> {
+            match readline_rl(prompt) {
+                Some(text) => {
+                    self.pending_input += &text;
+                    Ok(self.write_to_buf(buf))
+                },
+                None => Err(Error::last_os_error())
+            }
+        }
+
+        fn split_pending(&mut self, buf: &mut [u8], split_idx: usize) -> usize {
+            let (outgoing, _) = self.pending_input.split_at(split_idx);
+
+            for (idx, b) in outgoing.bytes().enumerate() {
+                buf[idx] = b;
+            }
+
+            outgoing.len()
+        }
+
+        fn write_to_buf(&mut self, buf: &mut [u8]) -> usize {
+            let split_idx = std::cmp::min(self.pending_input.len(), buf.len());
+            let output_len = self.split_pending(buf, split_idx);
+
+            if split_idx < self.pending_input.len() {
+                self.pending_input = self.pending_input[split_idx ..].to_string();
+            } else {
+                self.pending_input.clear();
+            }
+
+            output_len
+        }
+    }
+
+    impl Read for ReadlineStream {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.pending_input.is_empty() {
+                let prompt = unsafe {
+                    if PRINT_PROMPT { "?- " } else { "" }
+                };
+
+                self.call_readline(prompt, buf)
+            } else {
+                Ok(self.write_to_buf(buf))
+            }
+        }
+    }
+
+    static mut PRINT_PROMPT: bool = true;
     static mut LINE_MODE: LineMode = LineMode::Single;
     static mut END_OF_LINE: bool = false;
+
+    pub fn toggle_prompt(on_or_off: bool) {
+        unsafe {
+            PRINT_PROMPT = on_or_off;
+        }
+    }
 
     pub fn set_line_mode(mode: LineMode) {
         unsafe {
             LINE_MODE = mode;
             END_OF_LINE = false;
             rl_done = 0;
-        }
-    }
-
-    fn is_directive(buf: &str) -> bool {
-        match buf {
-            "?- [user]." | "?- [clear]." => true,
-            _ => false
         }
     }
 
@@ -67,26 +122,9 @@ pub mod readline
         0
     }
 
-    unsafe extern "C" fn bind_end_key(_: i32, _: i32) -> i32 {
-        insert_text_rl(".");
-
-        if let LineMode::Single = LINE_MODE {
-            END_OF_LINE = true;
-        }
-
-        0
-    }
-
     unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {
-        if END_OF_LINE {
-            if let Some(buf) = rl_line_buffer_as_str() {
-                if is_directive(buf) {
-                    println!("");
-                    rl_done = 1;
-                    return 0;
-                }
-            }
-
+        if let LineMode::Single = LINE_MODE {
+            insert_text_rl("\n");
             println!("");
             rl_done = 1;
         } else {
@@ -103,22 +141,9 @@ pub mod readline
             panic!("initialize_rl() failed with return code {}", rc);
         }
 
-        unsafe {
-            rl_startup_hook = insert_query_prompt;
-        }
-
-        bind_key_rl('.' as i32, bind_end_key);
         bind_key_rl('\n' as i32, bind_cr);
         bind_key_rl('\r' as i32, bind_cr);
         bind_keyseq_rl("\\C-d", bind_end_chord);
-    }
-
-    unsafe extern "C" fn insert_query_prompt() -> i32 {
-        if let LineMode::Single = LINE_MODE {
-            insert_text_rl("?- ");
-        }
-
-        0
     }
 
     pub fn read_batch(prompt: &str) -> Result<Vec<u8>, ::SessionError> {
@@ -128,18 +153,41 @@ pub mod readline
         }
     }
 
-    pub fn read_line(prompt: &str) -> Result<String, ::SessionError> {
-        match readline_rl(prompt) {
-            Some(input) => Ok(String::from(input)),
-            None => Err(::SessionError::UserPrompt)
-        }
+    #[inline]
+    pub fn input_stream() -> ::PrologStream {
+        let reader: Box<Read> = Box::new(ReadlineStream::new(String::from("")));
+        parsing_stream(reader)
     }
 }
 
 #[cfg(not(feature = "readline_rs_compat"))]
 pub mod readline
 {
-    use std::io::{BufRead, Read, stdin, stdout, Write};
+    use prolog_parser::ast::*;
+    use std::io::{BufReader, Read, Stdin, Write, stdin, stdout};
+
+    static mut PRINT_PROMPT: bool = false;
+
+    struct StdinWrapper {
+        buf: BufReader<Stdin>
+    }
+
+    fn print_prompt() {
+        unsafe {
+            if PRINT_PROMPT {
+                print!("?- ");
+                stdout().flush().unwrap();
+                PRINT_PROMPT = false;
+            }
+        }
+    }
+
+    impl Read for StdinWrapper {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            print_prompt();
+            self.buf.read(buf)
+        }
+    }
 
     pub fn read_batch(_: &str) -> Result<Vec<u8>, ::SessionError> {
         let mut buf = vec![];
@@ -153,54 +201,30 @@ pub mod readline
         }
     }
 
-    pub fn read_line(_: &str) -> Result<String, ::SessionError> {
-        print!("?- ");
-        stdout().flush().unwrap();
+    #[inline]
+    pub fn input_stream() -> ::PrologStream {
+        print_prompt();
 
-        let stdin = stdin();
-        let stdin = stdin.lock();
+        let reader: Box<Read> = Box::new(StdinWrapper { buf: BufReader::new(stdin()) });
+        parsing_stream(reader)
+    }
 
-        let mut buf = "?- ".to_string();
 
-        for line in stdin.lines() {
-            match line {
-                Ok(line) => {
-                    buf += &line;
-
-                    if line.trim().ends_with(".") {
-                        break;
-                    }
-                },
-                _ => return Err(::SessionError::UserPrompt)
-            }
+    pub fn toggle_prompt(on_or_off: bool) {
+        unsafe {
+            PRINT_PROMPT = on_or_off;
         }
-
-        Ok(buf)
     }
 }
 
-pub fn toplevel_read_line() -> Result<Input, SessionError>
-{
-    let buffer = readline::read_line("")?;
-
-    Ok(match &*buffer.trim() {
-        "?- [clear]." => Input::Clear,
-        "?- [user]." => {
-            println!("(type Enter + Ctrl-D to terminate the stream when finished)");
-            Input::Batch
-        },
-        _ => Input::TermString(buffer)
-    })
-}
-
 impl MachineState {
-    pub fn read<R: Read>(&mut self, inner: R, atom_tbl: TabledData<Atom>, op_dir: &OpDir)
-                         -> Result<usize, ParserError>
+    pub fn read(&mut self, inner: &mut PrologStream, atom_tbl: TabledData<Atom>, op_dir: &OpDir)
+                -> Result<TermWriteResult, ParserError>
     {
         let mut parser = Parser::new(inner, atom_tbl, self.flags);
         let term = parser.read_term(composite_op!(op_dir))?;
 
-        Ok(write_term_to_heap(&term, self).heap_loc)
+        Ok(write_term_to_heap(&term, self))
     }
 }
 
@@ -220,12 +244,13 @@ fn modify_head_of_queue(machine_st: &mut MachineState, queue: &mut SubtermDeque,
     }
 }
 
-pub(crate) struct TermWriteResult {
+pub struct TermWriteResult {
     pub(crate) heap_loc: usize,
     pub(crate) var_dict: HeapVarDict,
 }
 
-pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteResult
+pub(crate)
+fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteResult
 {
     let heap_loc = machine_st.heap.h;
 

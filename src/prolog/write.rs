@@ -1,21 +1,15 @@
 use prolog::clause_types::*;
 use prolog::forms::*;
-use prolog::heap_print::*;
 use prolog::instructions::*;
-use prolog::machine::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 
-use termion::raw::{IntoRawMode, RawTerminal};
 use termion::input::TermRead;
 use termion::event::Key;
+use termion::raw::{RawTerminal};
 
-use std::io::{Write, stdin, stdout};
+use std::io::{Write, stdin};
 use std::fmt;
-
-fn error_string<StringT: AsRef<str>>(e: &StringT) -> String {
-    format!("error: exception thrown: {}", e.as_ref())
-}
 
 impl fmt::Display for LocalCodePtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -30,6 +24,17 @@ impl fmt::Display for LocalCodePtr {
                 write!(f, "LocalCodePtr::UserGoalExpansion({})", p),
             LocalCodePtr::UserTermExpansion(p) =>
                 write!(f, "LocalCodePtr::UserTermExpansion({})", p),
+        }
+    }
+}
+
+impl fmt::Display for REPLCodePtr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            REPLCodePtr::CompileBatch =>
+                write!(f, "REPLCodePtr::CompileBatch"),
+            REPLCodePtr::SubmitQueryAndPrintResults =>
+                write!(f, "REPLCodePtr::SubmitQueryAndPrintResults")
         }
     }
 }
@@ -262,10 +267,6 @@ impl fmt::Display for SessionError {
             &SessionError::ModuleNotFound => write!(f, "module not found."),
             &SessionError::ModuleDoesNotContainExport =>
                 write!(f, "module does not contain claimed export."),
-            &SessionError::QueryFailure =>
-                write!(f, "false."),
-            &SessionError::QueryFailureWithException(ref e) =>
-                write!(f, "{}", error_string(e)),
             &SessionError::OpIsInfixAndPostFix(_) =>
                 write!(f, "cannot define an op to be both postfix and infix."),
             &SessionError::NamelessEntry =>
@@ -302,7 +303,7 @@ impl fmt::Display for ArithmeticInstruction {
             &ArithmeticInstruction::Pow(ref a1, ref a2, ref t) =>
                 write!(f, "** {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::IntPow(ref a1, ref a2, ref t) =>
-                write!(f, "^ {}, {}, @{}", a1, a2, t),            
+                write!(f, "^ {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Div(ref a1, ref a2, ref t) =>
                 write!(f, "div {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::IDiv(ref a1, ref a2, ref t) =>
@@ -357,12 +358,13 @@ impl fmt::Display for Level {
     }
 }
 
-enum ContinueResult {
+pub enum ContinueResult {
     ContinueQuery,
     Conclude
 }
 
-fn next_step(mut stdout: RawTerminal<std::io::Stdout>) -> ContinueResult
+pub
+fn next_keypress(mut stdout: RawTerminal<std::io::Stdout>) -> ContinueResult
 {
     let stdin = stdin();
 
@@ -381,82 +383,4 @@ fn next_step(mut stdout: RawTerminal<std::io::Stdout>) -> ContinueResult
     }
 
     ContinueResult::Conclude
-}
-
-pub fn print(wam: &mut Machine, result: EvalSession) {
-    match result {
-        EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) =>
-            loop {
-                let bindings = {
-                    let mut output = PrinterOutputter::new();
-                    wam.toplevel_heap_view(&heap_locs, output).result()
-                };
-
-                let attr_goals = wam.attribute_goals(&heap_locs);
-
-                if wam.or_stack_is_empty() {
-                    if bindings.is_empty() {
-                        if !attr_goals.is_empty() {
-                            println!("{}.", attr_goals);
-                        } else {
-                            println!("true.");
-                        }
-
-                        return;
-                    }
-                } else if bindings.is_empty() && attr_goals.is_empty() {
-                    print!("true");
-                    stdout().flush().unwrap();
-                }
-
-                let mut raw_stdout = stdout().into_raw_mode().unwrap();
-
-                if !attr_goals.is_empty() {
-                    if bindings.is_empty() {
-                        write!(raw_stdout, "{}", attr_goals).unwrap();
-                    } else {
-                        write!(raw_stdout, "{}, {}", bindings, attr_goals).unwrap();
-                    }
-                } else if !bindings.is_empty() {
-                    write!(raw_stdout, "{}", bindings).unwrap();
-                }
-
-                if !wam.or_stack_is_empty() {
-                    raw_stdout.flush().unwrap();
-
-                    let result = match next_step(raw_stdout) {
-                        ContinueResult::ContinueQuery =>
-                            wam.continue_query(&alloc_locs, &mut heap_locs),
-                        ContinueResult::Conclude =>
-                            return
-                    };
-
-                    let mut raw_stdout = stdout().into_raw_mode().unwrap();
-
-                    if let &EvalSession::Error(SessionError::QueryFailure) = &result
-                    {
-                        write!(raw_stdout, "false.\r\n").unwrap();
-                        raw_stdout.flush().unwrap();
-                        return;
-                    }
-
-                    if let &EvalSession::Error(SessionError::QueryFailureWithException(ref e)) = &result
-                    {
-                        write!(raw_stdout, "{}\r\n", error_string(e)).unwrap();
-                        raw_stdout.flush().unwrap();
-                        return;
-                    }
-                } else {
-                    if bindings.is_empty() && attr_goals.is_empty() {
-                        write!(raw_stdout, "true.\r\n").unwrap();
-                    } else {
-                        write!(raw_stdout, ".\r\n").unwrap();
-                    }
-
-                    break;
-                }
-            },
-        EvalSession::Error(e) => println!("{}", e),
-        _ => {}
-    };
 }

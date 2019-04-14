@@ -12,12 +12,13 @@ use prolog::machine::machine_indices::*;
 use prolog::machine::modules::*;
 use prolog::machine::or_stack::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
+use prolog::read::{PrologStream, readline};
 
 use downcast::Any;
 
 use std::cmp::Ordering;
-use std::io::{Write, stdin, stdout};
-use std::mem::swap;
+use std::io::{Write, stdout};
+use std::mem;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
 
@@ -34,6 +35,16 @@ impl Ball {
     pub(super) fn reset(&mut self) {
         self.boundary = 0;
         self.stub.clear();
+    }
+
+    pub(super) fn take(&mut self) -> Ball {
+        let boundary = self.boundary;
+        self.boundary = 0;
+        
+        Ball {
+            boundary,
+            stub: mem::replace(&mut self.stub, vec![])
+        }
     }
 }
 
@@ -88,7 +99,7 @@ pub(super) struct CopyBallTerm<'a> {
     and_stack: &'a mut AndStack,
     heap: &'a mut Heap,
     heap_boundary: usize,
-    stub: &'a mut MachineStub,    
+    stub: &'a mut MachineStub,
 }
 
 impl<'a> CopyBallTerm<'a> {
@@ -227,7 +238,7 @@ pub struct MachineState {
     pub(crate) flags: MachineFlags
 }
 
-impl MachineState {
+impl MachineState {    
     fn call_at_index(&mut self, arity: usize, p: usize)
     {
         self.cp.assign_if_local(self.p.clone() + 1);
@@ -518,7 +529,7 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn call_builtin(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
-                    indices: &mut IndexStore)
+                    indices: &mut IndexStore, parsing_stream: &mut PrologStream)
                     -> CallResult
     {
         match ct {
@@ -572,10 +583,12 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Read => {
-                match machine_st.read(stdin(), indices.atom_tbl.clone(), &indices.op_dir) {
+                readline::toggle_prompt(false);
+                
+                match machine_st.read(parsing_stream, indices.atom_tbl.clone(), &indices.op_dir) {
                     Ok(offset) => {
                         let addr = machine_st[temp_v!(1)].clone();
-                        machine_st.unify(addr, Addr::HeapCell(offset));
+                        machine_st.unify(addr, Addr::HeapCell(offset.heap_loc));
                     },
                     Err(e) => {
                         let h    = machine_st.heap.h;
@@ -695,7 +708,8 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn call_n(&mut self, machine_st: &mut MachineState, arity: usize, indices: &mut IndexStore)
+    fn call_n(&mut self, machine_st: &mut MachineState, arity: usize, indices: &mut IndexStore,
+              parsing_stream: &mut PrologStream)
               -> CallResult
     {
         if let Some((name, arity)) = machine_st.setup_call_n(arity) {
@@ -711,7 +725,7 @@ pub(crate) trait CallPolicy: Any {
                 },
                 ClauseType::BuiltIn(built_in) => {
                     machine_st.setup_built_in_call(built_in.clone());
-                    self.call_builtin(machine_st, &built_in, indices)?;
+                    self.call_builtin(machine_st, &built_in, indices, parsing_stream)?;
                 },
                 ClauseType::Inlined(inlined) => {
                     machine_st.execute_inlined(&inlined);
@@ -781,17 +795,18 @@ impl CallPolicy for CWILCallPolicy {
     }
 
     fn call_builtin(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
-                    indices: &mut IndexStore)
+                    indices: &mut IndexStore, parsing_stream: &mut PrologStream)
                     -> CallResult
     {
-        self.prev_policy.call_builtin(machine_st, ct, indices)?;
+        self.prev_policy.call_builtin(machine_st, ct, indices, parsing_stream)?;
         self.increment(machine_st)
     }
 
-    fn call_n(&mut self, machine_st: &mut MachineState, arity: usize, indices: &mut IndexStore)
+    fn call_n(&mut self, machine_st: &mut MachineState, arity: usize, indices: &mut IndexStore,
+              parsing_stream: &mut PrologStream)
               -> CallResult
     {
-        self.prev_policy.call_n(machine_st, arity, indices)?;
+        self.prev_policy.call_n(machine_st, arity, indices, parsing_stream)?;
         self.increment(machine_st)
     }
 }
@@ -813,7 +828,7 @@ impl CWILCallPolicy {
     pub(crate) fn new_in_place(policy: &mut Box<CallPolicy>)
     {
         let mut prev_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
-        swap(&mut prev_policy, policy);
+        mem::swap(&mut prev_policy, policy);
 
         let new_policy = CWILCallPolicy { prev_policy,
                                           count:  BigUint::zero(),
@@ -870,7 +885,7 @@ impl CWILCallPolicy {
 
     pub(crate) fn into_inner(&mut self) -> Box<CallPolicy> {
         let mut new_inner: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
-        swap(&mut self.prev_policy, &mut new_inner);
+        mem::swap(&mut self.prev_policy, &mut new_inner);
         new_inner
     }
 }

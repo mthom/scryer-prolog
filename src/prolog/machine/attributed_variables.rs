@@ -57,14 +57,6 @@ impl MachineState {
         (var_list_addr, value_list_addr)
     }
 
-    pub(super)
-    fn calculate_register_threshold(&self) -> usize {
-        /* for all we know, all registers might be valid when we
-         * return from the verify_attributes interrupt. we currently
-         * lack a more precise way of determining this. */
-        MAX_ARITY
-    }
-
     fn verify_attributes(&mut self)
     {
         for (h, _) in &self.attr_var_init.bindings {
@@ -122,17 +114,17 @@ impl MachineState {
 
     pub(super)
     fn verify_attr_interrupt(&mut self, p: usize) {
-        let rs = self.calculate_register_threshold();
+        let rs = MAX_ARITY;
 
-        // store temp vars in perm vars slots along with
-        // self.b0 and self.num_of_args. why self.bo? if we return to a
-        // NeckCut after finishing the interrupt, it won't
-        // work correctly if self.b == self.b0. we must
-        // change it back when we return, as if nothing happened.
+        // store temp vars in perm vars slots along with self.b0 and
+        // self.num_of_args. why self.b0? if we return to a NeckCut
+        // after finishing the interrupt, it won't work correctly if
+        // self.b == self.b0. we must change it back when we return,
+        // as if nothing happened.
         self.allocate(rs + 2);
 
         let e = self.e;
-        self.and_stack[e].special_form_cp = self.attr_var_init.cp;
+        self.and_stack[e].interrupt_cp = self.attr_var_init.cp;
 
         for i in 1 .. rs + 1 {
             self.and_stack[e][i] = self[RegType::Temp(i)].clone();
@@ -193,7 +185,8 @@ impl Machine {
         self.machine_st[temp_v!(2)] = attr_vars;
 
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
-        self.machine_st.query_stepper(&mut self.indices, &mut self.policies, &mut self.code_repo);
+        self.machine_st.query_stepper(&mut self.indices, &mut self.policies, &mut self.code_repo,
+                                      &mut readline::input_stream());
 
         self.machine_st.print_attribute_goals_string(var_dict)
     }

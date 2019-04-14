@@ -130,7 +130,7 @@ ref_thread_local! {
         m.insert(("partial_string", 2), ClauseType::BuiltIn(BuiltInClauseType::PartialString));
         m.insert(("read", 1), ClauseType::BuiltIn(BuiltInClauseType::Read));
         m.insert(("sort", 2), ClauseType::BuiltIn(BuiltInClauseType::Sort));
-        
+
         m
     };
 }
@@ -177,7 +177,7 @@ pub enum SystemClauseType {
     FetchGlobalVar,
     GetChar,
     TruncateIfNoLiftedHeapGrowthDiff,
-    TruncateIfNoLiftedHeapGrowth,    
+    TruncateIfNoLiftedHeapGrowth,
     GetAttributedVariableList,
     GetAttrVarQueueDelimiter,
     GetAttrVarQueueBeyond,
@@ -201,6 +201,8 @@ pub enum SystemClauseType {
     ModuleRetractClause,
     NoSuchPredicate,
     OpDeclaration,
+    REPL(REPLCodePtr),
+    ReadTerm,
     RedoAttrVarBindings,
     RemoveCallPolicyCheck,
     RemoveInferenceCounter,
@@ -236,7 +238,7 @@ impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::AbolishClause => clause_name!("$abolish_clause"),
-            &SystemClauseType::AbolishModuleClause => clause_name!("$abolish_module_clause"),            
+            &SystemClauseType::AbolishModuleClause => clause_name!("$abolish_module_clause"),
             &SystemClauseType::AssertDynamicPredicateToBack => clause_name!("$assertz"),
             &SystemClauseType::AssertDynamicPredicateToFront => clause_name!("$asserta"),
             &SystemClauseType::AtomChars => clause_name!("$atom_chars"),
@@ -246,6 +248,9 @@ impl SystemClauseType {
             &SystemClauseType::ModuleAssertDynamicPredicateToBack => clause_name!("$module_assertz"),
             &SystemClauseType::CharCode => clause_name!("char_code"),
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
+            &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
+            &SystemClauseType::REPL(REPLCodePtr::SubmitQueryAndPrintResults) =>
+                clause_name!("$submit_query_and_print_results"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
@@ -296,6 +301,7 @@ impl SystemClauseType {
             &SystemClauseType::GetCurrentBlock => clause_name!("$get_current_block"),
             &SystemClauseType::InstallNewBlock => clause_name!("$install_new_block"),
             &SystemClauseType::ModuleRetractClause => clause_name!("$module_retract_clause"),
+            &SystemClauseType::ReadTerm => clause_name!("$read_term"),
             &SystemClauseType::ResetGlobalVarAtKey => clause_name!("$reset_global_var_at_key"),
             &SystemClauseType::RetractClause => clause_name!("$retract_clause"),
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
@@ -326,6 +332,7 @@ impl SystemClauseType {
             ("$assertz", 4) => Some(SystemClauseType::AssertDynamicPredicateToBack),
             ("$char_code", 2) => Some(SystemClauseType::CharCode),
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
+            ("$compile_batch", 0) => Some(SystemClauseType::REPL(REPLCodePtr::CompileBatch)),
             ("$copy_to_lh", 2) => Some(SystemClauseType::CopyToLiftedHeap),
             ("$del_attr_non_head", 1) => Some(SystemClauseType::DeleteAttribute),
             ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),
@@ -375,6 +382,7 @@ impl SystemClauseType {
             ("$get_current_block", 1) => Some(SystemClauseType::GetCurrentBlock),
             ("$get_cp", 1) => Some(SystemClauseType::GetCutPoint),
             ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
+            ("$read_term", 2) => Some(SystemClauseType::ReadTerm),
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
             ("$reset_global_var_at_key", 1) => Some(SystemClauseType::ResetGlobalVarAtKey),
             ("$retract_clause", 4) => Some(SystemClauseType::RetractClause),
@@ -385,6 +393,8 @@ impl SystemClauseType {
             ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$store_global_var", 2) => Some(SystemClauseType::StoreGlobalVar),
+            ("$submit_query_and_print_results", 2) =>
+                Some(SystemClauseType::REPL(REPLCodePtr::SubmitQueryAndPrintResults)),
             ("$term_variables", 2) => Some(SystemClauseType::TermVariables),
             ("$truncate_lh_to", 1) => Some(SystemClauseType::TruncateLiftedHeapTo),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
@@ -397,7 +407,7 @@ impl SystemClauseType {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum BuiltInClauseType {
     AcyclicTerm,
-    Arg, 
+    Arg,
     Compare,
     CompareTerm(CompareTermQT),
     CyclicTerm,

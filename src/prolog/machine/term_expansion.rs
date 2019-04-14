@@ -4,7 +4,6 @@ use prolog_parser::parser::*;
 use prolog::machine::*;
 use prolog::machine::machine_indices::HeapCellValue;
 use prolog::num::*;
-use prolog::read::*;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -74,7 +73,7 @@ pub struct TermStream<'a, R: Read> {
     pub(crate) indices: &'a mut IndexStore,
     policies: &'a mut MachinePolicies,
     pub(crate) code_repo: &'a mut CodeRepo,
-    parser: Parser<R>,
+    parser: Parser<'a, R>,
     in_module: bool,
     pub(crate) flags: MachineFlags,
     term_expansion_lens: (usize, usize),
@@ -111,7 +110,7 @@ impl<'a, R: Read> Drop for TermStream<'a, R> {
 }
 
 impl<'a, R: Read> TermStream<'a, R> {
-    pub fn new(src: R, atom_tbl: TabledData<Atom>, flags: MachineFlags,
+    pub fn new(src: &'a mut ParsingStream<R>, atom_tbl: TabledData<Atom>, flags: MachineFlags,
                indices: &'a mut IndexStore, policies: &'a mut MachinePolicies,
                code_repo: &'a mut CodeRepo)
                -> Self
@@ -127,6 +126,11 @@ impl<'a, R: Read> TermStream<'a, R> {
             in_module: false,
             flags
         }
+    }
+
+    #[inline]
+    pub fn add_to_top(&mut self, buf: &str) {
+        self.parser.add_to_top(buf);
     }
 
     #[inline]
@@ -185,14 +189,16 @@ impl<'a, R: Read> TermStream<'a, R> {
             },
             Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) =>
                 Ok(self.stack.push(term)),
-            _ => Err(ParserError::ExpectedTopLevelTerm)
+            _ =>
+                Err(ParserError::ExpectedTopLevelTerm)
         }
     }
 
     fn parse_expansion_output(&self, term_string: &str, op_dir: &OpDir) -> Result<Term, ParserError>
     {
-        let mut parser = Parser::new(term_string.trim().as_bytes(), self.parser.get_atom_tbl(),
-                                     self.flags);
+        let mut stream = parsing_stream(term_string.trim().as_bytes());
+        let mut parser = Parser::new(&mut stream, self.parser.get_atom_tbl(), self.flags);
+
         parser.read_term(composite_op!(self.in_module, &self.indices.op_dir, op_dir))
     }
 
@@ -230,24 +236,23 @@ impl<'a, R: Read> TermStream<'a, R> {
         match term {
             Term::Clause(cell, name, mut terms, arity) => {
                 let mut new_terms = {
-                    let old_terms = if name.as_str() == ":-" && terms.len() == 2 {
-                        let comma_term = *terms.pop().unwrap();
-                        unfold_by_str(comma_term, ",")
-                    } else if name.as_str() == "?-" && terms.len() == 1 {
-                        let comma_term = *terms.pop().unwrap();
-                        unfold_by_str(comma_term, ",")
-                    } else {
-                        return Ok(Term::Clause(cell, name, terms, arity));
+                    let old_terms = match (name.as_str(), terms.len()) {
+                        (":-", 2) => {
+                            let comma_term = *terms.pop().unwrap();
+                            unfold_by_str(comma_term, ",")
+                        },
+                        ("?-", 1) =>
+                            unfold_by_str(*terms.pop().unwrap(), ","),
+                        _ => return Ok(Term::Clause(cell, name, terms, arity))
                     };
 
                     self.expand_goals(machine_st, op_dir, VecDeque::from(old_terms))?
                 };
 
                 let initial_term = new_terms.pop().unwrap();
-
                 terms.push(Box::new(fold_by_str(new_terms.into_iter(), initial_term,
                                                 clause_name!(","))));
-                Ok(Term::Clause(cell, name, terms, None))
+                Ok(Term::Clause(cell, name, terms, arity))
             },
             _ =>
                 Ok(term)
@@ -302,6 +307,8 @@ impl MachineState {
         // style variable names will be longer than the keys of the var_dict, and therefore
         // not equal to any of them.
         printer.numbervars_offset = pow(BigInt::from(10), max_var_length) * 26;
+        printer.drop_toplevel_spec();
+
         printer.see_all_locs();
 
         let mut output = printer.print(addr);
@@ -324,7 +331,7 @@ impl MachineState {
         let code = vec![call_clause!(ClauseType::Hook(hook), 2, 0, true)];
 
         code_repo.cached_query = code;
-        self.query_stepper(indices, policies, code_repo);
+        self.query_stepper(indices, policies, code_repo, &mut readline::input_stream());
 
         if self.fail {
             self.reset();

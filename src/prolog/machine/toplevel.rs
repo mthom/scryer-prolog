@@ -681,6 +681,18 @@ impl RelationWorker {
         }
     }
 
+    fn try_term_to_query(&mut self, indices: &mut CompositeIndices, terms: Vec<Box<Term>>, blocks_cuts: bool)
+                         -> Result<TopLevel, ParserError>
+    {
+        match setup_declaration(terms.iter().cloned().collect()) {
+            Ok(Declaration::Op(..)) => {}, // this is now a predicate call in the query context.
+            Ok(decl) => return Ok(TopLevel::Declaration(decl)),
+            _ => {}
+        };
+
+        Ok(TopLevel::Query(self.setup_query(indices, terms, blocks_cuts)?))
+    }
+
     fn try_term_to_tl(&mut self, indices: &mut CompositeIndices, term: Term, blocks_cuts: bool)
                       -> Result<TopLevel, ParserError>
     {
@@ -692,13 +704,7 @@ impl RelationWorker {
 
                     Ok(TopLevel::Declaration(Declaration::Hook(hook, clause, queue)))
                 } else if name.as_str() == "?-" {
-                    match setup_declaration(terms.iter().cloned().collect()) {
-                        Ok(Declaration::Op(..)) => {}, // this is now a predicate call in the query context.
-                        Ok(decl) => return Ok(TopLevel::Declaration(decl)),
-                        _ => {}
-                    };
-
-                    Ok(TopLevel::Query(self.setup_query(indices, terms, blocks_cuts)?))
+                    self.try_term_to_query(indices, terms, blocks_cuts)
                 } else if name.as_str() == ":-" && terms.len() == 2 {
                     Ok(TopLevel::Rule(self.setup_rule(indices, terms, blocks_cuts, true)?))
                 } else if name.as_str() == ":-" && terms.len() == 1 {
@@ -770,21 +776,24 @@ fn term_to_toplevel<R>(term_stream: &mut TermStream<R>, code_dir: &mut CodeDir, 
     let mut indices = composite_indices!(false, term_stream.indices, code_dir);
 
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
+
     Ok((tl, rel_worker))
 }
 
 pub
-fn string_to_toplevel<R: Read>(buffer: R, wam: &mut Machine) -> Result<TopLevelPacket, SessionError>
+fn stream_to_toplevel<R: Read>(mut buffer: ParsingStream<R>, wam: &mut Machine)
+                               -> Result<TopLevelPacket, SessionError>
 {
-    let mut term_stream = TermStream::new(buffer, wam.indices.atom_tbl(),
+    let mut term_stream = TermStream::new(&mut buffer, wam.indices.atom_tbl(),
                                           wam.machine_flags(), &mut wam.indices,
                                           &mut wam.policies, &mut wam.code_repo);
+
+    term_stream.add_to_top("?- ");
 
     let term = term_stream.read_term(&OpDir::new())?;
     let mut code_dir = CodeDir::new();
 
     let (tl, mut rel_worker) = term_to_toplevel(&mut term_stream, &mut code_dir, term)?;
-
     rel_worker.expand_queue_contents(&mut term_stream, &OpDir::new())?;
 
     let mut indices = composite_indices!(false, term_stream.indices, &mut code_dir);
@@ -804,7 +813,8 @@ pub struct TopLevelBatchWorker<'a, R: Read> {
 }
 
 impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
-    pub fn new(inner: R, atom_tbl: TabledData<Atom>,
+
+    pub fn new(inner: &'a mut ParsingStream<R>, atom_tbl: TabledData<Atom>,
                flags: MachineFlags, indices: &'a mut IndexStore,
                policies: &'a mut MachinePolicies, code_repo: &'a mut CodeRepo)
                -> Self

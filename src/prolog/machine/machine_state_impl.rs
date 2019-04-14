@@ -17,9 +17,11 @@ use prolog::machine::machine_state::*;
 use prolog::num::{Integer, Signed, ToPrimitive, One, Zero};
 use prolog::num::bigint::{BigInt, BigUint};
 use prolog::num::rational::Ratio;
+use prolog::read::PrologStream;
 
 use std::cmp::{max, Ordering};
 use std::collections::{HashMap, HashSet};
+use std::mem;
 use std::rc::Rc;
 
 macro_rules! try_or_fail {
@@ -60,6 +62,36 @@ impl MachineState {
             ball: Ball::new(),
             lifted_heap: Vec::with_capacity(1024),
             interms: vec![Number::default(); 256],
+            last_call: false,
+            flags: MachineFlags::default()
+        }
+    }
+
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
+        MachineState {
+            s: 0,
+            p: CodePtr::default(),
+            b: 0,
+            b0: 0,
+            e: 0,
+            num_of_args: 0,
+            cp: LocalCodePtr::default(),
+            attr_var_init: AttrVarInitializer::new(0, 0),
+            fail: false,
+            heap: Heap::with_capacity(capacity),
+            mode: MachineMode::Write,
+            and_stack: AndStack::new(),
+            or_stack: OrStack::new(),
+            registers: vec![Addr::HeapCell(0); MAX_ARITY + 1], // self.registers[0] is never used.
+            trail: vec![],
+            pstr_trail: vec![],
+            pstr_tr: 0,
+            tr: 0,
+            hb: 0,
+            block: 0,
+            ball: Ball::new(),
+            lifted_heap: Vec::with_capacity(capacity),
+            interms: vec![Number::default(); 0],
             last_call: false,
             flags: MachineFlags::default()
         }
@@ -180,19 +212,6 @@ impl MachineState {
         }
 
         output
-    }
-
-    pub(super)
-    fn print_exception<Outputter>(&self, addr: Addr, var_dict: &HeapVarDict, output: Outputter)
-                                  -> Outputter
-      where Outputter: HCValueOutputter
-    {
-        let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
-
-        printer.see_all_locs();
-        printer.quoted = true;
-
-        printer.print(addr)
     }
 
     pub(super)
@@ -1546,27 +1565,24 @@ impl MachineState {
         self.fail = true;
     }
 
-    fn heap_ball_boundary_diff(&self) -> usize {
-        if self.ball.boundary > self.heap.h {
-            self.ball.boundary - self.heap.h
-        } else {
-            self.heap.h - self.ball.boundary
-        }
+    fn heap_ball_boundary_diff(&self) -> i64 {
+        self.ball.boundary as i64 - self.heap.h as i64
     }
 
-    pub(super) fn copy_and_align_ball_to_heap(&mut self, from: usize) -> usize {
+    pub(super) fn copy_and_align_ball(&self) -> MachineStub {
         let diff = self.heap_ball_boundary_diff();
+        let mut stub = vec![];
 
-        for index in from .. self.ball.stub.len() {
+        for index in 0 .. self.ball.stub.len() {
             let heap_value = self.ball.stub[index].clone();
 
-            self.heap.push(match heap_value {
+            stub.push(match heap_value {
                 HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
                 _ => heap_value
             });
         }
 
-        diff
+        stub
     }
 
     pub(crate) fn is_cyclic_term(&self, addr: Addr) -> bool {
@@ -2363,6 +2379,7 @@ impl MachineState {
     fn handle_call_clause(&mut self, indices: &mut IndexStore,
                           call_policy: &mut Box<CallPolicy>,
                           cut_policy:  &mut Box<CutPolicy>,
+                          parsing_stream: &mut PrologStream,
                           ct: &ClauseType,
                           arity: usize,
                           lco: bool,
@@ -2379,9 +2396,9 @@ impl MachineState {
 
         match ct {
             &ClauseType::BuiltIn(ref ct) =>
-                try_or_fail!(self, call_policy.call_builtin(self, ct, indices)),
+                try_or_fail!(self, call_policy.call_builtin(self, ct, indices, parsing_stream)),
             &ClauseType::CallN =>
-                try_or_fail!(self, call_policy.call_n(self, arity, indices)),
+                try_or_fail!(self, call_policy.call_n(self, arity, indices, parsing_stream)),
             &ClauseType::Hook(ref hook) =>
                 try_or_fail!(self, call_policy.compile_hook(self, hook)),
             &ClauseType::Inlined(ref ct) => {
@@ -2395,13 +2412,15 @@ impl MachineState {
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
                                                             indices)),
             &ClauseType::System(ref ct) =>
-                try_or_fail!(self, self.system_call(ct, indices, call_policy, cut_policy))
+                try_or_fail!(self, self.system_call(ct, indices, call_policy, cut_policy,
+                                                    parsing_stream))
         };
     }
 
     pub(super) fn execute_ctrl_instr(&mut self, indices: &mut IndexStore,
                                      call_policy: &mut Box<CallPolicy>,
                                      cut_policy:  &mut Box<CutPolicy>,
+                                     parsing_stream: &mut PrologStream,
                                      instr: &ControlInstruction)
     {
         match instr {
@@ -2409,7 +2428,8 @@ impl MachineState {
                 self.allocate(num_cells),
             &ControlInstruction::CallClause(ref ct, arity, _, lco, use_default_cp) =>
                 self.handle_call_clause(indices, call_policy, cut_policy,
-                                        ct, arity, lco, use_default_cp),
+                                        parsing_stream, ct, arity, lco,
+                                        use_default_cp),
             &ControlInstruction::Deallocate => self.deallocate(),
             &ControlInstruction::JmpBy(arity, offset, _, lco) => {
                 if !lco {
@@ -2568,5 +2588,59 @@ impl MachineState {
 
         self.ball.reset();
         self.lifted_heap.clear();
+    }
+
+    pub(super)
+    fn sink_to_snapshot(&mut self) -> MachineState {
+        let mut snapshot = MachineState::with_capacity(0);
+        
+        snapshot.hb = self.hb;
+        snapshot.e = self.e;
+        snapshot.b = self.b;
+        snapshot.b0 = self.b0;
+        snapshot.s = self.s;
+        snapshot.tr = self.tr;
+        snapshot.pstr_tr = self.pstr_tr;
+        snapshot.num_of_args = self.num_of_args;
+
+        snapshot.fail = self.fail;
+        snapshot.trail = mem::replace(&mut self.trail, vec![]);
+        snapshot.pstr_trail = mem::replace(&mut self.pstr_trail, vec![]);
+        snapshot.heap = self.heap.take();        
+        snapshot.mode = self.mode;
+        snapshot.and_stack = self.and_stack.take();
+        snapshot.or_stack = self.or_stack.take();
+        snapshot.registers = mem::replace(&mut self.registers, vec![]);
+        snapshot.block = self.block;
+
+        snapshot.ball = self.ball.take();
+        snapshot.lifted_heap = mem::replace(&mut self.lifted_heap, vec![]);
+
+        snapshot
+    }
+
+    pub(super)
+    fn absorb_snapshot(&mut self, mut snapshot: MachineState) {
+        self.hb = snapshot.hb;
+        self.e = snapshot.e;
+        self.b = snapshot.b;
+        self.b0 = snapshot.b0;
+        self.s = snapshot.s;
+        self.tr = snapshot.tr;
+        self.pstr_tr = snapshot.pstr_tr;
+        self.num_of_args = snapshot.num_of_args;
+
+        self.fail = snapshot.fail;
+        self.trail = mem::replace(&mut snapshot.trail, vec![]);
+        self.pstr_trail = mem::replace(&mut snapshot.pstr_trail, vec![]);
+        self.heap = snapshot.heap.take();
+        self.mode = snapshot.mode;
+        self.and_stack = snapshot.and_stack.take();
+        self.or_stack = snapshot.or_stack.take();
+        self.registers = mem::replace(&mut snapshot.registers, vec![]);
+        self.block = snapshot.block;
+
+        self.ball = snapshot.ball.take();
+        self.lifted_heap = mem::replace(&mut snapshot.lifted_heap, vec![]);
     }
 }

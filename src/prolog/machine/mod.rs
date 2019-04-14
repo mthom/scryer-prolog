@@ -6,6 +6,8 @@ use prolog::fixtures::*;
 use prolog::forms::*;
 use prolog::heap_print::*;
 use prolog::instructions::*;
+use prolog::read::*;
+use prolog::write::{ContinueResult, next_keypress};
 
 pub mod machine_indices;
 pub mod heap;
@@ -32,11 +34,16 @@ use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
 use prolog::machine::modules::*;
+use prolog::machine::toplevel::stream_to_toplevel;
+use prolog::read::PrologStream;
 
 use std::collections::{HashMap, VecDeque};
+use std::io::{Read, Write, stdout};
 use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
+
+use termion::raw::{IntoRawMode};
 
 pub struct MachinePolicies {
     call_policy: Box<CallPolicy>,
@@ -57,7 +64,9 @@ pub struct Machine {
     pub(super) machine_st: MachineState,
     pub(super) policies: MachinePolicies,
     pub(super) indices: IndexStore,
-    pub(super) code_repo: CodeRepo
+    pub(super) code_repo: CodeRepo,
+    pub(super) toplevel_idx: usize,
+    pub(super) prolog_stream: ParsingStream<Box<Read>>
 }
 
 impl Index<LocalCodePtr> for CodeRepo {
@@ -157,9 +166,11 @@ static REIF: &str     = include_str!("../lib/reif.pl");
 static ASSOC: &str    = include_str!("../lib/assoc.pl");
 static ORDSETS: &str  = include_str!("../lib/ordsets.pl");
 
+static TOPLEVEL: &str = include_str!("../toplevel.pl");
+
 impl Machine {
     fn compile_special_forms(&mut self) {
-        match compile_special_form(self, VERIFY_ATTRS.as_bytes()) {
+        match compile_special_form(self, parsing_stream(VERIFY_ATTRS.as_bytes())) {
             Ok(code) => {
                 self.machine_st.attr_var_init.verify_attrs_loc = self.code_repo.code.len();
                 self.code_repo.code.extend(code.into_iter());
@@ -167,7 +178,7 @@ impl Machine {
             Err(_) => panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS")
         }
 
-        match compile_special_form(self, PROJECT_ATTRS.as_bytes()) {
+        match compile_special_form(self, parsing_stream(PROJECT_ATTRS.as_bytes())) {
             Ok(code) => {
                 self.machine_st.attr_var_init.project_attrs_loc = self.code_repo.code.len();
                 self.code_repo.code.extend(code.into_iter());
@@ -176,37 +187,57 @@ impl Machine {
         }
     }
 
-    fn compile_libraries(&mut self) {
-        compile_user_module(self, NON_ISO.as_bytes());
-        compile_user_module(self, LISTS.as_bytes());
-        compile_user_module(self, QUEUES.as_bytes());
-        compile_user_module(self, ERROR.as_bytes());
-        compile_user_module(self, BETWEEN.as_bytes());
-	compile_user_module(self, TERMS.as_bytes());
-        compile_user_module(self, DCGS.as_bytes());
-        compile_user_module(self, ATTS.as_bytes());
-        compile_user_module(self, ORDSETS.as_bytes());
-        compile_user_module(self, DIF.as_bytes());
-        compile_user_module(self, FREEZE.as_bytes());
-        compile_user_module(self, REIF.as_bytes());
-        compile_user_module(self, ASSOC.as_bytes());
+    fn compile_top_level(&mut self) {
+        self.toplevel_idx = self.code_repo.code.len();
+        compile_user_module(self, parsing_stream(TOPLEVEL.as_bytes()));
     }
 
-    pub fn new() -> Self {
+    fn compile_libraries(&mut self) {
+        compile_user_module(self, parsing_stream(NON_ISO.as_bytes()));
+        compile_user_module(self, parsing_stream(LISTS.as_bytes()));
+        compile_user_module(self, parsing_stream(QUEUES.as_bytes()));
+        compile_user_module(self, parsing_stream(ERROR.as_bytes()));
+        compile_user_module(self, parsing_stream(BETWEEN.as_bytes()));
+	compile_user_module(self, parsing_stream(TERMS.as_bytes()));
+        compile_user_module(self, parsing_stream(DCGS.as_bytes()));
+        compile_user_module(self, parsing_stream(ATTS.as_bytes()));
+        compile_user_module(self, parsing_stream(ORDSETS.as_bytes()));
+        compile_user_module(self, parsing_stream(DIF.as_bytes()));
+        compile_user_module(self, parsing_stream(FREEZE.as_bytes()));
+        compile_user_module(self, parsing_stream(REIF.as_bytes()));
+        compile_user_module(self, parsing_stream(ASSOC.as_bytes()));
+    }
+
+    #[cfg(test)]    
+    pub fn reset(&mut self) {
+        self.prolog_stream = readline::input_stream();
+        self.policies.cut_policy = Box::new(DefaultCutPolicy {});
+        self.machine_st.reset();
+    }
+    
+    pub fn run_toplevel(&mut self) {
+        self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
+        self.run_query(&AllocVarDict::new(), &mut HeapVarDict::new());
+    }
+
+    pub fn new(prolog_stream: PrologStream) -> Self {
         let mut wam = Machine {
             machine_st: MachineState::new(),
             policies: MachinePolicies::new(),
             indices: IndexStore::new(),
-            code_repo: CodeRepo::new()
+            code_repo: CodeRepo::new(),
+            toplevel_idx: 0,
+            prolog_stream
         };
 
         let atom_tbl = wam.indices.atom_tbl.clone();
 
-        compile_listing(&mut wam, BUILTINS.as_bytes(),
+        compile_listing(&mut wam, parsing_stream(BUILTINS.as_bytes()),
                         default_index_store!(atom_tbl.clone()));
 
         wam.compile_libraries();
         wam.compile_special_forms();
+        wam.compile_top_level();
 
         wam
     }
@@ -251,7 +282,7 @@ impl Machine {
 
         Ok(())
     }
-        
+
     pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir)
     {
         // error detection has finished, so update the master index of keys.
@@ -283,33 +314,15 @@ impl Machine {
         self.code_repo.code.extend(code.into_iter());
     }
 
-    fn fail(&mut self) -> EvalSession
-    {
-        if self.machine_st.ball.stub.len() > 0 {
-            let h = self.machine_st.heap.h;
-            self.machine_st.copy_and_align_ball_to_heap(0);
-
-            let err_str = self.machine_st.print_exception(Addr::HeapCell(h),
-                                                          &HeapVarDict::new(),
-                                                          PrinterOutputter::new())
-                .result();
-
-            let err_str = clause_name!(err_str, self.indices.atom_tbl());
-            EvalSession::from(SessionError::QueryFailureWithException(err_str))
-        } else {
-            EvalSession::from(SessionError::QueryFailure)
-        }
-    }
-
     pub fn submit_query(&mut self, code: Code, alloc_locs: AllocVarDict) -> EvalSession
     {
-        let mut heap_locs = HashMap::new();
+        let mut heap_locs = HeapVarDict::new();
 
         self.code_repo.cached_query = code;
         self.run_query(&alloc_locs, &mut heap_locs);
 
         if self.machine_st.fail {
-            self.fail()
+            EvalSession::QueryFailure
         } else {
             EvalSession::InitialQuerySuccess(alloc_locs, heap_locs)
         }
@@ -341,6 +354,194 @@ impl Machine {
         }
     }
 
+    pub fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
+        let h = self.machine_st.heap.h;
+
+        let err  = MachineError::session_error(h, err);
+        let stub = MachineError::functor_stub(key.0, key.1);
+        let err  = self.machine_st.error_form(err, stub);
+
+        self.machine_st.throw_exception(err);
+        return;
+    }
+
+    fn handle_toplevel_command(&mut self, code_ptr: REPLCodePtr, p: LocalCodePtr)
+    {
+        match code_ptr {
+            REPLCodePtr::CompileBatch => {
+                #[cfg(feature = "readline_rs_compat")]
+                readline::set_line_mode(readline::LineMode::Multi);
+
+                let src = match readline::read_batch("") {
+                    Ok(src) => src,
+                    Err(e) => {
+                        self.throw_session_error(e, (clause_name!("repl"), 0));
+                        return;
+                    }
+                };
+
+                #[cfg(feature = "readline_rs_compat")]
+                readline::set_line_mode(readline::LineMode::Single);
+
+                match compile_user_module(self, parsing_stream(&src[0 ..])) {
+                    EvalSession::Error(e) =>
+                        self.throw_session_error(e, (clause_name!("repl"), 0)),
+                    _ => {}
+                };
+            },
+            REPLCodePtr::SubmitQueryAndPrintResults => {
+                let term = self.machine_st[temp_v!(1)].clone();
+                let stub = MachineError::functor_stub(clause_name!("repl"), 0);
+
+                let s = match self.machine_st.try_from_list(temp_v!(2), stub) {
+                    Ok(addrs) => {
+                        let mut var_dict = HeapVarDict::new();
+
+                        for addr in addrs {
+                            match addr {
+                                Addr::Str(s) => {
+                                    let var_atom = match self.machine_st.heap[s+1].as_addr(s+1) {
+                                        Addr::Con(Constant::Atom(var_atom, _)) =>
+                                            Rc::new(var_atom.to_string()),
+                                        _ => unreachable!()
+                                    };
+
+                                    let var_addr = self.machine_st.heap[s+2].as_addr(s+2);
+                                    var_dict.insert(var_atom, var_addr);
+                                },
+                                _ => unreachable!()
+                            };
+                        }
+
+                        let term_output = self.machine_st.print_with_locs(term, &var_dict);
+                        term_output.result()
+                    },
+                    Err(err_stub) => {
+                        self.machine_st.throw_exception(err_stub);
+                        return;
+                    }
+                };
+
+                let stream = parsing_stream(s.as_bytes());
+
+                let snapshot = self.machine_st.sink_to_snapshot();
+                self.machine_st.reset();
+
+                let result = match stream_to_toplevel(stream, self) {
+                    Ok(packet) => compile_term(self, packet),
+                    Err(e) => EvalSession::from(e)
+                };
+
+                self.handle_eval_session(result, snapshot);
+            }
+        }
+
+        self.machine_st.p = CodePtr::Local(p);
+    }
+
+    fn handle_eval_session(&mut self, result: EvalSession, snapshot: MachineState) {
+        match result {
+            EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) =>
+                loop {
+                    let bindings = {
+                        let mut output = PrinterOutputter::new();
+                        self.toplevel_heap_view(&heap_locs, output).result()
+                    };
+
+                    let attr_goals = self.attribute_goals(&heap_locs);
+
+                    if !(self.machine_st.b > 0) {
+                        if bindings.is_empty() {
+                            if !attr_goals.is_empty() {
+                                println!("{}.", attr_goals);
+                            } else {
+                                println!("true.");
+                            }
+
+                            self.machine_st.absorb_snapshot(snapshot);
+                            return;
+                        }
+                    } else if bindings.is_empty() && attr_goals.is_empty() {
+                        print!("true");
+                        stdout().flush().unwrap();
+                    }
+
+                    let mut raw_stdout = stdout().into_raw_mode().unwrap();
+
+                    if !attr_goals.is_empty() {
+                        if bindings.is_empty() {
+                            write!(raw_stdout, "{}", attr_goals).unwrap();
+                        } else {
+                            write!(raw_stdout, "{}, {}", bindings, attr_goals).unwrap();
+                        }
+                    } else if !bindings.is_empty() {
+                        write!(raw_stdout, "{}", bindings).unwrap();
+                    }
+
+                    if self.machine_st.b > 0 {
+                        raw_stdout.flush().unwrap();
+
+                        let result = match next_keypress(raw_stdout) {
+                            ContinueResult::ContinueQuery =>
+                                self.continue_query(&alloc_locs, &mut heap_locs),
+                            ContinueResult::Conclude => {
+                                self.machine_st.absorb_snapshot(snapshot);
+                                return;
+                            }
+                        };
+
+                        let mut raw_stdout = stdout().into_raw_mode().unwrap();
+
+                        match result {
+                            EvalSession::QueryFailure => {
+                                write!(raw_stdout, "false.\r\n").unwrap();
+                                raw_stdout.flush().unwrap();
+                                
+                                self.machine_st.absorb_snapshot(snapshot);
+                                return;
+                            },
+                            EvalSession::Error(err) => {
+                                self.machine_st.absorb_snapshot(snapshot);
+                                self.throw_session_error(err, (clause_name!("repl"), 0));
+                                return;
+                            },
+                            _ => {}
+                        }
+                    } else {
+                        if bindings.is_empty() && attr_goals.is_empty() {
+                            write!(raw_stdout, "true.\r\n").unwrap();
+                        } else {
+                            write!(raw_stdout, ".\r\n").unwrap();
+                        }
+
+                        break;
+                    }
+                },
+            EvalSession::Error(err) => {
+                self.machine_st.absorb_snapshot(snapshot);
+                self.throw_session_error(err, (clause_name!("repl"), 0));
+                return;
+            },
+            EvalSession::QueryFailure =>
+                if self.machine_st.ball.stub.len() > 0 {
+                    let ball = self.machine_st.ball.take();
+                    
+                    self.machine_st.absorb_snapshot(snapshot);
+                    self.machine_st.ball = ball;
+                    
+                    let stub = self.machine_st.copy_and_align_ball();
+                    self.machine_st.throw_exception(stub);
+
+                    return;
+                } else {
+                    println!("false.");
+                },
+            _ => {}
+        }
+
+        self.machine_st.absorb_snapshot(snapshot);
+    }
+
     pub(super)
     fn run_query(&mut self, alloc_locs: &AllocVarDict, heap_locs: &mut HeapVarDict)
     {
@@ -359,10 +560,13 @@ impl Machine {
                 self.machine_st.p = top_level_code_ptr!(cn, p);
             }
 
-            self.machine_st.query_stepper(&mut self.indices, &mut self.policies, &mut self.code_repo);
+            self.machine_st.query_stepper(&mut self.indices, &mut self.policies, &mut self.code_repo,
+                                          &mut self.prolog_stream);
 
             match self.machine_st.p {
                 CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {},
+                CodePtr::REPL(code_ptr, p) =>
+                    self.handle_toplevel_command(code_ptr, p),
                 CodePtr::DynamicTransaction(trans_type, p) => {
                     // self.code_repo.cached_query is about to be overwritten by the term expander,
                     // so hold onto it locally and restore it after the compiler has finished.
@@ -399,21 +603,22 @@ impl Machine {
             self.machine_st.p = self.machine_st.or_stack[b].bp.clone();
 
             if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                return EvalSession::from(SessionError::QueryFailure);
+                self.machine_st.fail = true;
+                return EvalSession::QueryFailure;
             }
 
             self.run_query(alloc_l, heap_l);
 
             if self.machine_st.fail {
-                self.fail()
+                EvalSession::QueryFailure
             } else {
                 EvalSession::SubsequentQuerySuccess
             }
         } else {
-            EvalSession::from(SessionError::QueryFailure)
+            EvalSession::QueryFailure
         }
     }
-    
+
     pub fn toplevel_heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter) -> Outputter
        where Outputter: HCValueOutputter
     {
@@ -422,11 +627,6 @@ impl Machine {
 
         for (var, addr) in sorted_vars {
             let addr = self.machine_st.store(self.machine_st.deref(addr.clone()));
-
-//            if addr.is_ref() {
-//                continue;
-//            }
-
             output = self.machine_st.print_var_eq(var.clone(), addr, var_dir, output);
         }
 
@@ -450,22 +650,12 @@ impl Machine {
     pub fn or_stack_is_empty(&self) -> bool {
         self.machine_st.b == 0
     }
-
-    pub fn clear(&mut self) {
-        let mut machine = Machine::new();
-        mem::swap(self, &mut machine);
-    }
-
-    pub fn reset(&mut self) {
-        self.policies.cut_policy = Box::new(DefaultCutPolicy {});
-        self.machine_st.reset();
-    }
 }
 
 
 impl MachineState {
     fn execute_instr(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
-                     code_repo: &CodeRepo)
+                     code_repo: &CodeRepo, prolog_stream: &mut PrologStream)
     {
         let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
             Some(instr) => instr,
@@ -481,7 +671,8 @@ impl MachineState {
                 self.execute_cut_instr(cut_instr, &mut policies.cut_policy),
             &Line::Control(ref control_instr) =>
                 self.execute_ctrl_instr(indices, &mut policies.call_policy,
-                                        &mut policies.cut_policy, control_instr),
+                                        &mut policies.cut_policy, prolog_stream,
+                                        control_instr),
             &Line::Fact(ref fact_instr) => {
                 self.execute_fact_instr(&fact_instr);
                 self.p += 1;
@@ -516,10 +707,10 @@ impl MachineState {
     }
 
     fn query_stepper(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
-                     code_repo: &mut CodeRepo)
+                     code_repo: &mut CodeRepo, prolog_stream: &mut PrologStream)
     {
         loop {
-            self.execute_instr(indices, policies, code_repo);
+            self.execute_instr(indices, policies, code_repo, prolog_stream);
 
             if self.fail {
                 self.backtrack();
@@ -538,7 +729,7 @@ impl MachineState {
                     self.fail = true,
                 CodePtr::Local(LocalCodePtr::InSituDirEntry(p))
                     if p < code_repo.in_situ_code.len() => {},
-                CodePtr::Local(_) =>
+                CodePtr::Local(_) | CodePtr::REPL(..) =>
                     break,
                 CodePtr::VerifyAttrInterrupt(p) =>
                     self.verify_attr_interrupt(p),
@@ -546,7 +737,7 @@ impl MachineState {
                     // prevent use of dynamic transactions from
                     // succeeding in expansions. this will be toggled
                     // back to true later.
-                    self.fail = true; 
+                    self.fail = true;
                     break;
                 },
                 _ => {}

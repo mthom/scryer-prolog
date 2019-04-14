@@ -123,6 +123,7 @@ fn compile_query(terms: Vec<QueryTerm>, queue: VecDeque<TopLevel>, flags: Machin
     let mut code = try!(cg.compile_query(&terms));
 
     compile_appendix(&mut code, &queue, false, flags)?;
+
     Ok((code, cg.take_vars()))
 }
 
@@ -214,7 +215,8 @@ fn setup_module_expansions(wam: &mut Machine, module_name: ClauseName)
 }
 
 pub(super)
-fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName, src: R, name: ClauseName)
+fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName,
+                                src: ParsingStream<R>, name: ClauseName)
                                 -> EvalSession
 {
     let mut indices = default_index_store!(wam.atom_tbl_of(&name));
@@ -232,7 +234,8 @@ fn compile_into_module<R: Read>(wam: &mut Machine, module_name: ClauseName, src:
 }
 
 fn compile_into_module_impl<R: Read>(wam: &mut Machine, compiler: &mut ListingCompiler,
-                                     module_name: ClauseName, src: R, mut indices: IndexStore)
+                                     module_name: ClauseName, src: ParsingStream<R>,
+                                     mut indices: IndexStore)
                                      -> Result<(), SessionError>
 {
     setup_module_expansions(wam, module_name.clone());
@@ -556,7 +559,7 @@ impl ListingCompiler {
                 let spec = get_desc(op_decl.name(), composite_op!(self.module.is_some(),
                                                                   &wam_indices.op_dir,
                                                                   &mut indices.op_dir));
-                
+
                 op_decl.submit(self.get_module_name(), spec, &mut indices.op_dir)
             },
             Declaration::UseModule(name) =>
@@ -597,12 +600,13 @@ impl ListingCompiler {
     }
 
     pub(crate)
-    fn gather_items<R: Read>(&mut self, wam: &mut Machine, src: R, indices: &mut IndexStore)
+    fn gather_items<R: Read>(&mut self, wam: &mut Machine, mut src: ParsingStream<R>,
+                             indices: &mut IndexStore)
                              -> Result<GatherResult, SessionError>
     {
         let flags      = wam.machine_flags();
         let atom_tbl   = indices.atom_tbl.clone();
-        let mut worker = TopLevelBatchWorker::new(src, atom_tbl.clone(), flags,
+        let mut worker = TopLevelBatchWorker::new(&mut src, atom_tbl.clone(), flags,
                                                   &mut wam.indices, &mut wam.policies,
                                                   &mut wam.code_repo);
 
@@ -649,8 +653,8 @@ impl ListingCompiler {
     }
 }
 
-fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src: R,
-                         mut indices: IndexStore)
+fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine,
+                         src: ParsingStream<R>, mut indices: IndexStore)
                          -> EvalSession
 {
     let mut results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
@@ -693,7 +697,8 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine, src:
 /* This is a truncated version of compile_user_module, used for
    compiling code composing special forms, ie. the code that calls
    M:verify_attributes on attributed variables. */
-pub fn compile_special_form<R: Read>(wam: &mut Machine, src: R) -> Result<Code, SessionError>
+pub fn compile_special_form<R: Read>(wam: &mut Machine, src: ParsingStream<R>)
+                                     -> Result<Code, SessionError>
 {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     setup_indices(wam, clause_name!("builtins"), &mut indices)?;
@@ -705,7 +710,9 @@ pub fn compile_special_form<R: Read>(wam: &mut Machine, src: R) -> Result<Code, 
 }
 
 #[inline]
-pub fn compile_listing<R: Read>(wam: &mut Machine, src: R, indices: IndexStore) -> EvalSession
+pub
+fn compile_listing<R: Read>(wam: &mut Machine, src: ParsingStream<R>, indices: IndexStore)
+                            -> EvalSession
 {
     let mut compiler = ListingCompiler::new(&wam.code_repo);
 
@@ -733,7 +740,7 @@ fn setup_indices(wam: &mut Machine, module: ClauseName, indices: &mut IndexStore
     }
 }
 
-pub fn compile_user_module<R: Read>(wam: &mut Machine, src: R) -> EvalSession {
+pub fn compile_user_module<R: Read>(wam: &mut Machine, src: ParsingStream<R>) -> EvalSession {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     try_eval_session!(setup_indices(wam, clause_name!("builtins"), &mut indices));
     compile_listing(wam, src, indices)

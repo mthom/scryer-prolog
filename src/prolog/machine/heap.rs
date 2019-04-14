@@ -2,6 +2,7 @@ use prolog_parser::ast::*;
 
 use prolog::machine::machine_indices::*;
 
+use std::mem;
 use std::ops::{Index, IndexMut};
 
 pub struct Heap {
@@ -19,6 +20,17 @@ impl Heap {
     pub fn push(&mut self, val: HeapCellValue) {
         self.heap.push(val);
         self.h += 1;
+    }
+
+    #[inline]
+    pub(crate) fn take(&mut self) -> Self {
+        let h = self.h;
+        self.h = 0;
+
+        Heap {
+            heap: mem::replace(&mut self.heap, vec![]),
+            h
+        }
     }
 
     #[inline]

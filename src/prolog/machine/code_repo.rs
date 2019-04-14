@@ -32,7 +32,7 @@ impl CodeRepo {
             term_dir: TermDir::new()
         }
     }
-
+    
     #[inline]
     pub fn term_dir_entry_len(&self, key: PredicateKey) -> (usize, usize) {
         self.term_dir.get(&key)
@@ -105,6 +105,8 @@ impl CodeRepo {
                 Some(RefOrOwned::Borrowed(&self.in_situ_code[p])),
             &CodePtr::Local(LocalCodePtr::DirEntry(p)) =>
                 Some(RefOrOwned::Borrowed(&self.code[p])),
+            &CodePtr::REPL(..) =>
+                None,
             &CodePtr::BuiltInClause(ref built_in, _) => {
                 let call_clause = call_clause!(ClauseType::BuiltIn(built_in.clone()),
                                                built_in.arity(),

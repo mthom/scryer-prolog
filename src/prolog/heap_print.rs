@@ -398,6 +398,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         printer
     }
 
+    pub fn drop_toplevel_spec(&mut self) {
+        self.toplevel_spec = None;
+    }
+
     #[inline]
     pub fn see_all_locs(&mut self) {
         for key in self.heap_locs.keys().cloned() {
@@ -559,8 +563,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     fn check_for_seen(&mut self, iter: &mut HCPreOrderIterator) -> Option<HeapCellValue>
     {
         iter.stack().last().cloned().and_then(|addr| {
-            let addr = self.machine_st.store(self.machine_st.deref(addr));
-
+            let addr = self.machine_st.store(self.machine_st.deref(addr));            
+            
             match self.heap_locs.get(&addr).cloned() {
                 Some(var) => if !self.printed_vars.contains(&addr) {
                     self.printed_vars.insert(addr);

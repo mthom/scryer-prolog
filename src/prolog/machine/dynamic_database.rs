@@ -17,7 +17,8 @@ impl Machine {
         }
     }
 
-    fn compile_into_machine<R: Read>(&mut self, src: R, name: ClauseName, arity: usize) -> EvalSession
+    fn compile_into_machine<R: Read>(&mut self, src: ParsingStream<R>, name: ClauseName, arity: usize)
+                                     -> EvalSession
     {
         match name.owning_module().as_str() {
             "user" => match self.indices.code_dir.get(&(name.clone(), arity)).cloned() {
@@ -118,7 +119,7 @@ impl Machine {
     {
         let machine_st = mem::replace(&mut self.machine_st, MachineState::new());
 
-        let result = self.compile_into_machine(pred_str.as_bytes(), name, arity);
+        let result = self.compile_into_machine(parsing_stream(pred_str.as_bytes()), name, arity);
         self.machine_st = machine_st;
 
         if let EvalSession::Error(err) = result {

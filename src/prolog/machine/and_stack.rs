@@ -1,5 +1,6 @@
 use prolog::machine::machine_indices::*;
 
+use std::mem;
 use std::ops::{Index, IndexMut};
 use std::vec::Vec;
 
@@ -8,7 +9,7 @@ pub struct Frame {
     pub global_index: usize,
     pub e: usize,
     pub cp: LocalCodePtr,
-    pub special_form_cp: LocalCodePtr,
+    pub interrupt_cp: LocalCodePtr,
     perms: Vec<Addr>
 }
 
@@ -18,7 +19,7 @@ impl Frame {
             global_index,
             e: e,
             cp: cp,
-            special_form_cp: LocalCodePtr::default(),
+            interrupt_cp: LocalCodePtr::default(),
             perms: (1 .. n+1).map(|i| Addr::StackCell(fr, i)).collect()
         }
     }
@@ -36,6 +37,11 @@ impl AndStack {
         AndStack(Vec::new())
     }
 
+    #[inline]
+    pub(crate) fn take(&mut self) -> Self {
+        AndStack(mem::replace(&mut self.0, vec![]))
+    }
+    
     pub fn push(&mut self, global_index: usize, e: usize, cp: LocalCodePtr, n: usize) {
         let len = self.0.len();
         self.0.push(Frame::new(global_index, len, e, cp, n));

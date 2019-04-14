@@ -124,6 +124,24 @@ impl Add<usize> for Addr {
     }
 }
 
+impl Sub<i64> for Addr {
+    type Output = Addr;
+
+    fn sub(self, rhs: i64) -> Self::Output {
+        if rhs < 0 {
+            match self {
+                Addr::Lis(a) => Addr::Lis(a + rhs.abs() as usize),
+                Addr::AttrVar(h) => Addr::AttrVar(h + rhs.abs() as usize),
+                Addr::HeapCell(h) => Addr::HeapCell(h + rhs.abs() as usize),
+                Addr::Str(s) => Addr::Str(s + rhs.abs() as usize),
+                _ => self
+            }
+        } else {
+            self.sub(rhs as usize)
+        }
+    }
+}
+
 impl Sub<usize> for Addr {
     type Output = Addr;
 
@@ -260,13 +278,20 @@ pub enum DynamicTransactionType {
     Retract // dynamic index of the clause to remove.
 }
 
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+pub enum REPLCodePtr {
+    CompileBatch,    
+    SubmitQueryAndPrintResults
+}
+
 #[derive(Clone, PartialEq)]
 pub enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
     CallN(usize, LocalCodePtr), // arity, local.
     Local(LocalCodePtr),
     DynamicTransaction(DynamicTransactionType, LocalCodePtr), // the type of transaction, the return pointer.
-    VerifyAttrInterrupt(usize), // location of the verify attribute interrupt code in the CodeDir.
+    REPL(REPLCodePtr, LocalCodePtr), // the REPL code, the return pointer.
+    VerifyAttrInterrupt(usize), // location of the verify attribute interrupt code in the CodeDir.    
 }
 
 impl CodePtr {
@@ -276,7 +301,8 @@ impl CodePtr {
           | &CodePtr::CallN(_, ref local)
           | &CodePtr::Local(ref local) => local.clone(),
             &CodePtr::VerifyAttrInterrupt(p) => LocalCodePtr::DirEntry(p),
-            &CodePtr::DynamicTransaction(_, p) => p
+            &CodePtr::REPL(_, p)
+          | &CodePtr::DynamicTransaction(_, p) => p
         }
     }
 }
@@ -367,7 +393,8 @@ impl Add<usize> for CodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            p @ CodePtr::VerifyAttrInterrupt(_)
+            p @ CodePtr::REPL(..)
+          | p @ CodePtr::VerifyAttrInterrupt(_)
           | p @ CodePtr::DynamicTransaction(..) => p,
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
             CodePtr::CallN(_, local) | CodePtr::BuiltInClause(_, local) => CodePtr::Local(local + rhs)
@@ -412,7 +439,7 @@ pub struct IndexStore {
     pub(super) global_variables: GlobalVarDir,
     pub(super) in_situ_code_dir: InSituCodeDir,
     pub(super) modules: ModuleDir,
-    pub(super) op_dir: OpDir,    
+    pub(super) op_dir: OpDir,
 }
 
 impl IndexStore {    
@@ -475,6 +502,7 @@ impl IndexStore {
             in_situ_code_dir: InSituCodeDir::new(),
             op_dir: default_op_dir(),
             modules: ModuleDir::new(),
+//            parsing_stream: readline::parsing_stream(String::new())
         }
     }
 
