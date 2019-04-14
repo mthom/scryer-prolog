@@ -14,7 +14,7 @@ cfg-if = "0.1.7"
 downcast = "0.10.0"
 num = "0.2"
 ordered-float = "0.5.0"
-prolog_parser = { version = "0.8.19", path = "../prolog_parser" }
+prolog_parser = "0.8.19"
 readline_rs_compat = { version = "0.1.8", path = "../readline.rs", optional = true }
 ref_thread_local = "0.0.0"
 
