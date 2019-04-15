@@ -178,6 +178,10 @@ macro_rules! try_eval_session {
 }
 macro_rules! return_from_clause {
     ($lco:expr, $machine_st:expr) => {{
+        if let CodePtr::VerifyAttrInterrupt(_) = $machine_st.p {
+            return Ok(());
+        }
+        
         if $lco {
             $machine_st.p = CodePtr::Local($machine_st.cp.clone());
         } else {

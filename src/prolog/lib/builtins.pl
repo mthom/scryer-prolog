@@ -76,8 +76,8 @@ Module : Predicate :-
 
 current_prolog_flag(Flag, false) :- Flag == bounded, !.
 current_prolog_flag(bounded, false).
-current_prolog_flag(Flag, down) :- Flag == integer_rounding_function, !.
-current_prolog_flag(integer_rounding_function, down).
+current_prolog_flag(Flag, toward_zero) :- Flag == integer_rounding_function, !.
+current_prolog_flag(integer_rounding_function, toward_zero).
 current_prolog_flag(Flag, Value) :- Flag == double_quotes, !, '$get_double_quotes'(Value).
 current_prolog_flag(double_quotes, Value) :- '$get_double_quotes'(Value).
 current_prolog_flag(Flag, _) :- Flag == max_integer, !, '$fail'.
