@@ -220,32 +220,28 @@ is_write_option(Functor) :-
     Functor =.. [Name, Arg],
     ( Arg == true -> true
     ; Arg == false -> true
-    ; throw(error(domain_error(write_option, Functor), write_term/2)) ), % 8.14.2.3 e)
+    ; var(Arg) -> throw(error(instantiation_error, write_term/2))
+    ; throw(error(domain_error(write_option, Functor), write_term/2))
+    ), % 8.14.2.3 e)
     ( Name == ignore_ops -> true
     ; Name == quoted -> true
     ; Name == numbervars -> true
-    ; throw(error(domain_error(write_option, Functor), write_term/2)) ). % 8.14.2.3 e)
+    ; throw(error(domain_error(write_option, Functor), write_term/2))
+    ). % 8.14.2.3 e)
 
 inst_member_or([X|Xs], Y, _) :-
-    ( nonvar(X), is_write_option(X) -> ( Y = X, ! ; inst_member_or(Xs, Y, _) )
-    ; throw(instantiation_error) ). % 8.14.2.3 b)
+    (  var(X) -> throw(error(instantiation_error, write_term/2))
+    ;  is_write_option(X) -> ( Y = X, ! ; inst_member_or(Xs, Y, _) )
+    ;  throw(error(domain_error(write_option, X), write_term/2))
+    ).
 inst_member_or([], Y, Y).
 
-%% TODO: complete the predicate! Most read options are missing.
-read_term(Term, Options) :-
+write_term(_, Options) :-
+    var(Options), throw(error(instantiation_error, write_term/2)).
+write_term(Term, Options) :-        
     '$skip_max_list'(_, -1, Options, Options0),
-    (  Options0 == [] -> true
-    ;  var(Options0)  -> throw(error(instantiation_error, read_term/2)) % 8.14.1.3 b)
-    ;  throw(error(type_error(list, Options), read_term/2)) % 8.14.1.3 d)
-    ),
-    (  Options = [variable_names(VarList)] -> '$read_term'(Term, VarList)
-    ;  Options = [] -> read(Term)
-    ;  false
-    ).
-    
-write_term(Term, Options) :-
-    '$skip_max_list'(_, -1, Options, Options0),
-    (  Options0 == [] -> true
+    (  var(Options0)  -> throw(error(instantiation_error, write_term/2))
+    ;  Options0 == [] -> true
     ;  throw(error(type_error(list, Options), write_term/2))
     ), % 8.14.2.3 c)
     inst_member_or(Options, ignore_ops(IgnoreOps), ignore_ops(false)),
@@ -259,6 +255,18 @@ write_canonical(Term) :- write_term(Term, [ignore_ops(true), quoted(true)]).
 
 writeq(Term) :- write_term(Term, [quoted(true), numbervars(true)]).
 
+%% TODO: complete the predicate! Most read options are missing.
+read_term(Term, Options) :-
+    '$skip_max_list'(_, -1, Options, Options0),
+    (  Options0 == [] -> true
+    ;  var(Options0)  -> throw(error(instantiation_error, read_term/2)) % 8.14.1.3 b)
+    ;  throw(error(type_error(list, Options), read_term/2)) % 8.14.1.3 d)
+    ),
+    (  Options = [variable_names(VarList)] -> '$read_term'(Term, VarList)
+    ;  Options = [] -> read(Term)
+    ;  false
+    ).
+
 % expand_goal.
 
 expand_goal(Term0, Term) :- '$expand_goal'(Term0, Term).
@@ -269,9 +277,9 @@ expand_term(Term0, Term) :- '$expand_term'(Term0, Term).
 
 % term_variables.
 
-% ensures List is either a variable or a proper list.
+% ensures List is either a variable or a list.
 can_be_list(List, _)  :- var(List), !.
-can_be_list(List, _)  :- '$skip_max_list'(_, -1, List, Tail), Tail == [], !.
+can_be_list(List, _)  :- '$skip_max_list'(_, -1, List, Tail), ( var(Tail) -> true ; Tail == []), !.
 can_be_list(List, PI) :- throw(error(type_error(list, List), PI)).
 
 term_variables(Term, Vars) :-

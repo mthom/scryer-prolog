@@ -183,7 +183,7 @@ macro_rules! return_from_clause {
         }
         
         if $lco {
-            $machine_st.p = CodePtr::Local($machine_st.cp.clone());
+            $machine_st.p = CodePtr::Local($machine_st.cp);
         } else {
             $machine_st.p += 1;
         }
