@@ -413,7 +413,8 @@ impl Machine {
                             };
                         }
 
-                        let term_output = self.machine_st.print_query(term, &var_dict);
+                        let term_output = self.machine_st.print_query(term, &self.indices.op_dir,
+                                                                      &var_dict);
                         term_output.result()
                     },
                     Err(err_stub) => {
@@ -627,21 +628,24 @@ impl Machine {
 
         for (var, addr) in sorted_vars {
             let addr = self.machine_st.store(self.machine_st.deref(addr.clone()));
-            output = self.machine_st.print_var_eq(var.clone(), addr, var_dir, output);
+            output = self.machine_st.print_var_eq(var.clone(), addr, &self.indices.op_dir, var_dir,
+                                                  output);
         }
 
         output
     }
 
     #[cfg(test)]
-    pub fn test_heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter) -> Outputter
+    pub fn test_heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter)
+                                     -> Outputter
        where Outputter: HCValueOutputter
     {
         let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = var_dir.iter().collect();
         sorted_vars.sort_by_key(|ref v| v.0);
 
         for (var, addr) in sorted_vars {
-            output = self.machine_st.print_var_eq(var.clone(), addr.clone(), var_dir, output);
+            output = self.machine_st.print_var_eq(var.clone(), addr.clone(), &self.indices.op_dir,
+                                                  var_dir, output);
         }
 
         output
@@ -654,10 +658,10 @@ impl Machine {
 
 
 impl MachineState {
-    fn print_query(&self, addr: Addr, var_dict: &HeapVarDict) -> PrinterOutputter
+    fn print_query(&self, addr: Addr, op_dir: &OpDir, var_dict: &HeapVarDict) -> PrinterOutputter
     {
         let output = PrinterOutputter::new();
-        let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
+        let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output, var_dict);
 
         printer.quoted = true;
         printer.numbervars = false;

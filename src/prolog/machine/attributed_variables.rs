@@ -140,7 +140,7 @@ impl MachineState {
         self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
     }
 
-    fn print_attribute_goals_string(&mut self, var_dict: &HeapVarDict) -> String
+    fn print_attribute_goals_string(&mut self, op_dir: &OpDir, var_dict: &HeapVarDict) -> String
     {
         let mut attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
 
@@ -154,7 +154,7 @@ impl MachineState {
         let mut output = PrinterOutputter::new();
 
         for goal_addr in attr_goals {
-            let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
+            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output, var_dict);
             printer.see_all_locs();
 
             printer.numbervars = false;
@@ -188,6 +188,6 @@ impl Machine {
         self.machine_st.query_stepper(&mut self.indices, &mut self.policies, &mut self.code_repo,
                                       &mut readline::input_stream());
 
-        self.machine_st.print_attribute_goals_string(var_dict)
+        self.machine_st.print_attribute_goals_string(&self.indices.op_dir, var_dict)
     }
 }

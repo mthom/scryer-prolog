@@ -181,7 +181,7 @@ impl OpDecl {
     pub fn remove(&self, op_dir: &mut OpDir) {
         self.insert_into_op_dir(clause_name!(""), op_dir, 0);
     }
-    
+
     fn insert_into_op_dir(&self, module: ClauseName, op_dir: &mut OpDir, prec: usize)
     {
         let (spec, name) = (self.1, self.2.clone());
@@ -227,6 +227,46 @@ impl OpDecl {
 
         Ok(self.insert_into_op_dir(module, op_dir, prec))
     }
+}
+
+pub
+fn fetch_atom_op_spec(name: ClauseName, spec: Option<SharedOpDesc>, op_dir: &OpDir)
+                      -> Option<SharedOpDesc>
+{
+    fetch_op_spec(name.clone(), 1, spec.clone(), op_dir)
+        .or_else(|| fetch_op_spec(name, 2, spec, op_dir))
+}
+
+pub
+fn fetch_op_spec(name: ClauseName, arity: usize, spec: Option<SharedOpDesc>, op_dir: &OpDir)
+                 -> Option<SharedOpDesc>
+{
+    spec.or_else(|| {
+        match arity {
+            2 => op_dir.get(&(name, Fixity::In)).and_then(|OpDirValue(spec, _)|
+                if spec.prec() > 0 {
+                    Some(spec.clone())
+                } else {
+                    None
+                }),
+            1 => {
+                if let Some(OpDirValue(spec, _)) = op_dir.get(&(name.clone(), Fixity::Pre)) {
+                    if spec.prec() > 0 {
+                        return Some(spec.clone());
+                    }
+                }
+
+                op_dir.get(&(name.clone(), Fixity::Post))
+                      .and_then(|OpDirValue(spec, _)|
+                        if spec.prec() > 0 {
+                            Some(spec.clone())
+                        } else {
+                            None
+                        })
+            },
+            _ => None
+        }
+    })
 }
 
 pub type ModuleDir = HashMap<ClauseName, Module>;

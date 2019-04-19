@@ -3,6 +3,7 @@ use prolog_parser::parser::{get_desc, get_clause_spec};
 use prolog_parser::tabled_rc::*;
 
 use prolog::clause_types::*;
+use prolog::forms::*;
 use prolog::heap_print::*;
 use prolog::machine::copier::*;
 use prolog::machine::machine_errors::*;
@@ -908,7 +909,7 @@ impl MachineState {
                     _ => unreachable!()
                 };
 
-                let module  = op.owning_module();
+                let module = op.owning_module();
 
                 let result = to_op_decl(priority, specifier.as_str(), op)
                     .map_err(SessionError::from)
@@ -1167,9 +1168,11 @@ impl MachineState {
                             },
                             _ => unreachable!()
                         },
-                    Addr::Con(Constant::Atom(name, op_spec)) => {
+                    Addr::Con(Constant::Atom(name, spec)) => {
                         let module = name.owning_module();
-                        indices.predicate_exists(name, module, 0, op_spec)
+                        let spec = fetch_atom_op_spec(name.clone(), spec, &indices.op_dir);
+
+                        indices.predicate_exists(name, module, 0, spec)
                     },
                     head => {
                         let err = MachineError::type_error(ValidType::Callable, head);
@@ -1423,9 +1426,9 @@ impl MachineState {
                             let var_atom = Constant::Atom(var_atom, None);
 
                             let h = self.heap.h;
-                            let op_desc = Some(SharedOpDesc::new(700, XFX));
+                            let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
 
-                            self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), op_desc));
+                            self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
                             self.heap.push(HeapCellValue::Addr(Addr::Con(var_atom)));
                             self.heap.push(HeapCellValue::Addr(binding));
 
@@ -1503,7 +1506,7 @@ impl MachineState {
                 let numbervars = self.store(self.deref(self[temp_v!(3)].clone()));
                 let quoted = self.store(self.deref(self[temp_v!(4)].clone()));
 
-                let mut printer = HCPrinter::new(&self, PrinterOutputter::new());
+                let mut printer = HCPrinter::new(&self, &indices.op_dir, PrinterOutputter::new());
 
                 if let &Addr::Con(Constant::Atom(ref name, ..)) = &ignore_ops {
                     printer.ignore_ops = name.as_str() == "true";

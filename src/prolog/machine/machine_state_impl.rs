@@ -186,7 +186,7 @@ impl MachineState {
     }
 
     pub(super)
-    fn print_var_eq<Outputter>(&self, var: Rc<Var>, addr: Addr, var_dict: &HeapVarDict,
+    fn print_var_eq<Outputter>(&self, var: Rc<Var>, addr: Addr, op_dir: &OpDir, var_dict: &HeapVarDict,
                                mut output: Outputter)
                                -> Outputter
       where Outputter: HCValueOutputter
@@ -198,13 +198,13 @@ impl MachineState {
         output.append(var.as_str());
         output.append(" = ");
 
-        let mut printer = HCPrinter::from_heap_locs(&self, output, var_dict);
+        let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output, var_dict);
 
         printer.numbervars = false;
         printer.quoted = true;
 
         let mut output = printer.print(addr);
-
+        
         let bad_ending = format!("= {}", &var);
 
         if output.ends_with(&bad_ending) {
@@ -2038,13 +2038,14 @@ impl MachineState {
                 self.try_functor_unify_components(a1, Addr::Con(integer!(0))),
             Addr::Str(o) =>
                 match self.heap[o].clone() {
-                    HeapCellValue::NamedStr(arity, name, spec) =>
-                        self.try_functor_compound_case(name, arity, spec),
+                    HeapCellValue::NamedStr(arity, name, spec) => {
+                        let spec = fetch_op_spec(name.clone(), arity, spec, op_dir);
+                        self.try_functor_compound_case(name, arity, spec)
+                    },                            
                     _ => self.fail = true
                 },
             Addr::Lis(_) => {
-                let shared_op_desc = op_dir.get(&(clause_name!("."), Fixity::In))
-                                           .map(|val| val.0.clone());
+                let shared_op_desc = fetch_op_spec(clause_name!("."), 2, None, op_dir);
                 self.try_functor_compound_case(clause_name!("."), 2, shared_op_desc)
             },
             Addr::AttrVar(..) | Addr::HeapCell(_) | Addr::StackCell(..) => {
@@ -2079,6 +2080,8 @@ impl MachineState {
                         Addr::Con(_) if arity == 0 =>
                             self.unify(a1, name),
                         Addr::Con(Constant::Atom(name, spec)) => {
+                            let spec = fetch_atom_op_spec(name.clone(), spec, op_dir);
+                                                          
                             let f_a = if name.as_str() == "." && arity == 2 {
                                 Addr::Lis(self.heap.h)
                             } else {

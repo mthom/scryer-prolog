@@ -40,7 +40,7 @@ impl Ball {
     pub(super) fn take(&mut self) -> Ball {
         let boundary = self.boundary;
         self.boundary = 0;
-        
+
         Ball {
             boundary,
             stub: mem::replace(&mut self.stub, vec![])
@@ -238,7 +238,7 @@ pub struct MachineState {
     pub(crate) flags: MachineFlags
 }
 
-impl MachineState {    
+impl MachineState {
     fn call_at_index(&mut self, arity: usize, p: usize)
     {
         self.cp.assign_if_local(self.p.clone() + 1);
@@ -548,12 +548,18 @@ pub(crate) trait CallPolicy: Any {
                 let a3 = machine_st[temp_v!(3)].clone();
 
                 let c = match machine_st.compare_term_test(&a2, &a3) {
-                    Ordering::Greater => Addr::Con(Constant::Atom(clause_name!(">"),
-                                                                  Some(SharedOpDesc::new(700, XFX)))),
-                    Ordering::Equal   => Addr::Con(Constant::Atom(clause_name!("="),
-                                                                  Some(SharedOpDesc::new(700, XFX)))),
-                    Ordering::Less    => Addr::Con(Constant::Atom(clause_name!("<"),
-                                                                  Some(SharedOpDesc::new(700, XFX))))
+                    Ordering::Greater => {
+                        let spec = fetch_atom_op_spec(clause_name!(">"), None, &indices.op_dir);
+                        Addr::Con(Constant::Atom(clause_name!(">"), spec))
+                    },
+                    Ordering::Equal => {
+                        let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
+                        Addr::Con(Constant::Atom(clause_name!("="), spec))
+                    },
+                    Ordering::Less => {
+                        let spec = fetch_atom_op_spec(clause_name!("<"), None, &indices.op_dir);
+                        Addr::Con(Constant::Atom(clause_name!("<"), spec))
+                    }
                 };
 
                 machine_st.unify(a1, c);
@@ -584,7 +590,7 @@ pub(crate) trait CallPolicy: Any {
             },
             &BuiltInClauseType::Read => {
                 readline::toggle_prompt(false);
-                
+
                 match machine_st.read(parsing_stream, indices.atom_tbl.clone(), &indices.op_dir) {
                     Ok(offset) => {
                         let addr = machine_st[temp_v!(1)].clone();

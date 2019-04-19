@@ -1838,7 +1838,7 @@ insect(bee).");
     assert_prolog_success!(&mut wam, "clause(legs(I, 6), Body).",
                            [["I = _1", "Body = insect(_1)"]]);
     assert_prolog_success!(&mut wam, "clause(legs(C, 7), Body).",
-                           [["C = _1", "Body = ','(_1, call(C))"]]);
+                           [["C = _1", "Body = (_1,call(C))"]]);
     assert_prolog_success!(&mut wam, "clause(insect(I), T).",
                            [["I = ant", "T = true"],
                             ["I = bee", "T = true"]]);

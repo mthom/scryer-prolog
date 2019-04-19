@@ -62,7 +62,7 @@ impl Machine {
         output.append(format!(":- dynamic({}/{}). ", name.as_str(), arity).as_str());
 
         for addr in addrs {
-            let mut printer = HCPrinter::new(&self.machine_st, output);
+            let mut printer = HCPrinter::new(&self.machine_st, &self.indices.op_dir, output);
             printer.quoted = true;
 
             output = printer.print(addr);
