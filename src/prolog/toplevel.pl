@@ -4,6 +4,7 @@ repl :-
 repl :- repl.
     
 read_and_match :-
+    write_term('?- ', [quoted(false)]),
     read_term(Term, [variable_names(VarList)]),
     '$instruction_match'(Term, VarList).
 

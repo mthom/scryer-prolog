@@ -85,26 +85,15 @@ pub mod readline
     impl Read for ReadlineStream {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
             if self.pending_input.is_empty() {
-                let prompt = unsafe {
-                    if PRINT_PROMPT { "?- " } else { "" }
-                };
-
-                self.call_readline(prompt, buf)
+                self.call_readline("", buf)
             } else {
                 Ok(self.write_to_buf(buf))
             }
         }
     }
 
-    static mut PRINT_PROMPT: bool = true;
     static mut LINE_MODE: LineMode = LineMode::Single;
     static mut END_OF_LINE: bool = false;
-
-    pub fn toggle_prompt(on_or_off: bool) {
-        unsafe {
-            PRINT_PROMPT = on_or_off;
-        }
-    }
 
     pub fn set_line_mode(mode: LineMode) {
         unsafe {
@@ -141,6 +130,7 @@ pub mod readline
             panic!("initialize_rl() failed with return code {}", rc);
         }
 
+        bind_key_rl('\t' as i32, rl_insert); // just insert tabs when typed.
         bind_key_rl('\n' as i32, bind_cr);
         bind_key_rl('\r' as i32, bind_cr);
         bind_keyseq_rl("\\C-d", bind_end_chord);
@@ -164,27 +154,14 @@ pub mod readline
 pub mod readline
 {
     use prolog_parser::ast::*;
-    use std::io::{BufReader, Read, Stdin, Write, stdin, stdout};
-
-    static mut PRINT_PROMPT: bool = false;
+    use std::io::{BufReader, Read, Stdin, stdin};
 
     struct StdinWrapper {
         buf: BufReader<Stdin>
     }
 
-    fn print_prompt() {
-        unsafe {
-            if PRINT_PROMPT {
-                print!("?- ");
-                stdout().flush().unwrap();
-                PRINT_PROMPT = false;
-            }
-        }
-    }
-
     impl Read for StdinWrapper {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            print_prompt();
             self.buf.read(buf)
         }
     }
@@ -203,17 +180,8 @@ pub mod readline
 
     #[inline]
     pub fn input_stream() -> ::PrologStream {
-        print_prompt();
-
         let reader: Box<Read> = Box::new(StdinWrapper { buf: BufReader::new(stdin()) });
         parsing_stream(reader)
-    }
-
-
-    pub fn toggle_prompt(on_or_off: bool) {
-        unsafe {
-            PRINT_PROMPT = on_or_off;
-        }
     }
 }
 

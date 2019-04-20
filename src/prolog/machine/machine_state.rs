@@ -12,7 +12,7 @@ use prolog::machine::machine_indices::*;
 use prolog::machine::modules::*;
 use prolog::machine::or_stack::*;
 use prolog::num::{BigInt, BigUint, Zero, One};
-use prolog::read::{PrologStream, readline};
+use prolog::read::PrologStream;
 
 use downcast::Any;
 
@@ -589,8 +589,6 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Read => {
-                readline::toggle_prompt(false);
-
                 match machine_st.read(parsing_stream, indices.atom_tbl.clone(), &indices.op_dir) {
                     Ok(offset) => {
                         let addr = machine_st[temp_v!(1)].clone();

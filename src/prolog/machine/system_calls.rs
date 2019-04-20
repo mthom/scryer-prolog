@@ -310,6 +310,20 @@ impl MachineState {
         }
     }
 
+    fn int_to_char_code(&mut self, n: Rc<BigInt>, stub: &'static str, arity: usize)
+                        -> Result<u8, MachineStub>
+    {
+        if let Some(c) = n.to_u8() {
+            Ok(c)
+        } else {
+            let stub = MachineError::functor_stub(clause_name!(stub), arity);
+            let err = MachineError::representation_error(RepFlag::CharacterCode);
+            let err = self.error_form(err, stub);
+
+            Err(err)
+        }
+    }
+    
     pub(super) fn system_call(&mut self,
                               ct: &SystemClauseType,
                               indices: &mut IndexStore,
@@ -444,6 +458,10 @@ impl MachineState {
 
                                 for addr in addrs.iter() {
                                     match addr {
+                                        &Addr::Con(Constant::Number(Number::Integer(ref n))) => {
+                                            let c = self.int_to_char_code(n.clone(), "atom_codes", 2)?;
+                                            chars.push(c as char);
+                                        },
                                         &Addr::Con(Constant::CharCode(c)) =>
                                             chars.push(c as char),
                                         _ => {
@@ -516,16 +534,10 @@ impl MachineState {
                         match self.store(self.deref(a2)) {
                             Addr::Con(Constant::CharCode(code)) =>
                                 self.unify(Addr::Con(Constant::Char(code as char)), addr.clone()),
-                            Addr::Con(Constant::Number(Number::Integer(n))) =>
-                                if let Some(c) = n.to_u8() {
-                                    self.unify(Addr::Con(Constant::Char(c as char)), addr.clone());
-                                } else {
-                                    let stub = MachineError::functor_stub(clause_name!("char_code"), 2);
-                                    let err = MachineError::representation_error(RepFlag::CharacterCode);
-                                    let err = self.error_form(err, stub);
-
-                                    return Err(err);
-                                },
+                            Addr::Con(Constant::Number(Number::Integer(n))) => {
+                                let c = self.int_to_char_code(n, "char_code", 2)?;
+                                self.unify(Addr::Con(Constant::Char(c as char)), addr.clone());
+                            },
                             _ => self.fail = true
                         };
                     },
@@ -556,8 +568,6 @@ impl MachineState {
                 };
             },
             &SystemClauseType::GetChar => {
-                readline::toggle_prompt(false);
-
                 let result = parsing_stream.next();
                 let a1 = self[temp_v!(1)].clone();
 
@@ -1408,8 +1418,6 @@ impl MachineState {
                 self.install_new_block(temp_v!(1));
             },
             &SystemClauseType::ReadTerm => {
-                readline::toggle_prompt(true);
-
                 match self.read(parsing_stream, indices.atom_tbl.clone(), &indices.op_dir) {
                     Ok(term_write_result) => {
                         let a1 = self[temp_v!(1)].clone();
