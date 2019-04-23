@@ -1669,6 +1669,8 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "call(((G = 2 ; fail), B=3, !)).",
                            [["G = 2", "B = 3"]]);
 
+    submit(&mut wam, ":- use_module(library(non_iso)).");
+
     assert_prolog_success!(&mut wam, "call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 100, R).",
                            [["G = 2", "B = 3", "R = !", "S = 1"]]);
     assert_prolog_success!(&mut wam, "call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 10, R).",
@@ -1977,6 +1979,8 @@ fn test_queries_on_setup_call_cleanup()
 {
     let mut wam = Machine::new(readline::input_stream());
 
+    submit(&mut wam, ":- use_module(library(non_iso)).");
+    
     // Test examples from the ISO Prolog page for setup_call_catch.
     assert_prolog_failure!(&mut wam, "setup_call_cleanup(false, _, _).");
     assert_prolog_success!(&mut wam, "catch(setup_call_cleanup(true, throw(unthrown), _), error(instantiation_error, _), true).");
@@ -2037,6 +2041,8 @@ fn test_queries_on_call_with_inference_limit()
 {
     let mut wam = Machine::new(readline::input_stream());
 
+    submit(&mut wam, ":- use_module(library(non_iso)).");
+    
     assert_prolog_success!(&mut wam, "call_with_inference_limit(throw(error), 0, R).",
                            [["R = inference_limit_exceeded"]]);
     assert_prolog_success!(&mut wam, "catch(call_with_inference_limit(throw(error), 1, R), error, true).");

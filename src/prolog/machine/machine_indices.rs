@@ -528,10 +528,10 @@ impl IndexStore {
         let r_w_h  = clause_name!("run_cleaners_with_handling");
         let r_wo_h = clause_name!("run_cleaners_without_handling");
 
-        let builtins = clause_name!("builtins");
+        let non_iso = clause_name!("non_iso");
 
-        let r_w_h  = self.get_internal(r_w_h, 0, builtins.clone()).and_then(|item| item.local());
-        let r_wo_h = self.get_internal(r_wo_h, 1, builtins).and_then(|item| item.local());
+        let r_w_h  = self.get_internal(r_w_h, 0, non_iso.clone()).and_then(|item| item.local());
+        let r_wo_h = self.get_internal(r_wo_h, 1, non_iso).and_then(|item| item.local());
 
         if let Some(r_w_h) = r_w_h {
             if let Some(r_wo_h) = r_wo_h {
