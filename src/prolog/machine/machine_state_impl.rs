@@ -721,7 +721,7 @@ impl MachineState {
         let caller = MachineError::functor_stub(clause_name!("(is)"), 2);
         let mut interms: Vec<Number> = Vec::with_capacity(64);
 
-        for heap_val in self.heap.post_order_iter(a) {
+        for heap_val in self.post_order_iter(a) {
             match heap_val {
                 HeapCellValue::NamedStr(2, name, _) => {
                     let a2 = interms.pop().unwrap();
