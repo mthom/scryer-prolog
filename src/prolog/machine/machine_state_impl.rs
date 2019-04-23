@@ -721,7 +721,7 @@ impl MachineState {
         let caller = MachineError::functor_stub(clause_name!("(is)"), 2);
         let mut interms: Vec<Number> = Vec::with_capacity(64);
 
-        for heap_val in self.post_order_iter(a) {
+        for heap_val in self.heap.post_order_iter(a) {
             match heap_val {
                 HeapCellValue::NamedStr(2, name, _) => {
                     let a2 = interms.pop().unwrap();
@@ -733,7 +733,7 @@ impl MachineState {
                         "*" => interms.push(a1 * a2),
                         "/" => interms.push(self.div(a1, a2)?),
                         "**" => interms.push(self.pow(a1, a2)?),
-                        "^"  => interms.push(self.pow(a1, a2)?),
+                        "^"  => interms.push(self.binary_pow(a1, a2)?),
                         "max"  => interms.push(self.max(a1, a2)?),
                         "rdiv" => {
                             let r1 = self.get_rational(&ArithmeticTerm::Number(a1), &caller)?;
@@ -841,6 +841,20 @@ impl MachineState {
         }
     }
 
+    fn binary_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub>
+    {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                self.pow(Number::Integer(n1), Number::Integer(n2)),
+            (Number::Integer(_), n) | (n, _) => {
+                let n = Addr::Con(Constant::Number(n));
+                let stub = MachineError::functor_stub(clause_name!("^"), 2);
+                
+                Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))                
+            }
+        }
+    }
+    
     fn pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub>
     {
         match n1.pow(n2) {
@@ -1033,7 +1047,7 @@ impl MachineState {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] = try_or_fail!(self, self.pow(n1, n2));
+                self.interms[t - 1] = try_or_fail!(self, self.binary_pow(n1, n2));
                 self.p += 1;
             },
             &ArithmeticInstruction::Pow(ref a1, ref a2, t) => {

@@ -249,7 +249,6 @@ impl RepFlag {
 #[derive(Clone, Copy)]
 pub enum EvalError {
 //    FloatOverflow,
-//    IntOverflow,
 //    Undefined,
 //    FloatUnderflow,
     ZeroDivisor,
@@ -260,7 +259,6 @@ impl EvalError {
     pub fn as_str(self) -> &'static str {
         match self {
 //            EvalError::FloatOverflow => "float_overflow",
-//            EvalError::IntOverflow => "int_overflow",
 //            EvalError::Undefined => "undefined",
 //            EvalError::FloatUnderflow => "underflow",
             EvalError::ZeroDivisor => "zero_divisor",
