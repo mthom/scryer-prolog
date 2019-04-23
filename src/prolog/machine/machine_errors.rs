@@ -251,7 +251,7 @@ pub enum EvalError {
 //    FloatOverflow,
 //    IntOverflow,
 //    Undefined,
-//    Underflow,
+//    FloatUnderflow,
     ZeroDivisor,
     NoRoots
 }
@@ -262,7 +262,7 @@ impl EvalError {
 //            EvalError::FloatOverflow => "float_overflow",
 //            EvalError::IntOverflow => "int_overflow",
 //            EvalError::Undefined => "undefined",
-//            EvalError::Underflow => "underflow",
+//            EvalError::FloatUnderflow => "underflow",
             EvalError::ZeroDivisor => "zero_divisor",
             EvalError::NoRoots => "no_roots"
         }

@@ -304,6 +304,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
     {
         match ct {
             &InlinedClauseType::CompareNumber(cmp, ..) => {
+                if let &Term::Var(ref vr, ref name) = terms[0].as_ref() {
+                    self.mark_non_callable(name.clone(), 2, term_loc, vr, code);                    
+                }
+
+                if let &Term::Var(ref vr, ref name) = terms[1].as_ref() {
+                    self.mark_non_callable(name.clone(), 2, term_loc, vr, code);                    
+                }
+                
                 let (mut lcode, at_1) = self.call_arith_eval(terms[0].as_ref(), 1)?;
                 let (mut rcode, at_2) = self.call_arith_eval(terms[1].as_ref(), 2)?;
 
