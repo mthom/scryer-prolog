@@ -5,9 +5,14 @@
 :- use_module(library(lists), [length/2]).
 :- use_module(library(error)).
 
-between(Lower, Upper, Lower) :-
+between(Lower, Upper, X) :-
+    must_be(integer, Lower),
+    must_be(integer, Upper),
+    between_(Lower, Upper, X).
+
+between_(Lower, Upper, Lower) :-
     Lower =< Upper.
-between(Lower1, Upper, X) :-
+between_(Lower1, Upper, X) :-
     Lower1 < Upper,
     Lower2 is Lower1 + 1,
     between(Lower2, Upper, X).

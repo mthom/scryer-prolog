@@ -1,5 +1,10 @@
 :- op(400, yfx, /).
 
+/* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
+   and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
+   instructions are unchanged. */
+:- op(700, fx, non_counted_backtracking).
+
 :- module(builtins, [(=)/2, (\=)/2, (\+)/1, (^)/2, (\)/1, (+)/1,
 	(+)/2, (**)/2, (*)/2, (-)/1, (-)/2, (/)/2, (/\)/2, (\/)/2,
 	(is)/2, (xor)/2, (div)/2, (//)/2, (rdiv)/2, (<<)/2, (>>)/2,
@@ -7,19 +12,13 @@
 	(=<)/2, (',')/2, (->)/2, (;)/2, (=..)/2, (==)/2, (\==)/2,
 	(@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2, (\=@=)/2, (:)/2,
 	abolish/1, asserta/1, assertz/1, atom_chars/2, atom_codes/2,
-	atom_length/2, bagof/3, bb_b_put/2, bb_get/2, bb_put/2,
-	call_cleanup/2, call_with_inference_limit/3, catch/3,
-	char_code/2, clause/2, current_predicate/1, current_op/3,
-	current_prolog_flag/2, expand_goal/2, expand_term/2,
+	atom_length/2, bagof/3, call_with_inference_limit/3, catch/3,
+	char_code/2, clause/2, current_op/3, current_predicate/1,
+	current_prolog_flag/2, expand_goal/2, expand_term/2, false/0,
 	findall/3, findall/4, get_char/1, halt/0, once/1, op/3,
 	read_term/2, repeat/0, retract/1, set_prolog_flag/2, setof/3,
 	setup_call_cleanup/3, term_variables/2, throw/1, true/0,
-	false/0, write/1, write_canonical/1, writeq/1, write_term/2]).
-
-/* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
-   and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
-   instructions are unchanged. */
-:- op(700, fx, non_counted_backtracking).
+	write/1, write_canonical/1, write_term/2, writeq/1]).
 
 % module resolution operator.
 :- op(600, xfy, :).
@@ -44,6 +43,12 @@ expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResu
 % arithmetic comparison operators.
 :- op(700, xfx, [>, <, =\=, =:=, >=, =<]).
 
+% term comparison.
+:- op(700, xfx, [==, \==, @=<, @>=, @<, @>, =@=, \=@=]).
+
+% the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
+max_arity(63).
+
 % conditional operators.
 :- op(1050, xfy, ->).
 :- op(1100, xfy, ;).
@@ -51,12 +56,6 @@ expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResu
 % control.
 :- op(700, xfx, [=, =.., \=]).
 :- op(900, fy, \+).
-
-% term comparison.
-:- op(700, xfx, [==, \==, @=<, @>=, @<, @>, =@=, \=@=]).
-
-% the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
-max_arity(63).
 
 % unify.
 X = X.
@@ -238,7 +237,7 @@ inst_member_or([], Y, Y).
 
 write_term(_, Options) :-
     var(Options), throw(error(instantiation_error, write_term/2)).
-write_term(Term, Options) :-        
+write_term(Term, Options) :-
     '$skip_max_list'(_, -1, Options, Options0),
     (  var(Options0)  -> throw(error(instantiation_error, write_term/2))
     ;  Options0 == [] -> true
@@ -285,88 +284,6 @@ can_be_list(List, PI) :- throw(error(type_error(list, List), PI)).
 term_variables(Term, Vars) :-
     can_be_list(Vars, term_variables/2),
     '$term_variables'(Term, Vars).
-
-% setup_call_cleanup.
-
-setup_call_cleanup(S, G, C) :- '$get_b_value'(B),
-    S, '$set_cp_by_default'(B), '$get_current_block'(Bb),
-    ( '$call_with_default_policy'(var(C)) -> throw(error(instantiation_error, setup_call_cleanup/3))
-    ; '$call_with_default_policy'(scc_helper(C, G, Bb)) ).
-
-:- non_counted_backtracking scc_helper/3.
-scc_helper(C, G, Bb) :-
-    '$get_cp'(Cp), '$install_scc_cleaner'(C, NBb), call(G),
-    ( '$check_cp'(Cp) -> '$reset_block'(Bb),
-			 '$call_with_default_policy'(run_cleaners_without_handling(Cp))
-    ; '$call_with_default_policy'(true)
-    ; '$reset_block'(NBb), '$fail').
-scc_helper(_, _, Bb) :-
-    '$reset_block'(Bb), '$get_ball'(Ball),
-    '$call_with_default_policy'(run_cleaners_with_handling),
-    '$erase_ball',
-    '$call_with_default_policy'(throw(Ball)).
-scc_helper(_, _, _) :-
-    '$get_cp'(Cp),
-    '$call_with_default_policy'(run_cleaners_without_handling(Cp)),
-    '$fail'.
-
-:- non_counted_backtracking run_cleaners_with_handling/0.
-run_cleaners_with_handling :-
-    '$get_scc_cleaner'(C), '$get_level'(B),
-    '$call_with_default_policy'(catch(C, _, true)),
-    '$set_cp_by_default'(B),
-    '$call_with_default_policy'(run_cleaners_with_handling).
-run_cleaners_with_handling :-
-    '$restore_cut_policy'.
-
-:- non_counted_backtracking run_cleaners_without_handling/1.
-run_cleaners_without_handling(Cp) :-
-    '$get_scc_cleaner'(C), '$get_level'(B), C, '$set_cp_by_default'(B),
-    '$call_with_default_policy'(run_cleaners_without_handling(Cp)).
-run_cleaners_without_handling(Cp) :-
-    '$set_cp_by_default'(Cp), '$restore_cut_policy'.
-
-call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
-
-% call_with_inference_limit
-
-call_with_inference_limit(G, L, R) :-
-    '$get_current_block'(Bb),
-    '$get_b_value'(B),
-    '$call_with_default_policy'(call_with_inference_limit(G, L, R, Bb, B)),
-    '$remove_call_policy_check'(B).
-
-:- non_counted_backtracking call_with_inference_limit/5.
-call_with_inference_limit(G, L, R, Bb, B) :-
-    '$install_new_block'(NBb),
-    '$install_inference_counter'(B, L, Count0),
-    call(G),
-    '$inference_level'(R, B),
-    '$remove_inference_counter'(B, Count1),
-    '$call_with_default_policy'(is(Diff, L - (Count1 - Count0))),
-    '$call_with_default_policy'(end_block(B, Bb, NBb, Diff)).
-call_with_inference_limit(_, _, R, Bb, B) :-
-    '$reset_block'(Bb),
-    '$remove_inference_counter'(B, _),
-    ( '$get_ball'(Ball), '$get_level'(Cp), '$set_cp_by_default'(Cp)
-    ; '$remove_call_policy_check'(B), '$fail' ),
-    '$erase_ball',
-    '$call_with_default_policy'(handle_ile(B, Ball, R)).
-
-:- non_counted_backtracking end_block/4.
-end_block(_, Bb, NBb, L) :-
-    '$clean_up_block'(NBb),
-    '$reset_block'(Bb).
-end_block(B, Bb, NBb, L) :-
-    '$install_inference_counter'(B, L, _),
-    '$reset_block'(NBb),
-    '$fail'.
-
-:- non_counted_backtracking handle_ile/3.
-handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :- !.
-handle_ile(B, E, _) :-
-    '$remove_call_policy_check'(B),
-    '$call_with_default_policy'(throw(E)).
 
 % exceptions.
 
@@ -803,31 +720,14 @@ op(Priority, OpSpec, Op) :-
     ;  throw(error(type_error(list, Op), op/3)) % 8.14.3.3 f)
     ).
 
-%% (non-)backtrackable global variables.
-
-bb_put(Key, Value) :- atom(Key), !, '$store_global_var'(Key, Value).
-bb_put(Key, _) :- throw(error(type_error(atom, Key), bb_put/2)).
-
-bb_b_put(Key, NewValue) :-
-    (  bb_get(Key, OldValue) ->
-       call_cleanup((store_global_var(Key, NewValue) ; false), store_global_var(Key, OldValue))
-    ;  call_cleanup((store_global_var(Key, NewValue) ; false), reset_global_var_at_key(Key))
-    ).
-
-store_global_var(Key, Value) :- '$store_global_var'(Key, Value).
-
-reset_global_var_at_key(Key) :- '$reset_global_var_at_key'(Key).
-
-bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
-bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).
-
 halt :- '$halt'.
 
 atom_length(Atom, Length) :-
     (  var(Atom)  -> throw(error(instantiation_error, atom_length/2)) % 8.16.1.3 a)
     ;  atom(Atom) -> (  var(Length) -> '$atom_length'(Atom, Length)
 		     ;  integer(Length), Length >= 0 -> '$atom_length'(Atom, Length)
-		     ;  integer(Length) -> throw(error(domain_error(not_less_than_zero, Length), atom_length/2)) % 8.16.1.3 d)
+		     ;  integer(Length) -> throw(error(domain_error(not_less_than_zero, Length), atom_length/2))
+		     % 8.16.1.3 d)
 		     ;  throw(error(type_error(integer, Length), atom_length/2)) % 8.16.1.3 c)
 		     )
     ;  throw(error(type_error(atom, Atom), atom_length/2)) % 8.16.1.3 b)
@@ -835,12 +735,13 @@ atom_length(Atom, Length) :-
 
 no_var_in_list([]).
 no_var_in_list([X|Xs]) :- var(X), !, '$fail'.
-no_var_in_list([_|Xs]) :- no_var_in_list(Xs).
+no_var_in_list([_|Xs]) :- nonvar(Xs), no_var_in_list(Xs).
 
 atom_chars(Atom, List) :-
     (  var(Atom) ->
        (  var(List) -> throw(error(instantiation_error, atom_chars/2))
        ;  can_be_list(List, atom_chars/3), no_var_in_list(List) -> '$atom_chars'(Atom, List)
+       ;  throw(error(instantiation_error, atom_chars/2))
        )
     ;  atom(Atom) -> '$atom_chars'(Atom, List)
     ;  throw(error(type_error(atom, Atom), atom_chars/2))
@@ -850,6 +751,7 @@ atom_codes(Atom, List) :-
     (  var(Atom) ->
        (  var(List) -> throw(error(instantiation_error, atom_codes/2))
        ;  can_be_list(List, atom_codes/3), no_var_in_list(List) -> '$atom_codes'(Atom, List)
+       ;  throw(error(instantiation_error, atom_codes/2))
        )
     ;  atom(Atom) -> '$atom_codes'(Atom, List)
     ;  throw(error(type_error(atom, Atom), atom_codes/2))
@@ -870,3 +772,83 @@ get_char(C) :-
     ;  atom_length(C, 1) -> '$get_char'(C)
     ;  throw(error(type_error(in_character, C), get_char/1))
     ).
+
+% setup_call_cleanup.
+
+setup_call_cleanup(S, G, C) :- '$get_b_value'(B),
+    S, '$set_cp_by_default'(B), '$get_current_block'(Bb),
+    ( '$call_with_default_policy'(var(C)) -> throw(error(instantiation_error, setup_call_cleanup/3))
+    ; '$call_with_default_policy'(scc_helper(C, G, Bb)) ).
+
+:- non_counted_backtracking run_cleaners_with_handling/0.
+run_cleaners_with_handling :-
+    '$get_scc_cleaner'(C), '$get_level'(B),
+    '$call_with_default_policy'(catch(C, _, true)),
+    '$set_cp_by_default'(B),
+    '$call_with_default_policy'(run_cleaners_with_handling).
+run_cleaners_with_handling :-
+    '$restore_cut_policy'.
+
+:- non_counted_backtracking run_cleaners_without_handling/1.
+run_cleaners_without_handling(Cp) :-
+    '$get_scc_cleaner'(C), '$get_level'(B), C, '$set_cp_by_default'(B),
+    '$call_with_default_policy'(run_cleaners_without_handling(Cp)).
+run_cleaners_without_handling(Cp) :-
+    '$set_cp_by_default'(Cp), '$restore_cut_policy'.
+
+:- non_counted_backtracking scc_helper/3.
+scc_helper(C, G, Bb) :-
+    '$get_cp'(Cp), '$install_scc_cleaner'(C, NBb), call(G),
+    ( '$check_cp'(Cp) -> '$reset_block'(Bb),
+			 '$call_with_default_policy'(run_cleaners_without_handling(Cp))
+    ; '$call_with_default_policy'(true)
+    ; '$reset_block'(NBb), '$fail').
+scc_helper(_, _, Bb) :-
+    '$reset_block'(Bb), '$get_ball'(Ball),
+    '$call_with_default_policy'(run_cleaners_with_handling),
+    '$erase_ball',
+    '$call_with_default_policy'(throw(Ball)).
+scc_helper(_, _, _) :-
+    '$get_cp'(Cp),
+    '$call_with_default_policy'(run_cleaners_without_handling(Cp)),
+    '$fail'.
+
+% call_with_inference_limit
+
+:- non_counted_backtracking end_block/4.
+end_block(_, Bb, NBb, L) :-
+    '$clean_up_block'(NBb),
+    '$reset_block'(Bb).
+end_block(B, Bb, NBb, L) :-
+    '$install_inference_counter'(B, L, _),
+    '$reset_block'(NBb),
+    '$fail'.
+
+:- non_counted_backtracking handle_ile/3.
+handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :- !.
+handle_ile(B, E, _) :-
+    '$remove_call_policy_check'(B),
+    '$call_with_default_policy'(throw(E)).
+
+call_with_inference_limit(G, L, R) :-
+    '$get_current_block'(Bb),
+    '$get_b_value'(B),
+    '$call_with_default_policy'(call_with_inference_limit(G, L, R, Bb, B)),
+    '$remove_call_policy_check'(B).
+
+:- non_counted_backtracking call_with_inference_limit/5.
+call_with_inference_limit(G, L, R, Bb, B) :-
+    '$install_new_block'(NBb),
+    '$install_inference_counter'(B, L, Count0),
+    call(G),
+    '$inference_level'(R, B),
+    '$remove_inference_counter'(B, Count1),
+    '$call_with_default_policy'(is(Diff, L - (Count1 - Count0))),
+    '$call_with_default_policy'(end_block(B, Bb, NBb, Diff)).
+call_with_inference_limit(_, _, R, Bb, B) :-
+    '$reset_block'(Bb),
+    '$remove_inference_counter'(B, _),
+    ( '$get_ball'(Ball), '$get_level'(Cp), '$set_cp_by_default'(Cp)
+    ; '$remove_call_policy_check'(B), '$fail' ),
+    '$erase_ball',
+    '$call_with_default_policy'(handle_ile(B, Ball, R)).

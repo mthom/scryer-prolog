@@ -676,19 +676,20 @@ impl MachineState {
         };
     }
 
-    pub(super) fn get_number(&self, at: &ArithmeticTerm) -> Result<Number, MachineStub> {
+    pub(super) fn get_number(&mut self, at: &ArithmeticTerm) -> Result<Number, MachineStub> {
         match at {
-            &ArithmeticTerm::Reg(r)        => self.arith_eval_by_metacall(r),
-            &ArithmeticTerm::Interm(i)     => Ok(self.interms[i-1].clone()),
-            &ArithmeticTerm::Number(ref n) => Ok(n.clone()),
+            &ArithmeticTerm::Reg(r)        =>
+                self.arith_eval_by_metacall(r),
+            &ArithmeticTerm::Interm(i)     =>
+                Ok(mem::replace(&mut self.interms[i-1], Number::Integer(Rc::new(BigInt::zero())))),
+            &ArithmeticTerm::Number(ref n) =>
+                Ok(n.clone()),
         }
     }
 
-    fn get_rational(&self, at: &ArithmeticTerm, caller: &MachineStub)
-                    -> Result<Rc<Ratio<BigInt>>, MachineStub>
+    fn rational_from_number(&self, n: Number, caller: &MachineStub)
+                            -> Result<Rc<Ratio<BigInt>>, MachineStub>
     {
-        let n = self.get_number(at)?;
-
         match n {
             Number::Rational(r) => Ok(r),
             Number::Float(fl) =>
@@ -700,6 +701,13 @@ impl MachineState {
             Number::Integer(bi) =>
                 Ok(Rc::new(Ratio::from_integer((*bi).clone())))
         }
+    }
+    
+    fn get_rational(&mut self, at: &ArithmeticTerm, caller: &MachineStub)
+                    -> Result<Rc<Ratio<BigInt>>, MachineStub>
+    {
+        let n = self.get_number(at)?;
+        self.rational_from_number(n, caller)
     }
 
     fn signed_bitwise_op<Op>(&self, n1: &BigInt, n2: &BigInt, f: Op) -> Rc<BigInt>
@@ -736,8 +744,8 @@ impl MachineState {
                         "^"  => interms.push(self.binary_pow(a1, a2)?),
                         "max"  => interms.push(self.max(a1, a2)?),
                         "rdiv" => {
-                            let r1 = self.get_rational(&ArithmeticTerm::Number(a1), &caller)?;
-                            let r2 = self.get_rational(&ArithmeticTerm::Number(a2), &caller)?;
+                            let r1 = self.rational_from_number(a1, &caller)?;
+                            let r2 = self.rational_from_number(a2, &caller)?;
 
                             let result = Number::Rational(self.rdiv(r1, r2)?);
                             interms.push(result)

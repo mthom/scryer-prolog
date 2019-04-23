@@ -1972,7 +1972,6 @@ foo(X) :- call(X) -> call(X).");
 
 }
 
-
 #[test]
 fn test_queries_on_setup_call_cleanup()
 {
