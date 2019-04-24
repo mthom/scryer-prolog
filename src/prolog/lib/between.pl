@@ -8,6 +8,7 @@
 between(Lower, Upper, X) :-
     must_be(integer, Lower),
     must_be(integer, Upper),
+    can_be(integer, X).
     between_(Lower, Upper, X).
 
 between_(Lower, Upper, Lower) :-
@@ -15,7 +16,7 @@ between_(Lower, Upper, Lower) :-
 between_(Lower1, Upper, X) :-
     Lower1 < Upper,
     Lower2 is Lower1 + 1,
-    between(Lower2, Upper, X).
+    between_(Lower2, Upper, X).
 
 enumerate_nats(I, I).
 enumerate_nats(I0, N) :-

@@ -42,7 +42,7 @@ append([X|L], R, [X|S]) :- append(L, R, S).
 memberchk(X, Xs) :- member(X, Xs), !.
 
 reverse(Xs, Ys) :-
-    (  var(Ys) -> reverse(Xs, Ys, [], Xs)
+    (  nonvar(Xs) -> reverse(Xs, Ys, [], Xs)
     ;  reverse(Ys, Xs, [], Ys)
     ).
 
