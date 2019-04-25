@@ -1,6 +1,7 @@
 :- module(dif, [dif/2]).
 
 :- use_module(library(atts)).
+:- use_module(library(lists), [append/3]).
 
 :- attribute dif/1.
 
@@ -16,8 +17,20 @@ dif_set_variables([Var|Vars], X, Y) :-
     put_dif_att(Var, X, Y),
     dif_set_variables(Vars, X, Y).
 
+append_goals([], _).
+append_goals([Var|Vars], Goals) :-
+    (   get_atts(Var, +dif(VarGoals)) ->
+	append(Goals, VarGoals, NewGoals0),
+	sort(NewGoals0, NewGoals)
+    ;   NewGoals = Goals
+    ),
+    put_atts(Var, +dif(NewGoals)),
+    append_goals(Vars, Goals).
+
 verify_attributes(Var, Value, Goals) :-
-    (   get_atts(Var, +dif(Goals)) -> true
+    (   get_atts(Var, +dif(Goals)) ->
+	term_variables(Value, ValueVars),
+	append_goals(ValueVars, Goals)
     ;   Goals = []
     ).
 

@@ -280,7 +280,7 @@ pub enum DynamicTransactionType {
 
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum REPLCodePtr {
-    CompileBatch,    
+    CompileBatch,
     SubmitQueryAndPrintResults
 }
 
@@ -291,7 +291,7 @@ pub enum CodePtr {
     Local(LocalCodePtr),
     DynamicTransaction(DynamicTransactionType, LocalCodePtr), // the type of transaction, the return pointer.
     REPL(REPLCodePtr, LocalCodePtr), // the REPL code, the return pointer.
-    VerifyAttrInterrupt(usize), // location of the verify attribute interrupt code in the CodeDir.    
+    VerifyAttrInterrupt(usize) // location of the verify attribute interrupt code in the CodeDir.
 }
 
 impl CodePtr {
@@ -442,7 +442,7 @@ pub struct IndexStore {
     pub(super) op_dir: OpDir,
 }
 
-impl IndexStore {    
+impl IndexStore {
     pub fn predicate_exists(&self, name: ClauseName, module: ClauseName, arity: usize,
                             op_spec: Option<SharedOpDesc>)
                             -> bool

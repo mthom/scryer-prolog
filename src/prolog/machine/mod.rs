@@ -675,15 +675,10 @@ impl MachineState {
         output
     }
 
-    fn execute_instr(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
-                     code_repo: &CodeRepo, prolog_stream: &mut PrologStream)
+    fn dispatch_instr(&mut self, instr: &Line, indices: &mut IndexStore, policies: &mut MachinePolicies,
+                      prolog_stream: &mut PrologStream)
     {
-        let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
-            Some(instr) => instr,
-            None => return
-        };
-
-        match instr.as_ref() {
+        match instr {
             &Line::Arithmetic(ref arith_instr) =>
                 self.execute_arith_instr(arith_instr),
             &Line::Choice(ref choice_instr) =>
@@ -709,6 +704,17 @@ impl MachineState {
         }
     }
 
+    fn execute_instr(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
+                     code_repo: &CodeRepo, prolog_stream: &mut PrologStream)
+    {
+        let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
+            Some(instr) => instr,
+            None => return
+        };
+
+        self.dispatch_instr(instr.as_ref(), indices, policies, prolog_stream);
+    }
+
     fn backtrack(&mut self)
     {
         if self.b > 0 {
@@ -727,6 +733,73 @@ impl MachineState {
         }
     }
 
+    fn check_machine_index(&mut self, code_repo: &CodeRepo) -> bool {
+        match self.p {
+            CodePtr::Local(LocalCodePtr::DirEntry(p))
+                if p < code_repo.code.len() => {},
+            CodePtr::Local(LocalCodePtr::UserTermExpansion(p))
+                if p < code_repo.term_expanders.len() => {},
+            CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) =>
+                self.fail = true,
+            CodePtr::Local(LocalCodePtr::UserGoalExpansion(p))
+                if p < code_repo.goal_expanders.len() => {},
+            CodePtr::Local(LocalCodePtr::UserGoalExpansion(_)) =>
+                self.fail = true,
+            CodePtr::Local(LocalCodePtr::InSituDirEntry(p))
+                if p < code_repo.in_situ_code.len() => {},
+            CodePtr::Local(_) | CodePtr::REPL(..) =>
+                return false,
+            CodePtr::DynamicTransaction(..) => {
+                // prevent use of dynamic transactions from
+                // succeeding in expansions. this will be toggled
+                // back to true later.
+                self.fail = true;
+                return false;
+            },
+            _ => {}
+        }
+
+        true
+    }
+
+    // return true iff verify_attr_interrupt is called.
+    fn verify_attr_stepper(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
+                           code_repo: &mut CodeRepo, prolog_stream: &mut PrologStream)
+                           -> bool
+    {
+        loop {
+            let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
+                Some(instr) => {
+                    if instr.as_ref().is_head_instr() {
+                        instr
+                    } else {
+                        let cp = self.p.local();
+                        self.run_verify_attr_interrupt(cp);
+                        return true;
+                    }
+                },
+                None => return false
+            };
+
+            self.dispatch_instr(instr.as_ref(), indices, policies, prolog_stream);
+
+            if self.fail {
+                self.backtrack();
+            }
+
+            if !self.check_machine_index(code_repo) {
+                return false;
+            }
+        }
+    }
+
+    fn run_verify_attr_interrupt(&mut self, cp: LocalCodePtr) {
+        let p = self.attr_var_init.verify_attrs_loc;
+
+        self.attr_var_init.cp = cp;
+        self.verify_attr_interrupt(p);
+    }
+
     fn query_stepper(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
                      code_repo: &mut CodeRepo, prolog_stream: &mut PrologStream)
     {
@@ -738,30 +811,22 @@ impl MachineState {
             }
 
             match self.p {
-                CodePtr::Local(LocalCodePtr::DirEntry(p))
-                    if p < code_repo.code.len() => {},
-                CodePtr::Local(LocalCodePtr::UserTermExpansion(p))
-                    if p < code_repo.term_expanders.len() => {},
-                CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) =>
-                    self.fail = true,
-                CodePtr::Local(LocalCodePtr::UserGoalExpansion(p))
-                    if p < code_repo.goal_expanders.len() => {},
-                CodePtr::Local(LocalCodePtr::UserGoalExpansion(_)) =>
-                    self.fail = true,
-                CodePtr::Local(LocalCodePtr::InSituDirEntry(p))
-                    if p < code_repo.in_situ_code.len() => {},
-                CodePtr::Local(_) | CodePtr::REPL(..) =>
-                    break,
-                CodePtr::VerifyAttrInterrupt(p) =>
-                    self.verify_attr_interrupt(p),
-                CodePtr::DynamicTransaction(..) => {
-                    // prevent use of dynamic transactions from
-                    // succeeding in expansions. this will be toggled
-                    // back to true later.
-                    self.fail = true;
-                    break;
+                CodePtr::VerifyAttrInterrupt(_)  => {
+                    self.p = CodePtr::Local(self.attr_var_init.cp + 1);
+
+                    if !self.verify_attr_stepper(indices, policies, code_repo, prolog_stream) {
+                        if self.fail {
+                            break;
+                        }
+                        
+                        let cp = self.p.local();
+                        self.run_verify_attr_interrupt(cp);                    
+                    }
                 },
-                _ => {}
+                _ =>
+                    if !self.check_machine_index(code_repo) {
+                        break;
+                    }
             }
         }
     }

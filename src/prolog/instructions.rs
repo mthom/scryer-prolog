@@ -53,6 +53,17 @@ pub enum Line {
     Query(QueryInstruction)
 }
 
+impl Line {
+    pub fn is_head_instr(&self) -> bool {
+        match self {
+            &Line::Cut(_) => true,            
+            &Line::Fact(_) => true,
+            &Line::Query(_) => true,
+            _ => false
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum ArithmeticInstruction {
     Add(ArithmeticTerm, ArithmeticTerm, usize),

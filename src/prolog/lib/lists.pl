@@ -13,7 +13,7 @@ length(Xs, N) :-
     N >= 0, !,
     '$skip_max_list'(M, N, Xs, Xs0),
     (  Xs0 == [] -> N = M
-    ;  var(Xs0)  -> R is N-M, length_rundown(Xs0, R)).
+    ;  var(Xs0)  -> R is N-M, nl, length_rundown(Xs0, R)).
 length(_, N) :-
     integer(N), !,
     throw(error(domain_error(not_less_than_zero, N), length/2)).
@@ -25,7 +25,7 @@ length_addendum([_|Xs], N, M) :-
     M1 is M + 1,
     length_addendum(Xs, N, M1).
 
-length_rundown([], 0) :- !.
+length_rundown(Xs, 0) :- !, Xs = [].
 length_rundown([_|Xs], N) :-
     N1 is N-1,
     length_rundown(Xs, N1).
