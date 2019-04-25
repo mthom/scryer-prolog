@@ -323,7 +323,7 @@ impl MachineState {
             Err(err)
         }
     }
-    
+
     pub(super) fn system_call(&mut self,
                               ct: &SystemClauseType,
                               indices: &mut IndexStore,
@@ -573,13 +573,17 @@ impl MachineState {
 
                 match result {
                     Some(Ok(b)) => self.unify(Addr::Con(Constant::Char(b as char)), a1),
-                    _ => {
+                    Some(Err(_)) => {
+                        let end_of_file = clause_name!("end_of_file");
+                        self.unify(a1, Addr::Con(Constant::Atom(end_of_file, None)));
+                    },
+                    None => {
                         let stub = MachineError::functor_stub(clause_name!("get_char"), 1);
                         let err = MachineError::representation_error(RepFlag::Character);
                         let err = self.error_form(err, stub);
 
                         return Err(err);
-                    }
+                    },
                 }
             },
             &SystemClauseType::GetModuleClause => {

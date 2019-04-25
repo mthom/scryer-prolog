@@ -1,5 +1,6 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::StringList;
+use prolog_parser::tabled_rc::*;
 
 use prolog::clause_types::*;
 use prolog::forms::*;
@@ -191,7 +192,7 @@ impl MachineState {
                                -> Outputter
       where Outputter: HCValueOutputter
     {
-        let orig_len = output.len();        
+        let orig_len = output.len();
 
         output.begin_new_var();
 
@@ -204,7 +205,7 @@ impl MachineState {
         printer.quoted = true;
 
         let mut output = printer.print(addr);
-        
+
         let bad_ending = format!("= {}", &var);
 
         if output.ends_with(&bad_ending) {
@@ -702,7 +703,7 @@ impl MachineState {
                 Ok(Rc::new(Ratio::from_integer((*bi).clone())))
         }
     }
-    
+
     fn get_rational(&mut self, at: &ArithmeticTerm, caller: &MachineStub)
                     -> Result<Rc<Ratio<BigInt>>, MachineStub>
     {
@@ -857,12 +858,12 @@ impl MachineState {
             (Number::Integer(_), n) | (n, _) => {
                 let n = Addr::Con(Constant::Number(n));
                 let stub = MachineError::functor_stub(clause_name!("^"), 2);
-                
-                Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))                
+
+                Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
             }
         }
     }
-    
+
     fn pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub>
     {
         match n1.pow(n2) {
@@ -2049,7 +2050,29 @@ impl MachineState {
         self.try_functor_unify_components(name, arity);
     }
 
-    pub(super) fn try_functor(&mut self, op_dir: &OpDir) -> CallResult {
+    fn try_functor_fabricate_struct(&mut self, name: ClauseName, arity: isize,
+                                    spec: Option<SharedOpDesc>, op_dir: &OpDir,
+                                    r: Ref)
+    {
+        let spec = fetch_atom_op_spec(name.clone(), spec, op_dir);
+
+        let f_a = if name.as_str() == "." && arity == 2 {
+            Addr::Lis(self.heap.h)
+        } else {
+            let h = self.heap.h;
+            self.heap.push(HeapCellValue::NamedStr(arity as usize, name, spec));
+            Addr::Str(h)
+        };
+
+        for _ in 0 .. arity {
+            let h = self.heap.h;
+            self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+        }
+
+        self.bind(r, f_a);
+    }
+
+    pub(super) fn try_functor(&mut self, indices: &IndexStore) -> CallResult {
         let stub = MachineError::functor_stub(clause_name!("functor"), 3);
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
@@ -2061,13 +2084,13 @@ impl MachineState {
             Addr::Str(o) =>
                 match self.heap[o].clone() {
                     HeapCellValue::NamedStr(arity, name, spec) => {
-                        let spec = fetch_op_spec(name.clone(), arity, spec, op_dir);
+                        let spec = fetch_op_spec(name.clone(), arity, spec, &indices.op_dir);
                         self.try_functor_compound_case(name, arity, spec)
-                    },                            
+                    },
                     _ => self.fail = true
                 },
             Addr::Lis(_) => {
-                let shared_op_desc = fetch_op_spec(clause_name!("."), 2, None, op_dir);
+                let shared_op_desc = fetch_op_spec(clause_name!("."), 2, None, &indices.op_dir);
                 self.try_functor_compound_case(clause_name!("."), 2, shared_op_desc)
             },
             Addr::AttrVar(..) | Addr::HeapCell(_) | Addr::StackCell(..) => {
@@ -2101,23 +2124,13 @@ impl MachineState {
                     match name {
                         Addr::Con(_) if arity == 0 =>
                             self.unify(a1, name),
-                        Addr::Con(Constant::Atom(name, spec)) => {
-                            let spec = fetch_atom_op_spec(name.clone(), spec, op_dir);
-                                                          
-                            let f_a = if name.as_str() == "." && arity == 2 {
-                                Addr::Lis(self.heap.h)
-                            } else {
-                                let h = self.heap.h;
-                                self.heap.push(HeapCellValue::NamedStr(arity as usize, name, spec));
-                                Addr::Str(h)
-                            };
-
-                            for _ in 0 .. arity {
-                                let h = self.heap.h;
-                                self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
-                            }
-
-                            self.unify(a1, f_a);
+                        Addr::Con(Constant::Atom(name, spec)) =>
+                            self.try_functor_fabricate_struct(name, arity, spec, &indices.op_dir,
+                                                              a1.as_var().unwrap()),
+                        Addr::Con(Constant::Char(c)) => {
+                            let name = clause_name!(c.to_string(), indices.atom_tbl);
+                            self.try_functor_fabricate_struct(name, arity, None, &indices.op_dir,
+                                                              a1.as_var().unwrap());
                         },
                         Addr::Con(_) =>
                             return Err(self.error_form(MachineError::type_error(ValidType::Atom, name),
@@ -2621,7 +2634,7 @@ impl MachineState {
     pub(super)
     fn sink_to_snapshot(&mut self) -> MachineState {
         let mut snapshot = MachineState::with_capacity(0);
-        
+
         snapshot.hb = self.hb;
         snapshot.e = self.e;
         snapshot.b = self.b;
@@ -2634,7 +2647,7 @@ impl MachineState {
         snapshot.fail = self.fail;
         snapshot.trail = mem::replace(&mut self.trail, vec![]);
         snapshot.pstr_trail = mem::replace(&mut self.pstr_trail, vec![]);
-        snapshot.heap = self.heap.take();        
+        snapshot.heap = self.heap.take();
         snapshot.mode = self.mode;
         snapshot.and_stack = self.and_stack.take();
         snapshot.or_stack = self.or_stack.take();

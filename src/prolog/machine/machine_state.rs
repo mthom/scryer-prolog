@@ -619,7 +619,7 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::Functor => {
-                machine_st.try_functor(&indices.op_dir)?;
+                machine_st.try_functor(&indices)?;
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::NotEq => {

@@ -769,6 +769,7 @@ char_code(Char, Code) :-
 
 get_char(C) :-
     (  var(C) -> '$get_char'(C)
+    ;  C == end_of_file  -> '$get_char'(C)
     ;  atom_length(C, 1) -> '$get_char'(C)
     ;  throw(error(type_error(in_character, C), get_char/1))
     ).
