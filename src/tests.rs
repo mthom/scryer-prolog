@@ -1638,7 +1638,7 @@ fn test_queries_on_builtins()
 
     assert_prolog_failure!(&mut wam, "Pairs = [a-a|Pairs], keysort(Pairs, _).");
     assert_prolog_success!(&mut wam, "Pairs = [a-a|Pairs], catch(keysort(Pairs, _), error(E, _), true).",
-                           [["E = type_error(list, [a-a, a-a, a-a, ...])", "Pairs = [a-a | Pairs]"]]);
+                           [["E = type_error(list, [a-a, a-a, a-a | ...])", "Pairs = [a-a | Pairs]"]]);
 
     assert_prolog_success!(&mut wam, "keysort([], L).",
                            [["L = []"]]);

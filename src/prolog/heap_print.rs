@@ -609,11 +609,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                                 self.cyclic_terms.insert(addr, reps - 1);
                                 iter.next()
                             } else {                                
-                                if !self.at_cdr(", ...") {
-                                    push_space_if_amb!(self, "...", {
-                                        self.append_str("...");
-                                    });
-                                }
+                                push_space_if_amb!(self, "...", {
+                                    self.append_str("...");
+                                });
 
                                 iter.stack().pop();
                                 self.cyclic_terms.remove(&addr);
