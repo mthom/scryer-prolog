@@ -1526,7 +1526,7 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "X = g(X, Y), Y = f(X), copy_term(Y, f(Z)).",
                            [["Y = f(g(X, Y))", "X = g(X, f(X))", "Z = g(Z, f(Z))"]]);
     assert_prolog_success!(&mut wam, "X = g(X, Y), Y = f(X), copy_term(Y, V).",
-                           [["Y = f(g(X, Y))", "X = g(X, f(X))", "V = f(g(_9, V))"]]);
+                           [["V = f(g(g(g(..., V), V), V))", "X = g(X, f(X))", "Y = f(g(X, Y))"]]);
     assert_prolog_success!(&mut wam, "f(Y,Y,[X,a,[],Y]) = Term, copy_term(Term, NewTerm).",
                            [["NewTerm = f(_16, _16, [_19, a, [], _16])",
                              "Term = f(_0, Y, [_6, a, [], Y])",
@@ -1638,7 +1638,7 @@ fn test_queries_on_builtins()
 
     assert_prolog_failure!(&mut wam, "Pairs = [a-a|Pairs], keysort(Pairs, _).");
     assert_prolog_success!(&mut wam, "Pairs = [a-a|Pairs], catch(keysort(Pairs, _), error(E, _), true).",
-                           [["E = type_error(list, [a-a | _25])", "Pairs = [a-a | Pairs]"]]);
+                           [["E = type_error(list, [a-a, a-a, a-a, ...])", "Pairs = [a-a | Pairs]"]]);
 
     assert_prolog_success!(&mut wam, "keysort([], L).",
                            [["L = []"]]);

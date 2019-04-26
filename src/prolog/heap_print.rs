@@ -293,6 +293,7 @@ pub struct HCPrinter<'a, Outputter> {
     heap_locs:    ReverseHeapVarDict,
     printed_vars: HashSet<Addr>,
     last_item_idx: usize,
+    cyclic_terms: HashMap<Addr, usize>,
     pub(crate) numbervars_offset: BigInt,
     pub(crate) numbervars:   bool,
     pub(crate) quoted:       bool,
@@ -407,7 +408,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     numbervars: false,
                     numbervars_offset: BigInt::zero(),
                     quoted: false,
-                    ignore_ops: false }
+                    ignore_ops: false,
+                    cyclic_terms: HashMap::new() }
     }
 
     pub fn from_heap_locs(machine_st: &'a MachineState, op_dir: &'a OpDir, output: Outputter,
@@ -601,24 +603,26 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     return None;
                 },
                 None => if self.machine_st.is_cyclic_term(addr.clone()) {
-                    if self.printed_vars.contains(&addr) {
-                        iter.stack().pop();
+                    match self.cyclic_terms.get(&addr).cloned() {
+                        Some(reps) =>
+                            if reps > 0 {
+                                self.cyclic_terms.insert(addr, reps - 1);
+                                iter.next()
+                            } else {                                
+                                if !self.at_cdr(", ...") {
+                                    push_space_if_amb!(self, "...", {
+                                        self.append_str("...");
+                                    });
+                                }
 
-                        if let Some(offset_str) = self.offset_as_string(addr) {
-                            push_space_if_amb!(self, &offset_str, {
-                                self.append_str(&offset_str);
-                            });
+                                iter.stack().pop();
+                                self.cyclic_terms.remove(&addr);
+                                None
+                            },
+                        None => {
+                            self.cyclic_terms.insert(addr, 2);
+                            iter.next()
                         }
-
-                        None
-                    } else {
-                        if let Some(s) = self.offset_as_string(addr.clone()) {
-                            let var = Rc::new(s);
-                            self.heap_locs.insert(addr.clone(), var);
-                        }
-
-                        self.printed_vars.insert(addr);
-                        iter.next()
                     }
                 } else {
                     iter.next()
@@ -720,16 +724,16 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                         if self.outputter.ends_with(&format!(" {}", op.as_str())) {
                             result.push(' ');
                         }
-                        
+
                         result.push('(');
                     }
-                    
+
                     result += &self.print_op_addendum(atom.as_str());
-                    
+
                     if op.is_some() {
                         result.push(')');
                     }
-                    
+
                     push_space_if_amb!(self, &result, {
                         self.append_str(&result);
                     });
