@@ -390,13 +390,15 @@ pub enum TopLevelPacket {
 }
 
 struct RelationWorker {
+    flags: MachineFlags,
     dynamic_clauses: Vec<(Term, Term)>, // Head, Body.
     queue: VecDeque<VecDeque<Term>>,
 }
 
 impl RelationWorker {
-    fn new() -> Self {
+    fn new(flags: MachineFlags) -> Self {
         RelationWorker { dynamic_clauses: vec![],
+                         flags,
                          queue: VecDeque::new() }
     }
 
@@ -538,14 +540,8 @@ impl RelationWorker {
                             Err(ParserError::InadmissibleQueryTerm)
                         },
                     ("partial_string", 2) => {
-                        if let Term::Constant(_, Constant::String(_)) = *terms[0].clone() {
-                            if let Term::Var(..) = *terms[1].clone() {
-                                let ct = ClauseType::BuiltIn(BuiltInClauseType::PartialString);
-                                return Ok(QueryTerm::Clause(Cell::default(), ct, terms, false));
-                            }
-                        }
-
-                        Err(ParserError::InadmissibleQueryTerm)
+                        let ct = ClauseType::BuiltIn(BuiltInClauseType::PartialString);
+                        return Ok(QueryTerm::Clause(Cell::default(), ct, terms, false));
                     },
                     _ => {
                         let ct = indices.get_clause_type(name, terms.len(), fixity);
@@ -768,11 +764,11 @@ impl RelationWorker {
     }
 }
 
-fn term_to_toplevel<R>(term_stream: &mut TermStream<R>, code_dir: &mut CodeDir, term: Term)
+fn term_to_toplevel<R>(term_stream: &mut TermStream<R>, code_dir: &mut CodeDir, term: Term, flags: MachineFlags)
                        -> Result<(TopLevel, RelationWorker), ParserError>
     where R: Read
 {
-    let mut rel_worker = RelationWorker::new();
+    let mut rel_worker = RelationWorker::new(flags);
     let mut indices = composite_indices!(false, term_stream.indices, code_dir);
 
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
@@ -784,6 +780,7 @@ pub
 fn stream_to_toplevel<R: Read>(mut buffer: ParsingStream<R>, wam: &mut Machine)
                                -> Result<TopLevelPacket, SessionError>
 {
+    let flags = wam.machine_flags();
     let mut term_stream = TermStream::new(&mut buffer, wam.indices.atom_tbl(),
                                           wam.machine_flags(), &mut wam.indices,
                                           &mut wam.policies, &mut wam.code_repo);
@@ -791,9 +788,9 @@ fn stream_to_toplevel<R: Read>(mut buffer: ParsingStream<R>, wam: &mut Machine)
     term_stream.add_to_top("?- ");
 
     let term = term_stream.read_term(&OpDir::new())?;
-    let mut code_dir = CodeDir::new();
+    let mut code_dir = CodeDir::new();    
 
-    let (tl, mut rel_worker) = term_to_toplevel(&mut term_stream, &mut code_dir, term)?;
+    let (tl, mut rel_worker) = term_to_toplevel(&mut term_stream, &mut code_dir, term, flags)?;
     rel_worker.expand_queue_contents(&mut term_stream, &OpDir::new())?;
 
     let mut indices = composite_indices!(false, term_stream.indices, &mut code_dir);
@@ -823,7 +820,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
                                           indices, policies, code_repo);
 
         TopLevelBatchWorker { term_stream,
-                              rel_worker: RelationWorker::new(),
+                              rel_worker: RelationWorker::new(flags),
                               results: vec![],
                               dynamic_clause_map: HashMap::new(),
                               in_module: false }
@@ -832,7 +829,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
     fn try_term_to_tl(&self, indices: &mut IndexStore, term: Term)
                       -> Result<(TopLevel, RelationWorker), SessionError>
     {
-        let mut new_rel_worker = RelationWorker::new();
+        let mut new_rel_worker = RelationWorker::new(self.rel_worker.flags);
         let mut indices = composite_indices!(self.in_module, indices,
                                              &self.term_stream.indices.code_dir);
 
@@ -877,7 +874,8 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         }
     }
 
-    pub fn consume(&mut self, indices: &mut IndexStore) -> Result<Option<Declaration>, SessionError>
+    pub fn consume(&mut self, indices: &mut IndexStore)
+                   -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
 

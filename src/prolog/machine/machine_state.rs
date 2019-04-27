@@ -320,6 +320,26 @@ fn try_in_situ(machine_st: &mut MachineState, name: ClauseName, arity: usize,
     }
 }
 
+pub(super) fn try_char_list(addrs: Vec<Addr>) -> Result<String, MachineError>
+{        
+    let mut chars = String::new();
+
+    for addr in addrs.iter() {
+        match addr {
+            &Addr::Con(Constant::Char(c)) =>
+                chars.push(c),
+            &Addr::Con(Constant::Atom(ref name, _))
+                if name.as_str().len() == 1 => {
+                    chars += name.as_str();
+                },
+            _ =>
+                return Err(MachineError::type_error(ValidType::Character, addr.clone()))
+        }
+    }
+
+    Ok(chars)        
+}
+
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
 pub(crate) trait CallPolicy: Any {
@@ -635,15 +655,11 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::PartialString => {
-                let a1 = machine_st[temp_v!(1)].clone();
+                let mut s = machine_st.try_string_list(temp_v!(1))?;
                 let a2 = machine_st[temp_v!(2)].clone();
 
-                if let Addr::Con(Constant::String(s)) = a1 {
-                    s.set_expandable(true);
-                    machine_st.write_constant_to_var(a2, Constant::String(s));
-                } else {
-                    machine_st.fail = true;
-                }
+                s.set_expandable(true);
+                machine_st.write_constant_to_var(a2, Constant::String(s));
 
                 return_from_clause!(machine_st.last_call, machine_st)
             },

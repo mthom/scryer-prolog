@@ -2391,7 +2391,7 @@ fn test_queries_on_string_lists()
     assert_prolog_success!(&mut wam, "partial_string(\"appendy\", X), f(X).",
                            [["X = [a, p, p, e, n, d, y, ' ', j, o, n, e, s]"],
                             ["X = [a, p, p, e, n, d, y, ' ', s, m, i, t, h, e, r, s, ' ', j, o, n, e, s]"],
-                            ["X = [a, p, p, e, n, d, y, ' ', o, ''', t, o, o, l, e]"]]);
+                            ["X = [a, p, p, e, n, d, y, ' ', o, '\\'', t, o, o, l, e]"]]);
 
     assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), partial_string(\"abcdef\", X).",
                            [["X = [a, b, c, d, e, f | _]"]]);

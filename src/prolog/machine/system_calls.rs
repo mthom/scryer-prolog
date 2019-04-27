@@ -9,7 +9,7 @@ use prolog::machine::copier::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
-use prolog::machine::toplevel::to_op_decl;
+use prolog::machine::toplevel::{to_op_decl};
 use prolog::num::{FromPrimitive, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt};
 use prolog::read::{PrologStream, readline};
@@ -35,7 +35,7 @@ impl BrentAlgState {
     }
 }
 
-impl MachineState {
+impl MachineState {    
     // a step in Brent's algorithm.
     fn brents_alg_step(&self, brent_st: &mut BrentAlgState) -> Option<CycleSearchResult>
     {
@@ -393,28 +393,15 @@ impl MachineState {
 
                         match self.try_from_list(temp_v!(2), stub.clone()) {
                             Err(e) => return Err(e),
-                            Ok(addrs) => {
-                                let mut chars = String::new();
-
-                                for addr in addrs.iter() {
-                                    match addr {
-                                        &Addr::Con(Constant::Char(c)) =>
-                                            chars.push(c),
-                                        &Addr::Con(Constant::Atom(ref name, _))
-                                            if name.as_str().len() == 1 => {
-                                                chars += name.as_str();
-                                            },
-                                        _ => {
-                                            let err = MachineError::type_error(ValidType::Character,
-                                                                               addr.clone());
-                                            return Err(self.error_form(err, stub));
-                                        }
-                                    }
-                                }
-
-                                let chars = clause_name!(chars, indices.atom_tbl);
-                                self.unify(addr.clone(), Addr::Con(Constant::Atom(chars, None)));
-                            }
+                            Ok(addrs) =>
+                                match try_char_list(addrs) {
+                                    Ok(string) => {
+                                        let chars = clause_name!(string, indices.atom_tbl);
+                                        self.unify(addr.clone(), Addr::Con(Constant::Atom(chars, None)));
+                                    },
+                                    Err(err) => 
+                                        return Err(self.error_form(err, stub))
+                                }                        
                         }
                     },
                     _ => unreachable!()

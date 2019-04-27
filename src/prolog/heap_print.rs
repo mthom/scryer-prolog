@@ -137,6 +137,7 @@ impl<'a> HCPreOrderIterator<'a> {
 
 fn char_to_string(c: char) -> String {
     match c {
+        '\'' => "\\'".to_string(),
         '\n' => "\\n".to_string(),
         '\r' => "\\r".to_string(),
         '\t' => "\\t".to_string(),

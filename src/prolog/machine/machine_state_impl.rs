@@ -2166,6 +2166,29 @@ impl MachineState {
     }
 
     pub(super)
+    fn try_string_list(&self, r: RegType) -> Result<StringList, MachineStub> {
+        let a1 = self[r].clone();
+        let a1 = self.store(self.deref(a1));
+
+        if let Addr::Con(Constant::String(s)) = a1 {
+            return Ok(s);
+        } else {
+            let stub = MachineError::functor_stub(clause_name!("partial_string"), 2);
+            
+            match self.try_from_list(r, stub.clone()) {
+                Ok(addrs) =>
+                    Ok(StringList::new(match try_char_list(addrs) {
+                        Ok(string) => string,
+                        Err(err) => {                            
+                            return Err(self.error_form(err, stub));
+                        }
+                    }, false)),
+                Err(err) => return Err(err)
+            }
+        }
+    }
+
+    pub(super)
     fn try_from_list(&self, r: RegType, caller: MachineStub) -> Result<Vec<Addr>, MachineStub>
     {
         let a1 = self.store(self.deref(self[r].clone()));
