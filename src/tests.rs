@@ -310,7 +310,7 @@ fn test_queries_on_rules() {
     assert_prolog_success!(&mut wam, "p(f(X, g(Y), Z), g(Z), h).",
                            [["Z = b", "Y = b", "X = f(a)"]]);
     assert_prolog_success!(&mut wam, "p(Z, Y, X).",
-                           [["X = h", "Y = g(b)", "Z = f(f(a), g(b), _7)"]]);
+                           [["X = h", "Y = g(b)", "Z = f(f(a),g(b),_7)"]]);
     assert_prolog_success!(&mut wam, "p(f(X, Y, Z), Y, h).",
                            [["Y = g(b)", "Z = _3", "X = f(a)"]]);
 
@@ -341,7 +341,7 @@ fn test_queries_on_predicates() {
     submit(&mut wam, "p(X, Y, a). p(X, a, Y). p(X, Y, a).");
 
     assert_prolog_success!(&mut wam, "p(c, d, X).", [["X = a"],
-                                                        ["X = a"]]);
+                                                     ["X = a"]]);
     assert_prolog_success!(&mut wam, "p(a, a, a).");
     assert_prolog_failure!(&mut wam, "p(b, c, d).");
 
@@ -880,8 +880,8 @@ fn test_queries_on_call_n()
 
     submit(&mut wam, "p(f(g(X)), compound, [lists,are,good]).");
 
-    assert_prolog_success!(&mut wam, "call(p(f(g(X))), Y, Z).",
-                           [["Y = compound", "Z = [lists, are, good]", "X = _3"]]);
+    assert_prolog_success!(&mut wam, "call(p(f(g(X))),Y,Z).",
+                           [["Y = compound","Z = [lists,are,good]","X = _3"]]);
 
     submit(&mut wam, "david_lynch(coffee).
                       david_lynch(pie).
@@ -892,75 +892,75 @@ fn test_queries_on_call_n()
                       kyle(showgirls).
                       kyle(flintstones).");
 
-    assert_prolog_success!(&mut wam, "call(david_lynch, X).",
+    assert_prolog_success!(&mut wam, "call(david_lynch,X).",
                            [["X = coffee"],
                             ["X = pie"],
                             ["X = kyle(dune)"],
                             ["X = kyle(blue_velvet)"],
                             ["X = kyle(showgirls)"],
                             ["X = kyle(flintstones)"]]);
-    assert_prolog_success!(&mut wam, "call(david_lynch, kyle(Film)).",
+    assert_prolog_success!(&mut wam, "call(david_lynch,kyle(Film)).",
                            [["Film = dune"],
                             ["Film = blue_velvet"],
                             ["Film = showgirls"],
                             ["Film = flintstones"]]);
-    assert_prolog_failure!(&mut wam, "call(david_lynch, kyle(Film), _).");
+    assert_prolog_failure!(&mut wam, "call(david_lynch,kyle(Film),_).");
 
-    submit(&mut wam, "call_mult(P, X) :- call(call(P), X).");
+    submit(&mut wam, "call_mult(P,X) :- call(call(P),X).");
 
-    assert_prolog_success!(&mut wam, "call_mult(p(X), Y).",
-                           [["Y = one", "X = one"],
-                            ["Y = two", "X = one"],
-                            ["Y = two", "X = two"]]);
-    assert_prolog_success!(&mut wam, "call_mult(p(X), X).",
+    assert_prolog_success!(&mut wam, "call_mult(p(X),Y).",
+                           [["Y = one","X = one"],
+                            ["Y = two","X = one"],
+                            ["Y = two","X = two"]]);
+    assert_prolog_success!(&mut wam, "call_mult(p(X),X).",
                            [["X = one"],
                             ["X = two"]]);
-    assert_prolog_success!(&mut wam, "call_mult(p(one), X).",
+    assert_prolog_success!(&mut wam, "call_mult(p(one),X).",
                            [["X = one"],
                             ["X = two"]]);
-    assert_prolog_success!(&mut wam, "call_mult(p(X), one).",
+    assert_prolog_success!(&mut wam, "call_mult(p(X),one).",
                            [["X = one"]]);
 
-    assert_prolog_failure!(&mut wam, "call_mult(p(two), one).");
-    assert_prolog_success!(&mut wam, "call_mult(p(two), two).");
+    assert_prolog_failure!(&mut wam, "call_mult(p(two),one).");
+    assert_prolog_success!(&mut wam, "call_mult(p(two),two).");
 
-    assert_prolog_success!(&mut wam, "call(call(p(one)), X), call(call(p(two)), two).",
+    assert_prolog_success!(&mut wam, "call(call(p(one)),X),call(call(p(two)),two).",
                            [["X = one"],
                             ["X = two"]]);
-    assert_prolog_success!(&mut wam, "call(call(p(one, X))), call(call(p(two, two))).",
+    assert_prolog_success!(&mut wam, "call(call(p(one,X))),call(call(p(two,two))).",
                            [["X = one"],
                             ["X = two"]]);
-    assert_prolog_failure!(&mut wam, "call(call(p(one)), X), call(call(p(two)), one).");
-    assert_prolog_success!(&mut wam, "call(call(p(X)), X), call(call(p(Y)), Y).",
-                           [["X = one", "Y = one"],
-                            ["X = one", "Y = two"],
-                            ["X = two", "Y = one"],
-                            ["X = two", "Y = two"]]);
-    assert_prolog_success!(&mut wam, "call(call(p(X)), Y), call(call(p(Y)), X).",
-                           [["X = one", "Y = one"],
-                            ["X = two", "Y = two"]]);
-    assert_prolog_success!(&mut wam, "call(call(p), X, Y), call(call(call(p)), X, Y).",
-                           [["X = one", "Y = one"],
-                            ["Y = two", "X = one"],
-                            ["Y = two", "X = two"]]);
-    assert_prolog_success!(&mut wam, "call(call(p), X, Y), call(call(call(p(X))), Y).",
-                           [["X = one", "Y = one"],
-                            ["Y = two", "X = one"],
-                            ["Y = two", "X = two"]]);
-    assert_prolog_failure!(&mut wam, "call(call(p), X, Y), call(call(call(p(X))), X, Y).");
-    assert_prolog_success!(&mut wam, "call(call(p), X, Y), call(call(call(p(X))), X).",
-                           [["X = one", "Y = one"],
-                            ["Y = two", "X = one"],
-                            ["Y = two", "X = two"]]);
+    assert_prolog_failure!(&mut wam, "call(call(p(one)),X),call(call(p(two)),one).");
+    assert_prolog_success!(&mut wam, "call(call(p(X)),X),call(call(p(Y)),Y).",
+                           [["X = one","Y = one"],
+                            ["X = one","Y = two"],
+                            ["X = two","Y = one"],
+                            ["X = two","Y = two"]]);
+    assert_prolog_success!(&mut wam, "call(call(p(X)),Y),call(call(p(Y)),X).",
+                           [["X = one","Y = one"],
+                            ["X = two","Y = two"]]);
+    assert_prolog_success!(&mut wam, "call(call(p),X,Y),call(call(call(p)),X,Y).",
+                           [["X = one","Y = one"],
+                            ["Y = two","X = one"],
+                            ["Y = two","X = two"]]);
+    assert_prolog_success!(&mut wam, "call(call(p),X,Y),call(call(call(p(X))),Y).",
+                           [["X = one","Y = one"],
+                            ["Y = two","X = one"],
+                            ["Y = two","X = two"]]);
+    assert_prolog_failure!(&mut wam, "call(call(p),X,Y),call(call(call(p(X))),X,Y).");
+    assert_prolog_success!(&mut wam, "call(call(p),X,Y),call(call(call(p(X))),X).",
+                           [["X = one","Y = one"],
+                            ["Y = two","X = one"],
+                            ["Y = two","X = two"]]);
 
-    submit(&mut wam, "f(call(f, undefined)). f(undefined).");
+    submit(&mut wam, "f(call(f,undefined)). f(undefined).");
     submit(&mut wam, "call_var(P) :- P.");
 
-    assert_prolog_success!(&mut wam, "f(X), call_var(X).",
-                           [["X = call(f, undefined)"]]);
-    assert_prolog_success!(&mut wam, "f(call(f, Q)), call_var(call(f, Q)).",
+    assert_prolog_success!(&mut wam, "f(X),call_var(X).",
+                           [["X = call(f,undefined)"]]);
+    assert_prolog_success!(&mut wam, "f(call(f,Q)),call_var(call(f,Q)).",
                            [["Q = undefined"]]);
-    assert_prolog_failure!(&mut wam, "call_var(call(undefined, Q)).");
+    assert_prolog_failure!(&mut wam, "call_var(call(undefined,Q)).");
 
     assert_prolog_failure!(&mut wam, "call(call).");
     assert_prolog_failure!(&mut wam, "call(call(call)).");
@@ -1235,75 +1235,75 @@ fn test_queries_on_skip_max_list() {
     let mut wam = Machine::new(readline::input_stream());
 
     // test on proper and empty lists.
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, 5, [], Xs).",
-                           [["Xs = []", "N = 0"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, 5, [a,b,c], Xs).",
-                           [["Xs = []", "N = 3"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, 2, [a,b,c], Xs).",
-                           [["Xs = [c]", "N = 2"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, 3, [a,b,c], Xs).",
-                           [["Xs = []", "N = 3"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,5,[],Xs).",
+                           [["Xs = []","N = 0"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,5,[a,b,c],Xs).",
+                           [["Xs = []","N = 3"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,2,[a,b,c],Xs).",
+                           [["Xs = [c]","N = 2"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,3,[a,b,c],Xs).",
+                           [["Xs = []","N = 3"]]);
 
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, 0, [], Xs).",
-                           [["Xs = []", "N = 0"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, 0, [a,b,c], Xs).",
-                           [["Xs = [a, b, c]", "N = 0"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, 0, [a,b,c], Xs).",
-                           [["Xs = [a, b, c]", "N = 0"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, 0, [a,b,c], Xs).",
-                           [["Xs = [a, b, c]", "N = 0"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,0,[],Xs).",
+                           [["Xs = []","N = 0"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,0,[a,b,c],Xs).",
+                           [["Xs = [a,b,c]","N = 0"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,0,[a,b,c],Xs).",
+                           [["Xs = [a,b,c]","N = 0"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,0,[a,b,c],Xs).",
+                           [["Xs = [a,b,c]","N = 0"]]);
 
-    assert_prolog_failure!(&mut wam, "'$skip_max_list'(4, 0, [], Xs).");
-    assert_prolog_failure!(&mut wam, "'$skip_max_list'(3, 0, [a,b,c], Xs).");
-    assert_prolog_failure!(&mut wam, "'$skip_max_list'(2, 0, [a,b,c], Xs).");
-    assert_prolog_failure!(&mut wam, "'$skip_max_list'(1, 0, [a,b,c], Xs).");
+    assert_prolog_failure!(&mut wam, "'$skip_max_list'(4,0,[],Xs).");
+    assert_prolog_failure!(&mut wam, "'$skip_max_list'(3,0,[a,b,c],Xs).");
+    assert_prolog_failure!(&mut wam, "'$skip_max_list'(2,0,[a,b,c],Xs).");
+    assert_prolog_failure!(&mut wam, "'$skip_max_list'(1,0,[a,b,c],Xs).");
 
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(0, 5, [], Xs).",
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(0,5,[],Xs).",
                            [["Xs = []"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(3, 5, [a,b,c], Xs).",
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(3,5,[a,b,c],Xs).",
                            [["Xs = []"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(2, 2, [a,b,c], Xs).",
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(2,2,[a,b,c],Xs).",
                            [["Xs = [c]"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(3, 3, [a,b,c], Xs).",
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(3,3,[a,b,c],Xs).",
                            [["Xs = []"]]);
 
     // tests on proper and empty lists with no max.
 
     // test on proper and empty lists.
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, -1, [], Xs).",
-                           [["Xs = []", "N = 0"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, -1, [a,b,c], Xs).",
-                           [["Xs = []", "N = 3"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,-1,[],Xs).",
+                           [["Xs = []","N = 0"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,-1,[a,b,c],Xs).",
+                           [["Xs = []","N = 3"]]);
 
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, -1, [], Xs).",
-                           [["Xs = []", "N = 0"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,-1,[],Xs).",
+                           [["Xs = []","N = 0"]]);
 
-    assert_prolog_failure!(&mut wam, "'$skip_max_list'(4, -1, [], Xs).");
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(3, -1, [a,b,c], Xs).",
+    assert_prolog_failure!(&mut wam, "'$skip_max_list'(4,-1,[],Xs).");
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(3,-1,[a,b,c],Xs).",
                            [["Xs = []"]]);
 
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(0, -1, [], Xs).",
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(0,-1,[],Xs).",
                            [["Xs = []"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(3, -1, [a,b,c], Xs).",
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(3,-1,[a,b,c],Xs).",
                            [["Xs = []"]]);
 
     // tests on partial lists.
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(3, 4, [a,b,c|X], Xs0).",
-                           [["X = _1", "Xs0 = _1"]]);
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(3, 3, [a,b,c|X], Xs0).",
-                           [["X = _1", "Xs0 = _1"]]);
-    assert_prolog_failure!(&mut wam, "'$skip_max_list'(3, 2, [a,b,c|X], Xs0).");
-    assert_prolog_failure!(&mut wam, "'$skip_max_list'(3, 1, [a,b,c|X], Xs0).");
-    assert_prolog_failure!(&mut wam, "'$skip_max_list'(3, 0, [a,b,c|X], Xs0).");
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(3,4,[a,b,c|X],Xs0).",
+                           [["X = _1","Xs0 = _1"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(3,3,[a,b,c|X],Xs0).",
+                           [["X = _1","Xs0 = _1"]]);
+    assert_prolog_failure!(&mut wam, "'$skip_max_list'(3,2,[a,b,c|X],Xs0).");
+    assert_prolog_failure!(&mut wam, "'$skip_max_list'(3,1,[a,b,c|X],Xs0).");
+    assert_prolog_failure!(&mut wam, "'$skip_max_list'(3,0,[a,b,c|X],Xs0).");
 
     // tests on cyclic lists.
-    assert_prolog_failure!(&mut wam, "Xs = [a,b|Xs], '$skip_max_list'(3, 5, X, Xs0).");
-    assert_prolog_failure!(&mut wam, "X = [a,b|Y], Y = [c,d|X], '$skip_max_list'(4, 5, X, Xs0).");
-    assert_prolog_failure!(&mut wam, "X = [a,b|Y], Y = [c,d|X], '$skip_max_list'(4, 3, X, Xs0).");
+    assert_prolog_failure!(&mut wam, "Xs = [a,b|Xs],'$skip_max_list'(3,5,X,Xs0).");
+    assert_prolog_failure!(&mut wam, "X = [a,b|Y],Y = [c,d|X],'$skip_max_list'(4,5,X,Xs0).");
+    assert_prolog_failure!(&mut wam, "X = [a,b|Y],Y = [c,d|X],'$skip_max_list'(4,3,X,Xs0).");
 
     // tests on non lists.
-    assert_prolog_success!(&mut wam, "'$skip_max_list'(N, 9, non_list, Xs).",
-                           [["Xs = non_list", "N = 0"]]);
+    assert_prolog_success!(&mut wam, "'$skip_max_list'(N,9,non_list,Xs).",
+                           [["Xs = non_list","N = 0"]]);
 }
 
 #[test]
@@ -1394,7 +1394,7 @@ reverse(Xs, Ys) :- lists:reverse(Xs, Ys).");
 
     assert_prolog_success!(&mut wam, "my_lists_2:local_member(1, [1,2,3]).");
     assert_prolog_success!(&mut wam, "catch(local_member(X, Xs), error(E, _), true).",
-                           [["X = _1", "E = existence_error(procedure, local_member/2)", "Xs = _2"]]);
+                           [["X = _1", "E = existence_error(procedure,local_member/2)", "Xs = _2"]]);
 
     submit(&mut wam, ":- use_module(library(lists), [reverse/2]).");
 
@@ -1464,73 +1464,73 @@ fn test_queries_on_builtins()
 
     assert_prolog_success!(&mut wam, "functor(F, f, 0).", [["F = f"]]);
 
-    assert_prolog_success!(&mut wam, "functor(Func, f, 3).", [["Func = f(_2, _3, _4)"]]);
-    assert_prolog_success!(&mut wam, "functor(Func, f, 4).", [["Func = f(_2, _3, _4, _5)"]]);
+    assert_prolog_success!(&mut wam, "functor(Func,f,3).",[["Func = f(_2,_3,_4)"]]);
+    assert_prolog_success!(&mut wam, "functor(Func,f,4).",[["Func = f(_2,_3,_4,_5)"]]);
 
-    assert_prolog_success!(&mut wam, "catch(functor(F, \"sdf\", 3), error(E, _), true).",
-                           [["E = type_error(atom, [s, d, f])", "F = _1"]]);
-    assert_prolog_success!(&mut wam, "catch(functor(Func, F, 3), error(E, _), true).",
-                           [["E = instantiation_error", "Func = _1", "F = _2"]]);
-    assert_prolog_success!(&mut wam, "catch(functor(Func, f, N), error(E, _), true).",
-                           [["E = instantiation_error", "Func = _1", "N = _3"]]);
-    assert_prolog_failure!(&mut wam, "catch(functor(Func, f, N), error(E, _), false).");
+    assert_prolog_success!(&mut wam, "catch(functor(F,\"sdf\",3),error(E,_),true).",
+                           [["E = type_error(atom,[s,d,f])","F = _1"]]);
+    assert_prolog_success!(&mut wam, "catch(functor(Func,F,3),error(E,_),true).",
+                           [["E = instantiation_error","Func = _1","F = _2"]]);
+    assert_prolog_success!(&mut wam, "catch(functor(Func,f,N),error(E,_),true).",
+                           [["E = instantiation_error","Func = _1","N = _3"]]);
+    assert_prolog_failure!(&mut wam, "catch(functor(Func,f,N),error(E,_),false).");
 
-    assert_prolog_success!(&mut wam, "X is 3, call(integer, X).");
-    assert_prolog_failure!(&mut wam, "X is 3 + 3.5, call(integer, X).");
-    assert_prolog_success!(&mut wam, "X is 3 + 3.5, \\+ call(integer, X).");
-    assert_prolog_success!(&mut wam, "X is 3 + 3.5, \\+ integer(X).");
+    assert_prolog_success!(&mut wam, "X is 3,call(integer,X).");
+    assert_prolog_failure!(&mut wam, "X is 3 + 3.5,call(integer,X).");
+    assert_prolog_success!(&mut wam, "X is 3 + 3.5,\\+ call(integer,X).");
+    assert_prolog_success!(&mut wam, "X is 3 + 3.5,\\+ integer(X).");
 
-    assert_prolog_success!(&mut wam, "Func =.. [atom].", [["Func = atom"]]);
-    assert_prolog_success!(&mut wam, "Func =.. [\"sdf\"].", [["Func = [s, d, f]"]]);
-    assert_prolog_success!(&mut wam, "Func =.. [1].", [["Func = 1"]]);
-    assert_prolog_success!(&mut wam, "catch(Func =.. [1,2], error(type_error(atom, 1), _), true).");
-    assert_prolog_success!(&mut wam, "f(1,2,3) =.. List.", [["List = [f, 1, 2, 3]"]]);
+    assert_prolog_success!(&mut wam, "Func =.. [atom].",[["Func = atom"]]);
+    assert_prolog_success!(&mut wam, "Func =.. [\"sdf\"].",[["Func = [s,d,f]"]]);
+    assert_prolog_success!(&mut wam, "Func =.. [1].",[["Func = 1"]]);
+    assert_prolog_success!(&mut wam, "catch(Func =.. [1,2],error(type_error(atom,1),_),true).");
+    assert_prolog_success!(&mut wam, "f(1,2,3) =.. List.",[["List = [f,1,2,3]"]]);
     assert_prolog_success!(&mut wam, "f(1,2,3) =.. [f,1,2,3].");
     assert_prolog_failure!(&mut wam, "f(1,2,3) =.. [f,1].");
     assert_prolog_failure!(&mut wam, "f(1,2,3) =.. [g,1,2,3].");
     assert_prolog_success!(&mut wam, "f(1,2,3) =.. [f,X,Y,Z].",
-                           [["X = 1", "Y = 2", "Z = 3"]]);
+                           [["X = 1","Y = 2","Z = 3"]]);
 
-    assert_prolog_success!(&mut wam, "length([a,b,c], N).", [["N = 3"]]);
-    assert_prolog_success_with_limit!(&mut wam, "length(Xs, N).",
-                                      [["N = 0", "Xs = []"],
-                                       ["N = 1", "Xs = [_4]"],
-                                       ["N = 2", "Xs = [_4, _8]"],
-                                       ["N = 3", "Xs = [_4, _8, _12]"],
-                                       ["N = 4", "Xs = [_4, _8, _12, _16]"],
-                                       ["N = 5", "Xs = [_4, _8, _12, _16, _20]"]],
+    assert_prolog_success!(&mut wam, "length([a,b,c],N).",[["N = 3"]]);
+    assert_prolog_success_with_limit!(&mut wam, "length(Xs,N).",
+                                      [["N = 0","Xs = []"],
+                                       ["N = 1","Xs = [_4]"],
+                                       ["N = 2","Xs = [_4,_8]"],
+                                       ["N = 3","Xs = [_4,_8,_12]"],
+                                       ["N = 4","Xs = [_4,_8,_12,_16]"],
+                                       ["N = 5","Xs = [_4,_8,_12,_16,_20]"]],
                                       6);
 
-    assert_prolog_success!(&mut wam, "length(Xs, 3).", [["Xs = [_5, _9, _13]"]]);
-    assert_prolog_success!(&mut wam, "length([], N).", [["N = 0"]]);
-    assert_prolog_success!(&mut wam, "length(Xs, 0).", [["Xs = []"]]);
-    assert_prolog_success!(&mut wam, "length([a,b,[a,b,c]], 3).");
-    assert_prolog_failure!(&mut wam, "length([a,b,[a,b,c]], 2).");
-    assert_prolog_success!(&mut wam, "catch(length(a, []), error(E, _), true).",
-                           [["E = type_error(integer, [])"]]);
+    assert_prolog_success!(&mut wam, "length(Xs,3).",[["Xs = [_5,_9,_13]"]]);
+    assert_prolog_success!(&mut wam, "length([],N).",[["N = 0"]]);
+    assert_prolog_success!(&mut wam, "length(Xs,0).",[["Xs = []"]]);
+    assert_prolog_success!(&mut wam, "length([a,b,[a,b,c]],3).");
+    assert_prolog_failure!(&mut wam, "length([a,b,[a,b,c]],2).");
+    assert_prolog_success!(&mut wam, "catch(length(a,[]),error(E,_),true).",
+                           [["E = type_error(integer,[])"]]);
 
-    assert_prolog_success!(&mut wam, "copy_term([1,2,3], [X,Y,Z]).",
-                           [["Z = 3", "Y = 2", "X = 1"]]);
-    assert_prolog_success!(&mut wam, "copy_term(f(X, [a], Z), f(X, Y, Z)).",
-                           [["X = _3", "Y = [a]", "Z = _5"]]);
-    assert_prolog_failure!(&mut wam, "copy_term(g(X), f(X)).");
-    assert_prolog_success!(&mut wam, "copy_term(f(X), f(X)).",
+    assert_prolog_success!(&mut wam, "copy_term([1,2,3],[X,Y,Z]).",
+                           [["Z = 3","Y = 2","X = 1"]]);
+    assert_prolog_success!(&mut wam, "copy_term(f(X,[a],Z),f(X,Y,Z)).",
+                           [["X = _3","Y = [a]","Z = _5"]]);
+    assert_prolog_failure!(&mut wam, "copy_term(g(X),f(X)).");
+    assert_prolog_success!(&mut wam, "copy_term(f(X),f(X)).",
                            [["X = _1"]]);
-    assert_prolog_success!(&mut wam, "copy_term([[[[X, Y], Y], X]], Term).",
-                           [["Term = [[[[_22, _26], _26], _22]]", "X = _2", "Y = _0"]]);
-    assert_prolog_success!(&mut wam, "copy_term([X, [Y, [X]]], Term).",
-                           [["Term = [_12, [_16, [_12]]]", "X = _0", "Y = _4"]]);
+    assert_prolog_success!(&mut wam, "copy_term([[[[X,Y],Y],X]],Term).",
+                           [["Term = [[[[_22,_26],_26],_22]]","X = _2","Y = _0"]]);
+    assert_prolog_success!(&mut wam, "copy_term([X,[Y,[X]]],Term).",
+                           [["Term = [_12,[_16,[_12]]]","X = _0","Y = _4"]]);
 
     // test copy_term on cyclic terms.
-    assert_prolog_failure!(&mut wam, "X = g(X, Y), Y = f(X), copy_term(Y, g(Z)).");
-    assert_prolog_success!(&mut wam, "X = g(X, Y), Y = f(X), copy_term(Y, f(Z)).",
-                           [["Y = f(g(X, Y))", "X = g(X, f(X))", "Z = g(Z, f(Z))"]]);
-    assert_prolog_success!(&mut wam, "X = g(X, Y), Y = f(X), copy_term(Y, V).",
-                           [["V = f(g(g(g(..., V), V), V))", "X = g(X, f(X))", "Y = f(g(X, Y))"]]);
-    assert_prolog_success!(&mut wam, "f(Y,Y,[X,a,[],Y]) = Term, copy_term(Term, NewTerm).",
-                           [["NewTerm = f(_16, _16, [_19, a, [], _16])",
-                             "Term = f(_0, Y, [_6, a, [], Y])",
-                             "X = _6", "Y = _0"]]);
+    assert_prolog_failure!(&mut wam, "X = g(X,Y),Y = f(X),copy_term(Y,g(Z)).");
+    assert_prolog_success!(&mut wam, "X = g(X,Y),Y = f(X),copy_term(Y,f(Z)).",
+                           [["Y = f(g(X,Y))","X = g(X,f(X))","Z = g(Z,f(Z))"]]);
+    assert_prolog_success!(&mut wam, "X = g(X,Y),Y = f(X),copy_term(Y,V).",
+                           [["V = f(g(g(g(...,V),V),V))","X = g(X,f(X))","Y = f(g(X,Y))"]]);
+    assert_prolog_success!(&mut wam, "f(Y,Y,[X,a,[],Y]) = Term,copy_term(Term,NewTerm).",
+                           [["NewTerm = f(_16,_16,[_19,a,[],_16])",
+                             "Term = f(_0,Y,[_6,a,[],Y])",
+                             "X = _6","Y = _0"]]);
 
     assert_prolog_success!(&mut wam, "float(3.14159269).");
     assert_prolog_failure!(&mut wam, "float(3).");
@@ -1539,9 +1539,9 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "float(structure(functor)).");
     assert_prolog_failure!(&mut wam, "float([1,2,3]).");
     assert_prolog_failure!(&mut wam, "float([1,2,X]).");
-    assert_prolog_failure!(&mut wam, "X is 3 rdiv 4, float(X).");
+    assert_prolog_failure!(&mut wam, "X is 3 rdiv 4,float(X).");
 
-    assert_prolog_success!(&mut wam, "X is 3 rdiv 4, rational(X).");
+    assert_prolog_success!(&mut wam, "X is 3 rdiv 4,rational(X).");
     assert_prolog_failure!(&mut wam, "rational(3).");
     assert_prolog_failure!(&mut wam, "rational(f(X)).");
     assert_prolog_failure!(&mut wam, "rational(\"sdfsa\").");
@@ -1568,7 +1568,7 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "string([1,2,3]).");
     assert_prolog_failure!(&mut wam, "string([1,2,X]).");
 
-    assert_prolog_success!(&mut wam, "X = nonvar, nonvar(X).");
+    assert_prolog_success!(&mut wam, "X = nonvar,nonvar(X).");
     assert_prolog_failure!(&mut wam, "nonvar(X).");
     assert_prolog_success!(&mut wam, "nonvar(f(X)).");
     assert_prolog_success!(&mut wam, "nonvar(functor(nonvar)).");
@@ -1579,23 +1579,23 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "nonvar([1,2,3]).");
     assert_prolog_success!(&mut wam, "nonvar([1,2,X]).");
 
-    assert_prolog_success!(&mut wam, "A = f(A), ground(f(f(A))), ground(f(A)), ground(A).");
-    assert_prolog_failure!(&mut wam, "B = f(A), ground(B).");
-    assert_prolog_failure!(&mut wam, "B = f(A), ground(A).");
+    assert_prolog_success!(&mut wam, "A = f(A),ground(f(f(A))),ground(f(A)),ground(A).");
+    assert_prolog_failure!(&mut wam, "B = f(A),ground(B).");
+    assert_prolog_failure!(&mut wam, "B = f(A),ground(A).");
 
-    assert_prolog_success!(&mut wam, "ground(x), ground(f(x)), X = f(x), ground(g(f(X), [a,b])).");
+    assert_prolog_success!(&mut wam, "ground(x),ground(f(x)),X = f(x),ground(g(f(X),[a,b])).");
 
-    assert_prolog_success!(&mut wam, "A = f(A), g(A, B) == g(f(A), B).");
-    assert_prolog_failure!(&mut wam, "A = f(A), g(A, B) == g(f(A), b).");
+    assert_prolog_success!(&mut wam, "A = f(A),g(A,B) == g(f(A),B).");
+    assert_prolog_failure!(&mut wam, "A = f(A),g(A,B) == g(f(A),b).");
     assert_prolog_failure!(&mut wam, "A == B.");
     assert_prolog_failure!(&mut wam, "A == 12.1.");
-    assert_prolog_success!(&mut wam, "X = x, f(X, x) == f(x, X).");
+    assert_prolog_success!(&mut wam, "X = x,f(X,x) == f(x,X).");
 
-    assert_prolog_failure!(&mut wam, "A = f(A), g(A, B) \\== g(f(A), B).");
-    assert_prolog_success!(&mut wam, "A = f(A), g(A, B) \\== g(f(A), b).");
+    assert_prolog_failure!(&mut wam, "A = f(A),g(A,B) \\== g(f(A),B).");
+    assert_prolog_success!(&mut wam, "A = f(A),g(A,B) \\== g(f(A),b).");
     assert_prolog_success!(&mut wam, "A \\== B.");
     assert_prolog_success!(&mut wam, "A \\== 12.1.");
-    assert_prolog_failure!(&mut wam, "X = x, f(X, x) \\== f(x, X).");
+    assert_prolog_failure!(&mut wam, "X = x,f(X,x) \\== f(x,X).");
 
     assert_prolog_success!(&mut wam, "X @=< Y.");
     assert_prolog_failure!(&mut wam, "X @>= Y.");
@@ -1605,7 +1605,7 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "atom @=< atom.");
     assert_prolog_failure!(&mut wam, "atom @=< aaa.");
     assert_prolog_success!(&mut wam, "atom @>= \"string\".");
-    assert_prolog_success!(&mut wam, "X is 3 + 3, X @>= Y.");
+    assert_prolog_success!(&mut wam, "X is 3 + 3,X @>= Y.");
     assert_prolog_success!(&mut wam, "f(X) @>= f(X).");
     assert_prolog_success!(&mut wam, "f(X) @>= a.");
     assert_prolog_failure!(&mut wam, "f(X) @=< a.");
@@ -1627,54 +1627,54 @@ fn test_queries_on_builtins()
     assert_prolog_failure!(&mut wam, "[X,Y,Z] =@= [V,W,V].");
     assert_prolog_success!(&mut wam, "[X,Y,Z] =@= [V,W,Z].");
     assert_prolog_success!(&mut wam, "[X,Y,X] =@= [V,W,V].");
-    assert_prolog_success!(&mut wam, "g(B) = B, g(A) = A, A =@= B.");
+    assert_prolog_success!(&mut wam, "g(B) = B,g(A) = A,A =@= B.");
 
-    assert_prolog_success!(&mut wam, "keysort([1-1, 1-1], Sorted).",
-                           [["Sorted = [1-1, 1-1]"]]);
-    assert_prolog_success!(&mut wam, "keysort([2-99, 1-a, 3-f(_), 1-z, 1-a, 2-44], Sorted).",
-                           [["Sorted = [1-a, 1-z, 1-a, 2-99, 2-44, 3-f(_7)]"]]);
+    assert_prolog_success!(&mut wam, "keysort([1-1,1-1],Sorted).",
+                           [["Sorted = [1-1,1-1]"]]);
+    assert_prolog_success!(&mut wam, "keysort([2-99,1-a,3-f(_),1-z,1-a,2-44],Sorted).",
+                           [["Sorted = [1-a,1-z,1-a,2-99,2-44,3-f(_7)]"]]);
     assert_prolog_success!(&mut wam, "keysort([X-1,1-1],[2-1,1-1]).",
                            [["X = 2"]]);
 
-    assert_prolog_failure!(&mut wam, "Pairs = [a-a|Pairs], keysort(Pairs, _).");
-    assert_prolog_success!(&mut wam, "Pairs = [a-a|Pairs], catch(keysort(Pairs, _), error(E, _), true).",
-                           [["E = type_error(list, [a-a, a-a, a-a | ...])", "Pairs = [a-a | Pairs]"]]);
+    assert_prolog_failure!(&mut wam, "Pairs = [a-a|Pairs],keysort(Pairs,_).");
+    assert_prolog_success!(&mut wam, "Pairs = [a-a|Pairs],catch(keysort(Pairs,_),error(E,_),true).",
+                           [["E = type_error(list,[a-a,a-a,a-a|...])","Pairs = [a-a|Pairs]"]]);
 
-    assert_prolog_success!(&mut wam, "keysort([], L).",
+    assert_prolog_success!(&mut wam, "keysort([],L).",
                            [["L = []"]]);
-    assert_prolog_success!(&mut wam, "catch(keysort([a|_], _), error(E, _), true).",
+    assert_prolog_success!(&mut wam, "catch(keysort([a|_],_),error(E,_),true).",
                            [["E = instantiation_error"]]);
-    assert_prolog_success!(&mut wam, "catch(keysort([],[a|a]),error(Pat, _),true).",
-                           [["Pat = type_error(list, [a | a])"]]);
-    assert_prolog_success!(&mut wam, "catch(keysort(_, _), error(E, _), true).",
-                           [["E = type_error(list, _16)"]]);
-    assert_prolog_success!(&mut wam, "catch(keysort([a-1], [_|b]), error(E, _), true).",
-                           [["E = type_error(list, [_27 | b])"]]);
-    assert_prolog_success!(&mut wam, "catch(keysort([a-1], [a-b,c-d,a]), error(E, _), true).",
-                           [["E = type_error(pair, a)"]]);
-    assert_prolog_success!(&mut wam, "catch(keysort([a], [a-b]), error(E, _), true).",
-                           [["E = type_error(pair, a)"]]);
+    assert_prolog_success!(&mut wam, "catch(keysort([],[a|a]),error(Pat,_),true).",
+                           [["Pat = type_error(list,[a|a])"]]);
+    assert_prolog_success!(&mut wam, "catch(keysort(_,_),error(E,_),true).",
+                           [["E = type_error(list,_16)"]]);
+    assert_prolog_success!(&mut wam, "catch(keysort([a-1],[_|b]),error(E,_),true).",
+                           [["E = type_error(list,[_27|b])"]]);
+    assert_prolog_success!(&mut wam, "catch(keysort([a-1],[a-b,c-d,a]),error(E,_),true).",
+                           [["E = type_error(pair,a)"]]);
+    assert_prolog_success!(&mut wam, "catch(keysort([a],[a-b]),error(E,_),true).",
+                           [["E = type_error(pair,a)"]]);
 
-    assert_prolog_success!(&mut wam, "catch(sort([a|_], _), error(E, _), true).",
+    assert_prolog_success!(&mut wam, "catch(sort([a|_],_),error(E,_),true).",
                            [["E = instantiation_error"]]);
-    assert_prolog_success!(&mut wam, "catch(sort([],[a|a]),error(Pat, _),true).",
-                           [["Pat = type_error(list, [a | a])"]]);
-    assert_prolog_success!(&mut wam, "sort([], L).",
+    assert_prolog_success!(&mut wam, "catch(sort([],[a|a]),error(Pat,_),true).",
+                           [["Pat = type_error(list,[a|a])"]]);
+    assert_prolog_success!(&mut wam, "sort([],L).",
                            [["L = []"]]);
-    assert_prolog_success!(&mut wam, "catch(sort(_, []), error(E, _), true).",
-                           [["E = type_error(list, _16)"]]);
-    assert_prolog_success!(&mut wam, "catch(sort([a,b,c], not_a_list), error(E, _), true).",
-                           [["E = type_error(list, not_a_list)"]]);
+    assert_prolog_success!(&mut wam, "catch(sort(_,[]),error(E,_),true).",
+                           [["E = type_error(list,_16)"]]);
+    assert_prolog_success!(&mut wam, "catch(sort([a,b,c],not_a_list),error(E,_),true).",
+                           [["E = type_error(list,not_a_list)"]]);
 
-    assert_prolog_success!(&mut wam, "call(((G = 2 ; fail), B=3, !)).",
-                           [["G = 2", "B = 3"]]);
+    assert_prolog_success!(&mut wam, "call(((G = 2 ; fail),B=3,!)).",
+                           [["G = 2","B = 3"]]);
 
     submit(&mut wam, ":- use_module(library(non_iso)).");
 
-    assert_prolog_success!(&mut wam, "call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 100, R).",
-                           [["G = 2", "B = 3", "R = !", "S = 1"]]);
-    assert_prolog_success!(&mut wam, "call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)), B=3, !), 10, R).",
-                           [["S = _1", "G = _4", "B = _14", "R = inference_limit_exceeded"]]);
+    assert_prolog_success!(&mut wam, "call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)),B=3,!),100,R).",
+                           [["G = 2","B = 3","R = !","S = 1"]]);
+    assert_prolog_success!(&mut wam, "call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)),B=3,!),10,R).",
+                           [["S = _1","G = _4","B = _14","R = inference_limit_exceeded"]]);
 
     assert_prolog_success!(&mut wam, "X = '\\033\\'.",
                            [["X = '\\x1b\\'"]]);
@@ -1698,13 +1698,13 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "X = ((*)=(*)).",
                            [["X = ((*)=(*))"]]);
     assert_prolog_success!(&mut wam, "X = [.,.(.,.,.)].",
-                           [["X = ['.', '.'('.', '.', '.')]"]]);
+                           [["X = ['.','.'('.','.','.')]"]]);
     assert_prolog_success!(&mut wam, "X = a+(b*c).",
                            [["X = a+b*c"]]);
     assert_prolog_success!(&mut wam, "X = a*(b+c).",
                            [["X = a*(b+c)"]]);
     assert_prolog_success!(&mut wam, "X = [:-,-].",
-                           [["X = [:-, -]"]]);
+                           [["X = [:-,-]"]]);
     assert_prolog_success!(&mut wam, "X = a*(b+c).",
                            [["X = a*(b+c)"]]);
     assert_prolog_success!(&mut wam, "X = (-)-(-).",
@@ -1723,100 +1723,100 @@ fn test_queries_on_builtins()
                            [["X = f((a,b,c))"]]);
     assert_prolog_success!(&mut wam, "X = f(((a,b),c)).",
                            [["X = f(((a,b),c))"]]);
-    assert_prolog_success!(&mut wam, "X = f(((a,b),(c, d))).",
+    assert_prolog_success!(&mut wam, "X = f(((a,b),(c,d))).",
                            [["X = f(((a,b),c,d))"]]);
 
-    assert_prolog_success!(&mut wam, "findall(X, (X = 1 ; X = 2), S).",
-                           [["S = [1, 2]", "X = _0"]]);
-    assert_prolog_success!(&mut wam, "findall(X+Y, (X = 1), S).",
-                           [["S = [1+_36]", "X = _1", "Y = _2"]]);
-    assert_prolog_success!(&mut wam, "findall(X, false, S).",
-                           [["S = []", "X = _0"]]);
-    assert_prolog_success!(&mut wam, "findall(X, (X = 1 ; X = 1), S).",
-                           [["S = [1, 1]", "X = _0"]]);
-    assert_prolog_failure!(&mut wam, "findall(X, (X = 2 ; X = 1), [1, 2]).");
-    assert_prolog_success!(&mut wam, "findall(X, (X = 1 ; X = 2), [X, Y]).",
-                           [["X = 1", "Y = 2"]]);
-    assert_prolog_success!(&mut wam, "catch(findall(X, 4, S), error(type_error(callable, 4), _), true).",
-                           [["S = _3", "X = _1"]]);
+    assert_prolog_success!(&mut wam, "findall(X,(X = 1 ; X = 2),S).",
+                           [["S = [1,2]","X = _0"]]);
+    assert_prolog_success!(&mut wam, "findall(X+Y,(X = 1),S).",
+                           [["S = [1+_36]","X = _1","Y = _2"]]);
+    assert_prolog_success!(&mut wam, "findall(X,false,S).",
+                           [["S = []","X = _0"]]);
+    assert_prolog_success!(&mut wam, "findall(X,(X = 1 ; X = 1),S).",
+                           [["S = [1,1]","X = _0"]]);
+    assert_prolog_failure!(&mut wam, "findall(X,(X = 2 ; X = 1),[1,2]).");
+    assert_prolog_success!(&mut wam, "findall(X,(X = 1 ; X = 2),[X,Y]).",
+                           [["X = 1","Y = 2"]]);
+    assert_prolog_success!(&mut wam, "catch(findall(X,4,S),error(type_error(callable,4),_),true).",
+                           [["S = _3","X = _1"]]);
 
-    assert_prolog_success!(&mut wam, "bagof(X, (X=Y; X=Z), S).",
-                           [["S = [_3, _6]", "X = _0", "Y = _3", "Z = _6"]]);
-    assert_prolog_success!(&mut wam, "bagof(X, (X=1 ; X = 2), X).",
-                           [["X = [1, 2]"]]);
-    assert_prolog_success!(&mut wam, "bagof(X, (X=1 ; X = 2), S).",
-                           [["S = [1, 2]", "X = _0"]]);
-    assert_prolog_success!(&mut wam, "bagof(1, (Y=1 ; Y=2), L).",
-                           [["L = [1]", "Y = 1"],
-                            ["L = [1]", "Y = 2"]]);
+    assert_prolog_success!(&mut wam, "bagof(X,(X=Y; X=Z),S).",
+                           [["S = [_3,_6]","X = _0","Y = _3","Z = _6"]]);
+    assert_prolog_success!(&mut wam, "bagof(X,(X=1 ; X = 2),X).",
+                           [["X = [1,2]"]]);
+    assert_prolog_success!(&mut wam, "bagof(X,(X=1 ; X = 2),S).",
+                           [["S = [1,2]","X = _0"]]);
+    assert_prolog_success!(&mut wam, "bagof(1,(Y=1 ; Y=2),L).",
+                           [["L = [1]","Y = 1"],
+                            ["L = [1]","Y = 2"]]);
 
-    submit(&mut wam, "b(1, 1). b(1, 1). b(1, 2). b(2, 1). b(2, 2). b(2, 2).");
+    submit(&mut wam, "b(1,1). b(1,1). b(1,2). b(2,1). b(2,2). b(2,2).");
 
-    assert_prolog_success!(&mut wam, "bagof(X, b(X, Y), L).",
-                           [["L = [1, Y, 2]", "X = _0", "Y = 1"],
-                            ["L = [1, 2, Y]", "X = _0", "Y = 2"]]);
+    assert_prolog_success!(&mut wam, "bagof(X,b(X,Y),L).",
+                           [["L = [1,Y,2]","X = _0","Y = 1"],
+                            ["L = [1,2,Y]","X = _0","Y = 2"]]);
 
-    assert_prolog_success!(&mut wam, "bagof(X, (X=Y; X=Z; Y=1), L).",
-                           [["L = [_3, _6]", "X = _0", "Y = _3", "Z = _6"],
-                            ["L = [_112]", "X = _0", "Y = 1", "Z = _6"]]);
+    assert_prolog_success!(&mut wam, "bagof(X,(X=Y; X=Z; Y=1),L).",
+                           [["L = [_3,_6]","X = _0","Y = _3","Z = _6"],
+                            ["L = [_112]","X = _0","Y = 1","Z = _6"]]);
 
-    submit(&mut wam, "a(1, f(_)). a(2, f(_)).");
+    submit(&mut wam, "a(1,f(_)). a(2,f(_)).");
 
-    assert_prolog_success!(&mut wam, "bagof(X, a(X, Y), L).",
-                           [["L = [1, 2]", "X = _0", "Y = f(_78)"]]);
+    assert_prolog_success!(&mut wam, "bagof(X,a(X,Y),L).",
+                           [["L = [1,2]","X = _0","Y = f(_78)"]]);
 
-    assert_prolog_success!(&mut wam, "setof(X, (X = 1 ; X = 2), S).",
-                           [["S = [1, 2]", "X = _0"]]);
-    assert_prolog_success!(&mut wam, "setof(X, (X=Y ; X=Z), S).",
-                           [["S = [_3, _6]", "X = _0", "Y = _3", "Z = _6"]]);
-    assert_prolog_failure!(&mut wam, "setof(X, false, S).");
-    assert_prolog_success!(&mut wam, "setof(1, (Y=1 ; Y=2), L).",
-                           [["L = [1]", "Y = 1"],
-                            ["L = [1]", "Y = 2"]]);
-    assert_prolog_success!(&mut wam, "setof(X, (X=Y; X=Z; Y=1), L).",
-                           [["L = [_3, _6]", "X = _0", "Y = _3", "Z = _6"],
-                            ["L = [_112]", "Y = 1", "X = _0", "Y = 1", "Z = _6"]]);
-    assert_prolog_failure!(&mut wam, "setof(X, member(X, [f(U,b),f(V,c)]), [f(a,c),f(a,b)]).");
-    assert_prolog_success!(&mut wam, "setof(X, member(X, [f(U,b),f(V,c)]), [f(a,b),f(a,c)]).",
-                           [["U = a", "V = a", "X = _0"]]);
-    assert_prolog_success!(&mut wam, "setof(X, member(X, [V,U,f(U),f(V)]), L).",
-                           [["L = [_2, _4, f(U), f(V)]", "U = _2", "V = _4", "X = _0"]]);
-    assert_prolog_success!(&mut wam, "setof(X, member(X, [V,U,f(U),f(V)]), [a,b,f(a),f(b)]).",
-                           [["U = a", "V = b", "X = _0"]]);
+    assert_prolog_success!(&mut wam, "setof(X,(X = 1 ; X = 2),S).",
+                           [["S = [1,2]","X = _0"]]);
+    assert_prolog_success!(&mut wam, "setof(X,(X=Y ; X=Z),S).",
+                           [["S = [_3,_6]","X = _0","Y = _3","Z = _6"]]);
+    assert_prolog_failure!(&mut wam, "setof(X,false,S).");
+    assert_prolog_success!(&mut wam, "setof(1,(Y=1 ; Y=2),L).",
+                           [["L = [1]","Y = 1"],
+                            ["L = [1]","Y = 2"]]);
+    assert_prolog_success!(&mut wam, "setof(X,(X=Y; X=Z; Y=1),L).",
+                           [["L = [_3,_6]","X = _0","Y = _3","Z = _6"],
+                            ["L = [_112]","Y = 1","X = _0","Y = 1","Z = _6"]]);
+    assert_prolog_failure!(&mut wam, "setof(X,member(X,[f(U,b),f(V,c)]),[f(a,c),f(a,b)]).");
+    assert_prolog_success!(&mut wam, "setof(X,member(X,[f(U,b),f(V,c)]),[f(a,b),f(a,c)]).",
+                           [["U = a","V = a","X = _0"]]);
+    assert_prolog_success!(&mut wam, "setof(X,member(X,[V,U,f(U),f(V)]),L).",
+                           [["L = [_2,_4,f(U),f(V)]","U = _2","V = _4","X = _0"]]);
+    assert_prolog_success!(&mut wam, "setof(X,member(X,[V,U,f(U),f(V)]),[a,b,f(a),f(b)]).",
+                           [["U = a","V = b","X = _0"]]);
 
-    assert_prolog_success!(&mut wam, "findall(X, (X = 1 ; X = 2), S0, S1).",
-                           [["S0 = [1, 2 | _11]", "S1 = _11", "X = _0"]]);
-    assert_prolog_success!(&mut wam, "findall(X+Y, (X = 1), S0, S1).",
-                           [["S0 = [1+_44 | _7]", "S1 = _7", "X = _1", "Y = _2"]]);
-    assert_prolog_success!(&mut wam, "findall(X, false, S, _).",
-                           [["S = []", "X = _0"]]);
-    assert_prolog_success!(&mut wam, "findall(X, (X = 1 ; X = 1), S0, S1).",
-                           [["S0 = [1, 1 | _11]", "S1 = _11", "X = _0"]]);
-    assert_prolog_failure!(&mut wam, "findall(X, (X = 2 ; X = 1), [1, 2 | S], S).");
-    assert_prolog_success!(&mut wam, "findall(X, (X = 1 ; X = 2), [X, Y | S], S).",
-                           [["S = _11", "X = 1", "Y = 2"]]);
-    assert_prolog_success!(&mut wam, "catch(findall(X, 4, S0, S1), error(type_error(callable, 4), _), true).",
-                           [["S0 = _3", "S1 = _4", "X = _1"]]);
+    assert_prolog_success!(&mut wam, "findall(X,(X = 1 ; X = 2),S0,S1).",
+                           [["S0 = [1,2|_11]","S1 = _11","X = _0"]]);
+    assert_prolog_success!(&mut wam, "findall(X+Y,(X = 1),S0,S1).",
+                           [["S0 = [1+_44|_7]","S1 = _7","X = _1","Y = _2"]]);
+    assert_prolog_success!(&mut wam, "findall(X,false,S,_).",
+                           [["S = []","X = _0"]]);
+    assert_prolog_success!(&mut wam, "findall(X,(X = 1 ; X = 1),S0,S1).",
+                           [["S0 = [1,1|_11]","S1 = _11","X = _0"]]);
+    assert_prolog_failure!(&mut wam, "findall(X,(X = 2 ; X = 1),[1,2|S],S).");
+    assert_prolog_success!(&mut wam, "findall(X,(X = 1 ; X = 2),[X,Y|S],S).",
+                           [["S = _11","X = 1","Y = 2"]]);
+    assert_prolog_success!(&mut wam, "catch(findall(X,4,S0,S1),error(type_error(callable,4),_),true).",
+                           [["S0 = _3","S1 = _4","X = _1"]]);
 
     // bagof & setof with existential variables.
-    assert_prolog_success!(&mut wam, "bagof(X, Y^((X = 1, Y = 1; (X = 2, Y = 2))), S).",
-                           [["S = [1, 2]", "X = _0", "Y = _5"]]);
-    assert_prolog_success!(&mut wam, "bagof(X, Y^((X = 1 ; Y = 1) ; (X = 2, Y = 2)), S).",
-                           [["S = [1, _126, 2]", "X = _0", "Y = _5"]]);
+    assert_prolog_success!(&mut wam, "bagof(X,Y^((X = 1,Y = 1; (X = 2,Y = 2))),S).",
+                           [["S = [1,2]","X = _0","Y = _5"]]);
+    assert_prolog_success!(&mut wam, "bagof(X,Y^((X = 1 ; Y = 1) ; (X = 2,Y = 2)),S).",
+                           [["S = [1,_126,2]","X = _0","Y = _5"]]);
 
-    assert_prolog_success!(&mut wam, "setof(X, Y^((X = 1, Y = 1; (X = 2, Y = 2))), S).",
-                           [["S = [1, 2]", "X = _0", "Y = _5"]]);
-    assert_prolog_success!(&mut wam, "setof(X, Y^((X = 1 ; Y = 1) ; (X = 2, Y = 2)), S).",
-                           [["S = [_126, 1, 2]", "X = _0", "Y = _5"]]);
+    assert_prolog_success!(&mut wam, "setof(X,Y^((X = 1,Y = 1; (X = 2,Y = 2))),S).",
+                           [["S = [1,2]","X = _0","Y = _5"]]);
+    assert_prolog_success!(&mut wam, "setof(X,Y^((X = 1 ; Y = 1) ; (X = 2,Y = 2)),S).",
+                           [["S = [_126,1,2]","X = _0","Y = _5"]]);
 
     submit(&mut wam, ":- use_module(library(non_iso)).");
 
-    assert_prolog_failure!(&mut wam, "forall(true, false).");
-    assert_prolog_success!(&mut wam, "forall(false, true).");
-    assert_prolog_success!(&mut wam, "catch(forall(_, true), error(instantiation_error, _), true).");
-    assert_prolog_success!(&mut wam, "catch(forall(true, _), error(instantiation_error, _), true).");
-    assert_prolog_success!(&mut wam, "catch(forall(1, true), error(type_error(callable, 1), _), true).");
-    assert_prolog_success!(&mut wam, "catch(forall(true, 1), error(type_error(callable, 1), _), true).");
+    assert_prolog_failure!(&mut wam, "forall(true,false).");
+    assert_prolog_success!(&mut wam, "forall(false,true).");
+    assert_prolog_success!(&mut wam, "catch(forall(_,true),error(instantiation_error,_),true).");
+    assert_prolog_success!(&mut wam, "catch(forall(true,_),error(instantiation_error,_),true).");
+    assert_prolog_success!(&mut wam, "catch(forall(1,true),error(type_error(callable,1),_),true).");
+    assert_prolog_success!(&mut wam, "catch(forall(true,1),error(type_error(callable,1),_),true).");
 
     submit(&mut wam, "
 :- dynamic(cat/0).
@@ -1828,38 +1828,38 @@ dog :- true.
 elk(X) :- moose(X).
 
 :- dynamic(legs/2).
-legs(A, 6) :- insect(A).
-legs(A, 7) :- A, call(A).
+legs(A,6) :- insect(A).
+legs(A,7) :- A,call(A).
 
 :- dynamic(insect/1).
 insect(ant).
 insect(bee).");
 
-    assert_prolog_success!(&mut wam, "clause(cat, true).");
-    assert_prolog_success!(&mut wam, "clause(dog, true).");
-    assert_prolog_success!(&mut wam, "clause(legs(I, 6), Body).",
-                           [["I = _1", "Body = insect(_1)"]]);
-    assert_prolog_success!(&mut wam, "clause(legs(C, 7), Body).",
-                           [["C = _1", "Body = (_1,call(C))"]]);
-    assert_prolog_success!(&mut wam, "clause(insect(I), T).",
-                           [["I = ant", "T = true"],
-                            ["I = bee", "T = true"]]);
-    assert_prolog_failure!(&mut wam, "clause(x, Body).");
-    assert_prolog_success!(&mut wam, "catch(clause(_, _), error(instantiation_error, _), true).");
-    assert_prolog_success!(&mut wam, "catch(clause(4, _), error(type_error(callable, 4), _), true).");
-    assert_prolog_success!(&mut wam, "catch(clause(elk(N), _), error(permission_error(access, private_procedure, elk/1), _), true).");
-    assert_prolog_success!(&mut wam, "catch(clause(atom(N), _), error(permission_error(access, private_procedure, atom/1), _), true).");
+    assert_prolog_success!(&mut wam, "clause(cat,true).");
+    assert_prolog_success!(&mut wam, "clause(dog,true).");
+    assert_prolog_success!(&mut wam, "clause(legs(I,6),Body).",
+                           [["I = _1","Body = insect(_1)"]]);
+    assert_prolog_success!(&mut wam, "clause(legs(C,7),Body).",
+                           [["C = _1","Body = (_1,call(C))"]]);
+    assert_prolog_success!(&mut wam, "clause(insect(I),T).",
+                           [["I = ant","T = true"],
+                            ["I = bee","T = true"]]);
+    assert_prolog_failure!(&mut wam, "clause(x,Body).");
+    assert_prolog_success!(&mut wam, "catch(clause(_,_),error(instantiation_error,_),true).");
+    assert_prolog_success!(&mut wam, "catch(clause(4,_),error(type_error(callable,4),_),true).");
+    assert_prolog_success!(&mut wam, "catch(clause(elk(N),_),error(permission_error(access,private_procedure,elk/1),_),true).");
+    assert_prolog_success!(&mut wam, "catch(clause(atom(N),_),error(permission_error(access,private_procedure,atom/1),_),true).");
 
-    assert_prolog_success!(&mut wam, "asserta(legs(octopus, 8)).");
-    assert_prolog_success!(&mut wam, "asserta( (legs(A, 4) :- animal(A)) ).");
-    assert_prolog_success!(&mut wam, "asserta( (foo(X) :- X, call(X)) ).");
-    assert_prolog_success!(&mut wam, "catch(asserta(_), error(instantiation_error, _), true).");
+    assert_prolog_success!(&mut wam, "asserta(legs(octopus,8)).");
+    assert_prolog_success!(&mut wam, "asserta( (legs(A,4) :- animal(A)) ).");
+    assert_prolog_success!(&mut wam, "asserta( (foo(X) :- X,call(X)) ).");
+    assert_prolog_success!(&mut wam, "catch(asserta(_),error(instantiation_error,_),true).");
     assert_prolog_failure!(&mut wam, "asserta(_).");
-    assert_prolog_success!(&mut wam, "catch(asserta(4), error(type_error(callable, 4), _), true).");
+    assert_prolog_success!(&mut wam, "catch(asserta(4),error(type_error(callable,4),_),true).");
     assert_prolog_failure!(&mut wam, "asserta(4).");
-    assert_prolog_success!(&mut wam, "catch(asserta( (foo :- 4) ), error(type_error(callable, 4), _), true).");
+    assert_prolog_success!(&mut wam, "catch(asserta( (foo :- 4) ),error(type_error(callable,4),_),true).");
     assert_prolog_failure!(&mut wam, "asserta( (foo :- 4) ).");
-    assert_prolog_success!(&mut wam, "catch(asserta( (atom(_) :- true) ), error(permission_error(modify, static_procedure, atom/1), _), true).");
+    assert_prolog_success!(&mut wam, "catch(asserta( (atom(_) :- true) ),error(permission_error(modify,static_procedure,atom/1),_),true).");
     assert_prolog_failure!(&mut wam, "asserta( (atom(_) :- true) ).");
 
     submit(&mut wam, "
@@ -1872,64 +1872,64 @@ dog :- true.
 elk(X) :- moose(X).
 
 :- dynamic(legs/2).
-legs(A, 6) :- insect(A).
-legs(A, 7) :- A, call(A).
+legs(A,6) :- insect(A).
+legs(A,7) :- A,call(A).
 
 :- dynamic(insect/1).
 insect(ant).
 insect(bee).");
 
-    assert_prolog_success!(&mut wam, "assertz(legs(octopus, 8)).");
-    assert_prolog_success!(&mut wam, "assertz( (legs(A, 4) :- animal(A)) ).");
-    assert_prolog_success!(&mut wam, "assertz( (foo(X) :- X, call(X)) ).");
-    assert_prolog_success!(&mut wam, "catch(assertz(_), error(instantiation_error, _), true).");
+    assert_prolog_success!(&mut wam, "assertz(legs(octopus,8)).");
+    assert_prolog_success!(&mut wam, "assertz( (legs(A,4) :- animal(A)) ).");
+    assert_prolog_success!(&mut wam, "assertz( (foo(X) :- X,call(X)) ).");
+    assert_prolog_success!(&mut wam, "catch(assertz(_),error(instantiation_error,_),true).");
     assert_prolog_failure!(&mut wam, "assertz(_).");
-    assert_prolog_success!(&mut wam, "catch(assertz(4), error(type_error(callable, 4), _), true).");
+    assert_prolog_success!(&mut wam, "catch(assertz(4),error(type_error(callable,4),_),true).");
     assert_prolog_failure!(&mut wam, "assertz(4).");
-    assert_prolog_success!(&mut wam, "catch(assertz( (foo :- 4) ), error(type_error(callable, 4), _), true).");
+    assert_prolog_success!(&mut wam, "catch(assertz( (foo :- 4) ),error(type_error(callable,4),_),true).");
     assert_prolog_failure!(&mut wam, "assertz( (foo :- 4) ).");
-    assert_prolog_success!(&mut wam, "catch(assertz( (atom(_) :- true) ), error(permission_error(modify, static_procedure, atom/1), _), true).");
+    assert_prolog_success!(&mut wam, "catch(assertz( (atom(_) :- true) ),error(permission_error(modify,static_procedure,atom/1),_),true).");
     assert_prolog_failure!(&mut wam, "assertz( (atom(_) :- true) ).");
 
     submit(&mut wam, "
 :- dynamic(legs/2).
-legs(A, 4) :- animal(A).
-legs(octopus, 8).
-legs(A, 6) :- insect(A).
-legs(spider, 8).
-legs(B, 2) :- bird(B).
+legs(A,4) :- animal(A).
+legs(octopus,8).
+legs(A,6) :- insect(A).
+legs(spider,8).
+legs(B,2) :- bird(B).
 
 :- dynamic(insect/1).
 insect(ant).
 insect(bee).
 
 :- dynamic(foo/1).
-foo(X) :- call(X), call(X).
+foo(X) :- call(X),call(X).
 foo(X) :- call(X) -> call(X).");
 
-    assert_prolog_success!(&mut wam, "retract(legs(octopus, 8)).");
-    assert_prolog_failure!(&mut wam, "retract(legs(spider, 6)).");
-    assert_prolog_success!(&mut wam, "retract( (legs(X, 2) :- T) ).",
-                           [["X = _1", "T = bird(_1)"]]);
-    assert_prolog_success!(&mut wam, "retract( (legs(X, Y) :- Z) ).",
-                           [["X = _1", "Y = 4", "Z = animal(_1)"],
-                            ["X = _1", "Y = 6", "Z = insect(_1)"],
-                            ["X = spider", "Y = 8", "Z = true"]]);
-    assert_prolog_failure!(&mut wam, "retract( (legs(X, Y) :- Z) ).");
+    assert_prolog_success!(&mut wam, "retract(legs(octopus,8)).");
+    assert_prolog_failure!(&mut wam, "retract(legs(spider,6)).");
+    assert_prolog_success!(&mut wam, "retract( (legs(X,2) :- T) ).",
+                           [["X = _1","T = bird(_1)"]]);
+    assert_prolog_success!(&mut wam, "retract( (legs(X,Y) :- Z) ).",
+                           [["X = _1","Y = 4","Z = animal(_1)"],
+                            ["X = _1","Y = 6","Z = insect(_1)"],
+                            ["X = spider","Y = 8","Z = true"]]);
+    assert_prolog_failure!(&mut wam, "retract( (legs(X,Y) :- Z) ).");
     assert_prolog_success!(&mut wam, "retract(insect(I)).",
                            [["I = ant"],
                             ["I = bee"]]);
-    assert_prolog_success!(&mut wam, "retract(( foo(A) :- A, call(A) )).",
+    assert_prolog_success!(&mut wam, "retract(( foo(A) :- A,call(A) )).",
                            [["A = call(A)"]]);
     assert_prolog_success!(&mut wam, "foo(atom(atom)).");
     assert_prolog_success!(&mut wam, "retract(( foo(C) :- A -> B )).",
-                           [["A = call(_1)", "B = call(_1)", "C = _1"]]);
+                           [["A = call(_1)","B = call(_1)","C = _1"]]);
     assert_prolog_failure!(&mut wam, "retract( (X :- in_eec(Y)) ).");
-    assert_prolog_success!(&mut wam, "catch(retract( (X :- in_eec(Y)) ), error(instantiation_error, _), true).");
+    assert_prolog_success!(&mut wam, "catch(retract( (X :- in_eec(Y)) ),error(instantiation_error,_),true).");
     assert_prolog_failure!(&mut wam, "retract( (4 :- X) ).");
-    assert_prolog_success!(&mut wam, "catch(retract( (4 :- X) ), error(type_error(callable, 4), _), true).");
+    assert_prolog_success!(&mut wam, "catch(retract( (4 :- X) ),error(type_error(callable,4),_),true).");
     assert_prolog_failure!(&mut wam, "retract( (atom(X) :- X == '[]') ).");
-    assert_prolog_success!(&mut wam, "catch(retract( (atom(X) :- X == '[]') ), error(permission_error(modify, static_procedure, atom/1), _), true).");
+    assert_prolog_success!(&mut wam, "catch(retract( (atom(X) :- X == '[]') ),error(permission_error(modify,static_procedure,atom/1),_),true).");
 
     /* This example shows why machine::compile::localize_self_calls is necessary. */
 submit(&mut wam, "
@@ -1940,38 +1940,37 @@ p(b).
 p(c) :- p(d).
 p(d).");
 
-    assert_prolog_success!(&mut wam, "p(X), retract(p(_)).",
+    assert_prolog_success!(&mut wam, "p(X),retract(p(_)).",
                            [["X = a"],
                             ["X = a"],
                             ["X = a"]]);
 
     submit(&mut wam, "
 :- dynamic(foo/1).
-foo(X) :- call(X), call(X).
+foo(X) :- call(X),call(X).
 foo(X) :- call(X) -> call(X).");
 
     assert_prolog_success!(&mut wam, "abolish(foo/2).");
     assert_prolog_failure!(&mut wam, "abolish(foo/_).");
-    assert_prolog_success!(&mut wam, "catch(abolish(foo/_), error(instantiation_error, abolish/1), true).");
+    assert_prolog_success!(&mut wam, "catch(abolish(foo/_),error(instantiation_error,abolish/1),true).");
     assert_prolog_failure!(&mut wam, "abolish(foo).");
-    assert_prolog_success!(&mut wam, "catch(abolish(foo), error(type_error(predicate_indicator, foo), abolish/1), true).");
+    assert_prolog_success!(&mut wam, "catch(abolish(foo),error(type_error(predicate_indicator,foo),abolish/1),true).");
     assert_prolog_failure!(&mut wam, "abolish(foo(_)).");
-    assert_prolog_success!(&mut wam, "catch(abolish(foo(_)), error(type_error(predicate_indicator, foo(_)), abolish/1), true).");
+    assert_prolog_success!(&mut wam, "catch(abolish(foo(_)),error(type_error(predicate_indicator,foo(_)),abolish/1),true).");
     assert_prolog_failure!(&mut wam, "abolish(abolish/1).");
-    assert_prolog_success!(&mut wam, "catch(abolish(abolish/1), error(permission_error(modify, static_procedure, abolish/1), abolish/1), true).");
+    assert_prolog_success!(&mut wam, "catch(abolish(abolish/1),error(permission_error(modify,static_procedure,abolish/1),abolish/1),true).");
 
-    assert_prolog_success!(&mut wam, "atom_length('enchanted evening', N).",
+    assert_prolog_success!(&mut wam, "atom_length('enchanted evening',N).",
                            [["N = 17"]]);
-    assert_prolog_success!(&mut wam, r"atom_length('enchanted\
- evening', N).",
+    assert_prolog_success!(&mut wam,r"atom_length('enchanted\
+ evening',N).",
                            [["N = 17"]]);
-    assert_prolog_success!(&mut wam, "atom_length('', N).",
+    assert_prolog_success!(&mut wam, "atom_length('',N).",
                            [["N = 0"]]);
-    assert_prolog_failure!(&mut wam, "atom_length('scarlet', 5).");
-    assert_prolog_success!(&mut wam, "catch((atom_length(Atom, 4), false), error(instantiation_error, _), true).");
-    assert_prolog_success!(&mut wam, "catch((atom_length(1.23, 4), false), error(type_error(atom, 1.23), _), true).");
-    assert_prolog_success!(&mut wam, "catch((atom_length(atom, '4'), false), error(type_error(integer, '4'), _), true).");
-
+    assert_prolog_failure!(&mut wam, "atom_length('scarlet',5).");
+    assert_prolog_success!(&mut wam, "catch((atom_length(Atom,4),false),error(instantiation_error,_),true).");
+    assert_prolog_success!(&mut wam, "catch((atom_length(1.23,4),false),error(type_error(atom,1.23),_),true).");
+    assert_prolog_success!(&mut wam, "catch((atom_length(atom,'4'),false),error(type_error(integer,'4'),_),true).");
 }
 
 #[test]
@@ -2184,9 +2183,9 @@ fn test_queries_on_dcgs()
       instant('Lightning Bolt') --> [].");
 
     assert_prolog_success!(&mut wam, "phrase(ability(destroy, X), P).",
-                           [["P = [destroy, target, creature]", "X = 'Llanowar Elves'"],
-                            ["P = [destroy, target, artifact]", "X = 'Ankh of Mishra'"],
-                            ["P = [destroy, target, land]", "X = 'Mountain'"]]);
+                           [["P = [destroy,target,creature]","X = 'Llanowar Elves'"],
+                            ["P = [destroy,target,artifact]","X = 'Ankh of Mishra'"],
+                            ["P = [destroy,target,land]","X = 'Mountain'"]]);
 }
 
 #[test]
@@ -2213,12 +2212,12 @@ fn test_queries_on_string_lists()
     assert_prolog_success!(&mut wam, "\"koen\" =@= [k, o, e, n].");
     assert_prolog_success!(&mut wam, "\"koen\" =@= \"koen\".");
     assert_prolog_success!(&mut wam, "\"koen\" = [k, o | X].",
-                           [["X = [e, n]"]]);
+                           [["X = [e,n]"]]);
     assert_prolog_success!(&mut wam, "\"koen\" = [k, o | X], X = \"en\".",
-                           [["X = [e, n]"]]);
+                           [["X = [e,n]"]]);
     assert_prolog_failure!(&mut wam, "\"koen\" = [k, o | X], X == \"en\".");
     assert_prolog_success!(&mut wam, "\"koen\" = [k, o | X], X =@= \"en\".",
-                           [["X = [e, n]"]]);
+                           [["X = [e,n]"]]);
 
     assert_prolog_failure!(&mut wam, "X = \"abc\", Y = \"abc\", X == Y.");
     assert_prolog_failure!(&mut wam, "partial_string(\"abc\", X), partial_string(\"abc\", Y), X == Y.");
@@ -2238,19 +2237,19 @@ fn test_queries_on_string_lists()
     submit(&mut wam, "matcher([a,b,c|X], X).");
 
     assert_prolog_success!(&mut wam, "matcher(\"abcdef\", X), X = [d,e,f|Y], Y =@= [], X = \"def\".",
-                           [["X = [d, e, f]", "Y = []"]]);
+                           [["X = [d,e,f]", "Y = []"]]);
     assert_prolog_success!(&mut wam, "matcher(\"abcdef\", X), X = [d,e,f|Y], Y =@= [], X =@= \"def\".",
-                           [["X = [d, e, f]", "Y = []"]]);
+                           [["X = [d,e,f]", "Y = []"]]);
     assert_prolog_success!(&mut wam, "X = ['a', 'b', 'c' | \"def\"].",
-                           [["X = [a, b, c, d, e, f]"]]);
+                           [["X = [a,b,c,d,e,f]"]]);
 
     assert_prolog_success!(&mut wam, "X = [a,b,c|\"abc\"].",
-                           [["X = [a, b, c, a, b, c]"]]);
+                           [["X = [a,b,c,a,b,c]"]]);
 
     assert_prolog_success!(&mut wam, "set_prolog_flag(double_quotes, atom).");
 
     assert_prolog_success!(&mut wam, "matcher(X, Y).",
-                          [["X = [a, b, c | _1]", "Y = _1"]]);
+                          [["X = [a,b,c|_1]", "Y = _1"]]);
     assert_prolog_failure!(&mut wam, "matcher(\"abcdef\", Y).");
 
     assert_prolog_success!(&mut wam, "set_prolog_flag(double_quotes, chars).");
@@ -2263,7 +2262,7 @@ fn test_queries_on_string_lists()
 
     assert_prolog_failure!(&mut wam, "Y = 5, partial_string(\"abc\", Y).");
     assert_prolog_success!(&mut wam, "partial_string(\"abc\", X).",
-                           [["X = [a, b, c | _]"]]);
+                           [["X = [a,b,c|_]"]]);
 
     assert_prolog_failure!(&mut wam, "partial_string(\"abc\", X), partial_string(\"abc\", Y), matcher(X, V),
                                          matcher(Y, Z), V = Z.");
@@ -2271,132 +2270,131 @@ fn test_queries_on_string_lists()
     submit(&mut wam, "matcher([a, b, c | X], X).");
 
     assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y).",
-                           [["X = [a, b, c | _]", "Y = _"]]);
+                           [["X = [a,b,c|_]", "Y = _"]]);
     assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), Y = \"def\".",
-                           [["X = [a, b, c, d, e, f]", "Y = [d, e, f]"]]);
+                           [["X = [a,b,c,d,e,f]", "Y = [d,e,f]"]]);
     assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), \"def\" = Y.",
-                           [["X = [a, b, c, d, e, f]", "Y = [d, e, f]"]]);
+                           [["X = [a,b,c,d,e,f]", "Y = [d,e,f]"]]);
 
     assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), partial_string(\"def\", Y).",
-                           [["X = [a, b, c, d, e, f | _]",
-                             "Y = [d, e, f | _]"]]);
+                           [["X = [a,b,c,d,e,f|_]",
+                             "Y = [d,e,f|_]"]]);
     assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), partial_string(\"def\", Y),
                                          Y = \"defghijkl\".",
-                           [["X = [a, b, c, d, e, f, g, h, i, j, k, l]",
-                             "Y = [d, e, f, g, h, i, j, k, l]"]]);
+                           [["X = [a,b,c,d,e,f,g,h,i,j,k,l]",
+                             "Y = [d,e,f,g,h,i,j,k,l]"]]);
     assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), partial_string(\"def\", Y),
                                          \"defghijkl\" = Y.",
-                           [["X = [a, b, c, d, e, f, g, h, i, j, k, l]",
-                             "Y = [d, e, f, g, h, i, j, k, l]"]]);
+                           [["X = [a,b,c,d,e,f,g,h,i,j,k,l]",
+                             "Y = [d,e,f,g,h,i,j,k,l]"]]);
 
     assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G].",
-                           [["X = [a, b, c, d, e, f | _]", "Y = [d, e, f | _]", "G = _"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), [d, e, f | G] = Y.",
-                           [["X = [a, b, c, d, e, f | _]", "Y = [d, e, f | _]", "G = _"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G],
-                                         G = \"ghi\".",
-                           [["X = [a, b, c, d, e, f, g, h, i]", "Y = [d, e, f, g, h, i]", "G = [g, h, i]"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G],
-                                         is_partial_string(Y), G = \"ghi\".",
-                           [["X = [a, b, c, d, e, f, g, h, i]", "Y = [d, e, f, g, h, i]", "G = [g, h, i]"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G],
-                                         is_partial_string(Y), is_partial_string(G), G = \"ghi\".",
-                           [["X = [a, b, c, d, e, f, g, h, i]", "Y = [d, e, f, g, h, i]", "G = [g, h, i]"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), partial_string(\"ababc\", Y), Y = [a,b|Z],
+                           [["X = [a,b,c,d,e,f|_]","Y = [d,e,f|_]","G = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),matcher(X,Y),[d,e,f | G] = Y.",
+                           [["X = [a,b,c,d,e,f|_]","Y = [d,e,f|_]","G = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),matcher(X,Y),Y = [d,e,f | G], G = \"ghi\".",
+                           [["X = [a,b,c,d,e,f,g,h,i]","Y = [d,e,f,g,h,i]","G = [g,h,i]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),matcher(X,Y),Y = [d,e,f | G],
+                                         is_partial_string(Y),G = \"ghi\".",
+                           [["X = [a,b,c,d,e,f,g,h,i]","Y = [d,e,f,g,h,i]","G = [g,h,i]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),matcher(X,Y),Y = [d,e,f | G],
+                                         is_partial_string(Y),is_partial_string(G),G = \"ghi\".",
+                           [["X = [a,b,c,d,e,f,g,h,i]","Y = [d,e,f,g,h,i]","G = [g,h,i]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),partial_string(\"ababc\",Y),Y = [a,b|Z],
                                          X =@= Z.",
-                           [["X = [a, b, c | _]", "Y = [a, b, a, b, c | _]", "Z = [a, b, c | _]"]]);
-    assert_prolog_failure!(&mut wam, "partial_string(\"abc\", X), partial_string(\"ababc\", Y), Y = [a,b|Z],
+                           [["X = [a,b,c|_]","Y = [a,b,a,b,c|_]","Z = [a,b,c|_]"]]);
+    assert_prolog_failure!(&mut wam, "partial_string(\"abc\",X),partial_string(\"ababc\",Y),Y = [a,b|Z],
                                          X == Z.");
 
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), X @> \"abc\".");
-    assert_prolog_failure!(&mut wam, "partial_string(\"abc\", X), X \\=@= \"abc\".");
-    assert_prolog_failure!(&mut wam, "partial_string(\"abc\", X), X @< \"abc\".");
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),X @> \"abc\".");
+    assert_prolog_failure!(&mut wam, "partial_string(\"abc\",X),X \\=@= \"abc\".");
+    assert_prolog_failure!(&mut wam, "partial_string(\"abc\",X),X @< \"abc\".");
 
-    assert_prolog_success!(&mut wam, "partial_string(\"ab\", X), matcher(X, Y), Y = [a,b|V],
-                                         matcher(Y, Z), is_partial_string(Y).",
-                           [["V = [c | _]", "X = [a, b, c, a, b, c | _]", "Y = [a, b, c | _]", "Z = _"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"a\", X), matcher(X, Y).",
-                           [["X = [a, b, c | _]", "Y = _"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"a\", X), matcher(X, Y), is_partial_string(Y).",
-                           [["X = [a, b, c | _]", "Y = _"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"a\", X), matcher(X, Y), Y = \"def\".",
-                           [["X = [a, b, c, d, e, f]", "Y = [d, e, f]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"ab\",X),matcher(X,Y),Y = [a,b|V],
+                                         matcher(Y,Z),is_partial_string(Y).",
+                           [["V = [c|_]","X = [a,b,c,a,b,c|_]","Y = [a,b,c|_]","Z = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"a\",X),matcher(X,Y).",
+                           [["X = [a,b,c|_]","Y = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"a\",X),matcher(X,Y),is_partial_string(Y).",
+                           [["X = [a,b,c|_]","Y = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"a\",X),matcher(X,Y),Y = \"def\".",
+                           [["X = [a,b,c,d,e,f]","Y = [d,e,f]"]]);
 
-    submit(&mut wam, "matcher([a,b,c|X], X).
-                      matcher([a,b,d|X], X).");
+    submit(&mut wam, "matcher([a,b,c|X],X).
+                      matcher([a,b,d|X],X).");
 
-    assert_prolog_success!(&mut wam, "partial_string(\"ab\", X), matcher(X, Y).",
-                           [["X = [a, b, c | _]", "Y = _"],
-                            ["X = [a, b, d | _]", "Y = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"ab\",X),matcher(X,Y).",
+                           [["X = [a,b,c|_]","Y = _"],
+                            ["X = [a,b,d|_]","Y = _"]]);
 
-    submit(&mut wam, "matcher([a,b,c,d|X], X).
-                      matcher([a,c,d|X], X).");
+    submit(&mut wam, "matcher([a,b,c,d|X],X).
+                      matcher([a,c,d|X],X).");
 
-    assert_prolog_success!(&mut wam, "partial_string(\"ab\", X), matcher(X, Y).",
-                           [["X = [a, b, c, d | _]", "Y = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"ab\",X),matcher(X,Y).",
+                           [["X = [a,b,c,d|_]","Y = _"]]);
 
-    assert_prolog_success!(&mut wam, "partial_string(\"a\", X), matcher(X, Y).",
-                           [["X = [a, b, c, d | _]", "Y = _"],
-                            ["X = [a, c, d | _]", "Y = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"a\",X),matcher(X,Y).",
+                           [["X = [a,b,c,d|_]","Y = _"],
+                            ["X = [a,c,d|_]","Y = _"]]);
 
-    submit(&mut wam, "matcher([a,b,c,d|X], X).
-                      matcher([a,c,d|X], X).
-                      matcher([a,e,f|X], X).");
+    submit(&mut wam, "matcher([a,b,c,d|X],X).
+                      matcher([a,c,d|X],X).
+                      matcher([a,e,f|X],X).");
 
-    assert_prolog_success!(&mut wam, "partial_string(\"a\", X), matcher(X, Y).",
-                           [["X = [a, b, c, d | _]", "Y = _"],
-                            ["X = [a, c, d | _]", "Y = _"],
-                            ["X = [a, e, f | _]", "Y = _"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"a\", X), matcher(X, Y), Y = \" t\".",
-                           [["X = [a, b, c, d, ' ', t]", "Y = [' ', t]"],
-                            ["X = [a, c, d, ' ', t]", "Y = [' ', t]"],
-                            ["X = [a, e, f, ' ', t]", "Y = [' ', t]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"a\",X),matcher(X,Y).",
+                           [["X = [a,b,c,d|_]","Y = _"],
+                            ["X = [a,c,d|_]","Y = _"],
+                            ["X = [a,e,f|_]","Y = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"a\",X),matcher(X,Y),Y = \" t\".",
+                           [["X = [a,b,c,d,' ',t]","Y = [' ',t]"],
+                            ["X = [a,c,d,' ',t]","Y = [' ',t]"],
+                            ["X = [a,e,f,' ',t]","Y = [' ',t]"]]);
 
-    submit(&mut wam, "matcher([a,b,c|X], X) :- X = [].
-                      matcher([a,b,c|X], X).");
+    submit(&mut wam, "matcher([a,b,c|X],X) :- X = [].
+                      matcher([a,b,c|X],X).");
 
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y).",
-                           [["X = [a, b, c]", "Y = []"],
-                            ["X = [a, b, c | _]", "Y = _"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"a\", X), matcher(X, Y).",
-                           [["X = [a, b, c]", "Y = []"],
-                            ["X = [a, b, c | _]", "Y = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),matcher(X,Y).",
+                           [["X = [a,b,c]","Y = []"],
+                            ["X = [a,b,c|_]","Y = _"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"a\",X),matcher(X,Y).",
+                           [["X = [a,b,c]","Y = []"],
+                            ["X = [a,b,c|_]","Y = _"]]);
 
-    assert_prolog_failure!(&mut wam, "partial_string(\"abc\", X), partial_string(\"bc\", Y), X = [a | Y].");
+    assert_prolog_failure!(&mut wam, "partial_string(\"abc\",X),partial_string(\"bc\",Y),X = [a|Y].");
 
-    submit(&mut wam, "matcher([a|X], X) :- matcher2(X, _).
-                      matcher([b|X], X) :- matcher2(X, _).
+    submit(&mut wam, "matcher([a|X],X) :- matcher2(X,_).
+                      matcher([b|X],X) :- matcher2(X,_).
 
-                      matcher2([c|X], X).
-                      matcher2([d|X], X).");
+                      matcher2([c|X],X).
+                      matcher2([d|X],X).");
 
-    assert_prolog_success!(&mut wam, "partial_string(\"\", X), matcher(X, Y).",
-                           [["X = [a, c | _]", "Y = [c | _]"],
-                            ["X = [a, d | _]", "Y = [d | _]"],
-                            ["X = [b, c | _]", "Y = [c | _]"],
-                            ["X = [b, d | _]", "Y = [d | _]"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"a\", X), matcher(X, Y).",
-                           [["X = [a, c | _]", "Y = [c | _]"],
-                            ["X = [a, d | _]", "Y = [d | _]"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"b\", X), matcher(X, Y).",
-                           [["X = [b, c | _]", "Y = [c | _]"],
-                            ["X = [b, d | _]", "Y = [d | _]"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"bc\", X), matcher(X, Y).",
-                           [["X = [b, c | _]", "Y = [c | _]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"\",X),matcher(X,Y).",
+                           [["X = [a,c|_]","Y = [c|_]"],
+                            ["X = [a,d|_]","Y = [d|_]"],
+                            ["X = [b,c|_]","Y = [c|_]"],
+                            ["X = [b,d|_]","Y = [d|_]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"a\",X),matcher(X,Y).",
+                           [["X = [a,c|_]","Y = [c|_]"],
+                            ["X = [a,d|_]","Y = [d|_]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"b\",X),matcher(X,Y).",
+                           [["X = [b,c|_]","Y = [c|_]"],
+                            ["X = [b,d|_]","Y = [d|_]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"bc\",X),matcher(X,Y).",
+                           [["X = [b,c|_]","Y = [c|_]"]]);
 
     submit(&mut wam, "f(\"appendy jones\").
                       f(\"appendy smithers jones\").
                       f(\"appendy o'toole\").");
 
-    assert_prolog_success!(&mut wam, "partial_string(\"appendy\", X), f(X).",
-                           [["X = [a, p, p, e, n, d, y, ' ', j, o, n, e, s]"],
-                            ["X = [a, p, p, e, n, d, y, ' ', s, m, i, t, h, e, r, s, ' ', j, o, n, e, s]"],
-                            ["X = [a, p, p, e, n, d, y, ' ', o, '\\'', t, o, o, l, e]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"appendy\",X),f(X).",
+                           [["X = [a,p,p,e,n,d,y,' ',j,o,n,e,s]"],
+                            ["X = [a,p,p,e,n,d,y,' ',s,m,i,t,h,e,r,s,' ',j,o,n,e,s]"],
+                            ["X = [a,p,p,e,n,d,y,' ',o,'\\'',t,o,o,l,e]"]]);
 
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), partial_string(\"abcdef\", X).",
-                           [["X = [a, b, c, d, e, f | _]"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), partial_string(\"abcdef\", X), X = \"abcdef\".",
-                           [["X = [a, b, c, d, e, f]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),partial_string(\"abcdef\",X).",
+                           [["X = [a,b,c,d,e,f|_]"]]);
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),partial_string(\"abcdef\",X),X = \"abcdef\".",
+                           [["X = [a,b,c,d,e,f]"]]);
 }
 
 #[test]
@@ -2420,9 +2418,9 @@ fn test_queries_on_attributed_variables()
    				       ; put_atts(V, my_mod, -frozen(a)), put_atts(V, my_mod, dif(2))
    				       ; put_atts(V, my_mod, dif(different)) ),
    				       get_atts(V, my_mod, Ls).",
-                           [["Ls = [frozen(a), dif(1)]", "V = _10"],
+                           [["Ls = [frozen(a),dif(1)]", "V = _10"],
                             ["Ls = [dif(2)]", "V = _10"],
-                            ["Ls = [frozen(a), dif(different)]", "V = _10"]]);
+                            ["Ls = [frozen(a),dif(different)]", "V = _10"]]);
 
     assert_prolog_success!(&mut wam, "put_atts(V, my_mod, [dif(1), dif(2), frozen(a)]),
    				       ( put_atts(V, my_mod, -dif(2)); put_atts(V, my_mod, -frozen(A)) ),
@@ -2459,10 +2457,10 @@ fn test_queries_on_attributed_variables()
       					 Vs = [X,Y],
       					 variables_set_zdd(Vs, ZDD),
       					 X = 1.",
-                           [["X = 1", "Y = 0", "Vs = [1, 0]", "ZDD = (1->b(true);0->b(true);b(false))"]]);
+                           [["X = 1", "Y = 0", "Vs = [1,0]", "ZDD = (1->b(true);0->b(true);b(false))"]]);
     assert_prolog_success!(&mut wam, "ZDD = ( X -> b(true) ; ( Y -> b(true) ; b(false) ) ),
       					 Vs = [X,Y],
       					 variables_set_zdd(Vs, ZDD),
       					 X = 0.",
-                           [["Vs = [0, _58]", "X = 0", "Y = _58", "ZDD = (0->b(true);_58->b(true);b(false))"]]);
+                           [["Vs = [0,_58]", "X = 0", "Y = _58", "ZDD = (0->b(true);_58->b(true);b(false))"]]);
 }

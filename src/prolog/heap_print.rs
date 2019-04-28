@@ -465,7 +465,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         } else { // if is_infix!(spec.assoc())
             match ct.name().as_str() {
                 "|" => {
-                    self.format_bar_separator_op_with_space(ct.name(), spec);
+                    self.format_bar_separator_op(ct.name(), spec);
                     return;
                 },
                 _ => {}
@@ -487,7 +487,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         for _ in 0 .. arity {
             self.state_stack.push(TokenOrRedirect::FunctorRedirect);
             self.state_stack.push(TokenOrRedirect::Comma);
-        }
+        }        
 
         self.state_stack.pop();
         self.state_stack.push(TokenOrRedirect::Open);
@@ -504,7 +504,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
-    fn format_bar_separator_op_with_space(&mut self, name: ClauseName, spec: SharedOpDesc)
+    fn format_bar_separator_op(&mut self, name: ClauseName, spec: SharedOpDesc)
     {
         let left_directed_op  = DirectedOp::Left(name.clone(), spec.clone());
         let right_directed_op = DirectedOp::Right(name.clone(), spec.clone());
@@ -609,7 +609,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                             if reps > 0 {
                                 self.cyclic_terms.insert(addr, reps - 1);
                                 iter.next()
-                            } else {                                
+                            } else {
                                 push_space_if_amb!(self, "...", {
                                     self.append_str("...");
                                 });
@@ -786,7 +786,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                         self.push_list();
                     }
                 } else if s.is_expandable() {
-                    if !self.at_cdr(" | _") {
+                    if !self.at_cdr("|_") {
                         self.push_char('_');
                     }
                 } else if !self.at_cdr("") {
@@ -902,8 +902,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     fn at_cdr(&mut self, tr: &str) -> bool {
         let len = self.outputter.len();
 
-        if self.outputter.ends_with(" | ") {
-            self.outputter.truncate(len - " | ".len());
+        if self.outputter.ends_with("|") {
+            self.outputter.truncate(len - "|".len());
             self.append_str(tr);
 
             true
@@ -933,7 +933,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     TokenOrRedirect::Open =>
                         self.push_char('('),
                     TokenOrRedirect::OpenList(delimit) =>
-                        if !self.at_cdr(", ") {
+                        if !self.at_cdr(",") {
                             self.push_char('[');
                         } else {
                             delimit.set(false);
@@ -943,9 +943,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                             self.push_char(']');
                         },
                     TokenOrRedirect::HeadTailSeparator =>
-                        self.append_str(" | "),
+                        self.append_str("|"),
                     TokenOrRedirect::Comma =>
-                        self.append_str(", "),
+                        self.append_str(","),
                     TokenOrRedirect::Space =>
                         self.push_char(' '),
                     TokenOrRedirect::LeftCurly =>
