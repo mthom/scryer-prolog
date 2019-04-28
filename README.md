@@ -223,6 +223,7 @@ The following predicates are built-in to Scryer.
 * `setup_call_cleanup/3`
 * `sort/2`
 * `string/1`
+* `subsumes_term/2`
 * `term_expansion/2`
 * `term_variables/2`
 * `throw/1`
