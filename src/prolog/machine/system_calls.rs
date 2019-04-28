@@ -1,5 +1,5 @@
 use prolog_parser::ast::*;
-use prolog_parser::parser::{get_desc, get_clause_spec};
+use prolog_parser::parser::*;
 use prolog_parser::tabled_rc::*;
 
 use prolog::clause_types::*;
@@ -12,6 +12,7 @@ use prolog::machine::machine_state::*;
 use prolog::machine::toplevel::{to_op_decl};
 use prolog::num::{FromPrimitive, ToPrimitive, Zero};
 use prolog::num::bigint::{BigInt};
+use prolog::ordered_float::OrderedFloat;
 use prolog::read::{PrologStream, readline};
 
 use ref_thread_local::RefThreadLocal;
@@ -35,7 +36,7 @@ impl BrentAlgState {
     }
 }
 
-impl MachineState {    
+impl MachineState {
     // a step in Brent's algorithm.
     fn brents_alg_step(&self, brent_st: &mut BrentAlgState) -> Option<CycleSearchResult>
     {
@@ -329,7 +330,7 @@ impl MachineState {
                               indices: &mut IndexStore,
                               call_policy: &mut Box<CallPolicy>,
                               cut_policy:  &mut Box<CutPolicy>,
-                              parsing_stream: &mut PrologStream)
+                              current_input_stream: &mut PrologStream)
                               -> CallResult
     {
         match ct {
@@ -399,9 +400,9 @@ impl MachineState {
                                         let chars = clause_name!(string, indices.atom_tbl);
                                         self.unify(addr.clone(), Addr::Con(Constant::Atom(chars, None)));
                                     },
-                                    Err(err) => 
+                                    Err(err) =>
                                         return Err(self.error_form(err, stub))
-                                }                        
+                                }
                         }
                     },
                     _ => unreachable!()
@@ -481,6 +482,75 @@ impl MachineState {
 
                 self.unify(a2, Addr::Con(Constant::Number(len)));
             },
+            &SystemClauseType::CharsToNumber => {
+                let nx  = self[temp_v!(2)].clone();
+                let stub = MachineError::functor_stub(clause_name!("number_chars"), 2);
+
+                match self.try_from_list(temp_v!(1), stub.clone()) {
+                    Err(e) => return Err(e),
+                    Ok(addrs) =>
+                        match try_char_list(addrs) {
+                            Ok(mut string) => {
+                                if let Some(c) = string.chars().last() {
+                                    if layout_char!(c) {
+                                        let err = ParserError::UnexpectedChar(c);
+                                        
+                                        let h = self.heap.h;
+                                        let err = MachineError::syntax_error(h, err);
+
+                                        return Err(self.error_form(err, stub));
+                                    }
+                                }
+                                
+                                string.push('.');
+
+                                let mut stream = parsing_stream(std::io::Cursor::new(string));
+                                let mut parser = Parser::new(&mut stream, indices.atom_tbl.clone(),
+                                                             self.machine_flags());
+
+                                match parser.read_term(composite_op!(&indices.op_dir)) {
+                                    Err(err) => {
+                                        let h = self.heap.h;
+                                        let err = MachineError::syntax_error(h, err);
+
+                                        return Err(self.error_form(err, stub));
+                                    },
+                                    Ok(Term::Constant(_, Constant::Number(n))) =>
+                                        self.unify(nx, Addr::Con(Constant::Number(n))),
+                                    Ok(Term::Constant(_, Constant::CharCode(c))) =>
+                                        self.unify(nx, Addr::Con(Constant::CharCode(c))),
+                                    _ => {
+                                        let err = ParserError::ParseBigInt;
+                                        
+                                        let h = self.heap.h;
+                                        let err = MachineError::syntax_error(h, err);
+
+                                        return Err(self.error_form(err, stub));
+                                    }
+                                }
+                            },
+                            Err(err) =>
+                                return Err(self.error_form(err, stub))
+                        }
+                }
+            },
+            &SystemClauseType::NumberToChars => {
+                let n = self[temp_v!(1)].clone();
+                let chs = self[temp_v!(2)].clone();
+
+                let string = match self.store(self.deref(n)) {
+                    Addr::Con(Constant::Number(Number::Float(OrderedFloat(n)))) =>
+                        format!("{0:<20?}", n),
+                    Addr::Con(Constant::Number(Number::Integer(n))) =>
+                        n.to_string(),
+                    _ => unreachable!()
+                };
+
+                let chars = string.trim().chars().map(|c| Addr::Con(Constant::Char(c)));
+                let char_list = Addr::HeapCell(self.heap.to_list(chars));
+
+                self.unify(char_list, chs);
+            },
             &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::ModuleAssert(DynamicAssertPlace::Front);
@@ -555,7 +625,7 @@ impl MachineState {
                 };
             },
             &SystemClauseType::GetChar => {
-                let result = parsing_stream.next();
+                let result = current_input_stream.next();
                 let a1 = self[temp_v!(1)].clone();
 
                 match result {
@@ -1409,7 +1479,7 @@ impl MachineState {
                 self.install_new_block(temp_v!(1));
             },
             &SystemClauseType::ReadTerm => {
-                match self.read(parsing_stream, indices.atom_tbl.clone(), &indices.op_dir) {
+                match self.read(current_input_stream, indices.atom_tbl.clone(), &indices.op_dir) {
                     Ok(term_write_result) => {
                         let a1 = self[temp_v!(1)].clone();
                         self.unify(Addr::HeapCell(term_write_result.heap_loc), a1);
@@ -1441,7 +1511,7 @@ impl MachineState {
                     },
                     Err(err) => {
                         // reset the input stream after an input failure.
-                        *parsing_stream = readline::input_stream();
+                        *current_input_stream = readline::input_stream();
 
                         let h = self.heap.h;
                         let syntax_error = MachineError::syntax_error(h, err);

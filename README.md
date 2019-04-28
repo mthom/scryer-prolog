@@ -206,6 +206,7 @@ The following predicates are built-in to Scryer.
 * `must_be/2`
 * `nl/0`
 * `nonvar/1`
+* `number_chars/2`
 * `numbervars/2`
 * `numlist/{2,3}`
 * `once/1`

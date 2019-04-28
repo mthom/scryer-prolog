@@ -15,10 +15,10 @@
 	atom_length/2, bagof/3, catch/3, char_code/2, clause/2,
 	current_op/3, current_predicate/1, current_prolog_flag/2,
 	expand_goal/2, expand_term/2, false/0, findall/3, findall/4,
-	get_char/1, halt/0, once/1, op/3, read_term/2, repeat/0,
-	retract/1, set_prolog_flag/2, setof/3, term_variables/2,
-	throw/1, true/0, write/1, write_canonical/1, write_term/2,
-	writeq/1]).
+	get_char/1, halt/0, number_chars/2, once/1, op/3, read_term/2,
+	repeat/0, retract/1, set_prolog_flag/2, setof/3,
+	term_variables/2, throw/1, true/0, write/1, write_canonical/1,
+	write_term/2, writeq/1]).
 
 % module resolution operator.
 :- op(600, xfy, :).
@@ -772,4 +772,46 @@ get_char(C) :-
     ;  C == end_of_file  -> '$get_char'(C)
     ;  atom_length(C, 1) -> '$get_char'(C)
     ;  throw(error(type_error(in_character, C), get_char/1))
+    ).
+
+can_be_number(N, PI) :-
+    (  var(N) -> true
+    ;  must_be_number(N, PI)
+    ).
+
+must_be_number(N, _) :-
+    (  integer(N)
+    ;  float(N)
+    ),
+    !.
+must_be_number(N, PI) :-
+    (  nonvar(N) -> throw(error(type_error(number, N), PI))
+    ;  throw(error(instantiation_error, PI))
+    ).
+
+must_be_chars([], _).
+must_be_chars([C|Cs], PI) :-
+    (  nonvar(C) ->
+       (  atom_length(C, 1) ->
+	  (  nonvar(Cs) -> must_be_chars(Cs, PI)
+	  ;  false %% throw(error(type_error(list, Cs), PI))
+	  )
+       ;  throw(error(type_error(character, C), PI))
+       )
+    ;  must_be_chars(Cs, PI)
+    ).
+
+number_chars(N, Chs) :-
+   (  ground(Chs)
+   -> can_be_number(N, number_chars/2),
+      can_be_list(Chs, number_chars/2),
+      '$chars_to_number'(Chs, Nx),
+      Nx = N
+   ;  must_be_number(N, number_chars/2),
+      (  var(Chs) -> true
+      ;  can_be_list(Chs, number_chars/2)
+      ,  must_be_chars(Chs, number_chars/2)
+      ),
+      '$number_to_chars'(N, Chsx),
+      Chsx = Chs
     ).

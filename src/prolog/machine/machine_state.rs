@@ -320,7 +320,8 @@ fn try_in_situ(machine_st: &mut MachineState, name: ClauseName, arity: usize,
     }
 }
 
-pub(super) fn try_char_list(addrs: Vec<Addr>) -> Result<String, MachineError>
+pub(super)
+fn try_char_list(addrs: Vec<Addr>) -> Result<String, MachineError>
 {        
     let mut chars = String::new();
 
