@@ -342,7 +342,8 @@ impl MachineState {
 
     pub(super) fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
-
+        let mut tabu_list: HashSet<(Addr, Addr)> = HashSet::new();
+        
         self.fail = false;
 
         while !(pdl.is_empty() || self.fail) {
@@ -350,7 +351,16 @@ impl MachineState {
             let d2 = self.deref(pdl.pop().unwrap());
 
             if d1 != d2 {
-                match (self.store(d1.clone()), self.store(d2.clone())) {
+                let d1 = self.store(d1);
+                let d2 = self.store(d2);
+
+                if tabu_list.contains(&(d1.clone(), d2.clone())) {
+                    continue;
+                } else {
+                    tabu_list.insert((d1.clone(), d2.clone()));
+                }
+                
+                match (d1.clone(), d2.clone()) {
                     (Addr::AttrVar(h), addr) | (addr, Addr::AttrVar(h)) =>
                         self.bind(Ref::AttrVar(h), addr),
                     (Addr::HeapCell(h), _) =>

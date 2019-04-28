@@ -487,7 +487,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         for _ in 0 .. arity {
             self.state_stack.push(TokenOrRedirect::FunctorRedirect);
             self.state_stack.push(TokenOrRedirect::Comma);
-        }        
+        }
 
         self.state_stack.pop();
         self.state_stack.push(TokenOrRedirect::Open);
@@ -778,7 +778,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
 
     fn print_string(&mut self, s: StringList) {
         match self.machine_st.machine_flags().double_quotes {
-            DoubleQuotes::Chars | DoubleQuotes::Codes => {
+            DoubleQuotes::Chars | DoubleQuotes::Codes =>
                 if !s.is_empty() {
                     if self.ignore_ops {
                         self.format_struct(2, clause_name!("."));
@@ -791,8 +791,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     }
                 } else if !self.at_cdr("") {
                     self.append_str("[]");
-                }
-            },
+                },            
             DoubleQuotes::Atom => {
                 let borrowed_str = s.borrow();
 
@@ -802,7 +801,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             }
         }
     }
-
+    
     fn push_list(&mut self) {
         let cell = Rc::new(Cell::new(true));
 
