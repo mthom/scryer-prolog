@@ -440,6 +440,18 @@ impl Machine {
         self.machine_st.p = CodePtr::Local(p);
     }
 
+    fn propagate_exception_to_toplevel(&mut self, snapshot: MachineState) {
+        let ball = self.machine_st.ball.take();
+
+        self.machine_st.absorb_snapshot(snapshot);
+        self.machine_st.ball = ball;
+
+        let stub = self.machine_st.copy_and_align_ball();
+        self.machine_st.throw_exception(stub);
+
+        return;
+    }
+
     fn handle_eval_session(&mut self, result: EvalSession, snapshot: MachineState) {
         match result {
             EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) =>
@@ -471,12 +483,15 @@ impl Machine {
 
                     if !attr_goals.is_empty() {
                         if bindings.is_empty() {
-                            write!(raw_stdout, "{}", attr_goals).unwrap();
+                            let space = if requires_space(&attr_goals, ".") { " " } else { "" };
+                            write!(raw_stdout, "{}{}", attr_goals, space).unwrap();
                         } else {
-                            write!(raw_stdout, "{}, {}", bindings, attr_goals).unwrap();
+                            let space = if requires_space(&attr_goals, ".") { " " } else { "" };
+                            write!(raw_stdout, "{}, {}{}", bindings, attr_goals, space).unwrap();
                         }
                     } else if !bindings.is_empty() {
-                        write!(raw_stdout, "{}", bindings).unwrap();
+                        let space = if requires_space(&bindings, ".") { " " } else { "" };
+                        write!(raw_stdout, "{}{}", bindings, space).unwrap();
                     }
 
                     if self.machine_st.b > 0 {
@@ -494,13 +509,17 @@ impl Machine {
                         let mut raw_stdout = stdout().into_raw_mode().unwrap();
 
                         match result {
-                            EvalSession::QueryFailure => {
-                                write!(raw_stdout, "false.\r\n").unwrap();
-                                raw_stdout.flush().unwrap();
+                            EvalSession::QueryFailure =>
+                                if self.machine_st.ball.stub.len() > 0 {
+                                    self.propagate_exception_to_toplevel(snapshot);
+                                    return;
+                                } else {
+                                    write!(raw_stdout, "false.\r\n").unwrap();
+                                    raw_stdout.flush().unwrap();
 
-                                self.machine_st.absorb_snapshot(snapshot);
-                                return;
-                            },
+                                    self.machine_st.absorb_snapshot(snapshot);
+                                    return;
+                                },
                             EvalSession::Error(err) => {
                                 self.machine_st.absorb_snapshot(snapshot);
                                 self.throw_session_error(err, (clause_name!("repl"), 0));
@@ -525,15 +544,7 @@ impl Machine {
             },
             EvalSession::QueryFailure =>
                 if self.machine_st.ball.stub.len() > 0 {
-                    let ball = self.machine_st.ball.take();
-
-                    self.machine_st.absorb_snapshot(snapshot);
-                    self.machine_st.ball = ball;
-
-                    let stub = self.machine_st.copy_and_align_ball();
-                    self.machine_st.throw_exception(stub);
-
-                    return;
+                    return self.propagate_exception_to_toplevel(snapshot);
                 } else {
                     println!("false.");
                 },
@@ -658,20 +669,27 @@ impl Machine {
 
 
 impl MachineState {
-    fn print_query(&self, addr: Addr, op_dir: &OpDir, var_dict: &HeapVarDict) -> PrinterOutputter
+    fn print_query(&mut self, addr: Addr, op_dir: &OpDir, var_dict: &HeapVarDict) -> PrinterOutputter
     {
-        let output = PrinterOutputter::new();
-        let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output, var_dict);
+        let flags = self.flags;
+        
+        let mut output = {
+            self.flags = MachineFlags { double_quotes: DoubleQuotes::Atom };
+            
+            let output = PrinterOutputter::new();
+            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output, var_dict);            
 
-        printer.quoted = true;
-        printer.numbervars = false;
-        printer.drop_toplevel_spec();
+            printer.quoted = true;
+            printer.numbervars = false;
+            printer.drop_toplevel_spec();
 
-        printer.see_all_locs();
+            printer.see_all_locs();
+            printer.print(addr)
+        };
 
-        let mut output = printer.print(addr);
+        self.flags = flags;
 
-        output.push_char('.');
+        output.append(".");
         output
     }
 
@@ -818,9 +836,9 @@ impl MachineState {
                         if self.fail {
                             break;
                         }
-                        
+
                         let cp = self.p.local();
-                        self.run_verify_attr_interrupt(cp);                    
+                        self.run_verify_attr_interrupt(cp);
                     }
                 },
                 _ =>

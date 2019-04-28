@@ -195,7 +195,11 @@ impl HCValueOutputter for PrinterOutputter {
         PrinterOutputter { contents: String::new() }
     }
 
-    fn append(&mut self, contents: &str) {
+    fn append(&mut self, contents: &str) {        
+        if requires_space(&self.contents, contents) {
+            self.push_char(' ');
+        }
+        
         self.contents += contents;
     }
 
@@ -312,7 +316,7 @@ macro_rules! push_space_if_amb {
     )
 }
 
-fn requires_space(atom: &str, op: &str) -> bool {
+pub fn requires_space(atom: &str, op: &str) -> bool {
     match atom.chars().last() {
         Some(ac) => op.chars().next().map(|oc| {
             if ac == '0' {
@@ -571,7 +575,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     #[inline]
     fn append_str(&mut self, s: &str) {
         self.last_item_idx = self.outputter.len();
-        self.outputter.append(s);
+        self.outputter.append(s);            
     }
 
     fn offset_as_string(&self, addr: Addr) -> Option<String> {
