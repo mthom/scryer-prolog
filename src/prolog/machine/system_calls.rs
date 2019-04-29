@@ -1594,6 +1594,12 @@ impl MachineState {
                         self.lifted_heap.truncate(lh_offset),
                     _ => self.fail = true
                 },
+            &SystemClauseType::UnifyWithOccursCheck => {
+                let a1 = self[temp_v!(1)].clone();
+                let a2 = self[temp_v!(2)].clone();
+
+                self.unify_with_occurs_check(a1, a2);
+            },
             &SystemClauseType::UnwindStack => self.unwind_stack(),
             &SystemClauseType::WriteTerm => {
                 let addr = self[temp_v!(1)].clone();

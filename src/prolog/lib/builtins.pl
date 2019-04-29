@@ -17,8 +17,9 @@
 	expand_goal/2, expand_term/2, false/0, findall/3, findall/4,
 	get_char/1, halt/0, number_chars/2, once/1, op/3, read_term/2,
 	repeat/0, retract/1, set_prolog_flag/2, setof/3,
-	subsumes_term/2, term_variables/2, throw/1, true/0, write/1,
-	write_canonical/1, write_term/2, writeq/1]).
+	subsumes_term/2, term_variables/2, throw/1, true/0,
+	unify_with_occurs_check/2, write/1, write_canonical/1,
+	write_term/2, writeq/1]).
 
 % module resolution operator.
 :- op(600, xfy, :).
@@ -846,3 +847,5 @@ subsumes_term(General, Specific) :-
       term_variables(SVs1, SVs2),
       SVs1 == SVs2
    ).
+
+unify_with_occurs_check(X, Y) :- '$unify_with_occurs_check'(X, Y).

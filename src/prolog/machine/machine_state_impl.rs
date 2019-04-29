@@ -340,6 +340,129 @@ impl MachineState {
         false
     }
 
+    fn bind_with_occurs_check(&mut self, r: Ref, addr: Addr) {
+        let mut fail = false;
+        
+        for value in self.acyclic_pre_order_iter(addr.clone()) {
+            if let HeapCellValue::Addr(addr) = value {
+                if let Some(inner_r) = addr.as_var() {
+                    if r == inner_r {
+                        fail = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        self.fail = fail;        
+        self.bind(r, addr);
+    }
+
+    pub(super) fn unify_with_occurs_check(&mut self, a1: Addr, a2: Addr) {
+        let mut pdl = vec![a1, a2];
+        let mut tabu_list: HashSet<(Addr, Addr)> = HashSet::new();
+        
+        self.fail = false;
+
+        while !(pdl.is_empty() || self.fail) {
+            let d1 = self.deref(pdl.pop().unwrap());
+            let d2 = self.deref(pdl.pop().unwrap());
+
+            if d1 != d2 {
+                let d1 = self.store(d1);
+                let d2 = self.store(d2);
+
+                if tabu_list.contains(&(d1.clone(), d2.clone())) {
+                    continue;
+                } else {
+                    tabu_list.insert((d1.clone(), d2.clone()));
+                }
+                
+                match (d1.clone(), d2.clone()) {
+                    (Addr::AttrVar(h), addr) | (addr, Addr::AttrVar(h)) =>
+                        self.bind_with_occurs_check(Ref::AttrVar(h), addr),
+                    (Addr::HeapCell(h), addr) | (addr, Addr::HeapCell(h)) =>
+                        self.bind_with_occurs_check(Ref::HeapCell(h), addr),
+                    (Addr::StackCell(fr, sc), addr) | (addr, Addr::StackCell(fr, sc)) =>
+                        self.bind_with_occurs_check(Ref::StackCell(fr, sc), addr),
+                    (Addr::Lis(a1), Addr::Str(a2)) | (Addr::Str(a2), Addr::Lis(a1)) => {
+                        if let &HeapCellValue::NamedStr(n2, ref f2, _) = &self.heap[a2] {
+                            if f2.as_str() == "." && n2 == 2 {
+                                pdl.push(Addr::HeapCell(a1));
+                                pdl.push(Addr::HeapCell(a2 + 1));
+
+                                pdl.push(Addr::HeapCell(a1 + 1));
+                                pdl.push(Addr::HeapCell(a2 + 2));
+
+                                continue;
+                            }
+                        }
+
+                        self.fail = true;
+                    },
+                    (Addr::Lis(a1), Addr::Con(Constant::String(ref mut s)))
+                  | (Addr::Con(Constant::String(ref mut s)), Addr::Lis(a1)) => {
+                      if match self.flags.double_quotes {
+                          DoubleQuotes::Chars => self.deconstruct_chars(s, a1, &mut pdl),
+                          DoubleQuotes::Codes => self.deconstruct_codes(s, a1, &mut pdl),
+                          DoubleQuotes::Atom  => false
+                      } {
+                          continue;
+                      }
+
+                      self.fail = true;
+                    },
+                    (Addr::Con(Constant::EmptyList), Addr::Con(Constant::String(ref s)))
+                  | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
+                        if !self.flags.double_quotes.is_atom() => {
+                            if s.is_expandable() && s.is_empty() {
+                                self.pstr_trail(s.clone());
+                                s.set_expandable(false);
+                                continue;
+                            }
+
+                            self.fail = !s.is_empty();
+                        },
+                    (Addr::Lis(a1), Addr::Lis(a2)) => {
+                        pdl.push(Addr::HeapCell(a1));
+                        pdl.push(Addr::HeapCell(a2));
+
+                        pdl.push(Addr::HeapCell(a1 + 1));
+                        pdl.push(Addr::HeapCell(a2 + 1));
+                    },
+                    (Addr::Con(Constant::String(ref mut s1)),
+                     Addr::Con(Constant::String(ref mut s2))) =>
+                        self.fail = !(self.unify_strings(&mut pdl, s1, s2)
+                                   || self.unify_strings(&mut pdl, s2, s1)),
+                    (Addr::Con(ref c1), Addr::Con(ref c2)) =>
+                        if c1 != c2 {
+                            self.fail = true;
+                        },
+                    (Addr::Str(a1), Addr::Str(a2)) => {
+                        let r1 = &self.heap[a1];
+                        let r2 = &self.heap[a2];
+
+                        if let &HeapCellValue::NamedStr(n1, ref f1, _) = r1 {
+                            if let &HeapCellValue::NamedStr(n2, ref f2, _) = r2 {
+                                if n1 == n2 && *f1 == *f2 {
+                                    for i in 1 .. n1 + 1 {
+                                        pdl.push(Addr::HeapCell(a1 + i));
+                                        pdl.push(Addr::HeapCell(a2 + i));
+                                    }
+
+                                    continue;
+                                }
+                            }
+                        }
+
+                        self.fail = true;
+                    },
+                    _ => self.fail = true
+                };
+            }
+        }
+    }
+    
     pub(super) fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
         let mut tabu_list: HashSet<(Addr, Addr)> = HashSet::new();

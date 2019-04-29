@@ -232,7 +232,8 @@ pub enum SystemClauseType {
     Succeed,
     TermVariables,
     TruncateLiftedHeapTo,
-    UnwindStack,
+    UnifyWithOccursCheck,
+    UnwindStack,    
     WriteTerm
 }
 
@@ -318,6 +319,7 @@ impl SystemClauseType {
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::TermVariables => clause_name!("$term_variables"),
             &SystemClauseType::TruncateLiftedHeapTo => clause_name!("$truncate_lh_to"),
+            &SystemClauseType::UnifyWithOccursCheck => clause_name!("$unify_with_occurs_check"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
             &SystemClauseType::WriteTerm => clause_name!("$write_term"),
         }
@@ -404,6 +406,7 @@ impl SystemClauseType {
             ("$term_variables", 2) => Some(SystemClauseType::TermVariables),
             ("$truncate_lh_to", 1) => Some(SystemClauseType::TruncateLiftedHeapTo),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
+            ("$unify_with_occurs_check", 2) => Some(SystemClauseType::UnifyWithOccursCheck),
             ("$write_term", 4) => Some(SystemClauseType::WriteTerm),
             _ => None
         }

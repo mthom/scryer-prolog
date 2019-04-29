@@ -228,6 +228,7 @@ The following predicates are built-in to Scryer.
 * `term_variables/2`
 * `throw/1`
 * `true/0`
+* `unify_with_occurs_check/2`
 * `user:goal_expansion/2`
 * `user:term_expansion/2`
 * `var/1`
