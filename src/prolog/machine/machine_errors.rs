@@ -1,4 +1,5 @@
 use prolog_parser::ast::*;
+use prolog_parser::string_list::*;
 
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
@@ -273,6 +274,7 @@ pub(super) enum CycleSearchResult {
     NotList,
     PartialList(usize, usize), // the list length (up to max), and an offset into the heap.
     ProperList(usize), // the list length.
+    String(usize, StringList), // the number of elements iterated, the string tail.
     UntouchedList(usize) // the address of an uniterated Addr::Lis(address).
 }
 

@@ -1,5 +1,6 @@
 use prolog_parser::ast::*;
 use prolog_parser::parser::*;
+use prolog_parser::string_list::*;
 use prolog_parser::tabled_rc::*;
 
 use prolog::clause_types::*;
@@ -49,6 +50,9 @@ impl MachineState {
                         Some(CycleSearchResult::ProperList(brent_st.steps)),
                     Addr::HeapCell(_) | Addr::StackCell(..) =>
                         Some(CycleSearchResult::PartialList(brent_st.steps, brent_st.hare)),
+                    Addr::Con(Constant::String(ref s))
+                        if self.flags.double_quotes.is_chars() =>
+                          Some(CycleSearchResult::String(brent_st.steps, s.clone())),
                     Addr::Lis(l) => {
                         brent_st.hare = l + 1;
                         brent_st.steps += 1;
@@ -75,6 +79,9 @@ impl MachineState {
             Addr::Lis(offset) if max_steps > 0 => offset + 1,
             Addr::Lis(offset) => return CycleSearchResult::UntouchedList(offset),
             Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
+            Addr::Con(Constant::String(ref s))
+                if self.flags.double_quotes.is_chars() =>
+                   return CycleSearchResult::String(0, s.clone()),
             _ => return CycleSearchResult::NotList
         };
 
@@ -97,6 +104,9 @@ impl MachineState {
         let hare = match addr {
             Addr::Lis(offset) => offset + 1,
             Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
+            Addr::Con(Constant::String(ref s))
+                if self.flags.double_quotes.is_chars() =>
+                   return CycleSearchResult::String(0, s.clone()),
             _ => return CycleSearchResult::NotList
         };
 
@@ -135,18 +145,35 @@ impl MachineState {
                             self.unify(xs0, xs);
                         },
                         _ => {
-                            let search_result = if let Some(max_steps) = max_steps.to_isize() {
-                                if max_steps == -1 {
-                                    self.detect_cycles(self[temp_v!(3)].clone())
+                            let (max_steps, search_result) =
+                                if let Some(max_steps) = max_steps.to_isize() {
+                                    (max_steps, if max_steps == -1 {
+                                        self.detect_cycles(self[temp_v!(3)].clone())
+                                    } else {
+                                        self.detect_cycles_with_max(max_steps as usize,
+                                                                    self[temp_v!(3)].clone())
+                                    })
                                 } else {
-                                    self.detect_cycles_with_max(max_steps as usize,
-                                                                self[temp_v!(3)].clone())
-                                }
-                            } else {
-                                self.detect_cycles(self[temp_v!(3)].clone())
-                            };
+                                    (-1, self.detect_cycles(self[temp_v!(3)].clone()))
+                                };
 
                             match search_result {
+                                CycleSearchResult::String(n, s) =>                                    
+                                    if max_steps == -1 {
+                                        self.finalize_skip_max_list(n + s.len(),
+                                                                    Addr::Con(Constant::EmptyList))
+                                    } else {
+                                        let i = max_steps.to_usize().unwrap() - n;
+
+                                        if s.len() < i {
+                                            self.finalize_skip_max_list(n + s.len(),
+                                                                        Addr::Con(Constant::EmptyList))
+                                        } else {
+                                            let s = StringList::new(s.char_span(i), s.is_expandable());
+                                            self.finalize_skip_max_list(i + n,
+                                                                        Addr::Con(Constant::String(s)))
+                                        }
+                                    },
                                 CycleSearchResult::UntouchedList(l) =>
                                     self.finalize_skip_max_list(0, Addr::Lis(l)),
                                 CycleSearchResult::EmptyList =>
@@ -395,7 +422,7 @@ impl MachineState {
                         match self.try_from_list(temp_v!(2), stub.clone()) {
                             Err(e) => return Err(e),
                             Ok(addrs) =>
-                                match try_char_list(addrs) {
+                                match self.try_char_list(addrs) {
                                     Ok(string) => {
                                         let chars = clause_name!(string, indices.atom_tbl);
                                         self.unify(addr.clone(), Addr::Con(Constant::Atom(chars, None)));
@@ -453,7 +480,7 @@ impl MachineState {
                                         &Addr::Con(Constant::CharCode(c)) =>
                                             chars.push(c as char),
                                         _ => {
-                                            let err = MachineError::representation_error(RepFlag::CharacterCode);
+                                            let err = MachineError::type_error(ValidType::Integer, addr.clone());
                                             return Err(self.error_form(err, stub));
                                         }
                                     }
@@ -489,19 +516,19 @@ impl MachineState {
                 match self.try_from_list(temp_v!(1), stub.clone()) {
                     Err(e) => return Err(e),
                     Ok(addrs) =>
-                        match try_char_list(addrs) {
+                        match self.try_char_list(addrs) {
                             Ok(mut string) => {
                                 if let Some(c) = string.chars().last() {
                                     if layout_char!(c) {
                                         let err = ParserError::UnexpectedChar(c);
-                                        
+
                                         let h = self.heap.h;
                                         let err = MachineError::syntax_error(h, err);
 
                                         return Err(self.error_form(err, stub));
                                     }
                                 }
-                                
+
                                 string.push('.');
 
                                 let mut stream = parsing_stream(std::io::Cursor::new(string));
@@ -521,7 +548,7 @@ impl MachineState {
                                         self.unify(nx, Addr::Con(Constant::CharCode(c))),
                                     _ => {
                                         let err = ParserError::ParseBigInt;
-                                        
+
                                         let h = self.heap.h;
                                         let err = MachineError::syntax_error(h, err);
 

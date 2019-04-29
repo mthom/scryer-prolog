@@ -733,27 +733,31 @@ atom_length(Atom, Length) :-
     ;  throw(error(type_error(atom, Atom), atom_length/2)) % 8.16.1.3 b)
     ).
 
-no_var_in_list([]).
-no_var_in_list([X|Xs]) :- var(X), !, '$fail'.
-no_var_in_list([_|Xs]) :- nonvar(Xs), no_var_in_list(Xs).
-
 atom_chars(Atom, List) :-
+    '$skip_max_list'(_, -1, List, Tail),
+    (  ( Tail == [] ; var(Tail) ) -> true
+    ;  throw(error(type_error(list, List), atom_chars/2))
+    ),
     (  var(Atom) ->
-       (  var(List) -> throw(error(instantiation_error, atom_chars/2))
-       ;  can_be_list(List, atom_chars/3), no_var_in_list(List) -> '$atom_chars'(Atom, List)
+       (  var(Tail) -> throw(error(instantiation_error, atom_chars/2))
+       ;  ground(List), Tail == [] -> '$atom_chars'(Atom, List)
        ;  throw(error(instantiation_error, atom_chars/2))
        )
-    ;  atom(Atom) -> '$atom_chars'(Atom, List)
+    ;  atom(Atom) -> can_be_chars_or_vars(List, atom_chars/2), '$atom_chars'(Atom, List)
     ;  throw(error(type_error(atom, Atom), atom_chars/2))
     ).
 
 atom_codes(Atom, List) :-
+    '$skip_max_list'(_, -1, List, Tail),
+    (  ( Tail == [] ; var(Tail) ) -> true
+    ;  throw(error(type_error(list, List), atom_codes/2))
+    ),
     (  var(Atom) ->
-       (  var(List) -> throw(error(instantiation_error, atom_codes/2))
-       ;  can_be_list(List, atom_codes/3), no_var_in_list(List) -> '$atom_codes'(Atom, List)
+       (  var(Tail) -> throw(error(instantiation_error, atom_codes/2))
+       ;  ground(List), Tail == [] -> '$atom_codes'(Atom, List)
        ;  throw(error(instantiation_error, atom_codes/2))
        )
-    ;  atom(Atom) -> '$atom_codes'(Atom, List)
+    ;  atom(Atom) -> can_be_codes_or_vars(List, atom_codes/2), '$atom_codes'(Atom, List)
     ;  throw(error(type_error(atom, Atom), atom_codes/2))
     ).
 
@@ -789,16 +793,35 @@ must_be_number(N, PI) :-
     ;  throw(error(instantiation_error, PI))
     ).
 
-must_be_chars([], _).
-must_be_chars([C|Cs], PI) :-
+can_be_chars_or_vars(Cs, _) :- var(Cs), !.
+can_be_chars_or_vars(Cs, PI) :- chars_or_vars(Cs, PI).
+
+chars_or_vars([], _).
+chars_or_vars([C|Cs], PI) :-
     (  nonvar(C) ->
-       (  atom_length(C, 1) ->
-	  (  nonvar(Cs) -> must_be_chars(Cs, PI)
-	  ;  false %% throw(error(type_error(list, Cs), PI))
+       (  catch(atom_length(C, 1), _, false) ->
+	  (  nonvar(Cs) -> chars_or_vars(Cs, PI)
+	  ;  false
 	  )
        ;  throw(error(type_error(character, C), PI))
        )
-    ;  must_be_chars(Cs, PI)
+    ;  chars_or_vars(Cs, PI)
+    ).
+
+can_be_codes_or_vars(Cs, _) :- var(Cs), !.
+can_be_codes_or_vars(Cs, PI) :- codes_or_vars(Cs, PI).
+
+codes_or_vars([], _).
+codes_or_vars([C|Cs], PI) :-
+    (  nonvar(C) ->
+       (  catch(char_code(_, C), _, false) ->
+	  (  nonvar(Cs) -> codes_or_vars(Cs, PI)
+	  ;  false
+	  )
+       ;  integer(C) -> throw(error(representation_error(character_code), PI))
+       ;  throw(error(type_error(integer, C), PI))
+       )
+    ;  codes_or_vars(Cs, PI)
     ).
 
 number_chars(N, Chs) :-
@@ -810,7 +833,7 @@ number_chars(N, Chs) :-
    ;  must_be_number(N, number_chars/2),
       (  var(Chs) -> true
       ;  can_be_list(Chs, number_chars/2)
-      ,  must_be_chars(Chs, number_chars/2)
+      ,  chars_or_vars(Chs, number_chars/2)
       ),
       '$number_to_chars'(N, Chsx),
       Chsx = Chs

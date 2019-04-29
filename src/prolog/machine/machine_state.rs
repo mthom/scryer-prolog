@@ -239,6 +239,36 @@ pub struct MachineState {
 }
 
 impl MachineState {
+    pub(super)
+    fn try_char_list(&self, addrs: Vec<Addr>) -> Result<String, MachineError>
+    {
+        let mut chars = String::new();
+        let mut iter = addrs.iter();
+        
+        while let Some(addr) = iter.next() {
+            match addr {
+                &Addr::Con(Constant::String(ref s))
+                    if self.flags.double_quotes.is_chars() => {
+                        chars += s.borrow().as_str();
+
+                        if iter.next().is_some() {
+                            return Err(MachineError::type_error(ValidType::Character, addr.clone()));
+                        }
+                    },
+                &Addr::Con(Constant::Char(c)) =>
+                    chars.push(c),
+                &Addr::Con(Constant::Atom(ref name, _))
+                    if name.as_str().len() == 1 => {
+                        chars += name.as_str();
+                    },
+                _ =>
+                    return Err(MachineError::type_error(ValidType::Character, addr.clone()))
+            }
+        }
+
+        Ok(chars)
+    }
+
     fn call_at_index(&mut self, arity: usize, p: usize)
     {
         self.cp.assign_if_local(self.p.clone() + 1);
@@ -318,27 +348,6 @@ fn try_in_situ(machine_st: &mut MachineState, name: ClauseName, arity: usize,
         Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
                                   stub))
     }
-}
-
-pub(super)
-fn try_char_list(addrs: Vec<Addr>) -> Result<String, MachineError>
-{        
-    let mut chars = String::new();
-
-    for addr in addrs.iter() {
-        match addr {
-            &Addr::Con(Constant::Char(c)) =>
-                chars.push(c),
-            &Addr::Con(Constant::Atom(ref name, _))
-                if name.as_str().len() == 1 => {
-                    chars += name.as_str();
-                },
-            _ =>
-                return Err(MachineError::type_error(ValidType::Character, addr.clone()))
-        }
-    }
-
-    Ok(chars)        
 }
 
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;

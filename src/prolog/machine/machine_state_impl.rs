@@ -1691,6 +1691,21 @@ impl MachineState {
                         } else {
                             self.fail = true;
                         },
+                    Addr::Con(Constant::String(ref s))
+                        if self.flags.double_quotes.is_chars() && !s.is_empty() => {
+                            if n == 1 || n == 2 {
+                                let a3  = self[temp_v!(3)].clone();
+                                let h_a = if n == 1 {
+                                    Addr::Con(Constant::Char(s.head().unwrap()))
+                                } else {
+                                    Addr::Con(Constant::String(s.tail()))
+                                };
+                                
+                                self.unify(a3, h_a);
+                            } else {
+                                self.fail = true;
+                            }
+                        },
                     _ => // 8.5.2.3 d)
                         return Err(self.error_form(MachineError::type_error(ValidType::Compound, term),
                                                    stub))
@@ -2089,6 +2104,11 @@ impl MachineState {
         match a1.clone() {
             Addr::DBRef(_) =>
                 self.fail = true,
+            Addr::Con(Constant::String(ref s))
+                if self.flags.double_quotes.is_chars() && !s.is_empty() => {
+                    let shared_op_desc = fetch_op_spec(clause_name!("."), 2, None, &indices.op_dir);
+                    self.try_functor_compound_case(clause_name!("."), 2, shared_op_desc)
+                },
             Addr::Con(_) =>
                 self.try_functor_unify_components(a1, Addr::Con(integer!(0))),
             Addr::Str(o) =>
@@ -2187,7 +2207,7 @@ impl MachineState {
             
             match self.try_from_list(r, stub.clone()) {
                 Ok(addrs) =>
-                    Ok(StringList::new(match try_char_list(addrs) {
+                    Ok(StringList::new(match self.try_char_list(addrs) {
                         Ok(string) => string,
                         Err(err) => {                            
                             return Err(self.error_form(err, stub));
@@ -2218,6 +2238,11 @@ impl MachineState {
                                     result.push(self.heap[hcp].as_addr(hcp));
                                     l = hcp + 1;
                                 },
+                                Addr::Con(Constant::String(ref s))
+                                    if self.flags.double_quotes.is_chars() => {
+                                        result.push(Addr::Con(Constant::String(s.clone())));
+                                        break;
+                                    },
                                 Addr::Con(Constant::EmptyList) =>
                                     break,
                                 Addr::HeapCell(_) | Addr::StackCell(..) =>
@@ -2229,11 +2254,13 @@ impl MachineState {
                         _ =>
                             return Err(self.error_form(MachineError::type_error(ValidType::List, a1),
                                                        caller))
-                    };
+                    }
                 }
 
                 Ok(result)
             },
+            Addr::Con(Constant::String(ref s)) if self.flags.double_quotes.is_chars() =>
+                Ok(vec![Addr::Con(Constant::String(s.clone()))]),
             Addr::HeapCell(_) | Addr::StackCell(..) =>
                 Err(self.error_form(MachineError::instantiation_error(), caller)),
             Addr::Con(Constant::EmptyList) =>
