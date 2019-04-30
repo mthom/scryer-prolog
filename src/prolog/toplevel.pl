@@ -15,6 +15,6 @@ read_and_match :-
     !.
 
 '$print_exception'(E) :-
-    write_term('error: exception thrown: ', [quoted(false)]),
+    write_term('caught: ', [quoted(false)]),
     writeq(E),
     nl.

@@ -195,11 +195,11 @@ impl HCValueOutputter for PrinterOutputter {
         PrinterOutputter { contents: String::new() }
     }
 
-    fn append(&mut self, contents: &str) {        
+    fn append(&mut self, contents: &str) {
         if requires_space(&self.contents, contents) {
             self.push_char(' ');
         }
-        
+
         self.contents += contents;
     }
 
@@ -320,7 +320,7 @@ pub fn requires_space(atom: &str, op: &str) -> bool {
     match atom.chars().last() {
         Some(ac) => op.chars().next().map(|oc| {
             if ac == '0' {
-                oc == 'b' || oc == 'x' || oc == 'o' || !non_quoted_token(op.chars())
+                oc == 'b' || oc == 'x' || oc == 'o' || oc == '\''
             } else if alpha_numeric_char!(ac) {
                 oc == '(' || alpha_numeric_char!(oc)
             } else if graphic_token_char!(ac) {
@@ -575,7 +575,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
     #[inline]
     fn append_str(&mut self, s: &str) {
         self.last_item_idx = self.outputter.len();
-        self.outputter.append(s);            
+        self.outputter.append(s);
     }
 
     fn offset_as_string(&self, addr: Addr) -> Option<String> {
@@ -795,7 +795,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     }
                 } else if !self.at_cdr("") {
                     self.append_str("[]");
-                },            
+                },
             DoubleQuotes::Atom => {
                 let borrowed_str = s.borrow();
 
@@ -805,7 +805,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
             }
         }
     }
-    
+
     fn push_list(&mut self) {
         let cell = Rc::new(Cell::new(true));
 

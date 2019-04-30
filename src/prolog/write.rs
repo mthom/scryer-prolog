@@ -6,9 +6,8 @@ use prolog::machine::machine_indices::*;
 
 use termion::input::TermRead;
 use termion::event::Key;
-use termion::raw::{RawTerminal};
 
-use std::io::{Write, stdin};
+use std::io::stdin;
 use std::fmt;
 
 impl fmt::Display for LocalCodePtr {
@@ -364,20 +363,16 @@ pub enum ContinueResult {
 }
 
 pub
-fn next_keypress(mut stdout: RawTerminal<std::io::Stdout>) -> ContinueResult
+fn next_keypress() -> ContinueResult
 {
     let stdin = stdin();
 
     for c in stdin.keys() {
         match c.unwrap() {
-            Key::Char(' ') | Key::Char(';') => {
-                write!(stdout, " ;\r\n").unwrap();
-                return ContinueResult::ContinueQuery;
-            },
-            Key::Char('.') => {
-                write!(stdout, " .\r\n").unwrap();
-                return ContinueResult::Conclude;
-            },
+            Key::Char(' ') | Key::Char(';') =>
+                return ContinueResult::ContinueQuery,
+            Key::Char('.') =>
+                return ContinueResult::Conclude,
             _ => {}
         }
     }

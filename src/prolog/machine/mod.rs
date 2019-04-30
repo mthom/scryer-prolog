@@ -465,8 +465,10 @@ impl Machine {
 
                     if !(self.machine_st.b > 0) {
                         if bindings.is_empty() {
+                            let space = if requires_space(&attr_goals, ".") { " " } else { "" };
+                            
                             if !attr_goals.is_empty() {
-                                println!("{}.", attr_goals);
+                                println!("{}{}.", attr_goals, space);
                             } else {
                                 println!("true.");
                             }
@@ -483,24 +485,24 @@ impl Machine {
 
                     if !attr_goals.is_empty() {
                         if bindings.is_empty() {
-                            let space = if requires_space(&attr_goals, ".") { " " } else { "" };
-                            write!(raw_stdout, "{}{}", attr_goals, space).unwrap();
+                            write!(raw_stdout, "{}", attr_goals).unwrap();
                         } else {
-                            let space = if requires_space(&attr_goals, ".") { " " } else { "" };
-                            write!(raw_stdout, "{}, {}{}", bindings, attr_goals, space).unwrap();
+                            write!(raw_stdout, "{}, {}", bindings, attr_goals).unwrap();
                         }
                     } else if !bindings.is_empty() {
-                        let space = if requires_space(&bindings, ".") { " " } else { "" };
-                        write!(raw_stdout, "{}{}", bindings, space).unwrap();
+                        write!(raw_stdout, "{}", bindings).unwrap();
                     }
 
                     if self.machine_st.b > 0 {
                         raw_stdout.flush().unwrap();
 
-                        let result = match next_keypress(raw_stdout) {
-                            ContinueResult::ContinueQuery =>
-                                self.continue_query(&alloc_locs, &mut heap_locs),
+                        let result = match next_keypress() {
+                            ContinueResult::ContinueQuery => {
+                                write!(raw_stdout, " ;\r\n").unwrap();
+                                self.continue_query(&alloc_locs, &mut heap_locs)
+                            },
                             ContinueResult::Conclude => {
+                                write!(raw_stdout, " ...\r\n").unwrap();
                                 self.machine_st.absorb_snapshot(snapshot);
                                 return;
                             }
@@ -531,7 +533,13 @@ impl Machine {
                         if bindings.is_empty() && attr_goals.is_empty() {
                             write!(raw_stdout, "true.\r\n").unwrap();
                         } else {
-                            write!(raw_stdout, ".\r\n").unwrap();
+                            let space = if !attr_goals.is_empty() {
+                                if requires_space(&attr_goals, ".") { " " } else { "" }
+                            } else {
+                                if requires_space(&bindings, ".") { " " } else { "" }
+                            };
+                            
+                            write!(raw_stdout, "{}.\r\n", space).unwrap();
                         }
 
                         break;

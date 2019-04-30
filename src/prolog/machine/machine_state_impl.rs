@@ -1828,7 +1828,7 @@ impl MachineState {
                             } else {
                                 self.fail = true;
                             }
-                        },
+                        }
                     _ => // 8.5.2.3 d)
                         return Err(self.error_form(MachineError::type_error(ValidType::Compound, term),
                                                    stub))
