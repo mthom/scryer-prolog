@@ -159,6 +159,7 @@ The following predicates are built-in to Scryer.
 * `atomic/1`
 * `atom_chars/2`
 * `atom_codes/2`
+* `atom_concat/3`
 * `atom_length/2`
 * `bagof/3`
 * `bb_b_put/2`
@@ -205,6 +206,7 @@ The following predicates are built-in to Scryer.
 * `nl/0`
 * `nonvar/1`
 * `number_chars/2`
+* `number_codes/2`
 * `numbervars/2`
 * `numlist/{2,3}`
 * `once/1`
@@ -221,6 +223,7 @@ The following predicates are built-in to Scryer.
 * `setup_call_cleanup/3`
 * `sort/2`
 * `string/1`
+* `sub_atom/5`
 * `subsumes_term/2`
 * `term_expansion/2`
 * `term_variables/2`
