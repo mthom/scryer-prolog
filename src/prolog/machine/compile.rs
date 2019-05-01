@@ -133,8 +133,8 @@ fn compile_decl(wam: &mut Machine, compiler: &mut ListingCompiler, decl: Declara
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     let wam_indices = &mut wam.indices;
 
-    compiler.process_decl(decl, &mut wam.code_repo, wam_indices, &mut indices, flags)?;
-
+    compiler.process_decl(decl, &mut wam.code_repo, wam_indices, &mut indices, flags)?;    
+    
     Ok(indices)
 }
 

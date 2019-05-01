@@ -58,8 +58,13 @@ impl CodeOffsets {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
             },
-            &Term::Constant(_, Constant::String(_))
-                if !self.flags.double_quotes.is_atom() => { // strings are lists in this case.
+            &Term::Constant(_, Constant::String(ref s))
+                if !self.flags.double_quotes.is_atom() && !s.is_empty() => { // strings are lists in this case.
+                    let is_initial_index = self.lists.is_empty();
+                    self.lists.push(Self::add_index(is_initial_index, index));
+                },
+            &Term::Constant(_, Constant::String(ref s))
+                if !self.flags.double_quotes.is_atom() && s.is_expandable() => {
                     let is_initial_index = self.lists.is_empty();
                     self.lists.push(Self::add_index(is_initial_index, index));
                 },
@@ -132,7 +137,7 @@ impl CodeOffsets {
             _ => IntIndex::Fail
         }
     }
-    
+
     fn switch_on_constant(con_ind: HashMap<Constant, ThirdLevelIndex>, prelude: &mut CodeDeque)
                           -> IntIndex
     {
@@ -203,7 +208,7 @@ impl CodeOffsets {
         match con_loc {
             IntIndex::External(offset) => offset + prelude_len + 1,
             IntIndex::Fail => 0,
-            IntIndex::Internal(offset) => offset, 
+            IntIndex::Internal(offset) => offset,
         }
     }
 
@@ -216,7 +221,7 @@ impl CodeOffsets {
             IntIndex::Internal(_) => prelude_len - lst_offset + 1
         }
     }
-    
+
     pub fn add_indices(self, code: &mut Code, mut code_body: Code)
     {
         if self.no_indices() {

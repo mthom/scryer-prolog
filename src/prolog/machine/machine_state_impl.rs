@@ -1496,7 +1496,8 @@ impl MachineState {
 
                 let offset = match addr {
                     Addr::HeapCell(_) | Addr::StackCell(..) | Addr::AttrVar(..) => v,
-                    Addr::Con(Constant::String(_)) if !self.flags.double_quotes.is_atom() => l,
+                    Addr::Con(Constant::String(ref s)) if !self.flags.double_quotes.is_atom() =>
+                        if s.is_empty() && !s.is_expandable() { c } else { l },
                     Addr::Con(_) => c,
                     Addr::Lis(_) => l,
                     Addr::Str(_) => s,
