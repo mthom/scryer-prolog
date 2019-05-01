@@ -127,8 +127,6 @@ impl fmt::Display for CompareTermQT {
             &CompareTermQT::GreaterThanOrEqual => write!(f, "@>="),
             &CompareTermQT::LessThan => write!(f, "@<"),
             &CompareTermQT::LessThanOrEqual => write!(f, "@<="),
-            &CompareTermQT::NotEqual => write!(f, "\\=@="),
-            &CompareTermQT::Equal => write!(f, "=@="),
         }
     }
 }

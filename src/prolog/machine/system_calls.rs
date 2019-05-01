@@ -80,7 +80,7 @@ impl MachineState {
             Addr::Lis(offset) => return CycleSearchResult::UntouchedList(offset),
             Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
             Addr::Con(Constant::String(ref s))
-                if self.flags.double_quotes.is_chars() =>
+                if !self.flags.double_quotes.is_atom() =>
                    return CycleSearchResult::String(0, s.clone()),
             _ => return CycleSearchResult::NotList
         };
@@ -105,7 +105,7 @@ impl MachineState {
             Addr::Lis(offset) => offset + 1,
             Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
             Addr::Con(Constant::String(ref s))
-                if self.flags.double_quotes.is_chars() =>
+                if !self.flags.double_quotes.is_atom() =>
                    return CycleSearchResult::String(0, s.clone()),
             _ => return CycleSearchResult::NotList
         };
@@ -158,7 +158,7 @@ impl MachineState {
                                 };
 
                             match search_result {
-                                CycleSearchResult::String(n, s) =>                                    
+                                CycleSearchResult::String(n, s) =>
                                     if max_steps == -1 {
                                         self.finalize_skip_max_list(n + s.len(),
                                                                     Addr::Con(Constant::EmptyList))
@@ -352,6 +352,52 @@ impl MachineState {
         }
     }
 
+    fn parse_number_from_string(&mut self, mut string: String, indices: &IndexStore, stub: MachineStub)
+                                -> CallResult
+    {
+        let nx  = self[temp_v!(2)].clone();
+        
+        if let Some(c) = string.chars().last() {
+            if layout_char!(c) {
+                let err = ParserError::UnexpectedChar(c);
+
+                let h = self.heap.h;
+                let err = MachineError::syntax_error(h, err);
+
+                return Err(self.error_form(err, stub));
+            }
+        }
+
+        string.push('.');
+
+        let mut stream = parsing_stream(std::io::Cursor::new(string));
+        let mut parser = Parser::new(&mut stream, indices.atom_tbl.clone(),
+                                     self.machine_flags());
+
+        match parser.read_term(composite_op!(&indices.op_dir)) {
+            Err(err) => {
+                let h = self.heap.h;
+                let err = MachineError::syntax_error(h, err);
+
+                return Err(self.error_form(err, stub));
+            },
+            Ok(Term::Constant(_, Constant::Number(n))) =>
+                self.unify(nx, Addr::Con(Constant::Number(n))),
+            Ok(Term::Constant(_, Constant::CharCode(c))) =>
+                self.unify(nx, Addr::Con(Constant::CharCode(c))),
+            _ => {
+                let err = ParserError::ParseBigInt;
+
+                let h = self.heap.h;
+                let err = MachineError::syntax_error(h, err);
+
+                return Err(self.error_form(err, stub));
+            }
+        }
+
+        Ok(())
+    }
+
     pub(super) fn system_call(&mut self,
                               ct: &SystemClauseType,
                               indices: &mut IndexStore,
@@ -509,53 +555,15 @@ impl MachineState {
 
                 self.unify(a2, Addr::Con(Constant::Number(len)));
             },
-            &SystemClauseType::CharsToNumber => {
-                let nx  = self[temp_v!(2)].clone();
+            &SystemClauseType::CharsToNumber => {                
                 let stub = MachineError::functor_stub(clause_name!("number_chars"), 2);
 
                 match self.try_from_list(temp_v!(1), stub.clone()) {
                     Err(e) => return Err(e),
                     Ok(addrs) =>
                         match self.try_char_list(addrs) {
-                            Ok(mut string) => {
-                                if let Some(c) = string.chars().last() {
-                                    if layout_char!(c) {
-                                        let err = ParserError::UnexpectedChar(c);
-
-                                        let h = self.heap.h;
-                                        let err = MachineError::syntax_error(h, err);
-
-                                        return Err(self.error_form(err, stub));
-                                    }
-                                }
-
-                                string.push('.');
-
-                                let mut stream = parsing_stream(std::io::Cursor::new(string));
-                                let mut parser = Parser::new(&mut stream, indices.atom_tbl.clone(),
-                                                             self.machine_flags());
-
-                                match parser.read_term(composite_op!(&indices.op_dir)) {
-                                    Err(err) => {
-                                        let h = self.heap.h;
-                                        let err = MachineError::syntax_error(h, err);
-
-                                        return Err(self.error_form(err, stub));
-                                    },
-                                    Ok(Term::Constant(_, Constant::Number(n))) =>
-                                        self.unify(nx, Addr::Con(Constant::Number(n))),
-                                    Ok(Term::Constant(_, Constant::CharCode(c))) =>
-                                        self.unify(nx, Addr::Con(Constant::CharCode(c))),
-                                    _ => {
-                                        let err = ParserError::ParseBigInt;
-
-                                        let h = self.heap.h;
-                                        let err = MachineError::syntax_error(h, err);
-
-                                        return Err(self.error_form(err, stub));
-                                    }
-                                }
-                            },
+                            Ok(string) =>
+                                self.parse_number_from_string(string, indices, stub)?,
                             Err(err) =>
                                 return Err(self.error_form(err, stub))
                         }
@@ -577,6 +585,39 @@ impl MachineState {
                 let char_list = Addr::HeapCell(self.heap.to_list(chars));
 
                 self.unify(char_list, chs);
+            },            
+            &SystemClauseType::NumberToCodes => {
+                let n = self[temp_v!(1)].clone();
+                let chs = self[temp_v!(2)].clone();
+
+                let string = match self.store(self.deref(n)) {
+                    Addr::Con(Constant::Number(Number::Float(OrderedFloat(n)))) =>
+                        format!("{0:<20?}", n),
+                    Addr::Con(Constant::Number(Number::Integer(n))) =>
+                        n.to_string(),
+                    _ => unreachable!()
+                };
+
+                let codes = string.trim().chars().map(|c| Addr::Con(Constant::CharCode(c as u8)));
+                let codes_list = Addr::HeapCell(self.heap.to_list(codes));
+
+                self.unify(codes_list, chs);
+            },
+            &SystemClauseType::CodesToNumber => {
+                let stub = MachineError::functor_stub(clause_name!("number_codes"), 2);
+
+                match self.try_from_list(temp_v!(1), stub.clone()) {
+                    Err(e) => return Err(e),
+                    Ok(addrs) =>
+                        match self.try_code_list(addrs) {
+                            Ok(codes) => {
+                                let string = codes.iter().map(|c| *c as char).collect();
+                                self.parse_number_from_string(string, indices, stub)?
+                            },
+                            Err(err) =>
+                                return Err(self.error_form(err, stub))
+                        }
+                }
             },
             &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
                 let p = self.cp;
@@ -1600,7 +1641,10 @@ impl MachineState {
 
                 self.unify_with_occurs_check(a1, a2);
             },
-            &SystemClauseType::UnwindStack => self.unwind_stack(),
+            &SystemClauseType::UnwindStack =>
+                self.unwind_stack(),
+            &SystemClauseType::Variant =>
+                self.fail = self.structural_eq_test(),
             &SystemClauseType::WriteTerm => {
                 let addr = self[temp_v!(1)].clone();
 

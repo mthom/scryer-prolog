@@ -59,7 +59,7 @@ impl CodeOffsets {
                 self.lists.push(Self::add_index(is_initial_index, index));
             },
             &Term::Constant(_, Constant::String(_))
-                if self.flags.double_quotes.is_chars() => { // strings are lists in this case.
+                if !self.flags.double_quotes.is_atom() => { // strings are lists in this case.
                     let is_initial_index = self.lists.is_empty();
                     self.lists.push(Self::add_index(is_initial_index, index));
                 },

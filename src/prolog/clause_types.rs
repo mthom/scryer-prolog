@@ -33,10 +33,8 @@ impl CompareNumberQT {
 pub enum CompareTermQT {
     LessThan,
     LessThanOrEqual,
-    Equal,
     GreaterThanOrEqual,
     GreaterThan,
-    NotEqual,
 }
 
 impl CompareTermQT {
@@ -46,8 +44,6 @@ impl CompareTermQT {
             CompareTermQT::LessThan => "@<",
             CompareTermQT::GreaterThanOrEqual => "@>=",
             CompareTermQT::LessThanOrEqual => "@=<",
-            CompareTermQT::NotEqual => "\\=@=",
-            CompareTermQT::Equal => "=@="
         }
     }
 }
@@ -116,8 +112,6 @@ ref_thread_local! {
         m.insert(("@<", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::LessThan)));
         m.insert(("@>=", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual)));
         m.insert(("@=<", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::LessThanOrEqual)));
-        m.insert(("\\=@=", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::NotEqual)));
-        m.insert(("=@=", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::Equal)));
         m.insert(("copy_term", 2), ClauseType::BuiltIn(BuiltInClauseType::CopyTerm));
         m.insert(("cyclic_term", 1), ClauseType::BuiltIn(BuiltInClauseType::CyclicTerm));
         m.insert(("==", 2), ClauseType::BuiltIn(BuiltInClauseType::Eq));
@@ -166,6 +160,7 @@ pub enum SystemClauseType {
     ModuleAssertDynamicPredicateToBack,
     CharCode,
     CharsToNumber,
+    CodesToNumber,
     CheckCutPoint,
     CopyToLiftedHeap,
     DeleteAttribute,
@@ -202,6 +197,7 @@ pub enum SystemClauseType {
     ModuleRetractClause,
     NoSuchPredicate,
     NumberToChars,
+    NumberToCodes,
     OpDeclaration,
     REPL(REPLCodePtr),
     ReadTerm,
@@ -233,7 +229,8 @@ pub enum SystemClauseType {
     TermVariables,
     TruncateLiftedHeapTo,
     UnifyWithOccursCheck,
-    UnwindStack,    
+    UnwindStack,
+    Variant,
     WriteTerm
 }
 
@@ -251,6 +248,7 @@ impl SystemClauseType {
             &SystemClauseType::ModuleAssertDynamicPredicateToBack => clause_name!("$module_assertz"),
             &SystemClauseType::CharCode => clause_name!("$char_code"),
             &SystemClauseType::CharsToNumber => clause_name!("$chars_to_number"),
+            &SystemClauseType::CodesToNumber => clause_name!("$codes_to_number"),
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
             &SystemClauseType::REPL(REPLCodePtr::SubmitQueryAndPrintResults) =>
@@ -291,6 +289,7 @@ impl SystemClauseType {
             &SystemClauseType::ModuleOf => clause_name!("$module_of"),
             &SystemClauseType::NoSuchPredicate => clause_name!("$no_such_predicate"),
             &SystemClauseType::NumberToChars => clause_name!("$number_to_chars"),
+            &SystemClauseType::NumberToCodes => clause_name!("$number_to_codes"),
             &SystemClauseType::RedoAttrVarBindings => clause_name!("$redo_attr_var_bindings"),
             &SystemClauseType::RemoveCallPolicyCheck => clause_name!("$remove_call_policy_check"),
             &SystemClauseType::RemoveInferenceCounter => clause_name!("$remove_inference_counter"),
@@ -321,6 +320,7 @@ impl SystemClauseType {
             &SystemClauseType::TruncateLiftedHeapTo => clause_name!("$truncate_lh_to"),
             &SystemClauseType::UnifyWithOccursCheck => clause_name!("$unify_with_occurs_check"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
+            &SystemClauseType::Variant => clause_name!("$variant"),
             &SystemClauseType::WriteTerm => clause_name!("$write_term"),
         }
     }
@@ -338,6 +338,7 @@ impl SystemClauseType {
             ("$assertz", 4) => Some(SystemClauseType::AssertDynamicPredicateToBack),
             ("$char_code", 2) => Some(SystemClauseType::CharCode),
             ("$chars_to_number", 2) => Some(SystemClauseType::CharsToNumber),
+            ("$codes_to_number", 2) => Some(SystemClauseType::CodesToNumber),
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
             ("$compile_batch", 0) => Some(SystemClauseType::REPL(REPLCodePtr::CompileBatch)),
             ("$copy_to_lh", 2) => Some(SystemClauseType::CopyToLiftedHeap),
@@ -374,6 +375,7 @@ impl SystemClauseType {
             ("$module_head_is_dynamic", 2) => Some(SystemClauseType::ModuleHeadIsDynamic),
             ("$no_such_predicate", 1) => Some(SystemClauseType::NoSuchPredicate),
             ("$number_to_chars", 2) => Some(SystemClauseType::NumberToChars),
+            ("$number_to_codes", 2) => Some(SystemClauseType::NumberToCodes),
             ("$op", 3) => Some(SystemClauseType::OpDeclaration),
             ("$redo_attr_var_bindings", 0) => Some(SystemClauseType::RedoAttrVarBindings),
             ("$remove_call_policy_check", 1) => Some(SystemClauseType::RemoveCallPolicyCheck),
@@ -407,6 +409,7 @@ impl SystemClauseType {
             ("$truncate_lh_to", 1) => Some(SystemClauseType::TruncateLiftedHeapTo),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             ("$unify_with_occurs_check", 2) => Some(SystemClauseType::UnifyWithOccursCheck),
+            ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$write_term", 4) => Some(SystemClauseType::WriteTerm),
             _ => None
         }

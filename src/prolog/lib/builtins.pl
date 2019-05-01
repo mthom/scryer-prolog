@@ -10,16 +10,16 @@
 	(is)/2, (xor)/2, (div)/2, (//)/2, (rdiv)/2, (<<)/2, (>>)/2,
 	(mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2, (>=)/2,
 	(=<)/2, (',')/2, (->)/2, (;)/2, (=..)/2, (==)/2, (\==)/2,
-	(@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (=@=)/2, (\=@=)/2, (:)/2,
-	abolish/1, asserta/1, assertz/1, atom_chars/2, atom_codes/2,
+	(@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (:)/2, abolish/1, asserta/1,
+	assertz/1, atom_chars/2, atom_codes/2, atom_concat/3,
 	atom_length/2, bagof/3, catch/3, char_code/2, clause/2,
 	current_op/3, current_predicate/1, current_prolog_flag/2,
 	expand_goal/2, expand_term/2, false/0, findall/3, findall/4,
-	get_char/1, halt/0, number_chars/2, once/1, op/3, read_term/2,
-	repeat/0, retract/1, set_prolog_flag/2, setof/3,
-	subsumes_term/2, term_variables/2, throw/1, true/0,
-	unify_with_occurs_check/2, write/1, write_canonical/1,
-	write_term/2, writeq/1]).
+	get_char/1, halt/0, number_chars/2, number_codes/2, once/1,
+	op/3, read_term/2, repeat/0, retract/1, set_prolog_flag/2,
+	setof/3, sub_atom/5, subsumes_term/2, term_variables/2,
+	throw/1, true/0, unify_with_occurs_check/2, write/1,
+	write_canonical/1, write_term/2, writeq/1]).
 
 % module resolution operator.
 :- op(600, xfy, :).
@@ -45,7 +45,7 @@ expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResu
 :- op(700, xfx, [>, <, =\=, =:=, >=, =<]).
 
 % term comparison.
-:- op(700, xfx, [==, \==, @=<, @>=, @<, @>, =@=, \=@=]).
+:- op(700, xfx, [==, \==, @=<, @>=, @<, @>]).
 
 % the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
 max_arity(63).
@@ -356,7 +356,7 @@ set_difference([], _, []) :- !.
 set_difference(Xs, [], Xs).
 
 group_by_variant([V2-S2 | Pairs], V1-S1, [S2 | Solutions], Pairs0) :-
-    V1 =@= V2, !, V1 = V2, group_by_variant(Pairs, V2-S2, Solutions, Pairs0).
+    non_iso:variant(V1, V2), !, V1 = V2, group_by_variant(Pairs, V2-S2, Solutions, Pairs0).
 group_by_variant(Pairs, _, [], Pairs).
 
 group_by_variants([V-S|Pairs], [V-Solution|Solutions]) :-
@@ -762,6 +762,48 @@ atom_codes(Atom, List) :-
     ;  throw(error(type_error(atom, Atom), atom_codes/2))
     ).
 
+atom_concat(Atom_1, Atom_2, Atom_12) :-
+    error:can_be(atom, Atom_1),
+    error:can_be(atom, Atom_2),
+    error:can_be(atom, Atom_12),
+    (  var(Atom_1) ->
+       (  var(Atom_12) -> throw(error(instantiation_error, atom_concat/3))
+       ;  atom_chars(Atom_12, Atom_12_Chars),
+	  lists:append(BeforeChars, AfterChars, Atom_12_Chars),
+	  atom_chars(Atom_1, BeforeChars),
+	  atom_chars(Atom_2, AfterChars)
+       )
+    ;  var(Atom_2) ->
+       (  var(Atom_12) -> throw(error(instantiation_error, atom_concat/3))
+       ;  atom_chars(Atom_1, Atom_1_Chars),
+	  atom_chars(Atom_12, Atom_12_Chars),
+	  lists:append(Atom_1_Chars, Atom_2_Chars, Atom_12_Chars),
+	  atom_chars(Atom_2, Atom_2_Chars)
+       )
+    ;  atom_chars(Atom_1, Atom_1_Chars),
+       atom_chars(Atom_2, Atom_2_Chars),
+       lists:append(Atom_1_Chars, Atom_2_Chars, Atom_12_Chars),
+       atom_chars(Atom_12, Atom_12_Chars)
+    ).
+
+sub_atom(Atom, Before, Length, After, Sub_atom) :-
+    error:must_be(atom, Atom),
+    error:can_be(atom, Sub_atom),
+    error:can_be(integer, Before),
+    error:can_be(integer, Length),
+    error:can_be(integer, After),
+    (  integer(Before), Before < 0 -> throw(error(domain_error(not_less_than_zero, Before), sub_atom/5))
+    ;  integer(Length), Length < 0 -> throw(error(domain_error(not_less_than_zero, Length), sub_atom/5))
+    ;  integer(After), After < 0 -> throw(error(domain_error(not_less_than_zero, After), sub_atom/5))
+    ;  atom_chars(Atom, AtomChars),
+       lists:append(BeforeChars, LengthAndAfterChars, AtomChars),
+       lists:append(LengthChars, AfterChars, LengthAndAfterChars),
+       '$skip_max_list'(Before, -1, BeforeChars, []),
+       '$skip_max_list'(Length, -1, LengthChars, []),
+       '$skip_max_list'(After, -1, AfterChars, []),
+       atom_chars(Sub_atom, LengthChars)
+    ).
+
 char_code(Char, Code) :-
     (  var(Char) ->
        (  var(Code) -> throw(error(instantiation_error, char_code/2))
@@ -837,6 +879,21 @@ number_chars(N, Chs) :-
       ,  chars_or_vars(Chs, number_chars/2)
       ),
       '$number_to_chars'(N, Chsx),
+      Chsx = Chs
+    ).
+
+number_codes(N, Chs) :-
+   (  ground(Chs)
+   -> can_be_number(N, number_codes/2),
+      can_be_list(Chs, number_codes/2),
+      '$codes_to_number'(Chs, Nx),
+      Nx = N
+   ;  must_be_number(N, number_codes/2),
+      (  var(Chs) -> true
+      ;  can_be_list(Chs, number_codes/2)
+      ,  codes_or_vars(Chs, number_codes/2)
+      ),
+      '$number_to_codes'(N, Chsx),
       Chsx = Chs
     ).
 

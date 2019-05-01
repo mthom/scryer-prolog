@@ -5,7 +5,7 @@
 
 :- module(non_iso, [bb_b_put/2, bb_get/2, bb_put/2, call_cleanup/2,
 		    call_with_inference_limit/3, forall/2,
-		    setup_call_cleanup/3]).
+		    setup_call_cleanup/3, variant/2]).
 
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
@@ -110,3 +110,5 @@ call_with_inference_limit(_, _, R, Bb, B) :-
     ; '$remove_call_policy_check'(B), '$fail' ),
     '$erase_ball',
     '$call_with_default_policy'(handle_ile(B, Ball, R)).
+
+variant(X, Y) :- '$variant'(X, Y).

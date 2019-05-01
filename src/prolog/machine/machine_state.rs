@@ -11,7 +11,7 @@ use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::modules::*;
 use prolog::machine::or_stack::*;
-use prolog::num::{BigInt, BigUint, Zero, One};
+use prolog::num::{BigInt, BigUint, One, ToPrimitive, Zero};
 use prolog::read::PrologStream;
 
 use downcast::Any;
@@ -244,7 +244,7 @@ impl MachineState {
     {
         let mut chars = String::new();
         let mut iter = addrs.iter();
-        
+
         while let Some(addr) = iter.next() {
             match addr {
                 &Addr::Con(Constant::String(ref s))
@@ -269,6 +269,38 @@ impl MachineState {
         Ok(chars)
     }
 
+    pub(super)
+    fn try_code_list(&self, addrs: Vec<Addr>) -> Result<Vec<u8>, MachineError>
+    {
+        let mut codes = vec![];
+        let mut iter  = addrs.iter();
+
+        while let Some(addr) = iter.next() {
+            match addr {
+                &Addr::Con(Constant::String(ref s))
+                    if self.flags.double_quotes.is_codes() => {
+                        codes.extend(s.borrow().chars().map(|c| c as u8));
+
+                        if iter.next().is_some() {
+                            return Err(MachineError::representation_error(RepFlag::CharacterCode));
+                        }
+                    },
+                &Addr::Con(Constant::CharCode(c)) =>
+                    codes.push(c),
+                &Addr::Con(Constant::Number(Number::Integer(ref n))) => 
+                    if let Some(c) = n.to_u8() {
+                        codes.push(c);
+                    } else {
+                        return Err(MachineError::representation_error(RepFlag::CharacterCode));
+                    },
+                _ =>
+                    return Err(MachineError::representation_error(RepFlag::CharacterCode))
+            }
+        }
+
+        Ok(codes)
+    }
+    
     fn call_at_index(&mut self, arity: usize, p: usize)
     {
         self.cp.assign_if_local(self.p.clone() + 1);
@@ -596,14 +628,7 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::CompareTerm(qt) => {
-                match qt {
-                    CompareTermQT::Equal =>
-                        machine_st.fail = machine_st.structural_eq_test(),
-                    CompareTermQT::NotEqual =>
-                        machine_st.fail = !machine_st.structural_eq_test(),
-                    _ => machine_st.compare_term(qt)
-                };
-
+                machine_st.compare_term(qt);
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::CyclicTerm => {

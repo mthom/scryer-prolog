@@ -141,8 +141,6 @@ The following predicates are built-in to Scryer.
 * `(@>=)/2`
 * `(@=<)/2`
 * `(@<)/2`
-* `(=@=)/2`
-* `(\=@=)/2`
 * `(\+)/1`
 * `(==)/2`
 * `(\==)/2`
@@ -232,6 +230,7 @@ The following predicates are built-in to Scryer.
 * `user:goal_expansion/2`
 * `user:term_expansion/2`
 * `var/1`
+* `variant/2`
 * `write/1`
 * `write_canonical/1`
 * `writeq/1`

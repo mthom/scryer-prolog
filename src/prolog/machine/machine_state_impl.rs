@@ -1815,11 +1815,15 @@ impl MachineState {
                             self.fail = true;
                         },
                     Addr::Con(Constant::String(ref s))
-                        if self.flags.double_quotes.is_chars() && !s.is_empty() => {
+                        if !self.flags.double_quotes.is_atom() && !s.is_empty() => {
                             if n == 1 || n == 2 {
                                 let a3  = self[temp_v!(3)].clone();
                                 let h_a = if n == 1 {
-                                    Addr::Con(Constant::Char(s.head().unwrap()))
+                                    if self.flags.double_quotes.is_chars() {
+                                        Addr::Con(Constant::Char(s.head().unwrap()))
+                                    } else {
+                                        Addr::Con(Constant::CharCode(s.head().unwrap() as u8))
+                                    }
                                 } else {
                                     Addr::Con(Constant::String(s.tail()))
                                 };
@@ -2228,7 +2232,7 @@ impl MachineState {
             Addr::DBRef(_) =>
                 self.fail = true,
             Addr::Con(Constant::String(ref s))
-                if self.flags.double_quotes.is_chars() && !s.is_empty() => {
+                if !self.flags.double_quotes.is_atom() && !s.is_empty() => {
                     let shared_op_desc = fetch_op_spec(clause_name!("."), 2, None, &indices.op_dir);
                     self.try_functor_compound_case(clause_name!("."), 2, shared_op_desc)
                 },
@@ -2362,7 +2366,7 @@ impl MachineState {
                                     l = hcp + 1;
                                 },
                                 Addr::Con(Constant::String(ref s))
-                                    if self.flags.double_quotes.is_chars() => {
+                                    if !self.flags.double_quotes.is_atom() => {
                                         result.push(Addr::Con(Constant::String(s.clone())));
                                         break;
                                     },
@@ -2382,7 +2386,7 @@ impl MachineState {
 
                 Ok(result)
             },
-            Addr::Con(Constant::String(ref s)) if self.flags.double_quotes.is_chars() =>
+            Addr::Con(Constant::String(ref s)) if !self.flags.double_quotes.is_atom() =>
                 Ok(vec![Addr::Con(Constant::String(s.clone()))]),
             Addr::HeapCell(_) | Addr::StackCell(..) =>
                 Err(self.error_form(MachineError::instantiation_error(), caller)),

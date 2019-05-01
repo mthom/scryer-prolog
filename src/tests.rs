@@ -1620,14 +1620,16 @@ fn test_queries_on_builtins()
     assert_prolog_success!(&mut wam, "1.0 @=< 1.");
     assert_prolog_success!(&mut wam, "1 @=< 1.0."); //TODO: currently this succeeds. make it fail.
 
-    assert_prolog_success!(&mut wam, "X =@= Y.");
-    assert_prolog_failure!(&mut wam, "f(X) =@= f(x).");
-    assert_prolog_failure!(&mut wam, "X \\=@= X.");
-    assert_prolog_success!(&mut wam, "f(x) =@= f(x).");
-    assert_prolog_failure!(&mut wam, "[X,Y,Z] =@= [V,W,V].");
-    assert_prolog_success!(&mut wam, "[X,Y,Z] =@= [V,W,Z].");
-    assert_prolog_success!(&mut wam, "[X,Y,X] =@= [V,W,V].");
-    assert_prolog_success!(&mut wam, "g(B) = B,g(A) = A,A =@= B.");
+    submit(&mut wam, ":- use_module(library(non_iso)).");
+    
+    assert_prolog_success!(&mut wam, "variant(X, Y).");
+    assert_prolog_failure!(&mut wam, "variant(f(X), f(x)).");
+    assert_prolog_success!(&mut wam, "variant(X, X).");
+    assert_prolog_success!(&mut wam, "variant(f(x), f(x)).");
+    assert_prolog_failure!(&mut wam, "variant([X,Y,Z], [V,W,V]).");
+    assert_prolog_success!(&mut wam, "variant([X,Y,Z], [V,W,Z]).");
+    assert_prolog_success!(&mut wam, "variant([X,Y,X], [V,W,V]).");
+    assert_prolog_success!(&mut wam, "g(B) = B, g(A) = A, variant(A, B).");
 
     assert_prolog_success!(&mut wam, "keysort([1-1,1-1],Sorted).",
                            [["Sorted = [1-1,1-1]"]]);
@@ -2193,15 +2195,17 @@ fn test_queries_on_string_lists()
 {
     let mut wam = Machine::new(readline::input_stream());
 
+    submit(&mut wam, ":- use_module(library(non_iso)).");
+    
     // double_quotes is chars by default.
-    assert_prolog_success!(&mut wam, "\"\" =@= [].");
+    assert_prolog_success!(&mut wam, "variant(\"\", []).");
     assert_prolog_failure!(&mut wam, "\"\" == [].");
     assert_prolog_failure!(&mut wam, "\"abc\" == [].");
-    assert_prolog_success!(&mut wam, "\"abc\" =@= ['a', 'b', 'c'].");
-    assert_prolog_success!(&mut wam, "\"abc\" =@= ['a', 'b', c].");
-    assert_prolog_success!(&mut wam, "\"abc\" =@= ['a', b, 'c'].");
-    assert_prolog_success!(&mut wam, "\"abc\" =@= [a, 'b', 'c'].");
-    assert_prolog_success!(&mut wam, "\"abc\" =@= [a, 'b', c].");
+    assert_prolog_success!(&mut wam, "variant(\"abc\", ['a', 'b', 'c']).");
+    assert_prolog_success!(&mut wam, "variant(\"abc\", ['a', 'b', c]).");
+    assert_prolog_success!(&mut wam, "variant(\"abc\", ['a', b, 'c']).");
+    assert_prolog_success!(&mut wam, "variant(\"abc\", [a, 'b', 'c']).");
+    assert_prolog_success!(&mut wam, "variant(\"abc\", [a, 'b', c]).");
     assert_prolog_failure!(&mut wam, "\"abc\" == ['a', 'b', 'c'].");
     assert_prolog_failure!(&mut wam, "\"abc\" == ['a', 'b', c].");
     assert_prolog_failure!(&mut wam, "\"abc\" == ['a', b, 'c'].");
@@ -2209,21 +2213,21 @@ fn test_queries_on_string_lists()
     assert_prolog_failure!(&mut wam, "\"abc\" == [a, 'b', c].");
     assert_prolog_failure!(&mut wam, "\"koen\" == [k, o, e, n].");
     assert_prolog_success!(&mut wam, "\"koen\" = [k, o, e, n].");
-    assert_prolog_success!(&mut wam, "\"koen\" =@= [k, o, e, n].");
-    assert_prolog_success!(&mut wam, "\"koen\" =@= \"koen\".");
+    assert_prolog_success!(&mut wam, "variant(\"koen\", [k, o, e, n]).");
+    assert_prolog_success!(&mut wam, "variant(\"koen\", \"koen\").");
     assert_prolog_success!(&mut wam, "\"koen\" = [k, o | X].",
                            [["X = [e,n]"]]);
     assert_prolog_success!(&mut wam, "\"koen\" = [k, o | X], X = \"en\".",
                            [["X = [e,n]"]]);
     assert_prolog_failure!(&mut wam, "\"koen\" = [k, o | X], X == \"en\".");
-    assert_prolog_success!(&mut wam, "\"koen\" = [k, o | X], X =@= \"en\".",
+    assert_prolog_success!(&mut wam, "\"koen\" = [k, o | X], variant(X, \"en\").",
                            [["X = [e,n]"]]);
 
     assert_prolog_failure!(&mut wam, "X = \"abc\", Y = \"abc\", X == Y.");
     assert_prolog_failure!(&mut wam, "partial_string(\"abc\", X), partial_string(\"abc\", Y), X == Y.");
 
-    assert_prolog_success!(&mut wam, "X = \"abc\", Y = \"abc\", X =@= Y.");
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), partial_string(\"abc\", Y), X =@= Y.");
+    assert_prolog_success!(&mut wam, "X = \"abc\", Y = \"abc\", variant(X, Y).");
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), partial_string(\"abc\", Y), variant(X, Y).");
 
     submit(&mut wam, "matcher([a,b,c|X], ['d','e','f'|X]).");
 
@@ -2236,9 +2240,9 @@ fn test_queries_on_string_lists()
 
     submit(&mut wam, "matcher([a,b,c|X], X).");
 
-    assert_prolog_success!(&mut wam, "matcher(\"abcdef\", X), X = [d,e,f|Y], Y =@= [], X = \"def\".",
+    assert_prolog_success!(&mut wam, "matcher(\"abcdef\", X), X = [d,e,f|Y], variant(Y, []), X = \"def\".",
                            [["X = [d,e,f]", "Y = []"]]);
-    assert_prolog_success!(&mut wam, "matcher(\"abcdef\", X), X = [d,e,f|Y], Y =@= [], X =@= \"def\".",
+    assert_prolog_success!(&mut wam, "matcher(\"abcdef\", X), X = [d,e,f|Y], variant(Y, []), variant(X, \"def\").",
                            [["X = [d,e,f]", "Y = []"]]);
     assert_prolog_success!(&mut wam, "X = ['a', 'b', 'c' | \"def\"].",
                            [["X = [a,b,c,d,e,f]"]]);
@@ -2301,14 +2305,14 @@ fn test_queries_on_string_lists()
                                          is_partial_string(Y),is_partial_string(G),G = \"ghi\".",
                            [["X = [a,b,c,d,e,f,g,h,i]","Y = [d,e,f,g,h,i]","G = [g,h,i]"]]);
     assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),partial_string(\"ababc\",Y),Y = [a,b|Z],
-                                         X =@= Z.",
+                                      variant(X, Z).",
                            [["X = [a,b,c|_]","Y = [a,b,a,b,c|_]","Z = [a,b,c|_]"]]);
     assert_prolog_failure!(&mut wam, "partial_string(\"abc\",X),partial_string(\"ababc\",Y),Y = [a,b|Z],
-                                         X == Z.");
+                                      X == Z.");
 
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X),X @> \"abc\".");
-    assert_prolog_failure!(&mut wam, "partial_string(\"abc\",X),X \\=@= \"abc\".");
-    assert_prolog_failure!(&mut wam, "partial_string(\"abc\",X),X @< \"abc\".");
+    assert_prolog_success!(&mut wam, "partial_string(\"abc\",X), X @> \"abc\".");
+    assert_prolog_failure!(&mut wam, "partial_string(\"abc\",X), \\+ variant(X, \"abc\").");
+    assert_prolog_failure!(&mut wam, "partial_string(\"abc\",X), X @< \"abc\".");
 
     assert_prolog_success!(&mut wam, "partial_string(\"ab\",X),matcher(X,Y),Y = [a,b|V],
                                          matcher(Y,Z),is_partial_string(Y).",
