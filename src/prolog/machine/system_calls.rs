@@ -18,7 +18,7 @@ use prolog::read::{PrologStream, readline};
 
 use ref_thread_local::RefThreadLocal;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{stdout, Write};
 use std::iter::once;
 use std::mem;
@@ -356,7 +356,7 @@ impl MachineState {
                                 -> CallResult
     {
         let nx  = self[temp_v!(2)].clone();
-        
+
         if let Some(c) = string.chars().last() {
             if layout_char!(c) {
                 let err = ParserError::UnexpectedChar(c);
@@ -555,7 +555,7 @@ impl MachineState {
 
                 self.unify(a2, Addr::Con(Constant::Number(len)));
             },
-            &SystemClauseType::CharsToNumber => {                
+            &SystemClauseType::CharsToNumber => {
                 let stub = MachineError::functor_stub(clause_name!("number_chars"), 2);
 
                 match self.try_from_list(temp_v!(1), stub.clone()) {
@@ -585,7 +585,7 @@ impl MachineState {
                 let char_list = Addr::HeapCell(self.heap.to_list(chars));
 
                 self.unify(char_list, chs);
-            },            
+            },
             &SystemClauseType::NumberToCodes => {
                 let n = self[temp_v!(1)].clone();
                 let chs = self[temp_v!(2)].clone();
@@ -1664,6 +1664,47 @@ impl MachineState {
 
                 if let &Addr::Con(Constant::Atom(ref name, ..)) = &quoted {
                     printer.quoted = name.as_str() == "true";
+                }
+
+                let stub = MachineError::functor_stub(clause_name!("write_term"), 2);
+
+                match self.try_from_list(temp_v!(5), stub.clone()) {
+                    Ok(addrs) => {
+                        let mut var_names: HashMap<Addr, String> = HashMap::new();
+
+                        for addr in addrs {
+                            match addr {
+                                Addr::Str(s) =>
+                                    match &self.heap[s] {
+                                        &HeapCellValue::NamedStr(2, ref name, _)
+                                            if name.as_str() == "=" => {
+                                                let atom = self.heap[s+1].as_addr(s+1);
+                                                let var  = self.heap[s+2].as_addr(s+2);
+
+                                                let atom = match self.store(self.deref(atom)) {
+                                                    Addr::Con(Constant::Atom(atom, _)) => atom.to_string(),
+                                                    Addr::Con(Constant::Char(c)) => c.to_string(),
+                                                    _ => unreachable!()
+                                                };
+
+                                                let var = self.store(self.deref(var));
+
+                                                if var_names.contains_key(&var) {
+                                                    continue;
+                                                }
+                                                
+                                                var_names.insert(var, atom);
+                                            },
+                                        _ => unreachable!()
+                                    },
+                                _ => unreachable!()
+                            }
+                        }
+
+                        printer.var_names = var_names;
+                    },
+                    Err(err) =>
+                        return Err(err)
                 }
 
                 let mut output  = printer.print(addr);

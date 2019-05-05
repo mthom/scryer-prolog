@@ -289,13 +289,13 @@ impl<'a, R: Read> TermStream<'a, R> {
 
 impl MachineState {
     pub(super)
-    fn print_with_locs(&self, addr: Addr, op_dir: &OpDir, var_dict: &HeapVarDict) -> PrinterOutputter
+    fn print_with_locs(&self, addr: Addr, op_dir: &OpDir) -> PrinterOutputter
     {
         let output = PrinterOutputter::new();
-        let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output, var_dict);
+        let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);
         let mut max_var_length = 0;
 
-        for var in var_dict.keys() {
+        for var in self.heap_locs.keys() {
             max_var_length = std::cmp::max(var.len(), max_var_length);
         }
 
@@ -337,8 +337,10 @@ impl MachineState {
             self.reset();
             None
         } else {
-            let &TermWriteResult { heap_loc: _, ref var_dict } = &term_write_result;
-            let output = self.print_with_locs(Addr::HeapCell(h), &indices.op_dir, var_dict);
+            let TermWriteResult { var_dict, .. } = term_write_result;
+            
+            self.heap_locs = var_dict;
+            let output = self.print_with_locs(Addr::HeapCell(h), &indices.op_dir);
 
             self.reset();
             Some(output.result())

@@ -85,12 +85,12 @@ impl MachineState {
         attr_vars.into_iter()
     }
 
-    fn populate_project_attr_lists(&mut self, var_dict: &HeapVarDict) -> (Addr, Addr)
+    fn populate_project_attr_lists(&mut self) -> (Addr, Addr)
     {
         let mut query_vars = HashSet::new();
         let attr_vars = self.gather_attr_vars_created_since(0);
 
-        for (_, addr) in var_dict {
+        for (_, addr) in self.heap_locs.iter() {
             let iter = self.acyclic_pre_order_iter(addr.clone());
 
             for value in iter {
@@ -140,7 +140,7 @@ impl MachineState {
         self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
     }
 
-    fn print_attribute_goals_string(&mut self, op_dir: &OpDir, var_dict: &HeapVarDict) -> String
+    fn print_attribute_goals_string(&mut self, op_dir: &OpDir) -> String
     {
         let mut attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
 
@@ -154,7 +154,7 @@ impl MachineState {
         let mut output = PrinterOutputter::new();
 
         for goal_addr in attr_goals {
-            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output, var_dict);
+            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);
             printer.see_all_locs();
 
             printer.numbervars = false;
@@ -174,10 +174,10 @@ impl MachineState {
 
 impl Machine {
     pub
-    fn attribute_goals(&mut self, var_dict: &HeapVarDict) -> String
+    fn attribute_goals(&mut self) -> String
     {
         let p = self.machine_st.attr_var_init.project_attrs_loc;
-        let (query_vars, attr_vars) = self.machine_st.populate_project_attr_lists(var_dict);
+        let (query_vars, attr_vars) = self.machine_st.populate_project_attr_lists();
 
         self.machine_st.allocate(0);
 
@@ -188,6 +188,6 @@ impl Machine {
         self.machine_st.query_stepper(&mut self.indices, &mut self.policies, &mut self.code_repo,
                                       &mut readline::input_stream());
 
-        self.machine_st.print_attribute_goals_string(&self.indices.op_dir, var_dict)
+        self.machine_st.print_attribute_goals_string(&self.indices.op_dir)
     }
 }

@@ -391,7 +391,7 @@ pub enum SessionError {
 pub enum EvalSession {
     EntrySuccess,
     Error(SessionError),
-    InitialQuerySuccess(AllocVarDict, HeapVarDict),
+    InitialQuerySuccess(AllocVarDict),
     QueryFailure,
     SubsequentQuerySuccess,
 }

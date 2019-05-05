@@ -217,7 +217,7 @@ impl Machine {
 
     pub fn run_toplevel(&mut self) {
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
-        self.run_query(&AllocVarDict::new(), &mut HeapVarDict::new());
+        self.run_query(&AllocVarDict::new());
     }
 
     pub fn new(prolog_stream: PrologStream) -> Self {
@@ -316,41 +316,13 @@ impl Machine {
 
     pub fn submit_query(&mut self, code: Code, alloc_locs: AllocVarDict) -> EvalSession
     {
-        let mut heap_locs = HeapVarDict::new();
-
         self.code_repo.cached_query = code;
-        self.run_query(&alloc_locs, &mut heap_locs);
+        self.run_query(&alloc_locs);
 
         if self.machine_st.fail {
             EvalSession::QueryFailure
         } else {
-            EvalSession::InitialQuerySuccess(alloc_locs, heap_locs)
-        }
-    }
-
-    fn record_var_places(&self, chunk_num: usize, alloc_locs: &AllocVarDict,
-                         heap_locs: &mut HeapVarDict)
-    {
-        for (var, var_data) in alloc_locs {
-            match var_data {
-                &VarData::Perm(p) if p > 0 =>
-                    if !heap_locs.contains_key(var) {
-                        let e = self.machine_st.e;
-                        let r = var_data.as_reg_type().reg_num();
-                        let addr = self.machine_st.and_stack[e][r].clone();
-
-                        heap_locs.insert(var.clone(), addr);
-                    },
-                &VarData::Temp(cn, _, _) if cn == chunk_num => {
-                    let r = var_data.as_reg_type();
-
-                    if r.reg_num() != 0 {
-                        let addr = self.machine_st[r].clone();
-                        heap_locs.insert(var.clone(), addr);
-                    }
-                },
-                _ => {}
-            }
+            EvalSession::InitialQuerySuccess(alloc_locs)
         }
     }
 
@@ -413,8 +385,9 @@ impl Machine {
                             };
                         }
 
-                        let term_output = self.machine_st.print_query(term, &self.indices.op_dir,
-                                                                      &var_dict);
+                        self.machine_st.heap_locs = var_dict;
+                        let term_output = self.machine_st.print_query(term, &self.indices.op_dir);
+                        
                         term_output.result()
                     },
                     Err(err_stub) => {
@@ -454,14 +427,14 @@ impl Machine {
 
     fn handle_eval_session(&mut self, result: EvalSession, snapshot: MachineState) {
         match result {
-            EvalSession::InitialQuerySuccess(alloc_locs, mut heap_locs) =>
+            EvalSession::InitialQuerySuccess(alloc_locs) =>
                 loop {
                     let bindings = {
                         let mut output = PrinterOutputter::new();
-                        self.toplevel_heap_view(&heap_locs, output).result()
+                        self.toplevel_heap_view(output).result()
                     };
 
-                    let attr_goals = self.attribute_goals(&heap_locs);
+                    let attr_goals = self.attribute_goals();
 
                     if !(self.machine_st.b > 0) {
                         if bindings.is_empty() {
@@ -499,7 +472,7 @@ impl Machine {
                         let result = match next_keypress() {
                             ContinueResult::ContinueQuery => {
                                 write!(raw_stdout, " ;\r\n").unwrap();
-                                self.continue_query(&alloc_locs, &mut heap_locs)
+                                self.continue_query(&alloc_locs)
                             },
                             ContinueResult::Conclude => {
                                 write!(raw_stdout, " ...\r\n").unwrap();
@@ -563,7 +536,7 @@ impl Machine {
     }
 
     pub(super)
-    fn run_query(&mut self, alloc_locs: &AllocVarDict, heap_locs: &mut HeapVarDict)
+    fn run_query(&mut self, alloc_locs: &AllocVarDict)
     {
         let end_ptr = top_level_code_ptr!(0, self.code_repo.size_of_cached_query());
 
@@ -571,7 +544,7 @@ impl Machine {
             if let CodePtr::Local(LocalCodePtr::TopLevel(mut cn, p)) = self.machine_st.p {
                 match &self.code_repo[LocalCodePtr::TopLevel(cn, p)] {
                     &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
-                        self.record_var_places(cn, alloc_locs, heap_locs);
+                        self.machine_st.record_var_places(cn, alloc_locs);
                         cn += 1;
                     },
                     _ => {}
@@ -595,8 +568,8 @@ impl Machine {
                     self.dynamic_transaction(trans_type, p);
 
                     if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                        if heap_locs.is_empty() {
-                            self.record_var_places(0, alloc_locs, heap_locs);
+                        if self.machine_st.heap_locs.is_empty() {
+                            self.machine_st.record_var_places(0, alloc_locs);
                         }
 
                         self.code_repo.cached_query = cached_query;
@@ -606,8 +579,8 @@ impl Machine {
                     self.code_repo.cached_query = cached_query;
                 },
                 _ => {
-                    if heap_locs.is_empty() {
-                        self.record_var_places(0, alloc_locs, heap_locs);
+                    if self.machine_st.heap_locs.is_empty() {
+                        self.machine_st.record_var_places(0, alloc_locs);
                     }
 
                     break;
@@ -616,7 +589,7 @@ impl Machine {
         }
     }
 
-    pub fn continue_query(&mut self, alloc_l: &AllocVarDict, heap_l: &mut HeapVarDict) -> EvalSession
+    pub fn continue_query(&mut self, alloc_locs: &AllocVarDict) -> EvalSession
     {
         if !self.or_stack_is_empty() {
             let b = self.machine_st.b - 1;
@@ -627,7 +600,7 @@ impl Machine {
                 return EvalSession::QueryFailure;
             }
 
-            self.run_query(alloc_l, heap_l);
+            self.run_query(alloc_locs);
 
             if self.machine_st.fail {
                 EvalSession::QueryFailure
@@ -639,15 +612,15 @@ impl Machine {
         }
     }
 
-    pub fn toplevel_heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter) -> Outputter
+    pub fn toplevel_heap_view<Outputter>(&self, mut output: Outputter) -> Outputter
        where Outputter: HCValueOutputter
     {
-        let mut sorted_vars: Vec<_> = var_dir.iter().collect();
+        let mut sorted_vars: Vec<_> = self.machine_st.heap_locs.iter().collect();
         sorted_vars.sort_by_key(|ref v| v.0);
 
         for (var, addr) in sorted_vars {
             let addr = self.machine_st.store(self.machine_st.deref(addr.clone()));
-            output = self.machine_st.print_var_eq(var.clone(), addr, &self.indices.op_dir, var_dir,
+            output = self.machine_st.print_var_eq(var.clone(), addr, &self.indices.op_dir,
                                                   output);
         }
 
@@ -655,16 +628,15 @@ impl Machine {
     }
 
     #[cfg(test)]
-    pub fn test_heap_view<Outputter>(&self, var_dir: &HeapVarDict, mut output: Outputter)
-                                     -> Outputter
+    pub fn test_heap_view<Outputter>(&self, mut output: Outputter) -> Outputter
        where Outputter: HCValueOutputter
     {
-        let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = var_dir.iter().collect();
+        let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = self.machine_st.heap_locs.iter().collect();
         sorted_vars.sort_by_key(|ref v| v.0);
 
         for (var, addr) in sorted_vars {
             output = self.machine_st.print_var_eq(var.clone(), addr.clone(), &self.indices.op_dir,
-                                                  var_dir, output);
+                                                  output);
         }
 
         output
@@ -677,7 +649,32 @@ impl Machine {
 
 
 impl MachineState {
-    fn print_query(&mut self, addr: Addr, op_dir: &OpDir, var_dict: &HeapVarDict) -> PrinterOutputter
+    fn record_var_places(&mut self, chunk_num: usize, alloc_locs: &AllocVarDict)                         
+    {
+        for (var, var_data) in alloc_locs {
+            match var_data {
+                &VarData::Perm(p) if p > 0 =>
+                    if !self.heap_locs.contains_key(var) {
+                        let e = self.e;
+                        let r = var_data.as_reg_type().reg_num();
+                        let addr = self.and_stack[e][r].clone();
+
+                        self.heap_locs.insert(var.clone(), addr);
+                    },
+                &VarData::Temp(cn, _, _) if cn == chunk_num => {
+                    let r = var_data.as_reg_type();
+
+                    if r.reg_num() != 0 {
+                        let addr = self[r].clone();
+                        self.heap_locs.insert(var.clone(), addr);
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+    
+    fn print_query(&mut self, addr: Addr, op_dir: &OpDir) -> PrinterOutputter
     {
         let flags = self.flags;
         
@@ -685,7 +682,7 @@ impl MachineState {
             self.flags = MachineFlags { double_quotes: DoubleQuotes::Atom };
             
             let output = PrinterOutputter::new();
-            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output, var_dict);            
+            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);            
 
             printer.quoted = true;
             printer.numbervars = false;

@@ -84,30 +84,27 @@ impl HCValueOutputter for TestOutputter {
     }
 }
 
-pub fn collect_test_output(wam: &mut Machine, alloc_locs: AllocVarDict, mut heap_locs: HeapVarDict)
-                           -> Vec<HashSet<String>>
+pub fn collect_test_output(wam: &mut Machine, alloc_locs: AllocVarDict) -> Vec<HashSet<String>>
 {
     let mut output = TestOutputter::new();
 
-    output = wam.test_heap_view(&heap_locs, output);
+    output = wam.test_heap_view(output);
     output.cache();
 
-    while let EvalSession::SubsequentQuerySuccess = wam.continue_query(&alloc_locs, &mut heap_locs)
-    {
-        output = wam.test_heap_view(&heap_locs, output);
+    while let EvalSession::SubsequentQuerySuccess = wam.continue_query(&alloc_locs) {
+        output = wam.test_heap_view(output);
         output.cache();
     }
 
     output.result()
 }
 
-pub fn collect_test_output_with_limit(wam: &mut Machine, alloc_locs: AllocVarDict,
-                                      mut heap_locs: HeapVarDict, limit: usize)
+pub fn collect_test_output_with_limit(wam: &mut Machine, alloc_locs: AllocVarDict, limit: usize)                                      
                                       -> Vec<HashSet<String>>
 {
     let mut output = TestOutputter::new();
 
-    output = wam.test_heap_view(&heap_locs, output);
+    output = wam.test_heap_view(output);
     output.cache();
 
     let mut count  = 1;
@@ -116,9 +113,9 @@ pub fn collect_test_output_with_limit(wam: &mut Machine, alloc_locs: AllocVarDic
         return output.result();
     }
 
-    while let EvalSession::SubsequentQuerySuccess = wam.continue_query(&alloc_locs, &mut heap_locs)
+    while let EvalSession::SubsequentQuerySuccess = wam.continue_query(&alloc_locs)
     {
-        output = wam.test_heap_view(&heap_locs, output);
+        output = wam.test_heap_view(output);
         output.cache();
 
         count += 1;
@@ -137,7 +134,7 @@ pub fn submit(wam: &mut Machine, buffer: &str) -> bool
     wam.reset();
 
     match submit_code(wam, buffer) {
-        EvalSession::InitialQuerySuccess(_, _) |
+        EvalSession::InitialQuerySuccess(_) |
         EvalSession::EntrySuccess |
         EvalSession::SubsequentQuerySuccess =>
             true,
@@ -153,8 +150,8 @@ pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>
     match stream_to_toplevel(parsing_stream(buffer.as_bytes()), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
-                EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
-                    result == collect_test_output(wam, alloc_locs, heap_locs),
+                EvalSession::InitialQuerySuccess(alloc_locs) =>
+                    result == collect_test_output(wam, alloc_locs),
                 EvalSession::EntrySuccess => true,
                 _ => false
             },
@@ -188,9 +185,8 @@ pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
     match stream_to_toplevel(parsing_stream(buffer.as_bytes()), wam) {
         Ok(term) =>
             match compile_term(wam, term) {
-                EvalSession::InitialQuerySuccess(alloc_locs, heap_locs) =>
-                    result == collect_test_output_with_limit(wam, alloc_locs,
-                                                             heap_locs, limit),
+                EvalSession::InitialQuerySuccess(alloc_locs) =>
+                    result == collect_test_output_with_limit(wam, alloc_locs, limit),
                 EvalSession::EntrySuccess => true,
                 _ => false
             },
@@ -1673,7 +1669,7 @@ fn test_queries_on_builtins()
 
     submit(&mut wam, ":- use_module(library(non_iso)).");
 
-    assert_prolog_success!(&mut wam, "call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)),B=3,!),100,R).",
+    assert_prolog_success!(&mut wam, "call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)),B=3,!),135,R).",
                            [["G = 2","B = 3","R = !","S = 1"]]);
     assert_prolog_success!(&mut wam, "call_with_inference_limit((setup_call_cleanup(S=1,(G=2;fail),writeq(S+G>B)),B=3,!),10,R).",
                            [["S = _1","G = _4","B = _14","R = inference_limit_exceeded"]]);

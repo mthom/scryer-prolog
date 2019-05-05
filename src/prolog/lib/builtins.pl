@@ -220,21 +220,40 @@ is_write_option(Functor) :-
     Functor =.. [Name, Arg],
     ( Arg == true -> true
     ; Arg == false -> true
+    ; Name == variable_names -> must_be_var_names_list(Arg)		 
     ; var(Arg) -> throw(error(instantiation_error, write_term/2))
     ; throw(error(domain_error(write_option, Functor), write_term/2))
     ), % 8.14.2.3 e)
     ( Name == ignore_ops -> true
     ; Name == quoted -> true
     ; Name == numbervars -> true
+    ; Name == variable_names -> true
     ; throw(error(domain_error(write_option, Functor), write_term/2))
     ). % 8.14.2.3 e)
 
-inst_member_or([X|Xs], Y, _) :-
+inst_member_or([X|Xs], Y, Z) :-
     (  var(X) -> throw(error(instantiation_error, write_term/2))
-    ;  is_write_option(X) -> ( Y = X, ! ; inst_member_or(Xs, Y, _) )
+    ;  is_write_option(X) -> ( Y = X, ! ; inst_member_or(Xs, Y, Z) )
     ;  throw(error(domain_error(write_option, X), write_term/2))
     ).
 inst_member_or([], Y, Y).
+
+must_be_var_names_list(VarNames) :-
+    '$skip_max_list'(_, -1, VarNames, Tail),
+    (  Tail == [] -> must_be_var_names_list_(VarNames)
+    ;  var(Tail)  -> throw(error(instantiation_error, write_term/2))
+    ;  throw(error(domain_error(write_options, variable_names(VarNames)), write_term/2))
+    ).
+
+must_be_var_names_list_([]).
+must_be_var_names_list_([VarName | VarNames]) :-
+    (  nonvar(VarName), VarName = (Atom = _) ->
+       (  atom(Atom) -> must_be_var_names_list_(VarNames)
+       ;  var(Atom) -> throw(error(instantiation_error, write_term/2))
+       ;  throw(error(domain_error(write_options, variable_names(VarName)), write_term/2))
+       )
+    ;  throw(error(instantiation_error, write_term/2))
+    ).
 
 write_term(_, Options) :-
     var(Options), throw(error(instantiation_error, write_term/2)).
@@ -247,7 +266,8 @@ write_term(Term, Options) :-
     inst_member_or(Options, ignore_ops(IgnoreOps), ignore_ops(false)),
     inst_member_or(Options, numbervars(NumberVars), numbervars(false)),
     inst_member_or(Options, quoted(Quoted), quoted(false)),
-    '$write_term'(Term, IgnoreOps, NumberVars, Quoted).
+    inst_member_or(Options, variable_names(VarNames), variable_names([])),
+    '$write_term'(Term, IgnoreOps, NumberVars, Quoted, VarNames).
 
 write(Term) :- write_term(Term, [numbervars(true)]).
 
@@ -605,8 +625,8 @@ module_abolish(Pred, Module) :-
        (  var(Name)  -> throw(error(instantiation_error, abolish/1))
        ;  integer(Arity) ->
 	  ( \+ atom(Name) -> throw(error(type_error(atom, Name), abolish/1))
-	  ; Arity < 0 -> throw(domain_error(not_less_than_zero, Arity), abolish/1)
-	  ; max_arity(N), Arity > N -> throw(representation_error(max_arity), abolish/1)
+	  ; Arity < 0 -> throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
+	  ; max_arity(N), Arity > N -> throw(error(representation_error(max_arity), abolish/1))
 	  ; functor(Head, Name, Arity) ->
 	    (  '$module_head_is_dynamic'(Head, Module) ->
 	       '$abolish_module_clause'(Name, Arity, Module)
@@ -626,8 +646,8 @@ abolish(Pred) :-
        ;  var(Arity) -> throw(error(instantiation_error, abolish/1))
        ;  integer(Arity) ->
 	  ( \+ atom(Name) -> throw(error(type_error(atom, Name), abolish/1))
-	  ; Arity < 0 -> throw(domain_error(not_less_than_zero, Arity), abolish/1)
-	  ; max_arity(N), Arity > N -> throw(representation_error(max_arity), abolish/1)
+	  ; Arity < 0 -> throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
+	  ; max_arity(N), Arity > N -> throw(error(representation_error(max_arity), abolish/1))
 	  ; functor(Head, Name, Arity) ->
 	    (  '$no_such_predicate'(Head) -> true
 	    ;  '$head_is_dynamic'(Head) -> '$abolish_clause'(Name, Arity)

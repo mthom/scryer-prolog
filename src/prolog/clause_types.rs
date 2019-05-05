@@ -410,7 +410,7 @@ impl SystemClauseType {
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             ("$unify_with_occurs_check", 2) => Some(SystemClauseType::UnifyWithOccursCheck),
             ("$variant", 2) => Some(SystemClauseType::Variant),
-            ("$write_term", 4) => Some(SystemClauseType::WriteTerm),
+            ("$write_term", 5) => Some(SystemClauseType::WriteTerm),
             _ => None
         }
     }

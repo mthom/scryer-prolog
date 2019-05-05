@@ -64,6 +64,7 @@ impl MachineState {
             lifted_heap: Vec::with_capacity(1024),
             interms: vec![Number::default(); 256],
             last_call: false,
+            heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default()
         }
     }
@@ -94,6 +95,7 @@ impl MachineState {
             lifted_heap: Vec::with_capacity(capacity),
             interms: vec![Number::default(); 0],
             last_call: false,
+            heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default()
         }
     }
@@ -187,8 +189,7 @@ impl MachineState {
     }
 
     pub(super)
-    fn print_var_eq<Outputter>(&self, var: Rc<Var>, addr: Addr, op_dir: &OpDir, var_dict: &HeapVarDict,
-                               mut output: Outputter)
+    fn print_var_eq<Outputter>(&self, var: Rc<Var>, addr: Addr, op_dir: &OpDir, mut output: Outputter)
                                -> Outputter
       where Outputter: HCValueOutputter
     {
@@ -199,7 +200,7 @@ impl MachineState {
         output.append(var.as_str());
         output.append(" = ");
 
-        let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output, var_dict);
+        let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);
 
         printer.numbervars = false;
         printer.quoted = true;
@@ -2816,6 +2817,7 @@ impl MachineState {
         self.block = 0;
 
         self.ball.reset();
+        self.heap_locs.clear();
         self.lifted_heap.clear();
     }
 

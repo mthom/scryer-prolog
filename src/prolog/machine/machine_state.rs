@@ -235,6 +235,7 @@ pub struct MachineState {
     pub(super) lifted_heap: Vec<HeapCellValue>,
     pub(super) interms: Vec<Number>, // intermediate numbers.
     pub(super) last_call: bool,
+    pub(crate) heap_locs: HeapVarDict,
     pub(crate) flags: MachineFlags
 }
 

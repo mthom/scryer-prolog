@@ -290,15 +290,16 @@ impl MachineState {
 type ReverseHeapVarDict = HashMap<Addr, Rc<Var>>;
 
 pub struct HCPrinter<'a, Outputter> {
-    outputter:    Outputter,
-    machine_st:   &'a MachineState,
+    outputter: Outputter,
+    machine_st: &'a MachineState,
     op_dir: &'a OpDir,
-    state_stack:  Vec<TokenOrRedirect>,
+    state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
-    heap_locs:    ReverseHeapVarDict,
+    heap_locs: ReverseHeapVarDict,
     printed_vars: HashSet<Addr>,
     last_item_idx: usize,
     cyclic_terms: HashMap<Addr, usize>,
+    pub(crate) var_names: HashMap<Addr, String>,
     pub(crate) numbervars_offset: BigInt,
     pub(crate) numbervars:   bool,
     pub(crate) quoted:       bool,
@@ -341,10 +342,9 @@ pub fn requires_space(atom: &str, op: &str) -> bool {
     }
 }
 
-fn reverse_heap_locs<'a>(machine_st: &'a MachineState, heap_locs: &'a HeapVarDict)
-                         -> ReverseHeapVarDict
+fn reverse_heap_locs<'a>(machine_st: &'a MachineState) -> ReverseHeapVarDict
 {
-    heap_locs.iter().map(|(var, var_addr)| {
+    machine_st.heap_locs.iter().map(|(var, var_addr)| {
         (machine_st.store(machine_st.deref(var_addr.clone())), var.clone())
     }).collect()
 }
@@ -414,17 +414,17 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     numbervars_offset: BigInt::zero(),
                     quoted: false,
                     ignore_ops: false,
-                    cyclic_terms: HashMap::new() }
+                    cyclic_terms: HashMap::new(),
+                    var_names: HashMap::new() }
     }
 
-    pub fn from_heap_locs(machine_st: &'a MachineState, op_dir: &'a OpDir, output: Outputter,
-                          heap_locs: &'a HeapVarDict)
+    pub fn from_heap_locs(machine_st: &'a MachineState, op_dir: &'a OpDir, output: Outputter)
                           -> Self
     {
         let mut printer = Self::new(machine_st, op_dir, output);
 
         printer.toplevel_spec = Some(DirectedOp::Right(clause_name!("="), SharedOpDesc::new(700, XFX)));
-        printer.heap_locs = reverse_heap_locs(machine_st, heap_locs);
+        printer.heap_locs = reverse_heap_locs(machine_st);
 
         printer
     }
@@ -577,8 +577,18 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.last_item_idx = self.outputter.len();
         self.outputter.append(s);
     }
+    
+    fn offset_as_string(&self, iter: &mut HCPreOrderIterator, addr: Addr) -> Option<String>
+    {
+        if let Some(var) = self.var_names.get(&addr) {
+            if addr.as_var().is_some() {
+                return Some(format!("{}", var));
+            } else {
+                iter.stack().push(addr);
+                return None;
+            }
+        }
 
-    fn offset_as_string(&self, addr: Addr) -> Option<String> {
         match addr {
             Addr::AttrVar(h) =>
                 Some(format!("_{}", h + 1)),
@@ -894,7 +904,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     self.push_list();
                 },
             HeapCellValue::Addr(addr) =>
-                if let Some(offset_str) = self.offset_as_string(addr) {
+                if let Some(offset_str) = self.offset_as_string(iter, addr) {
                     push_space_if_amb!(self, &offset_str, {
                         self.append_str(offset_str.as_str());
                     })
