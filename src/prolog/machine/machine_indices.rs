@@ -1,3 +1,5 @@
+use indexmap::IndexMap;
+
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
@@ -412,8 +414,8 @@ impl AddAssign<usize> for CodePtr {
     }
 }
 
-pub type HeapVarDict  = HashMap<Rc<Var>, Addr>;
-pub type AllocVarDict = HashMap<Rc<Var>, VarData>;
+pub type HeapVarDict  = IndexMap<Rc<Var>, Addr>;
+pub type AllocVarDict = IndexMap<Rc<Var>, VarData>;
 
 #[derive(Clone)]
 pub struct DynamicPredicateInfo {

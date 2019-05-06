@@ -1,3 +1,5 @@
+use indexmap::IndexMap;
+
 use prolog_parser::ast::*;
 
 use prolog::allocator::*;
@@ -11,7 +13,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
 pub struct DebrayAllocator {
-    bindings: HashMap<Rc<Var>, VarData>,
+    bindings: IndexMap<Rc<Var>, VarData>,
     arg_c:    usize,
     temp_lb:  usize,
     arity:    usize, // 0 if not at head.
@@ -207,7 +209,7 @@ impl<'a> Allocator<'a> for DebrayAllocator
             arity:   0,
             arg_c:   1,
             temp_lb: 1,
-            bindings: HashMap::new(),
+            bindings: IndexMap::new(),
             contents: HashMap::new(),
             in_use: BTreeSet::new()
         }

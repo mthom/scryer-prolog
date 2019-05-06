@@ -1,5 +1,6 @@
 #[macro_use] extern crate cfg_if;
 #[macro_use] extern crate downcast;
+extern crate indexmap;
 #[macro_use] extern crate prolog_parser;
 #[macro_use] extern crate ref_thread_local;
 

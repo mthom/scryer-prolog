@@ -1558,7 +1558,7 @@ impl MachineState {
 
                         let mut list_of_var_eqs = vec![];
 
-                        for (var, binding) in term_write_result.var_dict {
+                        for (var, binding) in term_write_result.var_dict.into_iter().rev() {
                             let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
                             let var_atom = Constant::Atom(var_atom, None);
 
