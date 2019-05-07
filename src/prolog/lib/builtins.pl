@@ -220,7 +220,7 @@ is_write_option(Functor) :-
     Functor =.. [Name, Arg],
     ( Arg == true -> true
     ; Arg == false -> true
-    ; Name == variable_names -> must_be_var_names_list(Arg)		 
+    ; Name == variable_names -> must_be_var_names_list(Arg)
     ; var(Arg) -> throw(error(instantiation_error, write_term/2))
     ; throw(error(domain_error(write_option, Functor), write_term/2))
     ), % 8.14.2.3 e)
@@ -249,6 +249,7 @@ must_be_var_names_list_([]).
 must_be_var_names_list_([VarName | VarNames]) :-
     (  nonvar(VarName), VarName = (Atom = _) ->
        (  atom(Atom) -> must_be_var_names_list_(VarNames)
+       ;  var(Atom)  -> throw(error(instantiation_error, write_term/2))
        ;  throw(error(domain_error(write_options, variable_names(VarName)), write_term/2))
        )
     ;  throw(error(domain_error(write_options, variable_names(VarName)), write_term/2))
