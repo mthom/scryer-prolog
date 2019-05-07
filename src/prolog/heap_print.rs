@@ -389,7 +389,7 @@ fn non_quoted_token<Iter: Iterator<Item=char>>(mut iter: Iter) -> bool {
         } else if c == '{' {
             (iter.next() == Some('}') && iter.next().is_none())
         } else if solo_char!(c) {
-            false // !iter.next().is_none()                
+            false
         } else {
             false
         }
