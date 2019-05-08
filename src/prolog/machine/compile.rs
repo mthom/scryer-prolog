@@ -143,7 +143,7 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession
     match packet {
         TopLevelPacket::Query(terms, queue) =>
             match compile_query(terms, queue, wam.machine_flags()) {
-                Ok((mut code, vars)) => wam.submit_query(code, vars),
+                Ok((code, vars)) => wam.submit_query(code, vars),
                 Err(e) => EvalSession::from(e)
             },
         TopLevelPacket::Decl(TopLevel::Declaration(decl), _) => {

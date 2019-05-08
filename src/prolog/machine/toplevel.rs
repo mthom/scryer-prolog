@@ -372,7 +372,7 @@ fn flatten_hook(mut term: Term) -> Term {
                     _ => None
                 };
 
-                if let Some(mut inner_term) = inner_term {
+                if let Some(inner_term) = inner_term {
                     mem::swap(&mut terms[0], &mut Box::new(inner_term));
                 }
             },

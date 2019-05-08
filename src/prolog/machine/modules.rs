@@ -142,7 +142,7 @@ pub trait SubModuleUser
 
         if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
             let name = name.with_table(submodule.atom_tbl.clone());
-            let mut atom_tbl = self.atom_tbl();
+            let atom_tbl = self.atom_tbl();
 
             atom_tbl.borrow_mut().insert(name.to_rc());
 

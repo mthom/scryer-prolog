@@ -430,7 +430,7 @@ impl Machine {
             EvalSession::InitialQuerySuccess(alloc_locs) =>
                 loop {
                     let bindings = {
-                        let mut output = PrinterOutputter::new();
+                        let output = PrinterOutputter::new();
                         self.toplevel_heap_view(output).result()
                     };
 
