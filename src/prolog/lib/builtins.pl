@@ -250,9 +250,9 @@ must_be_var_names_list_([VarName | VarNames]) :-
     (  nonvar(VarName), VarName = (Atom = _) ->
        (  atom(Atom) -> must_be_var_names_list_(VarNames)
        ;  var(Atom)  -> throw(error(instantiation_error, write_term/2))
-       ;  throw(error(domain_error(write_options, variable_names(VarName)), write_term/2))
+       ;  throw(error(domain_error(write_options, variable_names([VarName | VarNames])), write_term/2))
        )
-    ;  throw(error(domain_error(write_options, variable_names(VarName)), write_term/2))
+    ;  throw(error(domain_error(write_options, variable_names([VarName | VarNames])), write_term/2))
     ).
 
 write_term(_, Options) :-
