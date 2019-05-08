@@ -691,7 +691,7 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             },
             &BuiltInClauseType::PartialString => {
-                let mut s = machine_st.try_string_list(temp_v!(1))?;
+                let s = machine_st.try_string_list(temp_v!(1))?;
                 let a2 = machine_st[temp_v!(2)].clone();
 
                 s.set_expandable(true);
@@ -719,7 +719,7 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.check_keysort_errors()?;
 
                 let stub = MachineError::functor_stub(clause_name!("keysort"), 2);
-                let mut list = machine_st.try_from_list(temp_v!(1), stub)?;
+                let list = machine_st.try_from_list(temp_v!(1), stub)?;
                 let mut key_pairs = Vec::new();
 
                 for val in list {

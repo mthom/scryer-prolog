@@ -1079,7 +1079,7 @@ impl MachineState {
                 self.truncate_if_no_lifted_heap_diff(|_| Addr::Con(Constant::EmptyList)),
             &SystemClauseType::GetAttributedVariableList => {
                 let attr_var = self.store(self.deref(self[temp_v!(1)].clone()));
-                let mut attr_var_list = match attr_var {
+                let attr_var_list = match attr_var {
                     Addr::AttrVar(h) => h + 1,
                     attr_var @ Addr::HeapCell(_) | attr_var @ Addr::StackCell(..) => {
                         // create an AttrVar in the heap.
@@ -1322,7 +1322,7 @@ impl MachineState {
                 };
             },
             &SystemClauseType::RedoAttrVarBindings => {
-                let mut bindings = mem::replace(&mut self.attr_var_init.bindings, vec![]);
+                let bindings = mem::replace(&mut self.attr_var_init.bindings, vec![]);
 
                 for (h, addr) in bindings {
                     self.heap[h] = HeapCellValue::Addr(addr);
@@ -1707,7 +1707,7 @@ impl MachineState {
                         return Err(err)
                 }
 
-                let mut output  = printer.print(addr);
+                let output  = printer.print(addr);
                 print!("{}", output.result());
                 stdout().flush().unwrap();
             }
