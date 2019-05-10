@@ -240,19 +240,19 @@ inst_member_or([], Y, Y).
 
 must_be_var_names_list(VarNames) :-
     '$skip_max_list'(_, -1, VarNames, Tail),
-    (  Tail == [] -> must_be_var_names_list_(VarNames)
+    (  Tail == [] -> must_be_var_names_list_(VarNames, VarNames)
     ;  var(Tail)  -> throw(error(instantiation_error, write_term/2))
     ;  throw(error(domain_error(write_options, variable_names(VarNames)), write_term/2))
     ).
 
-must_be_var_names_list_([]).
-must_be_var_names_list_([VarName | VarNames]) :-
+must_be_var_names_list_([], List).
+must_be_var_names_list_([VarName | VarNames], List) :-
     (  nonvar(VarName), VarName = (Atom = _) ->
-       (  atom(Atom) -> must_be_var_names_list_(VarNames)
+       (  atom(Atom) -> must_be_var_names_list_(VarNames, List)
        ;  var(Atom)  -> throw(error(instantiation_error, write_term/2))
-       ;  throw(error(domain_error(write_options, variable_names([VarName | VarNames])), write_term/2))
+       ;  throw(error(domain_error(write_options, variable_names(List)), write_term/2))
        )
-    ;  throw(error(domain_error(write_options, variable_names([VarName | VarNames])), write_term/2))
+    ;  throw(error(domain_error(write_options, variable_names(List)), write_term/2))
     ).
 
 write_term(_, Options) :-
