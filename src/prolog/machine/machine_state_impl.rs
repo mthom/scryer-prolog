@@ -1290,11 +1290,41 @@ impl MachineState {
     }
 
     fn max(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        Ok(max(n1, n2))
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                if n1 > n2 {
+                    Ok(Number::Integer(n1))
+                } else {
+                    Ok(Number::Integer(n2))
+                },
+            (n1, n2) => {
+                let stub = MachineError::functor_stub(clause_name!("max"), 2);
+
+                let f1 = try_numeric_result!(self, result_f(n1, rnd_f), stub.clone())?;
+                let f2 = try_numeric_result!(self, result_f(n2, rnd_f), stub)?;
+
+                Ok(Number::Float(max(OrderedFloat(f1), OrderedFloat(f2))))
+            }
+        }
     }
 
     fn min(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        Ok(min(n1, n2))
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                if n1 < n2 {
+                    Ok(Number::Integer(n1))
+                } else {
+                    Ok(Number::Integer(n2))
+                },
+            (n1, n2) => {
+                let stub = MachineError::functor_stub(clause_name!("max"), 2);
+                
+                let f1 = try_numeric_result!(self, result_f(n1, rnd_f), stub.clone())?;
+                let f2 = try_numeric_result!(self, result_f(n2, rnd_f), stub)?;
+
+                Ok(Number::Float(min(OrderedFloat(f1), OrderedFloat(f2))))
+            }
+        }
     }
 
     fn remainder(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub>
