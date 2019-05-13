@@ -276,6 +276,16 @@ impl fmt::Display for SessionError {
     }
 }
 
+impl fmt::Display for Number {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Number::Float(fl) => write!(f, "{}", fl),
+            &Number::Integer(ref bi) => write!(f, "{}", bi),
+            &Number::Rational(ref r) => write!(f, "{}", r)
+        }
+    }
+}
+
 impl fmt::Display for ArithmeticTerm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -307,8 +317,10 @@ impl fmt::Display for ArithmeticInstruction {
                 write!(f, "idiv {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Max(ref a1, ref a2, ref t) =>
                 write!(f, "max {}, {}, @{}", a1, a2, t),
-            &ArithmeticInstruction::FIDiv(ref a1, ref a2, ref t) =>
-                write!(f, "floored_idiv {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::Min(ref a1, ref a2, ref t) =>
+                write!(f, "min {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::IntFloorDiv(ref a1, ref a2, ref t) =>
+                write!(f, "int_floor_div {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::RDiv(ref a1, ref a2, ref t) =>
                 write!(f, "rdiv {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Shl(ref a1, ref a2, ref t) =>
@@ -325,8 +337,42 @@ impl fmt::Display for ArithmeticInstruction {
                 write!(f, "mod {}, {}, @{}", a1, a2, t),
             &ArithmeticInstruction::Rem(ref a1, ref a2, ref t) =>
                 write!(f, "rem {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::ATan2(ref a1, ref a2, ref t) =>
+                write!(f, "atan2 {}, {}, @{}", a1, a2, t),
+            &ArithmeticInstruction::Plus(ref a, ref t) =>
+                write!(f, "plus {}, @{}", a, t),
             &ArithmeticInstruction::Neg(ref a, ref t) =>
-                write!(f, "neg {}, @{}", a, t)
+                write!(f, "neg {}, @{}", a, t),
+            &ArithmeticInstruction::Cos(ref a, ref t) =>
+                write!(f, "cos {}, @{}", a, t),
+            &ArithmeticInstruction::Sin(ref a, ref t) =>
+                write!(f, "sin {}, @{}", a, t),
+            &ArithmeticInstruction::Tan(ref a, ref t) =>
+                write!(f, "tan {}, @{}", a, t),
+            &ArithmeticInstruction::ATan(ref a, ref t) =>
+                write!(f, "atan {}, @{}", a, t),
+            &ArithmeticInstruction::ASin(ref a, ref t) =>
+                write!(f, "asin {}, @{}", a, t),
+            &ArithmeticInstruction::ACos(ref a, ref t) =>
+                write!(f, "acos {}, @{}", a, t),
+            &ArithmeticInstruction::Log(ref a, ref t) =>
+                write!(f, "log {}, @{}", a, t),
+            &ArithmeticInstruction::Exp(ref a, ref t) =>
+                write!(f, "exp {}, @{}", a, t),
+            &ArithmeticInstruction::Sqrt(ref a, ref t) =>
+                write!(f, "sqrt {}, @{}", a, t),
+            &ArithmeticInstruction::BitwiseComplement(ref a, ref t) =>
+                write!(f, "bitwise_complement {}, @{}", a, t),
+            &ArithmeticInstruction::Truncate(ref a, ref t) =>
+                write!(f, "truncate {}, @{}", a, t),
+            &ArithmeticInstruction::Round(ref a, ref t) =>
+                write!(f, "round {}, @{}", a, t),
+            &ArithmeticInstruction::Ceiling(ref a, ref t) =>
+                write!(f, "ceiling {}, @{}", a, t),
+            &ArithmeticInstruction::Floor(ref a, ref t) =>
+                write!(f, "floor {}, @{}", a, t),
+            &ArithmeticInstruction::Float(ref a, ref t) =>
+                write!(f, "float {}, @{}", a, t),
         }
     }
 }

@@ -4,7 +4,6 @@ use prolog::heap_print::*;
 use prolog::machine::*;
 use prolog::machine::compile::*;
 use prolog::machine::machine_errors::*;
-use prolog::num::ToPrimitive;
 
 use std::io::Read;
 
@@ -47,7 +46,7 @@ impl Machine {
         };
 
         let arity = match self.machine_st.store(self.machine_st.deref(arity)) {
-            Addr::Con(Constant::Number(Number::Integer(arity))) =>
+            Addr::Con(Constant::Integer(arity)) =>
                 arity.to_usize().unwrap(),
             _ => unreachable!()
         };
@@ -192,7 +191,7 @@ impl Machine {
     {
         let index = self.machine_st[temp_v!(3)].clone();
         let index = match self.machine_st.store(self.machine_st.deref(index)) {
-            Addr::Con(Constant::Number(Number::Integer(n))) => n.to_usize().unwrap(),
+            Addr::Con(Constant::Integer(n)) => n.to_usize().unwrap(),
             _ => unreachable!()
         };
 
@@ -227,7 +226,7 @@ impl Machine {
     {
         let index = self.machine_st[temp_v!(3)].clone();
         let index = match self.machine_st.store(self.machine_st.deref(index)) {
-            Addr::Con(Constant::Number(Number::Integer(n))) => n.to_usize().unwrap(),
+            Addr::Con(Constant::Integer(n)) => n.to_usize().unwrap(),
             _ => unreachable!()
         };
 

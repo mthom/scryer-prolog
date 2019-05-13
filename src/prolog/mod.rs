@@ -1,6 +1,6 @@
-extern crate num;
 extern crate ordered_float;
 extern crate prolog_parser;
+extern crate rug;
 
 pub mod instructions;
 #[macro_use] mod macros;

@@ -305,13 +305,13 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
         match ct {
             &InlinedClauseType::CompareNumber(cmp, ..) => {
                 if let &Term::Var(ref vr, ref name) = terms[0].as_ref() {
-                    self.mark_non_callable(name.clone(), 2, term_loc, vr, code);                    
+                    self.mark_non_callable(name.clone(), 2, term_loc, vr, code);
                 }
 
                 if let &Term::Var(ref vr, ref name) = terms[1].as_ref() {
-                    self.mark_non_callable(name.clone(), 2, term_loc, vr, code);                    
+                    self.mark_non_callable(name.clone(), 2, term_loc, vr, code);
                 }
-                
+
                 let (mut lcode, at_1) = self.call_arith_eval(terms[0].as_ref(), 1)?;
                 let (mut rcode, at_2) = self.call_arith_eval(terms[1].as_ref(), 2)?;
 
@@ -365,7 +365,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 },
             &InlinedClauseType::IsRational(..) =>
                 match terms[0].as_ref() {
-                    &Term::Constant(_, Constant::Number(Number::Rational(_))) => {
+                    &Term::Constant(_, Constant::Rational(_)) => {
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
@@ -378,7 +378,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                 },
             &InlinedClauseType::IsFloat(..) =>
                 match terms[0].as_ref() {
-                    &Term::Constant(_, Constant::Number(Number::Float(_))) => {
+                    &Term::Constant(_, Constant::Float(_)) => {
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
@@ -418,7 +418,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
             &InlinedClauseType::IsInteger(..) =>
                 match terms[0].as_ref() {
                     &Term::Constant(_, Constant::CharCode(_))
-                  | &Term::Constant(_, Constant::Number(Number::Integer(_))) => {
+                  | &Term::Constant(_, Constant::Integer(_)) => {
                         code.push(succeed!());
                     },
                     &Term::Var(ref vr, ref name) => {
@@ -486,7 +486,25 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
                     code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))))
                 }
             },
-            &Term::Constant(_, ref c @ Constant::Number(_)) => {
+            &Term::Constant(_, ref c @ Constant::Integer(_)) => {
+                code.push(Line::Query(put_constant!(Level::Shallow, c.clone(), temp_v!(1))));
+
+                if use_default_call_policy {
+                    code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))))
+                } else {
+                    code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))))
+                }
+            },
+            &Term::Constant(_, ref c @ Constant::Float(_)) => {
+                code.push(Line::Query(put_constant!(Level::Shallow, c.clone(), temp_v!(1))));
+
+                if use_default_call_policy {
+                    code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))))
+                } else {
+                    code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))))
+                }
+            },
+            &Term::Constant(_, ref c @ Constant::Rational(_)) => {
                 code.push(Line::Query(put_constant!(Level::Shallow, c.clone(), temp_v!(1))));
 
                 if use_default_call_policy {

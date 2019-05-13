@@ -11,8 +11,8 @@ use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::modules::*;
 use prolog::machine::or_stack::*;
-use prolog::num::{BigInt, BigUint, One, ToPrimitive, Zero};
 use prolog::read::PrologStream;
+use prolog::rug::Integer;
 
 use downcast::Any;
 
@@ -20,7 +20,6 @@ use std::cmp::Ordering;
 use std::io::{Write, stdout};
 use std::mem;
 use std::ops::{Index, IndexMut};
-use std::rc::Rc;
 
 pub(super) struct Ball {
     pub(super) boundary: usize,   // ball.0
@@ -288,7 +287,7 @@ impl MachineState {
                     },
                 &Addr::Con(Constant::CharCode(c)) =>
                     codes.push(c),
-                &Addr::Con(Constant::Number(Number::Integer(ref n))) => 
+                &Addr::Con(Constant::Integer(ref n)) => 
                     if let Some(c) = n.to_u8() {
                         codes.push(c);
                     } else {
@@ -741,7 +740,7 @@ pub(crate) trait CallPolicy: Any {
                 let a1 = machine_st[r].clone();
                 let a2 = machine_st.get_number(at)?;
 
-                machine_st.unify(a1, Addr::Con(Constant::Number(a2)));
+                machine_st.unify(a1, Addr::Con(a2.to_constant()));
                 return_from_clause!(machine_st.last_call, machine_st)
             },
         }
@@ -875,8 +874,8 @@ impl CallPolicy for DefaultCallPolicy {}
 
 pub(crate) struct CWILCallPolicy {
     pub(crate) prev_policy: Box<CallPolicy>,
-    count:  BigUint,
-    limits: Vec<(BigUint, usize)>,
+    count:  Integer,
+    limits: Vec<(Integer, usize)>,
     inference_limit_exceeded: bool
 }
 
@@ -887,7 +886,7 @@ impl CWILCallPolicy {
         mem::swap(&mut prev_policy, policy);
 
         let new_policy = CWILCallPolicy { prev_policy,
-                                          count:  BigUint::zero(),
+                                          count:  Integer::from(0),
                                           limits: vec![],
                                           inference_limit_exceeded: false };
         *policy = Box::new(new_policy);
@@ -904,35 +903,32 @@ impl CWILCallPolicy {
                 return Err(functor!("inference_limit_exceeded", 1,
                                     [HeapCellValue::Addr(Addr::Con(Constant::Usize(bp)))]));
             } else {
-                self.count += BigUint::one();
+                self.count += 1;
             }
         }
 
         Ok(())
     }
 
-    pub(crate) fn add_limit(&mut self, limit: Rc<BigInt>, b: usize) -> Rc<BigInt> {
-        let limit = match limit.to_biguint() {
-            Some(limit) => limit + &self.count,
-            None => panic!("install_inference_counter: limit must be positive")
-        };
+    pub(crate) fn add_limit(&mut self, mut limit: Integer, b: usize) -> &Integer {
+        limit += &self.count;
 
         match self.limits.last().cloned() {
             Some((ref inner_limit, _)) if *inner_limit <= limit => {},
             _ => self.limits.push((limit, b))
         };
 
-        Rc::new(BigInt::from(self.count.clone()))
+        &self.count
     }
 
-    pub(crate) fn remove_limit(&mut self, b: usize) -> Rc<BigInt> {
+    pub(crate) fn remove_limit(&mut self, b: usize) -> &Integer {
         if let Some((_, bp)) = self.limits.last().cloned() {
             if bp == b {
                 self.limits.pop();
             }
         }
 
-        Rc::new(BigInt::from(self.count.clone()))
+        &self.count
     }
 
     pub(crate) fn is_empty(&self) -> bool {

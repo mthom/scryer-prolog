@@ -12,7 +12,7 @@ macro_rules! heap_str {
 
 macro_rules! heap_integer {
     ($i:expr) => (
-        HeapCellValue::Addr(Addr::Con(integer!($i)))
+        HeapCellValue::Addr(Addr::Con(Constant::Integer($i)))
     )
 }
 

@@ -1,12 +1,13 @@
 use prolog_parser::ast::*;
 
+use prolog::forms::Number;
 use prolog::machine::machine_indices::*;
 
 use ref_thread_local::RefThreadLocal;
 
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum CompareNumberQT {
     GreaterThan,
     LessThan,
@@ -29,7 +30,7 @@ impl CompareNumberQT {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CompareTermQT {
     LessThan,
     LessThanOrEqual,
@@ -48,7 +49,7 @@ impl CompareTermQT {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ArithmeticTerm {
     Reg(RegType),
     Interm(usize),
@@ -65,7 +66,7 @@ impl ArithmeticTerm {
     }
 }
 
-#[derive(Clone, Eq, Ord, PartialOrd, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum InlinedClauseType {
     CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
     IsAtom(RegType),
@@ -147,7 +148,7 @@ impl InlinedClauseType {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum SystemClauseType {
     AbolishClause,
     AbolishModuleClause,
@@ -416,7 +417,7 @@ impl SystemClauseType {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum BuiltInClauseType {
     AcyclicTerm,
     Arg,
@@ -436,7 +437,7 @@ pub enum BuiltInClauseType {
     Sort,
 }
 
-#[derive(Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ClauseType {
     BuiltIn(BuiltInClauseType),
     CallN,

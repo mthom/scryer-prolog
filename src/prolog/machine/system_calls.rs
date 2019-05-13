@@ -11,10 +11,9 @@ use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
 use prolog::machine::toplevel::{to_op_decl};
-use prolog::num::{FromPrimitive, ToPrimitive, Zero};
-use prolog::num::bigint::{BigInt};
 use prolog::ordered_float::OrderedFloat;
 use prolog::read::{PrologStream, readline};
+use prolog::rug::Integer;
 
 use ref_thread_local::RefThreadLocal;
 
@@ -121,7 +120,7 @@ impl MachineState {
 
     fn finalize_skip_max_list(&mut self, n: usize, addr: Addr) {
         let target_n = self[temp_v!(1)].clone();
-        self.unify(Addr::Con(integer!(n)), target_n);
+        self.unify(Addr::Con(Constant::Integer(Integer::from(n))), target_n);
 
         if !self.fail {
             let xs = self[temp_v!(4)].clone();
@@ -133,12 +132,12 @@ impl MachineState {
         let max_steps = self.store(self.deref(self[temp_v!(2)].clone()));
 
         match max_steps {
-            Addr::Con(Constant::Number(Number::Integer(ref max_steps))) =>
+            Addr::Con(Constant::Integer(ref max_steps)) =>
                 if max_steps.to_isize().map(|i| i >= -1).unwrap_or(false) {
                     let n = self.store(self.deref(self[temp_v!(1)].clone()));
 
                     match n {
-                        Addr::Con(Constant::Number(Number::Integer(ref n))) if n.is_zero() => {
+                        Addr::Con(Constant::Integer(ref n)) if n == &0 => {
                             let xs0 = self[temp_v!(3)].clone();
                             let xs  = self[temp_v!(4)].clone();
 
@@ -163,7 +162,7 @@ impl MachineState {
                                         self.finalize_skip_max_list(n + s.len(),
                                                                     Addr::Con(Constant::EmptyList))
                                     } else {
-                                        let i = max_steps.to_usize().unwrap() - n;
+                                        let i = (max_steps as usize) - n;
 
                                         if s.len() < i {
                                             self.finalize_skip_max_list(n + s.len(),
@@ -338,7 +337,7 @@ impl MachineState {
         }
     }
 
-    fn int_to_char_code(&mut self, n: Rc<BigInt>, stub: &'static str, arity: usize)
+    fn int_to_char_code(&mut self, n: &Integer, stub: &'static str, arity: usize)
                         -> Result<u8, MachineStub>
     {
         if let Some(c) = n.to_u8() {
@@ -381,8 +380,12 @@ impl MachineState {
 
                 return Err(self.error_form(err, stub));
             },
-            Ok(Term::Constant(_, Constant::Number(n))) =>
-                self.unify(nx, Addr::Con(Constant::Number(n))),
+            Ok(Term::Constant(_, Constant::Rational(n))) =>
+                self.unify(nx, Addr::Con(Constant::Rational(n))),
+            Ok(Term::Constant(_, Constant::Float(n))) =>
+                self.unify(nx, Addr::Con(Constant::Float(n))),
+            Ok(Term::Constant(_, Constant::Integer(n))) =>
+                self.unify(nx, Addr::Con(Constant::Integer(n))),
             Ok(Term::Constant(_, Constant::CharCode(c))) =>
                 self.unify(nx, Addr::Con(Constant::CharCode(c))),
             _ => {
@@ -519,8 +522,8 @@ impl MachineState {
 
                                 for addr in addrs.iter() {
                                     match addr {
-                                        &Addr::Con(Constant::Number(Number::Integer(ref n))) => {
-                                            let c = self.int_to_char_code(n.clone(), "atom_codes", 2)?;
+                                        &Addr::Con(Constant::Integer(ref n)) => {
+                                            let c = self.int_to_char_code(&n, "atom_codes", 2)?;
                                             chars.push(c as char);
                                         },
                                         &Addr::Con(Constant::CharCode(c)) =>
@@ -550,10 +553,10 @@ impl MachineState {
                     _ => unreachable!()
                 };
 
-                let len = Number::Integer(Rc::new(BigInt::from_usize(atom.as_str().len()).unwrap()));
+                let len = Integer::from(atom.as_str().len());
                 let a2  = self[temp_v!(2)].clone();
 
-                self.unify(a2, Addr::Con(Constant::Number(len)));
+                self.unify(a2, Addr::Con(Constant::Integer(len)));
             },
             &SystemClauseType::CharsToNumber => {
                 let stub = MachineError::functor_stub(clause_name!("number_chars"), 2);
@@ -574,9 +577,9 @@ impl MachineState {
                 let chs = self[temp_v!(2)].clone();
 
                 let string = match self.store(self.deref(n)) {
-                    Addr::Con(Constant::Number(Number::Float(OrderedFloat(n)))) =>
+                    Addr::Con(Constant::Float(OrderedFloat(n))) =>
                         format!("{0:<20?}", n),
-                    Addr::Con(Constant::Number(Number::Integer(n))) =>
+                    Addr::Con(Constant::Integer(n)) =>
                         n.to_string(),
                     _ => unreachable!()
                 };
@@ -591,9 +594,9 @@ impl MachineState {
                 let chs = self[temp_v!(2)].clone();
 
                 let string = match self.store(self.deref(n)) {
-                    Addr::Con(Constant::Number(Number::Float(OrderedFloat(n)))) =>
+                    Addr::Con(Constant::Float(OrderedFloat(n))) =>
                         format!("{0:<20?}", n),
-                    Addr::Con(Constant::Number(Number::Integer(n))) =>
+                    Addr::Con(Constant::Integer(n)) =>
                         n.to_string(),
                     _ => unreachable!()
                 };
@@ -659,8 +662,8 @@ impl MachineState {
                         match self.store(self.deref(a2)) {
                             Addr::Con(Constant::CharCode(code)) =>
                                 self.unify(Addr::Con(Constant::Char(code as char)), addr.clone()),
-                            Addr::Con(Constant::Number(Number::Integer(n))) => {
-                                let c = self.int_to_char_code(n, "char_code", 2)?;
+                            Addr::Con(Constant::Integer(n)) => {
+                                let c = self.int_to_char_code(&n, "char_code", 2)?;
                                 self.unify(Addr::Con(Constant::Char(c as char)), addr.clone());
                             },
                             _ => self.fail = true
@@ -967,12 +970,12 @@ impl MachineState {
                                 let a2 = self[temp_v!(2)].clone();
                                 let a3 = self[temp_v!(3)].clone();
 
-                                let arity = Number::Integer(Rc::new(BigInt::from_usize(arity).unwrap()));
+                                let arity = Integer::from(arity);
 
                                 self.unify(a2, Addr::Con(Constant::Atom(name, spec)));
 
                                 if !self.fail {
-                                    self.unify(a3, Addr::Con(Constant::Number(arity)));
+                                    self.unify(a3, Addr::Con(Constant::Integer(arity)));
                                 }
                             },
                             _ => self.fail = true
@@ -1007,11 +1010,11 @@ impl MachineState {
                                     }
                                 };
 
-                                let a2 = Number::Integer(Rc::new(BigInt::from_usize(priority).unwrap()));
+                                let a2 = Integer::from(priority);
                                 let a3 = Addr::Con(Constant::Atom(clause_name!(spec), None));
                                 let a4 = Addr::Con(Constant::Atom(name, Some(shared_op_desc)));
 
-                                self.unify(Addr::Con(Constant::Number(a2)), prec);
+                                self.unify(Addr::Con(Constant::Integer(a2)), prec);
 
                                 if !self.fail {
                                     self.unify(a3, specifier);
@@ -1032,7 +1035,7 @@ impl MachineState {
                 let op = self[temp_v!(3)].clone();
 
                 let priority = match self.store(self.deref(priority)) {
-                    Addr::Con(Constant::Number(Number::Integer(n))) => n.to_usize().unwrap(),
+                    Addr::Con(Constant::Integer(n)) => n.to_usize().unwrap(),
                     _ => unreachable!()
                 };
 
@@ -1251,11 +1254,11 @@ impl MachineState {
 
                 match (a1, a2.clone()) {
                     (Addr::Con(Constant::Usize(bp)),
-                     Addr::Con(Constant::Number(Number::Integer(n)))) =>
+                     Addr::Con(Constant::Integer(n))) =>
                         match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
                             Some(call_policy) => {
                                 let count = call_policy.add_limit(n, bp);
-                                let count = Addr::Con(Constant::Number(Number::Integer(count)));
+                                let count = Addr::Con(Constant::Integer(count.clone()));
 
                                 let a3 = self[temp_v!(3)].clone();
 
@@ -1369,7 +1372,7 @@ impl MachineState {
 
                         if let Addr::Con(Constant::Usize(bp)) = a1 {
                             let count = call_policy.remove_limit(bp);
-                            let count = Addr::Con(Constant::Number(Number::Integer(count)));
+                            let count = Addr::Con(Constant::Integer(count.clone()));
 
                             let a2 = self[temp_v!(2)].clone();
 
@@ -1692,7 +1695,7 @@ impl MachineState {
                                                 if var_names.contains_key(&var) {
                                                     continue;
                                                 }
-                                                
+
                                                 var_names.insert(var, atom);
                                             },
                                         _ => unreachable!()

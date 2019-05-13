@@ -2,12 +2,12 @@ use prolog_parser::ast::*;
 use prolog_parser::string_list::*;
 
 use prolog::clause_types::*;
-use prolog::forms::{fetch_atom_op_spec, fetch_op_spec};
+use prolog::forms::*;
 use prolog::heap_iter::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
-use prolog::num::*;
 use prolog::ordered_float::OrderedFloat;
+use prolog::rug::{Integer};
 
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -112,8 +112,12 @@ impl<'a> HCPreOrderIterator<'a> {
                         _ =>
                             return false
                     },
-                Addr::Con(Constant::Number(n)) =>
-                    return property_check(Constant::Number(n)),
+                Addr::Con(Constant::Integer(n)) =>
+                    return property_check(Constant::Integer(n)),
+                Addr::Con(Constant::Float(n)) =>
+                    return property_check(Constant::Float(n)),
+                Addr::Con(Constant::Rational(n)) =>
+                    return property_check(Constant::Rational(n)),
                 _ =>
                     return false
             }
@@ -253,7 +257,9 @@ fn negated_op_needs_bracketing(iter: &HCPreOrderIterator, op: &Option<DirectedOp
     if let &Some(ref op) = op {
         op.is_negative_sign() && iter.leftmost_leaf_has_property(|c| {
             match c {
-                Constant::Number(n) => n.is_positive(),
+                Constant::Integer(n) => n > 0,
+                Constant::Float(f) => f > OrderedFloat(0f64),
+                Constant::Rational(r) => r > 0,
                 _ => false
             }
         })
@@ -263,20 +269,21 @@ fn negated_op_needs_bracketing(iter: &HCPreOrderIterator, op: &Option<DirectedOp
 }
 
 impl MachineState {
-    pub fn numbervar(&self, offset: &BigInt, addr: Addr) -> Option<Var> {
+    pub fn numbervar(&self, offset: &Integer, addr: Addr) -> Option<Var> {
         static CHAR_CODES: [char; 26] = ['A','B','C','D','E','F','G','H','I','J',
                                          'K','L','M','N','O','P','Q','R','S','T',
                                          'U','V','W','X','Y','Z'];
 
         match self.store(self.deref(addr)) {
-            Addr::Con(Constant::Number(Number::Integer(ref n)))
-                if !n.is_negative() => {
-                    let n = offset + n.as_ref();
+            Addr::Con(Constant::Integer(ref n))
+                if n >= &0 => {
+                    let n = Integer::from(offset + n);
 
-                    let i = n.mod_floor(&BigInt::from(26)).to_usize().unwrap();
-                    let j = n.div_floor(&BigInt::from(26));
-
-                    Some(if j.is_zero() {
+                    let i = n.mod_u(26) as usize;
+                    let j = n.div_rem_floor(Integer::from(26));
+                    let j = <(Integer, Integer)>::from(j).1;
+                    
+                    Some(if j == 0 {
                         CHAR_CODES[i].to_string()
                     } else {
                         format!("{}{}", CHAR_CODES[i], j)
@@ -300,7 +307,7 @@ pub struct HCPrinter<'a, Outputter> {
     last_item_idx: usize,
     cyclic_terms: HashMap<Addr, usize>,
     pub(crate) var_names: HashMap<Addr, String>,
-    pub(crate) numbervars_offset: BigInt,
+    pub(crate) numbervars_offset: Integer,
     pub(crate) numbervars:   bool,
     pub(crate) quoted:       bool,
     pub(crate) ignore_ops:   bool
@@ -389,7 +396,7 @@ fn non_quoted_token<Iter: Iterator<Item=char>>(mut iter: Iter) -> bool {
         } else if c == '{' {
             (iter.next() == Some('}') && iter.next().is_none())
         } else if solo_char!(c) {
-            false
+            !(c == ')' || c == '}' || c == ']' || c == ',' || c == '%' || c == '|')
         } else {
             false
         }
@@ -411,7 +418,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     printed_vars: HashSet::new(),
                     last_item_idx: 0,
                     numbervars: false,
-                    numbervars_offset: BigInt::zero(),
+                    numbervars_offset: Integer::from(0),
                     quoted: false,
                     ignore_ops: false,
                     cyclic_terms: HashMap::new(),
@@ -577,7 +584,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
         self.last_item_idx = self.outputter.len();
         self.outputter.append(s);
     }
-    
+
     fn offset_as_string(&self, iter: &mut HCPreOrderIterator, addr: Addr) -> Option<String>
     {
         if let Some(var) = self.var_names.get(&addr) {
@@ -781,8 +788,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                 self.append_str(&format!("{}", c)),
             Constant::EmptyList =>
                 self.append_str("[]"),
-            Constant::Number(n) =>
-                self.print_number(n, op),
+            Constant::Integer(n) =>
+                self.print_number(Number::Integer(n), op),
+            Constant::Float(n) =>
+                self.print_number(Number::Float(n), op),
+            Constant::Rational(n) =>
+                self.print_number(Number::Rational(n), op),
             Constant::String(s) =>
                 self.print_string(s),
             Constant::Usize(i) =>
@@ -837,7 +848,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                 if self.numbervars && arity == 1 && name.as_str() == "$VAR" {
                     !iter.immediate_leaf_has_property(|c| {
                         match c {
-                            Constant::Number(n) => n.is_zero() || n.is_positive(),
+                            Constant::Integer(n) => n >= 0,
+                            Constant::Float(f) => f >= OrderedFloat(0f64),
+                            Constant::Rational(r) => r >= 0,
                             _ => false
                         }
                     }) && needs_bracketing(&spec, op)

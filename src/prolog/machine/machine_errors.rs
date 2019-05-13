@@ -3,9 +3,7 @@ use prolog_parser::string_list::*;
 
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
-use prolog::num::bigint::BigInt;
-
-use std::rc::Rc;
+use prolog::rug::Integer;
 
 pub(super) type MachineStub = Vec<HeapCellValue>;
 
@@ -23,7 +21,7 @@ pub(super) struct MachineError {
 impl MachineError {
     pub(super) fn functor_stub(name: ClauseName, arity: usize) -> MachineStub {
         let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name, None)));
-        functor!("/", 2, [name, heap_integer!(arity)], SharedOpDesc::new(400, YFX))
+        functor!("/", 2, [name, heap_integer!(Integer::from(arity))], SharedOpDesc::new(400, YFX))
     }
 
     pub(super) fn evaluation_error(eval_error: EvalError) -> Self {
@@ -47,7 +45,7 @@ impl MachineError {
         let mut stub = functor!("evaluation_error", 1, [HeapCellValue::Addr(Addr::HeapCell(h + 2))]);
 
         stub.append(&mut functor!("/", 2, [HeapCellValue::Addr(Addr::HeapCell(h + 2 + 3)),
-                                           heap_integer!(arity)],
+                                           heap_integer!(Integer::from(arity))],
                                   SharedOpDesc::new(400, YFX)));
         stub.append(&mut functor!(":", 2, [mod_name, name], SharedOpDesc::new(600, XFY)));
 
@@ -99,7 +97,28 @@ impl MachineError {
         MachineError { stub, from: ErrorProvenance::Constructed }
     }
 
+    fn arithmetic_error(h: usize, err: ArithmeticError) -> Self {
+        match err {
+            ArithmeticError::UninstantiatedVar =>
+                Self::instantiation_error(),
+            ArithmeticError::NonEvaluableFunctor(name, arity) => {
+                let name = HeapCellValue::Addr(Addr::Con(name));                
+                let culprit = functor!("/", 2, [name, heap_integer!(Integer::from(arity))],
+                                       SharedOpDesc::new(400, YFX));
+                
+                let mut stub = Self::type_error(ValidType::Evaluable, Addr::HeapCell(3+h)).stub;
+                stub.extend(culprit.into_iter());
+
+                MachineError { stub, from: ErrorProvenance::Constructed }
+            }
+        }
+    }
+
     pub(super) fn syntax_error(h: usize, err: ParserError) -> Self {
+        if let ParserError::Arithmetic(err) = err {
+            return Self::arithmetic_error(h, err);
+        }
+        
         let err = vec![heap_atom!(err.as_str())];
 
         let mut stub = if err.len() == 1 {
@@ -175,7 +194,8 @@ pub enum ValidType {
     Callable,
     Character,
     Compound,
-//    Evaluable,
+    Evaluable,
+    Float,
 //    InByte,
 //    InCharacter,
     Integer,
@@ -196,7 +216,8 @@ impl ValidType {
             ValidType::Callable => "callable",
             ValidType::Character => "character",
             ValidType::Compound => "compound",
-//            ValidType::Evaluable => "evaluable",
+            ValidType::Evaluable => "evaluable",
+            ValidType::Float => "float",
 //            ValidType::InByte => "in_byte",
 //            ValidType::InCharacter => "in_character",
             ValidType::Integer => "integer",
@@ -249,21 +270,19 @@ impl RepFlag {
 // from 7.12.2 g) of 13211-1:1995
 #[derive(Clone, Copy)]
 pub enum EvalError {
-//    FloatOverflow,
-//    Undefined,
-//    FloatUnderflow,
+    FloatOverflow,
+    Undefined,
+//    Underflow,
     ZeroDivisor,
-    NoRoots
 }
 
 impl EvalError {
     pub fn as_str(self) -> &'static str {
         match self {
-//            EvalError::FloatOverflow => "float_overflow",
-//            EvalError::Undefined => "undefined",
+            EvalError::FloatOverflow => "float_overflow",
+            EvalError::Undefined => "undefined",
 //            EvalError::FloatUnderflow => "underflow",
             EvalError::ZeroDivisor => "zero_divisor",
-            EvalError::NoRoots => "no_roots"
         }
     }
 }

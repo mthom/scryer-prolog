@@ -9,7 +9,6 @@ use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::MachineState;
 use prolog::machine::term_expansion::*;
-use prolog::num::*;
 
 use std::borrow::BorrowMut;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -142,7 +141,7 @@ fn setup_op_decl(mut terms: Vec<Box<Term>>) -> Result<OpDecl, ParserError>
     };
 
     let prec = match *terms.pop().unwrap() {
-        Term::Constant(_, Constant::Number(Number::Integer(bi))) =>
+        Term::Constant(_, Constant::Integer(bi)) =>
             match bi.to_usize() {
                 Some(n) if n <= 1200 => n,
                 _ => return Err(ParserError::InconsistentEntry)
@@ -162,7 +161,7 @@ fn setup_predicate_indicator(mut term: Term) -> Result<PredicateKey, ParserError
                 let name  = *terms.pop().unwrap();
 
                 let arity = arity.to_constant().and_then(|c| c.to_integer())
-                    .and_then(|n| if !n.is_negative() { n.to_usize() } else { None })
+                    .and_then(|n| n.to_usize())
                     .ok_or(ParserError::InvalidModuleExport)?;
 
                 let name = name.to_constant().and_then(|c| c.to_atom())

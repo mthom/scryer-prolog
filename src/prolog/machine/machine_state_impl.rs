@@ -2,6 +2,7 @@ use prolog_parser::ast::*;
 use prolog_parser::string_list::StringList;
 use prolog_parser::tabled_rc::*;
 
+use prolog::arithmetic::*;
 use prolog::clause_types::*;
 use prolog::forms::*;
 use prolog::heap_iter::*;
@@ -15,15 +16,26 @@ use prolog::machine::or_stack::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
-use prolog::num::{Integer, Signed, ToPrimitive, One, Zero};
-use prolog::num::bigint::{BigInt, BigUint};
-use prolog::num::rational::Ratio;
+use prolog::ordered_float::*;
+use prolog::rug::{Integer, Rational};
 use prolog::read::PrologStream;
 
-use std::cmp::{max, Ordering};
+use std::cmp::{min, max, Ordering};
 use std::collections::{HashMap, HashSet};
+use std::f64;
 use std::mem;
 use std::rc::Rc;
+
+macro_rules! try_numeric_result {
+    ($s: ident, $e: expr, $caller: expr) => {{
+        match $e {
+            Ok(val) =>
+                Ok(val),
+            Err(e) =>
+                Err($s.error_form(MachineError::evaluation_error(e), $caller))
+        }
+    }}
+}
 
 macro_rules! try_or_fail {
     ($s:ident, $e:expr) => {{
@@ -328,7 +340,7 @@ impl MachineState {
                     stepper(c as char);
                     return true;
                 },
-                HeapCellValue::Addr(Addr::Con(Constant::Number(Number::Integer(n)))) =>
+                HeapCellValue::Addr(Addr::Con(Constant::Integer(n))) =>
                     if let Some(c) = n.to_u8() {
                         self.pstr_trail(prev_s);
                         stepper(c as char);
@@ -343,7 +355,7 @@ impl MachineState {
 
     fn bind_with_occurs_check(&mut self, r: Ref, addr: Addr) {
         let mut fail = false;
-        
+
         for value in self.acyclic_pre_order_iter(addr.clone()) {
             if let HeapCellValue::Addr(addr) = value {
                 if let Some(inner_r) = addr.as_var() {
@@ -355,14 +367,14 @@ impl MachineState {
             }
         }
 
-        self.fail = fail;        
+        self.fail = fail;
         self.bind(r, addr);
     }
 
     pub(super) fn unify_with_occurs_check(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
         let mut tabu_list: HashSet<(Addr, Addr)> = HashSet::new();
-        
+
         self.fail = false;
 
         while !(pdl.is_empty() || self.fail) {
@@ -378,7 +390,7 @@ impl MachineState {
                 } else {
                     tabu_list.insert((d1.clone(), d2.clone()));
                 }
-                
+
                 match (d1.clone(), d2.clone()) {
                     (Addr::AttrVar(h), addr) | (addr, Addr::AttrVar(h)) =>
                         self.bind_with_occurs_check(Ref::AttrVar(h), addr),
@@ -463,11 +475,11 @@ impl MachineState {
             }
         }
     }
-    
+
     pub(super) fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
         let mut tabu_list: HashSet<(Addr, Addr)> = HashSet::new();
-        
+
         self.fail = false;
 
         while !(pdl.is_empty() || self.fail) {
@@ -483,7 +495,7 @@ impl MachineState {
                 } else {
                     tabu_list.insert((d1.clone(), d2.clone()));
                 }
-                
+
                 match (d1.clone(), d2.clone()) {
                     (Addr::AttrVar(h), addr) | (addr, Addr::AttrVar(h)) =>
                         self.bind(Ref::AttrVar(h), addr),
@@ -816,48 +828,34 @@ impl MachineState {
             &ArithmeticTerm::Reg(r)        =>
                 self.arith_eval_by_metacall(r),
             &ArithmeticTerm::Interm(i)     =>
-                Ok(mem::replace(&mut self.interms[i-1], Number::Integer(Rc::new(BigInt::zero())))),
+                Ok(mem::replace(&mut self.interms[i-1], Number::Integer(Integer::from(0)))),
             &ArithmeticTerm::Number(ref n) =>
                 Ok(n.clone()),
         }
     }
 
-    fn rational_from_number(&self, n: Number, caller: &MachineStub)
-                            -> Result<Rc<Ratio<BigInt>>, MachineStub>
+    fn rational_from_number(&self, n: Number, caller: &MachineStub) -> Result<Rational, MachineStub>
     {
         match n {
             Number::Rational(r) => Ok(r),
-            Number::Float(fl) =>
-                if let Some(r) = Ratio::from_float(fl.into_inner()) {
-                    Ok(Rc::new(r))
-                } else {
-                    Err(self.error_form(MachineError::instantiation_error(), caller.clone()))
-                },
-            Number::Integer(bi) =>
-                Ok(Rc::new(Ratio::from_integer((*bi).clone())))
+            Number::Float(OrderedFloat(f)) =>
+                Rational::from_f64(f).ok_or_else(|| {
+                    self.error_form(MachineError::instantiation_error(), caller.clone())
+                }),
+            Number::Integer(n) =>
+                Ok(Rational::from(n))
         }
     }
 
     fn get_rational(&mut self, at: &ArithmeticTerm, caller: &MachineStub)
-                    -> Result<Rc<Ratio<BigInt>>, MachineStub>
+                    -> Result<Rational, MachineStub>
     {
         let n = self.get_number(at)?;
         self.rational_from_number(n, caller)
     }
 
-    fn signed_bitwise_op<Op>(&self, n1: &BigInt, n2: &BigInt, f: Op) -> Rc<BigInt>
-        where Op: FnOnce(&BigUint, &BigUint) -> BigUint
-    {
-        let n1_b = n1.to_signed_bytes_le();
-        let n2_b = n2.to_signed_bytes_le();
-
-        let u_n1 = BigUint::from_bytes_le(&n1_b);
-        let u_n2 = BigUint::from_bytes_le(&n2_b);
-
-        Rc::new(BigInt::from_signed_bytes_le(&f(&u_n1, &u_n2).to_bytes_le()))
-    }
-
-    pub(super) fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, MachineStub>
+    pub(super)
+    fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, MachineStub>
     {
         let a = self[r].clone();
 
@@ -871,13 +869,14 @@ impl MachineState {
                     let a1 = interms.pop().unwrap();
 
                     match name.as_str() {
-                        "+" => interms.push(a1 + a2),
-                        "-" => interms.push(a1 - a2),
-                        "*" => interms.push(a1 * a2),
+                        "+" => interms.push(try_numeric_result!(self, a1 + a2, caller.clone())?),
+                        "-" => interms.push(try_numeric_result!(self, a1 - a2, caller.clone())?),
+                        "*" => interms.push(try_numeric_result!(self, a1 * a2, caller.clone())?),
                         "/" => interms.push(self.div(a1, a2)?),
-                        "**" => interms.push(self.pow(a1, a2)?),
-                        "^"  => interms.push(self.binary_pow(a1, a2)?),
+                        "**" => interms.push(self.pow(a1, a2, "(is)")?),
+                        "^"  => interms.push(self.int_pow(a1, a2)?),
                         "max"  => interms.push(self.max(a1, a2)?),
+                        "min"  => interms.push(self.min(a1, a2)?),
                         "rdiv" => {
                             let r1 = self.rational_from_number(a1, &caller)?;
                             let r2 = self.rational_from_number(a2, &caller)?;
@@ -886,7 +885,7 @@ impl MachineState {
                             interms.push(result)
                         },
                         "//"  => interms.push(Number::Integer(self.idiv(a1, a2)?)),
-                        "div" => interms.push(Number::Integer(self.fidiv(a1, a2)?)),
+                        "div" => interms.push(Number::Integer(self.int_floor_div(a1, a2)?)),
                         ">>"  => interms.push(Number::Integer(self.shr(a1, a2)?)),
                         "<<"  => interms.push(Number::Integer(self.shl(a1, a2)?)),
                         "/\\" => interms.push(Number::Integer(self.and(a1, a2)?)),
@@ -894,6 +893,7 @@ impl MachineState {
                         "xor" => interms.push(Number::Integer(self.xor(a1, a2)?)),
                         "mod" => interms.push(Number::Integer(self.modulus(a1, a2)?)),
                         "rem" => interms.push(Number::Integer(self.remainder(a1, a2)?)),
+                        "atan2" => interms.push(Number::Float(OrderedFloat(self.atan2(a1, a2)?))),
                         _     => return Err(self.error_form(MachineError::instantiation_error(),
                                                             caller))
                     }
@@ -902,13 +902,34 @@ impl MachineState {
                     let a1 = interms.pop().unwrap();
 
                     match name.as_str() {
-                        "-" => interms.push(- a1),
-                        _   => return Err(self.error_form(MachineError::instantiation_error(),
-                                                          caller))
+                        "-"   => interms.push(- a1),
+                        "+"   => interms.push(a1),
+                        "cos" => interms.push(Number::Float(OrderedFloat(self.cos(a1)?))),
+                        "sin" => interms.push(Number::Float(OrderedFloat(self.sin(a1)?))),
+                        "tan" => interms.push(Number::Float(OrderedFloat(self.tan(a1)?))),
+                        "sqrt" => interms.push(Number::Float(OrderedFloat(self.sqrt(a1)?))),
+                        "log" => interms.push(Number::Float(OrderedFloat(self.log(a1)?))),
+                        "exp" => interms.push(Number::Float(OrderedFloat(self.exp(a1)?))),
+                        "acos" => interms.push(Number::Float(OrderedFloat(self.acos(a1)?))),
+                        "asin" => interms.push(Number::Float(OrderedFloat(self.asin(a1)?))),
+                        "atan" => interms.push(Number::Float(OrderedFloat(self.atan(a1)?))),
+                        "abs"  => interms.push(a1.abs()),
+                        "float" => interms.push(Number::Float(OrderedFloat(self.float(a1)?))),
+                        "truncate" => interms.push(Number::Integer(self.truncate(a1))),
+                        "round" => interms.push(Number::Integer(self.round(a1)?)),
+                        "ceiling" => interms.push(Number::Integer(self.ceiling(a1))),
+                        "floor" => interms.push(Number::Integer(self.floor(a1))),
+                        "\\" => interms.push(Number::Integer(self.bitwise_complement(a1)?)),
+                        _     => return Err(self.error_form(MachineError::instantiation_error(),
+                                                            caller))
                     }
                 },
-                HeapCellValue::Addr(Addr::Con(Constant::Number(n))) =>
-                    interms.push(n),
+                HeapCellValue::Addr(Addr::Con(Constant::Integer(n))) =>
+                    interms.push(Number::Integer(n)),
+                HeapCellValue::Addr(Addr::Con(Constant::Float(n))) =>
+                    interms.push(Number::Float(n)),
+                HeapCellValue::Addr(Addr::Con(Constant::Rational(n))) =>
+                    interms.push(Number::Rational(n)),
                 _ =>
                     return Err(self.error_form(MachineError::instantiation_error(), caller))
             }
@@ -917,58 +938,46 @@ impl MachineState {
         Ok(interms.pop().unwrap())
     }
 
-    fn rdiv(&self, r1: Rc<Ratio<BigInt>>, r2: Rc<Ratio<BigInt>>)
-            -> Result<Rc<Ratio<BigInt>>, MachineStub>
+    fn rdiv(&self, r1: Rational, r2: Rational) -> Result<Rational, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(rdiv)"), 2);
 
-        if *r2 == Ratio::zero() {
+        if r2 == 0 {
             Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
         } else {
-            Ok(Rc::new(&*r1 / &*r2))
+            Ok(r1 / r2)
         }
     }
 
-    fn fidiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
+    fn int_floor_div(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(div)"), 2);
 
-        match (n1, n2) {
-            (Number::Integer(n1), Number::Integer(n2)) =>
-                if *n2 == BigInt::zero() {
-                    Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    Ok(Rc::new(n1.div_floor(&n2)))
-                },
-            (Number::Integer(_), n2) =>
-                Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n2))),
-                                    stub)),
-            (n1, _) =>
-                Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n1))),
-                                    stub))
+        match n1 / n2 {
+            Ok(result) => Ok(rnd_i(result)),
+            Err(e) => Err(self.error_form(MachineError::evaluation_error(e), stub))
         }
     }
 
-    fn idiv(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
+    fn idiv(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(//)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                if *n2 == BigInt::zero() {
-                    Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
+                if n2 == 0 {
+                    Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor),
+                                        stub))
                 } else {
-                    Ok(Rc::new(&*n1 / &*n2))
+                    Ok(n1.div_rem(n2).0)
                 },
             (Number::Integer(_), n2) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n2))),
+                                                             Addr::Con(n2.to_constant())),
                                     stub)),
             (n1, _) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n1))),
+                                                             Addr::Con(n1.to_constant())),
                                     stub))
         }
     }
@@ -980,133 +989,299 @@ impl MachineState {
         if n2.is_zero() {
             Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
         } else {
-            Ok(n1 / n2)
+            try_numeric_result!(self, n1 / n2, stub)
         }
     }
 
-    fn binary_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub>
+    fn atan2(&self, n1: Number, n2: Number) -> Result<f64, MachineStub>
     {
+        let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+
+        if n1.is_zero() && n2.is_zero() {
+            Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub))
+        } else {
+            let f1 = self.float(n1)?;
+            let f2 = self.float(n2)?;
+
+            self.unary_float_fn_template(Number::Float(OrderedFloat(f1)), |f| f.atan2(f2))
+        }
+    }
+
+    fn int_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub>
+    {
+        if n1.is_zero() && n2.is_negative() {
+            let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+            return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
+        }
+
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                self.pow(Number::Integer(n1), Number::Integer(n2)),
-            (Number::Integer(_), n) | (n, _) => {
-                let n = Addr::Con(Constant::Number(n));
-                let stub = MachineError::functor_stub(clause_name!("^"), 2);
+                if n1 != 1 && n2 < 0 {
+                    let n = Addr::Con(Constant::Integer(n1));
+                    let stub = MachineError::functor_stub(clause_name!("^"), 2);
 
-                Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
+                    Err(self.error_form(MachineError::type_error(ValidType::Float, n), stub))
+                } else {
+                    Ok(Number::Integer(binary_pow(n1, n2)))
+                },
+            (n1, Number::Integer(n2)) => {
+                let f1 = self.float(n1)?;
+                let f2 = self.float(Number::Integer(n2))?;
+
+                self.unary_float_fn_template(Number::Float(OrderedFloat(f1)), |f| f.powf(f2))
+                    .map(|f| Number::Float(OrderedFloat(f)))
+            },
+            (n1, n2) => {
+                let f2 = self.float(n2)?;
+
+                if n1.is_negative() && f2 != f2.floor() {
+                    let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+                    return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
+                }
+
+                let f1 = self.float(n1)?;
+                self.unary_float_fn_template(Number::Float(OrderedFloat(f1)), |f| f.powf(f2))
+                    .map(|f| Number::Float(OrderedFloat(f)))
             }
         }
     }
 
-    fn pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub>
+    fn float_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub>
     {
-        match n1.pow(n2) {
-            Ok(result) => Ok(result),
-            Err(_) => {
-                let stub = MachineError::functor_stub(clause_name!("**"), 2);
-                Err(self.error_form(MachineError::evaluation_error(EvalError::NoRoots),
-                                    stub))
-            }
+        let f1 = result_f(n1, rnd_f);
+        let f2 = result_f(n2, rnd_f);
+
+        let stub = MachineError::functor_stub(clause_name!("(**)"), 2);
+
+        let f1 = try_numeric_result!(self, f1, stub.clone())?;
+        let f2 = try_numeric_result!(self, f2, stub.clone())?;
+
+        let result = result_f(Number::Float(OrderedFloat(f1.powf(f2))), rnd_f);
+
+        Ok(Number::Float(OrderedFloat(try_numeric_result!(self, result, stub)?)))
+    }
+
+    fn pow(&self, n1: Number, n2: Number, culprit: &'static str) -> Result<Number, MachineStub>
+    {
+        if n2.is_negative() {
+            let stub = MachineError::functor_stub(clause_name!(culprit), 2);
+            return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
+        }
+
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) =>
+                Ok(Number::Integer(binary_pow(n1, n2))),
+            (n1, n2) =>
+                self.float_pow(n1, n2)
         }
     }
 
-    fn shr(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
+    fn unary_float_fn_template<FloatFn>(&self, n1: Number, f: FloatFn) -> Result<f64, MachineStub>
+      where FloatFn: Fn(f64) -> f64
+    {
+        let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+
+        let f1 = try_numeric_result!(self, result_f(n1, rnd_f), stub.clone())?;
+        let f1 = result_f(Number::Float(OrderedFloat(f(f1))), rnd_f);
+
+        try_numeric_result!(self, f1, stub)
+    }
+
+    fn sin(&self, n1: Number) -> Result<f64, MachineStub>
+    {
+        self.unary_float_fn_template(n1, |f| f.sin())
+    }
+
+    fn cos(&self, n1: Number) -> Result<f64, MachineStub>
+    {
+        self.unary_float_fn_template(n1, |f| f.cos())
+    }
+
+    fn tan(&self, n1: Number) -> Result<f64, MachineStub>
+    {
+        self.unary_float_fn_template(n1, |f| f.tan())
+    }
+
+    fn log(&self, n1: Number) -> Result<f64, MachineStub>
+    {
+        self.unary_float_fn_template(n1, |f| f.log(f64::consts::E))
+    }
+
+    fn exp(&self, n1: Number) -> Result<f64, MachineStub>
+    {
+        self.unary_float_fn_template(n1, |f| f.exp())
+    }
+
+    fn asin(&self, n1: Number) -> Result<f64, MachineStub>
+    {
+        self.unary_float_fn_template(n1, |f| f.asin())
+    }
+
+    fn acos(&self, n1: Number) -> Result<f64, MachineStub>
+    {
+        self.unary_float_fn_template(n1, |f| f.acos())
+    }
+
+    fn atan(&self, n1: Number) -> Result<f64, MachineStub>
+    {
+        self.unary_float_fn_template(n1, |f| f.atan())
+    }
+
+    fn sqrt(&self, n1: Number) -> Result<f64, MachineStub>
+    {
+        if n1.is_negative() {
+            let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+            return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
+        }
+
+        self.unary_float_fn_template(n1, |f| f.sqrt())
+    }
+
+    fn float(&self, n: Number) -> Result<f64, MachineStub>
+    {
+        let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+        try_numeric_result!(self, result_f(n, rnd_f), stub)
+    }
+
+    fn floor(&self, n1: Number) -> Integer
+    {
+        rnd_i(n1)
+    }
+
+    fn ceiling(&self, n1: Number) -> Integer
+    {
+        -self.floor(-n1)
+    }
+
+    fn truncate(&self, n: Number) -> Integer
+    {
+        if n.is_negative() {
+            -self.floor(n.abs())
+        } else {
+            self.floor(n)
+        }
+    }
+
+    fn round(&self, n: Number) -> Result<Integer, MachineStub>
+    {
+        let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+
+        let result = n + Number::Float(OrderedFloat(0.5f64));
+        let result = try_numeric_result!(self, result, stub)?;
+
+        Ok(self.floor(result))
+    }
+
+    fn shr(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(>>)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                match n2.to_usize() {
-                    Some(n2) => Ok(Rc::new(&*n1 >> n2)),
-                    _        => Ok(Rc::new(&*n1 >> usize::max_value()))
+                match n2.to_u32() {
+                    Some(n2) => Ok(n1 >> n2),
+                    _        => Ok(n1 >> u32::max_value())
                 },
             (Number::Integer(_), n2) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n2))),
+                                                             Addr::Con(n2.to_constant())),
                                     stub)),
             (n1, _) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n1))),
+                                                             Addr::Con(n1.to_constant())),
                                     stub))
         }
     }
 
-    fn shl(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
+    fn shl(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(<<)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                match n2.to_usize() {
-                    Some(n2) => Ok(Rc::new(&*n1 << n2)),
-                    _        => Ok(Rc::new(&*n1 << usize::max_value()))
+                match n2.to_u32() {
+                    Some(n2) => Ok(n1 << n2),
+                    _        => Ok(n1 << u32::max_value())
                 },
             (Number::Integer(_), n2) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n2))),
+                                                             Addr::Con(n2.to_constant())),
                                     stub)),
             (n1, _) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n1))),
+                                                             Addr::Con(n1.to_constant())),
                                     stub))
         }
     }
 
-    fn xor(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
+    fn bitwise_complement(&self, n1: Number) -> Result<Integer, MachineStub>
+    {
+        let stub = MachineError::functor_stub(clause_name!("(\\)"), 2);
+
+        match n1 {
+            Number::Integer(n1) =>
+                Ok(!n1),
+            _ =>
+                Err(self.error_form(MachineError::type_error(ValidType::Integer,
+                                                             Addr::Con(n1.to_constant())),
+                                    stub))
+        }
+    }
+
+    fn xor(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(xor)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 ^ u_n2)),
+                Ok(n1 ^ n2),
             (Number::Integer(_), n2) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n2))),
+                                                             Addr::Con(n2.to_constant())),
                                     stub)),
             (n1, _) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n1))),
+                                                             Addr::Con(n1.to_constant())),
                                     stub))
         }
     }
 
-    fn and(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
+    fn and(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(/\\)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
+                Ok(n1 & n2),
             (Number::Integer(_), n2) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n2))),
+                                                             Addr::Con(n2.to_constant())),
                                     stub)),
             (n1, _) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                    Addr::Con(Constant::Number(n1))),
+                                                             Addr::Con(n1.to_constant())),
                                     stub))
         }
     }
 
-    fn modulus(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
+    fn modulus(&self, x: Number, y: Number) -> Result<Integer, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(mod)"), 2);
 
-        match (n1, n2) {
-            (Number::Integer(n1), Number::Integer(n2)) =>
-                if *n2 == BigInt::zero() {
-                    Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor),
-                                        stub))
+        match (x, y) {
+            (Number::Integer(x), Number::Integer(y)) =>
+                if y == 0 {
+                    Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
                 } else {
-                    Ok(Rc::new(n1.mod_floor(&n2)))
+                    Ok(x.div_rem_floor(y).1)
                 },
             (Number::Integer(_), n2) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                             Addr::Con(Constant::Number(n2))),
+                                                             Addr::Con(n2.to_constant())),
                                     stub)),
             (n1, _) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                             Addr::Con(Constant::Number(n1))),
+                                                             Addr::Con(n1.to_constant())),
                                     stub))
         }
     }
@@ -1115,68 +1290,76 @@ impl MachineState {
         Ok(max(n1, n2))
     }
 
-    fn remainder(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
+    fn min(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
+        Ok(min(n1, n2))
+    }
+
+    fn remainder(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(rem)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                if *n2 == BigInt::zero() {
+                if n2 == 0 {
                     Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor),
                                         stub))
                 } else {
-                    Ok(Rc::new(&*n1 % &*n2))
+                    Ok(n1 % n2)
                 },
             (Number::Integer(_), n2) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                             Addr::Con(Constant::Number(n2))),
+                                                             Addr::Con(n2.to_constant())),
                                     stub)),
             (n1, _) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                             Addr::Con(Constant::Number(n1))),
+                                                             Addr::Con(n1.to_constant())),
                                     stub))
         }
     }
 
-    fn or(&self, n1: Number, n2: Number) -> Result<Rc<BigInt>, MachineStub>
+    fn or(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(\\/)"), 2);
 
         match (n1, n2) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                Ok(self.signed_bitwise_op(&*n1, &*n2, |u_n1, u_n2| u_n1 & u_n2)),
+                Ok(n1 | n2),
             (Number::Integer(_), n2) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                             Addr::Con(Constant::Number(n2))),
+                                                             Addr::Con(n2.to_constant())),
                                     stub)),
             (n1, _) =>
                 Err(self.error_form(MachineError::type_error(ValidType::Integer,
-                                                             Addr::Con(Constant::Number(n1))),
+                                                             Addr::Con(n1.to_constant())),
                                     stub))
         }
     }
 
-    pub(super) fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
+    pub(super)
+    fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction)
+    {
+        let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+
         match instr {
             &ArithmeticInstruction::Add(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] = n1 + n2;
+                self.interms[t - 1] = try_or_fail!(self, try_numeric_result!(self, n1 + n2, stub));
                 self.p += 1;
             },
             &ArithmeticInstruction::Sub(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] = n1 - n2;
+                self.interms[t - 1] = try_or_fail!(self, try_numeric_result!(self, n1 - n2, stub));
                 self.p += 1;
             },
             &ArithmeticInstruction::Mul(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] = n1 * n2;
+                self.interms[t - 1] = try_or_fail!(self, try_numeric_result!(self, n1 * n2, stub));
                 self.p += 1;
             },
             &ArithmeticInstruction::Max(ref a1, ref a2, t) => {
@@ -1186,18 +1369,25 @@ impl MachineState {
                 self.interms[t - 1] = try_or_fail!(self, self.max(n1, n2));
                 self.p += 1;
             },
+            &ArithmeticInstruction::Min(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                self.interms[t - 1] = try_or_fail!(self, self.min(n1, n2));
+                self.p += 1;
+            },
             &ArithmeticInstruction::IntPow(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] = try_or_fail!(self, self.binary_pow(n1, n2));
+                self.interms[t - 1] = try_or_fail!(self, self.int_pow(n1, n2));
                 self.p += 1;
             },
             &ArithmeticInstruction::Pow(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] = try_or_fail!(self, self.pow(n1, n2));
+                self.interms[t - 1] = try_or_fail!(self, self.pow(n1, n2, "(**)"));
                 self.p += 1;
             },
             &ArithmeticInstruction::RDiv(ref a1, ref a2, t) => {
@@ -1209,11 +1399,11 @@ impl MachineState {
                 self.interms[t - 1] = Number::Rational(try_or_fail!(self, self.rdiv(r1, r2)));
                 self.p += 1;
             },
-            &ArithmeticInstruction::FIDiv(ref a1, ref a2, t) => {
+            &ArithmeticInstruction::IntFloorDiv(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.fidiv(n1, n2)));
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.int_floor_div(n1, n2)));
                 self.p += 1;
             },
             &ArithmeticInstruction::IDiv(ref a1, ref a2, t) => {
@@ -1233,6 +1423,12 @@ impl MachineState {
                 let n1 = try_or_fail!(self, self.get_number(a1));
 
                 self.interms[t - 1] = - n1;
+                self.p += 1;
+            },
+            &ArithmeticInstruction::BitwiseComplement(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.bitwise_complement(n1)));
                 self.p += 1;
             },
             &ArithmeticInstruction::Div(ref a1, ref a2, t) => {
@@ -1290,7 +1486,104 @@ impl MachineState {
 
                 self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.remainder(n1, n2)));
                 self.p += 1;
-            }
+            },
+            &ArithmeticInstruction::Cos(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.cos(n1))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Sin(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.sin(n1))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Tan(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.tan(n1))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Sqrt(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.sqrt(n1))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Log(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.log(n1))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Exp(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.exp(n1))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::ACos(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.acos(n1))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::ASin(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.asin(n1))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::ATan(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.atan(n1))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::ATan2(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.atan2(n1, n2))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Float(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Float(OrderedFloat(try_or_fail!(self, self.float(n1))));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Truncate(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Integer(self.truncate(n1));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Round(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.round(n1)));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Ceiling(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Integer(self.ceiling(n1));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Floor(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Integer(self.floor(n1));
+                self.p += 1;
+            },
+            &ArithmeticInstruction::Plus(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = n1;
+                self.p += 1;
+            },
         };
     }
 
@@ -1775,10 +2068,10 @@ impl MachineState {
         match n {
             Addr::HeapCell(_) | Addr::StackCell(..) => // 8.5.2.3 a)
                 return Err(self.error_form(MachineError::instantiation_error(), stub)),
-            Addr::Con(Constant::Number(Number::Integer(n))) => {
-                if n.is_negative() {
+            Addr::Con(Constant::Integer(n)) => {
+                if n < 0 {
                     // 8.5.2.3 e)
-                    let n = Addr::Con(Constant::Number(Number::Integer(n)));
+                    let n = Addr::Con(Constant::Integer(n));
                     let dom_err = MachineError::domain_error(DomainError::NotLessThanZero, n);
 
                     return Err(self.error_form(dom_err, stub));
@@ -1829,7 +2122,7 @@ impl MachineState {
                                 } else {
                                     Addr::Con(Constant::String(s.tail()))
                                 };
-                                
+
                                 self.unify(a3, h_a);
                             } else {
                                 self.fail = true;
@@ -1982,20 +2275,50 @@ impl MachineState {
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::StackCell(..)), _) =>
                     return Ordering::Less,
-                (HeapCellValue::Addr(Addr::Con(Constant::Number(..))),
+                (HeapCellValue::Addr(Addr::Con(Constant::Integer(..))),
                  HeapCellValue::Addr(Addr::HeapCell(_)))
-              | (HeapCellValue::Addr(Addr::Con(Constant::Number(..))),
+              | (HeapCellValue::Addr(Addr::Con(Constant::Integer(..))),
                  HeapCellValue::Addr(Addr::AttrVar(_))) =>
                     return Ordering::Greater,
-                (HeapCellValue::Addr(Addr::Con(Constant::Number(..))),
+                (HeapCellValue::Addr(Addr::Con(Constant::Integer(..))),
                  HeapCellValue::Addr(Addr::StackCell(..))) =>
                     return Ordering::Greater,
-                (HeapCellValue::Addr(Addr::Con(Constant::Number(n1))),
-                 HeapCellValue::Addr(Addr::Con(Constant::Number(n2)))) =>
+                (HeapCellValue::Addr(Addr::Con(Constant::Integer(n1))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Integer(n2)))) =>
                     if n1 != n2 {
                         return n1.cmp(&n2);
                     },
-                (HeapCellValue::Addr(Addr::Con(Constant::Number(_))), _) =>
+                (HeapCellValue::Addr(Addr::Con(Constant::Integer(_))), _) =>
+                    return Ordering::Less,
+                (HeapCellValue::Addr(Addr::Con(Constant::Float(..))),
+                 HeapCellValue::Addr(Addr::HeapCell(_)))
+              | (HeapCellValue::Addr(Addr::Con(Constant::Float(..))),
+                 HeapCellValue::Addr(Addr::AttrVar(_))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Float(..))),
+                 HeapCellValue::Addr(Addr::StackCell(..))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Float(n1))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Float(n2)))) =>
+                    if n1 != n2 {
+                        return n1.cmp(&n2);
+                    },
+                (HeapCellValue::Addr(Addr::Con(Constant::Float(_))), _) =>
+                    return Ordering::Less,
+                (HeapCellValue::Addr(Addr::Con(Constant::Rational(..))),
+                 HeapCellValue::Addr(Addr::HeapCell(_)))
+              | (HeapCellValue::Addr(Addr::Con(Constant::Rational(..))),
+                 HeapCellValue::Addr(Addr::AttrVar(_))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Rational(..))),
+                 HeapCellValue::Addr(Addr::StackCell(..))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Rational(n1))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Rational(n2)))) =>
+                    if n1 != n2 {
+                        return n1.cmp(&n2);
+                    },
+                (HeapCellValue::Addr(Addr::Con(Constant::Rational(_))), _) =>
                     return Ordering::Less,
                 (HeapCellValue::Addr(Addr::Con(Constant::String(..))),
                  HeapCellValue::Addr(Addr::HeapCell(_)))
@@ -2006,7 +2329,13 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::StackCell(..))) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::String(_))),
-                 HeapCellValue::Addr(Addr::Con(Constant::Number(_)))) =>
+                 HeapCellValue::Addr(Addr::Con(Constant::Integer(_)))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::String(_))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Rational(_)))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::String(_))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Float(_)))) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::String(s1))),
                  HeapCellValue::Addr(Addr::Con(Constant::String(s2)))) =>
@@ -2034,7 +2363,13 @@ impl MachineState {
                  HeapCellValue::Addr(Addr::StackCell(..))) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
-                 HeapCellValue::Addr(Addr::Con(Constant::Number(_)))) =>
+                 HeapCellValue::Addr(Addr::Con(Constant::Float(_)))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Integer(_)))) =>
+                    return Ordering::Greater,
+                (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
+                 HeapCellValue::Addr(Addr::Con(Constant::Rational(_)))) =>
                     return Ordering::Greater,
                 (HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
                  HeapCellValue::Addr(Addr::Con(Constant::String(_)))) =>
@@ -2114,10 +2449,10 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Number(Number::Integer(_))) => self.p += 1,
+                    Addr::Con(Constant::Integer(_))  => self.p += 1,
                     Addr::Con(Constant::CharCode(_)) => self.p += 1,
-                    Addr::Con(Constant::Number(Number::Rational(r))) =>
-                        if r.denom() == &BigInt::one() {
+                    Addr::Con(Constant::Rational(r)) =>
+                        if r.denom() == &1 {
                             self.p += 1;
                         } else {
                             self.fail = true;
@@ -2137,7 +2472,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Number(Number::Float(_))) => self.p += 1,
+                    Addr::Con(Constant::Float(_)) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -2145,7 +2480,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::Con(Constant::Number(Number::Rational(_))) => self.p += 1,
+                    Addr::Con(Constant::Rational(_)) => self.p += 1,
                     _ => self.fail = true
                 };
             },
@@ -2195,11 +2530,10 @@ impl MachineState {
         }
     }
 
-    fn try_functor_compound_case(&mut self, name: ClauseName, arity: usize,
-                                 spec: Option<SharedOpDesc>)
+    fn try_functor_compound_case(&mut self, name: ClauseName, arity: usize, spec: Option<SharedOpDesc>)
     {
         let name  = Addr::Con(Constant::Atom(name, spec));
-        let arity = Addr::Con(integer!(arity));
+        let arity = Addr::Con(Constant::Integer(Integer::from(arity)));
 
         self.try_functor_unify_components(name, arity);
     }
@@ -2239,7 +2573,7 @@ impl MachineState {
                     self.try_functor_compound_case(clause_name!("."), 2, shared_op_desc)
                 },
             Addr::Con(_) =>
-                self.try_functor_unify_components(a1, Addr::Con(integer!(0))),
+                self.try_functor_unify_components(a1, Addr::Con(Constant::Integer(Integer::from(0)))),
             Addr::Str(o) =>
                 match self.heap[o].clone() {
                     HeapCellValue::NamedStr(arity, name, spec) => {
@@ -2260,7 +2594,7 @@ impl MachineState {
                     return Err(self.error_form(MachineError::instantiation_error(), stub));
                 }
 
-                if let Addr::Con(Constant::Number(Number::Integer(arity))) = arity {
+                if let Addr::Con(Constant::Integer(arity)) = arity {
                     let arity = match arity.to_isize() {
                         Some(arity) => arity,
                         None => {
@@ -2275,8 +2609,9 @@ impl MachineState {
                         return Err(self.error_form(rep_err, stub));
                     } else if arity < 0 {
                         // 8.5.1.3 g)
+                        let arity   = Integer::from(arity);
                         let dom_err = MachineError::domain_error(DomainError::NotLessThanZero,
-                                                                 Addr::Con(integer!(arity)));
+                                                                 Addr::Con(Constant::Integer(arity)));
                         return Err(self.error_form(dom_err, stub));
                     }
 
@@ -2333,12 +2668,12 @@ impl MachineState {
             return Ok(s);
         } else {
             let stub = MachineError::functor_stub(clause_name!("partial_string"), 2);
-            
+
             match self.try_from_list(r, stub.clone()) {
                 Ok(addrs) =>
                     Ok(StringList::new(match self.try_char_list(addrs) {
                         Ok(string) => string,
-                        Err(err) => {                            
+                        Err(err) => {
                             return Err(self.error_form(err, stub));
                         }
                     }, false)),

@@ -5,6 +5,8 @@ use prolog_parser::tabled_rc::*;
 use prolog::clause_types::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
+use prolog::ordered_float::OrderedFloat;
+use prolog::rug::{Integer, Rational};
 
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
@@ -287,4 +289,63 @@ pub struct Module {
     pub user_term_expansions: (Predicate, VecDeque<TopLevel>), // term expansions inherited from the user scope.
     pub user_goal_expansions: (Predicate, VecDeque<TopLevel>), // same for goal_expansions.
     pub inserted_expansions: bool // has the module been successfully inserted into toplevel??
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum Number {
+    Float(OrderedFloat<f64>),
+    Integer(Integer),
+    Rational(Rational)
+}
+
+impl Default for Number {
+    fn default() -> Self {
+        Number::Float(OrderedFloat(0f64))
+    }
+}
+
+impl Number {
+    pub fn to_constant(self) -> Constant {
+        match self {
+            Number::Integer(n) => Constant::Integer(n),
+            Number::Float(f) => Constant::Float(f),
+            Number::Rational(r) => Constant::Rational(r)
+        }
+    }
+
+    #[inline]
+    pub fn is_positive(&self) -> bool {
+        match self {
+            &Number::Integer(ref n) => n > &0,
+            &Number::Float(OrderedFloat(f)) => f.is_sign_positive(),
+            &Number::Rational(ref r) => r > &0
+        }
+    }
+
+    #[inline]
+    pub fn is_negative(&self) -> bool {
+        match self {
+            &Number::Integer(ref n) => n < &0,
+            &Number::Float(OrderedFloat(f)) => f.is_sign_negative(),
+            &Number::Rational(ref r) => r < &0
+        }
+    }
+
+    #[inline]
+    pub fn is_zero(&self) -> bool {
+        match self {
+            &Number::Integer(ref n) => n == &0,
+            &Number::Float(f) => f == OrderedFloat(0f64),
+            &Number::Rational(ref r) => r == &0
+        }
+    }
+
+    #[inline]
+    pub fn abs(self) -> Self {
+        match self {
+            Number::Integer(n) => Number::Integer(n.abs()),
+            Number::Float(f) => Number::Float(OrderedFloat(f.abs())),
+            Number::Rational(r) => Number::Rational(r.abs())
+        }
+    }
 }
