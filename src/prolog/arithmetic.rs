@@ -40,6 +40,10 @@ impl<'a> ArithInstructionIterator<'a> {
                 match ClauseType::from(name.clone(), terms.len(), fixity.clone()) {
                     ct @ ClauseType::Named(..) | ct @ ClauseType::Op(..) =>
                         Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms)),
+                    ClauseType::Inlined(InlinedClauseType::IsFloat(_)) => {
+                        let ct = ClauseType::Named(clause_name!("float"), 1, CodeIndex::default());
+                        Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms))
+                    },
                     _ => Err(ArithmeticError::NonEvaluableFunctor(Constant::Atom(name.clone(),
                                                                                  fixity.clone()),
                                                                   terms.len()))
@@ -233,6 +237,8 @@ impl<'a> ArithmeticEvaluator<'a>
                 self.interm.push(ArithmeticTerm::Number(Number::Float(n.clone()))),
             &Constant::Rational(ref n) =>
                 self.interm.push(ArithmeticTerm::Number(Number::Rational(n.clone()))),
+            &Constant::Atom(ref name, _) if name.as_str() == "pi" =>
+                self.interm.push(ArithmeticTerm::Number(Number::Float(OrderedFloat(f64::consts::PI)))),
             _ =>
                 return Err(ArithmeticError::NonEvaluableFunctor(c.clone(), 0))
         }

@@ -930,6 +930,9 @@ impl MachineState {
                     interms.push(Number::Float(n)),
                 HeapCellValue::Addr(Addr::Con(Constant::Rational(n))) =>
                     interms.push(Number::Rational(n)),
+                HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _)))
+                    if name.as_str() == "pi" =>
+                      interms.push(Number::Float(OrderedFloat(f64::consts::PI))),
                 _ =>
                     return Err(self.error_form(MachineError::instantiation_error(), caller))
             }
