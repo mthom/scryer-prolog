@@ -247,12 +247,15 @@ must_be_var_names_list(VarNames) :-
 
 must_be_var_names_list_([], List).
 must_be_var_names_list_([VarName | VarNames], List) :-
-    (  nonvar(VarName), VarName = (Atom = _) ->
-       (  atom(Atom) -> must_be_var_names_list_(VarNames, List)
-       ;  var(Atom)  -> throw(error(instantiation_error, write_term/2))
+    (  nonvar(VarName) ->
+       (  VarName = (Atom = _) ->
+	      (  atom(Atom) -> must_be_var_names_list_(VarNames, List)
+	      ;  var(Atom)  -> throw(error(instantiation_error, write_term/2))
+	      ;  throw(error(domain_error(write_options, variable_names(List)), write_term/2))
+	      )
        ;  throw(error(domain_error(write_options, variable_names(List)), write_term/2))
        )
-    ;  throw(error(domain_error(write_options, variable_names(List)), write_term/2))
+    ;  throw(error(instantiation_error, write_term/2)) % throw(error(domain_error(write_options, variable_names(List)), write_term/2))
     ).
 
 write_term(_, Options) :-
