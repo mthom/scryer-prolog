@@ -10,7 +10,7 @@ use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 
 use prolog::ordered_float::*;
-use prolog::rug::{Integer, Rational};
+use prolog::rug::{Assign, Integer, Rational};
 use prolog::rug::ops::PowAssign;
 
 use std::cell::Cell;
@@ -279,35 +279,42 @@ impl<'a> ArithmeticEvaluator<'a>
 }
 
 // integer division rounding function -- 9.1.3.1.
-pub fn rnd_i(n: Number) -> Integer {
+pub fn rnd_i<'a>(n: &'a Number) -> RefOrOwned<'a, Integer> {
     match n {
-        Number::Integer(n) => n,
-        Number::Float(OrderedFloat(f)) =>
-            Integer::from_f64(f.floor()).unwrap_or_else(|| Integer::from(0)),
-        Number::Rational(r) => r.fract_floor(Integer::new()).1
+        &Number::Integer(ref n) =>
+            RefOrOwned::Borrowed(n),
+        &Number::Float(OrderedFloat(f)) =>
+            RefOrOwned::Owned(Integer::from_f64(f.floor()).unwrap_or_else(|| Integer::from(0))),
+        &Number::Rational(ref r) => {
+            let r_ref = r.fract_floor_ref();
+            let (mut fract, mut floor) = (Rational::new(), Integer::new());
+            
+            (&mut fract, &mut floor).assign(r_ref);            
+            RefOrOwned::Owned(floor)
+        }
     }
 }
 
 // floating point rounding function -- 9.1.4.1.
-pub fn rnd_f(n: Number) -> f64 {
+pub fn rnd_f(n: &Number) -> f64 {
     match n {
-        Number::Integer(n) => n.to_f64(),
-        Number::Float(OrderedFloat(f)) => f,
-        Number::Rational(r) => r.to_f64()
+        &Number::Integer(ref n) => n.to_f64(),
+        &Number::Float(OrderedFloat(f)) => f,
+        &Number::Rational(ref r) => r.to_f64()
     }
 }
 
 // floating point result function -- 9.1.4.2.
-pub fn result_f<Round>(n: Number, round: Round) -> Result<f64, EvalError>
-  where Round: Fn(Number) -> f64
+pub fn result_f<Round>(n: &Number, round: Round) -> Result<f64, EvalError>
+  where Round: Fn(&Number) -> f64
 {
     let f = rnd_f(n);
 
     match f.classify() {
         FpCategory::Normal | FpCategory::Zero =>
-            Ok(round(Number::Float(OrderedFloat(f)))),
+            Ok(round(&Number::Float(OrderedFloat(f)))),
         FpCategory::Infinite => {
-            let f = round(Number::Float(OrderedFloat(f)));
+            let f = round(&Number::Float(OrderedFloat(f)));
 
             if OrderedFloat(f) == OrderedFloat(f64::MAX) {
                 Ok(f)
@@ -316,31 +323,31 @@ pub fn result_f<Round>(n: Number, round: Round) -> Result<f64, EvalError>
             }
         },
         FpCategory::Nan => Err(EvalError::Undefined),
-        _ => Ok(round(Number::Float(OrderedFloat(f))))
+        _ => Ok(round(&Number::Float(OrderedFloat(f))))
     }
 }
 
 fn float_i_to_f(n: Integer) -> Result<f64, EvalError> {
-    result_f(Number::Integer(n), rnd_f)
+    result_f(&Number::Integer(n), rnd_f)
 }
 
 fn float_r_to_f(r: Rational) -> Result<f64, EvalError> {
-    result_f(Number::Rational(r), rnd_f)
+    result_f(&Number::Rational(r), rnd_f)
 }
 
 fn add_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
-    Ok(OrderedFloat(result_f(Number::Float(OrderedFloat(f1 + f2)), rnd_f)?))
+    Ok(OrderedFloat(result_f(&Number::Float(OrderedFloat(f1 + f2)), rnd_f)?))
 }
 
 fn mul_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
-    Ok(OrderedFloat(result_f(Number::Float(OrderedFloat(f1 * f2)), rnd_f)?))
+    Ok(OrderedFloat(result_f(&Number::Float(OrderedFloat(f1 * f2)), rnd_f)?))
 }
 
 fn div_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
     if FpCategory::Zero == f2.classify() {
         Err(EvalError::ZeroDivisor)
     } else {
-        Ok(OrderedFloat(result_f(Number::Float(OrderedFloat(f1 / f2)), rnd_f)?))
+        Ok(OrderedFloat(result_f(&Number::Float(OrderedFloat(f1 / f2)), rnd_f)?))
     }
 }
 
@@ -492,12 +499,11 @@ impl Ord for Number {
 // Computes n ^ power. Ignores the sign of power.
 pub fn binary_pow(mut n: Integer, power: Integer) -> Integer
 {
-    let one = Integer::from(1);
-    
+    let one = Integer::from(1);    
     let mut power = power.abs();
 
-    if power == Integer::from(0) {
-        return Integer::from(1);
+    if power == 0 {
+        return one;
     }
 
     let mut oddand = Integer::from(1);

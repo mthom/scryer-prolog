@@ -957,7 +957,7 @@ impl MachineState {
         let stub = MachineError::functor_stub(clause_name!("(div)"), 2);
 
         match n1 / n2 {
-            Ok(result) => Ok(rnd_i(result)),
+            Ok(result) => Ok(rnd_i(&result).to_owned()),
             Err(e) => Err(self.error_form(MachineError::evaluation_error(e), stub))
         }
     }
@@ -1051,15 +1051,15 @@ impl MachineState {
 
     fn float_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub>
     {
-        let f1 = result_f(n1, rnd_f);
-        let f2 = result_f(n2, rnd_f);
+        let f1 = result_f(&n1, rnd_f);
+        let f2 = result_f(&n2, rnd_f);
 
         let stub = MachineError::functor_stub(clause_name!("(**)"), 2);
 
         let f1 = try_numeric_result!(self, f1, stub.clone())?;
         let f2 = try_numeric_result!(self, f2, stub.clone())?;
 
-        let result = result_f(Number::Float(OrderedFloat(f1.powf(f2))), rnd_f);
+        let result = result_f(&Number::Float(OrderedFloat(f1.powf(f2))), rnd_f);
 
         Ok(Number::Float(OrderedFloat(try_numeric_result!(self, result, stub)?)))
     }
@@ -1084,8 +1084,8 @@ impl MachineState {
     {
         let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
 
-        let f1 = try_numeric_result!(self, result_f(n1, rnd_f), stub.clone())?;
-        let f1 = result_f(Number::Float(OrderedFloat(f(f1))), rnd_f);
+        let f1 = try_numeric_result!(self, result_f(&n1, rnd_f), stub.clone())?;
+        let f1 = result_f(&Number::Float(OrderedFloat(f(f1))), rnd_f);
 
         try_numeric_result!(self, f1, stub)
     }
@@ -1143,12 +1143,12 @@ impl MachineState {
     fn float(&self, n: Number) -> Result<f64, MachineStub>
     {
         let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
-        try_numeric_result!(self, result_f(n, rnd_f), stub)
+        try_numeric_result!(self, result_f(&n, rnd_f), stub)
     }
 
     fn floor(&self, n1: Number) -> Integer
     {
-        rnd_i(n1)
+        rnd_i(&n1).to_owned()
     }
 
     fn ceiling(&self, n1: Number) -> Integer
@@ -1300,8 +1300,8 @@ impl MachineState {
             (n1, n2) => {
                 let stub = MachineError::functor_stub(clause_name!("max"), 2);
 
-                let f1 = try_numeric_result!(self, result_f(n1, rnd_f), stub.clone())?;
-                let f2 = try_numeric_result!(self, result_f(n2, rnd_f), stub)?;
+                let f1 = try_numeric_result!(self, result_f(&n1, rnd_f), stub.clone())?;
+                let f2 = try_numeric_result!(self, result_f(&n2, rnd_f), stub)?;
 
                 Ok(Number::Float(max(OrderedFloat(f1), OrderedFloat(f2))))
             }
@@ -1319,8 +1319,8 @@ impl MachineState {
             (n1, n2) => {
                 let stub = MachineError::functor_stub(clause_name!("max"), 2);
                 
-                let f1 = try_numeric_result!(self, result_f(n1, rnd_f), stub.clone())?;
-                let f2 = try_numeric_result!(self, result_f(n2, rnd_f), stub)?;
+                let f1 = try_numeric_result!(self, result_f(&n1, rnd_f), stub.clone())?;
+                let f2 = try_numeric_result!(self, result_f(&n2, rnd_f), stub)?;
 
                 Ok(Number::Float(min(OrderedFloat(f1), OrderedFloat(f2))))
             }

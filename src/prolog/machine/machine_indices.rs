@@ -595,17 +595,25 @@ impl CompileTimeHook {
     }
 }
 
-pub(super) enum RefOrOwned<'a, T: 'a> {
+pub enum RefOrOwned<'a, T: 'a> {
     Borrowed(&'a T),
     Owned(T)
 }
 
 impl<'a, T> RefOrOwned<'a, T> {
-    pub(super)
-    fn as_ref(&'a self) -> &'a T {
+    pub fn as_ref(&'a self) -> &'a T {
         match self {
             &RefOrOwned::Borrowed(r) => r,
             &RefOrOwned::Owned(ref r) => r
+        }
+    }
+
+    pub fn to_owned(self) -> T
+      where T: Clone
+    {
+        match self {
+            RefOrOwned::Borrowed(item) => item.clone(),
+            RefOrOwned::Owned(item) => item
         }
     }
 }
