@@ -309,7 +309,12 @@ pub fn result_f<Round>(n: &Number, round: Round) -> Result<f64, EvalError>
   where Round: Fn(&Number) -> f64
 {
     let f = rnd_f(n);
+    classify_float(f, round)
+}
 
+fn classify_float<Round>(f: f64, round: Round) -> Result<f64, EvalError>
+  where Round: Fn(&Number) -> f64
+{
     match f.classify() {
         FpCategory::Normal | FpCategory::Zero =>
             Ok(round(&Number::Float(OrderedFloat(f)))),
@@ -324,30 +329,30 @@ pub fn result_f<Round>(n: &Number, round: Round) -> Result<f64, EvalError>
         },
         FpCategory::Nan => Err(EvalError::Undefined),
         _ => Ok(round(&Number::Float(OrderedFloat(f))))
-    }
+    }    
 }
 
-fn float_i_to_f(n: Integer) -> Result<f64, EvalError> {
-    result_f(&Number::Integer(n), rnd_f)
+fn float_i_to_f(n: &Integer) -> Result<f64, EvalError> {
+    classify_float(n.to_f64(), rnd_f)
 }
 
-fn float_r_to_f(r: Rational) -> Result<f64, EvalError> {
-    result_f(&Number::Rational(r), rnd_f)
+fn float_r_to_f(r: &Rational) -> Result<f64, EvalError> {
+    classify_float(r.to_f64(), rnd_f)
 }
 
 fn add_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
-    Ok(OrderedFloat(result_f(&Number::Float(OrderedFloat(f1 + f2)), rnd_f)?))
+    Ok(OrderedFloat(classify_float(f1 + f2, rnd_f)?))
 }
 
 fn mul_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
-    Ok(OrderedFloat(result_f(&Number::Float(OrderedFloat(f1 * f2)), rnd_f)?))
+    Ok(OrderedFloat(classify_float(f1 * f2, rnd_f)?))
 }
 
 fn div_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
     if FpCategory::Zero == f2.classify() {
         Err(EvalError::ZeroDivisor)
     } else {
-        Ok(OrderedFloat(result_f(&Number::Float(OrderedFloat(f1 / f2)), rnd_f)?))
+        Ok(OrderedFloat(classify_float(f1 / f2, rnd_f)?))
     }
 }
 
@@ -360,13 +365,13 @@ impl Add<Number> for Number {
                 Ok(Number::Integer(n1 + n2)), // add_i
             (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
           | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) =>
-                Ok(Number::Float(add_f(float_i_to_f(n1)?, n2)?)),
+                Ok(Number::Float(add_f(float_i_to_f(&n1)?, n2)?)),
             (Number::Integer(n1), Number::Rational(n2))
           | (Number::Rational(n2), Number::Integer(n1)) =>
                 Ok(Number::Rational(Rational::from(n1) + n2)),
             (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
           | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) =>
-                Ok(Number::Float(add_f(float_r_to_f(n1)?, n2)?)),
+                Ok(Number::Float(add_f(float_r_to_f(&n1)?, n2)?)),
             (Number::Float(OrderedFloat(f1)), Number::Float(OrderedFloat(f2))) =>
                 Ok(Number::Float(add_f(f1, f2)?)),
             (Number::Rational(r1), Number::Rational(r2)) =>
@@ -403,14 +408,14 @@ impl Mul<Number> for Number {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 Ok(Number::Integer(n1 * n2)), // mul_i
             (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
-          | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) =>
-                Ok(Number::Float(mul_f(float_i_to_f(n1)?, n2)?)),
+                | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) =>
+                Ok(Number::Float(mul_f(float_i_to_f(&n1)?, n2)?)),
             (Number::Integer(n1), Number::Rational(n2))
-          | (Number::Rational(n2), Number::Integer(n1)) =>
+                | (Number::Rational(n2), Number::Integer(n1)) =>
                 Ok(Number::Rational(Rational::from(n1) * n2)),
             (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
-          | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) =>
-                Ok(Number::Float(mul_f(float_r_to_f(n1)?, n2)?)),
+                | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) =>
+                Ok(Number::Float(mul_f(float_r_to_f(&n1)?, n2)?)),
             (Number::Float(OrderedFloat(f1)), Number::Float(OrderedFloat(f2))) =>
                 Ok(Number::Float(mul_f(f1, f2)?)),
             (Number::Rational(r1), Number::Rational(r2)) =>
@@ -425,23 +430,23 @@ impl Div<Number> for Number {
     fn div(self, rhs: Number) -> Self::Output {
         match (self, rhs) {
             (Number::Integer(n1), Number::Integer(n2)) =>
-                Ok(Number::Float(div_f(float_i_to_f(n1)?, float_i_to_f(n2)?)?)),
+                Ok(Number::Float(div_f(float_i_to_f(&n1)?, float_i_to_f(&n2)?)?)),
             (Number::Integer(n1), Number::Float(OrderedFloat(n2))) =>
-                Ok(Number::Float(div_f(float_i_to_f(n1)?, n2)?)),
+                Ok(Number::Float(div_f(float_i_to_f(&n1)?, n2)?)),
             (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) =>
-                Ok(Number::Float(div_f(n2, float_i_to_f(n1)?)?)),
+                Ok(Number::Float(div_f(n2, float_i_to_f(&n1)?)?)),
             (Number::Integer(n1), Number::Rational(n2)) =>
-                Ok(Number::Float(div_f(float_i_to_f(n1)?, float_r_to_f(n2)?)?)),
+                Ok(Number::Float(div_f(float_i_to_f(&n1)?, float_r_to_f(&n2)?)?)),
             (Number::Rational(n2), Number::Integer(n1)) =>
-                Ok(Number::Float(div_f(float_r_to_f(n2)?, float_i_to_f(n1)?)?)),
+                Ok(Number::Float(div_f(float_r_to_f(&n2)?, float_i_to_f(&n1)?)?)),
             (Number::Rational(n1), Number::Float(OrderedFloat(n2))) =>
-                Ok(Number::Float(div_f(float_r_to_f(n1)?, n2)?)),
+                Ok(Number::Float(div_f(float_r_to_f(&n1)?, n2)?)),
             (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) =>
-                Ok(Number::Float(div_f(n2, float_r_to_f(n1)?)?)),
+                Ok(Number::Float(div_f(n2, float_r_to_f(&n1)?)?)),
             (Number::Float(OrderedFloat(f1)), Number::Float(OrderedFloat(f2))) =>
                 Ok(Number::Float(div_f(f1, f2)?)),
             (Number::Rational(r1), Number::Rational(r2)) =>
-                Ok(Number::Float(div_f(float_r_to_f(r1)?, float_r_to_f(r2)?)?))
+                Ok(Number::Float(div_f(float_r_to_f(&r1)?, float_r_to_f(&r2)?)?))
         }
     }
 }
