@@ -238,7 +238,7 @@ impl Machine {
         wam.compile_libraries();
         wam.compile_special_forms();
         wam.compile_top_level();
-
+        
         wam
     }
 

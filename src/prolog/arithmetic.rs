@@ -132,7 +132,7 @@ impl<'a> ArithmeticEvaluator<'a>
             "+" => Ok(ArithmeticInstruction::Plus(a1, t)),
             "cos" => Ok(ArithmeticInstruction::Cos(a1, t)),
             "sin" => Ok(ArithmeticInstruction::Sin(a1, t)),
-            "tan" => Ok(ArithmeticInstruction::Tan(a1, t)),            
+            "tan" => Ok(ArithmeticInstruction::Tan(a1, t)),
             "log" => Ok(ArithmeticInstruction::Log(a1, t)),
             "exp" => Ok(ArithmeticInstruction::Exp(a1, t)),
             "sqrt" => Ok(ArithmeticInstruction::Sqrt(a1, t)),
@@ -288,8 +288,8 @@ pub fn rnd_i<'a>(n: &'a Number) -> RefOrOwned<'a, Integer> {
         &Number::Rational(ref r) => {
             let r_ref = r.fract_floor_ref();
             let (mut fract, mut floor) = (Rational::new(), Integer::new());
-            
-            (&mut fract, &mut floor).assign(r_ref);            
+
+            (&mut fract, &mut floor).assign(r_ref);
             RefOrOwned::Owned(floor)
         }
     }
@@ -329,7 +329,7 @@ fn classify_float<Round>(f: f64, round: Round) -> Result<f64, EvalError>
         },
         FpCategory::Nan => Err(EvalError::Undefined),
         _ => Ok(round(&Number::Float(OrderedFloat(f))))
-    }    
+    }
 }
 
 fn float_i_to_f(n: &Integer) -> Result<f64, EvalError> {
@@ -408,13 +408,13 @@ impl Mul<Number> for Number {
             (Number::Integer(n1), Number::Integer(n2)) =>
                 Ok(Number::Integer(n1 * n2)), // mul_i
             (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
-                | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) =>
+          | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) =>
                 Ok(Number::Float(mul_f(float_i_to_f(&n1)?, n2)?)),
             (Number::Integer(n1), Number::Rational(n2))
-                | (Number::Rational(n2), Number::Integer(n1)) =>
+          | (Number::Rational(n2), Number::Integer(n1)) =>
                 Ok(Number::Rational(Rational::from(n1) * n2)),
             (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
-                | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) =>
+          | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) =>
                 Ok(Number::Float(mul_f(float_r_to_f(&n1)?, n2)?)),
             (Number::Float(OrderedFloat(f1)), Number::Float(OrderedFloat(f2))) =>
                 Ok(Number::Float(mul_f(f1, f2)?)),
@@ -504,16 +504,15 @@ impl Ord for Number {
 // Computes n ^ power. Ignores the sign of power.
 pub fn binary_pow(mut n: Integer, power: Integer) -> Integer
 {
-    let one = Integer::from(1);    
     let mut power = power.abs();
 
     if power == 0 {
-        return one;
+        return Integer::from(1);
     }
 
     let mut oddand = Integer::from(1);
 
-    while power > one {
+    while power > 1 {
         if power.is_odd() {
             oddand *= &n;
         }

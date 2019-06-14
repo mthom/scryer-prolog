@@ -275,9 +275,14 @@ impl MachineState {
                     },
                     None =>
                         match indices.code_dir.iter().next() {
-                            Some(((ref name, arity), _)) => {
+                            Some(((ref name, arity), idx)) => {
                                 let a2 = self[temp_v!(2)].clone();
 
+                                if idx.is_undefined() {
+                                    self.fail = true;
+                                    return;
+                                }
+                                
                                 if let Some(r) = a2.as_var() {
                                     let spec = get_clause_spec(name.clone(), *arity,
                                                                composite_op!(&indices.op_dir));
@@ -296,9 +301,14 @@ impl MachineState {
                 let key = (name.clone(), arity);
 
                 match indices.code_dir.range(key ..).skip(1).next() {
-                    Some(((name, arity), _)) => {
+                    Some(((name, arity), idx)) => {
                         let a2 = self[temp_v!(2)].clone();
 
+                        if idx.is_undefined() {
+                            self.fail = true;
+                            return;
+                        }
+                        
                         if let Some(r) = a2.as_var() {
                             let spec = get_clause_spec(name.clone(), *arity,
                                                        composite_op!(&indices.op_dir));
@@ -990,8 +1000,6 @@ impl MachineState {
                     Addr::DBRef(db_ref) =>
                         match db_ref {
                             DBRef::Op(priority, spec, name, _, shared_op_desc) => {
-
-
                                 let prec = self[temp_v!(2)].clone();
                                 let specifier = self[temp_v!(3)].clone();
                                 let op = self[temp_v!(4)].clone();

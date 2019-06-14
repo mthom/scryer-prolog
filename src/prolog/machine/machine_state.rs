@@ -797,6 +797,7 @@ pub(crate) trait CallPolicy: Any {
                     } else {
                         let h = machine_st.heap.h;
                         let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
+
                         return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
                                                          stub));
                     }
