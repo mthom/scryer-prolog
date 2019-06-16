@@ -819,9 +819,14 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                 },
             DoubleQuotes::Atom => {
                 let borrowed_str = s.borrow();
+                let mut atom = String::new();
+
+                for c in borrowed_str[s.cursor() ..].chars() {
+                    atom += &char_to_string(c);
+                }
 
                 self.push_char('"');
-                self.append_str(&borrowed_str[s.cursor() ..]);
+                self.append_str(&atom);
                 self.push_char('"');
             }
         }
