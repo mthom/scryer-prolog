@@ -187,6 +187,7 @@ The following predicates are built-in to Scryer.
 * `dif/2`
 * `expand_goal/2`
 * `expand_term/2`
+* `fail/0`
 * `false/0`
 * `findall/{3,4}`
 * `float/1`
