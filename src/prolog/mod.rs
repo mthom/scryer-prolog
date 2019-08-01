@@ -1,8 +1,11 @@
 extern crate dirs;
 extern crate ordered_float;
 extern crate prolog_parser;
+#[cfg(feature = "rug")]
 extern crate rug;
-extern crate rustyline;   
+#[cfg(feature = "num-rug-adapter")]
+extern crate num_rug_adapter as rug;
+extern crate rustyline;
 
 #[macro_use]
 mod macros;
