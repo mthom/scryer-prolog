@@ -14,8 +14,10 @@ use prolog::machine::toplevel::*;
 
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fs::File;
 use std::io::Read;
 use std::mem;
+use std::path::PathBuf;
 
 #[allow(dead_code)]
 fn print_code(code: &Code) {
@@ -38,6 +40,59 @@ fn print_code(code: &Code) {
             &Line::Query(ref query_instr) =>
                 println!("{}", query_instr)
         }
+    }
+}
+
+fn fix_filename(atom_tbl: TabledData<Atom>, filename: &str) -> Result<PathBuf, SessionError>
+{
+    let mut path = PathBuf::from(filename);
+
+    if !path.is_file() {
+        if path.extension().is_none() {
+            path.set_extension("pl");
+        }
+
+        if !path.is_file() {
+            let filename = clause_name!(path.to_string_lossy().to_string(), atom_tbl);
+            return Err(SessionError::InvalidFileName(filename));
+        }
+    }
+
+    Ok(path)
+}
+
+fn load_module_from_file(wam: &mut Machine, filename: &str) -> Result<ClauseName, SessionError>
+{
+    let path = fix_filename(wam.indices.atom_tbl.clone(), filename)?;
+
+    let file_handle = File::open(&path).or_else(|_| {
+        let filename = clause_name!(path.to_string_lossy().to_string(), wam.indices.atom_tbl);
+        Err(SessionError::InvalidFileName(filename))
+    })?;
+
+    let file_src = parsing_stream(file_handle);
+
+    // follow the operation of compile_user_module, but before
+    // compiling, check that a module is declared in the file. if not,
+    // throw an exception.
+    let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
+    setup_indices(wam, clause_name!("builtins"), &mut indices)?;
+
+    let mut compiler = ListingCompiler::new(&wam.code_repo);
+    let results = compiler.gather_items(wam, file_src, &mut indices)?;
+
+    let module_name = if let Some(ref module) = &compiler.module {
+        module.module_decl.name.clone()
+    } else {
+        let module_name = path.to_string_lossy().to_string();
+        let module_name = clause_name!(module_name, wam.indices.atom_tbl);
+
+        return Err(SessionError::NoModuleDeclaration(module_name));
+    };
+
+    match compile_work_impl(&mut compiler, wam, indices, results) {
+        EvalSession::Error(e) => return Err(e),
+        _ => Ok(module_name)
     }
 }
 
@@ -96,6 +151,7 @@ impl CodeRepo {
                         -> Result<(), ParserError>
     {
         let key = (hook.name(), hook.arity());
+        
         match self.term_dir.get(&key) {
             Some(preds) => {
                 let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
@@ -131,10 +187,9 @@ fn compile_decl(wam: &mut Machine, compiler: &mut ListingCompiler, decl: Declara
 {
     let flags = wam.machine_flags();
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
-    let wam_indices = &mut wam.indices;
 
-    compiler.process_decl(decl, &mut wam.code_repo, wam_indices, &mut indices, flags)?;    
-    
+    compiler.process_decl(decl, wam, &mut indices, flags)?;
+
     Ok(indices)
 }
 
@@ -407,19 +462,18 @@ impl ListingCompiler {
         }
     }
 
-    fn use_module(&mut self, submodule: ClauseName, code_repo: &mut CodeRepo,
-                  flags: MachineFlags, wam_indices: &mut IndexStore,
-                  indices: &mut IndexStore)
+    fn use_module(&mut self, submodule: ClauseName, code_repo: &mut CodeRepo, flags: MachineFlags,
+                  wam_indices: &mut IndexStore, indices: &mut IndexStore)
                   -> Result<(), SessionError>
     {
-        let mod_name = self.get_module_name();
+        let module_name = self.get_module_name();
 
         if let Some(mut submodule) = wam_indices.take_module(submodule) {
             unwind_protect!(indices.use_module(code_repo, flags, &submodule),
                             wam_indices.insert_module(submodule));
 
             if let &mut Some(ref mut module) = &mut self.module {
-                module.remove_module(mod_name, &submodule);
+                module.remove_module(module_name, &submodule);
                 unwind_protect!(module.use_module(code_repo, flags, &submodule),
                                 wam_indices.insert_module(submodule));
             } else {
@@ -438,14 +492,14 @@ impl ListingCompiler {
                             wam_indices: &mut IndexStore, indices: &mut IndexStore)
                             -> Result<(), SessionError>
     {
-        let mod_name = self.get_module_name();
+        let module_name = self.get_module_name();
 
         if let Some(mut submodule) = wam_indices.take_module(submodule) {
             unwind_protect!(indices.use_qualified_module(code_repo, flags, &submodule, exports),
                             wam_indices.insert_module(submodule));
 
             if let &mut Some(ref mut module) = &mut self.module {
-                module.remove_module(mod_name, &submodule);
+                module.remove_module(module_name, &submodule);
                 unwind_protect!(module.use_qualified_module(code_repo, flags, &submodule, exports),
                                 wam_indices.insert_module(submodule));
             } else {
@@ -536,19 +590,20 @@ impl ListingCompiler {
         (len, queue_len)
     }
 
-    fn process_decl(&mut self, decl: Declaration, code_repo: &mut CodeRepo,
-                    wam_indices: &mut IndexStore, indices: &mut IndexStore,
+    fn process_decl(&mut self, decl: Declaration, wam: &mut Machine, indices: &mut IndexStore,
                     flags: MachineFlags)
                     -> Result<(), SessionError>
     {
         match decl {
+            Declaration::EndOfFile =>
+                return Ok(()),
             Declaration::Hook(hook, clause, queue) => {
                 let key = (hook.name(), hook.arity());
-                let (len, queue_len) = self.add_term_dir_terms(hook, code_repo, key.clone(),
-                                                               clause, queue);
+                let (len, queue_len) = self.add_term_dir_terms(hook, &mut wam.code_repo,
+                                                               key.clone(), clause, queue);
 
-                let result = code_repo.compile_hook(hook, flags).map_err(SessionError::from);
-                code_repo.truncate_terms(key, len, queue_len);
+                let result = wam.code_repo.compile_hook(hook, flags).map_err(SessionError::from);
+                wam.code_repo.truncate_terms(key, len, queue_len);
 
                 result
             },
@@ -556,15 +611,17 @@ impl ListingCompiler {
                 Ok(self.add_non_counted_bt_flag(name, arity)),
             Declaration::Op(op_decl) => {
                 let spec = get_desc(op_decl.name(), composite_op!(self.module.is_some(),
-                                                                  &wam_indices.op_dir,
+                                                                  &wam.indices.op_dir,
                                                                   &mut indices.op_dir));
 
                 op_decl.submit(self.get_module_name(), spec, &mut indices.op_dir)
             },
-            Declaration::UseModule(name) =>
-                self.use_module(name, code_repo, flags, wam_indices, indices),
-            Declaration::UseQualifiedModule(name, exports) =>
-                self.use_qualified_module(name, code_repo, flags, &exports, wam_indices, indices),
+            Declaration::UseModule(ModuleSource::Library(name)) =>
+                self.use_module(name, &mut wam.code_repo, flags, &mut wam.indices,
+                                indices),
+            Declaration::UseQualifiedModule(ModuleSource::Library(name), exports) =>
+                self.use_qualified_module(name, &mut wam.code_repo, flags, &exports,
+                                          &mut wam.indices, indices),
             Declaration::Module(module_decl) =>
                 if self.module.is_none() {
                     let module_name = module_decl.name.clone();
@@ -574,6 +631,15 @@ impl ListingCompiler {
                 } else {
                     Err(SessionError::from(ParserError::InvalidModuleDecl))
                 },
+            Declaration::UseModule(ModuleSource::File(filename)) => {
+                let name = load_module_from_file(wam, filename.as_str())?;
+                self.use_module(name, &mut wam.code_repo, flags, &mut wam.indices, indices)
+            },
+            Declaration::UseQualifiedModule(ModuleSource::File(filename), exports) => {
+                let name = load_module_from_file(wam, filename.as_str())?;
+                self.use_qualified_module(name, &mut wam.code_repo, flags, &exports,
+                                          &mut wam.indices, indices)
+            },
             Declaration::Dynamic(..) => Ok(())
         }
     }
@@ -583,6 +649,8 @@ impl ListingCompiler {
                                         indices: &mut IndexStore, flags: MachineFlags)
                                         -> Result<(), SessionError>
     {
+        let mut update_expansion_lengths = false;
+
         match &decl {
             &Declaration::Dynamic(ref name, arity) => {
                 worker.dynamic_clause_map.entry((name.clone(), arity)).or_insert(vec![]);
@@ -591,11 +659,19 @@ impl ListingCompiler {
                 worker.term_stream.incr_expansion_lens(hook.user_scope(), 1, queue.len()),
             &Declaration::Hook(hook, _, ref queue) if !hook.has_module_scope() =>
                 worker.term_stream.incr_expansion_lens(hook, 1, queue.len()),
+            &Declaration::UseModule(ModuleSource::File(_))
+          | &Declaration::UseQualifiedModule(ModuleSource::File(_), _) =>
+                update_expansion_lengths = true,
             _ => {}
         };
 
-        self.process_decl(decl, &mut worker.term_stream.code_repo,
-                          &mut worker.term_stream.indices, indices, flags)
+        let result = self.process_decl(decl, &mut worker.term_stream.wam, indices, flags);
+
+        if update_expansion_lengths {
+            worker.term_stream.update_expansion_lens();
+        }
+
+        result
     }
 
     pub(crate)
@@ -605,9 +681,7 @@ impl ListingCompiler {
     {
         let flags      = wam.machine_flags();
         let atom_tbl   = indices.atom_tbl.clone();
-        let mut worker = TopLevelBatchWorker::new(&mut src, atom_tbl.clone(), flags,
-                                                  &mut wam.indices, &mut wam.policies,
-                                                  &mut wam.code_repo);
+        let mut worker = TopLevelBatchWorker::new(&mut src, atom_tbl.clone(), flags, wam);
 
         let mut toplevel_results = vec![];
         let mut toplevel_indices = default_index_store!(atom_tbl.clone());
@@ -623,6 +697,8 @@ impl ListingCompiler {
                 if let &Some(ref module) = &self.module {
                     worker.term_stream.set_atom_tbl(module.atom_tbl.clone());
                 }
+            } else if decl.is_end_of_file() {
+                break;
             } else {
                 self.process_and_commit_decl(decl, &mut worker, indices, flags)?;
             }
@@ -652,12 +728,10 @@ impl ListingCompiler {
     }
 }
 
-fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine,
-                         src: ParsingStream<R>, mut indices: IndexStore)
-                         -> EvalSession
+fn compile_work_impl(compiler: &mut ListingCompiler, wam: &mut Machine,
+                     mut indices: IndexStore, mut results: GatherResult)
+                     -> EvalSession
 {
-    let mut results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
-
     let module_code = try_eval_session!(compiler.generate_code(results.worker_results, wam,
                                                                &mut indices.code_dir, 0));
     let toplvl_code = try_eval_session!(compiler.generate_code(results.toplevel_results, wam,
@@ -691,6 +765,14 @@ fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine,
     }
 
     EvalSession::EntrySuccess
+}
+
+fn compile_work<R: Read>(compiler: &mut ListingCompiler, wam: &mut Machine,
+                         src: ParsingStream<R>, mut indices: IndexStore)
+                         -> EvalSession
+{
+    let results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
+    compile_work_impl(compiler, wam, indices, results)
 }
 
 /* This is a truncated version of compile_user_module, used for

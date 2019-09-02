@@ -4,7 +4,6 @@ use prolog_parser::tabled_rc::*;
 use prolog::forms::*;
 use prolog::iterators::*;
 use prolog::machine::*;
-use prolog::machine::code_repo::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::MachineState;
@@ -193,31 +192,37 @@ fn setup_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleDecl, ParserErro
     }
 }
 
-fn setup_use_module_decl(mut terms: Vec<Box<Term>>) -> Result<ClauseName, ParserError>
+fn setup_use_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleSource, ParserError>
 {
     match *terms.pop().unwrap() {
         Term::Clause(_, ref name, ref mut terms, None)
             if name.as_str() == "library" && terms.len() == 1 => {
                 terms.pop().unwrap().to_constant()
-                    .and_then(|c| c.to_atom())
-                    .ok_or(ParserError::InvalidUseModuleDecl)
+                     .and_then(|c| c.to_atom())
+                     .map(|c| ModuleSource::Library(c))
+                     .ok_or(ParserError::InvalidUseModuleDecl)
             },
+        Term::Constant(_, Constant::Atom(ref name, _)) =>
+            Ok(ModuleSource::File(name.clone())),
         _ => Err(ParserError::InvalidUseModuleDecl)
     }
 }
 
-type UseModuleExport = (ClauseName, Vec<PredicateKey>);
+type UseModuleExport = (ModuleSource, Vec<PredicateKey>);
 
 fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, ParserError>
 {
     let mut export_list = *terms.pop().unwrap();
-    let name = match *terms.pop().unwrap() {
+    let module_src = match *terms.pop().unwrap() {
         Term::Clause(_, ref name, ref mut terms, None)
             if name.as_str() == "library" && terms.len() == 1 => {
                 terms.pop().unwrap().to_constant()
                     .and_then(|c| c.to_atom())
+                    .map(|c| ModuleSource::Library(c))
                     .ok_or(ParserError::InvalidUseModuleDecl)
             },
+        Term::Constant(_, Constant::Atom(ref name, _)) =>
+            Ok(ModuleSource::File(name.clone())),
         _ => Err(ParserError::InvalidUseModuleDecl)
     }?;
 
@@ -231,7 +236,7 @@ fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, 
     if export_list.to_constant() != Some(Constant::EmptyList) {
         Err(ParserError::InvalidModuleDecl)
     } else {
-        Ok((name, exports))
+        Ok((module_src, exports))
     }
 }
 
@@ -768,7 +773,7 @@ fn term_to_toplevel<R>(term_stream: &mut TermStream<R>, code_dir: &mut CodeDir, 
     where R: Read
 {
     let mut rel_worker = RelationWorker::new(flags);
-    let mut indices = composite_indices!(false, term_stream.indices, code_dir);
+    let mut indices = composite_indices!(false, &mut term_stream.wam.indices, code_dir);
 
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
 
@@ -781,18 +786,17 @@ fn stream_to_toplevel<R: Read>(mut buffer: ParsingStream<R>, wam: &mut Machine)
 {
     let flags = wam.machine_flags();
     let mut term_stream = TermStream::new(&mut buffer, wam.indices.atom_tbl(),
-                                          wam.machine_flags(), &mut wam.indices,
-                                          &mut wam.policies, &mut wam.code_repo);
+                                          wam.machine_flags(), wam);
 
     term_stream.add_to_top("?- ");
 
     let term = term_stream.read_term(&OpDir::new())?;
-    let mut code_dir = CodeDir::new();    
+    let mut code_dir = CodeDir::new();
 
     let (tl, mut rel_worker) = term_to_toplevel(&mut term_stream, &mut code_dir, term, flags)?;
     rel_worker.expand_queue_contents(&mut term_stream, &OpDir::new())?;
 
-    let mut indices = composite_indices!(false, term_stream.indices, &mut code_dir);
+    let mut indices = composite_indices!(false, &mut term_stream.wam.indices, &mut code_dir);
     let queue = rel_worker.parse_queue(&mut indices)?;
 
     Ok(deque_to_packet(tl, queue))
@@ -811,12 +815,10 @@ pub struct TopLevelBatchWorker<'a, R: Read> {
 impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
 
     pub fn new(inner: &'a mut ParsingStream<R>, atom_tbl: TabledData<Atom>,
-               flags: MachineFlags, indices: &'a mut IndexStore,
-               policies: &'a mut MachinePolicies, code_repo: &'a mut CodeRepo)
+               flags: MachineFlags, wam: &'a mut Machine)
                -> Self
     {
-        let term_stream = TermStream::new(inner, atom_tbl, flags,
-                                          indices, policies, code_repo);
+        let term_stream = TermStream::new(inner, atom_tbl, flags, wam);
 
         TopLevelBatchWorker { term_stream,
                               rel_worker: RelationWorker::new(flags),
@@ -830,7 +832,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
     {
         let mut new_rel_worker = RelationWorker::new(self.rel_worker.flags);
         let mut indices = composite_indices!(self.in_module, indices,
-                                             &self.term_stream.indices.code_dir);
+                                             &self.term_stream.wam.indices.code_dir);
 
         Ok((new_rel_worker.try_term_to_tl(&mut indices, term, true)?, new_rel_worker))
     }
@@ -841,15 +843,15 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         self.rel_worker.expand_queue_contents(&mut self.term_stream, &indices.op_dir)?;
 
         let mut indices = composite_indices!(self.in_module, indices,
-                                             &mut self.term_stream.indices.code_dir);
+                                             &mut self.term_stream.wam.indices.code_dir);
 
         let queue  = self.rel_worker.parse_queue(&mut indices)?;
         let result = (append_preds(preds), queue);
 
-        let in_situ_code_dir = &mut self.term_stream.indices.in_situ_code_dir;
+        let in_situ_code_dir = &mut self.term_stream.wam.indices.in_situ_code_dir;
 
-        self.term_stream.code_repo.add_in_situ_result(&result, in_situ_code_dir,
-                                                      self.term_stream.flags)?;
+        self.term_stream.wam.code_repo.add_in_situ_result(&result, in_situ_code_dir,
+                                                          self.term_stream.flags)?;
 
         Ok(self.results.push(result))
     }
@@ -873,14 +875,17 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         }
     }
 
-    pub fn consume(&mut self, indices: &mut IndexStore)
-                   -> Result<Option<Declaration>, SessionError>
+    pub fn consume(&mut self, indices: &mut IndexStore) -> Result<Option<Declaration>, SessionError>
     {
         let mut preds = vec![];
 
         while !self.term_stream.eof()? {
             let term = self.term_stream.read_term(&indices.op_dir)?;
-            let (tl, new_rel_worker) = self.try_term_to_tl(indices, term)?;
+            let (mut tl, new_rel_worker) = self.try_term_to_tl(indices, term)?;
+
+            if tl.is_end_of_file_atom() {
+                tl = TopLevel::Declaration(Declaration::EndOfFile);
+            }
 
             // if is_consistent is false, preds is non-empty.
             if !is_consistent(&tl, &preds) {

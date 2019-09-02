@@ -71,9 +71,7 @@ fn extract_from_list(head: Box<Term>, tail: Box<Term>)
 
 pub struct TermStream<'a, R: Read> {
     stack: Vec<Term>,
-    pub(crate) indices: &'a mut IndexStore,
-    policies: &'a mut MachinePolicies,
-    pub(crate) code_repo: &'a mut CodeRepo,
+    pub(crate) wam: &'a mut Machine,
     parser: Parser<'a, R>,
     in_module: bool,
     pub(crate) flags: MachineFlags,
@@ -104,25 +102,21 @@ impl ExpansionAdditionResult {
 
 impl<'a, R: Read> Drop for TermStream<'a, R> {
     fn drop(&mut self) {
-        self.indices.in_situ_code_dir.clear();
-        self.code_repo.in_situ_code.clear();
+        self.wam.indices.in_situ_code_dir.clear();
+        self.wam.code_repo.in_situ_code.clear();
         discard_result!(self.rollback_expansion_code());
     }
 }
 
 impl<'a, R: Read> TermStream<'a, R> {
-    pub fn new(src: &'a mut ParsingStream<R>, atom_tbl: TabledData<Atom>, flags: MachineFlags,
-               indices: &'a mut IndexStore, policies: &'a mut MachinePolicies,
-               code_repo: &'a mut CodeRepo)
+    pub fn new(src: &'a mut ParsingStream<R>, atom_tbl: TabledData<Atom>, flags: MachineFlags, wam: &'a mut Machine)
                -> Self
     {
         TermStream {
             stack: Vec::new(),
-            term_expansion_lens: code_repo.term_dir_entry_len((clause_name!("term_expansion"), 2)),
-            goal_expansion_lens: code_repo.term_dir_entry_len((clause_name!("goal_expansion"), 2)),
-            code_repo,
-            indices,
-            policies,
+            term_expansion_lens: wam.code_repo.term_dir_entry_len((clause_name!("term_expansion"), 2)),
+            goal_expansion_lens: wam.code_repo.term_dir_entry_len((clause_name!("goal_expansion"), 2)),
+            wam,
             parser: Parser::new(src, atom_tbl, flags),
             in_module: false,
             flags
@@ -150,6 +144,22 @@ impl<'a, R: Read> TermStream<'a, R> {
     }
 
     #[inline]
+    pub fn update_expansion_lens(&mut self) {
+        let te_key = (clause_name!("term_expansion"), 2);
+        let ge_key = (clause_name!("goal_expansion"), 2);
+
+        let (tes_len, tes_q_len) = self.wam.code_repo.term_dir_entry_len(te_key);
+
+        self.term_expansion_lens.0 = tes_len;
+        self.term_expansion_lens.1 = tes_q_len;
+
+        let (ges_len, ges_q_len) = self.wam.code_repo.term_dir_entry_len(ge_key);
+
+        self.goal_expansion_lens.0 = ges_len;
+        self.goal_expansion_lens.1 = ges_q_len;
+    }
+
+    #[inline]
     pub fn set_atom_tbl(&mut self, atom_tbl: TabledData<Atom>) {
         self.parser.set_atom_tbl(atom_tbl);
     }
@@ -159,7 +169,8 @@ impl<'a, R: Read> TermStream<'a, R> {
         Ok(self.stack.is_empty() && self.parser.eof()?)
     }
 
-    pub fn rollback_expansion_code(&mut self) -> Result<ExpansionAdditionResult, ParserError> {
+    pub fn rollback_expansion_code(&mut self) -> Result<ExpansionAdditionResult, ParserError>
+    {
         let te_len = self.term_expansion_lens.0;
         let te_queue_len = self.term_expansion_lens.1;
 
@@ -167,14 +178,14 @@ impl<'a, R: Read> TermStream<'a, R> {
         let ge_queue_len = self.goal_expansion_lens.1;
 
         let term_expansion_additions =
-            self.code_repo.truncate_terms((clause_name!("term_expansion"), 2),
-                                          te_len, te_queue_len);
+            self.wam.code_repo.truncate_terms((clause_name!("term_expansion"), 2),
+                                              te_len, te_queue_len);
         let goal_expansion_additions =
-            self.code_repo.truncate_terms((clause_name!("goal_expansion"), 2),
-                                          ge_len, ge_queue_len);
+            self.wam.code_repo.truncate_terms((clause_name!("goal_expansion"), 2),
+                                              ge_len, ge_queue_len);
 
-        self.code_repo.compile_hook(CompileTimeHook::TermExpansion, self.flags)?;
-        self.code_repo.compile_hook(CompileTimeHook::GoalExpansion, self.flags)?;
+        self.wam.code_repo.compile_hook(CompileTimeHook::TermExpansion, self.flags)?;
+        self.wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion, self.flags)?;
 
         Ok(ExpansionAdditionResult {
             term_expansion_additions,
@@ -200,7 +211,7 @@ impl<'a, R: Read> TermStream<'a, R> {
         let mut stream = parsing_stream(term_string.trim().as_bytes());
         let mut parser = Parser::new(&mut stream, self.parser.get_atom_tbl(), self.flags);
 
-        parser.read_term(composite_op!(self.in_module, &self.indices.op_dir, op_dir))
+        parser.read_term(composite_op!(self.in_module, &self.wam.indices.op_dir, op_dir))
     }
 
     pub fn read_term(&mut self, op_dir: &OpDir) -> Result<Term, ParserError>
@@ -209,8 +220,7 @@ impl<'a, R: Read> TermStream<'a, R> {
 
         loop {
             while let Some(term) = self.stack.pop() {
-                match machine_st.try_expand_term(self.indices, self.policies, self.code_repo,
-                                                 &term, CompileTimeHook::TermExpansion)
+                match machine_st.try_expand_term(self.wam, &term, CompileTimeHook::TermExpansion)
                 {
                     Some(term_string) => {
                         let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;
@@ -224,7 +234,7 @@ impl<'a, R: Read> TermStream<'a, R> {
             }
 
             self.parser.reset();
-            let term = self.parser.read_term(composite_op!(self.in_module, &self.indices.op_dir,
+            let term = self.parser.read_term(composite_op!(self.in_module, &self.wam.indices.op_dir,
                                                            op_dir))?;
             self.stack.push(term);
         }
@@ -242,8 +252,7 @@ impl<'a, R: Read> TermStream<'a, R> {
                             let comma_term = *terms.pop().unwrap();
                             unfold_by_str(comma_term, ",")
                         },
-                        ("?-", 1) =>
-                            unfold_by_str(*terms.pop().unwrap(), ","),
+                        ("?-", 1) => unfold_by_str(*terms.pop().unwrap(), ","),
                         _ => return Ok(Term::Clause(cell, name, terms, arity))
                     };
 
@@ -266,10 +275,10 @@ impl<'a, R: Read> TermStream<'a, R> {
         let mut results = vec![];
 
         while let Some(term) = terms.pop_front() {
-            match machine_st.try_expand_term(self.indices, self.policies, self.code_repo,
-                                             &term, CompileTimeHook::GoalExpansion)
+            match machine_st.try_expand_term(self.wam, &term, CompileTimeHook::GoalExpansion)
             {
                 Some(term_string) => {
+                    println!("trying to goal expand {}", term_string);
                     let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;
 
                     match term {
@@ -318,8 +327,7 @@ impl MachineState {
         output
     }
 
-    fn try_expand_term(&mut self, indices: &mut IndexStore, policies: &mut MachinePolicies,
-                       code_repo: &mut CodeRepo, term: &Term, hook: CompileTimeHook)
+    fn try_expand_term(&mut self, wam: &mut Machine, term: &Term, hook: CompileTimeHook)
                        -> Option<String>
     {
         let term_write_result = write_term_to_heap(term, self);
@@ -331,17 +339,17 @@ impl MachineState {
 
         let code = vec![call_clause!(ClauseType::Hook(hook), 2, 0, true)];
 
-        code_repo.cached_query = code;
-        self.query_stepper(indices, policies, code_repo, &mut readline::input_stream());
+        wam.code_repo.cached_query = code;
+        self.query_stepper(&mut wam.indices, &mut wam.policies, &mut wam.code_repo, &mut readline::input_stream());
 
         if self.fail {
             self.reset();
             None
         } else {
             let TermWriteResult { var_dict, .. } = term_write_result;
-            
+
             self.heap_locs = var_dict;
-            let output = self.print_with_locs(Addr::HeapCell(h), &indices.op_dir);
+            let output = self.print_with_locs(Addr::HeapCell(h), &wam.indices.op_dir);
 
             self.reset();
             Some(output.result())

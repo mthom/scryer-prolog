@@ -136,13 +136,6 @@ pub mod readline
         bind_keyseq_rl("\\C-d", bind_end_chord);
     }
 
-    pub fn read_batch(prompt: &str) -> Result<Vec<u8>, ::SessionError> {
-        match readline_rl(prompt) {
-            Some(input) => Ok(Vec::from(input.as_bytes())),
-            None => Err(::SessionError::UserPrompt)
-        }
-    }
-
     #[inline]
     pub fn input_stream() -> ::PrologStream {
         let reader: Box<Read> = Box::new(ReadlineStream::new(String::from("")));

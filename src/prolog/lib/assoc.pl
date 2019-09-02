@@ -52,7 +52,7 @@
             del_max_assoc/4             % +Assoc0, ?Key, ?Value, ?Assoc
           ]).
 
-:- use_module(library(lists)).
+:- use_module('src/prolog/lib/lists.pl').
 
 /** <module> Binary associations
 

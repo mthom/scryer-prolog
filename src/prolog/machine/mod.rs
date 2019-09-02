@@ -152,21 +152,8 @@ impl SubModuleUser for IndexStore {
 }
 
 static BUILTINS: &str = include_str!("../lib/builtins.pl");
-static NON_ISO: &str  = include_str!("../lib/non_iso.pl");
-static LISTS: &str    = include_str!("../lib/lists.pl");
-static QUEUES: &str   = include_str!("../lib/queues.pl");
-static ERROR: &str    = include_str!("../lib/error.pl");
-static BETWEEN: &str  = include_str!("../lib/between.pl");
-static TERMS: &str    = include_str!("../lib/terms.pl");
-static DCGS: &str     = include_str!("../lib/dcgs.pl");
-static ATTS: &str     = include_str!("../lib/atts.pl");
-static DIF: &str      = include_str!("../lib/dif.pl");
-static FREEZE: &str   = include_str!("../lib/freeze.pl");
-static REIF: &str     = include_str!("../lib/reif.pl");
-static ASSOC: &str    = include_str!("../lib/assoc.pl");
-static ORDSETS: &str  = include_str!("../lib/ordsets.pl");
-
 static TOPLEVEL: &str = include_str!("../toplevel.pl");
+static ERROR: &str = include_str!("../lib/error.pl");
 
 impl Machine {
     fn compile_special_forms(&mut self) {
@@ -190,22 +177,6 @@ impl Machine {
     fn compile_top_level(&mut self) {
         self.toplevel_idx = self.code_repo.code.len();
         compile_user_module(self, parsing_stream(TOPLEVEL.as_bytes()));
-    }
-
-    fn compile_libraries(&mut self) {
-        compile_user_module(self, parsing_stream(NON_ISO.as_bytes()));
-        compile_user_module(self, parsing_stream(LISTS.as_bytes()));
-        compile_user_module(self, parsing_stream(QUEUES.as_bytes()));
-        compile_user_module(self, parsing_stream(ERROR.as_bytes()));
-        compile_user_module(self, parsing_stream(BETWEEN.as_bytes()));
-	compile_user_module(self, parsing_stream(TERMS.as_bytes()));
-        compile_user_module(self, parsing_stream(DCGS.as_bytes()));
-        compile_user_module(self, parsing_stream(ATTS.as_bytes()));
-        compile_user_module(self, parsing_stream(ORDSETS.as_bytes()));
-        compile_user_module(self, parsing_stream(DIF.as_bytes()));
-        compile_user_module(self, parsing_stream(FREEZE.as_bytes()));
-        compile_user_module(self, parsing_stream(REIF.as_bytes()));
-        compile_user_module(self, parsing_stream(ASSOC.as_bytes()));
     }
 
     #[cfg(test)]
@@ -235,10 +206,11 @@ impl Machine {
         compile_listing(&mut wam, parsing_stream(BUILTINS.as_bytes()),
                         default_index_store!(atom_tbl.clone()));
 
-        wam.compile_libraries();
         wam.compile_special_forms();
         wam.compile_top_level();
-        
+
+        compile_user_module(&mut wam, parsing_stream(ERROR.as_bytes()));
+
         wam
     }
 
@@ -344,20 +316,13 @@ impl Machine {
                 #[cfg(feature = "readline_rs_compat")]
                 readline::set_line_mode(readline::LineMode::Multi);
 
-                let src = match readline::read_batch("") {
-                    Ok(src) => src,
-                    Err(e) => {
-                        self.throw_session_error(e, (clause_name!("repl"), 0));
-                        return;
-                    }
-                };
+                let src = readline::input_stream();
 
                 #[cfg(feature = "readline_rs_compat")]
                 readline::set_line_mode(readline::LineMode::Single);
 
-                match compile_user_module(self, parsing_stream(&src[0 ..])) {
-                    EvalSession::Error(e) =>
-                        self.throw_session_error(e, (clause_name!("repl"), 0)),
+                match compile_user_module(self, src) {
+                    EvalSession::Error(e) => self.throw_session_error(e, (clause_name!("repl"), 0)),
                     _ => {}
                 };
             },
@@ -387,7 +352,7 @@ impl Machine {
 
                         self.machine_st.heap_locs = var_dict;
                         let term_output = self.machine_st.print_query(term, &self.indices.op_dir);
-                        
+
                         term_output.result()
                     },
                     Err(err_stub) => {
@@ -439,7 +404,7 @@ impl Machine {
                     if !(self.machine_st.b > 0) {
                         if bindings.is_empty() {
                             let space = if requires_space(&attr_goals, ".") { " " } else { "" };
-                            
+
                             if !attr_goals.is_empty() {
                                 println!("{}{}.", attr_goals, space);
                             } else {
@@ -511,7 +476,7 @@ impl Machine {
                             } else {
                                 if requires_space(&bindings, ".") { " " } else { "" }
                             };
-                            
+
                             write!(raw_stdout, "{}.\r\n", space).unwrap();
                         }
 
@@ -647,9 +612,8 @@ impl Machine {
     }
 }
 
-
 impl MachineState {
-    fn record_var_places(&mut self, chunk_num: usize, alloc_locs: &AllocVarDict)                         
+    fn record_var_places(&mut self, chunk_num: usize, alloc_locs: &AllocVarDict)
     {
         for (var, var_data) in alloc_locs {
             match var_data {
@@ -673,16 +637,16 @@ impl MachineState {
             }
         }
     }
-    
+
     fn print_query(&mut self, addr: Addr, op_dir: &OpDir) -> PrinterOutputter
     {
         let flags = self.flags;
-        
+
         let mut output = {
             self.flags = MachineFlags { double_quotes: DoubleQuotes::Atom };
-            
+
             let output = PrinterOutputter::new();
-            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);            
+            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);
 
             printer.quoted = true;
             printer.numbervars = false;
@@ -774,8 +738,8 @@ impl MachineState {
                 return false,
             CodePtr::DynamicTransaction(..) => {
                 // prevent use of dynamic transactions from
-                // succeeding in expansions. this will be toggled
-                // back to true later.
+                // succeeding in expansions. self.fail will be toggled
+                // back to false later.
                 self.fail = true;
                 return false;
             },

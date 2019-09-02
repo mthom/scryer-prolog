@@ -50,6 +50,15 @@ impl TopLevel {
             &TopLevel::Rule(Rule { ref head, .. }) => head.1.len()
         }
     }
+
+    pub fn is_end_of_file_atom(&self) -> bool {
+        match self {
+            &TopLevel::Fact(Term::Constant(_, Constant::Atom(ref name, _))) =>
+                return name.as_str() == "end_of_file",
+            _ =>
+                false
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -153,20 +162,32 @@ impl PredicateClause {
 }
 
 #[derive(Clone)]
+pub enum ModuleSource {
+    Library(ClauseName),
+    File(ClauseName)
+}
+
+#[derive(Clone)]
 pub enum Declaration {
     Dynamic(ClauseName, usize), // name, arity
+    EndOfFile,
     Hook(CompileTimeHook, PredicateClause, VecDeque<TopLevel>),
     Module(ModuleDecl),
     NonCountedBacktracking(ClauseName, usize), // name, arity
     Op(OpDecl),
-    UseModule(ClauseName),
-    UseQualifiedModule(ClauseName, Vec<PredicateKey>)
+    UseModule(ModuleSource),
+    UseQualifiedModule(ModuleSource, Vec<PredicateKey>)
 }
 
 impl Declaration {
     #[inline]
     pub fn is_module_decl(&self) -> bool {
         if let &Declaration::Module(_) = self { true } else { false }
+    }
+
+    #[inline]
+    pub fn is_end_of_file(&self) -> bool {
+        if let &Declaration::EndOfFile = self { true } else { false }
     }
 }
 

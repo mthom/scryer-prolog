@@ -4,8 +4,8 @@
 		 '$add_to_list'/3, '$del_attr'/3, '$del_attr_step'/3,
 		 '$del_attr_buried'/4]).
 
-:- use_module(library(dcgs)).
-:- use_module(library(terms)).
+:- use_module('src/prolog/lib/dcgs.pl').
+:- use_module('src/prolog/lib/terms.pl').
 
 :- op(1199, fx, attribute).
 

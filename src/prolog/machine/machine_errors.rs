@@ -52,22 +52,32 @@ impl MachineError {
         MachineError { stub, from: ErrorProvenance::Constructed }
     }
 
-    pub(super) fn existence_error(h: usize, name: ClauseName, arity: usize) -> Self {
-        let mut stub = functor!("existence_error", 2, [heap_atom!("procedure"), heap_str!(3 + h)]);
-        stub.append(&mut Self::functor_stub(name, arity));
+    pub(super) fn existence_error(h: usize, err: ExistenceError) -> Self
+    {        
+        match err {
+            ExistenceError::Procedure(name, arity) => {
+                let mut stub = functor!("existence_error", 2, [heap_atom!("procedure"), heap_str!(3 + h)]);
+                stub.append(&mut Self::functor_stub(name, arity));
 
-        MachineError { stub, from: ErrorProvenance::Constructed }
+                MachineError { stub, from: ErrorProvenance::Constructed }
+            },
+            ExistenceError::Module(name) => {
+                let name = HeapCellValue::Addr(Addr::Con(Constant::Atom(name, None)));
+                let mut stub = functor!("existence_error", 2, [heap_atom!("module"), name]);
+
+                MachineError { stub, from: ErrorProvenance::Constructed }
+            }
+        }
     }
 
-    // so far, this function is only called wrt dynamic database
-    // transactions. their inapplicable error cases have been left
-    // unhandled.
     pub(super) fn session_error(h: usize, err: SessionError) -> Self {
         match err {
             SessionError::ParserError(err) => Self::syntax_error(h, err),
             SessionError::CannotOverwriteBuiltIn(pred_str)
           | SessionError::CannotOverwriteImport(pred_str) =>
                 Self::permission_error(PermissionError::Modify, "private_procedure", pred_str),
+            SessionError::InvalidFileName(filename) =>
+                Self::existence_error(h, ExistenceError::Module(filename)),
             SessionError::ModuleDoesNotContainExport =>
                 Self::permission_error(PermissionError::Access,
                                        "private_procedure",
@@ -76,6 +86,8 @@ impl MachineError {
                 Self::permission_error(PermissionError::Access,
                                        "private_procedure",
                                        clause_name!("module_does_not_exist")),
+            SessionError::NoModuleDeclaration(name) =>
+                Self::existence_error(h, ExistenceError::Module(name)),
             SessionError::OpIsInfixAndPostFix(op) =>
                 Self::permission_error(PermissionError::Create,
                                        "operator",
@@ -396,12 +408,19 @@ impl MachineState {
     }
 }
 
+pub enum ExistenceError {
+    Module(ClauseName),
+    Procedure(ClauseName, usize)
+}
+
 pub enum SessionError {
     CannotOverwriteBuiltIn(ClauseName),
     CannotOverwriteImport(ClauseName),
-    ModuleDoesNotContainExport,
+    InvalidFileName(ClauseName),
+    ModuleDoesNotContainExport,    
     ModuleNotFound,
     NamelessEntry,
+    NoModuleDeclaration(ClauseName),
     OpIsInfixAndPostFix(ClauseName),
     ParserError(ParserError),
     UserPrompt

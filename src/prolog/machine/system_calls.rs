@@ -282,7 +282,7 @@ impl MachineState {
                                     self.fail = true;
                                     return;
                                 }
-                                
+
                                 if let Some(r) = a2.as_var() {
                                     let spec = get_clause_spec(name.clone(), *arity,
                                                                composite_op!(&indices.op_dir));
@@ -308,7 +308,7 @@ impl MachineState {
                             self.fail = true;
                             return;
                         }
-                        
+
                         if let Some(r) = a2.as_var() {
                             let spec = get_clause_spec(name.clone(), *arity,
                                                        composite_op!(&indices.op_dir));
@@ -1589,6 +1589,10 @@ impl MachineState {
                         self.unify(list_offset, a2);
                     },
                     Err(err) => {
+                        if let ParserError::UnexpectedEOF = err {
+                            std::process::exit(0);
+                        }
+
                         // reset the input stream after an input failure.
                         *current_input_stream = readline::input_stream();
 

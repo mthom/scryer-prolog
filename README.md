@@ -359,16 +359,12 @@ been exported to the toplevel. To export them, write
 ?- use_module(library(lists)).
 ```
 
-The [user] prompt can also be used to define modules inline at the
-REPL:
+To load modules contained in files, the `library` functor can be
+omitted, prompting Scryer to search for the file (specified as an
+atom) from its home directory:
 
 ```
-?- [user].
-(type Enter + Ctrl-D to terminate the stream when finished)
-:- module(test, [local_member/2]).
-:- use_module(library(lists)).
-
-local_member(X, Xs) :- member(X, Xs).
+?- use_module('file.pl').
 ```
 
 `use_module` directives can be qualified by adding a list of imports:
@@ -386,3 +382,18 @@ imported to the current working namespace:
 ```
 ?- lists:member(X, Xs).
 ```
+
+The [user] prompt can also be used to define modules inline at the
+REPL:
+
+```
+?- [user].
+(type Enter + Ctrl-D to terminate the stream when finished)
+:- module(test, [local_member/2]).
+:- use_module(library(lists)).
+
+local_member(X, Xs) :- member(X, Xs).
+```
+
+The user listing can also be terminated by placing `end_of_file.` at
+the end of the stream.

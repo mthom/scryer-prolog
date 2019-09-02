@@ -15,7 +15,6 @@ extern crate termion;
 mod prolog;
 
 use prolog::machine::*;
-use prolog::machine::machine_errors::*;
 use prolog::read::*;
 
 #[cfg(test)]

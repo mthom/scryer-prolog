@@ -117,7 +117,7 @@ pub trait SubModuleUser
             };
         }
     }
-
+    
     // returns true on successful import.
     fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool
     {
@@ -155,8 +155,7 @@ pub trait SubModuleUser
 
     fn use_qualified_module(&mut self, &mut CodeRepo, MachineFlags, &Module, &Vec<PredicateKey>)
                             -> Result<(), SessionError>;
-    fn use_module(&mut self, &mut CodeRepo, MachineFlags, &Module)
-                  -> Result<(), SessionError>;
+    fn use_module(&mut self, &mut CodeRepo, MachineFlags, &Module) -> Result<(), SessionError>;
 }
 
 pub fn use_qualified_module<User>(user: &mut User, submodule: &Module, exports: &Vec<PredicateKey>)

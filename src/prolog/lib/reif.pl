@@ -2,7 +2,7 @@
 		 memberd_t/3, tfilter/3, tmember/2, tmember_t/3,
 		 tpartition/4]).
 
-:- use_module(library(dif)).
+:- use_module('src/prolog/lib/dif.pl').
 
 if_(If_1, Then_0, Else_0) :-
     call(If_1, T),

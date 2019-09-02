@@ -376,9 +376,9 @@ fn try_in_situ(machine_st: &mut MachineState, name: ClauseName, arity: usize,
     } else {
         let stub = MachineError::functor_stub(name.clone(), arity);
         let h = machine_st.heap.h;
+        let key = ExistenceError::Procedure(name, arity);
 
-        Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
-                                  stub))
+        Err(machine_st.error_form(MachineError::existence_error(h, key), stub))
     }
 }
 
@@ -797,8 +797,9 @@ pub(crate) trait CallPolicy: Any {
                     } else {
                         let h = machine_st.heap.h;
                         let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
+                        let key = ExistenceError::Procedure(name, arity);
 
-                        return Err(machine_st.error_form(MachineError::existence_error(h, name, arity),
+                        return Err(machine_st.error_form(MachineError::existence_error(h, key),
                                                          stub));
                     }
                 },

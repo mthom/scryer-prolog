@@ -2,8 +2,8 @@
 
 :- module(dcgs, [phrase/2, phrase/3]).
 
-:- use_module(library(lists), [append/3]).
-:- use_module(library(terms)).
+:- use_module('src/prolog/lib/lists.pl', [append/3]).
+:- use_module('src/prolog/lib/terms.pl').
 
 phrase(G, G) :-
     nonvar(G), G = [_|_], !.

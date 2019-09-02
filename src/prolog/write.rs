@@ -261,9 +261,13 @@ impl fmt::Display for SessionError {
                 write!(f, "cannot overwrite {}", msg),
             &SessionError::CannotOverwriteImport(ref msg) =>
                 write!(f, "cannot overwrite import {}", msg),
+            &SessionError::InvalidFileName(ref filename) =>
+                write!(f, "filename {} is invalid", filename),            
             &SessionError::ModuleNotFound => write!(f, "module not found."),
             &SessionError::ModuleDoesNotContainExport =>
                 write!(f, "module does not contain claimed export."),
+            &SessionError::NoModuleDeclaration(ref name) =>
+                write!(f, "file {}.pl lacks an expected module declaration.", name),
             &SessionError::OpIsInfixAndPostFix(_) =>
                 write!(f, "cannot define an op to be both postfix and infix."),
             &SessionError::NamelessEntry =>
