@@ -91,7 +91,7 @@ fn load_module_from_file(wam: &mut Machine, filename: &str) -> Result<ClauseName
     };
 
     match compile_work_impl(&mut compiler, wam, indices, results) {
-        EvalSession::Error(e) => return Err(e),
+        EvalSession::Error(e) => Err(e),
         _ => Ok(module_name)
     }
 }
@@ -595,8 +595,7 @@ impl ListingCompiler {
                     -> Result<(), SessionError>
     {
         match decl {
-            Declaration::EndOfFile =>
-                return Ok(()),
+            Declaration::EndOfFile => Ok(()),
             Declaration::Hook(hook, clause, queue) => {
                 let key = (hook.name(), hook.arity());
                 let (len, queue_len) = self.add_term_dir_terms(hook, &mut wam.code_repo,
