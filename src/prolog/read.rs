@@ -159,18 +159,6 @@ pub mod readline
         }
     }
 
-    pub fn read_batch(_: &str) -> Result<Vec<u8>, ::SessionError> {
-        let mut buf = vec![];
-
-        let stdin = stdin();
-        let mut stdin = stdin.lock();
-
-        match stdin.read_to_end(&mut buf) {
-            Ok(_) => Ok(buf),
-            _ => Err(::SessionError::UserPrompt)
-        }
-    }
-
     #[inline]
     pub fn input_stream() -> ::PrologStream {
         let reader: Box<Read> = Box::new(StdinWrapper { buf: BufReader::new(stdin()) });
