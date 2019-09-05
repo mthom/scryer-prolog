@@ -1,3 +1,4 @@
+extern crate dirs;
 extern crate ordered_float;
 extern crate prolog_parser;
 extern crate rug;

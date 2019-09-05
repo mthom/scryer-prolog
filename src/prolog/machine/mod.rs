@@ -39,6 +39,7 @@ use prolog::read::PrologStream;
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write, stdout};
+use std::fs::File;
 use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
@@ -153,7 +154,8 @@ impl SubModuleUser for IndexStore {
 
 static BUILTINS: &str = include_str!("../lib/builtins.pl");
 static TOPLEVEL: &str = include_str!("../toplevel.pl");
-static ERROR: &str = include_str!("../lib/error.pl");
+static BETWEEN: &str = include_str!("../lib/between.pl");
+static NON_ISO: &str = include_str!("../lib/non_iso.pl");
 
 impl Machine {
     fn compile_special_forms(&mut self) {
@@ -177,6 +179,24 @@ impl Machine {
     fn compile_top_level(&mut self) {
         self.toplevel_idx = self.code_repo.code.len();
         compile_user_module(self, parsing_stream(TOPLEVEL.as_bytes()));
+    }
+
+    fn compile_scryerrc(&mut self) {
+        let mut path = match dirs::home_dir() {
+            Some(path) => path,
+            None => return
+        };
+                
+        path.push(".scryerrc");
+
+        if path.is_file() {
+            let file_src = match File::open(&path) {
+                Ok(file_handle) => parsing_stream(file_handle),
+                Err(_) => return
+            };
+
+            compile_user_module(self, file_src);
+        }
     }
 
     #[cfg(test)]
@@ -209,7 +229,10 @@ impl Machine {
         wam.compile_special_forms();
         wam.compile_top_level();
 
-        compile_user_module(&mut wam, parsing_stream(ERROR.as_bytes()));
+        compile_user_module(&mut wam, parsing_stream(BETWEEN.as_bytes()));
+        compile_user_module(&mut wam, parsing_stream(NON_ISO.as_bytes()));
+
+        wam.compile_scryerrc();
 
         wam
     }
