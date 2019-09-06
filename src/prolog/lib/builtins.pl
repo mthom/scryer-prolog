@@ -675,9 +675,6 @@ current_predicate(Pred) :-
     -> throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ;  '$get_next_db_ref'(Ref, _),
        '$iterate_db_refs'(Ref, Pred)
-    ;  Pred = call/N,
-       max_arity(Max),
-       between:between(0, Max, N)
     ).
 
 '$iterate_op_db_refs'(Ref, Priority, Spec, Op) :-

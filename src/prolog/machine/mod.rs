@@ -153,9 +153,10 @@ impl SubModuleUser for IndexStore {
 }
 
 static BUILTINS: &str = include_str!("../lib/builtins.pl");
+static ERROR: &str    = include_str!("../lib/error.pl");
+static LISTS: &str    = include_str!("../lib/lists.pl");
+static NON_ISO: &str  = include_str!("../lib/non_iso.pl");
 static TOPLEVEL: &str = include_str!("../toplevel.pl");
-static BETWEEN: &str = include_str!("../lib/between.pl");
-static NON_ISO: &str = include_str!("../lib/non_iso.pl");
 
 impl Machine {
     fn compile_special_forms(&mut self) {
@@ -229,7 +230,8 @@ impl Machine {
         wam.compile_special_forms();
         wam.compile_top_level();
 
-        compile_user_module(&mut wam, parsing_stream(BETWEEN.as_bytes()));
+        compile_user_module(&mut wam, parsing_stream(ERROR.as_bytes()));
+        compile_user_module(&mut wam, parsing_stream(LISTS.as_bytes()));
         compile_user_module(&mut wam, parsing_stream(NON_ISO.as_bytes()));
 
         wam.compile_scryerrc();

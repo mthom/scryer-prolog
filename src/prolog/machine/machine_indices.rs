@@ -21,7 +21,6 @@ pub type OssifiedOpDir = BTreeMap<OrderedOpDirKey, (usize, Specifier)>;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum DBRef {
-    BuiltInPred(ClauseName, usize, Option<SharedOpDesc>),
     NamedPred(ClauseName, usize, Option<SharedOpDesc>),
     Op(usize, Specifier, ClauseName, Rc<OssifiedOpDir>, SharedOpDesc)
 }

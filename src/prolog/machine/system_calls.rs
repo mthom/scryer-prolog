@@ -15,8 +15,6 @@ use prolog::ordered_float::OrderedFloat;
 use prolog::read::{PrologStream, readline};
 use prolog::rug::Integer;
 
-use ref_thread_local::RefThreadLocal;
-
 use std::collections::{HashMap, HashSet};
 use std::io::{stdout, Write};
 use std::iter::once;
@@ -34,6 +32,13 @@ impl BrentAlgState {
     fn new(hare: usize) -> Self {
         BrentAlgState { hare, tortoise: hare, power: 2, steps: 1 }
     }
+}
+
+fn is_builtin_predicate(name: &ClauseName) -> bool {
+    let in_builtins = name.owning_module().as_str() == "builtins";
+    let hidden_name = name.as_str().starts_with("$");
+
+    in_builtins || hidden_name
 }
 
 impl MachineState {
@@ -260,65 +265,31 @@ impl MachineState {
 
     fn get_next_db_ref(&mut self, indices: &IndexStore, db_ref: &DBRef) {
         match db_ref {
-            &DBRef::BuiltInPred(ref name, arity, _) => {
-                let key = (name.as_str(), arity);
-
-                match CLAUSE_TYPE_FORMS.borrow().range(&key ..).skip(1).next() {
-                    Some(((_, arity), ct)) => {
-                        let a2 = self[temp_v!(2)].clone();
-
-                        if let Some(r) = a2.as_var() {
-                            self.bind(r, Addr::DBRef(DBRef::BuiltInPred(ct.name(), *arity, ct.spec())));
-                        } else {
-                            self.fail = true;
-                        }
-                    },
-                    None =>
-                        match indices.code_dir.iter().next() {
-                            Some(((ref name, arity), idx)) => {
-                                let a2 = self[temp_v!(2)].clone();
-
-                                if idx.is_undefined() {
-                                    self.fail = true;
-                                    return;
-                                }
-
-                                if let Some(r) = a2.as_var() {
-                                    let spec = get_clause_spec(name.clone(), *arity,
-                                                               composite_op!(&indices.op_dir));
-                                    self.bind(r, Addr::DBRef(DBRef::NamedPred(name.clone(), *arity, spec)));
-                                } else {
-                                    self.fail = true;
-                                }
-                            },
-                            None => {
-                                self.fail = true;
-                            }
-                        }
-                }
-            },
             &DBRef::NamedPred(ref name, arity, _) => {
                 let key = (name.clone(), arity);
+                let mut iter = indices.code_dir.range(key ..).skip(1);
 
-                match indices.code_dir.range(key ..).skip(1).next() {
-                    Some(((name, arity), idx)) => {
-                        let a2 = self[temp_v!(2)].clone();
+                while let Some(((name, arity), idx)) = iter.next() {
+                    if idx.is_undefined() {
+                        self.fail = true;
+                        return;
+                    }
 
-                        if idx.is_undefined() {
-                            self.fail = true;
-                            return;
-                        }
+                    if is_builtin_predicate(&name) {
+                        continue;
+                    }
 
-                        if let Some(r) = a2.as_var() {
-                            let spec = get_clause_spec(name.clone(), *arity,
-                                                       composite_op!(&indices.op_dir));
-                            self.bind(r, Addr::DBRef(DBRef::NamedPred(name.clone(), *arity, spec)));
-                        } else {
-                            self.fail = true;
-                        }
-                    },
-                    None => self.fail = true
+                    let a2 = self[temp_v!(2)].clone();
+
+                    if let Some(r) = a2.as_var() {
+                        let spec = get_clause_spec(name.clone(), *arity,
+                                                   composite_op!(&indices.op_dir));
+                        self.bind(r, Addr::DBRef(DBRef::NamedPred(name.clone(), *arity, spec)));
+                        return;
+                    }
                 }
+
+                self.fail = true;
             },
             &DBRef::Op(_, spec, ref name, ref op_dir, _) => {
                 let fixity = match spec {
@@ -900,19 +871,25 @@ impl MachineState {
                 match self.store(self.deref(a1)) {
                     addr @ Addr::HeapCell(_)
                   | addr @ Addr::StackCell(..)
-                  | addr @ Addr::AttrVar(_) =>
-                      match CLAUSE_TYPE_FORMS.borrow().iter().next() {
-                          Some(((_, arity), ct)) => {
-                              let db_ref = DBRef::BuiltInPred(ct.name(), *arity, ct.spec());
-                              let r = addr.as_var().unwrap();
-
-                              self.bind(r, Addr::DBRef(db_ref));
-                          },
-                          None => {
-                              self.fail = true;
-                              return Ok(());
+                  | addr @ Addr::AttrVar(_) => {
+                      let mut iter = indices.code_dir.iter();
+                      
+                      while let Some(((name, arity), _)) = iter.next() {
+                          if is_builtin_predicate(&name) {
+                              continue;
                           }
-                      },
+                          
+                          let spec = get_clause_spec(name.clone(), *arity,
+                                                     composite_op!(&indices.op_dir));
+                          let db_ref = DBRef::NamedPred(name.clone(), *arity, spec);
+                          let r = addr.as_var().unwrap();
+                          
+                          self.bind(r, Addr::DBRef(db_ref));
+                          return return_from_clause!(self.last_call, self);
+                      }
+
+                      self.fail = true;
+                    },
                     Addr::DBRef(DBRef::Op(..)) => self.fail = true,
                     Addr::DBRef(ref db_ref) =>
                       self.get_next_db_ref(&indices, db_ref),
@@ -961,7 +938,7 @@ impl MachineState {
                           }
                       }
                     },
-                    Addr::DBRef(DBRef::BuiltInPred(..)) | Addr::DBRef(DBRef::NamedPred(..)) =>
+                    Addr::DBRef(DBRef::NamedPred(..)) =>
                         self.fail = true,
                     Addr::DBRef(ref db_ref) =>
                         self.get_next_db_ref(&indices, db_ref),
@@ -976,7 +953,7 @@ impl MachineState {
                 match self.store(self.deref(a1)) {
                     Addr::DBRef(db_ref) =>
                         match db_ref {
-                            DBRef::BuiltInPred(name, arity, spec) | DBRef::NamedPred(name, arity, spec) => {
+                            DBRef::NamedPred(name, arity, spec) => {
                                 let a2 = self[temp_v!(2)].clone();
                                 let a3 = self[temp_v!(3)].clone();
 

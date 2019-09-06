@@ -1,9 +1,9 @@
-repl :-
-    catch(read_and_match, E, '$print_exception'(E)),
+'$repl' :-
+    catch('$read_and_match', E, '$print_exception'(E)),
     false. %% this is for GC, until we get actual GC.
-repl :- repl.
+'$repl' :- '$repl'.
 
-read_and_match :-
+'$read_and_match' :-
     write_term('?- ', [quoted(false)]),
     read_term(Term, [variable_names(VarList)]),
     '$instruction_match'(Term, VarList).
