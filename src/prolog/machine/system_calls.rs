@@ -339,7 +339,10 @@ impl MachineState {
 
         if let Some(c) = string.chars().last() {
             if layout_char!(c) {
-                let err = ParserError::UnexpectedChar(c);
+                let (line_num, col_num) = string.chars().fold((0, 0), |(line_num, col_num), c|
+                    if new_line_char!(c) { (1 + line_num, 0) } else { (line_num, col_num + 1) }
+                );
+                let err = ParserError::UnexpectedChar(c, line_num, col_num);
 
                 let h = self.heap.h;
                 let err = MachineError::syntax_error(h, err);
@@ -370,7 +373,7 @@ impl MachineState {
             Ok(Term::Constant(_, Constant::CharCode(c))) =>
                 self.unify(nx, Addr::Con(Constant::CharCode(c))),
             _ => {
-                let err = ParserError::ParseBigInt;
+                let err = ParserError::ParseBigInt(0, 0);
 
                 let h = self.heap.h;
                 let err = MachineError::syntax_error(h, err);
@@ -873,17 +876,17 @@ impl MachineState {
                   | addr @ Addr::StackCell(..)
                   | addr @ Addr::AttrVar(_) => {
                       let mut iter = indices.code_dir.iter();
-                      
+
                       while let Some(((name, arity), _)) = iter.next() {
                           if is_builtin_predicate(&name) {
                               continue;
                           }
-                          
+
                           let spec = get_clause_spec(name.clone(), *arity,
                                                      composite_op!(&indices.op_dir));
                           let db_ref = DBRef::NamedPred(name.clone(), *arity, spec);
                           let r = addr.as_var().unwrap();
-                          
+
                           self.bind(r, Addr::DBRef(db_ref));
                           return return_from_clause!(self.last_call, self);
                       }

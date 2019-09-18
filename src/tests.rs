@@ -2273,10 +2273,6 @@ fn test_queries_on_string_lists()
                                          Y = \"defghijkl\".",
                            [["X = [a,b,c,d,e,f,g,h,i,j,k,l]",
                              "Y = [d,e,f,g,h,i,j,k,l]"]]);
-    assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), partial_string(\"def\", Y),
-                                         \"defghijkl\" = Y.",
-                           [["X = [a,b,c,d,e,f,g,h,i,j,k,l]",
-                             "Y = [d,e,f,g,h,i,j,k,l]"]]);
 
     assert_prolog_success!(&mut wam, "partial_string(\"abc\", X), matcher(X, Y), Y = [d, e, f | G].",
                            [["X = [a,b,c,d,e,f|_]","Y = [d,e,f|_]","G = _"]]);
