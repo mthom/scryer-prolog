@@ -5,7 +5,7 @@ use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
 use prolog::rug::Integer;
 
-pub(super) type MachineStub = Vec<HeapCellValue>;
+pub(crate) type MachineStub = Vec<HeapCellValue>;
 
 #[derive(Clone, Copy)]
 enum ErrorProvenance {

@@ -16,6 +16,18 @@ macro_rules! heap_integer {
     )
 }
 
+macro_rules! heap_cell {
+    ($i:expr) => (
+        HeapCellValue::Addr(Addr::HeapCell($i))
+    )
+}
+
+macro_rules! heap_con {
+    ($i:expr) => (
+        HeapCellValue::Addr(Addr::Con($i))
+    )
+}
+
 macro_rules! heap_atom {
     ($name:expr) => (
         HeapCellValue::Addr(Addr::Con(atom!($name)))

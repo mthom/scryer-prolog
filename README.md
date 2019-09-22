@@ -240,6 +240,7 @@ The following predicates are built-in to Scryer.
 * `user:term_expansion/2`
 * `var/1`
 * `variant/2`
+* `wam_instructions/2`
 * `write/1`
 * `write_canonical/1`
 * `writeq/1`
@@ -361,7 +362,7 @@ been exported to the toplevel. To export them, write
 
 To load modules contained in files, the `library` functor can be
 omitted, prompting Scryer to search for the file (specified as an
-atom) from its home directory:
+atom) from its working directory:
 
 ```
 ?- use_module('file.pl').

@@ -74,6 +74,12 @@ impl Heap {
         self.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
         head_addr
     }
+
+    pub fn extend<Iter: Iterator<Item=HeapCellValue>>(&mut self, iter: Iter) {
+        for hcv in iter {
+            self.push(hcv);
+        }
+    }
 }
 
 impl Index<usize> for Heap {

@@ -688,7 +688,7 @@ impl MachineState {
     }
 
     fn dispatch_instr(&mut self, instr: &Line, indices: &mut IndexStore, policies: &mut MachinePolicies,
-                      prolog_stream: &mut PrologStream)
+                      code_repo: &CodeRepo, prolog_stream: &mut PrologStream)
     {
         match instr {
             &Line::Arithmetic(ref arith_instr) =>
@@ -698,7 +698,7 @@ impl MachineState {
             &Line::Cut(ref cut_instr) =>
                 self.execute_cut_instr(cut_instr, &mut policies.cut_policy),
             &Line::Control(ref control_instr) =>
-                self.execute_ctrl_instr(indices, &mut policies.call_policy,
+                self.execute_ctrl_instr(indices, code_repo, &mut policies.call_policy,
                                         &mut policies.cut_policy, prolog_stream,
                                         control_instr),
             &Line::Fact(ref fact_instr) => {
@@ -724,7 +724,7 @@ impl MachineState {
             None => return
         };
 
-        self.dispatch_instr(instr.as_ref(), indices, policies, prolog_stream);
+        self.dispatch_instr(instr.as_ref(), indices, policies, code_repo, prolog_stream);
     }
 
     fn backtrack(&mut self)
@@ -793,7 +793,7 @@ impl MachineState {
                 None => return false
             };
 
-            self.dispatch_instr(instr.as_ref(), indices, policies, prolog_stream);
+            self.dispatch_instr(instr.as_ref(), indices, policies, code_repo, prolog_stream);
 
             if self.fail {
                 self.backtrack();

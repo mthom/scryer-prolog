@@ -232,6 +232,7 @@ pub enum SystemClauseType {
     UnifyWithOccursCheck,
     UnwindStack,
     Variant,
+    WAMInstructions,
     WriteTerm
 }
 
@@ -322,6 +323,7 @@ impl SystemClauseType {
             &SystemClauseType::UnifyWithOccursCheck => clause_name!("$unify_with_occurs_check"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
             &SystemClauseType::Variant => clause_name!("$variant"),
+            &SystemClauseType::WAMInstructions => clause_name!("$wam_instructions"),
             &SystemClauseType::WriteTerm => clause_name!("$write_term"),
         }
     }
@@ -412,6 +414,7 @@ impl SystemClauseType {
             ("$unify_with_occurs_check", 2) => Some(SystemClauseType::UnifyWithOccursCheck),
             ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$write_term", 5) => Some(SystemClauseType::WriteTerm),
+            ("$wam_instructions", 3) => Some(SystemClauseType::WAMInstructions),
             _ => None
         }
     }

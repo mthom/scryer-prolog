@@ -10,6 +10,7 @@ use prolog::heap_print::*;
 use prolog::instructions::*;
 use prolog::machine::attributed_variables::*;
 use prolog::machine::and_stack::*;
+use prolog::machine::code_repo::CodeRepo;
 use prolog::machine::copier::*;
 use prolog::machine::heap::*;
 use prolog::machine::or_stack::*;
@@ -2975,6 +2976,7 @@ impl MachineState {
     }
 
     fn handle_call_clause(&mut self, indices: &mut IndexStore,
+                          code_repo: &CodeRepo,
                           call_policy: &mut Box<CallPolicy>,
                           cut_policy:  &mut Box<CutPolicy>,
                           parsing_stream: &mut PrologStream,
@@ -3010,22 +3012,25 @@ impl MachineState {
                 try_or_fail!(self, call_policy.context_call(self, name.clone(), arity, idx.clone(),
                                                             indices)),
             &ClauseType::System(ref ct) =>
-                try_or_fail!(self, self.system_call(ct, indices, call_policy, cut_policy,
+                try_or_fail!(self, self.system_call(ct, code_repo, indices, call_policy, cut_policy,
                                                     parsing_stream))
         };
     }
 
-    pub(super) fn execute_ctrl_instr(&mut self, indices: &mut IndexStore,
-                                     call_policy: &mut Box<CallPolicy>,
-                                     cut_policy:  &mut Box<CutPolicy>,
-                                     parsing_stream: &mut PrologStream,
-                                     instr: &ControlInstruction)
+    pub(super)
+    fn execute_ctrl_instr(&mut self,
+                          indices: &mut IndexStore,
+                          code_repo: &CodeRepo,
+                          call_policy: &mut Box<CallPolicy>,
+                          cut_policy:  &mut Box<CutPolicy>,
+                          parsing_stream: &mut PrologStream,
+                          instr: &ControlInstruction)
     {
         match instr {
             &ControlInstruction::Allocate(num_cells) =>
                 self.allocate(num_cells),
             &ControlInstruction::CallClause(ref ct, arity, _, lco, use_default_cp) =>
-                self.handle_call_clause(indices, call_policy, cut_policy,
+                self.handle_call_clause(indices, code_repo, call_policy, cut_policy,
                                         parsing_stream, ct, arity, lco,
                                         use_default_cp),
             &ControlInstruction::Deallocate => self.deallocate(),

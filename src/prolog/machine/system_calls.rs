@@ -6,6 +6,8 @@ use prolog_parser::tabled_rc::*;
 use prolog::clause_types::*;
 use prolog::forms::*;
 use prolog::heap_print::*;
+use prolog::instructions::*;
+use prolog::machine::code_repo::CodeRepo;
 use prolog::machine::copier::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
@@ -15,7 +17,7 @@ use prolog::ordered_float::OrderedFloat;
 use prolog::read::{PrologStream, readline};
 use prolog::rug::Integer;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{stdout, Write};
 use std::iter::once;
 use std::mem;
@@ -31,6 +33,21 @@ struct BrentAlgState {
 impl BrentAlgState {
     fn new(hare: usize) -> Self {
         BrentAlgState { hare, tortoise: hare, power: 2, steps: 1 }
+    }
+}
+
+fn scan_for_trust_me(code: &Code, jmp_offsets: &mut VecDeque<usize>, after_idx: &mut usize) {
+    for (idx, instr) in code[*after_idx ..].iter().enumerate() {
+        match instr {
+            &Line::Choice(ChoiceInstruction::TrustMe)
+          | &Line::IndexedChoice(IndexedChoiceInstruction::Trust(..)) => {
+                *after_idx += idx;
+                return;
+            },
+            &Line::Control(ControlInstruction::JmpBy(_, offset, ..)) =>
+                jmp_offsets.push_back(*after_idx + idx + offset),
+            _ => {}
+        }
     }
 }
 
@@ -385,13 +402,61 @@ impl MachineState {
         Ok(())
     }
 
-    pub(super) fn system_call(&mut self,
-                              ct: &SystemClauseType,
-                              indices: &mut IndexStore,
-                              call_policy: &mut Box<CallPolicy>,
-                              cut_policy:  &mut Box<CutPolicy>,
-                              current_input_stream: &mut PrologStream)
-                              -> CallResult
+    fn create_instruction_functors(&mut self, code: &Code, first_idx: usize) -> Vec<Addr>
+    {
+        let mut queue = VecDeque::new();
+        let mut functors = vec![];
+        let mut h = self.heap.h;
+
+        queue.push_back(first_idx);
+
+        while let Some(first_idx) = queue.pop_front() {
+            let mut last_idx = first_idx;
+
+            loop {
+                match &code[last_idx] {
+                    &Line::Choice(ChoiceInstruction::TryMeElse(..))
+                  | &Line::IndexedChoice(IndexedChoiceInstruction::Try(..)) => {
+                        last_idx += 1;
+                        scan_for_trust_me(code, &mut queue, &mut last_idx);
+                    },
+                    &Line::Control(ControlInstruction::JmpBy(_, offset, _, false)) => {
+                        queue.push_back(last_idx + offset);
+                        last_idx += 1;
+                    },
+                    &Line::Control(ControlInstruction::JmpBy(_, offset, _, true)) => {
+                        queue.push_back(last_idx + offset);
+                        break;
+                    },
+                    &Line::Control(ControlInstruction::Proceed)
+                  | &Line::Control(ControlInstruction::CallClause(_, _, _, true, _)) =>
+                        break,
+                    _ =>
+                        last_idx += 1
+                };
+            }
+
+            for instr in &code[first_idx .. last_idx + 1] {
+                let section = instr.to_functor(h);
+                functors.push(Addr::HeapCell(h));
+
+                h += section.len();
+                self.heap.extend(section.into_iter());
+            }
+        }
+
+        functors
+    }
+
+    pub(super)
+    fn system_call(&mut self,
+                   ct: &SystemClauseType,
+                   code_repo: &CodeRepo,
+                   indices: &mut IndexStore,
+                   call_policy: &mut Box<CallPolicy>,
+                   cut_policy:  &mut Box<CutPolicy>,
+                   current_input_stream: &mut PrologStream)
+                   -> CallResult
     {
         match ct {
             &SystemClauseType::AbolishClause => {
@@ -1640,6 +1705,55 @@ impl MachineState {
                 self.unwind_stack(),
             &SystemClauseType::Variant =>
                 self.fail = self.structural_eq_test(),
+            &SystemClauseType::WAMInstructions => {
+                let name  = self[temp_v!(1)].clone();
+                let arity = self[temp_v!(2)].clone();
+
+                let name = match self.store(self.deref(name)) {
+                    Addr::Con(Constant::Atom(name, _)) => name,
+                    _ => unreachable!()
+                };
+
+                let arity = match self.store(self.deref(arity)) {
+                    Addr::Con(Constant::Integer(n)) => n,
+                    _ => unreachable!()
+                };
+
+                let first_idx = match indices.code_dir.get(&(name.clone(), arity.to_usize().unwrap()))
+                {
+                    Some(ref idx) =>
+                        if let Some(idx) = idx.local() {
+                            idx
+                        } else {
+                            let arity = arity.to_usize().unwrap();
+                            let stub = MachineError::functor_stub(name.clone(), arity);
+                            let h = self.heap.h;
+
+                            let err = MachineError::existence_error(h, ExistenceError::Procedure(name, arity));
+                            let err = self.error_form(err, stub);
+
+                            self.throw_exception(err);
+                            return Ok(());
+                        },
+                    None => {
+                        let arity = arity.to_usize().unwrap();
+                        let stub = MachineError::functor_stub(name.clone(), arity);
+                        let h = self.heap.h;
+
+                        let err = MachineError::existence_error(h, ExistenceError::Procedure(name, arity));
+                        let err = self.error_form(err, stub);
+
+                        self.throw_exception(err);
+                        return Ok(());
+                    }
+                };
+
+                let functors = self.create_instruction_functors(&code_repo.code, first_idx);
+                let listing  = Addr::HeapCell(self.heap.to_list(functors.into_iter()));
+                let listing_var = self[temp_v!(3)].clone();
+
+                self.unify(listing, listing_var);
+            },
             &SystemClauseType::WriteTerm => {
                 let addr = self[temp_v!(1)].clone();
 
