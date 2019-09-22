@@ -1,5 +1,3 @@
-use indexmap::IndexMap;
-
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
@@ -7,9 +5,11 @@ use prolog::clause_types::*;
 use prolog::fixtures::*;
 use prolog::forms::*;
 
+use indexmap::IndexMap;
+
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::mem;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::rc::Rc;
@@ -427,11 +427,11 @@ impl Default for DynamicPredicateInfo {
     }
 }
 
-pub type InSituCodeDir  = HashMap<PredicateKey, usize>;
+pub type InSituCodeDir  = IndexMap<PredicateKey, usize>;
 // key type: module name, predicate indicator.
-pub type DynamicCodeDir = HashMap<(ClauseName, ClauseName, usize), DynamicPredicateInfo>;
+pub type DynamicCodeDir = IndexMap<(ClauseName, ClauseName, usize), DynamicPredicateInfo>;
 
-pub type GlobalVarDir = HashMap<ClauseName, Addr>;
+pub type GlobalVarDir = IndexMap<ClauseName, Addr>;
 
 pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,
@@ -545,7 +545,7 @@ impl IndexStore {
 }
 
 pub type CodeDir = BTreeMap<PredicateKey, CodeIndex>;
-pub type TermDir = HashMap<PredicateKey, (Predicate, VecDeque<TopLevel>)>;
+pub type TermDir = IndexMap<PredicateKey, (Predicate, VecDeque<TopLevel>)>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 pub enum CompileTimeHook {

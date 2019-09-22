@@ -8,13 +8,14 @@ use prolog::machine::machine_indices::*;
 use prolog::machine::toplevel::*;
 use prolog::read::readline;
 
-use std::collections::HashSet;
+use indexmap::IndexSet;
+
 use std::mem::swap;
 use std::ops::{Range, RangeFrom};
 
 pub struct TestOutputter {
-    results: Vec<HashSet<String>>,
-    contents: HashSet<String>,
+    results: Vec<IndexSet<String>>,
+    contents: IndexSet<String>,
     focus: String
 }
 
@@ -22,7 +23,7 @@ impl TestOutputter {
     fn cache(&mut self) {
         self.begin_new_var();
 
-        let mut contents = HashSet::new();
+        let mut contents = IndexSet::new();
         swap(&mut contents, &mut self.contents);
 
         self.results.push(contents);
@@ -30,11 +31,11 @@ impl TestOutputter {
 }
 
 impl HCValueOutputter for TestOutputter {
-    type Output = Vec<HashSet<String>>;
+    type Output = Vec<IndexSet<String>>;
 
     fn new() -> Self {
         TestOutputter { results: vec![],
-                        contents: HashSet::new(),
+                        contents: IndexSet::new(),
                         focus: String::new() }
     }
 
@@ -84,7 +85,7 @@ impl HCValueOutputter for TestOutputter {
     }
 }
 
-pub fn collect_test_output(wam: &mut Machine, alloc_locs: AllocVarDict) -> Vec<HashSet<String>>
+pub fn collect_test_output(wam: &mut Machine, alloc_locs: AllocVarDict) -> Vec<IndexSet<String>>
 {
     let mut output = TestOutputter::new();
 
@@ -100,7 +101,7 @@ pub fn collect_test_output(wam: &mut Machine, alloc_locs: AllocVarDict) -> Vec<H
 }
 
 pub fn collect_test_output_with_limit(wam: &mut Machine, alloc_locs: AllocVarDict, limit: usize)                                      
-                                      -> Vec<HashSet<String>>
+                                      -> Vec<IndexSet<String>>
 {
     let mut output = TestOutputter::new();
 
@@ -143,7 +144,7 @@ pub fn submit(wam: &mut Machine, buffer: &str) -> bool
 }
 
 #[allow(dead_code)]
-pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<HashSet<String>>) -> bool
+pub fn submit_query(wam: &mut Machine, buffer: &str, result: Vec<IndexSet<String>>) -> bool
 {
     wam.reset();
 
@@ -177,7 +178,7 @@ pub fn submit_query_without_results(wam: &mut Machine, buffer: &str) -> bool
 
 #[allow(dead_code)]
 pub fn submit_query_with_limit(wam: &mut Machine, buffer: &str,
-                               result: Vec<HashSet<String>>, limit: usize)
+                               result: Vec<IndexSet<String>>, limit: usize)
                                -> bool
 {
     wam.reset();

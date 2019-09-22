@@ -9,8 +9,10 @@ use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::MachineState;
 use prolog::machine::term_expansion::*;
 
+use indexmap::{IndexMap, IndexSet};
+
 use std::borrow::BorrowMut;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::cell::Cell;
 use std::io::Read;
 use std::mem;
@@ -426,7 +428,7 @@ impl RelationWorker {
 
     fn compute_head(&self, term: &Term) -> Vec<Term>
     {
-        let mut vars = HashSet::new();
+        let mut vars = IndexSet::new();
 
         for term in post_order_iter(term) {
             if let TermRef::Var(_, _, v) = term {
@@ -802,7 +804,7 @@ fn stream_to_toplevel<R: Read>(mut buffer: ParsingStream<R>, wam: &mut Machine)
     Ok(deque_to_packet(tl, queue))
 }
 
-pub type DynamicClauseMap = HashMap<(ClauseName, usize), Vec<(Term, Term)>>;
+pub type DynamicClauseMap = IndexMap<(ClauseName, usize), Vec<(Term, Term)>>;
 
 pub struct TopLevelBatchWorker<'a, R: Read> {
     pub(crate) term_stream: TermStream<'a, R>,
@@ -823,7 +825,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         TopLevelBatchWorker { term_stream,
                               rel_worker: RelationWorker::new(flags),
                               results: vec![],
-                              dynamic_clause_map: HashMap::new(),
+                              dynamic_clause_map: IndexMap::new(),
                               in_module: false }
     }
 

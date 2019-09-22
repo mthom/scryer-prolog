@@ -21,8 +21,9 @@ use prolog::ordered_float::*;
 use prolog::rug::{Integer, Rational};
 use prolog::read::PrologStream;
 
+use indexmap::{IndexMap, IndexSet};
+
 use std::cmp::{min, max, Ordering};
-use std::collections::{HashMap, HashSet};
 use std::f64;
 use std::mem;
 use std::rc::Rc;
@@ -374,7 +375,7 @@ impl MachineState {
 
     pub(super) fn unify_with_occurs_check(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
-        let mut tabu_list: HashSet<(Addr, Addr)> = HashSet::new();
+        let mut tabu_list: IndexSet<(Addr, Addr)> = IndexSet::new();
 
         self.fail = false;
 
@@ -479,7 +480,7 @@ impl MachineState {
 
     pub(super) fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
-        let mut tabu_list: HashSet<(Addr, Addr)> = HashSet::new();
+        let mut tabu_list: IndexSet<(Addr, Addr)> = IndexSet::new();
 
         self.fail = false;
 
@@ -2071,7 +2072,7 @@ impl MachineState {
     }
 
     pub(crate) fn is_cyclic_term(&self, addr: Addr) -> bool {
-        let mut seen = HashSet::new();
+        let mut seen = IndexSet::new();
         let mut fail = false;
         let mut iter = self.pre_order_iter(addr);
 
@@ -2835,7 +2836,7 @@ impl MachineState {
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
 
-        let mut var_pairs = HashMap::new();
+        let mut var_pairs = IndexMap::new();
 
         let iter = self.zipped_acyclic_pre_order_iter(a1, a2);
 

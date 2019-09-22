@@ -3,8 +3,9 @@ use prolog_parser::ast::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::*;
 
+use indexmap::IndexSet;
+
 use std::cmp::Ordering;
-use std::collections::HashSet;
 use std::ops::Deref;
 use std::vec::Vec;
 
@@ -187,13 +188,13 @@ impl<'a> MutStackHCIterator for HCPreOrderIterator<'a> {
 
 pub struct HCAcyclicIterator<HCIter> {
     iter: HCIter,
-    seen: HashSet<Addr>
+    seen: IndexSet<Addr>
 }
 
 impl<HCIter: MutStackHCIterator> HCAcyclicIterator<HCIter>
 {
     pub fn new(iter: HCIter) -> Self {
-        HCAcyclicIterator { iter, seen: HashSet::new() }
+        HCAcyclicIterator { iter, seen: IndexSet::new() }
     }
 }
 
@@ -227,14 +228,14 @@ impl<HCIter> Iterator for HCAcyclicIterator<HCIter>
 pub struct HCZippedAcyclicIterator<HCIter> {
     i1: HCIter,
     i2: HCIter,
-    seen: HashSet<(Addr, Addr)>,
+    seen: IndexSet<(Addr, Addr)>,
     pub first_to_expire: Ordering
 }
 
 impl<HCIter: MutStackHCIterator> HCZippedAcyclicIterator<HCIter>
 {
     pub fn new(i1: HCIter, i2: HCIter) -> Self {
-        HCZippedAcyclicIterator { i1, i2, seen: HashSet::new(),
+        HCZippedAcyclicIterator { i1, i2, seen: IndexSet::new(),
                                   first_to_expire: Ordering::Equal }
     }
 }

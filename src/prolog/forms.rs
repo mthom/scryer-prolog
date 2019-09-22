@@ -8,8 +8,10 @@ use prolog::machine::machine_indices::*;
 use prolog::ordered_float::OrderedFloat;
 use prolog::rug::{Integer, Rational};
 
+use indexmap::IndexMap;
+
 use std::cell::Cell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 pub type PredicateKey = (ClauseName, usize); // name, arity.
@@ -292,7 +294,7 @@ fn fetch_op_spec(name: ClauseName, arity: usize, spec: Option<SharedOpDesc>, op_
     })
 }
 
-pub type ModuleDir = HashMap<ClauseName, Module>;
+pub type ModuleDir = IndexMap<ClauseName, Module>;
 
 #[derive(Clone)]
 pub struct ModuleDecl {

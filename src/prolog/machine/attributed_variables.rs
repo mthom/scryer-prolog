@@ -1,6 +1,7 @@
 use prolog::machine::*;
 
-use std::collections::HashSet;
+use indexmap::IndexSet;
+
 use std::vec::IntoIter;
 
 pub static VERIFY_ATTRS: &str  = include_str!("attributed_variables.pl");
@@ -87,7 +88,7 @@ impl MachineState {
 
     fn populate_project_attr_lists(&mut self) -> (Addr, Addr)
     {
-        let mut query_vars = HashSet::new();
+        let mut query_vars = IndexSet::new();
         let attr_vars = self.gather_attr_vars_created_since(0);
 
         for (_, addr) in self.heap_locs.iter() {

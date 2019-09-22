@@ -239,7 +239,7 @@ macro_rules! index_store {
 
 macro_rules! default_index_store {
     ($atom_tbl:expr) => (
-        index_store!($atom_tbl, CodeDir::new(), default_op_dir(), HashMap::new())
+        index_store!($atom_tbl, CodeDir::new(), default_op_dir(), IndexMap::new())
     )
 }
 

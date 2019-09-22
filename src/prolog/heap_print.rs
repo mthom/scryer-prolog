@@ -9,8 +9,9 @@ use prolog::machine::machine_state::*;
 use prolog::ordered_float::OrderedFloat;
 use prolog::rug::{Integer};
 
+use indexmap::{IndexMap, IndexSet};
+
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
 use std::iter::once;
 use std::ops::{Range, RangeFrom};
 use std::rc::Rc;
@@ -294,7 +295,7 @@ impl MachineState {
     }
 }
 
-type ReverseHeapVarDict = HashMap<Addr, Rc<Var>>;
+type ReverseHeapVarDict = IndexMap<Addr, Rc<Var>>;
 
 pub struct HCPrinter<'a, Outputter> {
     outputter: Outputter,
@@ -303,10 +304,10 @@ pub struct HCPrinter<'a, Outputter> {
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
     heap_locs: ReverseHeapVarDict,
-    printed_vars: HashSet<Addr>,
+    printed_vars: IndexSet<Addr>,
     last_item_idx: usize,
-    cyclic_terms: HashMap<Addr, usize>,
-    pub(crate) var_names: HashMap<Addr, String>,
+    cyclic_terms: IndexMap<Addr, usize>,
+    pub(crate) var_names: IndexMap<Addr, String>,
     pub(crate) numbervars_offset: Integer,
     pub(crate) numbervars:   bool,
     pub(crate) quoted:       bool,
@@ -415,14 +416,14 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter>
                     state_stack: vec![],
                     heap_locs: ReverseHeapVarDict::new(),
                     toplevel_spec: None,
-                    printed_vars: HashSet::new(),
+                    printed_vars: IndexSet::new(),
                     last_item_idx: 0,
                     numbervars: false,
                     numbervars_offset: Integer::from(0),
                     quoted: false,
                     ignore_ops: false,
-                    cyclic_terms: HashMap::new(),
-                    var_names: HashMap::new() }
+                    cyclic_terms: IndexMap::new(),
+                    var_names: IndexMap::new() }
     }
 
     pub fn from_heap_locs(machine_st: &'a MachineState, op_dir: &'a OpDir, output: Outputter)

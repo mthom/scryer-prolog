@@ -17,7 +17,9 @@ use prolog::ordered_float::OrderedFloat;
 use prolog::read::{PrologStream, readline};
 use prolog::rug::Integer;
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use indexmap::{IndexMap, IndexSet};
+
+use std::collections::VecDeque;
 use std::io::{stdout, Write};
 use std::iter::once;
 use std::mem;
@@ -1672,7 +1674,7 @@ impl MachineState {
             &SystemClauseType::Succeed => {},
             &SystemClauseType::TermVariables => {
                 let a1 = self[temp_v!(1)].clone();
-                let mut seen_vars = HashSet::new();
+                let mut seen_vars = IndexSet::new();
 
                 for item in self.acyclic_pre_order_iter(a1) {
                     match item {
@@ -1779,7 +1781,7 @@ impl MachineState {
 
                 match self.try_from_list(temp_v!(5), stub.clone()) {
                     Ok(addrs) => {
-                        let mut var_names: HashMap<Addr, String> = HashMap::new();
+                        let mut var_names: IndexMap<Addr, String> = IndexMap::new();
 
                         for addr in addrs {
                             match addr {

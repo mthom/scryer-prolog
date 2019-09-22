@@ -7,7 +7,9 @@ use prolog::machine::machine_indices::*;
 
 use prolog::rug::Integer;
 
-use std::collections::{HashMap, VecDeque};
+use indexmap::IndexMap;
+
+use std::collections::VecDeque;
 
 fn reg_type_into_functor(r: RegType) -> MachineStub {
     match r {
@@ -361,8 +363,8 @@ impl ControlInstruction {
 
 pub enum IndexingInstruction {
     SwitchOnTerm(usize, usize, usize, usize),
-    SwitchOnConstant(usize, HashMap<Constant, usize>),
-    SwitchOnStructure(usize, HashMap<(ClauseName, usize), usize>)
+    SwitchOnConstant(usize, IndexMap<Constant, usize>),
+    SwitchOnStructure(usize, IndexMap<(ClauseName, usize), usize>)
 }
 
 impl From<IndexingInstruction> for Line {

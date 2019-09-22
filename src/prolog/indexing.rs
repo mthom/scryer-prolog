@@ -1,7 +1,10 @@
 use prolog_parser::ast::*;
 
 use prolog::instructions::*;
-use std::collections::{HashMap, VecDeque};
+
+use indexmap::IndexMap;
+
+use std::collections::VecDeque;
 use std::hash::Hash;
 
 #[derive(Clone, Copy)]
@@ -11,18 +14,18 @@ enum IntIndex {
 
 pub struct CodeOffsets {
     flags: MachineFlags,
-    pub constants:  HashMap<Constant, ThirdLevelIndex>,
+    pub constants:  IndexMap<Constant, ThirdLevelIndex>,
     pub lists: ThirdLevelIndex,
-    pub structures: HashMap<(ClauseName, usize), ThirdLevelIndex>
+    pub structures: IndexMap<(ClauseName, usize), ThirdLevelIndex>
 }
 
 impl CodeOffsets {
     pub fn new(flags: MachineFlags) -> Self {
         CodeOffsets {
             flags,
-            constants: HashMap::new(),
+            constants: IndexMap::new(),
             lists: Vec::new(),
-            structures: HashMap::new()
+            structures: IndexMap::new()
         }
     }
 
@@ -79,11 +82,11 @@ impl CodeOffsets {
         };
     }
 
-    fn second_level_index<Index>(indices: HashMap<Index, ThirdLevelIndex>, prelude: &mut CodeDeque)
-                                 -> HashMap<Index, IntIndex>
+    fn second_level_index<Index>(indices: IndexMap<Index, ThirdLevelIndex>, prelude: &mut CodeDeque)
+                                 -> IndexMap<Index, IntIndex>
         where Index: Eq + Hash
     {
-        let mut index_locs = HashMap::new();
+        let mut index_locs = IndexMap::new();
 
         for (key, mut code) in indices.into_iter() {
             if code.len() > 1 {
@@ -108,11 +111,11 @@ impl CodeOffsets {
         no_constants && no_structures && no_lists
     }
 
-    fn flatten_index<Index>(index: HashMap<Index, IntIndex>, len: usize)
-                            -> HashMap<Index, usize>
+    fn flatten_index<Index>(index: IndexMap<Index, IntIndex>, len: usize)
+                            -> IndexMap<Index, usize>
         where Index: Eq + Hash
     {
-        let mut flattened_index = HashMap::new();
+        let mut flattened_index = IndexMap::new();
 
         for (key, int_index) in index.into_iter() {
             match int_index {
@@ -138,7 +141,7 @@ impl CodeOffsets {
         }
     }
 
-    fn switch_on_constant(con_ind: HashMap<Constant, ThirdLevelIndex>, prelude: &mut CodeDeque)
+    fn switch_on_constant(con_ind: IndexMap<Constant, ThirdLevelIndex>, prelude: &mut CodeDeque)
                           -> IntIndex
     {
         let con_ind = Self::second_level_index(con_ind, prelude);
@@ -157,7 +160,7 @@ impl CodeOffsets {
         }
     }
 
-    fn switch_on_structure(str_ind: HashMap<(ClauseName, usize), ThirdLevelIndex>,
+    fn switch_on_structure(str_ind: IndexMap<(ClauseName, usize), ThirdLevelIndex>,
                            prelude: &mut CodeDeque)
                            -> IntIndex
     {

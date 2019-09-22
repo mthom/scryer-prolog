@@ -12,8 +12,10 @@ use prolog::machine::machine_indices::*;
 use prolog::machine::term_expansion::{ExpansionAdditionResult};
 use prolog::machine::toplevel::*;
 
+use indexmap::{IndexMap, IndexSet};
+
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
 use std::mem;
@@ -325,13 +327,13 @@ pub struct GatherResult {
 pub struct ClauseCodeGenerator {
     len_offset: usize,
     code: Code,
-    pi_to_loc: HashMap<PredicateKey, usize>
+    pi_to_loc: IndexMap<PredicateKey, usize>
 }
 
 impl ClauseCodeGenerator {
     #[inline]
     fn new(len_offset: usize) -> Self {
-        ClauseCodeGenerator { len_offset, code: vec![], pi_to_loc: HashMap::new() }
+        ClauseCodeGenerator { len_offset, code: vec![], pi_to_loc: IndexMap::new() }
     }
 
     fn generate_clause_code(&mut self, dynamic_clause_map: DynamicClauseMap, wam: &Machine)
@@ -375,7 +377,7 @@ impl ClauseCodeGenerator {
 }
 
 pub struct ListingCompiler {
-    non_counted_bt_preds: HashSet<PredicateKey>,
+    non_counted_bt_preds: IndexSet<PredicateKey>,
     module: Option<Module>,
     user_term_dir: TermDir,
     orig_term_expansion_lens: (usize, usize),
@@ -428,7 +430,7 @@ impl ListingCompiler {
     #[inline]
     pub fn new(code_repo: &CodeRepo) -> Self {
         ListingCompiler {
-            non_counted_bt_preds: HashSet::new(),
+            non_counted_bt_preds: IndexSet::new(),
             module: None,
             user_term_dir: TermDir::new(),
             orig_term_expansion_lens: code_repo.term_dir_entry_len((clause_name!("term_expansion"), 2)),

@@ -4,8 +4,10 @@ use prolog::forms::*;
 use prolog::instructions::*;
 use prolog::iterators::*;
 
+use indexmap::IndexMap;
+
 use std::cell::Cell;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::collections::btree_map::{IntoIter, IterMut, Values};
 use std::mem::swap;
 use std::rc::Rc;
@@ -91,7 +93,7 @@ impl<'a> VariableFixtures<'a>
     pub fn populate_restricting_sets(&mut self)
     {
         // three stages:
-        // 1. move the use sets of each variable to a local HashMap, use_set
+        // 1. move the use sets of each variable to a local IndexMap, use_set
         // (iterate mutably, swap mutable refs).
         // 2. drain use_set. For each use set of U, add into the
         // no-use sets of appropriate variables T =/= U.
@@ -99,7 +101,7 @@ impl<'a> VariableFixtures<'a>
         // Compute the conflict set of u.
 
         // 1.
-        let mut use_sets: HashMap<Rc<Var>, OccurrenceSet> = HashMap::new();
+        let mut use_sets: IndexMap<Rc<Var>, OccurrenceSet> = IndexMap::new();
 
         for (var, &mut (ref mut var_status, _)) in self.iter_mut() {
             if let &mut VarStatus::Temp(_, ref mut var_data) = var_status {
@@ -110,7 +112,7 @@ impl<'a> VariableFixtures<'a>
             }
         }
 
-        for (u, use_set) in use_sets.drain() {
+        for (u, use_set) in use_sets.drain(..) {
             // 2.
             for &(term_loc, reg) in use_set.iter() {
                 if let GenContext::Last(cn_u) = term_loc {
@@ -240,13 +242,13 @@ impl<'a> VariableFixtures<'a>
 }
 
 pub struct UnsafeVarMarker {
-    pub unsafe_vars: HashMap<RegType, bool>
+    pub unsafe_vars: IndexMap<RegType, bool>
 }
 
 impl UnsafeVarMarker {
     pub fn new() -> Self {
         UnsafeVarMarker {
-            unsafe_vars: HashMap::new()
+            unsafe_vars: IndexMap::new()
         }
     }
 

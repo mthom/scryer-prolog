@@ -9,7 +9,7 @@ use prolog::machine::machine_indices::*;
 use prolog::targets::*;
 
 use std::cell::Cell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 pub struct DebrayAllocator {
@@ -17,7 +17,7 @@ pub struct DebrayAllocator {
     arg_c:    usize,
     temp_lb:  usize,
     arity:    usize, // 0 if not at head.
-    contents: HashMap<usize, Rc<Var>>,
+    contents: IndexMap<usize, Rc<Var>>,
     in_use:   BTreeSet<usize>,
 }
 
@@ -210,7 +210,7 @@ impl<'a> Allocator<'a> for DebrayAllocator
             arg_c:   1,
             temp_lb: 1,
             bindings: IndexMap::new(),
-            contents: HashMap::new(),
+            contents: IndexMap::new(),
             in_use: BTreeSet::new()
         }
     }

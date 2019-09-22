@@ -11,15 +11,16 @@ use prolog::iterators::*;
 use prolog::machine::machine_indices::*;
 use prolog::targets::*;
 
+use indexmap::IndexMap;
+
 use std::cell::Cell;
-use std::collections::{HashMap};
 use std::rc::Rc;
 use std::vec::Vec;
 
 pub struct CodeGenerator<TermMarker> {
     flags: MachineFlags,
     marker: TermMarker,
-    var_count: HashMap<Rc<Var>, usize>,
+    var_count: IndexMap<Rc<Var>, usize>,
     non_counted_bt: bool
 }
 
@@ -92,7 +93,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 {
     pub fn new(non_counted_bt: bool, flags: MachineFlags) -> Self {
         CodeGenerator { marker:  Allocator::new(),
-                        var_count: HashMap::new(),
+                        var_count: IndexMap::new(),
                         non_counted_bt,
                         flags }
     }
@@ -653,7 +654,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker>
 
     fn mark_unsafe_fact_vars(&self, fact: &mut CompiledFact) -> UnsafeVarMarker
     {
-        let mut unsafe_vars = HashMap::new();
+        let mut unsafe_vars = IndexMap::new();
 
         for var_status in self.marker.bindings().values() {
             unsafe_vars.insert(var_status.as_reg_type(), false);

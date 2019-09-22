@@ -37,7 +37,9 @@ use prolog::machine::modules::*;
 use prolog::machine::toplevel::stream_to_toplevel;
 use prolog::read::PrologStream;
 
-use std::collections::{HashMap, VecDeque};
+use indexmap::IndexMap;
+
+use std::collections::VecDeque;
 use std::io::{Read, Write, stdout};
 use std::fs::File;
 use std::mem;
