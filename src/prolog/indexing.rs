@@ -9,14 +9,16 @@ use std::hash::Hash;
 
 #[derive(Clone, Copy)]
 enum IntIndex {
-    External(usize), Fail, Internal(usize)
+    External(usize),
+    Fail,
+    Internal(usize),
 }
 
 pub struct CodeOffsets {
     flags: MachineFlags,
-    pub constants:  IndexMap<Constant, ThirdLevelIndex>,
+    pub constants: IndexMap<Constant, ThirdLevelIndex>,
     pub lists: ThirdLevelIndex,
-    pub structures: IndexMap<(ClauseName, usize), ThirdLevelIndex>
+    pub structures: IndexMap<(ClauseName, usize), ThirdLevelIndex>,
 }
 
 impl CodeOffsets {
@@ -25,15 +27,16 @@ impl CodeOffsets {
             flags,
             constants: IndexMap::new(),
             lists: Vec::new(),
-            structures: IndexMap::new()
+            structures: IndexMap::new(),
         }
     }
 
     fn cap_choice_seq_with_trust(prelude: &mut ThirdLevelIndex) {
         prelude.last_mut().map(|instr| {
             match instr {
-                &mut IndexedChoiceInstruction::Retry(i) =>
-                    *instr = IndexedChoiceInstruction::Trust(i),
+                &mut IndexedChoiceInstruction::Retry(i) => {
+                    *instr = IndexedChoiceInstruction::Trust(i)
+                }
                 _ => {}
             };
         });
@@ -47,44 +50,50 @@ impl CodeOffsets {
         }
     }
 
-    pub fn index_term(&mut self, first_arg: &Term, index: usize)
-    {
+    pub fn index_term(&mut self, first_arg: &Term, index: usize) {
         match first_arg {
             &Term::Clause(_, ref name, ref terms, _) => {
-                let code = self.structures.entry((name.clone(), terms.len()))
-                               .or_insert(Vec::new());
+                let code = self
+                    .structures
+                    .entry((name.clone(), terms.len()))
+                    .or_insert(Vec::new());
 
                 let is_initial_index = code.is_empty();
                 code.push(Self::add_index(is_initial_index, index));
-            },
+            }
             &Term::Cons(..) => {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
-            },
+            }
             &Term::Constant(_, Constant::String(ref s))
-                if !self.flags.double_quotes.is_atom() && !s.is_empty() => { // strings are lists in this case.
-                    let is_initial_index = self.lists.is_empty();
-                    self.lists.push(Self::add_index(is_initial_index, index));
-                },
+                if !self.flags.double_quotes.is_atom() && !s.is_empty() =>
+            {
+                // strings are lists in this case.
+                let is_initial_index = self.lists.is_empty();
+                self.lists.push(Self::add_index(is_initial_index, index));
+            }
             &Term::Constant(_, Constant::String(ref s))
-                if !self.flags.double_quotes.is_atom() && s.is_expandable() => {
-                    let is_initial_index = self.lists.is_empty();
-                    self.lists.push(Self::add_index(is_initial_index, index));
-                },
+                if !self.flags.double_quotes.is_atom() && s.is_expandable() =>
+            {
+                let is_initial_index = self.lists.is_empty();
+                self.lists.push(Self::add_index(is_initial_index, index));
+            }
             &Term::Constant(_, ref constant) => {
-                let code = self.constants.entry(constant.clone())
-                               .or_insert(Vec::new());
+                let code = self.constants.entry(constant.clone()).or_insert(Vec::new());
 
                 let is_initial_index = code.is_empty();
                 code.push(Self::add_index(is_initial_index, index));
-            },
+            }
             _ => {}
         };
     }
 
-    fn second_level_index<Index>(indices: IndexMap<Index, ThirdLevelIndex>, prelude: &mut CodeDeque)
-                                 -> IndexMap<Index, IntIndex>
-        where Index: Eq + Hash
+    fn second_level_index<Index>(
+        indices: IndexMap<Index, ThirdLevelIndex>,
+        prelude: &mut CodeDeque,
+    ) -> IndexMap<Index, IntIndex>
+    where
+        Index: Eq + Hash,
     {
         let mut index_locs = IndexMap::new();
 
@@ -111,9 +120,9 @@ impl CodeOffsets {
         no_constants && no_structures && no_lists
     }
 
-    fn flatten_index<Index>(index: IndexMap<Index, IntIndex>, len: usize)
-                            -> IndexMap<Index, usize>
-        where Index: Eq + Hash
+    fn flatten_index<Index>(index: IndexMap<Index, IntIndex>, len: usize) -> IndexMap<Index, usize>
+    where
+        Index: Eq + Hash,
     {
         let mut flattened_index = IndexMap::new();
 
@@ -121,10 +130,10 @@ impl CodeOffsets {
             match int_index {
                 IntIndex::External(offset) => {
                     flattened_index.insert(key, offset + len + 1);
-                },
+                }
                 IntIndex::Internal(offset) => {
                     flattened_index.insert(key, offset + 1);
-                },
+                }
                 _ => {}
             };
         }
@@ -132,18 +141,18 @@ impl CodeOffsets {
         flattened_index
     }
 
-    fn adjust_internal_index(index: IntIndex) -> IntIndex
-    {
+    fn adjust_internal_index(index: IntIndex) -> IntIndex {
         match index {
             IntIndex::Internal(o) => IntIndex::Internal(o + 1),
             IntIndex::External(o) => IntIndex::External(o),
-            _ => IntIndex::Fail
+            _ => IntIndex::Fail,
         }
     }
 
-    fn switch_on_constant(con_ind: IndexMap<Constant, ThirdLevelIndex>, prelude: &mut CodeDeque)
-                          -> IntIndex
-    {
+    fn switch_on_constant(
+        con_ind: IndexMap<Constant, ThirdLevelIndex>,
+        prelude: &mut CodeDeque,
+    ) -> IntIndex {
         let con_ind = Self::second_level_index(con_ind, prelude);
 
         if con_ind.len() > 1 {
@@ -154,16 +163,18 @@ impl CodeOffsets {
 
             IntIndex::Internal(1)
         } else {
-            con_ind.values().next()
-                   .map(|index| Self::adjust_internal_index(*index))
-                   .unwrap_or(IntIndex::Fail)
+            con_ind
+                .values()
+                .next()
+                .map(|index| Self::adjust_internal_index(*index))
+                .unwrap_or(IntIndex::Fail)
         }
     }
 
-    fn switch_on_structure(str_ind: IndexMap<(ClauseName, usize), ThirdLevelIndex>,
-                           prelude: &mut CodeDeque)
-                           -> IntIndex
-    {
+    fn switch_on_structure(
+        str_ind: IndexMap<(ClauseName, usize), ThirdLevelIndex>,
+        prelude: &mut CodeDeque,
+    ) -> IntIndex {
         let str_ind = Self::second_level_index(str_ind, prelude);
 
         if str_ind.len() > 1 {
@@ -174,40 +185,43 @@ impl CodeOffsets {
 
             IntIndex::Internal(1)
         } else {
-            str_ind.values().next()
-                   .map(|index| Self::adjust_internal_index(*index))
-                   .unwrap_or(IntIndex::Fail)
+            str_ind
+                .values()
+                .next()
+                .map(|index| Self::adjust_internal_index(*index))
+                .unwrap_or(IntIndex::Fail)
         }
     }
 
-    fn switch_on_list(mut lists: ThirdLevelIndex, prelude: &mut CodeDeque) -> IntIndex
-    {
+    fn switch_on_list(mut lists: ThirdLevelIndex, prelude: &mut CodeDeque) -> IntIndex {
         if lists.len() > 1 {
             Self::cap_choice_seq_with_trust(&mut lists);
             prelude.extend(lists.into_iter().map(|i| Line::from(i)));
             IntIndex::Internal(0)
         } else {
-            lists.first()
-                 .map(|i| IntIndex::External(i.offset()))
-                 .unwrap_or(IntIndex::Fail)
+            lists
+                .first()
+                .map(|i| IntIndex::External(i.offset()))
+                .unwrap_or(IntIndex::Fail)
         }
     }
 
-    fn switch_on_str_offset_from(str_loc: IntIndex, prelude_len: usize, con_loc: IntIndex)
-                                 -> usize
-    {
+    fn switch_on_str_offset_from(
+        str_loc: IntIndex,
+        prelude_len: usize,
+        con_loc: IntIndex,
+    ) -> usize {
         match str_loc {
             IntIndex::External(o) => o + prelude_len + 1,
             IntIndex::Fail => 0,
             IntIndex::Internal(_) => match con_loc {
                 IntIndex::Internal(_) => 2,
-                _ => 1
-            }
+                _ => 1,
+            },
         }
     }
 
-    fn switch_on_con_offset_from(con_loc: IntIndex, prelude_len: usize) -> usize
-    {
+    fn switch_on_con_offset_from(con_loc: IntIndex, prelude_len: usize) -> usize {
         match con_loc {
             IntIndex::External(offset) => offset + prelude_len + 1,
             IntIndex::Fail => 0,
@@ -215,18 +229,19 @@ impl CodeOffsets {
         }
     }
 
-    fn switch_on_lst_offset_from(lst_loc: IntIndex, prelude_len: usize, lst_offset: usize)
-                                 -> usize
-    {
+    fn switch_on_lst_offset_from(
+        lst_loc: IntIndex,
+        prelude_len: usize,
+        lst_offset: usize,
+    ) -> usize {
         match lst_loc {
             IntIndex::External(o) => o + prelude_len + 1,
             IntIndex::Fail => 0,
-            IntIndex::Internal(_) => prelude_len - lst_offset + 1
+            IntIndex::Internal(_) => prelude_len - lst_offset + 1,
         }
     }
 
-    pub fn add_indices(self, code: &mut Code, mut code_body: Code)
-    {
+    pub fn add_indices(self, code: &mut Code, mut code_body: Code) {
         if self.no_indices() {
             *code = code_body;
             return;
@@ -244,10 +259,11 @@ impl CodeOffsets {
 
         for (index, line) in prelude.iter_mut().enumerate() {
             match line {
-                  &mut Line::IndexedChoice(IndexedChoiceInstruction::Try(ref mut i))
+                &mut Line::IndexedChoice(IndexedChoiceInstruction::Try(ref mut i))
                 | &mut Line::IndexedChoice(IndexedChoiceInstruction::Retry(ref mut i))
-                | &mut Line::IndexedChoice(IndexedChoiceInstruction::Trust(ref mut i)) =>
-                    *i += prelude_length - index,
+                | &mut Line::IndexedChoice(IndexedChoiceInstruction::Trust(ref mut i)) => {
+                    *i += prelude_length - index
+                }
                 _ => {}
             }
         }
@@ -256,10 +272,8 @@ impl CodeOffsets {
         let con_loc = Self::switch_on_con_offset_from(con_loc, prelude.len());
         let lst_loc = Self::switch_on_lst_offset_from(lst_loc, prelude.len(), lst_offset);
 
-        let switch_instr = IndexingInstruction::SwitchOnTerm(prelude.len() + 1,
-                                                             con_loc,
-                                                             lst_loc,
-                                                             str_loc);
+        let switch_instr =
+            IndexingInstruction::SwitchOnTerm(prelude.len() + 1, con_loc, lst_loc, str_loc);
 
         prelude.push_front(Line::from(switch_instr));
 

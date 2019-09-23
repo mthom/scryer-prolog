@@ -34,11 +34,9 @@ impl TopLevel {
         match self {
             &TopLevel::Declaration(_) => None,
             &TopLevel::Fact(ref term) => term.name(),
-            &TopLevel::Predicate(ref clauses) =>
-                clauses.0.first().and_then(|ref term| term.name()),
+            &TopLevel::Predicate(ref clauses) => clauses.0.first().and_then(|ref term| term.name()),
             &TopLevel::Query(_) => None,
-            &TopLevel::Rule(Rule { ref head, .. }) =>
-                Some(head.0.clone())
+            &TopLevel::Rule(Rule { ref head, .. }) => Some(head.0.clone()),
         }
     }
 
@@ -46,33 +44,34 @@ impl TopLevel {
         match self {
             &TopLevel::Declaration(_) => 0,
             &TopLevel::Fact(ref term) => term.arity(),
-            &TopLevel::Predicate(ref clauses) =>
-                clauses.0.first().map(|t| t.arity()).unwrap_or(0),
+            &TopLevel::Predicate(ref clauses) => clauses.0.first().map(|t| t.arity()).unwrap_or(0),
             &TopLevel::Query(_) => 0,
-            &TopLevel::Rule(Rule { ref head, .. }) => head.1.len()
+            &TopLevel::Rule(Rule { ref head, .. }) => head.1.len(),
         }
     }
 
     pub fn is_end_of_file_atom(&self) -> bool {
         match self {
-            &TopLevel::Fact(Term::Constant(_, Constant::Atom(ref name, _))) =>
-                return name.as_str() == "end_of_file",
-            _ =>
-                false
+            &TopLevel::Fact(Term::Constant(_, Constant::Atom(ref name, _))) => {
+                return name.as_str() == "end_of_file"
+            }
+            _ => false,
         }
     }
 }
 
 #[derive(Clone, Copy)]
 pub enum Level {
-    Deep, Root, Shallow
+    Deep,
+    Root,
+    Shallow,
 }
 
 impl Level {
     pub fn child_level(self) -> Level {
         match self {
             Level::Root => Level::Shallow,
-            _ => Level::Deep
+            _ => Level::Deep,
         }
     }
 }
@@ -84,7 +83,7 @@ pub enum QueryTerm {
     BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
     UnblockedCut(Cell<VarReg>),
     GetLevelAndUnify(Cell<VarReg>, Rc<Var>),
-    Jump(JumpStub)
+    Jump(JumpStub),
 }
 
 impl QueryTerm {
@@ -108,7 +107,7 @@ impl QueryTerm {
 #[derive(Clone)]
 pub struct Rule {
     pub head: (ClauseName, Vec<Box<Term>>, QueryTerm),
-    pub clauses: Vec<QueryTerm>
+    pub clauses: Vec<QueryTerm>,
 }
 
 #[derive(Clone)]
@@ -127,7 +126,8 @@ impl Predicate {
 
     #[inline]
     pub fn predicate_indicator(&self) -> Option<(ClauseName, usize)> {
-        self.0.first()
+        self.0
+            .first()
             .and_then(|clause| clause.name().map(|name| (name, clause.arity())))
     }
 }
@@ -137,7 +137,7 @@ pub type CompiledResult = (Predicate, VecDeque<TopLevel>);
 #[derive(Clone)]
 pub enum PredicateClause {
     Fact(Term),
-    Rule(Rule)
+    Rule(Rule),
 }
 
 impl PredicateClause {
@@ -151,7 +151,7 @@ impl PredicateClause {
     pub fn arity(&self) -> usize {
         match self {
             &PredicateClause::Fact(ref term) => term.arity(),
-            &PredicateClause::Rule(ref rule) => rule.head.1.len()
+            &PredicateClause::Rule(ref rule) => rule.head.1.len(),
         }
     }
 
@@ -166,7 +166,7 @@ impl PredicateClause {
 #[derive(Clone)]
 pub enum ModuleSource {
     Library(ClauseName),
-    File(ClauseName)
+    File(ClauseName),
 }
 
 #[derive(Clone)]
@@ -178,18 +178,26 @@ pub enum Declaration {
     NonCountedBacktracking(ClauseName, usize), // name, arity
     Op(OpDecl),
     UseModule(ModuleSource),
-    UseQualifiedModule(ModuleSource, Vec<PredicateKey>)
+    UseQualifiedModule(ModuleSource, Vec<PredicateKey>),
 }
 
 impl Declaration {
     #[inline]
     pub fn is_module_decl(&self) -> bool {
-        if let &Declaration::Module(_) = self { true } else { false }
+        if let &Declaration::Module(_) = self {
+            true
+        } else {
+            false
+        }
     }
 
     #[inline]
     pub fn is_end_of_file(&self) -> bool {
-        if let &Declaration::EndOfFile = self { true } else { false }
+        if let &Declaration::EndOfFile = self {
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -207,15 +215,14 @@ impl OpDecl {
         self.insert_into_op_dir(clause_name!(""), op_dir, 0);
     }
 
-    fn insert_into_op_dir(&self, module: ClauseName, op_dir: &mut OpDir, prec: usize)
-    {
+    fn insert_into_op_dir(&self, module: ClauseName, op_dir: &mut OpDir, prec: usize) {
         let (spec, name) = (self.1, self.2.clone());
 
         let fixity = match spec {
             XFY | XFX | YFX => Fixity::In,
             XF | YF => Fixity::Post,
             FX | FY => Fixity::Pre,
-            _ => return
+            _ => return,
         };
 
         match op_dir.get(&(name.clone(), fixity)) {
@@ -229,9 +236,12 @@ impl OpDecl {
         op_dir.insert((name, fixity), OpDirValue::new(spec, prec, module));
     }
 
-    pub fn submit(&self, module: ClauseName, existing_desc: Option<OpDesc>, op_dir: &mut OpDir)
-                  -> Result<(), SessionError>
-    {
+    pub fn submit(
+        &self,
+        module: ClauseName,
+        existing_desc: Option<OpDesc>,
+        op_dir: &mut OpDir,
+    ) -> Result<(), SessionError> {
         let (prec, spec, name) = (self.0, self.1, self.2.clone());
 
         if is_infix!(spec) {
@@ -254,43 +264,49 @@ impl OpDecl {
     }
 }
 
-pub
-fn fetch_atom_op_spec(name: ClauseName, spec: Option<SharedOpDesc>, op_dir: &OpDir)
-                      -> Option<SharedOpDesc>
-{
+pub fn fetch_atom_op_spec(
+    name: ClauseName,
+    spec: Option<SharedOpDesc>,
+    op_dir: &OpDir,
+) -> Option<SharedOpDesc> {
     fetch_op_spec(name.clone(), 1, spec.clone(), op_dir)
         .or_else(|| fetch_op_spec(name, 2, spec, op_dir))
 }
 
-pub
-fn fetch_op_spec(name: ClauseName, arity: usize, spec: Option<SharedOpDesc>, op_dir: &OpDir)
-                 -> Option<SharedOpDesc>
-{
-    spec.or_else(|| {
-        match arity {
-            2 => op_dir.get(&(name, Fixity::In)).and_then(|OpDirValue(spec, _)|
+pub fn fetch_op_spec(
+    name: ClauseName,
+    arity: usize,
+    spec: Option<SharedOpDesc>,
+    op_dir: &OpDir,
+) -> Option<SharedOpDesc> {
+    spec.or_else(|| match arity {
+        2 => op_dir
+            .get(&(name, Fixity::In))
+            .and_then(|OpDirValue(spec, _)| {
                 if spec.prec() > 0 {
                     Some(spec.clone())
                 } else {
                     None
-                }),
-            1 => {
-                if let Some(OpDirValue(spec, _)) = op_dir.get(&(name.clone(), Fixity::Pre)) {
-                    if spec.prec() > 0 {
-                        return Some(spec.clone());
-                    }
                 }
+            }),
+        1 => {
+            if let Some(OpDirValue(spec, _)) = op_dir.get(&(name.clone(), Fixity::Pre)) {
+                if spec.prec() > 0 {
+                    return Some(spec.clone());
+                }
+            }
 
-                op_dir.get(&(name.clone(), Fixity::Post))
-                      .and_then(|OpDirValue(spec, _)|
-                        if spec.prec() > 0 {
-                            Some(spec.clone())
-                        } else {
-                            None
-                        })
-            },
-            _ => None
+            op_dir
+                .get(&(name.clone(), Fixity::Post))
+                .and_then(|OpDirValue(spec, _)| {
+                    if spec.prec() > 0 {
+                        Some(spec.clone())
+                    } else {
+                        None
+                    }
+                })
         }
+        _ => None,
     })
 }
 
@@ -299,7 +315,7 @@ pub type ModuleDir = IndexMap<ClauseName, Module>;
 #[derive(Clone)]
 pub struct ModuleDecl {
     pub name: ClauseName,
-    pub exports: Vec<PredicateKey>
+    pub exports: Vec<PredicateKey>,
 }
 
 pub struct Module {
@@ -311,14 +327,14 @@ pub struct Module {
     pub goal_expansions: (Predicate, VecDeque<TopLevel>),
     pub user_term_expansions: (Predicate, VecDeque<TopLevel>), // term expansions inherited from the user scope.
     pub user_goal_expansions: (Predicate, VecDeque<TopLevel>), // same for goal_expansions.
-    pub inserted_expansions: bool // has the module been successfully inserted into toplevel??
+    pub inserted_expansions: bool, // has the module been successfully inserted into toplevel??
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Number {
     Float(OrderedFloat<f64>),
     Integer(Integer),
-    Rational(Rational)
+    Rational(Rational),
 }
 
 impl Default for Number {
@@ -332,7 +348,7 @@ impl Number {
         match self {
             Number::Integer(n) => Constant::Integer(n),
             Number::Float(f) => Constant::Float(f),
-            Number::Rational(r) => Constant::Rational(r)
+            Number::Rational(r) => Constant::Rational(r),
         }
     }
 
@@ -341,7 +357,7 @@ impl Number {
         match self {
             &Number::Integer(ref n) => n > &0,
             &Number::Float(OrderedFloat(f)) => f.is_sign_positive(),
-            &Number::Rational(ref r) => r > &0
+            &Number::Rational(ref r) => r > &0,
         }
     }
 
@@ -350,7 +366,7 @@ impl Number {
         match self {
             &Number::Integer(ref n) => n < &0,
             &Number::Float(OrderedFloat(f)) => f.is_sign_negative(),
-            &Number::Rational(ref r) => r < &0
+            &Number::Rational(ref r) => r < &0,
         }
     }
 
@@ -359,7 +375,7 @@ impl Number {
         match self {
             &Number::Integer(ref n) => n == &0,
             &Number::Float(f) => f == OrderedFloat(0f64),
-            &Number::Rational(ref r) => r == &0
+            &Number::Rational(ref r) => r == &0,
         }
     }
 
@@ -368,7 +384,7 @@ impl Number {
         match self {
             Number::Integer(n) => Number::Integer(n.abs()),
             Number::Float(f) => Number::Float(OrderedFloat(f.abs())),
-            Number::Rational(r) => Number::Rational(r.abs())
+            Number::Rational(r) => Number::Rational(r.abs()),
         }
     }
 }

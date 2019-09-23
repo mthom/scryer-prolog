@@ -9,29 +9,29 @@ pub struct Frame {
     pub e: usize,
     pub cp: LocalCodePtr,
     pub attr_var_init_b: usize,
-    pub b: usize,    
+    pub b: usize,
     pub bp: CodePtr,
     pub tr: usize,
     pub pstr_tr: usize,
     pub h: usize,
     pub b0: usize,
-    args: Vec<Addr>
+    args: Vec<Addr>,
 }
 
 impl Frame {
-    fn new(global_index: usize,
-           e: usize,
-           cp: LocalCodePtr,
-           attr_var_init_b: usize,
-           b: usize,
-           bp: CodePtr,
-           tr: usize,
-           pstr_tr: usize,
-           h: usize,
-           b0: usize,
-           n: usize)
-           -> Self
-    {
+    fn new(
+        global_index: usize,
+        e: usize,
+        cp: LocalCodePtr,
+        attr_var_init_b: usize,
+        b: usize,
+        bp: CodePtr,
+        tr: usize,
+        pstr_tr: usize,
+        h: usize,
+        b0: usize,
+        n: usize,
+    ) -> Self {
         Frame {
             global_index,
             e,
@@ -43,7 +43,7 @@ impl Frame {
             pstr_tr,
             h,
             b0,
-            args: vec![Addr::HeapCell(0); n]
+            args: vec![Addr::HeapCell(0); n],
         }
     }
 
@@ -59,20 +59,33 @@ impl OrStack {
         OrStack(Vec::new())
     }
 
-    pub fn push(&mut self,
-                global_index: usize,
-                e: usize,
-                cp: LocalCodePtr,
-                attr_var_init_b: usize,
-                b: usize,
-                bp: CodePtr,
-                tr: usize,
-                pstr_tr: usize,
-                h: usize,
-                b0: usize,
-                n: usize)
-    {
-        self.0.push(Frame::new(global_index, e, cp, attr_var_init_b, b, bp, tr, pstr_tr, h, b0, n));
+    pub fn push(
+        &mut self,
+        global_index: usize,
+        e: usize,
+        cp: LocalCodePtr,
+        attr_var_init_b: usize,
+        b: usize,
+        bp: CodePtr,
+        tr: usize,
+        pstr_tr: usize,
+        h: usize,
+        b0: usize,
+        n: usize,
+    ) {
+        self.0.push(Frame::new(
+            global_index,
+            e,
+            cp,
+            attr_var_init_b,
+            b,
+            bp,
+            tr,
+            pstr_tr,
+            h,
+            b0,
+            n,
+        ));
     }
 
     #[inline]
@@ -87,7 +100,7 @@ impl OrStack {
     pub fn clear(&mut self) {
         self.0.clear()
     }
-    
+
     pub fn top(&self) -> Option<&Frame> {
         self.0.last()
     }
@@ -97,7 +110,7 @@ impl OrStack {
     pub fn truncate(&mut self, new_b: usize) {
         self.0.truncate(new_b);
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }

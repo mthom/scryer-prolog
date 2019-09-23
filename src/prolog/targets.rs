@@ -6,7 +6,7 @@ use prolog::instructions::*;
 use prolog::iterators::*;
 
 pub trait CompilationTarget<'a> {
-    type Iterator : Iterator<Item=TermRef<'a>>;
+    type Iterator: Iterator<Item = TermRef<'a>>;
 
     fn iter(&'a Term) -> Self::Iterator;
 
@@ -43,8 +43,7 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         FactInstruction::GetConstant(lvl, constant, reg)
     }
 
-    fn to_structure(ct: ClauseType, arity: usize, reg: RegType) -> Self
-    {
+    fn to_structure(ct: ClauseType, arity: usize, reg: RegType) -> Self {
         FactInstruction::GetStructure(ct, arity, reg)
     }
 
@@ -59,7 +58,7 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
     fn is_void_instr(&self) -> bool {
         match self {
             &FactInstruction::UnifyVoid(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -125,7 +124,7 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
     fn is_void_instr(&self) -> bool {
         match self {
             &QueryInstruction::SetVoid(_) => true,
-            _ => false
+            _ => false,
         }
     }
 

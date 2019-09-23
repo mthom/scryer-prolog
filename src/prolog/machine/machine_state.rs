@@ -17,7 +17,7 @@ use prolog::rug::Integer;
 use downcast::Any;
 
 use std::cmp::Ordering;
-use std::io::{Write, stdout};
+use std::io::{stdout, Write};
 use std::mem;
 use std::ops::{Index, IndexMut};
 
@@ -28,7 +28,10 @@ pub(super) struct Ball {
 
 impl Ball {
     pub(super) fn new() -> Self {
-        Ball { boundary: 0, stub: MachineStub::new() }
+        Ball {
+            boundary: 0,
+            stub: MachineStub::new(),
+        }
     }
 
     pub(super) fn reset(&mut self) {
@@ -42,13 +45,13 @@ impl Ball {
 
         Ball {
             boundary,
-            stub: mem::replace(&mut self.stub, vec![])
+            stub: mem::replace(&mut self.stub, vec![]),
         }
     }
 }
 
 pub(super) struct CopyTerm<'a> {
-    state: &'a mut MachineState
+    state: &'a mut MachineState,
 }
 
 impl<'a> CopyTerm<'a> {
@@ -102,10 +105,18 @@ pub(super) struct CopyBallTerm<'a> {
 }
 
 impl<'a> CopyBallTerm<'a> {
-    pub(super) fn new(and_stack: &'a mut AndStack, heap: &'a mut Heap, stub: &'a mut MachineStub) -> Self
-    {
+    pub(super) fn new(
+        and_stack: &'a mut AndStack,
+        heap: &'a mut Heap,
+        stub: &'a mut MachineStub,
+    ) -> Self {
         let hb = heap.len();
-        CopyBallTerm { and_stack, heap, heap_boundary: hb, stub }
+        CopyBallTerm {
+            and_stack,
+            heap,
+            heap_boundary: hb,
+            stub,
+        }
     }
 }
 
@@ -145,15 +156,15 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
 
     fn store(&self, addr: Addr) -> Addr {
         match addr {
-            Addr::HeapCell(h) | Addr::AttrVar(h) if h < self.heap_boundary =>
-                self.heap[h].as_addr(h),
+            Addr::HeapCell(h) | Addr::AttrVar(h) if h < self.heap_boundary => {
+                self.heap[h].as_addr(h)
+            }
             Addr::HeapCell(h) | Addr::AttrVar(h) => {
                 let index = h - self.heap_boundary;
                 self.stub[index].as_addr(h)
-            },
-            Addr::StackCell(fr, sc) =>
-                self.and_stack[fr][sc].clone(),
-            addr => addr
+            }
+            Addr::StackCell(fr, sc) => self.and_stack[fr][sc].clone(),
+            addr => addr,
         }
     }
 
@@ -167,7 +178,7 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
             }
 
             return addr;
-        };
+        }
     }
 
     fn stack(&mut self) -> &mut AndStack {
@@ -206,7 +217,7 @@ pub type Registers = Vec<Addr>;
 #[derive(Clone, Copy)]
 pub(super) enum MachineMode {
     Read,
-    Write
+    Write,
 }
 
 pub struct MachineState {
@@ -235,97 +246,85 @@ pub struct MachineState {
     pub(super) interms: Vec<Number>, // intermediate numbers.
     pub(super) last_call: bool,
     pub(crate) heap_locs: HeapVarDict,
-    pub(crate) flags: MachineFlags
+    pub(crate) flags: MachineFlags,
 }
 
 impl MachineState {
-    pub(super)
-    fn try_char_list(&self, addrs: Vec<Addr>) -> Result<String, MachineError>
-    {
+    pub(super) fn try_char_list(&self, addrs: Vec<Addr>) -> Result<String, MachineError> {
         let mut chars = String::new();
         let mut iter = addrs.iter();
 
         while let Some(addr) = iter.next() {
             match addr {
-                &Addr::Con(Constant::String(ref s))
-                    if self.flags.double_quotes.is_chars() => {
-                        chars += s.borrow().as_str();
+                &Addr::Con(Constant::String(ref s)) if self.flags.double_quotes.is_chars() => {
+                    chars += s.borrow().as_str();
 
-                        if iter.next().is_some() {
-                            return Err(MachineError::type_error(ValidType::Character, addr.clone()));
-                        }
-                    },
-                &Addr::Con(Constant::Char(c)) =>
-                    chars.push(c),
-                &Addr::Con(Constant::Atom(ref name, _))
-                    if name.as_str().len() == 1 => {
-                        chars += name.as_str();
-                    },
-                _ =>
-                    return Err(MachineError::type_error(ValidType::Character, addr.clone()))
+                    if iter.next().is_some() {
+                        return Err(MachineError::type_error(ValidType::Character, addr.clone()));
+                    }
+                }
+                &Addr::Con(Constant::Char(c)) => chars.push(c),
+                &Addr::Con(Constant::Atom(ref name, _)) if name.as_str().len() == 1 => {
+                    chars += name.as_str();
+                }
+                _ => return Err(MachineError::type_error(ValidType::Character, addr.clone())),
             }
         }
 
         Ok(chars)
     }
 
-    pub(super)
-    fn try_code_list(&self, addrs: Vec<Addr>) -> Result<Vec<u8>, MachineError>
-    {
+    pub(super) fn try_code_list(&self, addrs: Vec<Addr>) -> Result<Vec<u8>, MachineError> {
         let mut codes = vec![];
-        let mut iter  = addrs.iter();
+        let mut iter = addrs.iter();
 
         while let Some(addr) = iter.next() {
             match addr {
-                &Addr::Con(Constant::String(ref s))
-                    if self.flags.double_quotes.is_codes() => {
-                        codes.extend(s.borrow().chars().map(|c| c as u8));
+                &Addr::Con(Constant::String(ref s)) if self.flags.double_quotes.is_codes() => {
+                    codes.extend(s.borrow().chars().map(|c| c as u8));
 
-                        if iter.next().is_some() {
-                            return Err(MachineError::representation_error(RepFlag::CharacterCode));
-                        }
-                    },
-                &Addr::Con(Constant::CharCode(c)) =>
-                    codes.push(c),
-                &Addr::Con(Constant::Integer(ref n)) => 
+                    if iter.next().is_some() {
+                        return Err(MachineError::representation_error(RepFlag::CharacterCode));
+                    }
+                }
+                &Addr::Con(Constant::CharCode(c)) => codes.push(c),
+                &Addr::Con(Constant::Integer(ref n)) => {
                     if let Some(c) = n.to_u8() {
                         codes.push(c);
                     } else {
                         return Err(MachineError::representation_error(RepFlag::CharacterCode));
-                    },
-                _ =>
-                    return Err(MachineError::representation_error(RepFlag::CharacterCode))
+                    }
+                }
+                _ => return Err(MachineError::representation_error(RepFlag::CharacterCode)),
             }
         }
 
         Ok(codes)
     }
-    
-    fn call_at_index(&mut self, arity: usize, p: usize)
-    {
+
+    fn call_at_index(&mut self, arity: usize, p: usize) {
         self.cp.assign_if_local(self.p.clone() + 1);
         self.num_of_args = arity;
         self.b0 = self.b;
         self.p = dir_entry!(p);
     }
 
-    pub(super)
-    fn execute_at_index(&mut self, arity: usize, p: usize)
-    {
+    pub(super) fn execute_at_index(&mut self, arity: usize, p: usize) {
         self.num_of_args = arity;
         self.b0 = self.b;
         self.p = dir_entry!(p);
     }
 
-    pub(super)
-    fn module_lookup(&mut self, indices: &IndexStore, key: PredicateKey, module_name: ClauseName,
-                     last_call: bool)
-                     -> CallResult
-    {
+    pub(super) fn module_lookup(
+        &mut self,
+        indices: &IndexStore,
+        key: PredicateKey,
+        module_name: ClauseName,
+        last_call: bool,
+    ) -> CallResult {
         let (name, arity) = key;
 
-        if let Some(ref idx) = indices.get_code_index((name.clone(), arity), module_name.clone())
-        {
+        if let Some(ref idx) = indices.get_code_index((name.clone(), arity), module_name.clone()) {
             if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
                 if last_call {
                     self.execute_at_index(arity, compiled_tl_index);
@@ -345,25 +344,29 @@ impl MachineState {
     }
 }
 
-fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore) -> Option<usize>
-{
+fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore) -> Option<usize> {
     match indices.in_situ_code_dir.get(&(name.clone(), arity)) {
         Some(p) => Some(*p),
         None => match indices.code_dir.get(&(name, arity)) {
-            Some(ref idx) => if let &IndexPtr::Index(p) = &idx.0.borrow().0 {
-                Some(p)
-            } else {
-                None
-            },
-            _ => None
-        }
+            Some(ref idx) => {
+                if let &IndexPtr::Index(p) = &idx.0.borrow().0 {
+                    Some(p)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        },
     }
 }
 
-fn try_in_situ(machine_st: &mut MachineState, name: ClauseName, arity: usize,
-               indices: &IndexStore, last_call: bool)
-               -> CallResult
-{
+fn try_in_situ(
+    machine_st: &mut MachineState,
+    name: ClauseName,
+    arity: usize,
+    indices: &IndexStore,
+    last_call: bool,
+) -> CallResult {
     if let Some(p) = try_in_situ_lookup(name.clone(), arity, indices) {
         if last_call {
             machine_st.execute_at_index(arity, p);
@@ -385,21 +388,20 @@ fn try_in_situ(machine_st: &mut MachineState, name: ClauseName, arity: usize,
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
 pub(crate) trait CallPolicy: Any {
-    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
+    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
         let b = machine_st.b - 1;
         let n = machine_st.or_stack[b].num_args();
 
-        for i in 1 .. n + 1 {
+        for i in 1..n + 1 {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
-        machine_st.e  = machine_st.or_stack[b].e;
+        machine_st.e = machine_st.or_stack[b].e;
         machine_st.cp = machine_st.or_stack[b].cp.clone();
 
         machine_st.or_stack[b].bp = machine_st.p.clone() + offset;
 
-        let old_tr  = machine_st.or_stack[b].tr;
+        let old_tr = machine_st.or_stack[b].tr;
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
@@ -407,7 +409,7 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.trail.truncate(machine_st.tr);
 
-        let old_pstr_tr  = machine_st.or_stack[b].pstr_tr;
+        let old_pstr_tr = machine_st.or_stack[b].pstr_tr;
         let curr_pstr_tr = machine_st.pstr_tr;
 
         machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
@@ -418,7 +420,10 @@ pub(crate) trait CallPolicy: Any {
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
-        machine_st.attr_var_init.attr_var_queue.truncate(attr_var_init_b);
+        machine_st
+            .attr_var_init
+            .attr_var_queue
+            .truncate(attr_var_init_b);
 
         machine_st.hb = machine_st.heap.h;
         machine_st.p += 1;
@@ -426,21 +431,20 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
+    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
         let b = machine_st.b - 1;
         let n = machine_st.or_stack[b].num_args();
 
-        for i in 1 .. n + 1 {
+        for i in 1..n + 1 {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
-        machine_st.e  = machine_st.or_stack[b].e;
+        machine_st.e = machine_st.or_stack[b].e;
         machine_st.cp = machine_st.or_stack[b].cp.clone();
 
         machine_st.or_stack[b].bp = machine_st.p.clone() + 1;
 
-        let old_tr  = machine_st.or_stack[b].tr;
+        let old_tr = machine_st.or_stack[b].tr;
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
@@ -448,7 +452,7 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.trail.truncate(machine_st.tr);
 
-        let old_pstr_tr  = machine_st.or_stack[b].pstr_tr;
+        let old_pstr_tr = machine_st.or_stack[b].pstr_tr;
         let curr_pstr_tr = machine_st.pstr_tr;
 
         machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
@@ -459,7 +463,10 @@ pub(crate) trait CallPolicy: Any {
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
-        machine_st.attr_var_init.attr_var_queue.truncate(attr_var_init_b);
+        machine_st
+            .attr_var_init
+            .attr_var_queue
+            .truncate(attr_var_init_b);
 
         machine_st.hb = machine_st.heap.h;
         machine_st.p += offset;
@@ -467,19 +474,18 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
+    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
         let b = machine_st.b - 1;
         let n = machine_st.or_stack[b].num_args();
 
-        for i in 1 .. n + 1 {
+        for i in 1..n + 1 {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
-        machine_st.e  = machine_st.or_stack[b].e;
+        machine_st.e = machine_st.or_stack[b].e;
         machine_st.cp = machine_st.or_stack[b].cp.clone();
 
-        let old_tr  = machine_st.or_stack[b].tr;
+        let old_tr = machine_st.or_stack[b].tr;
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
@@ -487,7 +493,7 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.trail.truncate(machine_st.tr);
 
-        let old_pstr_tr  = machine_st.or_stack[b].pstr_tr;
+        let old_pstr_tr = machine_st.or_stack[b].pstr_tr;
         let curr_pstr_tr = machine_st.pstr_tr;
 
         machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
@@ -498,7 +504,10 @@ pub(crate) trait CallPolicy: Any {
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
-        machine_st.attr_var_init.attr_var_queue.truncate(attr_var_init_b);
+        machine_st
+            .attr_var_init
+            .attr_var_queue
+            .truncate(attr_var_init_b);
 
         machine_st.b = machine_st.or_stack[b].b;
         machine_st.or_stack.truncate(machine_st.b);
@@ -509,19 +518,18 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult
-    {
+    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult {
         let b = machine_st.b - 1;
         let n = machine_st.or_stack[b].num_args();
 
-        for i in 1 .. n + 1 {
+        for i in 1..n + 1 {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
-        machine_st.e  = machine_st.or_stack[b].e;
+        machine_st.e = machine_st.or_stack[b].e;
         machine_st.cp = machine_st.or_stack[b].cp.clone();
 
-        let old_tr  = machine_st.or_stack[b].tr;
+        let old_tr = machine_st.or_stack[b].tr;
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
@@ -529,7 +537,7 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.trail.truncate(machine_st.tr);
 
-        let old_pstr_tr  = machine_st.or_stack[b].pstr_tr;
+        let old_pstr_tr = machine_st.or_stack[b].pstr_tr;
         let curr_pstr_tr = machine_st.pstr_tr;
 
         machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
@@ -540,7 +548,10 @@ pub(crate) trait CallPolicy: Any {
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
-        machine_st.attr_var_init.attr_var_queue.truncate(attr_var_init_b);
+        machine_st
+            .attr_var_init
+            .attr_var_queue
+            .truncate(attr_var_init_b);
 
         machine_st.b = machine_st.or_stack[b].b;
         machine_st.or_stack.truncate(machine_st.b);
@@ -551,10 +562,14 @@ pub(crate) trait CallPolicy: Any {
         Ok(())
     }
 
-    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                    arity: usize, idx: CodeIndex, indices: &mut IndexStore)
-                    -> CallResult
-    {
+    fn context_call(
+        &mut self,
+        machine_st: &mut MachineState,
+        name: ClauseName,
+        arity: usize,
+        idx: CodeIndex,
+        indices: &mut IndexStore,
+    ) -> CallResult {
         if machine_st.last_call {
             self.try_execute(machine_st, name, arity, idx, indices)
         } else {
@@ -562,48 +577,59 @@ pub(crate) trait CallPolicy: Any {
         }
     }
 
-    fn try_call(&mut self, machine_st: &mut MachineState, name: ClauseName, arity: usize,
-                idx: CodeIndex, indices: &IndexStore)
-                -> CallResult
-    {
+    fn try_call(
+        &mut self,
+        machine_st: &mut MachineState,
+        name: ClauseName,
+        arity: usize,
+        idx: CodeIndex,
+        indices: &IndexStore,
+    ) -> CallResult {
         match idx.0.borrow().0 {
-            IndexPtr::Undefined =>
-                return try_in_situ(machine_st, name, arity, indices, false),
-            IndexPtr::Index(compiled_tl_index) =>
+            IndexPtr::Undefined => return try_in_situ(machine_st, name, arity, indices, false),
+            IndexPtr::Index(compiled_tl_index) => {
                 machine_st.call_at_index(arity, compiled_tl_index)
+            }
         }
 
         Ok(())
     }
 
-    fn try_execute(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                   arity: usize, idx: CodeIndex, indices: &IndexStore)
-                   -> CallResult
-    {
+    fn try_execute(
+        &mut self,
+        machine_st: &mut MachineState,
+        name: ClauseName,
+        arity: usize,
+        idx: CodeIndex,
+        indices: &IndexStore,
+    ) -> CallResult {
         match idx.0.borrow().0 {
-            IndexPtr::Undefined =>
-                return try_in_situ(machine_st, name, arity, indices, true),
-            IndexPtr::Index(compiled_tl_index) =>
+            IndexPtr::Undefined => return try_in_situ(machine_st, name, arity, indices, true),
+            IndexPtr::Index(compiled_tl_index) => {
                 machine_st.execute_at_index(arity, compiled_tl_index)
+            }
         }
 
         Ok(())
     }
 
-    fn call_builtin(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
-                    indices: &mut IndexStore, parsing_stream: &mut PrologStream)
-                    -> CallResult
-    {
+    fn call_builtin(
+        &mut self,
+        machine_st: &mut MachineState,
+        ct: &BuiltInClauseType,
+        indices: &mut IndexStore,
+        parsing_stream: &mut PrologStream,
+    ) -> CallResult {
         match ct {
             &BuiltInClauseType::AcyclicTerm => {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = machine_st.is_cyclic_term(addr);
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::Arg => {
                 machine_st.try_arg()?;
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::Compare => {
                 let a1 = machine_st[temp_v!(1)].clone();
                 let a2 = machine_st[temp_v!(2)].clone();
@@ -613,11 +639,11 @@ pub(crate) trait CallPolicy: Any {
                     Ordering::Greater => {
                         let spec = fetch_atom_op_spec(clause_name!(">"), None, &indices.op_dir);
                         Addr::Con(Constant::Atom(clause_name!(">"), spec))
-                    },
+                    }
                     Ordering::Equal => {
                         let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
                         Addr::Con(Constant::Atom(clause_name!("="), spec))
-                    },
+                    }
                     Ordering::Less => {
                         let spec = fetch_atom_op_spec(clause_name!("<"), None, &indices.op_dir);
                         Addr::Con(Constant::Atom(clause_name!("<"), spec))
@@ -626,57 +652,57 @@ pub(crate) trait CallPolicy: Any {
 
                 machine_st.unify(a1, c);
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::CompareTerm(qt) => {
                 machine_st.compare_term(qt);
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::CyclicTerm => {
                 let addr = machine_st[temp_v!(1)].clone();
                 machine_st.fail = !machine_st.is_cyclic_term(addr);
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::Nl => {
                 let mut stdout = stdout();
 
                 write!(stdout, "\n\r").unwrap();
                 stdout.flush().unwrap();
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::Read => {
                 match machine_st.read(parsing_stream, indices.atom_tbl.clone(), &indices.op_dir) {
                     Ok(offset) => {
                         let addr = machine_st[temp_v!(1)].clone();
                         machine_st.unify(addr, Addr::HeapCell(offset.heap_loc));
-                    },
+                    }
                     Err(e) => {
-                        let h    = machine_st.heap.h;
+                        let h = machine_st.heap.h;
                         let stub = MachineError::functor_stub(clause_name!("read"), 1);
-                        let err  = MachineError::syntax_error(h, e);
-                        let err  = machine_st.error_form(err, stub);
+                        let err = MachineError::syntax_error(h, e);
+                        let err = machine_st.error_form(err, stub);
 
                         return Err(err);
                     }
                 };
 
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::CopyTerm => {
                 machine_st.copy_term();
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::Eq => {
                 machine_st.fail = machine_st.eq_test();
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::Ground => {
                 machine_st.fail = machine_st.ground_test();
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::Functor => {
                 machine_st.try_functor(&indices)?;
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::NotEq => {
                 let a1 = machine_st[temp_v!(1)].clone();
                 let a2 = machine_st[temp_v!(2)].clone();
@@ -688,7 +714,7 @@ pub(crate) trait CallPolicy: Any {
                 };
 
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::PartialString => {
                 let s = machine_st.try_string_list(temp_v!(1))?;
                 let a2 = machine_st[temp_v!(2)].clone();
@@ -697,7 +723,7 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.write_constant_to_var(a2, Constant::String(s));
 
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::Sort => {
                 machine_st.check_sort_errors()?;
 
@@ -713,7 +739,7 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.unify(r2, heap_addr);
 
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::KeySort => {
                 machine_st.check_keysort_errors()?;
 
@@ -735,38 +761,46 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.unify(r2, heap_addr);
 
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
             &BuiltInClauseType::Is(r, ref at) => {
                 let a1 = machine_st[r].clone();
                 let a2 = machine_st.get_number(at)?;
 
                 machine_st.unify(a1, Addr::Con(a2.to_constant()));
                 return_from_clause!(machine_st.last_call, machine_st)
-            },
+            }
         }
     }
 
-    fn compile_hook(&mut self, machine_st: &mut MachineState, hook: &CompileTimeHook) -> CallResult
-    {
+    fn compile_hook(
+        &mut self,
+        machine_st: &mut MachineState,
+        hook: &CompileTimeHook,
+    ) -> CallResult {
         machine_st.cp = LocalCodePtr::TopLevel(0, 0);
 
         machine_st.num_of_args = hook.arity();
         machine_st.b0 = machine_st.b;
 
         machine_st.p = match hook {
-            CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion =>
-                CodePtr::Local(LocalCodePtr::UserTermExpansion(0)),
-            CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion =>
+            CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion => {
+                CodePtr::Local(LocalCodePtr::UserTermExpansion(0))
+            }
+            CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion => {
                 CodePtr::Local(LocalCodePtr::UserGoalExpansion(0))
+            }
         };
 
         Ok(())
     }
 
-    fn call_n(&mut self, machine_st: &mut MachineState, arity: usize, indices: &mut IndexStore,
-              parsing_stream: &mut PrologStream)
-              -> CallResult
-    {
+    fn call_n(
+        &mut self,
+        machine_st: &mut MachineState,
+        arity: usize,
+        indices: &mut IndexStore,
+        parsing_stream: &mut PrologStream,
+    ) -> CallResult {
         if let Some((name, arity)) = machine_st.setup_call_n(arity) {
             match ClauseType::from(name.clone(), arity, None) {
                 ClauseType::CallN => {
@@ -777,18 +811,18 @@ pub(crate) trait CallPolicy: Any {
                     }
 
                     machine_st.p = CodePtr::CallN(arity, machine_st.p.local());
-                },
+                }
                 ClauseType::BuiltIn(built_in) => {
                     machine_st.setup_built_in_call(built_in.clone());
                     self.call_builtin(machine_st, &built_in, indices, parsing_stream)?;
-                },
+                }
                 ClauseType::Inlined(inlined) => {
                     machine_st.execute_inlined(&inlined);
 
                     if machine_st.last_call {
                         machine_st.p = CodePtr::Local(machine_st.cp);
                     }
-                },
+                }
                 ClauseType::Op(..) | ClauseType::Named(..) => {
                     let module = name.owning_module();
 
@@ -799,17 +833,17 @@ pub(crate) trait CallPolicy: Any {
                         let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
                         let key = ExistenceError::Procedure(name, arity);
 
-                        return Err(machine_st.error_form(MachineError::existence_error(h, key),
-                                                         stub));
+                        return Err(
+                            machine_st.error_form(MachineError::existence_error(h, key), stub)
+                        );
                     }
-                },
+                }
                 ClauseType::Hook(_) | ClauseType::System(_) => {
                     let name = Addr::Con(Constant::Atom(name, None));
                     let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
 
-                    return Err(machine_st.error_form(MachineError::type_error(ValidType::Callable,
-                                                                              name),
-                                                     stub));
+                    return Err(machine_st
+                        .error_form(MachineError::type_error(ValidType::Callable, name), stub));
                 }
             };
         }
@@ -819,51 +853,60 @@ pub(crate) trait CallPolicy: Any {
 }
 
 impl CallPolicy for CWILCallPolicy {
-    fn context_call(&mut self, machine_st: &mut MachineState, name: ClauseName,
-                    arity: usize, idx: CodeIndex, indices: &mut IndexStore)
-                    -> CallResult
-    {
-        self.prev_policy.context_call(machine_st, name, arity, idx, indices)?;
+    fn context_call(
+        &mut self,
+        machine_st: &mut MachineState,
+        name: ClauseName,
+        arity: usize,
+        idx: CodeIndex,
+        indices: &mut IndexStore,
+    ) -> CallResult {
+        self.prev_policy
+            .context_call(machine_st, name, arity, idx, indices)?;
         self.increment(machine_st)
     }
 
-    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
+    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
         self.prev_policy.retry_me_else(machine_st, offset)?;
         self.increment(machine_st)
     }
 
-    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
+    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
         self.prev_policy.retry(machine_st, offset)?;
         self.increment(machine_st)
     }
 
-    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult
-    {
+    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult {
         self.prev_policy.trust_me(machine_st)?;
         self.increment(machine_st)
     }
 
-    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult
-    {
+    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
         self.prev_policy.trust(machine_st, offset)?;
         self.increment(machine_st)
     }
 
-    fn call_builtin(&mut self, machine_st: &mut MachineState, ct: &BuiltInClauseType,
-                    indices: &mut IndexStore, parsing_stream: &mut PrologStream)
-                    -> CallResult
-    {
-        self.prev_policy.call_builtin(machine_st, ct, indices, parsing_stream)?;
+    fn call_builtin(
+        &mut self,
+        machine_st: &mut MachineState,
+        ct: &BuiltInClauseType,
+        indices: &mut IndexStore,
+        parsing_stream: &mut PrologStream,
+    ) -> CallResult {
+        self.prev_policy
+            .call_builtin(machine_st, ct, indices, parsing_stream)?;
         self.increment(machine_st)
     }
 
-    fn call_n(&mut self, machine_st: &mut MachineState, arity: usize, indices: &mut IndexStore,
-              parsing_stream: &mut PrologStream)
-              -> CallResult
-    {
-        self.prev_policy.call_n(machine_st, arity, indices, parsing_stream)?;
+    fn call_n(
+        &mut self,
+        machine_st: &mut MachineState,
+        arity: usize,
+        indices: &mut IndexStore,
+        parsing_stream: &mut PrologStream,
+    ) -> CallResult {
+        self.prev_policy
+            .call_n(machine_st, arity, indices, parsing_stream)?;
         self.increment(machine_st)
     }
 }
@@ -876,21 +919,22 @@ impl CallPolicy for DefaultCallPolicy {}
 
 pub(crate) struct CWILCallPolicy {
     pub(crate) prev_policy: Box<CallPolicy>,
-    count:  Integer,
+    count: Integer,
     limits: Vec<(Integer, usize)>,
-    inference_limit_exceeded: bool
+    inference_limit_exceeded: bool,
 }
 
 impl CWILCallPolicy {
-    pub(crate) fn new_in_place(policy: &mut Box<CallPolicy>)
-    {
+    pub(crate) fn new_in_place(policy: &mut Box<CallPolicy>) {
         let mut prev_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
         mem::swap(&mut prev_policy, policy);
 
-        let new_policy = CWILCallPolicy { prev_policy,
-                                          count:  Integer::from(0),
-                                          limits: vec![],
-                                          inference_limit_exceeded: false };
+        let new_policy = CWILCallPolicy {
+            prev_policy,
+            count: Integer::from(0),
+            limits: vec![],
+            inference_limit_exceeded: false,
+        };
         *policy = Box::new(new_policy);
     }
 
@@ -902,8 +946,11 @@ impl CWILCallPolicy {
         if let Some(&(ref limit, bp)) = self.limits.last() {
             if self.count == *limit {
                 self.inference_limit_exceeded = true;
-                return Err(functor!("inference_limit_exceeded", 1,
-                                    [HeapCellValue::Addr(Addr::Con(Constant::Usize(bp)))]));
+                return Err(functor!(
+                    "inference_limit_exceeded",
+                    1,
+                    [HeapCellValue::Addr(Addr::Con(Constant::Usize(bp)))]
+                ));
             } else {
                 self.count += 1;
             }
@@ -916,8 +963,8 @@ impl CWILCallPolicy {
         limit += &self.count;
 
         match self.limits.last().cloned() {
-            Some((ref inner_limit, _)) if *inner_limit <= limit => {},
-            _ => self.limits.push((limit, b))
+            Some((ref inner_limit, _)) if *inner_limit <= limit => {}
+            _ => self.limits.push((limit, b)),
         };
 
         &self.count
@@ -986,13 +1033,17 @@ impl CutPolicy for DefaultCutPolicy {
 pub(crate) struct SCCCutPolicy {
     // locations of cleaners, cut points, the previous block
     cont_pts: Vec<(Addr, usize, usize)>,
-    r_c_w_h:  usize,
-    r_c_wo_h: usize
+    r_c_w_h: usize,
+    r_c_wo_h: usize,
 }
 
 impl SCCCutPolicy {
     pub(crate) fn new(r_c_w_h: usize, r_c_wo_h: usize) -> Self {
-        SCCCutPolicy { cont_pts: vec![], r_c_w_h, r_c_wo_h }
+        SCCCutPolicy {
+            cont_pts: vec![],
+            r_c_w_h,
+            r_c_wo_h,
+        }
     }
 
     pub(crate) fn out_of_cont_pts(&self) -> bool {

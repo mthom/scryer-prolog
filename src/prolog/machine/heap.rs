@@ -12,8 +12,10 @@ pub struct Heap {
 
 impl Heap {
     pub fn with_capacity(cap: usize) -> Self {
-        Heap { heap: Vec::with_capacity(cap),
-               h: 0 }
+        Heap {
+            heap: Vec::with_capacity(cap),
+            h: 0,
+        }
     }
 
     #[inline]
@@ -29,7 +31,7 @@ impl Heap {
 
         Heap {
             heap: mem::replace(&mut self.heap, vec![]),
-            h
+            h,
         }
     }
 
@@ -61,13 +63,13 @@ impl Heap {
         self.h = 0;
     }
 
-    pub fn to_list<Iter: Iterator<Item=Addr>>(&mut self, values: Iter) -> usize {
+    pub fn to_list<Iter: Iterator<Item = Addr>>(&mut self, values: Iter) -> usize {
         let head_addr = self.h;
 
         for value in values {
             let h = self.h;
 
-            self.push(HeapCellValue::Addr(Addr::Lis(h+1)));
+            self.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
             self.push(HeapCellValue::Addr(value));
         }
 
@@ -75,7 +77,7 @@ impl Heap {
         head_addr
     }
 
-    pub fn extend<Iter: Iterator<Item=HeapCellValue>>(&mut self, iter: Iter) {
+    pub fn extend<Iter: Iterator<Item = HeapCellValue>>(&mut self, iter: Iter) {
         for hcv in iter {
             self.push(hcv);
         }

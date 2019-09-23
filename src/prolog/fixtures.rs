@@ -7,15 +7,16 @@ use prolog::iterators::*;
 use indexmap::IndexMap;
 
 use std::cell::Cell;
-use std::collections::{BTreeMap, BTreeSet};
 use std::collections::btree_map::{IntoIter, IterMut, Values};
+use std::collections::{BTreeMap, BTreeSet};
 use std::mem::swap;
 use std::rc::Rc;
 use std::vec::Vec;
 
 // labeled with chunk numbers.
 pub enum VarStatus {
-    Perm(usize), Temp(usize, TempVarData) // Perm(chunk_num) | Temp(chunk_num, _)
+    Perm(usize),
+    Temp(usize, TempVarData), // Perm(chunk_num) | Temp(chunk_num, _)
 }
 
 pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
@@ -23,14 +24,15 @@ pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
 // Perm: 0 initially, a stack register once processed.
 // Temp: labeled with chunk_num and temp offset (unassigned if 0).
 pub enum VarData {
-    Perm(usize), Temp(usize, usize, TempVarData)
+    Perm(usize),
+    Temp(usize, usize, TempVarData),
 }
 
 impl VarData {
     pub fn as_reg_type(&self) -> RegType {
         match self {
             &VarData::Temp(_, r, _) => RegType::Temp(r),
-            &VarData::Perm(r) => RegType::Perm(r)
+            &VarData::Perm(r) => RegType::Perm(r),
         }
     }
 }
@@ -39,7 +41,7 @@ pub struct TempVarData {
     pub last_term_arity: usize,
     pub use_set: OccurrenceSet,
     pub no_use_set: BTreeSet<usize>,
-    pub conflict_set: BTreeSet<usize>
+    pub conflict_set: BTreeSet<usize>,
 }
 
 impl TempVarData {
@@ -48,7 +50,7 @@ impl TempVarData {
             last_term_arity: last_term_arity,
             use_set: BTreeSet::new(),
             no_use_set: BTreeSet::new(),
-            conflict_set: BTreeSet::new()
+            conflict_set: BTreeSet::new(),
         }
     }
 
@@ -65,7 +67,7 @@ impl TempVarData {
     pub fn populate_conflict_set(&mut self) {
         if self.last_term_arity > 0 {
             let arity = self.last_term_arity;
-            let mut conflict_set : BTreeSet<usize> = (1..arity).collect();
+            let mut conflict_set: BTreeSet<usize> = (1..arity).collect();
 
             for &(_, reg) in self.use_set.iter() {
                 conflict_set.remove(&reg);
@@ -79,8 +81,7 @@ impl TempVarData {
 type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
 pub struct VariableFixtures<'a>(BTreeMap<Rc<Var>, VariableFixture<'a>>);
 
-impl<'a> VariableFixtures<'a>
-{
+impl<'a> VariableFixtures<'a> {
     pub fn new() -> Self {
         VariableFixtures(BTreeMap::new())
     }
@@ -90,8 +91,7 @@ impl<'a> VariableFixtures<'a>
     }
 
     // computes no_use and conflict sets for all temp vars.
-    pub fn populate_restricting_sets(&mut self)
-    {
+    pub fn populate_restricting_sets(&mut self) {
         // three stages:
         // 1. move the use sets of each variable to a local IndexMap, use_set
         // (iterate mutably, swap mutable refs).
@@ -133,7 +133,7 @@ impl<'a> VariableFixtures<'a>
                 &mut (VarStatus::Temp(_, ref mut u_data), _) => {
                     u_data.use_set = use_set;
                     u_data.populate_conflict_set();
-                },
+                }
                 _ => {}
             };
         }
@@ -147,21 +147,16 @@ impl<'a> VariableFixtures<'a>
         self.0.iter_mut()
     }
 
-    fn record_temp_info(&mut self,
-                        tvd: &mut TempVarData,
-                        arg_c: usize,
-                        term_loc: GenContext)
-    {
+    fn record_temp_info(&mut self, tvd: &mut TempVarData, arg_c: usize, term_loc: GenContext) {
         match term_loc {
             GenContext::Head | GenContext::Last(_) => {
                 tvd.use_set.insert((term_loc, arg_c));
-            },
+            }
             _ => {}
         };
     }
 
-    pub fn vars_above_threshold(&self, index: usize) -> usize
-    {
+    pub fn vars_above_threshold(&self, index: usize) -> usize {
         let mut var_count = 0;
 
         for &(ref var_status, _) in self.values() {
@@ -176,25 +171,28 @@ impl<'a> VariableFixtures<'a>
     }
 
     pub fn mark_vars_in_chunk<I>(&mut self, iter: I, lt_arity: usize, term_loc: GenContext)
-        where I: Iterator<Item=TermRef<'a>>
+    where
+        I: Iterator<Item = TermRef<'a>>,
     {
         let chunk_num = term_loc.chunk_num();
         let mut arg_c = 1;
 
         for term_ref in iter {
             if let &TermRef::Var(lvl, cell, ref var) = &term_ref {
-                let mut status = self.0.remove(var)
-                    .unwrap_or((VarStatus::Temp(chunk_num, TempVarData::new(lt_arity)),
-                                Vec::new()));
+                let mut status = self.0.remove(var).unwrap_or((
+                    VarStatus::Temp(chunk_num, TempVarData::new(lt_arity)),
+                    Vec::new(),
+                ));
 
                 status.1.push(cell);
 
                 match status.0 {
-                    VarStatus::Temp(cn, ref mut tvd) if cn == chunk_num =>
+                    VarStatus::Temp(cn, ref mut tvd) if cn == chunk_num => {
                         if let Level::Shallow = lvl {
                             self.record_temp_info(tvd, arg_c, term_loc);
-                        },
-                    _ => status.0 = VarStatus::Perm(chunk_num)
+                        }
+                    }
+                    _ => status.0 = VarStatus::Perm(chunk_num),
                 };
 
                 self.0.insert(var.clone(), status);
@@ -218,14 +216,12 @@ impl<'a> VariableFixtures<'a>
         self.0.len()
     }
 
-    pub fn set_perm_vals(&self, has_deep_cuts: bool)
-    {
-        let mut values_vec : Vec<_> = self.values()
-            .filter_map(|ref v| {
-                match &v.0 {
-                    &VarStatus::Perm(i) => Some((i, &v.1)),
-                    _ => None
-                }
+    pub fn set_perm_vals(&self, has_deep_cuts: bool) {
+        let mut values_vec: Vec<_> = self
+            .values()
+            .filter_map(|ref v| match &v.0 {
+                &VarStatus::Perm(i) => Some((i, &v.1)),
+                _ => None,
             })
             .collect();
 
@@ -242,13 +238,13 @@ impl<'a> VariableFixtures<'a>
 }
 
 pub struct UnsafeVarMarker {
-    pub unsafe_vars: IndexMap<RegType, bool>
+    pub unsafe_vars: IndexMap<RegType, bool>,
 }
 
 impl UnsafeVarMarker {
     pub fn new() -> Self {
         UnsafeVarMarker {
-            unsafe_vars: IndexMap::new()
+            unsafe_vars: IndexMap::new(),
         }
     }
 
@@ -264,35 +260,38 @@ impl UnsafeVarMarker {
 
     pub fn mark_safe_vars(&mut self, query_instr: &mut QueryInstruction) {
         match query_instr {
-            &mut QueryInstruction::PutVariable(RegType::Temp(r), _) =>
+            &mut QueryInstruction::PutVariable(RegType::Temp(r), _) => {
                 if let Some(found) = self.unsafe_vars.get_mut(&RegType::Temp(r)) {
                     *found = true;
-                },
-            &mut QueryInstruction::SetVariable(reg) =>
+                }
+            }
+            &mut QueryInstruction::SetVariable(reg) => {
                 if let Some(found) = self.unsafe_vars.get_mut(&reg) {
                     *found = true;
-                },
+                }
+            }
             _ => {}
         }
     }
 
-    pub fn mark_unsafe_vars(&mut self, query_instr: &mut QueryInstruction)
-    {
+    pub fn mark_unsafe_vars(&mut self, query_instr: &mut QueryInstruction) {
         match query_instr {
-            &mut QueryInstruction::PutValue(RegType::Perm(i), arg) =>
+            &mut QueryInstruction::PutValue(RegType::Perm(i), arg) => {
                 if let Some(found) = self.unsafe_vars.get_mut(&RegType::Perm(i)) {
                     if !*found {
                         *found = true;
                         *query_instr = QueryInstruction::PutUnsafeValue(i, arg);
                     }
-                },
-            &mut QueryInstruction::SetValue(reg) =>
+                }
+            }
+            &mut QueryInstruction::SetValue(reg) => {
                 if let Some(found) = self.unsafe_vars.get_mut(&reg) {
                     if !*found {
                         *found = true;
                         *query_instr = QueryInstruction::SetLocalValue(reg);
                     }
-                },
+                }
+            }
             _ => {}
         }
     }
