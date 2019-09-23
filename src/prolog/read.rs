@@ -26,8 +26,7 @@ impl<'a> TermRef<'a> {
 pub type PrologStream = ParsingStream<Box<Read>>;
 
 #[cfg(feature = "readline_rs_compat")]
-pub mod readline
-{
+pub mod readline {
     use prolog_parser::ast::*;
     use readline_rs_compat::readline::*;
     use std::io::{Error, Read};
@@ -35,11 +34,11 @@ pub mod readline
     #[derive(Clone, Copy)]
     pub enum LineMode {
         Single,
-        Multi
+        Multi,
     }
 
     pub struct ReadlineStream {
-        pending_input: String
+        pending_input: String,
     }
 
     impl ReadlineStream {
@@ -53,8 +52,8 @@ pub mod readline
                 Some(text) => {
                     self.pending_input += &text;
                     Ok(self.write_to_buf(buf))
-                },
-                None => Err(Error::last_os_error())
+                }
+                None => Err(Error::last_os_error()),
             }
         }
 
@@ -73,7 +72,7 @@ pub mod readline
             let output_len = self.split_pending(buf, split_idx);
 
             if split_idx < self.pending_input.len() {
-                self.pending_input = self.pending_input[split_idx ..].to_string();
+                self.pending_input = self.pending_input[split_idx..].to_string();
             } else {
                 self.pending_input.clear();
             }
@@ -144,13 +143,12 @@ pub mod readline
 }
 
 #[cfg(not(feature = "readline_rs_compat"))]
-pub mod readline
-{
+pub mod readline {
     use prolog_parser::ast::*;
-    use std::io::{BufReader, Read, Stdin, stdin};
+    use std::io::{stdin, BufReader, Read, Stdin};
 
     struct StdinWrapper {
-        buf: BufReader<Stdin>
+        buf: BufReader<Stdin>,
     }
 
     impl Read for StdinWrapper {
@@ -161,15 +159,20 @@ pub mod readline
 
     #[inline]
     pub fn input_stream() -> ::PrologStream {
-        let reader: Box<Read> = Box::new(StdinWrapper { buf: BufReader::new(stdin()) });
+        let reader: Box<Read> = Box::new(StdinWrapper {
+            buf: BufReader::new(stdin()),
+        });
         parsing_stream(reader)
     }
 }
 
 impl MachineState {
-    pub fn read(&mut self, inner: &mut PrologStream, atom_tbl: TabledData<Atom>, op_dir: &OpDir)
-                -> Result<TermWriteResult, ParserError>
-    {
+    pub fn read(
+        &mut self,
+        inner: &mut PrologStream,
+        atom_tbl: TabledData<Atom>,
+        op_dir: &OpDir,
+    ) -> Result<TermWriteResult, ParserError> {
         let mut parser = Parser::new(inner, atom_tbl, self.flags);
         let term = parser.read_term(composite_op!(op_dir))?;
 
@@ -182,8 +185,12 @@ fn push_stub_addr(machine_st: &mut MachineState) {
     machine_st.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
 }
 
-fn modify_head_of_queue(machine_st: &mut MachineState, queue: &mut SubtermDeque, term: TermRef, h: usize)
-{
+fn modify_head_of_queue(
+    machine_st: &mut MachineState,
+    queue: &mut SubtermDeque,
+    term: TermRef,
+    h: usize,
+) {
     if let Some((arity, site_h)) = queue.pop_front() {
         machine_st.heap[site_h] = HeapCellValue::Addr(term.as_addr(h));
 
@@ -198,9 +205,7 @@ pub struct TermWriteResult {
     pub(crate) var_dict: HeapVarDict,
 }
 
-pub(crate)
-fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteResult
-{
+pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteResult {
     let heap_loc = machine_st.heap.h;
 
     let mut queue = SubtermDeque::new();
@@ -211,8 +216,8 @@ fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteRe
 
         match &term {
             &TermRef::Cons(lvl, ..) => {
-                queue.push_back((2, h+1));
-                machine_st.heap.push(HeapCellValue::Addr(Addr::Lis(h+1)));
+                queue.push_back((2, h + 1));
+                machine_st.heap.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
 
                 push_stub_addr(machine_st);
                 push_stub_addr(machine_st);
@@ -220,25 +225,27 @@ fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteRe
                 if let Level::Root = lvl {
                     continue;
                 }
-            },
+            }
             &TermRef::Clause(lvl, _, ref ct, subterms) => {
-                queue.push_back((subterms.len(), h+1));
+                queue.push_back((subterms.len(), h + 1));
                 let named = HeapCellValue::NamedStr(subterms.len(), ct.name(), ct.spec());
 
                 machine_st.heap.push(named);
 
-                for _ in 0 .. subterms.len() {
+                for _ in 0..subterms.len() {
                     push_stub_addr(machine_st);
                 }
 
                 if let Level::Root = lvl {
                     continue;
                 }
-            },
-            &TermRef::AnonVar(Level::Root) | &TermRef::Constant(Level::Root, ..) =>
-                machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h))),
-            &TermRef::Var(Level::Root, ..) =>
-                machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h))),
+            }
+            &TermRef::AnonVar(Level::Root) | &TermRef::Constant(Level::Root, ..) => {
+                machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h)))
+            }
+            &TermRef::Var(Level::Root, ..) => {
+                machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h)))
+            }
             &TermRef::AnonVar(_) => {
                 if let Some((arity, site_h)) = queue.pop_front() {
                     if arity > 1 {
@@ -247,7 +254,7 @@ fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteRe
                 }
 
                 continue;
-            },
+            }
             &TermRef::Var(_, _, ref var) => {
                 if let Some((arity, site_h)) = queue.pop_front() {
                     if let Some(addr) = var_dict.get(var).cloned() {
@@ -262,7 +269,7 @@ fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteRe
                 }
 
                 continue;
-            },
+            }
             _ => {}
         };
 

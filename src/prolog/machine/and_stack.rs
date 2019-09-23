@@ -10,7 +10,7 @@ pub struct Frame {
     pub e: usize,
     pub cp: LocalCodePtr,
     pub interrupt_cp: LocalCodePtr,
-    perms: Vec<Addr>
+    perms: Vec<Addr>,
 }
 
 impl Frame {
@@ -20,7 +20,7 @@ impl Frame {
             e: e,
             cp: cp,
             interrupt_cp: LocalCodePtr::default(),
-            perms: (1 .. n+1).map(|i| Addr::StackCell(fr, i)).collect()
+            perms: (1..n + 1).map(|i| Addr::StackCell(fr, i)).collect(),
         }
     }
 
@@ -41,7 +41,7 @@ impl AndStack {
     pub(crate) fn take(&mut self) -> Self {
         AndStack(mem::replace(&mut self.0, vec![]))
     }
-    
+
     pub fn push(&mut self, global_index: usize, e: usize, cp: LocalCodePtr, n: usize) {
         let len = self.0.len();
         self.0.push(Frame::new(global_index, len, e, cp, n));
@@ -61,7 +61,7 @@ impl AndStack {
         if len < n {
             self[fr].perms.reserve(n - len);
 
-            for i in len .. n {
+            for i in len..n {
                 self[fr].perms.push(Addr::StackCell(fr, i));
             }
         }

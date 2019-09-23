@@ -3,50 +3,56 @@ use prolog_parser::tabled_rc::*;
 
 use prolog::forms::*;
 use prolog::iterators::*;
-use prolog::machine::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::machine_state::MachineState;
 use prolog::machine::term_expansion::*;
+use prolog::machine::*;
 
 use indexmap::{IndexMap, IndexSet};
 
 use std::borrow::BorrowMut;
-use std::collections::VecDeque;
 use std::cell::Cell;
+use std::collections::VecDeque;
 use std::io::Read;
 use std::mem;
 use std::rc::Rc;
 
 struct CompositeIndices<'a, 'b> {
     local: &'a mut IndexStore,
-    static_code_dir: Option<&'b CodeDir>
+    static_code_dir: Option<&'b CodeDir>,
 }
 
 macro_rules! composite_indices {
-    ($in_module: expr, $local: expr, $static_code_dir: expr) => (
-        CompositeIndices { local: $local,
-                           static_code_dir: if $in_module {
-                               None
-                           } else {
-                               Some($static_code_dir)
-                           }}
-    );
-    ($local: expr) => (
-        CompositeIndices { local: $local, static_code_dir: None }
-    )
+    ($in_module: expr, $local: expr, $static_code_dir: expr) => {
+        CompositeIndices {
+            local: $local,
+            static_code_dir: if $in_module {
+                None
+            } else {
+                Some($static_code_dir)
+            },
+        }
+    };
+    ($local: expr) => {
+        CompositeIndices {
+            local: $local,
+            static_code_dir: None,
+        }
+    };
 }
 
-impl<'a, 'b> CompositeIndices<'a, 'b>
-{
+impl<'a, 'b> CompositeIndices<'a, 'b> {
     fn get_code_index(&mut self, name: ClauseName, arity: usize) -> CodeIndex {
-        let idx_opt = self.local.code_dir.get(&(name.clone(), arity))
-            .or_else(|| {
-                match &self.static_code_dir {
-                    &Some(ref code_dir) => code_dir.get(&(name.clone(), arity)),
-                    _ => None
-                }
-            }).cloned();
+        let idx_opt = self
+            .local
+            .code_dir
+            .get(&(name.clone(), arity))
+            .or_else(|| match &self.static_code_dir {
+                &Some(ref code_dir) => code_dir.get(&(name.clone(), arity)),
+                _ => None,
+            })
+            .cloned();
 
         if let Some(idx) = idx_opt {
             self.local.code_dir.insert((name, arity), idx.clone());
@@ -58,24 +64,31 @@ impl<'a, 'b> CompositeIndices<'a, 'b>
         }
     }
 
-    fn get_clause_type(&mut self, name: ClauseName, arity: usize, spec: Option<SharedOpDesc>) -> ClauseType
-    {
+    fn get_clause_type(
+        &mut self,
+        name: ClauseName,
+        arity: usize,
+        spec: Option<SharedOpDesc>,
+    ) -> ClauseType {
         match ClauseType::from(name, arity, spec) {
             ClauseType::Named(name, arity, _) => {
                 let idx = self.get_code_index(name.clone(), arity);
                 ClauseType::Named(name, arity, idx.clone())
-            },
+            }
             ClauseType::Op(name, spec, _) => {
                 let idx = self.get_code_index(name.clone(), arity);
                 ClauseType::Op(name, spec, idx.clone())
-            },
-            ct => ct
+            }
+            ct => ct,
         }
     }
 }
 
-fn as_compile_time_hook(name: &str, arity: usize, terms: &Vec<Box<Term>>) -> Option<CompileTimeHook>
-{
+fn as_compile_time_hook(
+    name: &str,
+    arity: usize,
+    terms: &Vec<Box<Term>>,
+) -> Option<CompileTimeHook> {
     match (name, arity) {
         ("term_expansion", 2) => Some(CompileTimeHook::TermExpansion),
         ("goal_expansion", 2) => Some(CompileTimeHook::GoalExpansion),
@@ -84,19 +97,21 @@ fn as_compile_time_hook(name: &str, arity: usize, terms: &Vec<Box<Term>>) -> Opt
                 if name.as_str() == "user" {
                     if let &Term::Clause(_, ref name, ref terms, _) = &terms[1].as_ref() {
                         return match name.as_str() {
-                            "term_expansion" if terms.len() == 2 =>
-                                Some(CompileTimeHook::UserTermExpansion),
-                            "goal_expansion" if terms.len() == 2 =>
-                                Some(CompileTimeHook::UserGoalExpansion),
-                            _ => None
-                        }
+                            "term_expansion" if terms.len() == 2 => {
+                                Some(CompileTimeHook::UserTermExpansion)
+                            }
+                            "goal_expansion" if terms.len() == 2 => {
+                                Some(CompileTimeHook::UserGoalExpansion)
+                            }
+                            _ => None,
+                        };
                     }
                 }
             }
 
             None
-        },
-        _ => None
+        }
+        _ => None,
     }
 }
 
@@ -115,69 +130,73 @@ fn is_compile_time_hook(name: &ClauseName, terms: &Vec<Box<Term>>) -> Option<Com
 
 type CompileTimeHookCompileInfo = (CompileTimeHook, PredicateClause, VecDeque<TopLevel>);
 
-pub fn to_op_decl(prec: usize, spec: &str, name: ClauseName) -> Result<OpDecl, ParserError>
-{
+pub fn to_op_decl(prec: usize, spec: &str, name: ClauseName) -> Result<OpDecl, ParserError> {
     match spec {
         "xfx" => Ok(OpDecl(prec, XFX, name)),
         "xfy" => Ok(OpDecl(prec, XFY, name)),
         "yfx" => Ok(OpDecl(prec, YFX, name)),
-        "fx"  => Ok(OpDecl(prec, FX, name)),
-        "fy"  => Ok(OpDecl(prec, FY, name)),
-        "xf"  => Ok(OpDecl(prec, XF, name)),
-        "yf"  => Ok(OpDecl(prec, YF, name)),
-        _     => Err(ParserError::InconsistentEntry)
+        "fx" => Ok(OpDecl(prec, FX, name)),
+        "fy" => Ok(OpDecl(prec, FY, name)),
+        "xf" => Ok(OpDecl(prec, XF, name)),
+        "yf" => Ok(OpDecl(prec, YF, name)),
+        _ => Err(ParserError::InconsistentEntry),
     }
 }
 
-fn setup_op_decl(mut terms: Vec<Box<Term>>) -> Result<OpDecl, ParserError>
-{
+fn setup_op_decl(mut terms: Vec<Box<Term>>) -> Result<OpDecl, ParserError> {
     let name = match *terms.pop().unwrap() {
         Term::Constant(_, Constant::Atom(name, _)) => name,
-        _ => return Err(ParserError::InconsistentEntry)
+        _ => return Err(ParserError::InconsistentEntry),
     };
 
     let spec = match *terms.pop().unwrap() {
         Term::Constant(_, Constant::Atom(name, _)) => name,
-        _ => return Err(ParserError::InconsistentEntry)
+        _ => return Err(ParserError::InconsistentEntry),
     };
 
     let prec = match *terms.pop().unwrap() {
-        Term::Constant(_, Constant::Integer(bi)) =>
-            match bi.to_usize() {
-                Some(n) if n <= 1200 => n,
-                _ => return Err(ParserError::InconsistentEntry)
-            },
-        _ => return Err(ParserError::InconsistentEntry)
+        Term::Constant(_, Constant::Integer(bi)) => match bi.to_usize() {
+            Some(n) if n <= 1200 => n,
+            _ => return Err(ParserError::InconsistentEntry),
+        },
+        _ => return Err(ParserError::InconsistentEntry),
     };
 
     to_op_decl(prec, spec.as_str(), name)
 }
 
-fn setup_predicate_indicator(mut term: Term) -> Result<PredicateKey, ParserError>
-{
+fn setup_predicate_indicator(mut term: Term) -> Result<PredicateKey, ParserError> {
     match term {
         Term::Clause(_, ref name, ref mut terms, Some(_))
-            if name.as_str() == "/" && terms.len() == 2 => {
-                let arity = *terms.pop().unwrap();
-                let name  = *terms.pop().unwrap();
+            if name.as_str() == "/" && terms.len() == 2 =>
+        {
+            let arity = *terms.pop().unwrap();
+            let name = *terms.pop().unwrap();
 
-                let arity = arity.to_constant().and_then(|c| c.to_integer())
-                    .and_then(|n| n.to_usize())
-                    .ok_or(ParserError::InvalidModuleExport)?;
+            let arity = arity
+                .to_constant()
+                .and_then(|c| c.to_integer())
+                .and_then(|n| n.to_usize())
+                .ok_or(ParserError::InvalidModuleExport)?;
 
-                let name = name.to_constant().and_then(|c| c.to_atom())
-                    .ok_or(ParserError::InvalidModuleExport)?;
+            let name = name
+                .to_constant()
+                .and_then(|c| c.to_atom())
+                .ok_or(ParserError::InvalidModuleExport)?;
 
-                Ok((name, arity))
-            },
-        _ => Err(ParserError::InvalidModuleExport)
+            Ok((name, arity))
+        }
+        _ => Err(ParserError::InvalidModuleExport),
     }
 }
 
-fn setup_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleDecl, ParserError>
-{
+fn setup_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleDecl, ParserError> {
     let mut export_list = *terms.pop().unwrap();
-    let name = terms.pop().unwrap().to_constant().and_then(|c| c.to_atom())
+    let name = terms
+        .pop()
+        .unwrap()
+        .to_constant()
+        .and_then(|c| c.to_atom())
         .ok_or(ParserError::InvalidModuleDecl)?;
 
     let mut exports = Vec::new();
@@ -194,38 +213,42 @@ fn setup_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleDecl, ParserErro
     }
 }
 
-fn setup_use_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleSource, ParserError>
-{
+fn setup_use_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleSource, ParserError> {
     match *terms.pop().unwrap() {
         Term::Clause(_, ref name, ref mut terms, None)
-            if name.as_str() == "library" && terms.len() == 1 => {
-                terms.pop().unwrap().to_constant()
-                     .and_then(|c| c.to_atom())
-                     .map(|c| ModuleSource::Library(c))
-                     .ok_or(ParserError::InvalidUseModuleDecl)
-            },
-        Term::Constant(_, Constant::Atom(ref name, _)) =>
-            Ok(ModuleSource::File(name.clone())),
-        _ => Err(ParserError::InvalidUseModuleDecl)
+            if name.as_str() == "library" && terms.len() == 1 =>
+        {
+            terms
+                .pop()
+                .unwrap()
+                .to_constant()
+                .and_then(|c| c.to_atom())
+                .map(|c| ModuleSource::Library(c))
+                .ok_or(ParserError::InvalidUseModuleDecl)
+        }
+        Term::Constant(_, Constant::Atom(ref name, _)) => Ok(ModuleSource::File(name.clone())),
+        _ => Err(ParserError::InvalidUseModuleDecl),
     }
 }
 
 type UseModuleExport = (ModuleSource, Vec<PredicateKey>);
 
-fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, ParserError>
-{
+fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, ParserError> {
     let mut export_list = *terms.pop().unwrap();
     let module_src = match *terms.pop().unwrap() {
         Term::Clause(_, ref name, ref mut terms, None)
-            if name.as_str() == "library" && terms.len() == 1 => {
-                terms.pop().unwrap().to_constant()
-                    .and_then(|c| c.to_atom())
-                    .map(|c| ModuleSource::Library(c))
-                    .ok_or(ParserError::InvalidUseModuleDecl)
-            },
-        Term::Constant(_, Constant::Atom(ref name, _)) =>
-            Ok(ModuleSource::File(name.clone())),
-        _ => Err(ParserError::InvalidUseModuleDecl)
+            if name.as_str() == "library" && terms.len() == 1 =>
+        {
+            terms
+                .pop()
+                .unwrap()
+                .to_constant()
+                .and_then(|c| c.to_atom())
+                .map(|c| ModuleSource::Library(c))
+                .ok_or(ParserError::InvalidUseModuleDecl)
+        }
+        Term::Constant(_, Constant::Atom(ref name, _)) => Ok(ModuleSource::File(name.clone())),
+        _ => Err(ParserError::InvalidUseModuleDecl),
     }?;
 
     let mut exports = Vec::new();
@@ -242,12 +265,11 @@ fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, 
     }
 }
 
-fn setup_declaration(mut terms: Vec<Box<Term>>) -> Result<Declaration, ParserError>
-{
+fn setup_declaration(mut terms: Vec<Box<Term>>) -> Result<Declaration, ParserError> {
     let term = *terms.pop().unwrap();
 
     match term {
-        Term::Clause(_, name, mut terms, _) =>
+        Term::Clause(_, name, mut terms, _) => {
             if name.as_str() == "op" && terms.len() == 3 {
                 Ok(Declaration::Op(setup_op_decl(terms)?))
             } else if name.as_str() == "module" && terms.len() == 2 {
@@ -265,53 +287,51 @@ fn setup_declaration(mut terms: Vec<Box<Term>>) -> Result<Declaration, ParserErr
                 Ok(Declaration::Dynamic(name, arity))
             } else {
                 Err(ParserError::InconsistentEntry)
-            },
-        _ => return Err(ParserError::InconsistentEntry)
+            }
+        }
+        _ => return Err(ParserError::InconsistentEntry),
     }
 }
 
-fn is_consistent(tl: &TopLevel, clauses: &Vec<PredicateClause>) -> bool
-{
+fn is_consistent(tl: &TopLevel, clauses: &Vec<PredicateClause>) -> bool {
     match clauses.first() {
         Some(ref cl) => tl.name() == cl.name() && tl.arity() == cl.arity(),
-        None => true
+        None => true,
     }
 }
 
-fn deque_to_packet(head: TopLevel, deque: VecDeque<TopLevel>) -> TopLevelPacket
-{
+fn deque_to_packet(head: TopLevel, deque: VecDeque<TopLevel>) -> TopLevelPacket {
     match head {
         TopLevel::Query(query) => TopLevelPacket::Query(query, deque),
-        tl => TopLevelPacket::Decl(tl, deque)
+        tl => TopLevelPacket::Decl(tl, deque),
     }
 }
 
-fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError>
-{
+fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError> {
     let mut clauses: Vec<PredicateClause> = vec![];
 
     while let Some(tl) = tls.pop_front() {
         match tl {
-            TopLevel::Query(_) if clauses.is_empty() && tls.is_empty() =>
-                return Ok(tl),
-            TopLevel::Declaration(_) if clauses.is_empty() =>
-                return Ok(tl),
-            TopLevel::Query(_) =>
-                return Err(ParserError::InconsistentEntry),
-            TopLevel::Fact(_) if is_consistent(&tl, &clauses) =>
+            TopLevel::Query(_) if clauses.is_empty() && tls.is_empty() => return Ok(tl),
+            TopLevel::Declaration(_) if clauses.is_empty() => return Ok(tl),
+            TopLevel::Query(_) => return Err(ParserError::InconsistentEntry),
+            TopLevel::Fact(_) if is_consistent(&tl, &clauses) => {
                 if let TopLevel::Fact(fact) = tl {
                     let clause = PredicateClause::Fact(fact);
                     clauses.push(clause);
-                },
-            TopLevel::Rule(_) if is_consistent(&tl, &clauses) =>
+                }
+            }
+            TopLevel::Rule(_) if is_consistent(&tl, &clauses) => {
                 if let TopLevel::Rule(rule) = tl {
                     let clause = PredicateClause::Rule(rule);
                     clauses.push(clause);
-                },
-            TopLevel::Predicate(_) if is_consistent(&tl, &clauses) =>
+                }
+            }
+            TopLevel::Predicate(_) if is_consistent(&tl, &clauses) => {
                 if let TopLevel::Predicate(pred) = tl {
                     clauses.extend(pred.clauses().into_iter())
-                },
+                }
+            }
             _ => {
                 tls.push_front(tl);
                 break;
@@ -333,8 +353,9 @@ fn append_preds(preds: &mut Vec<PredicateClause>) -> Predicate {
 fn mark_cut_variables_as(terms: &mut Vec<Term>, name: ClauseName) {
     for term in terms.iter_mut() {
         match term {
-            &mut Term::Constant(_, Constant::Atom(ref mut var, _)) if var.as_str() == "!" =>
-                *var = name.clone(),
+            &mut Term::Constant(_, Constant::Atom(ref mut var, _)) if var.as_str() == "!" => {
+                *var = name.clone()
+            }
             _ => {}
         }
     }
@@ -343,7 +364,7 @@ fn mark_cut_variables_as(terms: &mut Vec<Term>, name: ClauseName) {
 fn mark_cut_variable(term: &mut Term) -> bool {
     let cut_var_found = match term {
         &mut Term::Constant(_, Constant::Atom(ref var, _)) if var.as_str() == "!" => true,
-        _ => false
+        _ => false,
     };
 
     if cut_var_found {
@@ -369,19 +390,20 @@ fn flatten_hook(mut term: Term) -> Term {
         match (name.as_str(), terms.len()) {
             (":-", 2) => {
                 let inner_term = match terms.first_mut().map(|term| term.borrow_mut()) {
-                    Some(&mut Term::Clause(_, ref name, ref mut inner_terms, _)) =>
+                    Some(&mut Term::Clause(_, ref name, ref mut inner_terms, _)) => {
                         if name.as_str() == ":" && inner_terms.len() == 2 {
                             Some(*inner_terms.pop().unwrap())
                         } else {
                             None
-                        },
-                    _ => None
+                        }
+                    }
+                    _ => None,
                 };
 
                 if let Some(inner_term) = inner_term {
                     mem::swap(&mut terms[0], &mut Box::new(inner_term));
                 }
-            },
+            }
             (":", 2) => return *terms.pop().unwrap(),
             _ => {}
         }
@@ -392,7 +414,7 @@ fn flatten_hook(mut term: Term) -> Term {
 
 pub enum TopLevelPacket {
     Query(Vec<QueryTerm>, VecDeque<TopLevel>),
-    Decl(TopLevel, VecDeque<TopLevel>)
+    Decl(TopLevel, VecDeque<TopLevel>),
 }
 
 struct RelationWorker {
@@ -403,31 +425,30 @@ struct RelationWorker {
 
 impl RelationWorker {
     fn new(flags: MachineFlags) -> Self {
-        RelationWorker { dynamic_clauses: vec![],
-                         flags,
-                         queue: VecDeque::new() }
+        RelationWorker {
+            dynamic_clauses: vec![],
+            flags,
+            queue: VecDeque::new(),
+        }
     }
 
-    fn setup_fact(&mut self, term: Term, assume_dyn: bool) -> Result<Term, ParserError>
-    {
+    fn setup_fact(&mut self, term: Term, assume_dyn: bool) -> Result<Term, ParserError> {
         match term {
             Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) => {
-                let tail = Term::Constant(Cell::default(),
-                                          Constant::Atom(clause_name!("true"), None));
+                let tail =
+                    Term::Constant(Cell::default(), Constant::Atom(clause_name!("true"), None));
 
                 if assume_dyn {
                     self.dynamic_clauses.push((term.clone(), tail));
                 }
 
                 Ok(term)
-            },
-            _ =>
-                Err(ParserError::InadmissibleFact)
+            }
+            _ => Err(ParserError::InadmissibleFact),
         }
     }
 
-    fn compute_head(&self, term: &Term) -> Vec<Term>
-    {
+    fn compute_head(&self, term: &Term) -> Vec<Term> {
         let mut vars = IndexSet::new();
 
         for term in post_order_iter(term) {
@@ -442,8 +463,7 @@ impl RelationWorker {
             .collect()
     }
 
-    fn fabricate_rule_body(&self, vars: &Vec<Term>, body_term: Term) -> Term
-    {
+    fn fabricate_rule_body(&self, vars: &Vec<Term>, body_term: Term) -> Term {
         let vars_of_head = vars.iter().cloned().map(Box::new).collect();
         let head_term = Term::Clause(Cell::default(), clause_name!(""), vars_of_head, None);
 
@@ -456,8 +476,7 @@ impl RelationWorker {
     // the terms form the body of the rule. We create a head, by
     // gathering variables from the body of terms and recording them
     // in the head clause.
-    fn fabricate_rule(&self, body_term: Term) -> (JumpStub, VecDeque<Term>)
-    {
+    fn fabricate_rule(&self, body_term: Term) -> (JumpStub, VecDeque<Term>) {
         // collect the vars of body_term into a head, return the num_vars
         // (the arity) as well.
         let vars = self.compute_head(&body_term);
@@ -466,30 +485,31 @@ impl RelationWorker {
         (vars, VecDeque::from(vec![rule]))
     }
 
-    fn fabricate_disjunct(&self, body_term: Term) -> (JumpStub, VecDeque<Term>)
-    {
+    fn fabricate_disjunct(&self, body_term: Term) -> (JumpStub, VecDeque<Term>) {
         let vars = self.compute_head(&body_term);
-        let clauses: Vec<_> = unfold_by_str(body_term, ";").into_iter()
+        let clauses: Vec<_> = unfold_by_str(body_term, ";")
+            .into_iter()
             .map(|term| {
                 let mut subterms = unfold_by_str(term, ",");
                 mark_cut_variables(&mut subterms);
 
                 let term = subterms.pop().unwrap();
                 fold_by_str(subterms.into_iter(), term, clause_name!(","))
-            }).collect();
+            })
+            .collect();
 
-        let results = clauses.into_iter()
+        let results = clauses
+            .into_iter()
             .map(|clause| self.fabricate_rule_body(&vars, clause))
             .collect();
 
         (vars, results)
     }
 
-    fn fabricate_if_then(&self, prec: Term, conq: Term) -> (JumpStub, VecDeque<Term>)
-    {
+    fn fabricate_if_then(&self, prec: Term, conq: Term) -> (JumpStub, VecDeque<Term>) {
         let mut prec_seq = unfold_by_str(prec, ",");
-        let comma_sym    = clause_name!(",");
-        let cut_sym      = atom!("!");
+        let comma_sym = clause_name!(",");
+        let cut_sym = atom!("!");
 
         prec_seq.push(Term::Constant(Cell::default(), cut_sym));
 
@@ -500,70 +520,87 @@ impl RelationWorker {
         mark_cut_variables(&mut conq_seq);
         prec_seq.extend(conq_seq.into_iter());
 
-        let back_term  = Box::new(prec_seq.pop().unwrap());
+        let back_term = Box::new(prec_seq.pop().unwrap());
         let front_term = Box::new(prec_seq.pop().unwrap());
 
-        let body_term  = Term::Clause(Cell::default(), comma_sym.clone(),
-                                      vec![front_term, back_term], None);
+        let body_term = Term::Clause(
+            Cell::default(),
+            comma_sym.clone(),
+            vec![front_term, back_term],
+            None,
+        );
 
         self.fabricate_rule(fold_by_str(prec_seq.into_iter(), body_term, comma_sym))
     }
 
-    fn to_query_term(&mut self, indices: &mut CompositeIndices, term: Term) -> Result<QueryTerm, ParserError>
-    {
+    fn to_query_term(
+        &mut self,
+        indices: &mut CompositeIndices,
+        term: Term,
+    ) -> Result<QueryTerm, ParserError> {
         match term {
-            Term::Constant(_, Constant::Atom(name, fixity)) =>
+            Term::Constant(_, Constant::Atom(name, fixity)) => {
                 if name.as_str() == "!" || name.as_str() == "blocked_!" {
                     Ok(QueryTerm::BlockedCut)
                 } else {
                     let ct = indices.get_clause_type(name, 0, fixity);
                     Ok(QueryTerm::Clause(Cell::default(), ct, vec![], false))
-                },
-            Term::Var(_, ref v) if v.as_str() == "!" =>
-                Ok(QueryTerm::UnblockedCut(Cell::default())),
-            Term::Clause(r, name, mut terms, fixity) =>
-                match (name.as_str(), terms.len()) {
-                    (";", 2) => {
-                        let term = Term::Clause(r, name.clone(), terms, fixity);
-                        let (stub, clauses) = self.fabricate_disjunct(term);
+                }
+            }
+            Term::Var(_, ref v) if v.as_str() == "!" => {
+                Ok(QueryTerm::UnblockedCut(Cell::default()))
+            }
+            Term::Clause(r, name, mut terms, fixity) => match (name.as_str(), terms.len()) {
+                (";", 2) => {
+                    let term = Term::Clause(r, name.clone(), terms, fixity);
+                    let (stub, clauses) = self.fabricate_disjunct(term);
 
-                        self.queue.push_back(clauses);
-                        Ok(QueryTerm::Jump(stub))
-                    },
-                    ("->", 2) => {
-                        let conq = *terms.pop().unwrap();
-                        let prec = *terms.pop().unwrap();
+                    self.queue.push_back(clauses);
+                    Ok(QueryTerm::Jump(stub))
+                }
+                ("->", 2) => {
+                    let conq = *terms.pop().unwrap();
+                    let prec = *terms.pop().unwrap();
 
-                        let (stub, clauses) = self.fabricate_if_then(prec, conq);
+                    let (stub, clauses) = self.fabricate_if_then(prec, conq);
 
-                        self.queue.push_back(clauses);
-                        Ok(QueryTerm::Jump(stub))
-                    },
-                    ("$get_level", 1) =>
-                        if let Term::Var(_, ref var) = *terms[0] {
-                            Ok(QueryTerm::GetLevelAndUnify(Cell::default(), var.clone()))
-                        } else {
-                            Err(ParserError::InadmissibleQueryTerm)
-                        },
-                    ("partial_string", 2) => {
-                        let ct = ClauseType::BuiltIn(BuiltInClauseType::PartialString);
-                        return Ok(QueryTerm::Clause(Cell::default(), ct, terms, false));
-                    },
-                    _ => {
-                        let ct = indices.get_clause_type(name, terms.len(), fixity);
-                        Ok(QueryTerm::Clause(Cell::default(), ct, terms, false))
+                    self.queue.push_back(clauses);
+                    Ok(QueryTerm::Jump(stub))
+                }
+                ("$get_level", 1) => {
+                    if let Term::Var(_, ref var) = *terms[0] {
+                        Ok(QueryTerm::GetLevelAndUnify(Cell::default(), var.clone()))
+                    } else {
+                        Err(ParserError::InadmissibleQueryTerm)
                     }
-                },
-            Term::Var(..) =>
-                Ok(QueryTerm::Clause(Cell::default(), ClauseType::CallN, vec![Box::new(term)], false)),
-            _ => Err(ParserError::InadmissibleQueryTerm)
+                }
+                ("partial_string", 2) => {
+                    let ct = ClauseType::BuiltIn(BuiltInClauseType::PartialString);
+                    return Ok(QueryTerm::Clause(Cell::default(), ct, terms, false));
+                }
+                _ => {
+                    let ct = indices.get_clause_type(name, terms.len(), fixity);
+                    Ok(QueryTerm::Clause(Cell::default(), ct, terms, false))
+                }
+            },
+            Term::Var(..) => Ok(QueryTerm::Clause(
+                Cell::default(),
+                ClauseType::CallN,
+                vec![Box::new(term)],
+                false,
+            )),
+            _ => Err(ParserError::InadmissibleQueryTerm),
         }
     }
 
     // never blocks cuts in the consequent.
-    fn prepend_if_then(&self, prec: Term, conq: Term, queue: &mut VecDeque<Box<Term>>,
-                       blocks_cuts: bool)
-    {
+    fn prepend_if_then(
+        &self,
+        prec: Term,
+        conq: Term,
+        queue: &mut VecDeque<Box<Term>>,
+        blocks_cuts: bool,
+    ) {
         let cut_symb = atom!("blocked_!");
         let mut terms_seq = unfold_by_str(prec, ",");
 
@@ -584,10 +621,13 @@ impl RelationWorker {
         }
     }
 
-    fn pre_query_term(&mut self, indices: &mut CompositeIndices, term: Term) -> Result<QueryTerm, ParserError>
-    {
+    fn pre_query_term(
+        &mut self,
+        indices: &mut CompositeIndices,
+        term: Term,
+    ) -> Result<QueryTerm, ParserError> {
         match term {
-            Term::Clause(r, name, mut subterms, fixity) =>
+            Term::Clause(r, name, mut subterms, fixity) => {
                 if subterms.len() == 1 && name.as_str() == "$call_with_default_policy" {
                     self.to_query_term(indices, *subterms.pop().unwrap())
                         .map(|mut query_term| {
@@ -596,15 +636,18 @@ impl RelationWorker {
                         })
                 } else {
                     self.to_query_term(indices, Term::Clause(r, name, subterms, fixity))
-                },
-            _ => self.to_query_term(indices, term)
+                }
+            }
+            _ => self.to_query_term(indices, term),
         }
     }
 
-    fn setup_query(&mut self, indices: &mut CompositeIndices, terms: Vec<Box<Term>>,
-                   blocks_cuts: bool)
-                   -> Result<Vec<QueryTerm>, ParserError>
-    {
+    fn setup_query(
+        &mut self,
+        indices: &mut CompositeIndices,
+        terms: Vec<Box<Term>>,
+        blocks_cuts: bool,
+    ) -> Result<Vec<QueryTerm>, ParserError> {
         let mut query_terms = vec![];
         let mut work_queue = VecDeque::from(terms);
 
@@ -637,11 +680,14 @@ impl RelationWorker {
         Ok(query_terms)
     }
 
-    fn setup_hook(&mut self, hook: CompileTimeHook, indices: &mut CompositeIndices, term: Term)
-                  -> Result<CompileTimeHookCompileInfo, ParserError>
-    {
+    fn setup_hook(
+        &mut self,
+        hook: CompileTimeHook,
+        indices: &mut CompositeIndices,
+        term: Term,
+    ) -> Result<CompileTimeHookCompileInfo, ParserError> {
         match flatten_hook(term) {
-            Term::Clause(r, name, terms, _) =>
+            Term::Clause(r, name, terms, _) => {
                 if name == hook.name() && terms.len() == hook.arity() {
                     let term = self.setup_fact(Term::Clause(r, name, terms, None), false)?;
                     Ok((hook, PredicateClause::Fact(term), VecDeque::from(vec![])))
@@ -652,17 +698,21 @@ impl RelationWorker {
                     Ok((hook, PredicateClause::Rule(rule), results_queue))
                 } else {
                     Err(ParserError::InvalidHook)
-                },
-            _ => Err(ParserError::InvalidHook)
+                }
+            }
+            _ => Err(ParserError::InvalidHook),
         }
     }
 
-    fn setup_rule(&mut self, indices: &mut CompositeIndices, mut terms: Vec<Box<Term>>,
-                  blocks_cuts: bool, assume_dyn: bool)
-                  -> Result<Rule, ParserError>
-    {
+    fn setup_rule(
+        &mut self,
+        indices: &mut CompositeIndices,
+        mut terms: Vec<Box<Term>>,
+        blocks_cuts: bool,
+        assume_dyn: bool,
+    ) -> Result<Rule, ParserError> {
         let head = *terms.first().cloned().unwrap();
-        let post_head_terms: Vec<_> = terms.drain(1 .. ).collect();
+        let post_head_terms: Vec<_> = terms.drain(1..).collect();
 
         let tail = *post_head_terms.first().cloned().unwrap();
 
@@ -671,57 +721,84 @@ impl RelationWorker {
         }
 
         let mut query_terms = self.setup_query(indices, post_head_terms, blocks_cuts)?;
-        let clauses = query_terms.drain(1 ..).collect();
+        let clauses = query_terms.drain(1..).collect();
         let qt = query_terms.pop().unwrap();
 
         match *terms.pop().unwrap() {
-            Term::Clause(_, name, terms, _) =>
-                Ok(Rule { head: (name, terms, qt), clauses }),
-            Term::Constant(_, Constant::Atom(name, _)) =>
-                Ok(Rule { head: (name, vec![], qt), clauses }),
-            _ => Err(ParserError::InvalidRuleHead)
+            Term::Clause(_, name, terms, _) => Ok(Rule {
+                head: (name, terms, qt),
+                clauses,
+            }),
+            Term::Constant(_, Constant::Atom(name, _)) => Ok(Rule {
+                head: (name, vec![], qt),
+                clauses,
+            }),
+            _ => Err(ParserError::InvalidRuleHead),
         }
     }
 
-    fn try_term_to_query(&mut self, indices: &mut CompositeIndices, terms: Vec<Box<Term>>, blocks_cuts: bool)
-                         -> Result<TopLevel, ParserError>
-    {
+    fn try_term_to_query(
+        &mut self,
+        indices: &mut CompositeIndices,
+        terms: Vec<Box<Term>>,
+        blocks_cuts: bool,
+    ) -> Result<TopLevel, ParserError> {
         match setup_declaration(terms.iter().cloned().collect()) {
-            Ok(Declaration::Op(..)) => {}, // this is now a predicate call in the query context.
+            Ok(Declaration::Op(..)) => {} // this is now a predicate call in the query context.
             Ok(decl) => return Ok(TopLevel::Declaration(decl)),
             _ => {}
         };
 
-        Ok(TopLevel::Query(self.setup_query(indices, terms, blocks_cuts)?))
+        Ok(TopLevel::Query(self.setup_query(
+            indices,
+            terms,
+            blocks_cuts,
+        )?))
     }
 
-    fn try_term_to_tl(&mut self, indices: &mut CompositeIndices, term: Term, blocks_cuts: bool)
-                      -> Result<TopLevel, ParserError>
-    {
+    fn try_term_to_tl(
+        &mut self,
+        indices: &mut CompositeIndices,
+        term: Term,
+        blocks_cuts: bool,
+    ) -> Result<TopLevel, ParserError> {
         match term {
-            Term::Clause(r, name, terms, fixity) =>
+            Term::Clause(r, name, terms, fixity) => {
                 if let Some(hook) = is_compile_time_hook(&name, &terms) {
                     let term = Term::Clause(r, name, terms, fixity);
                     let (hook, clause, queue) = self.setup_hook(hook, indices, term)?;
 
-                    Ok(TopLevel::Declaration(Declaration::Hook(hook, clause, queue)))
+                    Ok(TopLevel::Declaration(Declaration::Hook(
+                        hook, clause, queue,
+                    )))
                 } else if name.as_str() == "?-" {
                     self.try_term_to_query(indices, terms, blocks_cuts)
                 } else if name.as_str() == ":-" && terms.len() == 2 {
-                    Ok(TopLevel::Rule(self.setup_rule(indices, terms, blocks_cuts, true)?))
+                    Ok(TopLevel::Rule(self.setup_rule(
+                        indices,
+                        terms,
+                        blocks_cuts,
+                        true,
+                    )?))
                 } else if name.as_str() == ":-" && terms.len() == 1 {
                     Ok(TopLevel::Declaration(setup_declaration(terms)?))
                 } else {
                     let term = Term::Clause(r, name, terms, fixity);
                     Ok(TopLevel::Fact(try!(self.setup_fact(term, true))))
-                },
-            term => Ok(TopLevel::Fact(try!(self.setup_fact(term, true))))
+                }
+            }
+            term => Ok(TopLevel::Fact(try!(self.setup_fact(term, true)))),
         }
     }
 
-    fn try_terms_to_tls<I>(&mut self, indices: &mut CompositeIndices, terms: I, blocks_cuts: bool)
-                           -> Result<VecDeque<TopLevel>, ParserError>
-        where I: IntoIterator<Item=Term>
+    fn try_terms_to_tls<I>(
+        &mut self,
+        indices: &mut CompositeIndices,
+        terms: I,
+        blocks_cuts: bool,
+    ) -> Result<VecDeque<TopLevel>, ParserError>
+    where
+        I: IntoIterator<Item = Term>,
     {
         let mut results = VecDeque::new();
 
@@ -732,8 +809,10 @@ impl RelationWorker {
         Ok(results)
     }
 
-    fn parse_queue(&mut self, indices: &mut CompositeIndices) -> Result<VecDeque<TopLevel>, ParserError>
-    {
+    fn parse_queue(
+        &mut self,
+        indices: &mut CompositeIndices,
+    ) -> Result<VecDeque<TopLevel>, ParserError> {
         let mut queue = VecDeque::new();
 
         while let Some(terms) = self.queue.pop_front() {
@@ -746,21 +825,30 @@ impl RelationWorker {
 
     fn absorb(&mut self, other: RelationWorker) {
         self.queue.extend(other.queue.into_iter());
-        self.dynamic_clauses.extend(other.dynamic_clauses.into_iter());
+        self.dynamic_clauses
+            .extend(other.dynamic_clauses.into_iter());
     }
 
-    fn expand_queue_contents<R>(&mut self, term_stream: &mut TermStream<R>, op_dir: &OpDir)
-                                -> Result<(), SessionError>
-        where R: Read
+    fn expand_queue_contents<R>(
+        &mut self,
+        term_stream: &mut TermStream<R>,
+        op_dir: &OpDir,
+    ) -> Result<(), SessionError>
+    where
+        R: Read,
     {
         let mut machine_st = MachineState::new();
-        let mut new_queue  = VecDeque::new();
+        let mut new_queue = VecDeque::new();
 
         while let Some(terms) = self.queue.pop_front() {
             let mut new_terms = VecDeque::new();
 
             for term in terms {
-                new_terms.push_back(term_stream.run_goal_expanders(&mut machine_st, &op_dir, term)?);
+                new_terms.push_back(term_stream.run_goal_expanders(
+                    &mut machine_st,
+                    &op_dir,
+                    term,
+                )?);
             }
 
             new_queue.push_back(new_terms);
@@ -770,9 +858,14 @@ impl RelationWorker {
     }
 }
 
-fn term_to_toplevel<R>(term_stream: &mut TermStream<R>, code_dir: &mut CodeDir, term: Term, flags: MachineFlags)
-                       -> Result<(TopLevel, RelationWorker), ParserError>
-    where R: Read
+fn term_to_toplevel<R>(
+    term_stream: &mut TermStream<R>,
+    code_dir: &mut CodeDir,
+    term: Term,
+    flags: MachineFlags,
+) -> Result<(TopLevel, RelationWorker), ParserError>
+where
+    R: Read,
 {
     let mut rel_worker = RelationWorker::new(flags);
     let mut indices = composite_indices!(false, &mut term_stream.wam.indices, code_dir);
@@ -782,13 +875,17 @@ fn term_to_toplevel<R>(term_stream: &mut TermStream<R>, code_dir: &mut CodeDir, 
     Ok((tl, rel_worker))
 }
 
-pub
-fn stream_to_toplevel<R: Read>(mut buffer: ParsingStream<R>, wam: &mut Machine)
-                               -> Result<TopLevelPacket, SessionError>
-{
+pub fn stream_to_toplevel<R: Read>(
+    mut buffer: ParsingStream<R>,
+    wam: &mut Machine,
+) -> Result<TopLevelPacket, SessionError> {
     let flags = wam.machine_flags();
-    let mut term_stream = TermStream::new(&mut buffer, wam.indices.atom_tbl(),
-                                          wam.machine_flags(), wam);
+    let mut term_stream = TermStream::new(
+        &mut buffer,
+        wam.indices.atom_tbl(),
+        wam.machine_flags(),
+        wam,
+    );
 
     term_stream.add_to_top("?- ");
 
@@ -811,74 +908,94 @@ pub struct TopLevelBatchWorker<'a, R: Read> {
     rel_worker: RelationWorker,
     pub(crate) results: Vec<(Predicate, VecDeque<TopLevel>)>,
     pub(crate) dynamic_clause_map: DynamicClauseMap,
-    pub(crate) in_module: bool
+    pub(crate) in_module: bool,
 }
 
 impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
-
-    pub fn new(inner: &'a mut ParsingStream<R>, atom_tbl: TabledData<Atom>,
-               flags: MachineFlags, wam: &'a mut Machine)
-               -> Self
-    {
+    pub fn new(
+        inner: &'a mut ParsingStream<R>,
+        atom_tbl: TabledData<Atom>,
+        flags: MachineFlags,
+        wam: &'a mut Machine,
+    ) -> Self {
         let term_stream = TermStream::new(inner, atom_tbl, flags, wam);
 
-        TopLevelBatchWorker { term_stream,
-                              rel_worker: RelationWorker::new(flags),
-                              results: vec![],
-                              dynamic_clause_map: IndexMap::new(),
-                              in_module: false }
+        TopLevelBatchWorker {
+            term_stream,
+            rel_worker: RelationWorker::new(flags),
+            results: vec![],
+            dynamic_clause_map: IndexMap::new(),
+            in_module: false,
+        }
     }
 
-    fn try_term_to_tl(&self, indices: &mut IndexStore, term: Term)
-                      -> Result<(TopLevel, RelationWorker), SessionError>
-    {
+    fn try_term_to_tl(
+        &self,
+        indices: &mut IndexStore,
+        term: Term,
+    ) -> Result<(TopLevel, RelationWorker), SessionError> {
         let mut new_rel_worker = RelationWorker::new(self.rel_worker.flags);
-        let mut indices = composite_indices!(self.in_module, indices,
-                                             &self.term_stream.wam.indices.code_dir);
+        let mut indices = composite_indices!(
+            self.in_module,
+            indices,
+            &self.term_stream.wam.indices.code_dir
+        );
 
-        Ok((new_rel_worker.try_term_to_tl(&mut indices, term, true)?, new_rel_worker))
+        Ok((
+            new_rel_worker.try_term_to_tl(&mut indices, term, true)?,
+            new_rel_worker,
+        ))
     }
 
-    fn process_result(&mut self, indices: &mut IndexStore, preds: &mut Vec<PredicateClause>)
-                      -> Result<(), SessionError>
-    {
-        self.rel_worker.expand_queue_contents(&mut self.term_stream, &indices.op_dir)?;
+    fn process_result(
+        &mut self,
+        indices: &mut IndexStore,
+        preds: &mut Vec<PredicateClause>,
+    ) -> Result<(), SessionError> {
+        self.rel_worker
+            .expand_queue_contents(&mut self.term_stream, &indices.op_dir)?;
 
-        let mut indices = composite_indices!(self.in_module, indices,
-                                             &mut self.term_stream.wam.indices.code_dir);
+        let mut indices = composite_indices!(
+            self.in_module,
+            indices,
+            &mut self.term_stream.wam.indices.code_dir
+        );
 
-        let queue  = self.rel_worker.parse_queue(&mut indices)?;
+        let queue = self.rel_worker.parse_queue(&mut indices)?;
         let result = (append_preds(preds), queue);
 
         let in_situ_code_dir = &mut self.term_stream.wam.indices.in_situ_code_dir;
 
-        self.term_stream.wam.code_repo.add_in_situ_result(&result, in_situ_code_dir,
-                                                          self.term_stream.flags)?;
+        self.term_stream.wam.code_repo.add_in_situ_result(
+            &result,
+            in_situ_code_dir,
+            self.term_stream.flags,
+        )?;
 
         Ok(self.results.push(result))
     }
 
     fn take_dynamic_clauses(&mut self) {
         let (name, arity) = match self.rel_worker.dynamic_clauses.first() {
-            Some((head, _)) =>
-                (head.name().unwrap(), head.arity()),
-            None =>
-                return
+            Some((head, _)) => (head.name().unwrap(), head.arity()),
+            None => return,
         };
 
         match self.dynamic_clause_map.get_mut(&(name.clone(), arity)) {
             Some(ref mut entry) => {
                 entry.clear(); // don't treat dynamic predicates as if they're discontiguous.
-                entry.extend(self.rel_worker.dynamic_clauses.drain(0 ..));
-            },
+                entry.extend(self.rel_worker.dynamic_clauses.drain(0..));
+            }
             _ => {
                 self.rel_worker.dynamic_clauses.clear();
             }
         }
     }
 
-    pub fn consume(&mut self, indices: &mut IndexStore) -> Result<Option<Declaration>, SessionError>
-    {
+    pub fn consume(
+        &mut self,
+        indices: &mut IndexStore,
+    ) -> Result<Option<Declaration>, SessionError> {
         let mut preds = vec![];
 
         while !self.term_stream.eof()? {
@@ -902,7 +1019,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
                 TopLevel::Rule(rule) => preds.push(PredicateClause::Rule(rule)),
                 TopLevel::Predicate(pred) => preds.extend(pred.0),
                 TopLevel::Declaration(decl) => return Ok(Some(decl)),
-                TopLevel::Query(_) => return Err(SessionError::NamelessEntry)
+                TopLevel::Query(_) => return Err(SessionError::NamelessEntry),
             }
         }
 

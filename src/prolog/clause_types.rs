@@ -14,7 +14,7 @@ pub enum CompareNumberQT {
     GreaterThanOrEqual,
     LessThanOrEqual,
     NotEqual,
-    Equal
+    Equal,
 }
 
 impl CompareNumberQT {
@@ -25,7 +25,7 @@ impl CompareNumberQT {
             CompareNumberQT::GreaterThanOrEqual => ">=",
             CompareNumberQT::LessThanOrEqual => "=<",
             CompareNumberQT::NotEqual => "=\\=",
-            CompareNumberQT::Equal => "=:="
+            CompareNumberQT::Equal => "=:=",
         }
     }
 }
@@ -53,7 +53,7 @@ impl CompareTermQT {
 pub enum ArithmeticTerm {
     Reg(RegType),
     Interm(usize),
-    Number(Number)
+    Number(Number),
 }
 
 impl ArithmeticTerm {
@@ -78,7 +78,7 @@ pub enum InlinedClauseType {
     IsFloat(RegType),
     IsNonVar(RegType),
     IsPartialString(RegType),
-    IsVar(RegType)
+    IsVar(RegType),
 }
 
 ref_thread_local! {
@@ -137,10 +137,10 @@ impl InlinedClauseType {
             &InlinedClauseType::IsAtom(..) => "atom",
             &InlinedClauseType::IsAtomic(..) => "atomic",
             &InlinedClauseType::IsCompound(..) => "compound",
-            &InlinedClauseType::IsInteger (..) => "integer",
+            &InlinedClauseType::IsInteger(..) => "integer",
             &InlinedClauseType::IsRational(..) => "rational",
             &InlinedClauseType::IsString(..) => "string",
-            &InlinedClauseType::IsFloat (..) => "float",
+            &InlinedClauseType::IsFloat(..) => "float",
             &InlinedClauseType::IsNonVar(..) => "nonvar",
             &InlinedClauseType::IsPartialString(..) => "is_partial_string",
             &InlinedClauseType::IsVar(..) => "var",
@@ -233,7 +233,7 @@ pub enum SystemClauseType {
     UnwindStack,
     Variant,
     WAMInstructions,
-    WriteTerm
+    WriteTerm,
 }
 
 impl SystemClauseType {
@@ -246,15 +246,20 @@ impl SystemClauseType {
             &SystemClauseType::AtomChars => clause_name!("$atom_chars"),
             &SystemClauseType::AtomCodes => clause_name!("$atom_codes"),
             &SystemClauseType::AtomLength => clause_name!("$atom_length"),
-            &SystemClauseType::ModuleAssertDynamicPredicateToFront => clause_name!("$module_asserta"),
-            &SystemClauseType::ModuleAssertDynamicPredicateToBack => clause_name!("$module_assertz"),
+            &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
+                clause_name!("$module_asserta")
+            }
+            &SystemClauseType::ModuleAssertDynamicPredicateToBack => {
+                clause_name!("$module_assertz")
+            }
             &SystemClauseType::CharCode => clause_name!("$char_code"),
             &SystemClauseType::CharsToNumber => clause_name!("$chars_to_number"),
             &SystemClauseType::CodesToNumber => clause_name!("$codes_to_number"),
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
-            &SystemClauseType::REPL(REPLCodePtr::SubmitQueryAndPrintResults) =>
-                clause_name!("$submit_query_and_print_results"),
+            &SystemClauseType::REPL(REPLCodePtr::SubmitQueryAndPrintResults) => {
+                clause_name!("$submit_query_and_print_results")
+            }
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
@@ -265,13 +270,21 @@ impl SystemClauseType {
             &SystemClauseType::ExpandGoal => clause_name!("$expand_goal"),
             &SystemClauseType::FetchGlobalVar => clause_name!("$fetch_global_var"),
             &SystemClauseType::GetChar => clause_name!("$get_char"),
-            &SystemClauseType::TruncateIfNoLiftedHeapGrowth => clause_name!("$truncate_if_no_lh_growth"),
-            &SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff => clause_name!("$truncate_if_no_lh_growth_diff"),
+            &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
+                clause_name!("$truncate_if_no_lh_growth")
+            }
+            &SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff => {
+                clause_name!("$truncate_if_no_lh_growth_diff")
+            }
             &SystemClauseType::GetAttributedVariableList => clause_name!("$get_attr_list"),
-            &SystemClauseType::GetAttrVarQueueDelimiter => clause_name!("$get_attr_var_queue_delim"),
+            &SystemClauseType::GetAttrVarQueueDelimiter => {
+                clause_name!("$get_attr_var_queue_delim")
+            }
             &SystemClauseType::GetAttrVarQueueBeyond => clause_name!("$get_attr_var_queue_beyond"),
             &SystemClauseType::GetLiftedHeapFromOffset => clause_name!("$get_lh_from_offset"),
-            &SystemClauseType::GetLiftedHeapFromOffsetDiff => clause_name!("$get_lh_from_offset_diff"),
+            &SystemClauseType::GetLiftedHeapFromOffsetDiff => {
+                clause_name!("$get_lh_from_offset_diff")
+            }
             &SystemClauseType::GetBValue => clause_name!("$get_b_value"),
             &SystemClauseType::GetClause => clause_name!("$get_clause"),
             &SystemClauseType::GetNextDBRef => clause_name!("$get_next_db_ref"),
@@ -285,7 +298,9 @@ impl SystemClauseType {
             &SystemClauseType::HeadIsDynamic => clause_name!("$head_is_dynamic"),
             &SystemClauseType::OpDeclaration => clause_name!("$op$"),
             &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
-            &SystemClauseType::InstallInferenceCounter => clause_name!("$install_inference_counter"),
+            &SystemClauseType::InstallInferenceCounter => {
+                clause_name!("$install_inference_counter")
+            }
             &SystemClauseType::LiftedHeapLength => clause_name!("$lh_length"),
             &SystemClauseType::ModuleHeadIsDynamic => clause_name!("$module_head_is_dynamic"),
             &SystemClauseType::ModuleOf => clause_name!("$module_of"),
@@ -311,7 +326,9 @@ impl SystemClauseType {
             &SystemClauseType::ResetGlobalVarAtKey => clause_name!("$reset_global_var_at_key"),
             &SystemClauseType::RetractClause => clause_name!("$retract_clause"),
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
-            &SystemClauseType::ReturnFromAttributeGoals => clause_name!("$return_from_attribute_goals"),
+            &SystemClauseType::ReturnFromAttributeGoals => {
+                clause_name!("$return_from_attribute_goals")
+            }
             &SystemClauseType::ReturnFromVerifyAttr => clause_name!("$return_from_verify_attr"),
             &SystemClauseType::SetBall => clause_name!("$set_ball"),
             &SystemClauseType::SetCutPointByDefault(_) => clause_name!("$set_cp_by_default"),
@@ -331,8 +348,8 @@ impl SystemClauseType {
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$abolish_clause", 2) => Some(SystemClauseType::AbolishClause),
-            ("$atom_chars", 2)  => Some(SystemClauseType::AtomChars),
-            ("$atom_codes", 2)  => Some(SystemClauseType::AtomCodes),
+            ("$atom_chars", 2) => Some(SystemClauseType::AtomChars),
+            ("$atom_codes", 2) => Some(SystemClauseType::AtomCodes),
             ("$atom_length", 2) => Some(SystemClauseType::AtomLength),
             ("$abolish_module_clause", 3) => Some(SystemClauseType::AbolishModuleClause),
             ("$module_asserta", 5) => Some(SystemClauseType::ModuleAssertDynamicPredicateToFront),
@@ -358,8 +375,12 @@ impl SystemClauseType {
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$get_char", 1) => Some(SystemClauseType::GetChar),
-            ("$truncate_if_no_lh_growth", 1) => Some(SystemClauseType::TruncateIfNoLiftedHeapGrowth),
-            ("$truncate_if_no_lh_growth_diff", 2) => Some(SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff),
+            ("$truncate_if_no_lh_growth", 1) => {
+                Some(SystemClauseType::TruncateIfNoLiftedHeapGrowth)
+            }
+            ("$truncate_if_no_lh_growth_diff", 2) => {
+                Some(SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff)
+            }
             ("$get_attr_list", 2) => Some(SystemClauseType::GetAttributedVariableList),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
             ("$get_clause", 2) => Some(SystemClauseType::GetClause),
@@ -406,8 +427,9 @@ impl SystemClauseType {
             ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$store_global_var", 2) => Some(SystemClauseType::StoreGlobalVar),
-            ("$submit_query_and_print_results", 2) =>
-                Some(SystemClauseType::REPL(REPLCodePtr::SubmitQueryAndPrintResults)),
+            ("$submit_query_and_print_results", 2) => Some(SystemClauseType::REPL(
+                REPLCodePtr::SubmitQueryAndPrintResults,
+            )),
             ("$term_variables", 2) => Some(SystemClauseType::TermVariables),
             ("$truncate_lh_to", 1) => Some(SystemClauseType::TruncateLiftedHeapTo),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
@@ -415,7 +437,7 @@ impl SystemClauseType {
             ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$write_term", 5) => Some(SystemClauseType::WriteTerm),
             ("$wam_instructions", 3) => Some(SystemClauseType::WAMInstructions),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -448,7 +470,7 @@ pub enum ClauseType {
     Inlined(InlinedClauseType),
     Named(ClauseName, usize, CodeIndex), // name, arity, index.
     Op(ClauseName, SharedOpDesc, CodeIndex),
-    System(SystemClauseType)
+    System(SystemClauseType),
 }
 
 impl BuiltInClauseType {
@@ -462,8 +484,8 @@ impl BuiltInClauseType {
             &BuiltInClauseType::CopyTerm => clause_name!("copy_term"),
             &BuiltInClauseType::Eq => clause_name!("=="),
             &BuiltInClauseType::Functor => clause_name!("functor"),
-            &BuiltInClauseType::Ground  => clause_name!("ground"),
-            &BuiltInClauseType::Is(..)  => clause_name!("is"),
+            &BuiltInClauseType::Ground => clause_name!("ground"),
+            &BuiltInClauseType::Is(..) => clause_name!("is"),
             &BuiltInClauseType::KeySort => clause_name!("keysort"),
             &BuiltInClauseType::Nl => clause_name!("nl"),
             &BuiltInClauseType::NotEq => clause_name!("\\=="),
@@ -483,7 +505,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::CopyTerm => 2,
             &BuiltInClauseType::Eq => 2,
             &BuiltInClauseType::Functor => 3,
-            &BuiltInClauseType::Ground  => 1,
+            &BuiltInClauseType::Ground => 1,
             &BuiltInClauseType::Is(..) => 2,
             &BuiltInClauseType::KeySort => 2,
             &BuiltInClauseType::NotEq => 2,
@@ -498,15 +520,13 @@ impl BuiltInClauseType {
 impl ClauseType {
     pub fn spec(&self) -> Option<SharedOpDesc> {
         match self {
-            &ClauseType::Op(_, ref spec, _) =>
-                Some(spec.clone()),
+            &ClauseType::Op(_, ref spec, _) => Some(spec.clone()),
             &ClauseType::Inlined(InlinedClauseType::CompareNumber(..))
-          | &ClauseType::BuiltIn(BuiltInClauseType::Is(..))
-          | &ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(_))
-          | &ClauseType::BuiltIn(BuiltInClauseType::NotEq)
-          | &ClauseType::BuiltIn(BuiltInClauseType::Eq) =>
-                Some(SharedOpDesc::new(700, XFX)),
-            _ => None
+            | &ClauseType::BuiltIn(BuiltInClauseType::Is(..))
+            | &ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(_))
+            | &ClauseType::BuiltIn(BuiltInClauseType::NotEq)
+            | &ClauseType::BuiltIn(BuiltInClauseType::Eq) => Some(SharedOpDesc::new(700, XFX)),
+            _ => None,
         }
     }
 
@@ -523,18 +543,23 @@ impl ClauseType {
     }
 
     pub fn from(name: ClauseName, arity: usize, spec: Option<SharedOpDesc>) -> Self {
-        CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), arity)).cloned()
-            .unwrap_or_else(||
+        CLAUSE_TYPE_FORMS
+            .borrow()
+            .get(&(name.as_str(), arity))
+            .cloned()
+            .unwrap_or_else(|| {
                 SystemClauseType::from(name.as_str(), arity)
                     .map(ClauseType::System)
-                    .unwrap_or_else(||
+                    .unwrap_or_else(|| {
                         if let Some(spec) = spec {
                             ClauseType::Op(name, spec, CodeIndex::default())
                         } else if name.as_str() == "call" {
                             ClauseType::CallN
                         } else {
                             ClauseType::Named(name, arity, CodeIndex::default())
-                        }))
+                        }
+                    })
+            })
     }
 }
 

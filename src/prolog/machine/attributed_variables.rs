@@ -4,7 +4,7 @@ use indexmap::IndexSet;
 
 use std::vec::IntoIter;
 
-pub static VERIFY_ATTRS: &str  = include_str!("attributed_variables.pl");
+pub static VERIFY_ATTRS: &str = include_str!("attributed_variables.pl");
 pub static PROJECT_ATTRS: &str = include_str!("project_attributes.pl");
 
 pub(super) type Bindings = Vec<(usize, Addr)>;
@@ -26,7 +26,7 @@ impl AttrVarInitializer {
             bindings: vec![],
             cp: LocalCodePtr::default(),
             verify_attrs_loc,
-            project_attrs_loc
+            project_attrs_loc,
         }
     }
 
@@ -38,8 +38,7 @@ impl AttrVarInitializer {
 }
 
 impl MachineState {
-    pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: Addr)
-    {
+    pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: Addr) {
         if self.attr_var_init.bindings.is_empty() {
             self.attr_var_init.cp = self.p.local();
             self.p = CodePtr::VerifyAttrInterrupt(self.attr_var_init.verify_attrs_loc);
@@ -49,17 +48,24 @@ impl MachineState {
     }
 
     fn populate_var_and_value_lists(&mut self) -> (Addr, Addr) {
-        let iter = self.attr_var_init.bindings.iter().map(|(ref h, _)| Addr::AttrVar(*h));
+        let iter = self
+            .attr_var_init
+            .bindings
+            .iter()
+            .map(|(ref h, _)| Addr::AttrVar(*h));
         let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
 
-        let iter = self.attr_var_init.bindings.iter().map(|(_, ref addr)| addr.clone());
+        let iter = self
+            .attr_var_init
+            .bindings
+            .iter()
+            .map(|(_, ref addr)| addr.clone());
         let value_list_addr = Addr::HeapCell(self.heap.to_list(iter));
 
         (var_list_addr, value_list_addr)
     }
 
-    fn verify_attributes(&mut self)
-    {
+    fn verify_attributes(&mut self) {
         for (h, _) in &self.attr_var_init.bindings {
             self.heap[*h] = HeapCellValue::Addr(Addr::AttrVar(*h));
         }
@@ -70,15 +76,14 @@ impl MachineState {
         self[temp_v!(2)] = value_list_addr;
     }
 
-    pub(super)
-    fn gather_attr_vars_created_since(&self, b: usize) -> IntoIter<Addr>
-    {
-        let mut attr_vars: Vec<_> = self.attr_var_init.attr_var_queue[b ..]
-            .iter().filter_map(|h|
-                               match self.store(self.deref(Addr::HeapCell(*h))) {
-                                   Addr::AttrVar(h) => Some(Addr::AttrVar(h)),
-                                   _ => None
-                               }).collect();
+    pub(super) fn gather_attr_vars_created_since(&self, b: usize) -> IntoIter<Addr> {
+        let mut attr_vars: Vec<_> = self.attr_var_init.attr_var_queue[b..]
+            .iter()
+            .filter_map(|h| match self.store(self.deref(Addr::HeapCell(*h))) {
+                Addr::AttrVar(h) => Some(Addr::AttrVar(h)),
+                _ => None,
+            })
+            .collect();
 
         attr_vars.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
 
@@ -86,8 +91,7 @@ impl MachineState {
         attr_vars.into_iter()
     }
 
-    fn populate_project_attr_lists(&mut self) -> (Addr, Addr)
-    {
+    fn populate_project_attr_lists(&mut self) -> (Addr, Addr) {
         let mut query_vars = IndexSet::new();
         let attr_vars = self.gather_attr_vars_created_since(0);
 
@@ -98,23 +102,22 @@ impl MachineState {
                 match value {
                     HeapCellValue::Addr(Addr::HeapCell(h)) => {
                         query_vars.insert(Addr::HeapCell(h));
-                    },
+                    }
                     HeapCellValue::Addr(Addr::StackCell(fr, sc)) => {
                         query_vars.insert(Addr::StackCell(fr, sc));
-                    },
+                    }
                     _ => {}
                 };
             }
         }
 
         let query_var_list = Addr::HeapCell(self.heap.to_list(query_vars.into_iter()));
-        let attr_var_list  = Addr::HeapCell(self.heap.to_list(attr_vars));
+        let attr_var_list = Addr::HeapCell(self.heap.to_list(attr_vars));
 
         (query_var_list, attr_var_list)
     }
 
-    pub(super)
-    fn verify_attr_interrupt(&mut self, p: usize) {
+    pub(super) fn verify_attr_interrupt(&mut self, p: usize) {
         let rs = MAX_ARITY;
 
         // store temp vars in perm vars slots along with self.b0 and
@@ -127,7 +130,7 @@ impl MachineState {
         let e = self.e;
         self.and_stack[e].interrupt_cp = self.attr_var_init.cp;
 
-        for i in 1 .. rs + 1 {
+        for i in 1..rs + 1 {
             self.and_stack[e][i] = self[RegType::Temp(i)].clone();
         }
 
@@ -141,8 +144,7 @@ impl MachineState {
         self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
     }
 
-    fn print_attribute_goals_string(&mut self, op_dir: &OpDir) -> String
-    {
+    fn print_attribute_goals_string(&mut self, op_dir: &OpDir) -> String {
         let mut attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
 
         if attr_goals.is_empty() {
@@ -174,9 +176,7 @@ impl MachineState {
 }
 
 impl Machine {
-    pub
-    fn attribute_goals(&mut self) -> String
-    {
+    pub fn attribute_goals(&mut self) -> String {
         let p = self.machine_st.attr_var_init.project_attrs_loc;
         let (query_vars, attr_vars) = self.machine_st.populate_project_attr_lists();
 
@@ -186,9 +186,14 @@ impl Machine {
         self.machine_st[temp_v!(2)] = attr_vars;
 
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
-        self.machine_st.query_stepper(&mut self.indices, &mut self.policies, &mut self.code_repo,
-                                      &mut readline::input_stream());
+        self.machine_st.query_stepper(
+            &mut self.indices,
+            &mut self.policies,
+            &mut self.code_repo,
+            &mut readline::input_stream(),
+        );
 
-        self.machine_st.print_attribute_goals_string(&self.indices.op_dir)
+        self.machine_st
+            .print_attribute_goals_string(&self.indices.op_dir)
     }
 }

@@ -3,20 +3,22 @@ extern crate ordered_float;
 extern crate prolog_parser;
 extern crate rug;
 
-#[macro_use] mod macros;
-pub mod instructions;
+#[macro_use]
+mod macros;
 mod clause_types;
-#[macro_use] mod allocator;
-mod fixtures;
-pub mod machine;
-mod forms;
+pub mod instructions;
+#[macro_use]
+mod allocator;
 mod arithmetic;
 mod codegen;
 mod debray_allocator;
+mod fixtures;
+mod forms;
 mod heap_iter;
-mod indexing;
-pub mod write;
-mod iterators;
 pub mod heap_print;
-mod targets;
+mod indexing;
+mod iterators;
+pub mod machine;
 pub mod read;
+mod targets;
+pub mod write;
