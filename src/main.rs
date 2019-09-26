@@ -25,8 +25,8 @@ use prolog::read::*;
 mod tests;
 
 fn main() {
-    #[cfg(feature = "readline_rs_compat")]
-    readline::readline_initialize();
+//    #[cfg(feature = "readline_rs_compat")]
+//    readline::readline_initialize();
 
     let mut wam = Machine::new(readline::input_stream());
     wam.run_toplevel();

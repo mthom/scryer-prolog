@@ -4,8 +4,7 @@
 '$repl' :- '$repl'.
 
 '$read_and_match' :-
-    write_term('?- ', [quoted(false)]),
-    read_term(Term, [variable_names(VarList)]),
+    '$read_query_term'(Term, VarList),
     '$instruction_match'(Term, VarList).
 
 '$instruction_match'([user], []) :-

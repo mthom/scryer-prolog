@@ -251,6 +251,63 @@ impl MachineState {
         Ok(())
     }
 
+    fn read_term(&mut self,
+                 current_input_stream: &mut PrologStream,
+                 indices: &mut IndexStore)
+                 -> CallResult
+    {
+        match self.read(
+            current_input_stream,
+            indices.atom_tbl.clone(),
+            &indices.op_dir,
+        ) {
+            Ok(term_write_result) => {
+                let a1 = self[temp_v!(1)].clone();
+                self.unify(Addr::HeapCell(term_write_result.heap_loc), a1);
+
+                if self.fail {
+                    return Ok(());
+                }
+
+                let mut list_of_var_eqs = vec![];
+
+                for (var, binding) in term_write_result.var_dict.into_iter().rev() {
+                    let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
+                    let var_atom = Constant::Atom(var_atom, None);
+
+                    let h = self.heap.h;
+                    let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
+
+                    self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
+                    self.heap.push(HeapCellValue::Addr(Addr::Con(var_atom)));
+                    self.heap.push(HeapCellValue::Addr(binding));
+
+                    list_of_var_eqs.push(Addr::Str(h));
+                }
+
+                let a2 = self[temp_v!(2)].clone();
+                let list_offset =
+                    Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
+
+                Ok(self.unify(list_offset, a2))
+            }
+            Err(err) => {
+                if let ParserError::UnexpectedEOF = err {
+                    std::process::exit(0);
+                }
+
+                // reset the input stream after an input failure.
+                *current_input_stream = readline::input_stream();
+
+                let h = self.heap.h;
+                let syntax_error = MachineError::syntax_error(h, err);
+                let stub = MachineError::functor_stub(clause_name!("read_term"), 2);
+
+                Err(self.error_form(syntax_error, stub))
+            }
+        }
+    }
+    
     #[inline]
     fn install_new_block(&mut self, r: RegType) -> usize {
         self.block = self.b;
@@ -1674,69 +1731,27 @@ impl MachineState {
             &SystemClauseType::InstallNewBlock => {
                 self.install_new_block(temp_v!(1));
             }
-            &SystemClauseType::ReadTerm => {
-                match self.read(
-                    current_input_stream,
-                    indices.atom_tbl.clone(),
-                    &indices.op_dir,
-                ) {
-                    Ok(term_write_result) => {
-                        let a1 = self[temp_v!(1)].clone();
-                        self.unify(Addr::HeapCell(term_write_result.heap_loc), a1);
+            &SystemClauseType::ReadQueryTerm => {
+                readline::set_prompt(true);
+                let result = self.read_term(current_input_stream, indices);
+                readline::set_prompt(false);
 
-                        if self.fail {
-                            return Ok(());
-                        }
-
-                        let mut list_of_var_eqs = vec![];
-
-                        for (var, binding) in term_write_result.var_dict.into_iter().rev() {
-                            let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
-                            let var_atom = Constant::Atom(var_atom, None);
-
-                            let h = self.heap.h;
-                            let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
-
-                            self.heap
-                                .push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
-                            self.heap.push(HeapCellValue::Addr(Addr::Con(var_atom)));
-                            self.heap.push(HeapCellValue::Addr(binding));
-
-                            list_of_var_eqs.push(Addr::Str(h));
-                        }
-
-                        let a2 = self[temp_v!(2)].clone();
-                        let list_offset =
-                            Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
-
-                        self.unify(list_offset, a2);
-                    }
-                    Err(err) => {
-                        if let ParserError::UnexpectedEOF = err {
-                            std::process::exit(0);
-                        }
-
-                        // reset the input stream after an input failure.
-                        *current_input_stream = readline::input_stream();
-
-                        let h = self.heap.h;
-                        let syntax_error = MachineError::syntax_error(h, err);
-                        let stub = MachineError::functor_stub(clause_name!("read_term"), 2);
-
-                        return Err(self.error_form(syntax_error, stub));
-                    }
-                }
+                let _ = result?;
             }
+            &SystemClauseType::ReadTerm => {
+                readline::set_prompt(false);
+                self.read_term(current_input_stream, indices)?;
+            },
             &SystemClauseType::ResetBlock => {
                 let addr = self.deref(self[temp_v!(1)].clone());
                 self.reset_block(addr);
             }
-            &SystemClauseType::SetBall => self.set_ball(),
-            &SystemClauseType::SkipMaxList => {
+            &SystemClauseType::SetBall =>
+                self.set_ball(),
+            &SystemClauseType::SkipMaxList =>
                 if let Err(err) = self.skip_max_list() {
                     return Err(err);
-                }
-            }
+                },            
             &SystemClauseType::StoreGlobalVar => {
                 let key = self[temp_v!(1)].clone();
 

@@ -25,35 +25,60 @@ impl<'a> TermRef<'a> {
 
 pub type PrologStream = ParsingStream<Box<Read>>;
 
-#[cfg(feature = "readline_rs_compat")]
 pub mod readline {
     use prolog_parser::ast::*;
-    use readline_rs_compat::readline::*;
-    use std::io::{Error, Read};
+    use prolog::rustyline::error::ReadlineError;
+    use prolog::rustyline::{Cmd, Editor, KeyPress};
+    use std::io::Read;
 
-    #[derive(Clone, Copy)]
-    pub enum LineMode {
-        Single,
-        Multi,
+    static mut PROMPT: bool = false;
+
+    pub fn set_prompt(value: bool) {
+        unsafe {
+            PROMPT = value;
+        }
     }
 
+    #[inline]
+    fn get_prompt() -> &'static str {
+        unsafe {
+            if PROMPT { "?- " } else { "" }
+        }
+    }
+    
     pub struct ReadlineStream {
+        rl: Editor<()>,
         pending_input: String,
     }
 
     impl ReadlineStream {
-        #[inline]
-        fn new(pending_input: String) -> Self {
-            ReadlineStream { pending_input }
+        fn input_stream(pending_input: String) -> Self {
+            let mut rl = Editor::<()>::new();
+
+            rl.bind_sequence(KeyPress::Tab, Cmd::Insert(1, "\t".to_string()));
+
+            ReadlineStream { rl, pending_input }
         }
 
-        fn call_readline(&mut self, prompt: &str, buf: &mut [u8]) -> std::io::Result<usize> {
-            match readline_rl(prompt) {
-                Some(text) => {
+        fn call_readline(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            match self.rl.readline(get_prompt()) {
+                Ok(text) => {
                     self.pending_input += &text;
+
+                    unsafe {
+                        if PROMPT {
+                            self.rl.history_mut().add(&self.pending_input);
+                            PROMPT = false;
+                        }
+                    }
+
+                    self.pending_input += "\n";                    
                     Ok(self.write_to_buf(buf))
                 }
-                None => Err(Error::last_os_error()),
+                Err(ReadlineError::Eof) =>
+                    Ok(self.write_to_buf(buf)),                
+                Err(e) =>
+                    Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
             }
         }
 
@@ -84,84 +109,16 @@ pub mod readline {
     impl Read for ReadlineStream {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
             if self.pending_input.is_empty() {
-                self.call_readline("", buf)
+                self.call_readline(buf)
             } else {
                 Ok(self.write_to_buf(buf))
             }
         }
     }
 
-    static mut LINE_MODE: LineMode = LineMode::Single;
-    static mut END_OF_LINE: bool = false;
-
-    pub fn set_line_mode(mode: LineMode) {
-        unsafe {
-            LINE_MODE = mode;
-            END_OF_LINE = false;
-            rl_done = 0;
-        }
-    }
-
-    unsafe extern "C" fn bind_end_chord(_: i32, _: i32) -> i32 {
-        if let LineMode::Multi = LINE_MODE {
-            rl_done = 1;
-        }
-
-        0
-    }
-
-    unsafe extern "C" fn bind_cr(_: i32, _: i32) -> i32 {
-        if let LineMode::Single = LINE_MODE {
-            insert_text_rl("\n");
-            println!("");
-            rl_done = 1;
-        } else {
-            insert_text_rl("\n");
-        }
-
-        0
-    }
-
-    pub fn readline_initialize() {
-        let rc = initialize_rl(); // initialize editline.
-
-        if rc != 0 {
-            panic!("initialize_rl() failed with return code {}", rc);
-        }
-
-        bind_key_rl('\t' as i32, rl_insert); // just insert tabs when typed.
-        bind_key_rl('\n' as i32, bind_cr);
-        bind_key_rl('\r' as i32, bind_cr);
-        bind_keyseq_rl("\\C-d", bind_end_chord);
-    }
-
     #[inline]
     pub fn input_stream() -> ::PrologStream {
-        let reader: Box<Read> = Box::new(ReadlineStream::new(String::from("")));
-        parsing_stream(reader)
-    }
-}
-
-#[cfg(not(feature = "readline_rs_compat"))]
-pub mod readline {
-    use prolog_parser::ast::*;
-    use std::io::{stdin, BufReader, Read, Stdin};
-
-    struct StdinWrapper {
-        buf: BufReader<Stdin>,
-    }
-
-    impl Read for StdinWrapper {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            self.buf.read(buf)
-        }
-    }
-
-    #[inline]
-    pub fn input_stream() -> ::PrologStream {
-        let reader: Box<Read> = Box::new(StdinWrapper {
-            buf: BufReader::new(stdin()),
-        });
+        let reader: Box<Read> = Box::new(ReadlineStream::input_stream(String::from("")));
         parsing_stream(reader)
     }
 }

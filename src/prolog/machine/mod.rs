@@ -354,14 +354,9 @@ impl Machine {
     fn handle_toplevel_command(&mut self, code_ptr: REPLCodePtr, p: LocalCodePtr) {
         match code_ptr {
             REPLCodePtr::CompileBatch => {
-                #[cfg(feature = "readline_rs_compat")]
-                readline::set_line_mode(readline::LineMode::Multi);
-
                 let src = readline::input_stream();
-
-                #[cfg(feature = "readline_rs_compat")]
-                readline::set_line_mode(readline::LineMode::Single);
-
+                readline::set_prompt(false);
+                
                 match compile_user_module(self, src) {
                     EvalSession::Error(e) => self.throw_session_error(e, (clause_name!("repl"), 0)),
                     _ => {}
