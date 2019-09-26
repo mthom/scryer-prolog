@@ -60,9 +60,9 @@
 
 :- module(zdd, [variables_set_zdd/2]).
 
-:- use_module(library(atts)).
-:- use_module(library(dcgs)).
-:- use_module(library(lists)).
+:- use_module('src/prolog/lib/atts').
+:- use_module('src/prolog/lib/dcgs').
+:- use_module('src/prolog/lib/lists').
 
 :- attribute zdd_vs/2.
 

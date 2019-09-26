@@ -3068,7 +3068,7 @@ fn test_queries_on_string_lists() {
 
     // double_quotes is chars by default.
     assert_prolog_success!(&mut wam, "variant(\"\", []).");
-    assert_prolog_failure!(&mut wam, "\"\" == [].");
+    assert_prolog_success!(&mut wam, "\"\" == [].");
     assert_prolog_failure!(&mut wam, "\"abc\" == [].");
     assert_prolog_success!(&mut wam, "variant(\"abc\", ['a', 'b', 'c']).");
     assert_prolog_success!(&mut wam, "variant(\"abc\", ['a', 'b', c]).");

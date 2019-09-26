@@ -4,8 +4,8 @@ https://sicstus.sics.se/sicstus/docs/3.7.1/html/sicstus_17.html
 
 :- module(domain, [domain/2]).
 
-:- use_module(library(atts)).
-:- use_module(library(ordsets), [
+:- use_module('src/prolog/lib/atts').
+:- use_module('src/prolog/lib/ordsets', [
         ord_intersection/3,
         ord_intersect/2,
         list_to_ord_set/2

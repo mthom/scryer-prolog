@@ -1,6 +1,6 @@
 [package]
 name = "scryer-prolog"
-version = "0.8.92"
+version = "0.8.93"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
 repository = "https://github.com/mthom/scryer-prolog"
 description = "A modern Prolog implementation written mostly in Rust."
@@ -15,7 +15,7 @@ dirs = "2.0.2"
 downcast = "0.10.0"
 indexmap = "1.0.2"
 ordered-float = "0.5.0"
-prolog_parser = "0.8.28"
+prolog_parser = "0.8.29"
 readline_rs_compat = { version = "0.1.9", optional = true }
 ref_thread_local = "0.0.0"
 rug = "1.4.0"

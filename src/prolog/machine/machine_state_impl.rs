@@ -552,7 +552,7 @@ impl MachineState {
                         self.fail = true;
                     }
                     (Addr::Lis(a1), Addr::Con(Constant::String(ref mut s)))
-                    | (Addr::Con(Constant::String(ref mut s)), Addr::Lis(a1)) => {
+                  | (Addr::Con(Constant::String(ref mut s)), Addr::Lis(a1)) => {
                         if match self.flags.double_quotes {
                             DoubleQuotes::Chars => self.deconstruct_chars(s, a1, &mut pdl),
                             DoubleQuotes::Codes => self.deconstruct_codes(s, a1, &mut pdl),
@@ -564,7 +564,7 @@ impl MachineState {
                         self.fail = true;
                     }
                     (Addr::Con(Constant::EmptyList), Addr::Con(Constant::String(ref s)))
-                    | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
+                  | (Addr::Con(Constant::String(ref s)), Addr::Con(Constant::EmptyList))
                         if !self.flags.double_quotes.is_atom() =>
                     {
                         if s.is_expandable() && s.is_empty() {
@@ -852,11 +852,8 @@ impl MachineState {
             Addr::Con(Constant::String(ref mut s)) => {
                 self.fail = self.write_constant_to_string(s, c)
             }
-            Addr::Con(c1) => {
-                if c1 != c {
-                    self.fail = true;
-                }
-            }
+            Addr::Con(c1) =>
+                self.fail = self.eq_test(Addr::Con(c), Addr::Con(c1)),
             Addr::Lis(l) => self.unify(Addr::Lis(l), Addr::Con(c)),
             addr => {
                 if let Some(r) = addr.as_var() {
@@ -2266,25 +2263,29 @@ impl MachineState {
     }
 
     // returns true on failure.
-    pub(super) fn eq_test(&self) -> bool {
-        let a1 = self[temp_v!(1)].clone();
-        let a2 = self[temp_v!(2)].clone();
-
+    pub(super) fn eq_test(&self, a1: Addr, a2: Addr) -> bool {
         let mut iter = self.zipped_acyclic_pre_order_iter(a1, a2);
 
         while let Some((v1, v2)) = iter.next() {
             match (v1, v2) {
-                (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) => {
+                (HeapCellValue::NamedStr(ar1, n1, _), HeapCellValue::NamedStr(ar2, n2, _)) =>
                     if ar1 != ar2 || n1 != n2 {
                         return true;
-                    }
-                }
-                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) => continue,
-                (HeapCellValue::Addr(a1), HeapCellValue::Addr(a2)) => {
+                    },
+                (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
+                    continue,
+                (HeapCellValue::Addr(Addr::Con(Constant::EmptyList)),
+                 HeapCellValue::Addr(Addr::Con(Constant::String(s))))
+              | (HeapCellValue::Addr(Addr::Con(Constant::String(s))),
+                 HeapCellValue::Addr(Addr::Con(Constant::EmptyList))) =>
+                    return match self.flags.double_quotes {
+                        DoubleQuotes::Atom => true,
+                        _ => !s.is_empty()
+                    },
+                (HeapCellValue::Addr(a1), HeapCellValue::Addr(a2)) =>
                     if a1 != a2 {
                         return true;
-                    }
-                }
+                    },                
                 _ => return true,
             }
         }
