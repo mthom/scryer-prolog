@@ -29,9 +29,9 @@
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-:- use_module('src/prolog/lib/dcgs').
-:- use_module('src/prolog/lib/dif').
-:- use_module('src/prolog/lib/lists').
+:- use_module(library(dcgs)).
+:- use_module(library(dif)).
+:- use_module(library(lists)).
 
 pl_resolution(Clauses0, Chain) :-
         maplist(sort, Clauses0, Clauses), % remove duplicates

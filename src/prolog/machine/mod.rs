@@ -163,10 +163,8 @@ impl SubModuleUser for IndexStore {
     }
 }
 
-static BUILTINS: &str = include_str!("../lib/builtins.pl");
-static ERROR: &str = include_str!("../lib/error.pl");
-static LISTS: &str = include_str!("../lib/lists.pl");
-static NON_ISO: &str = include_str!("../lib/non_iso.pl");
+include!("libraries.rs");
+
 static TOPLEVEL: &str = include_str!("../toplevel.pl");
 
 impl Machine {
@@ -538,14 +536,13 @@ impl Machine {
                 self.throw_session_error(err, (clause_name!("repl"), 0));
                 return;
             }
-            EvalSession::QueryFailure => {
+            EvalSession::QueryFailure =>
                 if self.machine_st.ball.stub.len() > 0 {
                     return self.propagate_exception_to_toplevel(snapshot);
                 } else {
                     println!("false.");
-                }
-            }
-            _ => {}
+                },
+            _ => println!("true.")
         }
 
         self.machine_st.absorb_snapshot(snapshot);

@@ -1,7 +1,7 @@
 :- module(dif, [dif/2]).
 
-:- use_module('src/prolog/lib/atts.pl').
-:- use_module('src/prolog/lib/lists.pl', [append/3]).
+:- use_module(library(atts)).
+:- use_module(library(lists), [append/3]).
 
 :- attribute dif/1.
 

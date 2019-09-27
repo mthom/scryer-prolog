@@ -1,5 +1,5 @@
-:- use_module('src/prolog/lib/dcgs').
-:- use_module('src/prolog/lib/reif').
+:- use_module(library(dcgs)).
+:- use_module(library(reif)).
 
 animals([animal(dog, [is_true('has fur'), is_true('says woof')]),
          animal(cat, [is_true('has fur'), is_true('says meow')]),

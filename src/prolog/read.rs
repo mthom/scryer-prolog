@@ -45,7 +45,7 @@ pub mod readline {
             if PROMPT { "?- " } else { "" }
         }
     }
-    
+
     pub struct ReadlineStream {
         rl: Editor<()>,
         pending_input: String,
@@ -54,9 +54,7 @@ pub mod readline {
     impl ReadlineStream {
         fn input_stream(pending_input: String) -> Self {
             let mut rl = Editor::<()>::new();
-
             rl.bind_sequence(KeyPress::Tab, Cmd::Insert(1, "\t".to_string()));
-
             ReadlineStream { rl, pending_input }
         }
 
@@ -72,11 +70,11 @@ pub mod readline {
                         }
                     }
 
-                    self.pending_input += "\n";                    
+                    self.pending_input += "\n";
                     Ok(self.write_to_buf(buf))
                 }
                 Err(ReadlineError::Eof) =>
-                    Ok(self.write_to_buf(buf)),                
+                    Ok(self.write_to_buf(buf)),
                 Err(e) =>
                     Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
             }

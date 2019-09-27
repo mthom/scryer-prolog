@@ -1,6 +1,6 @@
 :- module(freeze, [freeze/2]).
 
-:- use_module('src/prolog/lib/atts.pl').
+:- use_module(library(atts)).
 
 :- attribute frozen/1.
 

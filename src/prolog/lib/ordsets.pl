@@ -52,7 +52,7 @@
             ord_intersection/2          % +PowerSet, -Intersection
           ]).
 
-:- use_module('src/prolog/lib/lists.pl').
+:- use_module(library(lists)).
 
 /** <module> Ordered set manipulation
 Ordered sets are lists with unique elements sorted to the standard order

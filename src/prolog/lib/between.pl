@@ -2,8 +2,8 @@
 
 %% TODO: numlist/5.
 
-:- use_module('src/prolog/lib/lists.pl', [length/2]).
-:- use_module('src/prolog/lib/error.pl').
+:- use_module(library(lists), [length/2]).
+:- use_module(library(error)).
 
 between(Lower, Upper, X) :-
     must_be(integer, Lower),

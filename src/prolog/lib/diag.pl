@@ -1,6 +1,6 @@
 :- module(diag, [wam_instructions/2]).
 
-:- use_module('src/prolog/lib/error').
+:- use_module(library(error)).
 
 wam_instructions(Clause, Listing) :-
     (  nonvar(Clause) ->

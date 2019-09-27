@@ -14,6 +14,8 @@ use prolog::machine::*;
 
 use indexmap::{IndexMap, IndexSet};
 
+use ref_thread_local::RefThreadLocal;
+
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::fs::File;
@@ -54,16 +56,9 @@ fn fix_filename(atom_tbl: TabledData<Atom>, filename: &str) -> Result<PathBuf, S
     Ok(path)
 }
 
-fn load_module_from_file(wam: &mut Machine, filename: &str) -> Result<ClauseName, SessionError> {
-    let path = fix_filename(wam.indices.atom_tbl.clone(), filename)?;
-
-    let file_handle = File::open(&path).or_else(|_| {
-        let filename = clause_name!(path.to_string_lossy().to_string(), wam.indices.atom_tbl);
-        Err(SessionError::InvalidFileName(filename))
-    })?;
-
-    let file_src = parsing_stream(file_handle);
-
+fn load_module<R: Read>(wam: &mut Machine, name: &str, stream: ParsingStream<R>)
+                        -> Result<ClauseName, SessionError>
+{
     // follow the operation of compile_user_module, but before
     // compiling, check that a module is declared in the file. if not,
     // throw an exception.
@@ -71,21 +66,32 @@ fn load_module_from_file(wam: &mut Machine, filename: &str) -> Result<ClauseName
     setup_indices(wam, clause_name!("builtins"), &mut indices)?;
 
     let mut compiler = ListingCompiler::new(&wam.code_repo);
-    let results = compiler.gather_items(wam, file_src, &mut indices)?;
+    let results = compiler.gather_items(wam, stream, &mut indices)?;
 
     let module_name = if let Some(ref module) = &compiler.module {
         module.module_decl.name.clone()
     } else {
-        let module_name = path.to_string_lossy().to_string();
-        let module_name = clause_name!(module_name, wam.indices.atom_tbl);
-
+        let module_name = clause_name!(name.to_string(), wam.indices.atom_tbl);
         return Err(SessionError::NoModuleDeclaration(module_name));
     };
 
     match compile_work_impl(&mut compiler, wam, indices, results) {
         EvalSession::Error(e) => Err(e),
         _ => Ok(module_name),
-    }
+    }    
+}
+
+fn load_module_from_file(wam: &mut Machine, filename: &str) -> Result<ClauseName, SessionError>
+{
+    let path = fix_filename(wam.indices.atom_tbl.clone(), filename)?;
+
+    let file_handle = File::open(&path).or_else(|_| {
+        let filename = clause_name!(path.to_string_lossy().to_string(), wam.indices.atom_tbl);
+        Err(SessionError::InvalidFileName(filename))
+    })?;
+
+    let file_stem = path.file_stem().unwrap().to_string_lossy();    
+    load_module(wam, &file_stem, parsing_stream(file_handle))
 }
 
 pub type PredicateCompileQueue = (Predicate, VecDeque<TopLevel>);
@@ -459,6 +465,13 @@ fn add_non_module_code(
     Ok(())
 }
 
+fn load_library(wam: &mut Machine, name: ClauseName) -> Result<ClauseName, SessionError> {
+    match LIBRARIES.borrow().get(name.as_str()) {
+        Some(code) => load_module(wam, name.as_str(), parsing_stream(code.as_bytes())),
+        None => Err(SessionError::ModuleNotFound)
+    }
+}
+
 impl ListingCompiler {
     #[inline]
     pub fn new(code_repo: &CodeRepo) -> Self {
@@ -702,17 +715,30 @@ impl ListingCompiler {
                 op_decl.submit(self.get_module_name(), spec, &mut indices.op_dir)
             }
             Declaration::UseModule(ModuleSource::Library(name)) => {
+                let name = if !wam.indices.modules.contains_key(&name) {
+                    load_library(wam, name)?
+                } else {
+                    name
+                };
+
                 self.use_module(name, &mut wam.code_repo, flags, &mut wam.indices, indices)
             }
-            Declaration::UseQualifiedModule(ModuleSource::Library(name), exports) => self
-                .use_qualified_module(
+            Declaration::UseQualifiedModule(ModuleSource::Library(name), exports) => {
+                let name = if !wam.indices.modules.contains_key(&name) {
+                    load_library(wam, name)?
+                } else {
+                    name
+                };
+
+                self.use_qualified_module(
                     name,
                     &mut wam.code_repo,
                     flags,
                     &exports,
                     &mut wam.indices,
-                    indices,
-                ),
+                    indices
+                )
+            },
             Declaration::Module(module_decl) => {
                 if self.module.is_none() {
                     let module_name = module_decl.name.clone();

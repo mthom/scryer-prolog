@@ -1,10 +1,14 @@
 [package]
 name = "scryer-prolog"
-version = "0.8.94"
+version = "0.8.95"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
+build = "build.rs"
 repository = "https://github.com/mthom/scryer-prolog"
 description = "A modern Prolog implementation written mostly in Rust."
 license = "BSD-3-Clause"
+
+[build-dependencies]
+indexmap = "1.0.2"
 
 [dependencies]
 cfg-if = "0.1.7"

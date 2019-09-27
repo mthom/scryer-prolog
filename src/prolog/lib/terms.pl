@@ -1,6 +1,6 @@
 :- module(terms, [numbervars/3]).
 
-:- use_module('src/prolog/lib/error.pl').
+:- use_module(library(error)).
     
 numbervars(Term, N0, N) :-
    catch(internal_numbervars(Term, N0, N), error(E,Ctx),
