@@ -2,13 +2,15 @@ extern crate indexmap;
 
 use indexmap::IndexSet;
 
-use std::fs::{File, read_dir};
+use std::env;
+use std::fs::{File, copy, read_dir};
 use std::io::Write;
 use std::path::Path;
 
 fn main()
 {
-    let dest_path = Path::new("./src/prolog/machine/libraries.rs");
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let dest_path = Path::new(&out_dir).join("libraries.rs");
 
     let mut libraries = File::create(&dest_path).unwrap();
     let mut library_index = IndexSet::new();
@@ -18,14 +20,20 @@ fn main()
     for item in paths {
         let item = item.unwrap().path();
 
-        if item.is_file() {
+        if let Some(file_name) = item.file_name() {
             if let Some(ext) = item.extension() {
                 if ext == "pl" {
                     let file_stem = item.file_stem().unwrap();
                     let file_str  = file_stem.to_string_lossy().to_uppercase();
+                    let dest = Path::new(&out_dir).join(file_name);
 
-                    let include_line = format!("static {}: &str = include_str!(\"{}/{}.pl\");\n",
-                                               file_str, "../lib", file_stem.to_string_lossy());
+                    match copy(&item, dest) {
+                        Ok(_) => {},
+                        Err(e) => panic!("die: {:?}", e)
+                    };
+
+                    let include_line = format!("static {}: &str = include_str!(\"{}.pl\");\n",
+                                               file_str, file_stem.to_string_lossy());
 
                     libraries.write_all(include_line.as_bytes()).unwrap();
                     library_index.insert(file_stem.to_string_lossy().to_string());

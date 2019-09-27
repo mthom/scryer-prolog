@@ -1790,13 +1790,13 @@ fn test_queries_on_conditionals() {
 fn test_queries_on_modules() {
     let mut wam = Machine::new(readline::input_stream());
 
-    submit(&mut wam, ":- use_module('src/prolog/lib/lists.pl').");
+    submit(&mut wam, ":- use_module(library(lists)).");
 
     submit_code(
         &mut wam,
         "
 :- module(my_lists, [local_member/2, reverse/2]).
-:- use_module('src/prolog/lib/lists.pl', [member/2]).
+:- use_module(library(lists), [member/2]).
 
 local_member(X, Xs) :- member(X, Xs).
 
@@ -1826,7 +1826,7 @@ reverse(Xs, Ys) :- lists:reverse(Xs, Ys).",
 
     submit(
         &mut wam,
-        ":- use_module('src/prolog/lib/lists.pl', [reverse/2]).",
+        ":- use_module(library(lists), [reverse/2]).",
     );
 
     assert_prolog_success!(
@@ -1836,7 +1836,7 @@ reverse(Xs, Ys) :- lists:reverse(Xs, Ys).",
     );
     assert_prolog_success!(&mut wam, "reverse(_, _).");
 
-    submit(&mut wam, ":- use_module('src/prolog/lib/lists.pl', []).");
+    submit(&mut wam, ":- use_module(library(lists), []).");
 
     assert_prolog_success!(
         &mut wam,
@@ -1849,7 +1849,7 @@ reverse(Xs, Ys) :- lists:reverse(Xs, Ys).",
 fn test_queries_on_builtins() {
     let mut wam = Machine::new(readline::input_stream());
 
-    submit(&mut wam, ":- use_module('src/prolog/lib/lists.pl').");
+    submit(&mut wam, ":- use_module(library(lists)).");
 
     assert_prolog_failure!(&mut wam, "atom(X).");
     assert_prolog_success!(&mut wam, "atom(a).");
@@ -2113,7 +2113,7 @@ fn test_queries_on_builtins() {
     assert_prolog_success!(&mut wam, "1.0 @=< 1.");
     assert_prolog_success!(&mut wam, "1 @=< 1.0.");
 
-    submit(&mut wam, ":- use_module('src/prolog/lib/non_iso.pl').");
+    submit(&mut wam, ":- use_module(library(non_iso)).");
 
     assert_prolog_success!(&mut wam, "variant(X, Y).");
     assert_prolog_failure!(&mut wam, "variant(f(X), f(x)).");
@@ -2696,7 +2696,7 @@ foo(X) :- call(X) -> call(X).",
 fn test_queries_on_setup_call_cleanup() {
     let mut wam = Machine::new(readline::input_stream());
 
-    submit(&mut wam, ":- use_module('src/prolog/lib/non_iso.pl').");
+    submit(&mut wam, ":- use_module(library(non_iso)).");
 
     // Test examples from the ISO Prolog page for setup_call_catch.
     assert_prolog_failure!(&mut wam, "setup_call_cleanup(false, _, _).");
@@ -2805,7 +2805,7 @@ fn test_queries_on_setup_call_cleanup() {
 fn test_queries_on_call_with_inference_limit() {
     let mut wam = Machine::new(readline::input_stream());
 
-    submit(&mut wam, ":- use_module('src/prolog/lib/non_iso.pl').");
+    submit(&mut wam, ":- use_module(library(non_iso)).");
 
     assert_prolog_success!(
         &mut wam,
@@ -3027,7 +3027,7 @@ fn test_queries_on_call_with_inference_limit() {
 fn test_queries_on_dcgs() {
     let mut wam = Machine::new(readline::input_stream());
 
-    submit(&mut wam, ":- use_module('src/prolog/lib/dcgs.pl').");
+    submit(&mut wam, ":- use_module(library(dcgs)).");
 
     // test case by YeGoblynQueene from hacker news.
     submit_code(
@@ -3064,7 +3064,7 @@ fn test_queries_on_dcgs() {
 fn test_queries_on_string_lists() {
     let mut wam = Machine::new(readline::input_stream());
 
-    submit(&mut wam, ":- use_module('src/prolog/lib/non_iso.pl').");
+    submit(&mut wam, ":- use_module(library(non_iso)).");
 
     // double_quotes is chars by default.
     assert_prolog_success!(&mut wam, "variant(\"\", []).");
@@ -3426,15 +3426,14 @@ fn test_queries_on_attributed_variables() {
         &mut wam,
         "
 :- module(my_mod, []).
-:- use_module('src/prolog/lib/atts.pl').
+:- use_module(library(atts)).
 
 :- attribute dif/1, frozen/1.",
     );
 
     assert_prolog_success!(
         &mut wam,
-        "( put_atts(V, my_mod, dif(1)) ; put_atts(V, my_mod, dif(2)) ),
-                                      get_atts(V, my_mod, L).",
+        "( put_atts(V, my_mod, dif(1)) ; put_atts(V, my_mod, dif(2)) ), get_atts(V, my_mod, L).",
         [["L = [dif(1)]", "V = _10"], ["L = [dif(2)]", "V = _10"]]
     );
 

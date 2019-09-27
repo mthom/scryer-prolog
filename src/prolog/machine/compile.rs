@@ -790,8 +790,7 @@ impl ListingCompiler {
             &Declaration::Hook(hook, _, ref queue) if !hook.has_module_scope() => {
                 worker.term_stream.incr_expansion_lens(hook, 1, queue.len())
             }
-            &Declaration::UseModule(ModuleSource::File(_))
-            | &Declaration::UseQualifiedModule(ModuleSource::File(_), _) => {
+            &Declaration::UseModule(_) | &Declaration::UseQualifiedModule(..) => {
                 update_expansion_lengths = true
             }
             _ => {}

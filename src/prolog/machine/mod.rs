@@ -163,7 +163,7 @@ impl SubModuleUser for IndexStore {
     }
 }
 
-include!("libraries.rs");
+include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
 static TOPLEVEL: &str = include_str!("../toplevel.pl");
 
