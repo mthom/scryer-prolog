@@ -81,6 +81,7 @@ fn load_module<R: Read>(wam: &mut Machine, name: &str, stream: ParsingStream<R>)
     }    
 }
 
+pub(super)
 fn load_module_from_file(wam: &mut Machine, filename: &str) -> Result<ClauseName, SessionError>
 {
     let path = fix_filename(wam.indices.atom_tbl.clone(), filename)?;

@@ -217,6 +217,13 @@ impl Machine {
     }
 
     pub fn run_toplevel(&mut self) {
+	use std::env;
+	use prolog::machine::compile::load_module_from_file;
+
+	for filename in env::args() {
+	    load_module_from_file(self, &filename);
+	}
+	
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
         self.run_query(&AllocVarDict::new());
     }
