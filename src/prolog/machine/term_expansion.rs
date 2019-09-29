@@ -173,6 +173,7 @@ impl<'a, R: Read> TermStream<'a, R> {
 
     #[inline]
     pub fn eof(&mut self) -> Result<bool, ParserError> {
+	self.parser.devour_whitespace()?; // eliminate dangling comments before checking for EOF.
         Ok(self.stack.is_empty() && self.parser.eof()?)
     }
 
@@ -251,11 +252,13 @@ impl<'a, R: Read> TermStream<'a, R> {
             }
 
             self.parser.reset();
+
             let term = self.parser.read_term(composite_op!(
                 self.in_module,
                 &self.wam.indices.op_dir,
                 op_dir
             ))?;
+
             self.stack.push(term);
         }
     }
