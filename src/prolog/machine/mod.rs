@@ -46,12 +46,17 @@ use std::io::{stdout, Read, Write};
 use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
+use std::sync::atomic::AtomicBool;
 
 use termion::raw::IntoRawMode;
 
 pub struct MachinePolicies {
     call_policy: Box<CallPolicy>,
     cut_policy: Box<CutPolicy>,
+}
+
+lazy_static! {
+    pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
 }
 
 impl MachinePolicies {

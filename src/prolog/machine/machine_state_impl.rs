@@ -8,6 +8,7 @@ use prolog::forms::*;
 use prolog::heap_iter::*;
 use prolog::heap_print::*;
 use prolog::instructions::*;
+use prolog::machine::INTERRUPT;
 use prolog::machine::and_stack::*;
 use prolog::machine::attributed_variables::*;
 use prolog::machine::code_repo::CodeRepo;
@@ -3176,6 +3177,13 @@ impl MachineState {
         lco: bool,
         use_default_cp: bool,
     ) {
+	let interrupted = INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
+
+	if INTERRUPT.compare_and_swap(interrupted, false, std::sync::atomic::Ordering::Relaxed) {
+	    self.fail = true;
+	    return;
+	}
+	
         let mut default_call_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
         let call_policy = if use_default_cp {
             &mut default_call_policy
