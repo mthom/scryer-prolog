@@ -66,6 +66,11 @@ unfurl_commas(ModTerm, ModTerms, ModTerms1) :-
     unfurl_commas(ModTermIs, ModTerms2, ModTerms1).
 unfurl_commas(ModTermIN, (ModTermIN, ModTerms1), ModTerms1).
 
+unfurl_cond((P -> Q0), (P -> Q), Hole) :-
+    !, unfurl_commas(Q0, Q, Hole).
+unfurl_cond(P, Q, Hole) :-
+    unfurl_commas(P, Q, Hole).
+
 expand_body_term([], true, N, N) :- !.
 expand_body_term([Arg|Args], ModTerm, N0, N) :-
     !, N is N0 + 1,
@@ -80,11 +85,11 @@ expand_body_term((P ; Q), (PModTerm ; QModTerm), N0, N) :-
     ( N1 == N2 -> PModTerm = PModTerm0,
 		  QModTerm = QModTerm0,
 		  N = N1
-    ; N1 < N2  -> unfurl_commas(PModTerm0, PModTerm, Hole),
+    ; N1 < N2  -> unfurl_cond(PModTerm0, PModTerm, Hole),
 		  Hole = ('$VAR'(N1) = '$VAR'(N2) ),
 		  QModTerm = QModTerm0,
 		  N = N2
-    ; N1 > N2  -> unfurl_commas(QModTerm0, QModTerm, Hole),
+    ; N1 > N2  -> unfurl_cond(QModTerm0, QModTerm, Hole),
 		  Hole = ('$VAR'(N1) = '$VAR'(N2) ),
 		  PModTerm = PModTerm0,
 		  N = N1
