@@ -339,8 +339,7 @@ impl MachineState {
             self.p.local() + 1
         };
 
-        self.p = CodePtr::REPL(repl_code_ptr, p);
-        return Ok(());
+        Ok(self.p = CodePtr::REPL(repl_code_ptr, p))
     }
 
     fn truncate_if_no_lifted_heap_diff<AddrConstr>(&mut self, addr_constr: AddrConstr)
@@ -1513,7 +1512,7 @@ impl MachineState {
                     _ => unreachable!(),
                 };
 
-                indices.global_variables.remove(&key);
+                indices.global_variables.swap_remove(&key);
             }
             &SystemClauseType::RemoveCallPolicyCheck => {
                 let restore_default = match call_policy.downcast_mut::<CWILCallPolicy>().ok() {

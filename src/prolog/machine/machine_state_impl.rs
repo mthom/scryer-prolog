@@ -3387,7 +3387,7 @@ impl MachineState {
         }
     }
 
-    pub(super) fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.hb = 0;
         self.e = 0;
         self.b = 0;

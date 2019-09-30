@@ -33,6 +33,14 @@ impl fmt::Display for REPLCodePtr {
             REPLCodePtr::SubmitQueryAndPrintResults => {
                 write!(f, "REPLCodePtr::SubmitQueryAndPrintResults")
             }
+	    REPLCodePtr::UseModule =>
+		write!(f, "REPLCodePtr::UseModule"),
+	    REPLCodePtr::UseQualifiedModule =>
+		write!(f, "REPLCodePtr::UseQualifiedModule"),
+	    REPLCodePtr::UseModuleFromFile =>
+		write!(f, "REPLCodePtr::UseModuleFromFile"),
+	    REPLCodePtr::UseQualifiedModuleFromFile =>
+		write!(f, "REPLCodePtr::UseQualifiedModuleFromFile")
         }
     }
 }

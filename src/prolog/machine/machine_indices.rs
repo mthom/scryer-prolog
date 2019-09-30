@@ -291,6 +291,10 @@ pub enum DynamicTransactionType {
 pub enum REPLCodePtr {
     CompileBatch,
     SubmitQueryAndPrintResults,
+    UseModule,
+    UseQualifiedModule,
+    UseModuleFromFile,
+    UseQualifiedModuleFromFile
 }
 
 #[derive(Clone, PartialEq)]
@@ -307,8 +311,8 @@ impl CodePtr {
     pub fn local(&self) -> LocalCodePtr {
         match self {
             &CodePtr::BuiltInClause(_, ref local)
-            | &CodePtr::CallN(_, ref local)
-            | &CodePtr::Local(ref local) => local.clone(),
+          | &CodePtr::CallN(_, ref local)
+          | &CodePtr::Local(ref local) => local.clone(),
             &CodePtr::VerifyAttrInterrupt(p) => LocalCodePtr::DirEntry(p),
             &CodePtr::REPL(_, p) | &CodePtr::DynamicTransaction(_, p) => p,
         }
@@ -346,10 +350,10 @@ impl PartialOrd<LocalCodePtr> for LocalCodePtr {
     fn partial_cmp(&self, other: &LocalCodePtr) -> Option<Ordering> {
         match (self, other) {
             (&LocalCodePtr::InSituDirEntry(p1), &LocalCodePtr::InSituDirEntry(ref p2))
-            | (&LocalCodePtr::DirEntry(p1), &LocalCodePtr::DirEntry(ref p2))
-            | (&LocalCodePtr::UserTermExpansion(p1), &LocalCodePtr::UserTermExpansion(ref p2))
-            | (&LocalCodePtr::UserGoalExpansion(p1), &LocalCodePtr::UserGoalExpansion(ref p2))
-            | (&LocalCodePtr::TopLevel(_, p1), &LocalCodePtr::TopLevel(_, ref p2)) => {
+	  | (&LocalCodePtr::DirEntry(p1), &LocalCodePtr::DirEntry(ref p2))
+          | (&LocalCodePtr::UserTermExpansion(p1), &LocalCodePtr::UserTermExpansion(ref p2))
+          | (&LocalCodePtr::UserGoalExpansion(p1), &LocalCodePtr::UserGoalExpansion(ref p2))
+          | (&LocalCodePtr::TopLevel(_, p1), &LocalCodePtr::TopLevel(_, ref p2)) => {
                 p1.partial_cmp(p2)
             }
             (_, &LocalCodePtr::TopLevel(_, _)) => Some(Ordering::Less),
@@ -388,10 +392,10 @@ impl AddAssign<usize> for LocalCodePtr {
     fn add_assign(&mut self, rhs: usize) {
         match self {
             &mut LocalCodePtr::InSituDirEntry(ref mut p)
-            | &mut LocalCodePtr::UserGoalExpansion(ref mut p)
-            | &mut LocalCodePtr::UserTermExpansion(ref mut p)
-            | &mut LocalCodePtr::DirEntry(ref mut p)
-            | &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs,
+          | &mut LocalCodePtr::UserGoalExpansion(ref mut p)
+          | &mut LocalCodePtr::UserTermExpansion(ref mut p)
+          | &mut LocalCodePtr::DirEntry(ref mut p)
+          | &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs,
         }
     }
 }
@@ -402,8 +406,8 @@ impl Add<usize> for CodePtr {
     fn add(self, rhs: usize) -> Self::Output {
         match self {
             p @ CodePtr::REPL(..)
-            | p @ CodePtr::VerifyAttrInterrupt(_)
-            | p @ CodePtr::DynamicTransaction(..) => p,
+          | p @ CodePtr::VerifyAttrInterrupt(_)
+          | p @ CodePtr::DynamicTransaction(..) => p,
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
             CodePtr::CallN(_, local) | CodePtr::BuiltInClause(_, local) => {
                 CodePtr::Local(local + rhs)
@@ -480,7 +484,7 @@ impl IndexStore {
 
     #[inline]
     pub fn remove_clause_subsection(&mut self, module: ClauseName, name: ClauseName, arity: usize) {
-        self.dynamic_code_dir.remove(&(module, name, arity));
+        self.dynamic_code_dir.swap_remove(&(module, name, arity));
     }
 
     #[inline]
@@ -495,7 +499,7 @@ impl IndexStore {
 
     #[inline]
     pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
-        self.modules.remove(&name)
+        self.modules.swap_remove(&name)
     }
 
     #[inline]

@@ -743,12 +743,13 @@ impl RelationWorker {
         terms: Vec<Box<Term>>,
         blocks_cuts: bool,
     ) -> Result<TopLevel, ParserError> {
+	/*
         match setup_declaration(terms.iter().cloned().collect()) {
             Ok(Declaration::Op(..)) => {} // this is now a predicate call in the query context.
             Ok(decl) => return Ok(TopLevel::Declaration(decl)),
             _ => {}
         };
-
+	*/
         Ok(TopLevel::Query(self.setup_query(
             indices,
             terms,

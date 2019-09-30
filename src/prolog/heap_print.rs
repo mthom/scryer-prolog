@@ -652,7 +652,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                     });
 
                                     iter.stack().pop();
-                                    self.cyclic_terms.remove(&addr);
+                                    self.cyclic_terms.swap_remove(&addr);
                                     None
                                 }
                             }

@@ -78,7 +78,7 @@ fn load_module<R: Read>(wam: &mut Machine, name: &str, stream: ParsingStream<R>)
     match compile_work_impl(&mut compiler, wam, indices, results) {
         EvalSession::Error(e) => Err(e),
         _ => Ok(module_name),
-    }    
+    }
 }
 
 pub(super)
@@ -91,7 +91,7 @@ fn load_module_from_file(wam: &mut Machine, filename: &str) -> Result<ClauseName
         Err(SessionError::InvalidFileName(filename))
     })?;
 
-    let file_stem = path.file_stem().unwrap().to_string_lossy();    
+    let file_stem = path.file_stem().unwrap().to_string_lossy();
     load_module(wam, &file_stem, parsing_stream(file_handle))
 }
 
@@ -442,7 +442,7 @@ fn add_module_code(wam: &mut Machine, mut module: Module, code: Code, mut indice
         if name.owning_module() == module.module_decl.name {
             wam.indices
                 .dynamic_code_dir
-                .remove(&(name.owning_module(), name, arity));
+                .swap_remove(&(name.owning_module(), name, arity));
         }
     }
 
@@ -466,6 +466,7 @@ fn add_non_module_code(
     Ok(())
 }
 
+pub(super)
 fn load_library(wam: &mut Machine, name: ClauseName) -> Result<ClauseName, SessionError> {
     match LIBRARIES.borrow().get(name.as_str()) {
         Some(code) => load_module(wam, name.as_str(), parsing_stream(code.as_bytes())),

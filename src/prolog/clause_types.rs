@@ -261,6 +261,16 @@ impl SystemClauseType {
             &SystemClauseType::REPL(REPLCodePtr::SubmitQueryAndPrintResults) => {
                 clause_name!("$submit_query_and_print_results")
             }
+	    &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
+	    &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
+		clause_name!("$use_qualified_module")
+	    }
+	    &SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile) => {
+		clause_name!("$use_module_from_file")
+	    }
+	    &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile) => {
+		clause_name!("$use_qualified_module_from_file")
+	    }
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
@@ -437,6 +447,13 @@ impl SystemClauseType {
             ("$truncate_lh_to", 1) => Some(SystemClauseType::TruncateLiftedHeapTo),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             ("$unify_with_occurs_check", 2) => Some(SystemClauseType::UnifyWithOccursCheck),
+	    ("$use_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),
+	    ("$use_module_from_file", 1) =>
+		Some(SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile)),	    
+	    ("$use_qualified_module", 2) =>
+		Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule)),
+	    ("$use_qualified_module_from_file", 2) =>
+		Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile)),
             ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$write_term", 5) => Some(SystemClauseType::WriteTerm),
             ("$wam_instructions", 3) => Some(SystemClauseType::WAMInstructions),

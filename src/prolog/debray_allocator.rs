@@ -134,7 +134,7 @@ impl DebrayAllocator {
 
                     target.push(Target::move_to_register(r, k));
 
-                    self.contents.remove(&k);
+                    self.contents.swap_remove(&k);
                     self.contents.insert(r.reg_num(), var.clone());
 
                     self.record_register(var, r);

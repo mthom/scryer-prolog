@@ -216,15 +216,24 @@ impl Machine {
         self.machine_st.reset();
     }
 
-    pub fn run_toplevel(&mut self) {
+    pub fn run_top_level(&mut self) {
 	use std::env;
-	use prolog::machine::compile::load_module_from_file;
 
-	for filename in env::args() {
-	    load_module_from_file(self, &filename);
+	let mut filename_atoms = vec![];
+
+	// the first of these is the path to the scryer-prolog executable, so skip
+	// it.
+	for filename in env::args().skip(1) {
+	    let atom = atom!(filename, self.indices.atom_tbl);
+	    filename_atoms.push(Addr::Con(atom));
 	}
-	
+
+	let list_addr =
+	    Addr::HeapCell(self.machine_st.heap.to_list(filename_atoms.into_iter()));
+
+	self.machine_st[temp_v!(1)] = list_addr;
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
+
         self.run_query(&AllocVarDict::new());
     }
 
@@ -247,12 +256,13 @@ impl Machine {
         );
 
         wam.compile_special_forms();
-        wam.compile_top_level();
 
         compile_user_module(&mut wam, parsing_stream(ERROR.as_bytes()));
         compile_user_module(&mut wam, parsing_stream(LISTS.as_bytes()));
         compile_user_module(&mut wam, parsing_stream(NON_ISO.as_bytes()));
+        compile_user_module(&mut wam, parsing_stream(SI.as_bytes()));
 
+        wam.compile_top_level();
         wam.compile_scryerrc();
 
         wam
@@ -356,16 +366,132 @@ impl Machine {
         return;
     }
 
+    fn extract_predicate_indicator_list(&mut self) -> Vec<PredicateKey>
+    {
+	let export_list = self.machine_st[temp_v!(2)].clone();
+	let mut export_list = self.machine_st.store(self.machine_st.deref(export_list));
+	let mut exports = vec![];
+
+	while let Addr::Lis(l) = export_list {
+	    match &self.machine_st.heap[l] {
+		&HeapCellValue::Addr(Addr::Str(s)) => {
+		    let name = match &self.machine_st.heap[s+1] {
+			&HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
+			    name.clone(),
+			_ =>
+			    unreachable!()
+		    };
+
+		    let arity = match &self.machine_st.heap[s+2] {
+			&HeapCellValue::Addr(Addr::Con(Constant::Integer(ref arity))) =>
+			    arity.to_usize().unwrap(),
+			_ =>
+			    unreachable!()
+		    };
+
+		    exports.push((name, arity));
+		}
+		_ => unreachable!()
+	    }
+
+	    export_list = self.machine_st.heap[l+1].as_addr(l+1);
+	}
+
+	exports
+    }
+
+    fn use_module<ToSource>(&mut self, to_src: ToSource)
+	where ToSource: Fn(ClauseName) -> ModuleSource
+    {
+	// the term expander will overwrite the cached query, so save it here.
+	let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
+
+	let module_spec = self.machine_st[temp_v!(1)].clone();
+	let name = match self.machine_st.store(self.machine_st.deref(module_spec)) {
+	    Addr::Con(Constant::Atom(name, _)) => name,
+	    _ => unreachable!()
+	};
+
+	let load_result = match to_src(name) {
+	    ModuleSource::Library(name) =>
+		if !self.indices.modules.contains_key(&name) {
+		    load_library(self, name)
+		} else {
+		    Ok(name)
+		},
+	    ModuleSource::File(name) => load_module_from_file(self, name.as_str())
+	};
+
+	let result = load_result.and_then(|name| {
+	    let module = self.indices.take_module(name).unwrap();
+
+	    // remove previous exports.
+	    self.indices.remove_module(clause_name!("user"), &module);
+	    self.indices.use_module(&mut self.code_repo, self.machine_st.flags, &module)?;
+
+	    Ok(self.indices.insert_module(module))
+	});
+
+	self.code_repo.cached_query = cached_query;
+
+	if let Err(e) = result {
+	    self.throw_session_error(e, (clause_name!("use_module"), 1));
+	}
+    }
+
+    fn use_qualified_module<ToSource>(&mut self, to_src: ToSource)
+	where ToSource: Fn(ClauseName) -> ModuleSource
+    {
+	// the term expander will overwrite the cached query, so save it here.
+	let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
+
+	let module_spec = self.machine_st[temp_v!(1)].clone();
+	let name = match self.machine_st.store(self.machine_st.deref(module_spec)) {
+	    Addr::Con(Constant::Atom(name, _)) => name,
+	    _ => unreachable!()
+	};
+
+	let exports = self.extract_predicate_indicator_list();
+
+	let load_result = match to_src(name) {
+	    ModuleSource::Library(name) =>
+		if !self.indices.modules.contains_key(&name) {
+		    load_library(self, name)
+		} else {
+		    Ok(name)
+		},
+	    ModuleSource::File(name) => load_module_from_file(self, name.as_str())
+	};
+
+	let result = load_result.and_then(|name| {
+	    let module = self.indices.take_module(name).unwrap();
+
+	    // remove previous exports.
+	    self.indices.remove_module(clause_name!("user"), &module);
+	    self.indices.use_qualified_module(&mut self.code_repo,
+					      self.machine_st.flags,
+					      &module,
+					      &exports)?;
+
+	    Ok(self.indices.insert_module(module))
+	});
+
+	self.code_repo.cached_query = cached_query;
+
+	if let Err(e) = result {
+	    self.throw_session_error(e, (clause_name!("use_module"), 1));
+	}
+    }
+
     fn handle_toplevel_command(&mut self, code_ptr: REPLCodePtr, p: LocalCodePtr) {
         match code_ptr {
             REPLCodePtr::CompileBatch => {
                 let src = readline::input_stream();
                 readline::set_prompt(false);
-                
-                match compile_user_module(self, src) {
-                    EvalSession::Error(e) => self.throw_session_error(e, (clause_name!("repl"), 0)),
-                    _ => {}
-                };
+
+                if let EvalSession::Error(e) = compile_user_module(self, src) {
+                    self.throw_session_error(e, (clause_name!("repl"), 0));
+                }
             }
             REPLCodePtr::SubmitQueryAndPrintResults => {
                 let term = self.machine_st[temp_v!(1)].clone();
@@ -416,6 +542,14 @@ impl Machine {
 
                 self.handle_eval_session(result, snapshot);
             }
+	    REPLCodePtr::UseModule =>
+		self.use_module(ModuleSource::Library),
+	    REPLCodePtr::UseModuleFromFile =>
+		self.use_module(ModuleSource::File),
+	    REPLCodePtr::UseQualifiedModule =>
+		self.use_qualified_module(ModuleSource::Library),
+	    REPLCodePtr::UseQualifiedModuleFromFile =>
+		self.use_qualified_module(ModuleSource::File)
         }
 
         self.machine_st.p = CodePtr::Local(p);
@@ -556,7 +690,8 @@ impl Machine {
     }
 
     pub(super) fn run_query(&mut self, alloc_locs: &AllocVarDict) {
-        let end_ptr = top_level_code_ptr!(0, self.code_repo.size_of_cached_query());
+	self.machine_st.cp = LocalCodePtr::TopLevel(0, self.code_repo.size_of_cached_query());
+        let end_ptr = CodePtr::Local(self.machine_st.cp);
 
         while self.machine_st.p < end_ptr {
             if let CodePtr::Local(LocalCodePtr::TopLevel(mut cn, p)) = self.machine_st.p {
@@ -636,10 +771,7 @@ impl Machine {
     where
         Outputter: HCValueOutputter,
     {
-        let mut sorted_vars: Vec<_> = self.machine_st.heap_locs.iter().collect();
-        sorted_vars.sort_by_key(|ref v| v.0);
-
-        for (var, addr) in sorted_vars {
+        for (var, addr) in self.machine_st.heap_locs.iter() {
             let addr = self.machine_st.store(self.machine_st.deref(addr.clone()));
             output = self
                 .machine_st
@@ -654,10 +786,7 @@ impl Machine {
     where
         Outputter: HCValueOutputter,
     {
-        let mut sorted_vars: Vec<(&Rc<Var>, &Addr)> = self.machine_st.heap_locs.iter().collect();
-        sorted_vars.sort_by_key(|ref v| v.0);
-
-        for (var, addr) in sorted_vars {
+        for (var, addr) in self.machine_st.heap_locs.iter() {
             output = self.machine_st.print_var_eq(
                 var.clone(),
                 addr.clone(),
