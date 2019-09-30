@@ -604,34 +604,34 @@ impl Machine {
                     stdout().flush().unwrap();
                 }
 
-                let mut raw_stdout = stdout().into_raw_mode().unwrap();
-
                 if !attr_goals.is_empty() {
                     if bindings.is_empty() {
-                        write!(raw_stdout, "{}", attr_goals).unwrap();
+			print!("{}", attr_goals);
                     } else {
-                        write!(raw_stdout, "{}, {}", bindings, attr_goals).unwrap();
+			print!("{}, {}", bindings, attr_goals);
                     }
                 } else if !bindings.is_empty() {
-                    write!(raw_stdout, "{}", bindings).unwrap();
+		    print!("{}", bindings);
                 }
 
                 if self.machine_st.b > 0 {
-                    raw_stdout.flush().unwrap();
-
-                    let result = match next_keypress() {
+		    let keypress = {
+			let mut raw_stdout = stdout().into_raw_mode().unwrap();
+			raw_stdout.flush().unwrap();
+			next_keypress()
+		    };
+		    
+                    let result = match keypress {
                         ContinueResult::ContinueQuery => {
-                            write!(raw_stdout, " ;\r\n").unwrap();
+			    print!(" ;\r\n");
                             self.continue_query(&alloc_locs)
                         }
                         ContinueResult::Conclude => {
-                            write!(raw_stdout, " ...\r\n").unwrap();
+			    print!(" ...\r\n");
                             self.machine_st.absorb_snapshot(snapshot);
                             return;
                         }
                     };
-
-                    let mut raw_stdout = stdout().into_raw_mode().unwrap();
 
                     match result {
                         EvalSession::QueryFailure => {
@@ -639,9 +639,7 @@ impl Machine {
                                 self.propagate_exception_to_toplevel(snapshot);
                                 return;
                             } else {
-                                write!(raw_stdout, "false.\r\n").unwrap();
-                                raw_stdout.flush().unwrap();
-
+				print!("false.\r\n");
                                 self.machine_st.absorb_snapshot(snapshot);
                                 return;
                             }
@@ -655,7 +653,7 @@ impl Machine {
                     }
                 } else {
                     if bindings.is_empty() && attr_goals.is_empty() {
-                        write!(raw_stdout, "true.\r\n").unwrap();
+                        print!("true.\r\n");
                     } else {
                         let space = if !attr_goals.is_empty() {
                             if requires_space(&attr_goals, ".") {
@@ -671,7 +669,7 @@ impl Machine {
                             }
                         };
 
-                        write!(raw_stdout, "{}.\r\n", space).unwrap();
+			print!("{}.\r\n", space);
                     }
 
                     break;
@@ -693,7 +691,7 @@ impl Machine {
 
         self.machine_st.absorb_snapshot(snapshot);
     }
-
+    
     pub(super) fn run_query(&mut self, alloc_locs: &AllocVarDict) {
 	self.machine_st.cp = LocalCodePtr::TopLevel(0, self.code_repo.size_of_cached_query());
         let end_ptr = CodePtr::Local(self.machine_st.cp);

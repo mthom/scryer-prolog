@@ -3180,6 +3180,7 @@ impl MachineState {
 	let interrupted = INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
 
 	if INTERRUPT.compare_and_swap(interrupted, false, std::sync::atomic::Ordering::Relaxed) {
+	    self.reset();
 	    self.fail = true;
 	    return;
 	}
