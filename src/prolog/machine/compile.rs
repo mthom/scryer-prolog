@@ -420,6 +420,7 @@ pub struct ListingCompiler {
     user_term_dir: TermDir,
     orig_term_expansion_lens: (usize, usize),
     orig_goal_expansion_lens: (usize, usize),
+    initialization_goals: (Vec<QueryTerm>, VecDeque<TopLevel>)
 }
 
 fn add_toplevel_code(wam: &mut Machine, code: Code, mut indices: IndexStore) {
@@ -485,6 +486,7 @@ impl ListingCompiler {
                 .term_dir_entry_len((clause_name!("term_expansion"), 2)),
             orig_goal_expansion_lens: code_repo
                 .term_dir_entry_len((clause_name!("goal_expansion"), 2)),
+	    initialization_goals: (vec![], VecDeque::from(vec![]))
         }
     }
 
@@ -531,7 +533,7 @@ impl ListingCompiler {
                 wam_indices.insert_module(submodule)
             );
 
-            if let &mut Some(ref mut module) = &mut self.module {
+            if let Some(ref mut module) = &mut self.module {
                 module.remove_module(module_name, &submodule);
                 unwind_protect!(
                     module.use_module(code_repo, flags, &submodule),
@@ -588,6 +590,18 @@ impl ListingCompiler {
             .as_ref()
             .map(|module| module.module_decl.name.clone())
             .unwrap_or(ClauseName::BuiltIn("user"))
+    }
+
+    fn generate_init_goal_code(
+	&mut self,
+	flags: MachineFlags
+    ) -> Result<Code, SessionError> {
+	let query_terms = mem::replace(&mut self.initialization_goals.0, vec![]);
+	let queue = mem::replace(&mut self.initialization_goals.1, VecDeque::new());
+
+	compile_query(query_terms, queue, flags)
+	    .map(|(code, _)| code)
+	    .map_err(SessionError::from)
     }
 
     pub(crate) fn generate_code(
@@ -766,6 +780,12 @@ impl ListingCompiler {
                     indices,
                 )
             }
+	    Declaration::ModuleInitialization(query_terms, queue) => {
+		self.initialization_goals.0.extend(query_terms.into_iter());
+		self.initialization_goals.1.extend(queue.into_iter());
+		
+		Ok(())
+	    }   
             Declaration::Dynamic(..) => Ok(()),
         }
     }
@@ -866,7 +886,7 @@ fn compile_work_impl(
     wam: &mut Machine,
     mut indices: IndexStore,
     mut results: GatherResult,
-) -> EvalSession {
+) -> EvalSession {   
     let module_code = try_eval_session!(compiler.generate_code(
         results.worker_results,
         wam,
@@ -916,6 +936,14 @@ fn compile_work_impl(
         ));
     }
 
+    let init_goal_code = try_eval_session!(compiler.generate_init_goal_code(
+	wam.machine_flags()
+    ));
+    
+    if init_goal_code.len() > 0 {
+	wam.run_init_code(init_goal_code);
+    }
+    
     EvalSession::EntrySuccess
 }
 

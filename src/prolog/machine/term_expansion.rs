@@ -369,8 +369,8 @@ impl MachineState {
         self[temp_v!(2)] = Addr::HeapCell(h);
 
         let code = vec![call_clause!(ClauseType::Hook(hook), 2, 0, true)];
-
         wam.code_repo.cached_query = code;
+	
         self.query_stepper(
             &mut wam.indices,
             &mut wam.policies,

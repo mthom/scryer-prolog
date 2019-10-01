@@ -127,7 +127,7 @@ impl MachineError {
         match err {
             SessionError::ParserError(err) => Self::syntax_error(h, err),
             SessionError::CannotOverwriteBuiltIn(pred_str)
-            | SessionError::CannotOverwriteImport(pred_str) => {
+          | SessionError::CannotOverwriteImport(pred_str) => {
                 Self::permission_error(PermissionError::Modify, "private_procedure", pred_str)
             }
             SessionError::InvalidFileName(filename) => {

@@ -221,6 +221,16 @@ impl Machine {
         self.machine_st.reset();
     }
 
+    pub fn run_init_code(&mut self, code: Code) {
+	let old_machine_st = self.machine_st.sink_to_snapshot();
+	self.machine_st.reset();
+	
+	self.code_repo.cached_query = code;
+	self.run_query(&AllocVarDict::new());
+
+	self.machine_st.absorb_snapshot(old_machine_st);
+    }
+
     pub fn run_top_level(&mut self) {
 	use std::env;
 
@@ -433,10 +443,10 @@ impl Machine {
 	    // remove previous exports.
 	    self.indices.remove_module(clause_name!("user"), &module);
 	    self.indices.use_module(&mut self.code_repo, self.machine_st.flags, &module)?;
-
+	    
 	    Ok(self.indices.insert_module(module))
-	});
-
+	});	
+	
 	self.code_repo.cached_query = cached_query;
 
 	if let Err(e) = result {

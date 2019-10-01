@@ -281,7 +281,7 @@ impl SubModuleUser for Module {
         self.user_goal_expansions
             .1
             .extend(submodule.goal_expansions.1.iter().cloned());
-
+	
         Ok(())
     }
 }

@@ -265,34 +265,6 @@ fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, 
     }
 }
 
-fn setup_declaration(mut terms: Vec<Box<Term>>) -> Result<Declaration, ParserError> {
-    let term = *terms.pop().unwrap();
-
-    match term {
-        Term::Clause(_, name, mut terms, _) => {
-            if name.as_str() == "op" && terms.len() == 3 {
-                Ok(Declaration::Op(setup_op_decl(terms)?))
-            } else if name.as_str() == "module" && terms.len() == 2 {
-                Ok(Declaration::Module(setup_module_decl(terms)?))
-            } else if name.as_str() == "use_module" && terms.len() == 1 {
-                Ok(Declaration::UseModule(setup_use_module_decl(terms)?))
-            } else if name.as_str() == "use_module" && terms.len() == 2 {
-                let (name, exports) = setup_qualified_import(terms)?;
-                Ok(Declaration::UseQualifiedModule(name, exports))
-            } else if name.as_str() == "non_counted_backtracking" && terms.len() == 1 {
-                let (name, arity) = setup_predicate_indicator(*terms.pop().unwrap())?;
-                Ok(Declaration::NonCountedBacktracking(name, arity))
-            } else if name.as_str() == "dynamic" && terms.len() == 1 {
-                let (name, arity) = setup_predicate_indicator(*terms.pop().unwrap())?;
-                Ok(Declaration::Dynamic(name, arity))
-            } else {
-                Err(ParserError::InconsistentEntry)
-            }
-        }
-        _ => return Err(ParserError::InconsistentEntry),
-    }
-}
-
 fn is_consistent(tl: &TopLevel, clauses: &Vec<PredicateClause>) -> bool {
     match clauses.first() {
         Some(ref cl) => tl.name() == cl.name() && tl.arity() == cl.arity(),
@@ -410,6 +382,48 @@ fn flatten_hook(mut term: Term) -> Term {
     }
 
     term
+}
+
+fn setup_declaration(
+    indices: &mut CompositeIndices,
+    flags: MachineFlags,
+    mut terms: Vec<Box<Term>>
+) -> Result<Declaration, ParserError> {
+    let term = *terms.pop().unwrap();
+
+    match term {
+        Term::Clause(_, name, mut terms, _) =>
+	    match (name.as_str(), terms.len()) {
+		("op", 3) =>
+		    Ok(Declaration::Op(setup_op_decl(terms)?)),
+		("module", 2) =>
+		    Ok(Declaration::Module(setup_module_decl(terms)?)),
+		("use_module", 1) =>
+		    Ok(Declaration::UseModule(setup_use_module_decl(terms)?)),
+		("use_module", 2) => {
+		    let (name, exports) = setup_qualified_import(terms)?;
+		    Ok(Declaration::UseQualifiedModule(name, exports))
+		}
+		("non_counted_backtracking", 1) => {
+		    let (name, arity) = setup_predicate_indicator(*terms.pop().unwrap())?;
+		    Ok(Declaration::NonCountedBacktracking(name, arity))
+		}
+		("dynamic", 1) => {
+		    let (name, arity) = setup_predicate_indicator(*terms.pop().unwrap())?;
+		    Ok(Declaration::Dynamic(name, arity))
+		}
+		("initialization", 1) => {
+		    let mut rel_worker = RelationWorker::new(flags);
+		    let query_terms = rel_worker.setup_query(indices, terms, false)?;
+		    let queue = rel_worker.parse_queue(indices)?;
+		    
+		    Ok(Declaration::ModuleInitialization(query_terms, queue))
+		}
+		_ =>
+		    Err(ParserError::InconsistentEntry)
+	    },
+        _ => return Err(ParserError::InconsistentEntry),
+    }
 }
 
 pub enum TopLevelPacket {
@@ -743,13 +757,6 @@ impl RelationWorker {
         terms: Vec<Box<Term>>,
         blocks_cuts: bool,
     ) -> Result<TopLevel, ParserError> {
-	/*
-        match setup_declaration(terms.iter().cloned().collect()) {
-            Ok(Declaration::Op(..)) => {} // this is now a predicate call in the query context.
-            Ok(decl) => return Ok(TopLevel::Declaration(decl)),
-            _ => {}
-        };
-	*/
         Ok(TopLevel::Query(self.setup_query(
             indices,
             terms,
@@ -782,7 +789,7 @@ impl RelationWorker {
                         true,
                     )?))
                 } else if name.as_str() == ":-" && terms.len() == 1 {
-                    Ok(TopLevel::Declaration(setup_declaration(terms)?))
+                    Ok(TopLevel::Declaration(setup_declaration(indices, self.flags, terms)?))
                 } else {
                     let term = Term::Clause(r, name, terms, fixity);
                     Ok(TopLevel::Fact(try!(self.setup_fact(term, true))))
