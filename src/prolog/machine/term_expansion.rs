@@ -307,7 +307,6 @@ impl<'a, R: Read> TermStream<'a, R> {
         while let Some(term) = terms.pop_front() {
             match machine_st.try_expand_term(self.wam, &term, CompileTimeHook::GoalExpansion) {
                 Some(term_string) => {
-                    println!("trying to goal expand {}", term_string);
                     let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;
 
                     match term {

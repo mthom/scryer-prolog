@@ -72,3 +72,19 @@ use_module(Module, QualifiedExports) :-
        )
     ;  throw(error(instantiation_error, use_module/2))
     ).
+
+% expand goals in initialization directives.
+user:term_expansion(Term0, (:- initialization(ExpandedGoals))) :-
+    nonvar(Term0),
+    Term0 = (:- initialization(Goals)),
+    expand_goals(Goals, ExpandedGoals).
+
+expand_goals(Goals, ExpandedGoals) :-
+    nonvar(Goals),
+    var(ExpandedGoals),
+    (  Goals = (Goal0, Goals0) ->
+       (  expand_goal(Goal0, Goal1) -> expand_goals(Goals0, Goals1), ExpandedGoals = (Goal1, Goals1)
+       ;  expand_goals(Goals0, Goals1), ExpandedGoals = (Goal0, Goals1)
+       )
+    ;  expand_goal(Goals, ExpandedGoals), !
+    ).
