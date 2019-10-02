@@ -1,4 +1,4 @@
-/* 
+/*
  *  inserting the modules should not result in the insertion of
  *  code. this is because they're already loaded by this point -- see
  *  Machine::new.
@@ -77,15 +77,43 @@ use_module(Module, QualifiedExports) :-
 user:term_expansion(Term0, (:- initialization(ExpandedGoals))) :-
     nonvar(Term0),
     Term0 = (:- initialization(Goals)),
-    expand_goals(Goals, ExpandedGoals).
+    expand_goals(Goals, ExpandedGoals),
+    Goals \== ExpandedGoals.
 
-%%TODO: what if Goals expands to.. a list of goals?? We need to handle that.
 expand_goals(Goals, ExpandedGoals) :-
     nonvar(Goals),
     var(ExpandedGoals),
     (  Goals = (Goal0, Goals0) ->
-       (  expand_goal(Goal0, Goal1) -> expand_goals(Goals0, Goals1), ExpandedGoals = (Goal1, Goals1)
-       ;  expand_goals(Goals0, Goals1), ExpandedGoals = (Goal0, Goals1)
+       (  expand_goal(Goal0, Goal1) ->
+	  Expanded = true,
+	  expand_goals(Goals0, Goals1),
+	  thread_goals(Goal1, ExpandedGoals, Goals1)
+       ;  expand_goals(Goals0, Goals1),
+	  ExpandedGoals = (Goal0, Goals1)
        )
-    ;  expand_goal(Goals, ExpandedGoals), !
+    ;  expand_goal(Goals, ExpandedGoals0) ->     
+       thread_goals(ExpandedGoals0, ExpandedGoals)
+    ;  Goals = ExpandedGoals
+    ).
+
+thread_goals(Goals0, Goals1, Hole) :-
+    nonvar(Goals0),
+    (  Goals0 = [G | Gs] ->
+       (  Gs == [] ->
+	  Goals1 = (G, Hole)
+       ;  Goals1 = (G, Goals2),
+	  thread_goals(Gs, Goals2, Hole)
+       )
+    ;  Goals1 = (Goals0, Hole)
+    ).
+
+thread_goals(Goals0, Goals1) :-
+    nonvar(Goals0),
+    (  Goals0 = [G | Gs] ->
+       (  Gs = [] ->
+	  Goals1 = G
+       ;  Goals1 = (G, Goals2),
+	  thread_goals(Gs, Goals2)
+       )
+    ;  Goals1 = Goals0
     ).
