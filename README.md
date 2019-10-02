@@ -101,32 +101,13 @@ $> cargo install scryer-prolog
 ```
 
 cargo will download and install the libraries Scryer Prolog uses
-automatically, save for the C library readline. The
-`readline_rs_compat` crate on which Scryer depends (and which is built
-and maintained by myself) will search the following library paths for
-readline:
-
-```
-/lib
-/usr/lib
-/usr/local/lib
-/lib/x86_64-linux-gnu
-/opt/local/lib
-```
-
-If you'd like to disable readline (and the need for linking to it),
-install with the line
-
-```
-cargo install scryer-prolog --no-default-features
-```
-
-You can find the `scryer-prolog` executable in `~/.cargo/bin`.
+automatically. You can find the `scryer-prolog` executable in
+`~/.cargo/bin`.
 
 Note on compatibility: Scryer Prolog should work on Linux, Mac OS X,
 and BSD variants on which Rust runs. Windows support hinges on
-readline and Termion being fully functional in that environment, which
-to my knowledge is not currently the case.
+rustyline and Termion being functional in that environment, which to
+my knowledge is not currently the case.
 
 ## Built-in predicates
 
@@ -316,7 +297,7 @@ To quit scryer-prolog, type
 
 ### Dynamic operators
 
-Scryper supports dynamic operators. Using the built-in
+Scryer supports dynamic operators. Using the built-in
 arithmetic operators with the usual precedences,
 
 ```

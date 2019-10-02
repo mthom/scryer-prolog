@@ -79,6 +79,7 @@ user:term_expansion(Term0, (:- initialization(ExpandedGoals))) :-
     Term0 = (:- initialization(Goals)),
     expand_goals(Goals, ExpandedGoals).
 
+%%TODO: what if Goals expands to.. a list of goals?? We need to handle that.
 expand_goals(Goals, ExpandedGoals) :-
     nonvar(Goals),
     var(ExpandedGoals),
