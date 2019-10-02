@@ -1252,7 +1252,7 @@ impl MachineState {
             &SystemClauseType::GetAttributedVariableList => {
                 let attr_var = self.store(self.deref(self[temp_v!(1)].clone()));
                 let attr_var_list = match attr_var {
-                    Addr::AttrVar(h) => h + 1,
+                    Addr::AttrVar(h) => h + 1,                    
                     attr_var @ Addr::HeapCell(_) | attr_var @ Addr::StackCell(..) => {
                         // create an AttrVar in the heap.
                         let h = self.heap.h;

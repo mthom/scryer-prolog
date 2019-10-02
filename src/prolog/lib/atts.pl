@@ -24,7 +24,7 @@
 '$get_from_list'([L|Ls], V, Attr) :-
     nonvar(L),
     ( L \= Attr -> nonvar(Ls), '$get_from_list'(Ls, V, Attr)
-    ; L = Attr, '$enqueue_attr_var'(V)
+    ; L = Attr -> '$enqueue_attr_var'(V)
     ; '$get_from_list'(Ls, V, Attr)
     ).
 
