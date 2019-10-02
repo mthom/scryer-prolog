@@ -9,6 +9,17 @@
 
 :- op(1199, fx, attribute).
 
+% represent the list of attributes belonging to a variable,
+% of a particular module, as a list of terms of the form
+% Module:put_atts(V, ListOfAtts).
+'$default_attr_list'(Module, V, ListOfAtts) :-
+    Module:get_atts(V, Attributes),
+    '$default_attr_list'(Attributes, Module, V, ListOfAtts).
+
+'$default_attr_list'([PG | PGs], Module, AttrVar, [Module:put_atts(AttrVar, PG) | Gs]) :-
+    '$default_attr_list'(PGs, Module, AttrVar, Gs).
+'$default_attr_list'([], _, _, []).
+
 '$absent_attr'(V, Attr) :-
     '$get_attr_list'(V, Ls),
     '$absent_from_list'(Ls, Attr).

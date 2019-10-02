@@ -187,7 +187,7 @@ impl Machine {
                 self.machine_st.attr_var_init.project_attrs_loc = self.code_repo.code.len();
                 self.code_repo.code.extend(code.into_iter());
             }
-            Err(_) => panic!("Machine::compile_special_forms() failed at PROJECT_ATTRS"),
+            Err(e) => panic!("Machine::compile_special_forms() failed at PROJECT_ATTRS: {}", e),
         }
     }
 

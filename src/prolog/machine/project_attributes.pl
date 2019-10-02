@@ -40,7 +40,7 @@ call_goals([], _).
 call_goals([AttrVar|AttrVars], Module) :-
     (   catch(Module:attribute_goals(AttrVar, Goal),
 	      error(evaluation_error((Module:attribute_goals)/2), attribute_goals/2),
-	      true),
+	      atts:'$default_attr_list'(Module, AttrVar, Goal)),
 	nonvar(Goal) -> enqueue_goal(Goal)
     ;   true
     ),
