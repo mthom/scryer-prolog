@@ -56,8 +56,8 @@ fn fix_filename(atom_tbl: TabledData<Atom>, filename: &str) -> Result<PathBuf, S
     Ok(path)
 }
 
-fn load_module<R: Read>(wam: &mut Machine, name: &str, stream: ParsingStream<R>)
-                        -> Result<ClauseName, SessionError>
+fn load_module<R: Read>(wam: &mut Machine, stream: ParsingStream<R>)
+                        -> Result<Option<ClauseName>, SessionError>
 {
     // follow the operation of compile_user_module, but before
     // compiling, check that a module is declared in the file. if not,
@@ -69,10 +69,9 @@ fn load_module<R: Read>(wam: &mut Machine, name: &str, stream: ParsingStream<R>)
     let results = compiler.gather_items(wam, stream, &mut indices)?;
 
     let module_name = if let Some(ref module) = &compiler.module {
-        module.module_decl.name.clone()
+        Some(module.module_decl.name.clone())
     } else {
-        let module_name = clause_name!(name.to_string(), wam.indices.atom_tbl);
-        return Err(SessionError::NoModuleDeclaration(module_name));
+        None
     };
 
     match compile_work_impl(&mut compiler, wam, indices, results) {
@@ -82,7 +81,8 @@ fn load_module<R: Read>(wam: &mut Machine, name: &str, stream: ParsingStream<R>)
 }
 
 pub(super)
-fn load_module_from_file(wam: &mut Machine, filename: &str) -> Result<ClauseName, SessionError>
+fn load_module_from_file(wam: &mut Machine, filename: &str)
+                         -> Result<Option<ClauseName>, SessionError>
 {
     let path = fix_filename(wam.indices.atom_tbl.clone(), filename)?;
 
@@ -91,8 +91,7 @@ fn load_module_from_file(wam: &mut Machine, filename: &str) -> Result<ClauseName
         Err(SessionError::InvalidFileName(filename))
     })?;
 
-    let file_stem = path.file_stem().unwrap().to_string_lossy();
-    load_module(wam, &file_stem, parsing_stream(file_handle))
+    load_module(wam, parsing_stream(file_handle))
 }
 
 pub type PredicateCompileQueue = (Predicate, VecDeque<TopLevel>);
@@ -468,9 +467,13 @@ fn add_non_module_code(
 }
 
 pub(super)
-fn load_library(wam: &mut Machine, name: ClauseName) -> Result<ClauseName, SessionError> {
+fn load_library(wam: &mut Machine, name: ClauseName) -> Result<ClauseName, SessionError>
+{
     match LIBRARIES.borrow().get(name.as_str()) {
-        Some(code) => load_module(wam, name.as_str(), parsing_stream(code.as_bytes())),
+        Some(code) => {
+            let module_name = load_module(wam, parsing_stream(code.as_bytes()))?;
+            module_name.ok_or(SessionError::NoModuleDeclaration(name))
+        }
         None => Err(SessionError::ModuleNotFound)
     }
 }
@@ -767,25 +770,35 @@ impl ListingCompiler {
             }
             Declaration::UseModule(ModuleSource::File(filename)) => {
                 let name = load_module_from_file(wam, filename.as_str())?;
-                self.use_module(name, &mut wam.code_repo, flags, &mut wam.indices, indices)
+
+                if let Some(name) = name {
+                    self.use_module(name, &mut wam.code_repo, flags, &mut wam.indices, indices)
+                } else {
+                    Ok(())
+                }
             }
             Declaration::UseQualifiedModule(ModuleSource::File(filename), exports) => {
                 let name = load_module_from_file(wam, filename.as_str())?;
-                self.use_qualified_module(
-                    name,
-                    &mut wam.code_repo,
-                    flags,
-                    &exports,
-                    &mut wam.indices,
-                    indices,
-                )
+
+                if let Some(name) = name {
+                    self.use_qualified_module(
+                        name,
+                        &mut wam.code_repo,
+                        flags,
+                        &exports,
+                        &mut wam.indices,
+                        indices,
+                    )
+                } else {
+                    Ok(())
+                }
             }
 	    Declaration::ModuleInitialization(query_terms, queue) => {
 		self.initialization_goals.0.extend(query_terms.into_iter());
 		self.initialization_goals.1.extend(queue.into_iter());
-		
+
 		Ok(())
-	    }   
+	    }
             Declaration::Dynamic(..) => Ok(()),
         }
     }
@@ -886,7 +899,7 @@ fn compile_work_impl(
     wam: &mut Machine,
     mut indices: IndexStore,
     mut results: GatherResult,
-) -> EvalSession {   
+) -> EvalSession {
     let module_code = try_eval_session!(compiler.generate_code(
         results.worker_results,
         wam,
@@ -939,11 +952,11 @@ fn compile_work_impl(
     let init_goal_code = try_eval_session!(compiler.generate_init_goal_code(
 	wam.machine_flags()
     ));
-    
+
     if init_goal_code.len() > 0 {
 	wam.run_init_code(init_goal_code);
     }
-    
+
     EvalSession::EntrySuccess
 }
 

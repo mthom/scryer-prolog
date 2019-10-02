@@ -33,7 +33,7 @@
 
 '$add_to_list'(Ls, V, Attr) :-
     ( var(Ls) -> Ls = [Attr | _], '$enqueue_attr_var'(V)
-    ; Ls = [_ | Ls0] -> '$add_to_list'(Ls0, V, Attr)
+    ; Ls = [_ | Ls0], '$add_to_list'(Ls0, V, Attr)
     ).
 
 '$del_attr'(Ls0, _, _) :-
@@ -89,7 +89,7 @@ get_attrs_var_check -->
 put_attrs(Name/Arity) -->
     put_attr(Name, Arity),
     { numbervars([Var, Attr], 0, _) },
-    [(put_atts(Var, Attr) :- lists:maplist(put_atts(Var), Attr))].
+    [(put_atts(Var, Attr) :- lists:maplist(put_atts(Var), Attr), !)].
 put_attrs((Name/Arity, Atts)) -->
     { nonvar(Atts) },
     put_attr(Name, Arity),

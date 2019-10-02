@@ -430,22 +430,28 @@ impl Machine {
 	let load_result = match to_src(name) {
 	    ModuleSource::Library(name) =>
 		if !self.indices.modules.contains_key(&name) {
-		    load_library(self, name)
+		    load_library(self, name).map(Some)
 		} else {
-		    Ok(name)
+		    Ok(Some(name))
 		},
-	    ModuleSource::File(name) => load_module_from_file(self, name.as_str())
+	    ModuleSource::File(name) =>
+                load_module_from_file(self, name.as_str())
 	};
 
-	let result = load_result.and_then(|name| {
-	    let module = self.indices.take_module(name).unwrap();
+	let result = load_result.and_then(|name|
+            if let Some(name) = name {
+	        let module = self.indices.take_module(name).unwrap();
 
-	    // remove previous exports.
-	    self.indices.remove_module(clause_name!("user"), &module);
-	    self.indices.use_module(&mut self.code_repo, self.machine_st.flags, &module)?;
-	    
-	    Ok(self.indices.insert_module(module))
-	});	
+	        // remove previous exports.
+	        self.indices.remove_module(clause_name!("user"), &module);
+	        self.indices.use_module(&mut self.code_repo, self.machine_st.flags,
+                                        &module)?;
+	        
+	        Ok(self.indices.insert_module(module))
+	    } else {
+                Ok(())
+            }
+        );	
 	
 	self.code_repo.cached_query = cached_query;
 
@@ -471,25 +477,30 @@ impl Machine {
 	let load_result = match to_src(name) {
 	    ModuleSource::Library(name) =>
 		if !self.indices.modules.contains_key(&name) {
-		    load_library(self, name)
+		    load_library(self, name).map(Some)
 		} else {
-		    Ok(name)
+		    Ok(Some(name))
 		},
-	    ModuleSource::File(name) => load_module_from_file(self, name.as_str())
+	    ModuleSource::File(name) =>
+                load_module_from_file(self, name.as_str())
 	};
 
-	let result = load_result.and_then(|name| {
-	    let module = self.indices.take_module(name).unwrap();
+	let result = load_result.and_then(|name|
+            if let Some(name) = name {
+	        let module = self.indices.take_module(name).unwrap();
 
-	    // remove previous exports.
-	    self.indices.remove_module(clause_name!("user"), &module);
-	    self.indices.use_qualified_module(&mut self.code_repo,
-					      self.machine_st.flags,
-					      &module,
-					      &exports)?;
-
-	    Ok(self.indices.insert_module(module))
-	});
+	        // remove previous exports.
+	        self.indices.remove_module(clause_name!("user"), &module);
+	        self.indices.use_qualified_module(&mut self.code_repo,
+					          self.machine_st.flags,
+					          &module,
+					          &exports)?;
+                
+	        Ok(self.indices.insert_module(module))
+	    } else {
+                Ok(())
+            }
+        );
 
 	self.code_repo.cached_query = cached_query;
 
