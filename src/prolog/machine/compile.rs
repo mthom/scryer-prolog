@@ -407,8 +407,11 @@ impl ClauseCodeGenerator {
         for ((name, arity), _) in dynamic_code_dir {
             wam.indices.dynamic_code_dir.insert((name.owning_module(), name.clone(), arity),
                                                 DynamicPredicateInfo::default());
-            wam.indices.code_dir.entry((name, arity))
-               .or_insert(CodeIndex::dynamic_undefined(self.module_name.clone()));
+
+            if self.module_name.as_str() == "user" {
+                wam.indices.code_dir.entry((name, arity))
+                   .or_insert(CodeIndex::dynamic_undefined(self.module_name.clone()));
+            }
         }
 
         for ((name, arity), p) in self.pi_to_loc {
