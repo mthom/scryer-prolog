@@ -10,7 +10,8 @@ use std::collections::VecDeque;
 
 // Module's and related types are defined in forms.
 impl Module {
-    pub fn new(module_decl: ModuleDecl, atom_tbl: TabledData<Atom>) -> Self {
+    pub fn new(module_decl: ModuleDecl, atom_tbl: TabledData<Atom>) -> Self
+    {
         Module {
             module_decl,
             atom_tbl,

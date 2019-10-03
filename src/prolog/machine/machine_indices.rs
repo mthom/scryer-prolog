@@ -206,6 +206,7 @@ impl HeapCellValue {
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexPtr {
+    DynamicUndefined, // a predicate, declared as dynamic, whose location in code is as yet undefined.
     Undefined,
     Index(usize),
 }
@@ -218,13 +219,20 @@ impl CodeIndex {
     pub fn is_undefined(&self) -> bool {
         let index_ptr = &self.0.borrow().0;
 
-        if let &IndexPtr::Undefined = index_ptr {
-            true
-        } else {
-            false
+        match index_ptr {
+            &IndexPtr::Undefined | &IndexPtr::DynamicUndefined => true,
+            _ => false
         }
     }
 
+    #[inline]
+    pub fn dynamic_undefined(module_name: ClauseName) -> Self {
+        CodeIndex(Rc::new(RefCell::new((
+            IndexPtr::DynamicUndefined,
+            module_name
+        ))))
+    }
+    
     #[inline]
     pub fn module_name(&self) -> ClauseName {
         self.0.borrow().1.clone()

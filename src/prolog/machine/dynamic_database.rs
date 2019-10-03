@@ -78,7 +78,7 @@ impl Machine {
         let (name, arity) = self.get_predicate_key(name, arity);
 
         if let Some(idx) = self.indices.code_dir.get(&(name.clone(), arity)) {
-            set_code_index!(idx, IndexPtr::Undefined, clause_name!("user"));
+            set_code_index!(idx, IndexPtr::DynamicUndefined, clause_name!("user"));
         }
 
         self.indices.remove_code_index((name.clone(), arity));
@@ -106,7 +106,7 @@ impl Machine {
 
         if let Some(idx) = self.indices.code_dir.get(&(name.clone(), arity)) {
             if idx.module_name() == module_name {
-                set_code_index!(idx, IndexPtr::Undefined, clause_name!("user"));
+                set_code_index!(idx, IndexPtr::DynamicUndefined, clause_name!("user"));
             }
         }
 
@@ -208,11 +208,6 @@ impl Machine {
                     let mut addrs = VecDeque::from(addrs);
                     addrs.remove(index);
 
-                    if addrs.is_empty() {
-                        self.abolish_dynamic_clause_in_module(temp_v!(1), temp_v!(2), temp_v!(5));
-                        return;
-                    }
-
                     self.print_new_dynamic_clause(addrs, name.clone(), arity)
                 }
                 Err(err) => return self.machine_st.throw_exception(err),
@@ -241,11 +236,6 @@ impl Machine {
             Ok(addrs) => {
                 let mut addrs = VecDeque::from(addrs);
                 addrs.remove(index);
-
-                if addrs.is_empty() {
-                    self.abolish_dynamic_clause(temp_v!(1), temp_v!(2));
-                    return;
-                }
 
                 self.print_new_dynamic_clause(addrs, name.clone(), arity)
             }

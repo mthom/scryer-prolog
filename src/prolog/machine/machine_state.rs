@@ -325,14 +325,21 @@ impl MachineState {
         let (name, arity) = key;
 
         if let Some(ref idx) = indices.get_code_index((name.clone(), arity), module_name.clone()) {
-            if let IndexPtr::Index(compiled_tl_index) = idx.0.borrow().0 {
-                if last_call {
-                    self.execute_at_index(arity, compiled_tl_index);
-                } else {
-                    self.call_at_index(arity, compiled_tl_index);
-                }
+            match idx.0.borrow().0 {
+                IndexPtr::Index(compiled_tl_index) => {
+                    if last_call {
+                        self.execute_at_index(arity, compiled_tl_index);
+                    } else {
+                        self.call_at_index(arity, compiled_tl_index);
+                    }
 
-                return Ok(());
+                    return Ok(());
+                }
+                IndexPtr::DynamicUndefined => {
+                    self.fail = true;
+                    return Ok(());
+                }
+                _ => {}
             }
         }
 
@@ -586,7 +593,10 @@ pub(crate) trait CallPolicy: Any {
         indices: &IndexStore,
     ) -> CallResult {
         match idx.0.borrow().0 {
-            IndexPtr::Undefined => return try_in_situ(machine_st, name, arity, indices, false),
+            IndexPtr::DynamicUndefined =>
+                machine_st.fail = true,
+            IndexPtr::Undefined =>
+                return try_in_situ(machine_st, name, arity, indices, false),
             IndexPtr::Index(compiled_tl_index) => {
                 machine_st.call_at_index(arity, compiled_tl_index)
             }
@@ -604,7 +614,10 @@ pub(crate) trait CallPolicy: Any {
         indices: &IndexStore,
     ) -> CallResult {
         match idx.0.borrow().0 {
-            IndexPtr::Undefined => return try_in_situ(machine_st, name, arity, indices, true),
+            IndexPtr::DynamicUndefined =>
+                machine_st.fail = true,
+            IndexPtr::Undefined =>
+                return try_in_situ(machine_st, name, arity, indices, true),
             IndexPtr::Index(compiled_tl_index) => {
                 machine_st.execute_at_index(arity, compiled_tl_index)
             }
