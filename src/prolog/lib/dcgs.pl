@@ -20,7 +20,7 @@ phrase(G, Ls0, Ls2) :-
     nonvar(G), G = (G1, G2), !,
     phrase(G1, Ls0, Ls1), phrase(G2, Ls1, Ls2).
 phrase(G, Ls0, Ls1) :-
-    nonvar(G), G == !, !, Ls0 = [], Ls1 = [].
+    nonvar(G), G == !, !, Ls0 = Ls1.
 phrase(G, Ls0, Ls1) :-
     call(G, Ls0, Ls1).
 

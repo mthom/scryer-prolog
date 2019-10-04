@@ -174,7 +174,11 @@ static TOPLEVEL: &str = include_str!("../toplevel.pl");
 
 impl Machine {
     fn compile_special_forms(&mut self) {
-        match compile_special_form(self, parsing_stream(VERIFY_ATTRS.as_bytes())) {
+        let verify_attrs_src = clause_name!("verify_attrs.pl");
+        let project_attrs_src = clause_name!("project_attributes.pl");
+
+        match compile_special_form(self, parsing_stream(VERIFY_ATTRS.as_bytes()), verify_attrs_src)
+        {
             Ok(code) => {
                 self.machine_st.attr_var_init.verify_attrs_loc = self.code_repo.code.len();
                 self.code_repo.code.extend(code.into_iter());
@@ -182,7 +186,8 @@ impl Machine {
             Err(_) => panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS"),
         }
 
-        match compile_special_form(self, parsing_stream(PROJECT_ATTRS.as_bytes())) {
+        match compile_special_form(self, parsing_stream(PROJECT_ATTRS.as_bytes()), project_attrs_src)
+        {
             Ok(code) => {
                 self.machine_st.attr_var_init.project_attrs_loc = self.code_repo.code.len();
                 self.code_repo.code.extend(code.into_iter());
@@ -193,7 +198,8 @@ impl Machine {
 
     fn compile_top_level(&mut self) {
         self.toplevel_idx = self.code_repo.code.len();
-        compile_user_module(self, parsing_stream(TOPLEVEL.as_bytes()), true);
+        compile_user_module(self, parsing_stream(TOPLEVEL.as_bytes()),
+                            true, clause_name!("toplevel.pl"));
     }
 
     fn compile_scryerrc(&mut self) {
@@ -210,7 +216,8 @@ impl Machine {
                 Err(_) => return,
             };
 
-            compile_user_module(self, file_src, true);
+            compile_user_module(self, file_src, true,
+                                clause_name!("$HOME/.scryerrc"));
         }
     }
 
@@ -224,7 +231,7 @@ impl Machine {
     pub fn run_init_code(&mut self, code: Code) {
 	let old_machine_st = self.machine_st.sink_to_snapshot();
 	self.machine_st.reset();
-	
+
 	self.code_repo.cached_query = code;
 	self.run_query(&AllocVarDict::new());
 
@@ -268,16 +275,21 @@ impl Machine {
             &mut wam,
             parsing_stream(BUILTINS.as_bytes()),
             default_index_store!(atom_tbl.clone()),
-            true
+            true,
+            clause_name!("builtins.pl"),
         );
 
         wam.compile_special_forms();
 
-        compile_user_module(&mut wam, parsing_stream(ERROR.as_bytes()), true);
-        compile_user_module(&mut wam, parsing_stream(LISTS.as_bytes()), true);
-        compile_user_module(&mut wam, parsing_stream(NON_ISO.as_bytes()), true);
-        compile_user_module(&mut wam, parsing_stream(SI.as_bytes()), true);
-        
+        compile_user_module(&mut wam, parsing_stream(ERROR.as_bytes()), true,
+                            clause_name!("error"));
+        compile_user_module(&mut wam, parsing_stream(LISTS.as_bytes()), true,
+                            clause_name!("lists"));
+        compile_user_module(&mut wam, parsing_stream(NON_ISO.as_bytes()), true,
+                            clause_name!("non_iso"));
+        compile_user_module(&mut wam, parsing_stream(SI.as_bytes()), true,
+                            clause_name!("si"));
+
         wam.compile_top_level();
         wam.compile_scryerrc();
 
@@ -371,9 +383,9 @@ impl Machine {
         }
     }
 
-    pub fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
+    fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
         let h = self.machine_st.heap.h;
-
+        
         let err = MachineError::session_error(h, err);
         let stub = MachineError::functor_stub(key.0, key.1);
         let err = self.machine_st.error_form(err, stub);
@@ -447,13 +459,13 @@ impl Machine {
 	        self.indices.remove_module(clause_name!("user"), &module);
 	        self.indices.use_module(&mut self.code_repo, self.machine_st.flags,
                                         &module)?;
-	        
+
 	        Ok(self.indices.insert_module(module))
 	    } else {
                 Ok(())
             }
-        );	
-	
+        );
+
 	self.code_repo.cached_query = cached_query;
 
 	if let Err(e) = result {
@@ -496,7 +508,7 @@ impl Machine {
 					          self.machine_st.flags,
 					          &module,
 					          &exports)?;
-                
+
 	        Ok(self.indices.insert_module(module))
 	    } else {
                 Ok(())
@@ -513,10 +525,12 @@ impl Machine {
     fn handle_toplevel_command(&mut self, code_ptr: REPLCodePtr, p: LocalCodePtr) {
         match code_ptr {
             REPLCodePtr::CompileBatch => {
+                let user_src = clause_name!("user");
+
                 let src = readline::input_stream();
                 readline::set_prompt(false);
 
-                if let EvalSession::Error(e) = compile_user_module(self, src, false) {
+                if let EvalSession::Error(e) = compile_user_module(self, src, false, user_src) {
                     self.throw_session_error(e, (clause_name!("repl"), 0));
                 }
             }
@@ -642,7 +656,7 @@ impl Machine {
 			raw_stdout.flush().unwrap();
 			next_keypress()
 		    };
-		    
+
                     let result = match keypress {
                         ContinueResult::ContinueQuery => {
 			    print!(" ;\r\n");
@@ -713,7 +727,7 @@ impl Machine {
 
         self.machine_st.absorb_snapshot(snapshot);
     }
-    
+
     pub(super) fn run_query(&mut self, alloc_locs: &AllocVarDict) {
 	self.machine_st.cp = LocalCodePtr::TopLevel(0, self.code_repo.size_of_cached_query());
         let end_ptr = CodePtr::Local(self.machine_st.cp);

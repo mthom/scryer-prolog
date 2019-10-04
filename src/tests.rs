@@ -1,4 +1,4 @@
-use prolog_parser::ast::parsing_stream;
+use prolog_parser::ast::{ClauseName, parsing_stream};
 
 use prolog::heap_print::*;
 use prolog::machine::compile::*;
@@ -195,7 +195,7 @@ pub fn submit_query_with_limit(
 
 #[allow(dead_code)]
 pub fn submit_code(wam: &mut Machine, buf: &str) -> EvalSession {
-    compile_user_module(wam, parsing_stream(buf.as_bytes()), true)
+    compile_user_module(wam, parsing_stream(buf.as_bytes()), true, clause_name!("tests"))
 }
 
 #[allow(unused_macros)]

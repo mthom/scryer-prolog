@@ -61,26 +61,35 @@ fn load_module<R: Read>(
     wam: &mut Machine,
     stream: ParsingStream<R>,
     suppress_warnings: bool,
+    listing_src: ClauseName,
 ) -> Result<Option<ClauseName>, SessionError> {
     // follow the operation of compile_user_module, but before
     // compiling, check that a module is declared in the file. if not,
     // throw an exception.
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     setup_indices(wam, clause_name!("builtins"), &mut indices)?;
+    
+    let mut compiler = ListingCompiler::new(
+        &wam.code_repo,
+        suppress_warnings,
+        listing_src,
+    );
 
-    let mut compiler = ListingCompiler::new(&wam.code_repo, suppress_warnings);
-    let results = compiler.gather_items(wam, stream, &mut indices)?;
-
+    let results = compiler.gather_items(wam, stream, &mut indices);
+    
     let module_name = if let Some(ref module) = &compiler.module {
         Some(module.module_decl.name.clone())
     } else {
         None
     };
 
-    match compile_work_impl(&mut compiler, wam, indices, results) {
-        EvalSession::Error(e) => Err(e),
-        _ => Ok(module_name),
-    }
+    results.and_then(|results| compile_work_impl(&mut compiler, wam, indices, results))
+           .or_else(|e| {
+               compiler.print_error(&e);
+               Err(e)
+           })?;
+
+    Ok(module_name)
 }
 
 pub(super)
@@ -90,13 +99,13 @@ fn load_module_from_file(
     suppress_warnings: bool,
 ) -> Result<Option<ClauseName>, SessionError> {
     let path = fix_filename(wam.indices.atom_tbl.clone(), filename)?;
+    let filename = clause_name!(path.to_string_lossy().to_string(), wam.indices.atom_tbl);
 
     let file_handle = File::open(&path).or_else(|_| {
-        let filename = clause_name!(path.to_string_lossy().to_string(), wam.indices.atom_tbl);
-        Err(SessionError::InvalidFileName(filename))
+        Err(SessionError::InvalidFileName(filename.clone()))
     })?;
 
-    load_module(wam, parsing_stream(file_handle), suppress_warnings)
+    load_module(wam, parsing_stream(file_handle), suppress_warnings, filename)
 }
 
 pub type PredicateCompileQueue = (Predicate, VecDeque<TopLevel>);
@@ -115,7 +124,7 @@ fn compile_relation(
 }
 
 fn issue_singleton_warnings(
-    module_name: ClauseName,
+    src_name: ClauseName,
     terms_and_locs: Vec<(Term, usize, usize)>,
 ) {
     for (term, line_num, _col_num) in terms_and_locs {
@@ -128,7 +137,7 @@ fn issue_singleton_warnings(
                 *entry += 1;
             }
         }
-        
+
         for (var, count) in var_count {
             if count == 1 && !var.starts_with("_") && var.as_str() != "!" {
                 singletons.push(var);
@@ -137,12 +146,12 @@ fn issue_singleton_warnings(
 
         if let Some(last_var) = singletons.pop() {
             print!("Warning: {}:{}: Singleton variables: [",
-                   module_name, line_num);
-            
+                   src_name, line_num);
+
             for var in singletons {
                 print!("{}, ", var);
             }
-            
+
             println!("{}]", last_var);
         }
     }
@@ -247,7 +256,7 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession {
             }
         }
         TopLevelPacket::Decl(TopLevel::Declaration(decl), _) => {
-            let mut compiler = ListingCompiler::new(&wam.code_repo, false);
+            let mut compiler = ListingCompiler::new(&wam.code_repo, false, clause_name!("user"));
             let indices = try_eval_session!(compile_decl(wam, &mut compiler, decl));
 
             try_eval_session!(wam.check_toplevel_code(&indices));
@@ -332,7 +341,7 @@ pub(super) fn compile_into_module<R: Read>(
     let mut indices = default_index_store!(wam.atom_tbl_of(&name));
     try_eval_session!(setup_indices(wam, module_name.clone(), &mut indices));
 
-    let mut compiler = ListingCompiler::new(&wam.code_repo, true);
+    let mut compiler = ListingCompiler::new(&wam.code_repo, true, module_name.clone());
 
     match compile_into_module_impl(wam, &mut compiler, module_name, src, indices) {
         Ok(()) => EvalSession::EntrySuccess,
@@ -478,7 +487,8 @@ pub struct ListingCompiler {
     orig_term_expansion_lens: (usize, usize),
     orig_goal_expansion_lens: (usize, usize),
     initialization_goals: (Vec<QueryTerm>, VecDeque<TopLevel>),
-    suppress_warnings: bool
+    suppress_warnings: bool,
+    listing_src: ClauseName // a file? a module?
 }
 
 fn add_toplevel_code(wam: &mut Machine, code: Code, mut indices: IndexStore) {
@@ -533,7 +543,8 @@ fn load_library(
 ) -> Result<ClauseName, SessionError> {
     match LIBRARIES.borrow().get(name.as_str()) {
         Some(code) => {
-            let module_name = load_module(wam, parsing_stream(code.as_bytes()), suppress_warnings)?;
+            let module_name = load_module(wam, parsing_stream(code.as_bytes()),
+                                          suppress_warnings, name.clone())?;
             module_name.ok_or(SessionError::NoModuleDeclaration(name))
         }
         None => Err(SessionError::ModuleNotFound)
@@ -542,7 +553,11 @@ fn load_library(
 
 impl ListingCompiler {
     #[inline]
-    pub fn new(code_repo: &CodeRepo, suppress_warnings: bool) -> Self {
+    pub fn new(
+        code_repo: &CodeRepo,
+        suppress_warnings: bool,
+        listing_src: ClauseName,
+    ) -> Self {
         ListingCompiler {
             non_counted_bt_preds: IndexSet::new(),
             module: None,
@@ -552,7 +567,8 @@ impl ListingCompiler {
             orig_goal_expansion_lens: code_repo
                 .term_dir_entry_len((clause_name!("goal_expansion"), 2)),
 	    initialization_goals: (vec![], VecDeque::from(vec![])),
-            suppress_warnings
+            suppress_warnings,
+            listing_src
         }
     }
 
@@ -958,6 +974,14 @@ impl ListingCompiler {
         discard_result!(code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags));
         discard_result!(code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags));
     }
+
+    fn print_error(&self, e: &SessionError) {
+        if let &SessionError::ParserError(ref e) = e {
+            if let Some((line_num, _col_num)) = e.line_and_col_num() {
+                println!("{}:{}: {}", self.listing_src, line_num, e.as_str());
+            }
+        }
+    }
 }
 
 fn compile_work_impl(
@@ -965,19 +989,19 @@ fn compile_work_impl(
     wam: &mut Machine,
     mut indices: IndexStore,
     mut results: GatherResult,
-) -> EvalSession {
-    let module_code = try_eval_session!(compiler.generate_code(
+) -> Result<(), SessionError> {
+    let module_code = compiler.generate_code(
         results.worker_results,
         wam,
         &mut indices.code_dir,
         0
-    ));
-    let toplvl_code = try_eval_session!(compiler.generate_code(
+    )?;
+    let toplvl_code = compiler.generate_code(
         results.toplevel_results,
         wam,
         &mut results.toplevel_indices.code_dir,
         module_code.len()
-    ));
+    )?;
 
     if let Some(ref mut module) = &mut compiler.module {
         module.user_term_expansions = results.addition_results.take_term_expansions();
@@ -986,49 +1010,46 @@ fn compile_work_impl(
 
     let flags = wam.machine_flags();
 
-    try_eval_session!(wam
-        .code_repo
-        .compile_hook(CompileTimeHook::UserTermExpansion, flags));
-    try_eval_session!(wam
-        .code_repo
-        .compile_hook(CompileTimeHook::UserGoalExpansion, flags));
+    wam.code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags)?;
+    wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags)?;
 
     if let Some(module) = compiler.module.take() {
         let mut clause_code_generator =
             ClauseCodeGenerator::new(module_code.len() + toplvl_code.len(),
                                      module.module_decl.name.clone());
 
-        try_eval_session!(wam.check_toplevel_code(&results.toplevel_indices));
-        try_eval_session!(
-            clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)
-        );
+        wam.check_toplevel_code(&results.toplevel_indices)?;
+        clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;
 
         add_module_code(wam, module, module_code, indices);
         add_toplevel_code(wam, toplvl_code, results.toplevel_indices);
 
         clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
     } else {
-        try_eval_session!(add_non_module_code(
+        add_non_module_code(
             wam,
             results.dynamic_clause_map,
             module_code,
             indices
-        ));
+        )?;
     }
 
-    let init_goal_code = try_eval_session!(compiler.generate_init_goal_code(
+    let init_goal_code = compiler.generate_init_goal_code(
 	wam.machine_flags()
-    ));
+    )?;
 
     if init_goal_code.len() > 0 {
 	wam.run_init_code(init_goal_code);
     }
 
     if !compiler.suppress_warnings {
-        issue_singleton_warnings(compiler.get_module_name(), results.top_level_terms);
+        issue_singleton_warnings(
+            compiler.listing_src.clone(),
+            results.top_level_terms,
+        );
     }
-    
-    EvalSession::EntrySuccess
+
+    Ok(())
 }
 
 fn compile_work<R: Read>(
@@ -1038,7 +1059,8 @@ fn compile_work<R: Read>(
     mut indices: IndexStore,
 ) -> EvalSession {
     let results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
-    compile_work_impl(compiler, wam, indices, results)
+    try_eval_session!(compile_work_impl(compiler, wam, indices, results));
+    EvalSession::EntrySuccess
 }
 
 /* This is a truncated version of compile_user_module, used for
@@ -1047,11 +1069,12 @@ M:verify_attributes on attributed variables. */
 pub fn compile_special_form<R: Read>(
     wam: &mut Machine,
     src: ParsingStream<R>,
+    listing_src: ClauseName,
 ) -> Result<Code, SessionError> {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     setup_indices(wam, clause_name!("builtins"), &mut indices)?;
 
-    let mut compiler = ListingCompiler::new(&wam.code_repo, true);
+    let mut compiler = ListingCompiler::new(&wam.code_repo, true, listing_src);
     let results = compiler.gather_items(wam, src, &mut indices)?;
 
     compiler.generate_code(results.worker_results, wam, &mut indices.code_dir, 0)
@@ -1062,13 +1085,16 @@ pub fn compile_listing<R: Read>(
     wam: &mut Machine,
     src: ParsingStream<R>,
     indices: IndexStore,
-    suppress_warnings: bool
+    suppress_warnings: bool,
+    listing_src: ClauseName,
 ) -> EvalSession {
-    let mut compiler = ListingCompiler::new(&wam.code_repo, suppress_warnings);
+    let mut compiler = ListingCompiler::new(&wam.code_repo, suppress_warnings, listing_src);
 
     match compile_work(&mut compiler, wam, src, indices) {
         EvalSession::Error(e) => {
             compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo);
+            compiler.print_error(&e);
+
             EvalSession::Error(e)
         }
         result => result,
@@ -1095,8 +1121,9 @@ pub fn compile_user_module<R: Read>(
     wam: &mut Machine,
     src: ParsingStream<R>,
     suppress_warnings: bool,
+    listing_src: ClauseName,
 ) -> EvalSession {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     try_eval_session!(setup_indices(wam, clause_name!("builtins"), &mut indices));
-    compile_listing(wam, src, indices, suppress_warnings)
+    compile_listing(wam, src, indices, suppress_warnings, listing_src)
 }

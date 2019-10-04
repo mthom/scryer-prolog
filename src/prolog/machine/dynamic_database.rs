@@ -21,17 +21,19 @@ impl Machine {
         name: ClauseName,
         arity: usize,
     ) -> EvalSession {
+        let user_src = clause_name!("user");
+
         match name.owning_module().as_str() {
             "user" => match self.indices.code_dir.get(&(name.clone(), arity)).cloned() {
                 Some(idx) => {
                     let module = idx.0.borrow().1.clone();
 
                     match module.as_str() {
-                        "user" => compile_user_module(self, src, true),
-                        _ => compile_into_module(self, module, src, name),
+                        "user" => compile_user_module(self, src, true, user_src),
+                        _ => compile_into_module(self, module, src, name)                                                 
                     }
                 }
-                None => compile_user_module(self, src, true),
+                None => compile_user_module(self, src, true, user_src),
             },
             _ => compile_into_module(self, name.owning_module(), src, name),
         }
