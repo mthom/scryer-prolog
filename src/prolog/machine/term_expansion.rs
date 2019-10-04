@@ -77,6 +77,7 @@ pub struct TermStream<'a, R: Read> {
     pub(crate) flags: MachineFlags,
     term_expansion_lens: (usize, usize),
     goal_expansion_lens: (usize, usize),
+    top_level_terms: Vec<(Term, usize, usize)> // term, line_num, col_num.
 }
 
 pub struct ExpansionAdditionResult {
@@ -127,9 +128,15 @@ impl<'a, R: Read> TermStream<'a, R> {
             parser: Parser::new(src, atom_tbl, flags),
             in_module: false,
             flags,
+            top_level_terms: vec![]
         }
     }
 
+    #[inline]
+    pub fn top_level_terms(&mut self) -> Vec<(Term, usize, usize)> {
+        mem::replace(&mut self.top_level_terms, vec![])
+    }
+    
     #[inline]
     pub fn add_to_top(&mut self, buf: &str) {
         self.parser.add_to_top(buf);
@@ -263,12 +270,18 @@ impl<'a, R: Read> TermStream<'a, R> {
 
             self.parser.reset();
 
+            let line_num = self.line_num();
+            let col_num = self.col_num();
+            
             let term = self.parser.read_term(composite_op!(
                 self.in_module,
                 &self.wam.indices.op_dir,
                 op_dir
             ))?;
 
+            // preserve a copy of the original unexpanded term for warning scans,
+            // if that stage is reached.
+            self.top_level_terms.push((term.clone(), line_num, col_num));
             self.stack.push(term);
         }
     }

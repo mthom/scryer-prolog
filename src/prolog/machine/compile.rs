@@ -6,6 +6,7 @@ use prolog::codegen::*;
 use prolog::debray_allocator::*;
 use prolog::forms::*;
 use prolog::instructions::*;
+use prolog::iterators::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::machine::term_expansion::ExpansionAdditionResult;
@@ -114,31 +115,35 @@ fn compile_relation(
 }
 
 fn issue_singleton_warnings(
-    tl: &TopLevel,
     module_name: ClauseName,
+    terms_and_locs: Vec<(Term, usize, usize)>,
 ) {
-    if let Some((line_num, _)) = tl.location() {
-        if let Some(var_counts) = tl.var_count() {
-            for var_count in var_counts {
-                let mut singletons = vec![];
+    for (term, line_num, _col_num) in terms_and_locs {
+        let mut singletons = vec![];
+        let mut var_count = IndexMap::new();
 
-                for (var, count) in var_count {
-                    if count == 1 && !var.starts_with("_") && var.as_str() != "!" {
-                        singletons.push(var);
-                    }
-                }
-
-                if let Some(last_var) = singletons.pop() {
-                    print!("Warning: {}:{}: Singleton variables: [",
-                           module_name, line_num);
-                
-                    for var in singletons {
-                        print!("{}, ", var);
-                    }
-                    
-                    println!("{}]", last_var);
-                }
+        for subterm in breadth_first_iter(&term, true) {
+            if let TermRef::Var(_, _, var) = subterm {
+                let entry = var_count.entry(var).or_insert(0);
+                *entry += 1;
             }
+        }
+        
+        for (var, count) in var_count {
+            if count == 1 && !var.starts_with("_") && var.as_str() != "!" {
+                singletons.push(var);
+            }
+        }
+
+        if let Some(last_var) = singletons.pop() {
+            print!("Warning: {}:{}: Singleton variables: [",
+                   module_name, line_num);
+            
+            for var in singletons {
+                print!("{}, ", var);
+            }
+            
+            println!("{}]", last_var);
         }
     }
 }
@@ -375,6 +380,7 @@ pub struct GatherResult {
     toplevel_results: Vec<PredicateCompileQueue>,
     toplevel_indices: IndexStore,
     addition_results: ExpansionAdditionResult,
+    top_level_terms: Vec<(Term, usize, usize)>
 }
 
 pub struct ClauseCodeGenerator {
@@ -687,10 +693,6 @@ impl ListingCompiler {
 
             compile_appendix(&mut decl_code, &queue, non_counted_bt, wam.machine_flags())?;
 
-            if !self.suppress_warnings {
-                issue_singleton_warnings(&decl, self.get_module_name());
-            }
-
             let idx = code_dir
                 .entry((name.clone(), arity))
                 .or_insert(CodeIndex::default());
@@ -942,6 +944,7 @@ impl ListingCompiler {
             toplevel_results,
             toplevel_indices,
             addition_results,
+            top_level_terms: worker.term_stream.top_level_terms(),
         })
     }
 
@@ -1021,6 +1024,10 @@ fn compile_work_impl(
 	wam.run_init_code(init_goal_code);
     }
 
+    if !compiler.suppress_warnings {
+        issue_singleton_warnings(compiler.get_module_name(), results.top_level_terms);
+    }
+    
     EvalSession::EntrySuccess
 }
 
