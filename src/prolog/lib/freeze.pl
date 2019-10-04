@@ -22,10 +22,11 @@ freeze(X, Goal) :-
     Fresh = X.
 
 gather_freeze_goals(Attrs, _) -->
-    { var(Attrs), ! }.
+    { var(Attrs) },
+    !.
 gather_freeze_goals([frozen(X) | _], Var) -->
     [freeze(Var, X)],
-    { ! }.
+    !.
 gather_freeze_goals([_ | Attrs], Var) -->
     gather_freeze_goals(Attrs, Var).
 

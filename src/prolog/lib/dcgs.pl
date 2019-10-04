@@ -100,6 +100,7 @@ expand_body_term((P ; Q), (PModTerm ; QModTerm), N0, N) :-
 		  PModTerm = PModTerm0,
 		  N = N1
     ).
+expand_body_term(!, !, N, N) :- !.
 expand_body_term(CommaTerm, ModTerm, N, N) :-
     CommaTerm =.. [{} | BodyTerms], !,
     comma_ify(BodyTerms, ModTerm).
