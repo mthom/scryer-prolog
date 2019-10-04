@@ -2,23 +2,25 @@
 		 '$copy_attr_list'/2, '$get_attr'/2, '$put_attr'/2,
 		 '$absent_from_list'/2, '$get_from_list'/3,
 		 '$add_to_list'/3, '$del_attr'/3, '$del_attr_step'/3,
-		 '$del_attr_buried'/4]).
+		 '$del_attr_buried'/4, '$default_attr_list'/4]).
 
 :- use_module(library(dcgs)).
 :- use_module(library(terms)).
 
 :- op(1199, fx, attribute).
 
-% represent the list of attributes belonging to a variable,
-% of a particular module, as a list of terms of the form
-% Module:put_atts(V, ListOfAtts).
-'$default_attr_list'(Module, V, ListOfAtts) :-
-    Module:get_atts(V, Attributes),
-    '$default_attr_list'(Attributes, Module, V, ListOfAtts).
+/* represent the list of attributes belonging to a variable,
+   of a particular module, as a list of terms of the form
+   Module:put_atts(V, ListOfAtts). */
+'$default_attr_list'(Module, V) -->
+    { Module:get_atts(V, Attributes) },
+    '$default_attr_list'(Attributes, Module, V).
 
-'$default_attr_list'([PG | PGs], Module, AttrVar, [Module:put_atts(AttrVar, PG) | Gs]) :-
-    '$default_attr_list'(PGs, Module, AttrVar, Gs).
-'$default_attr_list'([], _, _, []).
+'$default_attr_list'([PG | PGs], Module, AttrVar) -->
+    (  { '$module_of'(Module, PG) } -> [Module:put_atts(AttrVar, PG)]
+    ;  { true } ),
+    '$default_attr_list'(PGs, Module, AttrVar).
+'$default_attr_list'([], _, _) --> [].
 
 '$absent_attr'(V, Attr) :-
     '$get_attr_list'(V, Ls),

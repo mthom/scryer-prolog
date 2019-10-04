@@ -1,6 +1,7 @@
 :- module(freeze, [freeze/2]).
 
 :- use_module(library(atts)).
+:- use_module(library(dcgs)).
 
 :- attribute frozen/1.
 
@@ -20,13 +21,14 @@ freeze(X, Goal) :-
     put_atts(Fresh, frozen(Goal)),
     Fresh = X.
 
-gather_freeze_goals(Attrs, _, _) :-
-    var(Attrs), !.
-gather_freeze_goals([frozen(X) | _], Var, [freeze(Var, X) | _]) :-
-    !.
-gather_freeze_goals([_ | Attrs], Var, Goals) :-
-    gather_freeze_goals(Attrs, Var, Goals).
+gather_freeze_goals(Attrs, _) -->
+    { var(Attrs), ! }.
+gather_freeze_goals([frozen(X) | _], Var) -->
+    [freeze(Var, X)],
+    { ! }.
+gather_freeze_goals([_ | Attrs], Var) -->
+    gather_freeze_goals(Attrs, Var).
 
-attribute_goals(X, Goals) :-
-    '$get_attr_list'(X, Attrs),
-    gather_freeze_goals(Attrs, X, Goals).
+attribute_goals(X) -->
+    { '$get_attr_list'(X, Attrs) },
+    gather_freeze_goals(Attrs, X).

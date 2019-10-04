@@ -277,7 +277,7 @@ impl Machine {
         compile_user_module(&mut wam, parsing_stream(LISTS.as_bytes()), true);
         compile_user_module(&mut wam, parsing_stream(NON_ISO.as_bytes()), true);
         compile_user_module(&mut wam, parsing_stream(SI.as_bytes()), true);
-
+        
         wam.compile_top_level();
         wam.compile_scryerrc();
 

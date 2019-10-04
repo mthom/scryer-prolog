@@ -6,13 +6,6 @@ driver(QueryVars, AttrVars) :-
     call_attribute_goals(Modules, AttrVars),
     '$return_from_attribute_goals'.
 
-enqueue_goal(Goals0) :-
-    nonvar(Goals0), Goals0 = [Goal | Goals], !,
-    enqueue_goals(Goals0). % enqueue lists of goals separately.
-enqueue_goal(Goal) :-
-    nonvar(Goal),
-    '$enqueue_attribute_goal'(Goal).  % enqueue the goal for printing to the toplevel.
-
 enqueue_goals(Goals0) :-
     nonvar(Goals0),
     Goals0 = [Goal | Goals],
@@ -33,18 +26,18 @@ call_project_attributes([Module|Modules], QueryVars, AttrVars) :-
 
 call_attribute_goals([], _).
 call_attribute_goals([Module | Modules], AttrVars) :-
-    call_goals(AttrVars, Module),
+    call_goals(AttrVars, Module, Goals),
+    enqueue_goals(Goals),
     call_attribute_goals(Modules, AttrVars).
 
-call_goals([], _).
-call_goals([AttrVar|AttrVars], Module) :-
-    (   catch(Module:attribute_goals(AttrVar, Goal),
-	      error(evaluation_error((Module:attribute_goals)/2), attribute_goals/2),
-	      atts:'$default_attr_list'(Module, AttrVar, Goal)),
-	nonvar(Goal) -> enqueue_goal(Goal)
-    ;   true
+call_goals([], _, []).
+call_goals([AttrVar|AttrVars], Module, Goals) :-
+    (  catch(Module:attribute_goals(AttrVar, Goals, RGoals),
+	     error(evaluation_error((Module:attribute_goals)/3), attribute_goals/3),
+	     atts:'$default_attr_list'(Module, AttrVar, Goals, RGoals)) -> true
+    ;  true
     ),
-    call_goals(AttrVars, Module).
+    call_goals(AttrVars, Module, RGoals).
 
 gather_modules([], [], _).
 gather_modules([AttrVar|AttrVars], Modules, Modules0) :-

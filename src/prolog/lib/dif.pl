@@ -1,6 +1,7 @@
 :- module(dif, [dif/2]).
 
 :- use_module(library(atts)).
+:- use_module(library(dcgs)).
 :- use_module(library(lists), [append/3]).
 
 :- attribute dif/1.
@@ -43,10 +44,11 @@ dif(X, Y) :- X \== Y,
 		 dif_set_variables(YVars, X, Y)
 	     ).
 
-gather_dif_goals([], _).
-gather_dif_goals([(X \== Y) | Goals0], [dif(X, Y) | Goals]) :-
-    gather_dif_goals(Goals0, Goals).
+gather_dif_goals([]) --> [].
+gather_dif_goals([(X \== Y) | Goals]) -->
+    [dif(X, Y)],
+    gather_dif_goals(Goals).
 
-attribute_goals(X, Goals) :-
-    get_atts(X, +dif(Goals0)),
-    gather_dif_goals(Goals0, Goals).
+attribute_goals(X) -->
+    { get_atts(X, +dif(Goals)) },
+    gather_dif_goals(Goals).
