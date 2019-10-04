@@ -23,10 +23,10 @@ impl<'a> TermRef<'a> {
     pub fn level(self) -> Level {
         match self {
             TermRef::AnonVar(lvl)
-            | TermRef::Cons(lvl, ..)
-            | TermRef::Constant(lvl, ..)
-            | TermRef::Var(lvl, ..)
-            | TermRef::Clause(lvl, ..) => lvl,
+          | TermRef::Cons(lvl, ..)
+          | TermRef::Constant(lvl, ..)
+          | TermRef::Var(lvl, ..)
+          | TermRef::Clause(lvl, ..) => lvl,
         }
     }
 }
@@ -112,7 +112,8 @@ impl<'a> QueryIterator<'a> {
                     state_stack: vec![],
                 }
             }
-            &Term::Var(ref cell, ref var) => TermIterState::Var(Level::Root, cell, (*var).clone()),
+            &Term::Var(ref cell, ref var) =>
+                TermIterState::Var(Level::Root, cell, (*var).clone()),
         };
 
         QueryIterator {

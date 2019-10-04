@@ -3,6 +3,7 @@ use prolog_parser::parser::OpDesc;
 use prolog_parser::tabled_rc::*;
 
 use prolog::clause_types::*;
+use prolog::iterators::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
 use prolog::ordered_float::OrderedFloat;
@@ -23,39 +24,73 @@ pub type JumpStub = Vec<Term>;
 #[derive(Clone)]
 pub enum TopLevel {
     Declaration(Declaration),
-    Fact(Term),
+    Fact(Term, usize, usize), // Term, line_num, col_num
     Predicate(Predicate),
     Query(Vec<QueryTerm>),
-    Rule(Rule),
+    Rule(Rule, usize, usize), // Rule, line_num, col_num
 }
 
 impl TopLevel {
     pub fn name(&self) -> Option<ClauseName> {
         match self {
             &TopLevel::Declaration(_) => None,
-            &TopLevel::Fact(ref term) => term.name(),
+            &TopLevel::Fact(ref term, ..) => term.name(),
             &TopLevel::Predicate(ref clauses) => clauses.0.first().and_then(|ref term| term.name()),
             &TopLevel::Query(_) => None,
-            &TopLevel::Rule(Rule { ref head, .. }) => Some(head.0.clone()),
+            &TopLevel::Rule(Rule { ref head, .. }, ..) => Some(head.0.clone()),
         }
     }
 
     pub fn arity(&self) -> usize {
         match self {
             &TopLevel::Declaration(_) => 0,
-            &TopLevel::Fact(ref term) => term.arity(),
+            &TopLevel::Fact(ref term, ..) => term.arity(),
             &TopLevel::Predicate(ref clauses) => clauses.0.first().map(|t| t.arity()).unwrap_or(0),
             &TopLevel::Query(_) => 0,
-            &TopLevel::Rule(Rule { ref head, .. }) => head.1.len(),
+            &TopLevel::Rule(Rule { ref head, .. }, ..) => head.1.len(),
         }
     }
 
     pub fn is_end_of_file_atom(&self) -> bool {
         match self {
-            &TopLevel::Fact(Term::Constant(_, Constant::Atom(ref name, _))) => {
+            &TopLevel::Fact(Term::Constant(_, Constant::Atom(ref name, _)), ..) => {
                 return name.as_str() == "end_of_file"
             }
             _ => false,
+        }
+    }
+
+    pub fn location(&self) -> Option<(usize, usize)> {
+        match self {
+            &TopLevel::Fact(_, line_num, col_num) | &TopLevel::Rule(_, line_num, col_num) =>
+                Some((line_num, col_num)),
+            &TopLevel::Predicate(Predicate(ref clauses)) =>
+                clauses.first().map(|clause| (clause.line_num(), clause.col_num())),
+            _ =>
+                None
+        }
+    }
+    
+    pub fn var_count(&self) -> Option<Vec<IndexMap<Rc<Var>, usize>>> {
+        match self {
+            &TopLevel::Fact(ref term, ..) => {
+                let mut var_count = IndexMap::new();
+                
+                for term_ref in breadth_first_iter(term, true) {
+                    if let TermRef::Var(_, _, var) = term_ref {
+                        let entry = var_count.entry(var).or_insert(0);
+                        *entry += 1;
+                    }
+                }
+
+                Some(vec![var_count])
+            }
+            &TopLevel::Rule(ref rule, ..) =>
+                Some(vec![rule.var_count()]),
+            &TopLevel::Predicate(ref predicate) =>
+                Some(predicate.var_count()),
+            _ =>
+                None
         }
     }
 }
@@ -110,6 +145,40 @@ pub struct Rule {
     pub clauses: Vec<QueryTerm>,
 }
 
+impl Rule {
+    pub fn var_count(&self) -> IndexMap<Rc<Var>, usize> {
+        let mut var_count = IndexMap::new();
+
+        for root_term in &self.head.1 {
+            // true because the root term is iterable.
+            for term_ref in breadth_first_iter(root_term, true) {
+                if let TermRef::Var(_, _, var) = term_ref {
+                    let entry = var_count.entry(var).or_insert(0);
+                    *entry += 1;
+                }
+            }
+        }
+        
+        for term_ref in query_term_post_order_iter(&self.head.2) {
+            if let TermRef::Var(_, _, var) = term_ref {
+                let entry = var_count.entry(var).or_insert(0);
+                *entry += 1;
+            }
+        }
+
+        for clause in &self.clauses {
+            for term_ref in query_term_post_order_iter(clause) {
+                if let TermRef::Var(_, _, var) = term_ref {
+                    let entry = var_count.entry(var).or_insert(0);
+                    *entry += 1;
+                }
+            }
+        }
+
+        var_count
+    }
+}
+
 #[derive(Clone)]
 pub struct Predicate(pub Vec<PredicateClause>);
 
@@ -130,35 +199,72 @@ impl Predicate {
             .first()
             .and_then(|clause| clause.name().map(|name| (name, clause.arity())))
     }
+
+    pub fn var_count(&self) -> Vec<IndexMap<Rc<Var>, usize>> {
+        self.0.iter().map(|clause| clause.var_count()).collect()
+    }
 }
 
 pub type CompiledResult = (Predicate, VecDeque<TopLevel>);
 
 #[derive(Clone)]
 pub enum PredicateClause {
-    Fact(Term),
-    Rule(Rule),
+    Fact(Term, usize, usize), // Term, line number, column number.
+    Rule(Rule, usize, usize), // Term, line number, column number.
 }
 
 impl PredicateClause {
     pub fn first_arg(&self) -> Option<&Term> {
         match self {
-            &PredicateClause::Fact(ref term) => term.first_arg(),
-            &PredicateClause::Rule(ref rule) => rule.head.1.first().map(|bt| bt.as_ref()),
+            &PredicateClause::Fact(ref term, ..) => term.first_arg(),
+            &PredicateClause::Rule(ref rule, ..) => rule.head.1.first().map(|bt| bt.as_ref()),
         }
     }
 
     pub fn arity(&self) -> usize {
         match self {
-            &PredicateClause::Fact(ref term) => term.arity(),
-            &PredicateClause::Rule(ref rule) => rule.head.1.len(),
+            &PredicateClause::Fact(ref term, ..) => term.arity(),
+            &PredicateClause::Rule(ref rule, ..) => rule.head.1.len(),
         }
     }
 
     pub fn name(&self) -> Option<ClauseName> {
         match self {
-            &PredicateClause::Fact(ref term) => term.name(),
-            &PredicateClause::Rule(ref rule) => Some(rule.head.0.clone()),
+            &PredicateClause::Fact(ref term, ..) => term.name(),
+            &PredicateClause::Rule(ref rule, ..) => Some(rule.head.0.clone()),
+        }
+    }
+
+    pub fn line_num(&self) -> usize {
+        match self {
+            &PredicateClause::Fact(_, line_num, _) => line_num,
+            &PredicateClause::Rule(_, line_num, _) => line_num
+        }
+    }
+
+    pub fn col_num(&self) -> usize {
+        match self {
+            &PredicateClause::Fact(_, _, col_num) => col_num,
+            &PredicateClause::Rule(_, _, col_num) => col_num
+        }
+    }
+
+    pub fn var_count(&self) -> IndexMap<Rc<Var>, usize> {
+        match self {
+            &PredicateClause::Fact(ref term, ..) => {
+                let mut var_count = IndexMap::new();
+                
+                for term_ref in breadth_first_iter(term, true) {
+                    if let TermRef::Var(_, _, var) = term_ref {
+                        let entry = var_count.entry(var).or_insert(0);
+                        *entry += 1;
+                    }
+                }
+
+                var_count
+            }
+            &PredicateClause::Rule(ref rule, ..) =>
+                rule.var_count()
         }
     }
 }

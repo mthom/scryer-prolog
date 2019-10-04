@@ -81,10 +81,12 @@ expand_body_term([Arg|Args], ModTerm, N0, N) :-
     append([Arg|Args], '$VAR'(N), ModArgs),
     ModTerm = ('$VAR'(N0) = ModArgs).
 expand_body_term((P -> Q), (PModTerm -> QModTerm), N0, N) :-
-    !, expand_body(P, PModTerm, N0, N1),
+    !,
+    expand_body(P, PModTerm, N0, N1),
     expand_body(Q, QModTerm, N1, N).
 expand_body_term((P ; Q), (PModTerm ; QModTerm), N0, N) :-
-    !, expand_body(P, PModTerm0, N0, N1),
+    !,
+    expand_body(P, PModTerm0, N0, N1),
     expand_body(Q, QModTerm0, N0, N2),
     ( N1 == N2 -> PModTerm = PModTerm0,
 		  QModTerm = QModTerm0,

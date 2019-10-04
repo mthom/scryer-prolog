@@ -287,15 +287,14 @@ fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError> 
             TopLevel::Query(_) if clauses.is_empty() && tls.is_empty() => return Ok(tl),
             TopLevel::Declaration(_) if clauses.is_empty() => return Ok(tl),
             TopLevel::Query(_) => return Err(ParserError::InconsistentEntry),
-            TopLevel::Fact(_) if is_consistent(&tl, &clauses) => {
-                if let TopLevel::Fact(fact) = tl {
-                    let clause = PredicateClause::Fact(fact);
+            TopLevel::Fact(..) if is_consistent(&tl, &clauses) =>
+                if let TopLevel::Fact(fact, line_num, col_num) = tl {
+                    let clause = PredicateClause::Fact(fact, line_num, col_num);
                     clauses.push(clause);
-                }
-            }
-            TopLevel::Rule(_) if is_consistent(&tl, &clauses) => {
-                if let TopLevel::Rule(rule) = tl {
-                    let clause = PredicateClause::Rule(rule);
+                },
+            TopLevel::Rule(..) if is_consistent(&tl, &clauses) => {
+                if let TopLevel::Rule(rule, line_num, col_num) = tl {
+                    let clause = PredicateClause::Rule(rule, line_num, col_num);
                     clauses.push(clause);
                 }
             }
@@ -357,6 +356,44 @@ fn mark_cut_variables(terms: &mut Vec<Term>) -> bool {
     found_cut_var
 }
 
+// terms is a list of goals composing one clause in a (;) functor. it
+// checks that the first (and only) of these clauses is a ->. if so,
+// it expands its terms using a blocked_!.
+fn check_for_internal_if_then(terms: &mut Vec<Term>) {
+    if terms.len() != 1 {
+        return;
+    }
+
+    if let Some(Term::Clause(_, ref name, ref subterms, _)) = terms.last() {
+        if name.as_str() != "->" || subterms.len() != 2 {
+            return;
+        }
+    } else {
+        return;
+    }
+
+    if let Some(Term::Clause(_, _, mut subterms, _)) = terms.pop() {
+        let mut conq_terms = VecDeque::from(unfold_by_str(*subterms.pop().unwrap(), ","));
+        let mut pre_cut_terms = VecDeque::from(unfold_by_str(*subterms.pop().unwrap(), ","));
+
+        conq_terms.push_front(Term::Constant(
+            Cell::default(),
+            Constant::Atom(clause_name!("blocked_!"), None))
+        );
+
+        while let Some(term) = pre_cut_terms.pop_back() {
+            conq_terms.push_front(term);
+        }
+
+        let tail_term = conq_terms.pop_back().unwrap();
+        terms.push(fold_by_str(
+            conq_terms.into_iter(),
+            tail_term,
+            clause_name!(","),
+        ));
+    }
+}
+
 fn flatten_hook(mut term: Term) -> Term {
     if let &mut Term::Clause(_, ref mut name, ref mut terms, _) = &mut term {
         match (name.as_str(), terms.len()) {
@@ -387,7 +424,9 @@ fn flatten_hook(mut term: Term) -> Term {
 fn setup_declaration(
     indices: &mut CompositeIndices,
     flags: MachineFlags,
-    mut terms: Vec<Box<Term>>
+    mut terms: Vec<Box<Term>>,
+    line_num: usize,
+    col_num: usize,
 ) -> Result<Declaration, ParserError> {
     let term = *terms.pop().unwrap();
 
@@ -413,10 +452,10 @@ fn setup_declaration(
 		    Ok(Declaration::Dynamic(name, arity))
 		}
 		("initialization", 1) => {
-		    let mut rel_worker = RelationWorker::new(flags);
+		    let mut rel_worker = RelationWorker::new(flags, line_num, col_num);
 		    let query_terms = rel_worker.setup_query(indices, terms, false)?;
 		    let queue = rel_worker.parse_queue(indices)?;
-		    
+
 		    Ok(Declaration::ModuleInitialization(query_terms, queue))
 		}
 		_ =>
@@ -435,14 +474,18 @@ struct RelationWorker {
     flags: MachineFlags,
     dynamic_clauses: Vec<(Term, Term)>, // Head, Body.
     queue: VecDeque<VecDeque<Term>>,
+    line_num: usize,
+    col_num: usize
 }
 
 impl RelationWorker {
-    fn new(flags: MachineFlags) -> Self {
+    fn new(flags: MachineFlags, line_num: usize, col_num: usize) -> Self {
         RelationWorker {
             dynamic_clauses: vec![],
             flags,
             queue: VecDeque::new(),
+            line_num,
+            col_num
         }
     }
 
@@ -506,6 +549,8 @@ impl RelationWorker {
             .map(|term| {
                 let mut subterms = unfold_by_str(term, ",");
                 mark_cut_variables(&mut subterms);
+
+                check_for_internal_if_then(&mut subterms);
 
                 let term = subterms.pop().unwrap();
                 fold_by_str(subterms.into_iter(), term, clause_name!(","))
@@ -704,12 +749,12 @@ impl RelationWorker {
             Term::Clause(r, name, terms, _) => {
                 if name == hook.name() && terms.len() == hook.arity() {
                     let term = self.setup_fact(Term::Clause(r, name, terms, None), false)?;
-                    Ok((hook, PredicateClause::Fact(term), VecDeque::from(vec![])))
+                    Ok((hook, PredicateClause::Fact(term, 0, 0), VecDeque::from(vec![])))
                 } else if name.as_str() == ":-" && terms.len() == 2 {
                     let rule = self.setup_rule(indices, terms, true, false)?;
                     let results_queue = self.parse_queue(indices)?;
 
-                    Ok((hook, PredicateClause::Rule(rule), results_queue))
+                    Ok((hook, PredicateClause::Rule(rule, 0, 0), results_queue))
                 } else {
                     Err(ParserError::InvalidHook)
                 }
@@ -787,15 +832,16 @@ impl RelationWorker {
                         terms,
                         blocks_cuts,
                         true,
-                    )?))
+                    )?, self.line_num, self.col_num))
                 } else if name.as_str() == ":-" && terms.len() == 1 {
-                    Ok(TopLevel::Declaration(setup_declaration(indices, self.flags, terms)?))
+                    Ok(TopLevel::Declaration(setup_declaration(indices, self.flags, terms,
+                                                               self.line_num, self.col_num)?))
                 } else {
                     let term = Term::Clause(r, name, terms, fixity);
-                    Ok(TopLevel::Fact(try!(self.setup_fact(term, true))))
+                    Ok(TopLevel::Fact(self.setup_fact(term, true)?, self.line_num, self.col_num))
                 }
             }
-            term => Ok(TopLevel::Fact(try!(self.setup_fact(term, true)))),
+            term => Ok(TopLevel::Fact(self.setup_fact(term, true)?, self.line_num, self.col_num)),
         }
     }
 
@@ -875,7 +921,10 @@ fn term_to_toplevel<R>(
 where
     R: Read,
 {
-    let mut rel_worker = RelationWorker::new(flags);
+    let line_num = term_stream.line_num();
+    let col_num  = term_stream.col_num();
+
+    let mut rel_worker = RelationWorker::new(flags, line_num, col_num);
     let mut indices = composite_indices!(false, &mut term_stream.wam.indices, code_dir);
 
     let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
@@ -928,9 +977,12 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
     ) -> Self {
         let term_stream = TermStream::new(inner, atom_tbl, flags, wam);
 
+        let line_num = term_stream.line_num();
+        let col_num  = term_stream.col_num();
+
         TopLevelBatchWorker {
             term_stream,
-            rel_worker: RelationWorker::new(flags),
+            rel_worker: RelationWorker::new(flags, line_num, col_num),
             results: vec![],
             dynamic_clause_map: IndexMap::new(),
             in_module: false,
@@ -942,7 +994,10 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         indices: &mut IndexStore,
         term: Term,
     ) -> Result<(TopLevel, RelationWorker), SessionError> {
-        let mut new_rel_worker = RelationWorker::new(self.rel_worker.flags);
+        let line_num = self.term_stream.line_num();
+        let col_num  = self.term_stream.col_num();
+
+        let mut new_rel_worker = RelationWorker::new(self.rel_worker.flags, line_num, col_num);
         let mut indices = composite_indices!(
             self.in_module,
             indices,
@@ -1023,11 +1078,16 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
             self.rel_worker.absorb(new_rel_worker);
 
             match tl {
-                TopLevel::Fact(fact) => preds.push(PredicateClause::Fact(fact)),
-                TopLevel::Rule(rule) => preds.push(PredicateClause::Rule(rule)),
-                TopLevel::Predicate(pred) => preds.extend(pred.0),
-                TopLevel::Declaration(decl) => return Ok(Some(decl)),
-                TopLevel::Query(_) => return Err(SessionError::NamelessEntry),
+                TopLevel::Fact(fact, line_num, col_num) =>
+                    preds.push(PredicateClause::Fact(fact, line_num, col_num)),
+                TopLevel::Rule(rule, line_num, col_num) =>
+                    preds.push(PredicateClause::Rule(rule, line_num, col_num)),
+                TopLevel::Predicate(pred) =>
+                    preds.extend(pred.0),
+                TopLevel::Declaration(decl) =>
+                    return Ok(Some(decl)),
+                TopLevel::Query(_) =>
+                    return Err(SessionError::NamelessEntry),
             }
         }
 

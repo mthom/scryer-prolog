@@ -20,7 +20,7 @@ use std::vec::Vec;
 pub struct CodeGenerator<TermMarker> {
     flags: MachineFlags,
     marker: TermMarker,
-    var_count: IndexMap<Rc<Var>, usize>,
+    pub var_count: IndexMap<Rc<Var>, usize>,
     non_counted_bt: bool,
 }
 
@@ -867,8 +867,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             self.marker.reset();
 
             let mut clause_code = match clause {
-                &PredicateClause::Fact(ref fact) => self.compile_fact(fact),
-                &PredicateClause::Rule(ref rule) => try!(self.compile_rule(rule)),
+                &PredicateClause::Fact(ref fact, ..) => self.compile_fact(fact),
+                &PredicateClause::Rule(ref rule, ..) => self.compile_rule(rule)?,
             };
 
             if num_clauses > 1 {

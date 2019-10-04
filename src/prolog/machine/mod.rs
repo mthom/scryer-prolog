@@ -193,7 +193,7 @@ impl Machine {
 
     fn compile_top_level(&mut self) {
         self.toplevel_idx = self.code_repo.code.len();
-        compile_user_module(self, parsing_stream(TOPLEVEL.as_bytes()));
+        compile_user_module(self, parsing_stream(TOPLEVEL.as_bytes()), true);
     }
 
     fn compile_scryerrc(&mut self) {
@@ -210,7 +210,7 @@ impl Machine {
                 Err(_) => return,
             };
 
-            compile_user_module(self, file_src);
+            compile_user_module(self, file_src, true);
         }
     }
 
@@ -268,14 +268,15 @@ impl Machine {
             &mut wam,
             parsing_stream(BUILTINS.as_bytes()),
             default_index_store!(atom_tbl.clone()),
+            true
         );
 
         wam.compile_special_forms();
 
-        compile_user_module(&mut wam, parsing_stream(ERROR.as_bytes()));
-        compile_user_module(&mut wam, parsing_stream(LISTS.as_bytes()));
-        compile_user_module(&mut wam, parsing_stream(NON_ISO.as_bytes()));
-        compile_user_module(&mut wam, parsing_stream(SI.as_bytes()));
+        compile_user_module(&mut wam, parsing_stream(ERROR.as_bytes()), true);
+        compile_user_module(&mut wam, parsing_stream(LISTS.as_bytes()), true);
+        compile_user_module(&mut wam, parsing_stream(NON_ISO.as_bytes()), true);
+        compile_user_module(&mut wam, parsing_stream(SI.as_bytes()), true);
 
         wam.compile_top_level();
         wam.compile_scryerrc();
@@ -430,12 +431,12 @@ impl Machine {
 	let load_result = match to_src(name) {
 	    ModuleSource::Library(name) =>
 		if !self.indices.modules.contains_key(&name) {
-		    load_library(self, name).map(Some)
+		    load_library(self, name, false).map(Some)
 		} else {
 		    Ok(Some(name))
 		},
 	    ModuleSource::File(name) =>
-                load_module_from_file(self, name.as_str())
+                load_module_from_file(self, name.as_str(), false)
 	};
 
 	let result = load_result.and_then(|name|
@@ -477,12 +478,12 @@ impl Machine {
 	let load_result = match to_src(name) {
 	    ModuleSource::Library(name) =>
 		if !self.indices.modules.contains_key(&name) {
-		    load_library(self, name).map(Some)
+		    load_library(self, name, false).map(Some)
 		} else {
 		    Ok(Some(name))
 		},
 	    ModuleSource::File(name) =>
-                load_module_from_file(self, name.as_str())
+                load_module_from_file(self, name.as_str(), false)
 	};
 
 	let result = load_result.and_then(|name|
@@ -515,7 +516,7 @@ impl Machine {
                 let src = readline::input_stream();
                 readline::set_prompt(false);
 
-                if let EvalSession::Error(e) = compile_user_module(self, src) {
+                if let EvalSession::Error(e) = compile_user_module(self, src, false) {
                     self.throw_session_error(e, (clause_name!("repl"), 0));
                 }
             }

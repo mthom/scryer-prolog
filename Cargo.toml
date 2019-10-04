@@ -1,6 +1,6 @@
 [package]
 name = "scryer-prolog"
-version = "0.8.98"
+version = "0.8.99"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
 build = "build.rs"
 repository = "https://github.com/mthom/scryer-prolog"
@@ -18,7 +18,7 @@ lazy_static = "1.4.0"
 libc = "0.2.62"
 nix = "0.15.0"
 ordered-float = "0.5.0"
-prolog_parser = "0.8.30"
+prolog_parser = "0.8.31"
 ref_thread_local = "0.0.0"
 rug = "1.4.0"
 rustyline = "5.0.3"

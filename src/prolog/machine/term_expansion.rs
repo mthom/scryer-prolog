@@ -151,6 +151,16 @@ impl<'a, R: Read> TermStream<'a, R> {
     }
 
     #[inline]
+    pub fn line_num(&self) -> usize {
+        self.parser.line_num()
+    }
+
+    #[inline]
+    pub fn col_num(&self) -> usize {
+        self.parser.col_num()
+    }
+    
+    #[inline]
     pub fn update_expansion_lens(&mut self) {
         let te_key = (clause_name!("term_expansion"), 2);
         let ge_key = (clause_name!("goal_expansion"), 2);
@@ -362,7 +372,7 @@ impl MachineState {
     ) -> Option<String> {
         let term_write_result = write_term_to_heap(term, self);
         let h = self.heap.h;
-
+        
         self[temp_v!(1)] = Addr::HeapCell(term_write_result.heap_loc);
         self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
         self[temp_v!(2)] = Addr::HeapCell(h);

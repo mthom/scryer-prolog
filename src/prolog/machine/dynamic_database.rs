@@ -27,11 +27,11 @@ impl Machine {
                     let module = idx.0.borrow().1.clone();
 
                     match module.as_str() {
-                        "user" => compile_user_module(self, src),
+                        "user" => compile_user_module(self, src, true),
                         _ => compile_into_module(self, module, src, name),
                     }
                 }
-                None => compile_user_module(self, src),
+                None => compile_user_module(self, src, true),
             },
             _ => compile_into_module(self, name.owning_module(), src, name),
         }

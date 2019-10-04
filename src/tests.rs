@@ -195,7 +195,7 @@ pub fn submit_query_with_limit(
 
 #[allow(dead_code)]
 pub fn submit_code(wam: &mut Machine, buf: &str) -> EvalSession {
-    compile_user_module(wam, parsing_stream(buf.as_bytes()))
+    compile_user_module(wam, parsing_stream(buf.as_bytes()), true)
 }
 
 #[allow(unused_macros)]
