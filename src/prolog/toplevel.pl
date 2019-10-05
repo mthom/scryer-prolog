@@ -31,13 +31,9 @@
     !.
 
 '$print_exception'(E) :-
-    (  E = error(_, _:_) -> true % if the error source contains a line
-                                 % number, a GNU-style error message
-                                 % is expected to be printed instead.
-    ;  write_term('caught: ', [quoted(false)]),
-       writeq(E),
-       nl
-    ).
+    write_term('caught: ', [quoted(false)]),
+    writeq(E),
+    nl.    
 
 '$predicate_indicator'(Source, PI) :-
     (  nonvar(PI) ->

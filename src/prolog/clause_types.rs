@@ -542,10 +542,10 @@ impl ClauseType {
         match self {
             &ClauseType::Op(_, ref spec, _) => Some(spec.clone()),
             &ClauseType::Inlined(InlinedClauseType::CompareNumber(..))
-            | &ClauseType::BuiltIn(BuiltInClauseType::Is(..))
-            | &ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(_))
-            | &ClauseType::BuiltIn(BuiltInClauseType::NotEq)
-            | &ClauseType::BuiltIn(BuiltInClauseType::Eq) => Some(SharedOpDesc::new(700, XFX)),
+          | &ClauseType::BuiltIn(BuiltInClauseType::Is(..))
+          | &ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(_))
+          | &ClauseType::BuiltIn(BuiltInClauseType::NotEq)
+          | &ClauseType::BuiltIn(BuiltInClauseType::Eq) => Some(SharedOpDesc::new(700, XFX)),
             _ => None,
         }
     }

@@ -922,7 +922,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         match heap_val {
             HeapCellValue::NamedStr(arity, name, spec) => {
-                if let Some(spec) = fetch_op_spec(name.clone(), arity, spec.clone(), self.op_dir) {
+                let spec = fetch_op_spec(name.clone(), arity, spec.clone(), self.op_dir);
+                
+                if let Some(spec) = spec {
                     self.handle_op_as_struct(
                         name,
                         arity,

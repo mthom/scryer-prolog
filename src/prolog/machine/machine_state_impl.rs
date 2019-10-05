@@ -1114,7 +1114,7 @@ impl MachineState {
     }
 
     fn pow(&self, n1: Number, n2: Number, culprit: &'static str) -> Result<Number, MachineStub> {
-        if n2.is_negative() {
+        if n2.is_negative() && n1.is_zero() {
             let stub = MachineError::functor_stub(clause_name!(culprit), 2);
             return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
         }
@@ -1882,7 +1882,7 @@ impl MachineState {
             &IndexingInstruction::SwitchOnConstant(_, ref hm) => {
                 let a1 = self.registers[1].clone();
                 let addr = self.store(self.deref(a1));
-
+                
                 let offset = match addr {
                     Addr::Con(constant) => match hm.get(&constant) {
                         Some(offset) => *offset,

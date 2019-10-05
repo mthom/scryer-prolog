@@ -280,6 +280,15 @@ pub fn fetch_op_spec(
     spec: Option<SharedOpDesc>,
     op_dir: &OpDir,
 ) -> Option<SharedOpDesc> {
+    if let Some(ref op_desc) = &spec {
+        if op_desc.arity() != arity {            
+            /* it's possible to extend operator functors with
+             * additional terms. When that happens,
+             * void the op_spec by returning None. */
+            return None; 
+        }
+    }
+
     spec.or_else(|| match arity {
         2 => op_dir
             .get(&(name, Fixity::In))
