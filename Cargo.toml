@@ -1,6 +1,6 @@
 [package]
 name = "scryer-prolog"
-version = "0.8.101"
+version = "0.8.102"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
 build = "build.rs"
 repository = "https://github.com/mthom/scryer-prolog"

@@ -143,14 +143,19 @@ pub fn to_op_decl(prec: usize, spec: &str, name: ClauseName) -> Result<OpDecl, P
     }
 }
 
-fn setup_op_decl(mut terms: Vec<Box<Term>>) -> Result<OpDecl, ParserError> {
+fn setup_op_decl(
+    mut terms: Vec<Box<Term>>,
+    atom_tbl: TabledData<Atom>,
+) -> Result<OpDecl, ParserError> {
     let name = match *terms.pop().unwrap() {
         Term::Constant(_, Constant::Atom(name, _)) => name,
+        Term::Constant(_, Constant::Char(c)) => clause_name!(c.to_string(), atom_tbl.clone()),
         _ => return Err(ParserError::InconsistentEntry),
     };
 
     let spec = match *terms.pop().unwrap() {
         Term::Constant(_, Constant::Atom(name, _)) => name,
+        Term::Constant(_, Constant::Char(c)) => clause_name!(c.to_string(), atom_tbl.clone()),
         _ => return Err(ParserError::InconsistentEntry),
     };
 
@@ -434,7 +439,7 @@ fn setup_declaration(
         Term::Clause(_, name, mut terms, _) =>
 	    match (name.as_str(), terms.len()) {
 		("op", 3) =>
-		    Ok(Declaration::Op(setup_op_decl(terms)?)),
+		    Ok(Declaration::Op(setup_op_decl(terms, indices.local.atom_tbl.clone())?)),
 		("module", 2) =>
 		    Ok(Declaration::Module(setup_module_decl(terms)?)),
 		("use_module", 1) =>

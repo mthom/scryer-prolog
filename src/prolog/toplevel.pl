@@ -24,8 +24,11 @@
     '$read_query_term'(Term, VarList),
     '$instruction_match'(Term, VarList).
 
+% make '$compile_batch', a system routine, callable.
+'$$compile_batch' :- '$compile_batch'.
+
 '$instruction_match'([user], []) :-
-    !, '$compile_batch'.
+    !, catch('$$compile_batch', E, '$print_exception_with_check'(E)).
 '$instruction_match'(Term, VarList) :-
     '$submit_query_and_print_results'(Term, VarList),
     !.
@@ -33,7 +36,14 @@
 '$print_exception'(E) :-
     write_term('caught: ', [quoted(false)]),
     writeq(E),
-    nl.    
+    nl.
+
+'$print_exception_with_check'(E) :-
+    (  E = error(_, _:_) -> true % if the error source contains a line
+                                 % number, a GNU-style error message
+                                 % is expected to be printed instead.
+    ;  '$print_exception'(E)
+    ).
 
 '$predicate_indicator'(Source, PI) :-
     (  nonvar(PI) ->
