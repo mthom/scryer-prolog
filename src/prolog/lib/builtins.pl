@@ -48,7 +48,7 @@ expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResu
 :- op(700, xfx, [==, \==, @=<, @>=, @<, @>]).
 
 % the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
-max_arity(63).
+max_arity(255).
 
 % conditional operators.
 :- op(1050, xfy, ->).

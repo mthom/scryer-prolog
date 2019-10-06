@@ -3416,7 +3416,7 @@ impl MachineState {
         self.mode = MachineMode::Write;
         self.and_stack.clear();
         self.or_stack.clear();
-        self.registers = vec![Addr::HeapCell(0); 64];
+        self.registers = vec![Addr::HeapCell(0); MAX_ARITY + 1]; // self.registers[0] is never used.
         self.block = 0;
 
         self.ball.reset();
