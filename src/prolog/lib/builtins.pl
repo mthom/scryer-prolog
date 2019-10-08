@@ -160,6 +160,7 @@ comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 :- non_counted_backtracking (;)/3.
 ;(G1, G4, B) :- compound(G1),
 		'$call_with_default_policy'(G1 = ->(G2, G3)),
+		!,
 		(G2 -> G3 ; '$set_cp'(B), G4).
 ;(G1, G2, B) :- G1 == !, '$set_cp'(B), G2.
 ;(G1, G2, B) :- G2 == !, G1, '$set_cp'(B).

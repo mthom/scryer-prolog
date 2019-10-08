@@ -313,12 +313,14 @@ impl<'a, R: Read> TermStream<'a, R> {
                     initial_term,
                     clause_name!(","),
                 )));
+                
                 Ok(Term::Clause(cell, name, terms, arity))
             }
             _ => Ok(term),
         }
     }
 
+    pub(super)
     fn expand_goals(
         &mut self,
         machine_st: &mut MachineState,
@@ -327,7 +329,7 @@ impl<'a, R: Read> TermStream<'a, R> {
     ) -> Result<Vec<Term>, ParserError> {
         let mut results = vec![];
 
-        while let Some(term) = terms.pop_front() {
+        while let Some(term) = terms.pop_front() {            
             match machine_st.try_expand_term(self.wam, &term, CompileTimeHook::GoalExpansion) {
                 Some(term_string) => {
                     let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;

@@ -5,7 +5,6 @@ use prolog::forms::*;
 use prolog::iterators::*;
 use prolog::machine::machine_errors::*;
 use prolog::machine::machine_indices::*;
-use prolog::machine::machine_state::MachineState;
 use prolog::machine::term_expansion::*;
 use prolog::machine::*;
 
@@ -18,48 +17,75 @@ use std::io::Read;
 use std::mem;
 use std::rc::Rc;
 
-struct CompositeIndices<'a, 'b> {
-    local: &'a mut IndexStore,
-    static_code_dir: Option<&'b CodeDir>,
+enum IndexSource<'a, T> {
+    TermStream,
+    Local(&'a mut T)
 }
 
-macro_rules! composite_indices {
-    ($in_module: expr, $local: expr, $static_code_dir: expr) => {
-        CompositeIndices {
-            local: $local,
-            static_code_dir: if $in_module {
-                None
-            } else {
-                Some($static_code_dir)
-            },
-        }
-    };
-    ($local: expr) => {
-        CompositeIndices {
-            local: $local,
-            static_code_dir: None,
-        }
-    };
+fn op_dir<'a, 'b: 'a>(from: &'b IndexSource<'a, IndexStore>) -> RefOrOwned<'a, OpDir> {
+    match from {
+        IndexSource::TermStream => RefOrOwned::Owned(OpDir::new()),
+        IndexSource::Local(ref indices) => RefOrOwned::Borrowed(&indices.op_dir)
+    }
 }
 
-impl<'a, 'b> CompositeIndices<'a, 'b> {
+struct CompositeIndices<'a, 'b, 'c, R: Read> {
+    term_stream: &'b mut TermStream<'a, R>,
+    index_src: IndexSource<'c, IndexStore>,
+    static_code_dir: Option<IndexSource<'c, CodeDir>>
+}
+
+impl<'a, 'b, 'c, R: Read> CompositeIndices<'a, 'b, 'c, R> {
+    fn new(
+        term_stream: &'b mut TermStream<'a, R>,
+        index_src: IndexSource<'c, IndexStore>,
+        static_code_dir: Option<IndexSource<'c, CodeDir>>,
+    ) -> Self {
+        CompositeIndices {
+            term_stream,
+            index_src,
+            static_code_dir,
+        }
+    }
+
+    fn atom_tbl(&self) -> TabledData<Atom> {
+        match self.index_src {
+            IndexSource::TermStream => self.term_stream.wam.indices.atom_tbl.clone(),
+            IndexSource::Local(ref indices) => indices.atom_tbl.clone(),
+        }
+    }
+
+    fn local_code_dir(&mut self) -> &mut CodeDir {
+        match self.index_src {
+            IndexSource::TermStream => &mut self.term_stream.wam.indices.code_dir,
+            IndexSource::Local(ref mut indices) => &mut indices.code_dir,
+        }
+    }
+
+    fn static_code_dir(&self) -> Option<&CodeDir> {
+        match self.static_code_dir {
+            Some(IndexSource::TermStream) => Some(&self.term_stream.wam.indices.code_dir),
+            Some(IndexSource::Local(ref code_dir)) => Some(code_dir),
+            None => None
+        }
+    }
+
     fn get_code_index(&mut self, name: ClauseName, arity: usize) -> CodeIndex {
-        let idx_opt = self
-            .local
-            .code_dir
-            .get(&(name.clone(), arity))
-            .or_else(|| match &self.static_code_dir {
-                &Some(ref code_dir) => code_dir.get(&(name.clone(), arity)),
+        let idx_opt = self.local_code_dir().get(&(name.clone(), arity));
+        let idx_opt = match idx_opt {
+            Some(idx) => Some(idx.clone()),
+            None => match self.static_code_dir() {
+                Some(ref code_dir) => code_dir.get(&(name.clone(), arity)).cloned(),
                 _ => None,
-            })
-            .cloned();
+            }
+        };
 
         if let Some(idx) = idx_opt {
-            self.local.code_dir.insert((name, arity), idx.clone());
+            self.local_code_dir().insert((name, arity), idx.clone());
             idx
         } else {
             let idx = CodeIndex::default();
-            self.local.code_dir.insert((name, arity), idx.clone());
+            self.local_code_dir().insert((name, arity), idx.clone());
             idx
         }
     }
@@ -400,7 +426,7 @@ fn check_for_internal_if_then(terms: &mut Vec<Term>) {
 }
 
 fn flatten_hook(mut term: Term) -> Term {
-    if let &mut Term::Clause(_, ref mut name, ref mut terms, _) = &mut term {
+    if let Term::Clause(_, ref mut name, ref mut terms, _) = &mut term {
         match (name.as_str(), terms.len()) {
             (":-", 2) => {
                 let inner_term = match terms.first_mut().map(|term| term.borrow_mut()) {
@@ -426,8 +452,8 @@ fn flatten_hook(mut term: Term) -> Term {
     term
 }
 
-fn setup_declaration(
-    indices: &mut CompositeIndices,
+fn setup_declaration<'a, 'b, 'c, R: Read>(
+    indices: &mut CompositeIndices<'a, 'b, 'c, R>,
     flags: MachineFlags,
     mut terms: Vec<Box<Term>>,
     line_num: usize,
@@ -439,7 +465,7 @@ fn setup_declaration(
         Term::Clause(_, name, mut terms, _) =>
 	    match (name.as_str(), terms.len()) {
 		("op", 3) =>
-		    Ok(Declaration::Op(setup_op_decl(terms, indices.local.atom_tbl.clone())?)),
+		    Ok(Declaration::Op(setup_op_decl(terms, indices.atom_tbl())?)),
 		("module", 2) =>
 		    Ok(Declaration::Module(setup_module_decl(terms)?)),
 		("use_module", 1) =>
@@ -597,9 +623,9 @@ impl RelationWorker {
         self.fabricate_rule(fold_by_str(prec_seq.into_iter(), body_term, comma_sym))
     }
 
-    fn to_query_term(
+    fn to_query_term<'a, 'b, 'c, R: Read>(
         &mut self,
-        indices: &mut CompositeIndices,
+        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
         term: Term,
     ) -> Result<QueryTerm, ParserError> {
         match term {
@@ -657,37 +683,9 @@ impl RelationWorker {
         }
     }
 
-    // never blocks cuts in the consequent.
-    fn prepend_if_then(
-        &self,
-        prec: Term,
-        conq: Term,
-        queue: &mut VecDeque<Box<Term>>,
-        blocks_cuts: bool,
-    ) {
-        let cut_symb = atom!("blocked_!");
-        let mut terms_seq = unfold_by_str(prec, ",");
-
-        terms_seq.push(Term::Constant(Cell::default(), cut_symb));
-
-        let mut conq_seq = unfold_by_str(conq, ",");
-
-        if !blocks_cuts {
-            for item in conq_seq.iter_mut() {
-                mark_cut_variable(item);
-            }
-        }
-
-        terms_seq.append(&mut conq_seq);
-
-        while let Some(term) = terms_seq.pop() {
-            queue.push_front(Box::new(term));
-        }
-    }
-
-    fn pre_query_term(
+    fn pre_query_term<'a, 'b, 'c, R: Read>(
         &mut self,
-        indices: &mut CompositeIndices,
+        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
         term: Term,
     ) -> Result<QueryTerm, ParserError> {
         match term {
@@ -706,48 +704,64 @@ impl RelationWorker {
         }
     }
 
-    fn setup_query(
+    fn setup_query<'a, 'b, 'c, R: Read>(
         &mut self,
-        indices: &mut CompositeIndices,
+        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
         terms: Vec<Box<Term>>,
         blocks_cuts: bool,
     ) -> Result<Vec<QueryTerm>, ParserError> {
         let mut query_terms = vec![];
         let mut work_queue = VecDeque::from(terms);
-
+        let mut machine_st = MachineState::new();
+        
         while let Some(term) = work_queue.pop_front() {
             let mut term = *term;
 
-            // a (->) clause makes up the entire query. That's what the test confirms.
-            if query_terms.is_empty() && work_queue.is_empty() {
-                // check for ->, inline it if found.
-                if let &mut Term::Clause(_, ref name, ref mut subterms, _) = &mut term {
-                    if name.as_str() == "->" && subterms.len() == 2 {
-                        let conq = *subterms.pop().unwrap();
-                        let prec = *subterms.pop().unwrap();
+            if let Term::Clause(cell, name, terms, op_spec) = term {
+                if name.as_str() == "," {
+                    let term = Term::Clause(cell, name, terms, op_spec);
+                    let mut subterms = unfold_by_str(term, ",");
 
-                        self.prepend_if_then(prec, conq, &mut work_queue, blocks_cuts);
-                        continue;
+                    while let Some(subterm) = subterms.pop() {
+                        work_queue.push_front(Box::new(subterm));
                     }
+
+                    continue;
+                } else {
+                    term = Term::Clause(cell, name, terms, op_spec);
                 }
             }
 
-            for mut subterm in unfold_by_str(term, ",") {
+            let op_dir = op_dir(&indices.index_src);
+
+            let mut expanded_terms = indices.term_stream.expand_goals(
+                &mut machine_st,
+                op_dir.as_ref(),
+                VecDeque::from(vec![term])
+            )?;
+            
+            while let Some(term) = expanded_terms.pop() {
+                work_queue.push_front(Box::new(term));
+            }
+
+            if let Some(term) = work_queue.pop_front() {            
+                let mut term = *term;
+
                 if !blocks_cuts {
-                    mark_cut_variable(&mut subterm);
+                    mark_cut_variable(&mut term);
                 }
 
-                query_terms.push(self.pre_query_term(indices, subterm)?);
+                query_terms.push(self.pre_query_term(indices, term)?);
             }
         }
 
         Ok(query_terms)
     }
 
-    fn setup_hook(
+    fn setup_hook<'a, 'b, 'c, R: Read>(
         &mut self,
         hook: CompileTimeHook,
-        indices: &mut CompositeIndices,
+        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
         term: Term,
     ) -> Result<CompileTimeHookCompileInfo, ParserError> {
         match flatten_hook(term) {
@@ -768,9 +782,9 @@ impl RelationWorker {
         }
     }
 
-    fn setup_rule(
+    fn setup_rule<'a, 'b, 'c, R: Read>(
         &mut self,
-        indices: &mut CompositeIndices,
+        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
         mut terms: Vec<Box<Term>>,
         blocks_cuts: bool,
         assume_dyn: bool,
@@ -801,9 +815,9 @@ impl RelationWorker {
         }
     }
 
-    fn try_term_to_query(
+    fn try_term_to_query<'a, 'b, 'c, R: Read>(
         &mut self,
-        indices: &mut CompositeIndices,
+        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
         terms: Vec<Box<Term>>,
         blocks_cuts: bool,
     ) -> Result<TopLevel, ParserError> {
@@ -814,9 +828,9 @@ impl RelationWorker {
         )?))
     }
 
-    fn try_term_to_tl(
+    fn try_term_to_tl<'a, 'b, 'c, R: Read>(
         &mut self,
-        indices: &mut CompositeIndices,
+        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
         term: Term,
         blocks_cuts: bool,
     ) -> Result<TopLevel, ParserError> {
@@ -850,14 +864,14 @@ impl RelationWorker {
         }
     }
 
-    fn try_terms_to_tls<I>(
+    fn try_terms_to_tls<'a, 'b, 'c, I, R>(
         &mut self,
-        indices: &mut CompositeIndices,
+        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
         terms: I,
         blocks_cuts: bool,
     ) -> Result<VecDeque<TopLevel>, ParserError>
     where
-        I: IntoIterator<Item = Term>,
+        I: IntoIterator<Item = Term>, R: Read
     {
         let mut results = VecDeque::new();
 
@@ -868,9 +882,9 @@ impl RelationWorker {
         Ok(results)
     }
 
-    fn parse_queue(
+    fn parse_queue<'a, 'b, 'c, R: Read>(
         &mut self,
-        indices: &mut CompositeIndices,
+        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
     ) -> Result<VecDeque<TopLevel>, ParserError> {
         let mut queue = VecDeque::new();
 
@@ -887,54 +901,6 @@ impl RelationWorker {
         self.dynamic_clauses
             .extend(other.dynamic_clauses.into_iter());
     }
-
-    fn expand_queue_contents<R>(
-        &mut self,
-        term_stream: &mut TermStream<R>,
-        op_dir: &OpDir,
-    ) -> Result<(), SessionError>
-    where
-        R: Read,
-    {
-        let mut machine_st = MachineState::new();
-        let mut new_queue = VecDeque::new();
-
-        while let Some(terms) = self.queue.pop_front() {
-            let mut new_terms = VecDeque::new();
-
-            for term in terms {
-                new_terms.push_back(term_stream.run_goal_expanders(
-                    &mut machine_st,
-                    &op_dir,
-                    term,
-                )?);
-            }
-
-            new_queue.push_back(new_terms);
-        }
-
-        Ok(self.queue = new_queue)
-    }
-}
-
-fn term_to_toplevel<R>(
-    term_stream: &mut TermStream<R>,
-    code_dir: &mut CodeDir,
-    term: Term,
-    flags: MachineFlags,
-) -> Result<(TopLevel, RelationWorker), ParserError>
-where
-    R: Read,
-{
-    let line_num = term_stream.line_num();
-    let col_num  = term_stream.col_num();
-
-    let mut rel_worker = RelationWorker::new(flags, line_num, col_num);
-    let mut indices = composite_indices!(false, &mut term_stream.wam.indices, code_dir);
-
-    let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
-
-    Ok((tl, rel_worker))
 }
 
 pub fn stream_to_toplevel<R: Read>(
@@ -954,10 +920,17 @@ pub fn stream_to_toplevel<R: Read>(
     let term = term_stream.read_term(&OpDir::new())?;
     let mut code_dir = CodeDir::new();
 
-    let (tl, mut rel_worker) = term_to_toplevel(&mut term_stream, &mut code_dir, term, flags)?;
-    rel_worker.expand_queue_contents(&mut term_stream, &OpDir::new())?;
+    let line_num = term_stream.line_num();
+    let col_num  = term_stream.col_num();
 
-    let mut indices = composite_indices!(false, &mut term_stream.wam.indices, &mut code_dir);
+    let mut rel_worker = RelationWorker::new(flags, line_num, col_num);
+    let mut indices = CompositeIndices::new(
+        &mut term_stream,
+        IndexSource::TermStream,
+        Some(IndexSource::Local(&mut code_dir))
+    );
+
+    let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
     let queue = rel_worker.parse_queue(&mut indices)?;
 
     Ok(deque_to_packet(tl, queue))
@@ -995,7 +968,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
     }
 
     fn try_term_to_tl(
-        &self,
+        &mut self,
         indices: &mut IndexStore,
         term: Term,
     ) -> Result<(TopLevel, RelationWorker), SessionError> {
@@ -1003,10 +976,10 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         let col_num  = self.term_stream.col_num();
 
         let mut new_rel_worker = RelationWorker::new(self.rel_worker.flags, line_num, col_num);
-        let mut indices = composite_indices!(
-            self.in_module,
-            indices,
-            &self.term_stream.wam.indices.code_dir
+        let mut indices = CompositeIndices::new(
+            &mut self.term_stream,
+            IndexSource::Local(indices),
+            if self.in_module { None } else { Some(IndexSource::TermStream) }
         );
 
         Ok((
@@ -1020,24 +993,21 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         indices: &mut IndexStore,
         preds: &mut Vec<PredicateClause>,
     ) -> Result<(), SessionError> {
-        self.rel_worker
-            .expand_queue_contents(&mut self.term_stream, &indices.op_dir)?;
-
-        let mut indices = composite_indices!(
-            self.in_module,
-            indices,
-            &mut self.term_stream.wam.indices.code_dir
+        let mut indices = CompositeIndices::new(
+            &mut self.term_stream,
+            IndexSource::Local(indices),
+            if self.in_module { None } else { Some(IndexSource::TermStream) }
         );
 
         let queue = self.rel_worker.parse_queue(&mut indices)?;
         let result = (append_preds(preds), queue);
 
-        let in_situ_code_dir = &mut self.term_stream.wam.indices.in_situ_code_dir;
+        let in_situ_code_dir = &mut indices.term_stream.wam.indices.in_situ_code_dir;
 
-        self.term_stream.wam.code_repo.add_in_situ_result(
+        indices.term_stream.wam.code_repo.add_in_situ_result(
             &result,
             in_situ_code_dir,
-            self.term_stream.flags,
+            indices.term_stream.flags,
         )?;
 
         Ok(self.results.push(result))

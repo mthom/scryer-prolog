@@ -901,7 +901,7 @@ impl ListingCompiler {
                                         CodeIndex::dynamic_undefined(self.get_module_name()));
             }
             &Declaration::Hook(hook, _, ref queue) if self.module.is_none() => worker
-                .term_stream
+                .term_stream                
                 .incr_expansion_lens(hook.user_scope(), 1, queue.len()),
             &Declaration::Hook(hook, _, ref queue) if !hook.has_module_scope() => {
                 worker.term_stream.incr_expansion_lens(hook, 1, queue.len())

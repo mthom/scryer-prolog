@@ -7,16 +7,7 @@
 
 user:term_expansion(Term0, (Head :- Body)) :-
     dcg_rule(Term0, Term),
-    Term = (Head :- Body0),
-    unravel_commas(Body0, Body).
-
-unravel_commas(((A, B), C), Body) :-
-    !,
-    unravel_commas((B, C), Body0),
-    unravel_commas((A, Body0), Body).
-unravel_commas((A, B), (A, Body0)) :-
-    !, unravel_commas(B, Body0).
-unravel_commas(Body, Body).
+    Term = (Head :- Body).
 
 phrase(GRBody, S0) :-
     phrase(GRBody, S0, []).

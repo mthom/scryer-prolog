@@ -18,7 +18,8 @@
 
 '$default_attr_list'([PG | PGs], Module, AttrVar) -->
     (  { '$module_of'(Module, PG) } -> [Module:put_atts(AttrVar, PG)]
-    ;  { true } ),
+    ;  true
+    ),
     '$default_attr_list'(PGs, Module, AttrVar).
 '$default_attr_list'([], _, _) --> [].
 
