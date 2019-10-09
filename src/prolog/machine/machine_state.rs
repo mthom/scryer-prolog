@@ -943,22 +943,22 @@ impl CallPolicy for CWILCallPolicy {
     }
 }
 
-downcast!(CallPolicy);
+downcast!(dyn CallPolicy);
 
 pub(crate) struct DefaultCallPolicy {}
 
 impl CallPolicy for DefaultCallPolicy {}
 
 pub(crate) struct CWILCallPolicy {
-    pub(crate) prev_policy: Box<CallPolicy>,
+    pub(crate) prev_policy: Box<dyn CallPolicy>,
     count: Integer,
     limits: Vec<(Integer, usize)>,
     inference_limit_exceeded: bool,
 }
 
 impl CWILCallPolicy {
-    pub(crate) fn new_in_place(policy: &mut Box<CallPolicy>) {
-        let mut prev_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
+    pub(crate) fn new_in_place(policy: &mut Box<dyn CallPolicy>) {
+        let mut prev_policy: Box<dyn CallPolicy> = Box::new(DefaultCallPolicy {});
         mem::swap(&mut prev_policy, policy);
 
         let new_policy = CWILCallPolicy {
@@ -1016,8 +1016,8 @@ impl CWILCallPolicy {
         self.limits.is_empty()
     }
 
-    pub(crate) fn into_inner(&mut self) -> Box<CallPolicy> {
-        let mut new_inner: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
+    pub(crate) fn into_inner(&mut self) -> Box<dyn CallPolicy> {
+        let mut new_inner: Box<dyn CallPolicy> = Box::new(DefaultCallPolicy {});
         mem::swap(&mut self.prev_policy, &mut new_inner);
         new_inner
     }
@@ -1028,7 +1028,7 @@ pub(crate) trait CutPolicy: Any {
     fn cut(&mut self, &mut MachineState, RegType) -> bool;
 }
 
-downcast!(CutPolicy);
+downcast!(dyn CutPolicy);
 
 fn cut_body(machine_st: &mut MachineState, addr: Addr) -> bool {
     let b = machine_st.b;

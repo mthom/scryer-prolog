@@ -550,8 +550,8 @@ impl MachineState {
         ct: &SystemClauseType,
         code_repo: &CodeRepo,
         indices: &mut IndexStore,
-        call_policy: &mut Box<CallPolicy>,
-        cut_policy: &mut Box<CutPolicy>,
+        call_policy: &mut Box<dyn CallPolicy>,
+        cut_policy: &mut Box<dyn CutPolicy>,
         current_input_stream: &mut PrologStream,
     ) -> CallResult {
         match ct {

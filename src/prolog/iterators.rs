@@ -342,7 +342,7 @@ fn contains_cut_var<'a, Iter: Iterator<Item = &'a Term>>(terms: Iter) -> bool {
 
 pub struct ChunkedIterator<'a> {
     pub chunk_num: usize,
-    iter: Box<Iterator<Item = ChunkedTerm<'a>> + 'a>,
+    iter: Box<dyn Iterator<Item = ChunkedTerm<'a>> + 'a>,
     deep_cut_encountered: bool,
     cut_var_in_head: bool,
 }
@@ -351,7 +351,7 @@ type ChunkedIteratorItem<'a> = (usize, usize, Vec<ChunkedTerm<'a>>);
 type RuleBodyIteratorItem<'a> = (usize, usize, Vec<&'a QueryTerm>);
 
 impl<'a> ChunkedIterator<'a> {
-    pub fn rule_body_iter(self) -> Box<Iterator<Item = RuleBodyIteratorItem<'a>> + 'a> {
+    pub fn rule_body_iter(self) -> Box<dyn Iterator<Item = RuleBodyIteratorItem<'a>> + 'a> {
         Box::new(self.filter_map(|(cn, lt_arity, terms)| {
             let filtered_terms: Vec<_> = terms
                 .into_iter()
