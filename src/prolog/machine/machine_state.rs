@@ -21,7 +21,7 @@ use std::io::{stdout, Write};
 use std::mem;
 use std::ops::{Index, IndexMut};
 
-pub(super) struct Ball {
+pub struct Ball {
     pub(super) boundary: usize,   // ball.0
     pub(super) stub: MachineStub, // ball.1
 }
@@ -47,6 +47,22 @@ impl Ball {
             boundary,
             stub: mem::replace(&mut self.stub, vec![]),
         }
+    }
+
+    pub(super) fn copy_and_align(&self, h: usize) -> MachineStub {
+        let diff = self.boundary as i64 - h as i64;
+        let mut stub = vec![];
+
+        for index in 0..self.stub.len() {
+            let heap_value = self.stub[index].clone();
+
+            stub.push(match heap_value {
+                HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
+                _ => heap_value,
+            });
+        }
+
+        stub        
     }
 }
 

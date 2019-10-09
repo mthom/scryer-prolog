@@ -713,25 +713,9 @@ impl RelationWorker {
         let mut query_terms = vec![];
         let mut work_queue = VecDeque::from(terms);
         let mut machine_st = MachineState::new();
-        
+
         while let Some(term) = work_queue.pop_front() {
-            let mut term = *term;
-
-            if let Term::Clause(cell, name, terms, op_spec) = term {
-                if name.as_str() == "," {
-                    let term = Term::Clause(cell, name, terms, op_spec);
-                    let mut subterms = unfold_by_str(term, ",");
-
-                    while let Some(subterm) = subterms.pop() {
-                        work_queue.push_front(Box::new(subterm));
-                    }
-
-                    continue;
-                } else {
-                    term = Term::Clause(cell, name, terms, op_spec);
-                }
-            }
-
+            let term = *term;
             let op_dir = op_dir(&indices.index_src);
 
             let mut expanded_terms = indices.term_stream.expand_goals(
@@ -739,13 +723,28 @@ impl RelationWorker {
                 op_dir.as_ref(),
                 VecDeque::from(vec![term])
             )?;
-            
+
             while let Some(term) = expanded_terms.pop() {
                 work_queue.push_front(Box::new(term));
             }
 
-            if let Some(term) = work_queue.pop_front() {            
+            if let Some(term) = work_queue.pop_front() {
                 let mut term = *term;
+
+                if let Term::Clause(cell, name, terms, op_spec) = term {
+                    if name.as_str() == "," {
+                        let term = Term::Clause(cell, name, terms, op_spec);
+                        let mut subterms = unfold_by_str(term, ",");
+                        
+                        while let Some(subterm) = subterms.pop() {
+                            work_queue.push_front(Box::new(subterm));
+                        }
+                        
+                        continue;
+                    } else {
+                        term = Term::Clause(cell, name, terms, op_spec);
+                    }
+                }
 
                 if !blocks_cuts {
                     mark_cut_variable(&mut term);
@@ -754,7 +753,7 @@ impl RelationWorker {
                 query_terms.push(self.pre_query_term(indices, term)?);
             }
         }
-
+        
         Ok(query_terms)
     }
 

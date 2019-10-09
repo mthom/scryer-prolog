@@ -840,8 +840,14 @@ impl MachineState {
 
                 let addr = self[temp_v!(2)].clone();
 
-                match indices.global_variables.get(&key).cloned() {
-                    Some(sought_addr) => self.unify(addr, sought_addr),
+                match indices.global_variables.get(&key) {
+                    Some(ref ball) => {
+                        let h = self.heap.h;
+                        let stub = ball.copy_and_align(h);
+
+                        self.heap.extend(stub.into_iter());
+                        self.unify(addr, Addr::HeapCell(h));
+                    }
                     None => self.fail = true,
                 };
             }
@@ -1671,7 +1677,7 @@ impl MachineState {
                 let h = self.heap.h;
 
                 if self.ball.stub.len() > 0 {
-                    let stub = self.copy_and_align_ball();
+                    let stub = self.ball.copy_and_align(h);
                     self.heap.append(stub);
                 } else {
                     self.fail = true;
@@ -1759,9 +1765,16 @@ impl MachineState {
                     _ => unreachable!(),
                 };
 
-                let value = self[temp_v!(2)].clone();
-
-                indices.global_variables.insert(key, value);
+                let value = self[temp_v!(2)].clone();                
+                let mut ball = Ball::new();
+                
+                ball.boundary = self.heap.h;
+                copy_term(
+                    CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut ball.stub),
+                    value,
+                );
+                
+                indices.global_variables.insert(key, ball);
             }
             &SystemClauseType::Succeed => {}
             &SystemClauseType::TermVariables => {

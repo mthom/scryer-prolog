@@ -15,16 +15,20 @@ enqueue_goals(Goals0) :-
     enqueue_goals(Goals).
 enqueue_goals(_).
 
-'$print_exception'(E) :-
-    write_term('caught: ', [quoted(false)]),
-    writeq(E),
-    nl.
+'$print_project_attributes_exception'(Module, E) :-
+    (  E = error(evaluation_error((Module:project_attributes)/2), project_attributes/2) ->
+       true
+    ;  write_term('caught: ', [quoted(false)]),
+       writeq(E),
+       nl
+    ).
 
 call_project_attributes([], _, _).
 call_project_attributes([Module|Modules], QueryVars, AttrVars) :-
     (   catch(Module:project_attributes(QueryVars, AttrVars),
-	      E, %error(evaluation_error((Module:project_attributes)/2), project_attributes/2),
-	      '$print_exception'(E)) -> true
+	      E,
+	      '$print_project_attributes_exception'(Module, E))
+    ->  true
     ;   true
     ),
     call_project_attributes(Modules, QueryVars, AttrVars).
@@ -35,12 +39,25 @@ call_attribute_goals([Module | Modules], AttrVars) :-
     enqueue_goals(Goals),
     call_attribute_goals(Modules, AttrVars).
 
+'$print_attribute_goals_exception'(Module, E) :-
+    (  E = error(evaluation_error((Module:attribute_goals)/3), attribute_goals/3)
+    -> true
+    ;  write_term('caught: ', [quoted(false)]),
+       writeq(E),
+       nl
+    ).
+
 call_goals([], _, []).
 call_goals([AttrVar|AttrVars], Module, Goals) :-
-    (  catch(Module:attribute_goals(AttrVar, Goals, RGoals),
-	     E, %error(evaluation_error((Module:attribute_goals)/3), attribute_goals/3),
-	     ('$print_exception'(E), atts:'$default_attr_list'(Module, AttrVar, Goals, RGoals))) -> true
-    ;  true
+    (  catch((  Module:attribute_goals(AttrVar, Goals, RGoals0),
+	        atts:'$default_attr_list'(Module, AttrVar, RGoals0, RGoals)
+	     ),
+	     E,
+	     (  '$print_attribute_goals_exception'(Module, E),
+		atts:'$default_attr_list'(Module, AttrVar, Goals, RGoals)
+	     ))
+    -> true
+    ;  atts:'$default_attr_list'(Module, AttrVar, Goals, RGoals)
     ),
     call_goals(AttrVars, Module, RGoals).
 

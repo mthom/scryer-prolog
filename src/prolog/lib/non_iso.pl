@@ -12,7 +12,9 @@ forall(Generate, Test) :-
 
 %% (non-)backtrackable global variables.
 
-bb_put(Key, Value) :- atom(Key), !, '$store_global_var'(Key, Value).
+bb_put(Key, Value) :- atom(Key),
+		      !,
+		      '$store_global_var'(Key, Value).
 bb_put(Key, _) :- throw(error(type_error(atom, Key), bb_put/2)).
 
 bb_b_put(Key, NewValue) :-

@@ -173,7 +173,7 @@ impl MachineState {
             }
             _ => {
                 self.push_attr_var_binding(h, addr.clone());
-                self.heap[h] = HeapCellValue::Addr(addr);
+                self.heap[h] = HeapCellValue::Addr(addr);                
                 self.trail(TrailRef::Ref(Ref::AttrVar(h)));
             }
         }
@@ -201,7 +201,8 @@ impl MachineState {
                     self.heap[h] = HeapCellValue::Addr(t1);
                     self.trail(TrailRef::Ref(Ref::HeapCell(h)));
                 }
-                Some(Ref::AttrVar(h)) => return self.bind_attr_var(h, t1),
+                Some(Ref::AttrVar(h)) =>
+                    self.bind_attr_var(h, t1),
                 None => {}
             }
         }
@@ -2091,26 +2092,6 @@ impl MachineState {
         self.fail = true;
     }
 
-    fn heap_ball_boundary_diff(&self) -> i64 {
-        self.ball.boundary as i64 - self.heap.h as i64
-    }
-
-    pub(super) fn copy_and_align_ball(&self) -> MachineStub {
-        let diff = self.heap_ball_boundary_diff();
-        let mut stub = vec![];
-
-        for index in 0..self.ball.stub.len() {
-            let heap_value = self.ball.stub[index].clone();
-
-            stub.push(match heap_value {
-                HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
-                _ => heap_value,
-            });
-        }
-
-        stub
-    }
-
     pub(crate) fn is_cyclic_term(&self, addr: Addr) -> bool {
         let mut seen = IndexSet::new();
         let mut fail = false;
@@ -2264,7 +2245,8 @@ impl MachineState {
     }
 
     // returns true on failure.
-    pub(super) fn eq_test(&self, a1: Addr, a2: Addr) -> bool {
+    pub(super)
+    fn eq_test(&self, a1: Addr, a2: Addr) -> bool {
         let mut iter = self.zipped_acyclic_pre_order_iter(a1, a2);
 
         while let Some((v1, v2)) = iter.next() {

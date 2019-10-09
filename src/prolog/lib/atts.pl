@@ -13,8 +13,10 @@
    of a particular module, as a list of terms of the form
    Module:put_atts(V, ListOfAtts). */
 '$default_attr_list'(Module, V) -->
-    { Module:get_atts(V, Attributes) },
-    '$default_attr_list'(Attributes, Module, V).
+    (  { Module:get_atts(V, Attributes) } ->
+       '$default_attr_list'(Attributes, Module, V)
+    ;  []
+    ).
 
 '$default_attr_list'([PG | PGs], Module, AttrVar) -->
     (  { '$module_of'(Module, PG) } -> [Module:put_atts(AttrVar, PG)]

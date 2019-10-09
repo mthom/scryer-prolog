@@ -15,7 +15,7 @@ pub(crate) trait CopierTarget: IndexMut<usize, Output = HeapCellValue> {
 
 pub(crate) fn copy_term<T: CopierTarget>(target: T, addr: Addr) {
     let mut copy_term_state = CopyTermState::new(target);
-    copy_term_state.copy_term_impl(addr);
+    copy_term_state.copy_term_impl(addr);    
 }
 
 struct CopyTermState<T: CopierTarget> {

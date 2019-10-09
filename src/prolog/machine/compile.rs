@@ -1070,14 +1070,19 @@ pub fn compile_special_form<R: Read>(
     wam: &mut Machine,
     src: ParsingStream<R>,
     listing_src: ClauseName,
-) -> Result<Code, SessionError> {
+) -> Result<usize, SessionError> {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     setup_indices(wam, clause_name!("builtins"), &mut indices)?;
 
     let mut compiler = ListingCompiler::new(&wam.code_repo, true, listing_src);
     let results = compiler.gather_items(wam, src, &mut indices)?;
 
-    compiler.generate_code(results.worker_results, wam, &mut indices.code_dir, 0)
+    let code = compiler.generate_code(results.worker_results, wam, &mut indices.code_dir, 0)?;
+    let p = wam.code_repo.code.len();
+
+    add_toplevel_code(wam, code, indices);
+
+    Ok(p)
 }
 
 #[inline]

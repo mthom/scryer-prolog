@@ -4,6 +4,7 @@ use prolog_parser::tabled_rc::*;
 use prolog::clause_types::*;
 use prolog::fixtures::*;
 use prolog::forms::*;
+use prolog::machine::Ball;
 
 use indexmap::IndexMap;
 
@@ -454,7 +455,7 @@ pub type InSituCodeDir = IndexMap<PredicateKey, usize>;
 // key type: module name, predicate indicator.
 pub type DynamicCodeDir = IndexMap<(ClauseName, ClauseName, usize), DynamicPredicateInfo>;
 
-pub type GlobalVarDir = IndexMap<ClauseName, Addr>;
+pub type GlobalVarDir = IndexMap<ClauseName, Ball>;
 
 pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,

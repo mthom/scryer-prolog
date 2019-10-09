@@ -179,18 +179,16 @@ impl Machine {
 
         match compile_special_form(self, parsing_stream(VERIFY_ATTRS.as_bytes()), verify_attrs_src)
         {
-            Ok(code) => {
-                self.machine_st.attr_var_init.verify_attrs_loc = self.code_repo.code.len();
-                self.code_repo.code.extend(code.into_iter());
+            Ok(p) => {
+                self.machine_st.attr_var_init.verify_attrs_loc = p;
             }
             Err(_) => panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS"),
         }
 
         match compile_special_form(self, parsing_stream(PROJECT_ATTRS.as_bytes()), project_attrs_src)
         {
-            Ok(code) => {
-                self.machine_st.attr_var_init.project_attrs_loc = self.code_repo.code.len();
-                self.code_repo.code.extend(code.into_iter());
+            Ok(p) => {
+                self.machine_st.attr_var_init.project_attrs_loc = p;
             }
             Err(e) => panic!("Machine::compile_special_forms() failed at PROJECT_ATTRS: {}", e),
         }
@@ -602,7 +600,9 @@ impl Machine {
         self.machine_st.absorb_snapshot(snapshot);
         self.machine_st.ball = ball;
 
-        let stub = self.machine_st.copy_and_align_ball();
+        let h = self.machine_st.heap.h;        
+        let stub = self.machine_st.ball.copy_and_align(h);
+
         self.machine_st.throw_exception(stub);
 
         return;
