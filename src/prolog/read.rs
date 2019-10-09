@@ -2,10 +2,10 @@ use prolog_parser::ast::*;
 use prolog_parser::parser::*;
 use prolog_parser::tabled_rc::TabledData;
 
-use prolog::forms::*;
-use prolog::iterators::*;
-use prolog::machine::machine_indices::*;
-use prolog::machine::machine_state::MachineState;
+use crate::prolog::forms::*;
+use crate::prolog::iterators::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::machine_state::MachineState;
 
 use std::collections::VecDeque;
 use std::io::Read;
@@ -27,8 +27,8 @@ pub type PrologStream = ParsingStream<Box<dyn Read>>;
 
 pub mod readline {
     use prolog_parser::ast::*;
-    use prolog::rustyline::error::ReadlineError;
-    use prolog::rustyline::{Cmd, Editor, KeyPress};
+    use crate::prolog::rustyline::error::ReadlineError;
+    use crate::prolog::rustyline::{Cmd, Editor, KeyPress};
     use std::io::Read;
 
     static mut PROMPT: bool = false;
@@ -115,7 +115,7 @@ pub mod readline {
     }
 
     #[inline]
-    pub fn input_stream() -> ::PrologStream {
+    pub fn input_stream() -> crate::PrologStream {
         let reader: Box<dyn Read> = Box::new(ReadlineStream::input_stream(String::from("")));
         parsing_stream(reader)
     }

@@ -1,9 +1,9 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::*;
 
-use prolog::machine::machine_indices::*;
-use prolog::machine::machine_state::*;
-use prolog::rug::Integer;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::machine_state::*;
+use crate::prolog::rug::Integer;
 
 pub(crate) type MachineStub = Vec<HeapCellValue>;
 

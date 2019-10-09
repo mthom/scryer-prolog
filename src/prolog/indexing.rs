@@ -1,6 +1,6 @@
 use prolog_parser::ast::*;
 
-use prolog::instructions::*;
+use crate::prolog::instructions::*;
 
 use indexmap::IndexMap;
 

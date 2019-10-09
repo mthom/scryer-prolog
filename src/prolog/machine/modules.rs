@@ -1,10 +1,10 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::forms::*;
-use prolog::machine::code_repo::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
+use crate::prolog::forms::*;
+use crate::prolog::machine::code_repo::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
 
 use std::collections::VecDeque;
 
@@ -82,10 +82,10 @@ impl Module {
 pub trait SubModuleUser {
     fn atom_tbl(&self) -> TabledData<Atom>;
     fn op_dir(&mut self) -> &mut OpDir;
-    fn remove_code_index(&mut self, PredicateKey);
-    fn get_code_index(&self, PredicateKey, ClauseName) -> Option<CodeIndex>;
+    fn remove_code_index(&mut self, _: PredicateKey);
+    fn get_code_index(&self, _: PredicateKey, _: ClauseName) -> Option<CodeIndex>;
 
-    fn insert_dir_entry(&mut self, ClauseName, usize, CodeIndex);
+    fn insert_dir_entry(&mut self, _: ClauseName, _: usize, _: CodeIndex);
 
     fn get_op_module_name(&mut self, name: ClauseName, fixity: Fixity) -> Option<ClauseName> {
         self.op_dir()
@@ -168,12 +168,12 @@ pub trait SubModuleUser {
 
     fn use_qualified_module(
         &mut self,
-        &mut CodeRepo,
-        MachineFlags,
-        &Module,
-        &Vec<PredicateKey>,
+        _: &mut CodeRepo,
+        _: MachineFlags,
+        _: &Module,
+        _: &Vec<PredicateKey>,
     ) -> Result<(), SessionError>;
-    fn use_module(&mut self, &mut CodeRepo, MachineFlags, &Module) -> Result<(), SessionError>;
+    fn use_module(&mut self, _: &mut CodeRepo, _: MachineFlags, _: &Module) -> Result<(), SessionError>;
 }
 
 pub fn use_qualified_module<User>(

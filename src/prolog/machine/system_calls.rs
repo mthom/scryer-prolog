@@ -3,19 +3,19 @@ use prolog_parser::parser::*;
 use prolog_parser::string_list::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::clause_types::*;
-use prolog::forms::*;
-use prolog::heap_print::*;
-use prolog::instructions::*;
-use prolog::machine::code_repo::CodeRepo;
-use prolog::machine::copier::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
-use prolog::machine::machine_state::*;
-use prolog::machine::toplevel::to_op_decl;
-use prolog::ordered_float::OrderedFloat;
-use prolog::read::{readline, PrologStream};
-use prolog::rug::Integer;
+use crate::prolog::clause_types::*;
+use crate::prolog::forms::*;
+use crate::prolog::heap_print::*;
+use crate::prolog::instructions::*;
+use crate::prolog::machine::code_repo::CodeRepo;
+use crate::prolog::machine::copier::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::machine_state::*;
+use crate::prolog::machine::toplevel::to_op_decl;
+use crate::prolog::ordered_float::OrderedFloat;
+use crate::prolog::read::{readline, PrologStream};
+use crate::prolog::rug::Integer;
 
 use indexmap::{IndexMap, IndexSet};
 

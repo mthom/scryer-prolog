@@ -1,11 +1,11 @@
 use prolog_parser::ast::*;
 
-use prolog::clause_types::*;
-use prolog::forms::*;
-use prolog::machine::machine_errors::MachineStub;
-use prolog::machine::machine_indices::*;
+use crate::prolog::clause_types::*;
+use crate::prolog::forms::*;
+use crate::prolog::machine::machine_errors::MachineStub;
+use crate::prolog::machine::machine_indices::*;
 
-use prolog::rug::Integer;
+use crate::prolog::rug::Integer;
 
 use indexmap::IndexMap;
 

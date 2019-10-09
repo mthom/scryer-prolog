@@ -1,15 +1,15 @@
 use prolog_parser::ast::*;
 
-use prolog::allocator::*;
-use prolog::arithmetic::*;
-use prolog::clause_types::*;
-use prolog::fixtures::*;
-use prolog::forms::*;
-use prolog::indexing::*;
-use prolog::instructions::*;
-use prolog::iterators::*;
-use prolog::machine::machine_indices::*;
-use prolog::targets::*;
+use crate::prolog::allocator::*;
+use crate::prolog::arithmetic::*;
+use crate::prolog::clause_types::*;
+use crate::prolog::fixtures::*;
+use crate::prolog::forms::*;
+use crate::prolog::indexing::*;
+use crate::prolog::instructions::*;
+use crate::prolog::iterators::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::targets::*;
 
 use indexmap::IndexMap;
 
@@ -701,7 +701,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         }
 
         let iter = ChunkedIterator::from_rule_body(p1, clauses);
-        try!(self.compile_seq(iter, &conjunct_info, &mut code, false));
+        self.compile_seq(iter, &conjunct_info, &mut code, false)?;
 
         if conjunct_info.allocates() {
             conjunct_info.mark_unsafe_vars(unsafe_var_marker, &mut code);
@@ -800,7 +800,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         self.compile_seq_prelude(&conjunct_info, &mut code);
 
         let iter = ChunkedIterator::from_term_sequence(query);
-        try!(self.compile_seq(iter, &conjunct_info, &mut code, true));
+        self.compile_seq(iter, &conjunct_info, &mut code, true)?;
 
         if conjunct_info.allocates() {
             conjunct_info.mark_unsafe_vars(UnsafeVarMarker::new(), &mut code);
@@ -904,7 +904,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         let multi_seq = split_pred.len() > 1;
 
         for (l, r) in split_pred {
-            let mut code_segment = try!(self.compile_pred_subseq(&clauses[l..r]));
+            let mut code_segment = self.compile_pred_subseq(&clauses[l..r])?;
 
             if multi_seq {
                 let choice = match l {

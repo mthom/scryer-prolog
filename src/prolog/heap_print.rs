@@ -1,13 +1,13 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::*;
 
-use prolog::clause_types::*;
-use prolog::forms::*;
-use prolog::heap_iter::*;
-use prolog::machine::machine_indices::*;
-use prolog::machine::machine_state::*;
-use prolog::ordered_float::OrderedFloat;
-use prolog::rug::Integer;
+use crate::prolog::clause_types::*;
+use crate::prolog::forms::*;
+use crate::prolog::heap_iter::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::machine_state::*;
+use crate::prolog::ordered_float::OrderedFloat;
+use crate::prolog::rug::Integer;
 
 use indexmap::{IndexMap, IndexSet};
 
@@ -174,16 +174,16 @@ pub trait HCValueOutputter {
     type Output;
 
     fn new() -> Self;
-    fn push_char(&mut self, char);
-    fn append(&mut self, &str);
+    fn push_char(&mut self, _: char);
+    fn append(&mut self, _: &str);
     fn begin_new_var(&mut self);
-    fn insert(&mut self, usize, char);
+    fn insert(&mut self, _: usize, _: char);
     fn result(self) -> Self::Output;
-    fn ends_with(&self, &str) -> bool;
+    fn ends_with(&self, _: &str) -> bool;
     fn len(&self) -> usize;
-    fn truncate(&mut self, usize);
-    fn range(&self, Range<usize>) -> &str;
-    fn range_from(&self, RangeFrom<usize>) -> &str;
+    fn truncate(&mut self, _: usize);
+    fn range(&self, _: Range<usize>) -> &str;
+    fn range_from(&self, _: RangeFrom<usize>) -> &str;
 }
 
 pub struct PrinterOutputter {

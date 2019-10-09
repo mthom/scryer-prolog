@@ -1,5 +1,5 @@
-use prolog::machine::and_stack::*;
-use prolog::machine::machine_indices::*;
+use crate::prolog::machine::and_stack::*;
+use crate::prolog::machine::machine_indices::*;
 
 use std::ops::IndexMut;
 
@@ -7,9 +7,9 @@ type Trail = Vec<(Ref, HeapCellValue)>;
 
 pub(crate) trait CopierTarget: IndexMut<usize, Output = HeapCellValue> {
     fn threshold(&self) -> usize;
-    fn push(&mut self, HeapCellValue);
-    fn store(&self, Addr) -> Addr;
-    fn deref(&self, Addr) -> Addr;
+    fn push(&mut self, _: HeapCellValue);
+    fn store(&self, _: Addr) -> Addr;
+    fn deref(&self, _: Addr) -> Addr;
     fn stack(&mut self) -> &mut AndStack;
 }
 

@@ -1,10 +1,10 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::clause_types::*;
-use prolog::fixtures::*;
-use prolog::forms::*;
-use prolog::machine::Ball;
+use crate::prolog::clause_types::*;
+use crate::prolog::fixtures::*;
+use crate::prolog::forms::*;
+use crate::prolog::machine::Ball;
 
 use indexmap::IndexMap;
 

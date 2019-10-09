@@ -1,9 +1,9 @@
 use prolog_parser::ast::*;
 
-use prolog::heap_print::*;
-use prolog::machine::compile::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::*;
+use crate::prolog::heap_print::*;
+use crate::prolog::machine::compile::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::*;
 
 use std::io::Read;
 

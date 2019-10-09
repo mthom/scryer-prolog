@@ -6,6 +6,7 @@ build = "build.rs"
 repository = "https://github.com/mthom/scryer-prolog"
 description = "A modern Prolog implementation written mostly in Rust."
 license = "BSD-3-Clause"
+edition = "2018"
 
 [build-dependencies]
 indexmap = "1.0.2"

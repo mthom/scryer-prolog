@@ -1,8 +1,8 @@
 use prolog_parser::ast::*;
 
-use prolog::forms::*;
-use prolog::instructions::*;
-use prolog::iterators::*;
+use crate::prolog::forms::*;
+use crate::prolog::instructions::*;
+use crate::prolog::iterators::*;
 
 use indexmap::IndexMap;
 

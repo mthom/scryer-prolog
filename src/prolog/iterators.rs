@@ -1,8 +1,8 @@
 use prolog_parser::ast::*;
 
-use prolog::clause_types::*;
-use prolog::forms::*;
-use prolog::machine::machine_indices::*;
+use crate::prolog::clause_types::*;
+use crate::prolog::forms::*;
+use crate::prolog::machine::machine_indices::*;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
