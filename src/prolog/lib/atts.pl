@@ -86,10 +86,13 @@ user:term_expansion(Term0, Terms) :-
     nonvar(Term0),
     Term0 = (:- attribute Atts),
     nonvar(Atts),
-    phrase(put_attrs_var_check, Terms, Terms1),
-    phrase(put_attrs(Atts), Terms1, Terms2),
-    phrase(get_attrs_var_check, Terms2, Terms3),
-    phrase(get_attrs(Atts), Terms3).
+    phrase(expand_terms(Atts), Terms).
+
+expand_terms(Atts) -->
+    put_attrs_var_check,
+    put_attrs(Atts),
+    get_attrs_var_check,
+    get_attrs(Atts).
 
 put_attrs_var_check -->
     { numbervars([Var, Attr], 0, _) },
@@ -105,7 +108,7 @@ get_attrs_var_check -->
 put_attrs(Name/Arity) -->
     put_attr(Name, Arity),
     { numbervars([Var, Attr], 0, _) },
-    [(put_atts(Var, Attr) :- lists:maplist(put_atts(Var), Attr), !)].
+    [(put_atts(Var, Attr) :- lists:maplist(put_atts(Var), Attr))].
 put_attrs((Name/Arity, Atts)) -->
     { nonvar(Atts) },
     put_attr(Name, Arity),
