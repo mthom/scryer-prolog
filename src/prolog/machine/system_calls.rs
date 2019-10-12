@@ -972,9 +972,17 @@ impl MachineState {
 
                 if let Addr::Lis(l1) = ls0 {
                     if let Addr::Lis(l2) = self.store(self.deref(Addr::HeapCell(l1 + 1))) {
-                        let addr = self.heap[l1 + 1].as_addr(l1 + 1);
-                        self.heap[l1 + 1] = HeapCellValue::Addr(Addr::HeapCell(l2 + 1));
-                        self.trail(TrailRef::AttrVarLink(l1 + 1, addr));
+                        let old_addr = self.heap[l1 + 1].as_addr(l1 + 1);
+
+                        let tail = self.store(self.deref(Addr::HeapCell(l2 + 1)));
+                        let tail = if tail.is_ref() {
+                            Addr::HeapCell(l1 + 1)
+                        } else {
+                            tail
+                        };
+                       
+                        self.heap[l1 + 1] = HeapCellValue::Addr(tail);
+                        self.trail(TrailRef::AttrVarLink(l1 + 1, old_addr));
                     }
                 }
             }
@@ -988,7 +996,14 @@ impl MachineState {
 
                         match addr {
                             Addr::Lis(l) => {
-                                self.heap[h + 1] = HeapCellValue::Addr(Addr::HeapCell(l + 1));
+                                let tail = self.store(self.deref(Addr::HeapCell(l + 1)));
+                                let tail = if tail.is_ref() {
+                                    Addr::HeapCell(h + 1)
+                                } else {
+                                    tail
+                                };
+
+                                self.heap[h + 1] = HeapCellValue::Addr(tail);
                                 self.trail(TrailRef::AttrVarLink(h + 1, Addr::Lis(l)));
                             }
                             _ => unreachable!(),
