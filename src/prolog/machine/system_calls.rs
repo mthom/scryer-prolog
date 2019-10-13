@@ -1617,10 +1617,10 @@ impl MachineState {
                 if let &Addr::Con(Constant::Usize(num_of_args)) = &self.and_stack[e][frame_len] {
                     self.num_of_args = num_of_args;
                 }
-
-                self.p = CodePtr::Local(self.and_stack[e].interrupt_cp);
+                
                 self.deallocate();
-
+                self.p = CodePtr::Local(self.and_stack[e].interrupt_cp);
+                
                 return Ok(());
             }
             &SystemClauseType::RestoreCutPolicy => {

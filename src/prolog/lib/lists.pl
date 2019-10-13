@@ -50,58 +50,42 @@ reverse([], [], YsRev, YsRev).
 reverse([X1|Xs], [Y1|Ys], YsPreludeRev, Xss) :-
     reverse(Xs, Ys, [Y1|YsPreludeRev], Xss).
 
-maplist_([], _).
-maplist_([E1|E1s], Cont) :-
-    call(Cont, E1),
-    maplist_(E1s, Cont).
+maplist(_, []).
+maplist(Cont1, [E1|E1s]) :-
+    call(Cont1, E1),
+    maplist(Cont1, E1s).
 
-maplist(Cont, Es) :- maplist_(Es, Cont).
+maplist(_, [], []).
+maplist(Cont2, [E1|E1s], [E2|E2s]) :-
+    call(Cont2, E1, E2),
+    maplist(Cont2, E1s, E2s).
 
-maplist_([], _, []).
-maplist_([E1|E1s], Cont, [E2|E2s]) :-
-    call(Cont, E1, E2),
-    maplist_(E1s, Cont, E2s).
+maplist(_, [], [], []).
+maplist(Cont3, [E1|E1s], [E2|E2s], [E3|E3s]) :-
+    call(Cont3, E1, E2, E3),
+    maplist(Cont3, E1s, E2s, E3s).
 
-maplist(Cont, Es1, Es2) :- maplist_(Es1, Cont, Es2).
-
-maplist_([], Cont, [], []).
-maplist_([E1|E1s], Cont, [E2|E2s], [E3|E3s]) :-
-    call(Cont, E1, E2, E3),
-    maplist_(E1s, Cont, E2s, E3s).
-
-maplist(Cont, Es1, Es2, Es3) :- maplist_(Es1, Cont, Es2, Es3).
-
-maplist_([], _, [], [], []).
-maplist_([E1|E1s], Cont, [E2|E2s], [E3|E3s], [E4|E4s]) :-
+maplist(_, [], [], [], []).
+maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s]) :-
     call(Cont, E1, E2, E3, E4),
-    maplist_(E1s, Cont, E2s, E3s, E4s).
+    maplist(Cont, E1s, E2s, E3s, E4s).
 
-maplist(Cont, Es1, Es2, Es3, Es4) :- maplist_(Es1, Cont, Es2, Es3, Es4).
-
-maplist_([], _, [], [], [], []).
-maplist_([E1|E1s], Cont, [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s]) :-
+maplist(_, [], [], [], [], []).
+maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s]) :-
     call(Cont, E1, E2, E3, E4, E5),
-    maplist_(E1s, Cont, E2s, E3s, E4s, E5s).
+    maplist(Cont, E1s, E2s, E3s, E4s, E5s).
 
-maplist(Cont, Es1, Es2, Es3, Es4, Es5) :- maplist_(Es1, Cont, Es2, Es3, Es4, Es5).
-
-maplist_([], _, [], [], [], [], []).
-maplist_([E1|E1s], Cont, [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s]) :-
+maplist(_, [], [], [], [], [], []).
+maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s]) :-
     call(Cont, E1, E2, E3, E4, E5, E6),
-    maplist_(E1s, Cont, E2s, E3s, E4s, E5s, E6s).
+    maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s).
 
-maplist(Cont, Es1, Es2, Es3, Es4, Es5, Es6) :- maplist_(Es1, Cont, Es2, Es3, Es4, Es6, Es6).
-
-maplist_([], _, [], [], [], [], [], []).
-maplist_([E1|E1s], Cont, [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7s]) :-
+maplist(_, [], [], [], [], [], [], []).
+maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7s]) :-
     call(Cont, E1, E2, E3, E4, E5, E6, E7),
-    maplist_(E1s, Cont, E2s, E3s, E4s, E5s, E6s, E7s).
+    maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s, E7s).
 
-maplist(Cont, Es1, Es2, Es3, Es4, Es5, Es6, Es7) :- maplist_(Es1, Cont, Es2, Es3, Es4, Es6, Es6, Es7).
-
-maplist_([], _, [], [], [], [], [], [], []).
-maplist_([E1|E1s], Cont, [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7s], [E8|E8s]) :-
-    call(Cont, E1, E2, E3, E4, E5, E6, E7, E8),
-    maplist_(E1s, Cont, E2s, E3s, E4s, E5s, E6s, E7s, E8s).
-
-maplist(Cont, Es1, Es2, Es3, Es4, Es5, Es6, Es7, Es8) :- maplist_(Es1, Cont, Es2, Es3, Es4, Es6, Es6, Es7, Es8).
+maplist(_, [], [], [], [], [], [], [], []).
+maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7s], [E8|E8s]) :-
+    call(Cont, E1, E2, E3, E4, E5, E6, E7),
+    maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s, E7s, E8s).

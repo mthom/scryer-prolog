@@ -383,7 +383,7 @@ impl Machine {
 
     fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
         let h = self.machine_st.heap.h;
-        
+
         let err = MachineError::session_error(h, err);
         let stub = MachineError::functor_stub(key.0, key.1);
         let err = self.machine_st.error_form(err, stub);
@@ -600,7 +600,7 @@ impl Machine {
         self.machine_st.absorb_snapshot(snapshot);
         self.machine_st.ball = ball;
 
-        let h = self.machine_st.heap.h;        
+        let h = self.machine_st.heap.h;
         let stub = self.machine_st.ball.copy_and_align(h);
 
         self.machine_st.throw_exception(stub);
@@ -1046,7 +1046,7 @@ impl MachineState {
 
             match self.p {
                 CodePtr::VerifyAttrInterrupt(_) => {
-                    self.p = CodePtr::Local(self.attr_var_init.cp + 1);
+                    self.p = CodePtr::Local(self.attr_var_init.cp);// + 1);
 
                     if !self.verify_attr_stepper(indices, policies, code_repo, prolog_stream) {
                         if self.fail {

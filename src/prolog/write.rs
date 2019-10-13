@@ -283,6 +283,21 @@ impl fmt::Display for SessionError {
     }
 }
 
+impl fmt::Display for Line {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Line::Arithmetic(ref arith_instr) => write!(f, "{}", arith_instr),
+            &Line::Choice(ref choice_instr) => write!(f, "{}", choice_instr), 
+            &Line::Control(ref control_instr) => write!(f, "{}", control_instr),
+            &Line::Cut(ref cut_instr) => write!(f, "{}", cut_instr), 
+            &Line::Fact(ref fact_instr) => write!(f, "{}", fact_instr),
+            &Line::Indexing(ref indexing_instr) => write!(f, "{}", indexing_instr), 
+            &Line::IndexedChoice(ref indexed_choice_instr) => write!(f, "{}", indexed_choice_instr), 
+            &Line::Query(ref query_instr) => write!(f, "{}", query_instr), 
+        }
+    }
+}
+
 impl fmt::Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

@@ -151,7 +151,6 @@ impl Line {
             &Line::Cut(_) => true,
             &Line::Fact(_) => true,
             &Line::Query(_) => true,
-            &Line::Control(ControlInstruction::Proceed) => true,
             _ => false,
         }
     }
