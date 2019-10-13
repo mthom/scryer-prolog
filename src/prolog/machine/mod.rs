@@ -1046,7 +1046,7 @@ impl MachineState {
 
             match self.p {
                 CodePtr::VerifyAttrInterrupt(_) => {
-                    self.p = CodePtr::Local(self.attr_var_init.cp);// + 1);
+                    self.p = CodePtr::Local(self.attr_var_init.cp);
 
                     if !self.verify_attr_stepper(indices, policies, code_repo, prolog_stream) {
                         if self.fail {

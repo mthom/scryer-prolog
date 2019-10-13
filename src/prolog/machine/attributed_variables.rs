@@ -40,7 +40,12 @@ impl AttrVarInitializer {
 impl MachineState {
     pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: Addr) {
         if self.attr_var_init.bindings.is_empty() {
-            self.attr_var_init.cp = self.p.local();
+            if self.last_call {
+                self.attr_var_init.cp = self.cp;
+            } else {
+                self.attr_var_init.cp = self.p.local();
+            }
+            
             self.p = CodePtr::VerifyAttrInterrupt(self.attr_var_init.verify_attrs_loc);
         }
 
