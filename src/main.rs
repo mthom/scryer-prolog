@@ -15,8 +15,8 @@ use nix::sys::signal;
 
 mod prolog;
 
-use prolog::machine::*;
-use prolog::read::*;
+use crate::prolog::machine::*;
+use crate::prolog::read::*;
 
 use std::sync::atomic::Ordering;
 

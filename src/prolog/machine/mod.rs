@@ -1,13 +1,13 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::clause_types::*;
-use prolog::fixtures::*;
-use prolog::forms::*;
-use prolog::heap_print::*;
-use prolog::instructions::*;
-use prolog::read::*;
-use prolog::write::{next_keypress, ContinueResult};
+use crate::prolog::clause_types::*;
+use crate::prolog::fixtures::*;
+use crate::prolog::forms::*;
+use crate::prolog::heap_print::*;
+use crate::prolog::instructions::*;
+use crate::prolog::read::*;
+use crate::prolog::write::{next_keypress, ContinueResult};
 
 mod and_stack;
 mod attributed_variables;
@@ -28,15 +28,15 @@ pub mod toplevel;
 mod machine_state_impl;
 mod system_calls;
 
-use prolog::machine::attributed_variables::*;
-use prolog::machine::code_repo::*;
-use prolog::machine::compile::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
-use prolog::machine::machine_state::*;
-use prolog::machine::modules::*;
-use prolog::machine::toplevel::stream_to_toplevel;
-use prolog::read::PrologStream;
+use crate::prolog::machine::attributed_variables::*;
+use crate::prolog::machine::code_repo::*;
+use crate::prolog::machine::compile::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::machine_state::*;
+use crate::prolog::machine::modules::*;
+use crate::prolog::machine::toplevel::stream_to_toplevel;
+use crate::prolog::read::PrologStream;
 
 use indexmap::IndexMap;
 

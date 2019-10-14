@@ -2,16 +2,16 @@ use prolog_parser::ast::*;
 use prolog_parser::parser::get_desc;
 use prolog_parser::tabled_rc::TabledData;
 
-use prolog::codegen::*;
-use prolog::debray_allocator::*;
-use prolog::forms::*;
-use prolog::instructions::*;
-use prolog::iterators::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
-use prolog::machine::term_expansion::ExpansionAdditionResult;
-use prolog::machine::toplevel::*;
-use prolog::machine::*;
+use crate::prolog::codegen::*;
+use crate::prolog::debray_allocator::*;
+use crate::prolog::forms::*;
+use crate::prolog::instructions::*;
+use crate::prolog::iterators::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::term_expansion::ExpansionAdditionResult;
+use crate::prolog::machine::toplevel::*;
+use crate::prolog::machine::*;
 
 use indexmap::{IndexMap, IndexSet};
 
@@ -228,7 +228,7 @@ fn compile_query(
 ) -> Result<(Code, AllocVarDict), ParserError> {
     // count backtracking inferences.
     let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
-    let mut code = try!(cg.compile_query(&terms));
+    let mut code = cg.compile_query(&terms)?;
 
     compile_appendix(&mut code, &queue, false, flags)?;
     Ok((code, cg.take_vars()))

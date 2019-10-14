@@ -1,7 +1,7 @@
 use prolog_parser::ast::*;
 
-use prolog::machine::machine_indices::*;
-use prolog::machine::machine_state::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::machine_state::*;
 
 use indexmap::IndexSet;
 

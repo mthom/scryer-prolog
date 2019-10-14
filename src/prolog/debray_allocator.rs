@@ -2,11 +2,11 @@ use indexmap::IndexMap;
 
 use prolog_parser::ast::*;
 
-use prolog::allocator::*;
-use prolog::fixtures::*;
-use prolog::forms::*;
-use prolog::machine::machine_indices::*;
-use prolog::targets::*;
+use crate::prolog::allocator::*;
+use crate::prolog::fixtures::*;
+use crate::prolog::forms::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::targets::*;
 
 use std::cell::Cell;
 use std::collections::BTreeSet;

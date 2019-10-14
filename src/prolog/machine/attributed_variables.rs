@@ -1,4 +1,4 @@
-use prolog::machine::*;
+use crate::prolog::machine::*;
 
 use indexmap::IndexSet;
 

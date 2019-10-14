@@ -1,8 +1,8 @@
-use prolog::clause_types::*;
-use prolog::forms::*;
-use prolog::instructions::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
+use crate::prolog::clause_types::*;
+use crate::prolog::forms::*;
+use crate::prolog::instructions::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
 
 use termion::event::Key;
 use termion::input::TermRead;

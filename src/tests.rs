@@ -1,12 +1,12 @@
 use prolog_parser::ast::{ClauseName, parsing_stream};
 
-use prolog::heap_print::*;
-use prolog::machine::compile::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
-use prolog::machine::toplevel::*;
-use prolog::machine::*;
-use prolog::read::readline;
+use crate::prolog::heap_print::*;
+use crate::prolog::machine::compile::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::toplevel::*;
+use crate::prolog::machine::*;
+use crate::prolog::read::readline;
 
 use indexmap::IndexSet;
 

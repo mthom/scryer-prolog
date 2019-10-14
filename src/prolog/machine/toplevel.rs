@@ -1,12 +1,12 @@
 use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
-use prolog::forms::*;
-use prolog::iterators::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
-use prolog::machine::term_expansion::*;
-use prolog::machine::*;
+use crate::prolog::forms::*;
+use crate::prolog::iterators::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::term_expansion::*;
+use crate::prolog::machine::*;
 
 use indexmap::{IndexMap, IndexSet};
 

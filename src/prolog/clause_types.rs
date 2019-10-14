@@ -1,7 +1,7 @@
 use prolog_parser::ast::*;
 
-use prolog::forms::Number;
-use prolog::machine::machine_indices::*;
+use crate::prolog::forms::Number;
+use crate::prolog::machine::machine_indices::*;
 
 use ref_thread_local::RefThreadLocal;
 

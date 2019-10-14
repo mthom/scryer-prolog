@@ -1,10 +1,10 @@
 use prolog_parser::ast::*;
 use prolog_parser::parser::*;
 
-use prolog::machine::machine_indices::HeapCellValue;
-use prolog::machine::*;
-use prolog::rug::ops::Pow;
-use prolog::rug::Integer;
+use crate::prolog::machine::machine_indices::HeapCellValue;
+use crate::prolog::machine::*;
+use crate::prolog::rug::ops::Pow;
+use crate::prolog::rug::Integer;
 
 use std::cell::Cell;
 use std::collections::VecDeque;

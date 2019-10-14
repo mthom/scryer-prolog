@@ -1,9 +1,9 @@
 use prolog_parser::ast::*;
 
-use prolog::fixtures::*;
-use prolog::forms::*;
-use prolog::machine::machine_indices::*;
-use prolog::targets::*;
+use crate::prolog::fixtures::*;
+use crate::prolog::forms::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::targets::*;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -11,31 +11,31 @@ use std::rc::Rc;
 pub trait Allocator<'a> {
     fn new() -> Self;
 
-    fn mark_anon_var<Target>(&mut self, Level, GenContext, &mut Vec<Target>)
+    fn mark_anon_var<Target>(&mut self, _: Level, _: GenContext, _: &mut Vec<Target>)
     where
         Target: CompilationTarget<'a>;
-    fn mark_non_var<Target>(&mut self, Level, GenContext, &'a Cell<RegType>, &mut Vec<Target>)
+    fn mark_non_var<Target>(&mut self, _: Level, _: GenContext, _: &'a Cell<RegType>, _: &mut Vec<Target>)
     where
         Target: CompilationTarget<'a>;
     fn mark_reserved_var<Target>(
         &mut self,
-        Rc<Var>,
-        Level,
-        &'a Cell<VarReg>,
-        GenContext,
-        &mut Vec<Target>,
-        RegType,
-        bool,
+        _: Rc<Var>,
+        _: Level,
+        _: &'a Cell<VarReg>,
+        _: GenContext,
+        _: &mut Vec<Target>,
+        _: RegType,
+        _: bool,
     ) where
         Target: CompilationTarget<'a>;
-    fn mark_var<Target>(&mut self, Rc<Var>, Level, &'a Cell<VarReg>, GenContext, &mut Vec<Target>)
+    fn mark_var<Target>(&mut self, _: Rc<Var>, _: Level, _: &'a Cell<VarReg>, _: GenContext, _: &mut Vec<Target>)
     where
         Target: CompilationTarget<'a>;
 
     fn reset(&mut self);
     fn reset_contents(&mut self) {}
-    fn reset_arg(&mut self, usize);
-    fn reset_at_head(&mut self, &Vec<Box<Term>>);
+    fn reset_arg(&mut self, _: usize);
+    fn reset_at_head(&mut self, _: &Vec<Box<Term>>);
 
     fn advance_arg(&mut self);
 

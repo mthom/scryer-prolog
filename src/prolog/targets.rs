@@ -1,35 +1,35 @@
 use prolog_parser::ast::*;
 
-use prolog::clause_types::*;
-use prolog::forms::*;
-use prolog::instructions::*;
-use prolog::iterators::*;
+use crate::prolog::clause_types::*;
+use crate::prolog::forms::*;
+use crate::prolog::instructions::*;
+use crate::prolog::iterators::*;
 
 pub trait CompilationTarget<'a> {
     type Iterator: Iterator<Item = TermRef<'a>>;
 
-    fn iter(&'a Term) -> Self::Iterator;
+    fn iter(_: &'a Term) -> Self::Iterator;
 
-    fn to_constant(Level, Constant, RegType) -> Self;
-    fn to_list(Level, RegType) -> Self;
-    fn to_structure(ClauseType, usize, RegType) -> Self;
+    fn to_constant(_: Level, _: Constant, _: RegType) -> Self;
+    fn to_list(_: Level, _: RegType) -> Self;
+    fn to_structure(_: ClauseType, _: usize, _: RegType) -> Self;
 
-    fn to_void(usize) -> Self;
+    fn to_void(_: usize) -> Self;
     fn is_void_instr(&self) -> bool;
 
     fn incr_void_instr(&mut self);
 
-    fn constant_subterm(Constant) -> Self;
+    fn constant_subterm(_: Constant) -> Self;
 
-    fn argument_to_variable(RegType, usize) -> Self;
-    fn argument_to_value(RegType, usize) -> Self;
+    fn argument_to_variable(_: RegType, _: usize) -> Self;
+    fn argument_to_value(_: RegType, _: usize) -> Self;
 
-    fn move_to_register(RegType, usize) -> Self;
+    fn move_to_register(_: RegType, _: usize) -> Self;
 
-    fn subterm_to_variable(RegType) -> Self;
-    fn subterm_to_value(RegType) -> Self;
+    fn subterm_to_variable(_: RegType) -> Self;
+    fn subterm_to_value(_: RegType) -> Self;
 
-    fn clause_arg_to_instr(RegType) -> Self;
+    fn clause_arg_to_instr(_: RegType) -> Self;
 }
 
 impl<'a> CompilationTarget<'a> for FactInstruction {

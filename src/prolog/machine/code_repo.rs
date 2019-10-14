@@ -1,13 +1,13 @@
 use prolog_parser::ast::MachineFlags;
 
-use prolog::clause_types::*;
-use prolog::codegen::*;
-use prolog::debray_allocator::*;
-use prolog::forms::*;
-use prolog::instructions::*;
-use prolog::machine::compile::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
+use crate::prolog::clause_types::*;
+use crate::prolog::codegen::*;
+use crate::prolog::debray_allocator::*;
+use crate::prolog::forms::*;
+use crate::prolog::instructions::*;
+use crate::prolog::machine::compile::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
 
 use std::collections::VecDeque;
 

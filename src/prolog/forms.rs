@@ -2,11 +2,11 @@ use prolog_parser::ast::*;
 use prolog_parser::parser::OpDesc;
 use prolog_parser::tabled_rc::*;
 
-use prolog::clause_types::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
-use prolog::ordered_float::OrderedFloat;
-use prolog::rug::{Integer, Rational};
+use crate::prolog::clause_types::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::ordered_float::OrderedFloat;
+use crate::prolog::rug::{Integer, Rational};
 
 use indexmap::IndexMap;
 

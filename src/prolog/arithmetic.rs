@@ -1,17 +1,17 @@
 use prolog_parser::ast::*;
 
-use prolog::clause_types::*;
-use prolog::fixtures::*;
-use prolog::forms::*;
-use prolog::instructions::*;
-use prolog::iterators::*;
+use crate::prolog::clause_types::*;
+use crate::prolog::fixtures::*;
+use crate::prolog::forms::*;
+use crate::prolog::instructions::*;
+use crate::prolog::iterators::*;
 
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
 
-use prolog::ordered_float::*;
-use prolog::rug::ops::PowAssign;
-use prolog::rug::{Assign, Integer, Rational};
+use crate::prolog::ordered_float::*;
+use crate::prolog::rug::ops::PowAssign;
+use crate::prolog::rug::{Assign, Integer, Rational};
 
 use std::cell::Cell;
 use std::cmp::{max, min, Ordering};

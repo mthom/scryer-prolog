@@ -1,18 +1,18 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::*;
 
-use prolog::clause_types::*;
-use prolog::forms::*;
-use prolog::machine::and_stack::*;
-use prolog::machine::attributed_variables::*;
-use prolog::machine::copier::*;
-use prolog::machine::heap::*;
-use prolog::machine::machine_errors::*;
-use prolog::machine::machine_indices::*;
-use prolog::machine::modules::*;
-use prolog::machine::or_stack::*;
-use prolog::read::PrologStream;
-use prolog::rug::Integer;
+use crate::prolog::clause_types::*;
+use crate::prolog::forms::*;
+use crate::prolog::machine::and_stack::*;
+use crate::prolog::machine::attributed_variables::*;
+use crate::prolog::machine::copier::*;
+use crate::prolog::machine::heap::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::modules::*;
+use crate::prolog::machine::or_stack::*;
+use crate::prolog::read::PrologStream;
+use crate::prolog::rug::Integer;
 
 use downcast::Any;
 
@@ -1025,7 +1025,7 @@ impl CWILCallPolicy {
 
 pub(crate) trait CutPolicy: Any {
     // returns true iff we fail or cut redirected the MachineState's p itself
-    fn cut(&mut self, &mut MachineState, RegType) -> bool;
+    fn cut(&mut self, _: &mut MachineState, _: RegType) -> bool;
 }
 
 downcast!(dyn CutPolicy);

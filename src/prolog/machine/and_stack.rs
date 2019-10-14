@@ -1,4 +1,4 @@
-use prolog::machine::machine_indices::*;
+use crate::prolog::machine::machine_indices::*;
 
 use std::mem;
 use std::ops::{Index, IndexMut};
