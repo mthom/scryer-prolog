@@ -23,7 +23,7 @@ impl<'a> TermRef<'a> {
     }
 }
 
-pub type PrologStream = ParsingStream<Box<Read>>;
+pub type PrologStream = ParsingStream<Box<dyn Read>>;
 
 pub mod readline {
     use prolog_parser::ast::*;
@@ -116,7 +116,7 @@ pub mod readline {
 
     #[inline]
     pub fn input_stream() -> ::PrologStream {
-        let reader: Box<Read> = Box::new(ReadlineStream::input_stream(String::from("")));
+        let reader: Box<dyn Read> = Box::new(ReadlineStream::input_stream(String::from("")));
         parsing_stream(reader)
     }
 }

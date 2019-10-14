@@ -147,7 +147,7 @@ fn char_to_string(c: char) -> String {
         '\u{0c}' => "\\f".to_string(), // UTF-8 form feed
         '\u{08}' => "\\b".to_string(), // UTF-8 backspace
         '\u{07}' => "\\a".to_string(), // UTF-8 alert
-        '\x20'...'\x7e' => c.to_string(),
+        '\x20'..='\x7e' => c.to_string(),
         _ => format!("\\x{:x}\\", c as u32),
     }
 }

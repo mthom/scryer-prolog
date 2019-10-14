@@ -3151,8 +3151,8 @@ impl MachineState {
         &mut self,
         indices: &mut IndexStore,
         code_repo: &CodeRepo,
-        call_policy: &mut Box<CallPolicy>,
-        cut_policy: &mut Box<CutPolicy>,
+        call_policy: &mut Box<dyn CallPolicy>,
+        cut_policy: &mut Box<dyn CutPolicy>,
         parsing_stream: &mut PrologStream,
         ct: &ClauseType,
         arity: usize,
@@ -3167,7 +3167,7 @@ impl MachineState {
 	    return;
 	}
 	
-        let mut default_call_policy: Box<CallPolicy> = Box::new(DefaultCallPolicy {});
+        let mut default_call_policy: Box<dyn CallPolicy> = Box::new(DefaultCallPolicy {});
         let call_policy = if use_default_cp {
             &mut default_call_policy
         } else {
@@ -3217,8 +3217,8 @@ impl MachineState {
         &mut self,
         indices: &mut IndexStore,
         code_repo: &CodeRepo,
-        call_policy: &mut Box<CallPolicy>,
-        cut_policy: &mut Box<CutPolicy>,
+        call_policy: &mut Box<dyn CallPolicy>,
+        cut_policy: &mut Box<dyn CutPolicy>,
         parsing_stream: &mut PrologStream,
         instr: &ControlInstruction,
     ) {
@@ -3253,7 +3253,7 @@ impl MachineState {
     pub(super) fn execute_indexed_choice_instr(
         &mut self,
         instr: &IndexedChoiceInstruction,
-        call_policy: &mut Box<CallPolicy>,
+        call_policy: &mut Box<dyn CallPolicy>,
     ) {
         match instr {
             &IndexedChoiceInstruction::Try(l) => {
@@ -3292,7 +3292,7 @@ impl MachineState {
     pub(super) fn execute_choice_instr(
         &mut self,
         instr: &ChoiceInstruction,
-        call_policy: &mut Box<CallPolicy>,
+        call_policy: &mut Box<dyn CallPolicy>,
     ) {
         match instr {
             &ChoiceInstruction::TryMeElse(offset) => {
@@ -3341,7 +3341,7 @@ impl MachineState {
     pub(super) fn execute_cut_instr(
         &mut self,
         instr: &CutInstruction,
-        cut_policy: &mut Box<CutPolicy>,
+        cut_policy: &mut Box<dyn CutPolicy>,
     ) {
         match instr {
             &CutInstruction::NeckCut => {

@@ -51,8 +51,8 @@ use std::sync::atomic::AtomicBool;
 use termion::raw::IntoRawMode;
 
 pub struct MachinePolicies {
-    call_policy: Box<CallPolicy>,
-    cut_policy: Box<CutPolicy>,
+    call_policy: Box<dyn CallPolicy>,
+    cut_policy: Box<dyn CutPolicy>,
 }
 
 lazy_static! {
@@ -75,7 +75,7 @@ pub struct Machine {
     pub(super) indices: IndexStore,
     pub(super) code_repo: CodeRepo,
     pub(super) toplevel_idx: usize,
-    pub(super) prolog_stream: ParsingStream<Box<Read>>,
+    pub(super) prolog_stream: ParsingStream<Box<dyn Read>>,
 }
 
 impl Index<LocalCodePtr> for CodeRepo {

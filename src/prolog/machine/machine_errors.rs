@@ -250,7 +250,7 @@ impl MachineError {
         }
     }
 
-    fn into_iter(self, offset: usize) -> Box<Iterator<Item = HeapCellValue>> {
+    fn into_iter(self, offset: usize) -> Box<dyn Iterator<Item = HeapCellValue>> {
         match self.from {
             ErrorProvenance::Constructed => {
                 Box::new(self.stub.into_iter().map(move |hcv| match hcv {
