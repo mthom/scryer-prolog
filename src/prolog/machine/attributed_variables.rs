@@ -111,6 +111,9 @@ impl MachineState {
                     HeapCellValue::Addr(Addr::StackCell(fr, sc)) => {
                         query_vars.insert(Addr::StackCell(fr, sc));
                     }
+                    HeapCellValue::Addr(Addr::AttrVar(h)) => {
+                        query_vars.insert(Addr::AttrVar(h));
+                    }
                     _ => {}
                 };
             }
