@@ -51,20 +51,32 @@ impl<'a> ConjunctInfo<'a> {
         self.has_deep_cut as usize
     }
 
-    fn mark_unsafe_vars(&self, mut unsafe_var_marker: UnsafeVarMarker, code: &mut Code) {
+    fn mark_unsafe_vars<Alloc: Allocator<'a>>(
+        &self,
+        mut unsafe_var_marker: UnsafeVarMarker,
+        marker: &Alloc,
+        code: &mut Code
+    ) {
         // target the last goal of the rule for handling unsafe variables.
         // we use this weird logic to find the last goal.
-        let right_index = if let &Line::Control(_) = code.last().unwrap() {
-            code.len() - 2
+        let right_index = if let Some(Line::Control(_)) = code.last() {
+            if code.len() >= 2 {
+                code.len() - 2
+            } else {
+                return;
+            }
         } else {
-            code.len() - 1
+            if code.len() >= 1 {
+                code.len() - 1
+            } else {
+                return;
+            }
         };
 
         let mut index = right_index;
 
         if let Line::Query(_) = &code[right_index] {
             while let Line::Query(_) = &code[index] {
-                // index >= 0.
                 if index == 0 {
                     break;
                 } else {
@@ -77,10 +89,10 @@ impl<'a> ConjunctInfo<'a> {
                 index += 1;
             }
 
-            unsafe_var_marker.record_unsafe_vars(&self.perm_vs);
+            unsafe_var_marker.record_unsafe_vars(&self.perm_vs, marker);
 
-            for line in code.iter_mut() {
-                if let &mut Line::Query(ref mut query_instr) = line {
+            for line in code.iter() {
+                if let Line::Query(ref query_instr) = line {
                     unsafe_var_marker.mark_safe_vars(query_instr);
                 }
             }
@@ -269,11 +281,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
 
     fn collect_var_data(&mut self, mut iter: ChunkedIterator<'a>) -> ConjunctInfo<'a> {
         let mut vs = VariableFixtures::new();
-
+        
         while let Some((chunk_num, lt_arity, chunked_terms)) = iter.next() {
             for (i, chunked_term) in chunked_terms.iter().enumerate() {
                 let term_loc = match chunked_term {
-                    &ChunkedTerm::HeadClause(..) => GenContext::Head,
+                    &ChunkedTerm::HeadClause(..) =>                       
+                        GenContext::Head,
                     &ChunkedTerm::BodyTerm(_) => {
                         if i < chunked_terms.len() - 1 {
                             GenContext::Mid(chunk_num)
@@ -294,8 +307,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         vs.populate_restricting_sets();
         vs.set_perm_vals(has_deep_cut);
 
-        let vs = self.marker.drain_var_data(vs);
-
+        let vs = self.marker.drain_var_data(vs, num_of_chunks);
         ConjunctInfo::new(vs, num_of_chunks, has_deep_cut)
     }
 
@@ -703,9 +715,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         let iter = ChunkedIterator::from_rule_body(p1, clauses);
         self.compile_seq(iter, &conjunct_info, &mut code, false)?;
 
-        if conjunct_info.allocates() {
-            conjunct_info.mark_unsafe_vars(unsafe_var_marker, &mut code);
-        }
+        conjunct_info.mark_unsafe_vars(unsafe_var_marker, &self.marker, &mut code);        
 
         Self::compile_cleanup(&mut code, &conjunct_info, clauses.last().unwrap_or(p1));
         Ok(code)
@@ -747,7 +757,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         vs.mark_vars_in_chunk(post_order_iter(term), term.arity(), GenContext::Head);
 
         vs.populate_restricting_sets();
-        self.marker.drain_var_data(vs);
+        self.marker.drain_var_data(vs, 1);
 
         let mut code = Vec::new();
 
@@ -802,9 +812,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         let iter = ChunkedIterator::from_term_sequence(query);
         self.compile_seq(iter, &conjunct_info, &mut code, true)?;
 
-        if conjunct_info.allocates() {
-            conjunct_info.mark_unsafe_vars(UnsafeVarMarker::new(), &mut code);
-        }
+        conjunct_info.mark_unsafe_vars(UnsafeVarMarker::new(), &self.marker, &mut code);
 
         if let Some(query_term) = query.last() {
             Self::compile_cleanup(&mut code, &conjunct_info, query_term);

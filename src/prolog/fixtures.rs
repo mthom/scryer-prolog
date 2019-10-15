@@ -1,14 +1,14 @@
 use prolog_parser::ast::*;
 
+use crate::prolog::allocator::*;
 use crate::prolog::forms::*;
 use crate::prolog::instructions::*;
 use crate::prolog::iterators::*;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
-use std::collections::btree_map::{IntoIter, IterMut, Values};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::mem::swap;
 use std::rc::Rc;
 use std::vec::Vec;
@@ -79,15 +79,27 @@ impl TempVarData {
 }
 
 type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
-pub struct VariableFixtures<'a>(BTreeMap<Rc<Var>, VariableFixture<'a>>);
+
+pub struct VariableFixtures<'a>{
+    perm_vars: IndexMap<Rc<Var>, VariableFixture<'a>>,
+    last_chunk_temp_vars: IndexSet<Rc<Var>>
+}
 
 impl<'a> VariableFixtures<'a> {
     pub fn new() -> Self {
-        VariableFixtures(BTreeMap::new())
+        VariableFixtures {
+            perm_vars: IndexMap::new(),
+            last_chunk_temp_vars: IndexSet::new()
+        }
+                          
     }
 
     pub fn insert(&mut self, var: Rc<Var>, vs: VariableFixture<'a>) {
-        self.0.insert(var, vs);
+        self.perm_vars.insert(var, vs);
+    }
+
+    pub fn insert_last_chunk_temp_var(&mut self, var: Rc<Var>) {
+        self.last_chunk_temp_vars.insert(var);
     }
 
     // computes no_use and conflict sets for all temp vars.
@@ -140,11 +152,11 @@ impl<'a> VariableFixtures<'a> {
     }
 
     fn get_mut(&mut self, u: Rc<Var>) -> Option<&mut VariableFixture<'a>> {
-        self.0.get_mut(&u)
+        self.perm_vars.get_mut(&u)
     }
 
-    fn iter_mut(&mut self) -> IterMut<Rc<Var>, VariableFixture<'a>> {
-        self.0.iter_mut()
+    fn iter_mut(&mut self) -> indexmap::map::IterMut<Rc<Var>, VariableFixture<'a>> {
+        self.perm_vars.iter_mut()
     }
 
     fn record_temp_info(&mut self, tvd: &mut TempVarData, arg_c: usize, term_loc: GenContext) {
@@ -179,7 +191,7 @@ impl<'a> VariableFixtures<'a> {
 
         for term_ref in iter {
             if let &TermRef::Var(lvl, cell, ref var) = &term_ref {
-                let mut status = self.0.remove(var).unwrap_or((
+                let mut status = self.perm_vars.remove(var).unwrap_or((
                     VarStatus::Temp(chunk_num, TempVarData::new(lt_arity)),
                     Vec::new(),
                 ));
@@ -195,7 +207,7 @@ impl<'a> VariableFixtures<'a> {
                     _ => status.0 = VarStatus::Perm(chunk_num),
                 };
 
-                self.0.insert(var.clone(), status);
+                self.perm_vars.insert(var.clone(), status);
             }
 
             if let Level::Shallow = term_ref.level() {
@@ -204,16 +216,16 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    pub fn into_iter(self) -> IntoIter<Rc<Var>, VariableFixture<'a>> {
-        self.0.into_iter()
+    pub fn into_iter(self) -> indexmap::map::IntoIter<Rc<Var>, VariableFixture<'a>> {
+        self.perm_vars.into_iter()
     }
 
-    fn values(&self) -> Values<Rc<Var>, VariableFixture<'a>> {
-        self.0.values()
+    fn values(&self) -> indexmap::map::Values<Rc<Var>, VariableFixture<'a>> {
+        self.perm_vars.values()
     }
 
     pub fn size(&self) -> usize {
-        self.0.len()
+        self.perm_vars.len()
     }
 
     pub fn set_perm_vals(&self, has_deep_cuts: bool) {
@@ -248,25 +260,34 @@ impl UnsafeVarMarker {
         }
     }
 
-    pub fn record_unsafe_vars(&mut self, fixtures: &VariableFixtures) {
-        for &(_, ref cb) in fixtures.values() {
+    pub fn record_unsafe_vars<'a, Alloc: Allocator<'a>>(
+        &mut self,
+        fixtures: &VariableFixtures,
+        marker: &Alloc
+    ) {
+        for &(_, ref cb) in fixtures.values() {           
             if let Some(index) = cb.first() {
                 if !self.unsafe_vars.contains_key(&index.get().norm()) {
                     self.unsafe_vars.insert(index.get().norm(), false);
                 }
             }
         }
+
+        for var in fixtures.last_chunk_temp_vars.iter().cloned() {
+            let r = marker.get(var);
+            self.unsafe_vars.insert(r, false);
+        }
     }
 
-    pub fn mark_safe_vars(&mut self, query_instr: &mut QueryInstruction) {
+    pub fn mark_safe_vars(&mut self, query_instr: &QueryInstruction) {
         match query_instr {
-            &mut QueryInstruction::PutVariable(RegType::Temp(r), _) => {
-                if let Some(found) = self.unsafe_vars.get_mut(&RegType::Temp(r)) {
+            QueryInstruction::PutVariable(RegType::Temp(r), _) => {
+                if let Some(found) = self.unsafe_vars.get_mut(&RegType::Temp(*r)) {
                     *found = true;
                 }
             }
-            &mut QueryInstruction::SetVariable(reg) => {
-                if let Some(found) = self.unsafe_vars.get_mut(&reg) {
+            QueryInstruction::SetVariable(reg) => {
+                if let Some(found) = self.unsafe_vars.get_mut(reg) {
                     *found = true;
                 }
             }

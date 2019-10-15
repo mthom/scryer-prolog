@@ -44,7 +44,11 @@ pub trait Allocator<'a> {
 
     fn take_bindings(self) -> AllocVarDict;
 
-    fn drain_var_data(&mut self, vs: VariableFixtures<'a>) -> VariableFixtures<'a> {
+    fn drain_var_data(
+        &mut self,
+        vs: VariableFixtures<'a>,
+        num_of_chunks: usize
+    ) -> VariableFixtures<'a> {
         let mut perm_vs = VariableFixtures::new();
 
         for (var, (var_status, cells)) in vs.into_iter() {
@@ -52,6 +56,10 @@ pub trait Allocator<'a> {
                 VarStatus::Temp(chunk_num, tvd) => {
                     self.bindings_mut()
                         .insert(var.clone(), VarData::Temp(chunk_num, 0, tvd));
+
+                    if chunk_num + 1 == num_of_chunks {
+                        perm_vs.insert_last_chunk_temp_var(var);
+                    }
                 }
                 VarStatus::Perm(_) => {
                     self.bindings_mut().insert(var.clone(), VarData::Perm(0));
