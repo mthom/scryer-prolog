@@ -172,6 +172,7 @@ pub enum SystemClauseType {
     ExpandGoal,
     ExpandTerm,
     FetchGlobalVar,
+    FetchGlobalVarWithOffset,
     GetChar,
     TruncateIfNoLiftedHeapGrowthDiff,
     TruncateIfNoLiftedHeapGrowth,
@@ -207,10 +208,12 @@ pub enum SystemClauseType {
     RemoveCallPolicyCheck,
     RemoveInferenceCounter,
     ResetGlobalVarAtKey,
+    ResetGlobalVarAtOffset,
     RetractClause,
     RestoreCutPolicy,
     SetCutPoint(RegType),
     StoreGlobalVar,
+    StoreGlobalVarWithOffset,
     InferenceLevel,
     CleanUpBlock,
     EraseBall,
@@ -280,6 +283,9 @@ impl SystemClauseType {
             &SystemClauseType::ExpandTerm => clause_name!("$expand_term"),
             &SystemClauseType::ExpandGoal => clause_name!("$expand_goal"),
             &SystemClauseType::FetchGlobalVar => clause_name!("$fetch_global_var"),
+            &SystemClauseType::FetchGlobalVarWithOffset => {
+                clause_name!("$fetch_global_var_with_offset")
+            }
             &SystemClauseType::GetChar => clause_name!("$get_char"),
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
                 clause_name!("$truncate_if_no_lh_growth")
@@ -324,6 +330,9 @@ impl SystemClauseType {
             &SystemClauseType::RestoreCutPolicy => clause_name!("$restore_cut_policy"),
             &SystemClauseType::SetCutPoint(_) => clause_name!("$set_cp"),
             &SystemClauseType::StoreGlobalVar => clause_name!("$store_global_var"),
+            &SystemClauseType::StoreGlobalVarWithOffset => {
+                clause_name!("$store_global_var_with_offset")
+            }
             &SystemClauseType::InferenceLevel => clause_name!("$inference_level"),
             &SystemClauseType::CleanUpBlock => clause_name!("$clean_up_block"),
             &SystemClauseType::EraseBall => clause_name!("$erase_ball"),
@@ -336,6 +345,7 @@ impl SystemClauseType {
             &SystemClauseType::ReadQueryTerm => clause_name!("$read_query_term"),
             &SystemClauseType::ReadTerm => clause_name!("$read_term"),
             &SystemClauseType::ResetGlobalVarAtKey => clause_name!("$reset_global_var_at_key"),
+            &SystemClauseType::ResetGlobalVarAtOffset => clause_name!("$reset_global_var_at_offset"),
             &SystemClauseType::RetractClause => clause_name!("$retract_clause"),
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
             &SystemClauseType::ReturnFromAttributeGoals => {
@@ -386,6 +396,7 @@ impl SystemClauseType {
             ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
+            ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
             ("$get_char", 1) => Some(SystemClauseType::GetChar),
             ("$truncate_if_no_lh_growth", 1) => {
                 Some(SystemClauseType::TruncateIfNoLiftedHeapGrowth)
@@ -432,6 +443,7 @@ impl SystemClauseType {
             ("$read_term", 2) => Some(SystemClauseType::ReadTerm),
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
             ("$reset_global_var_at_key", 1) => Some(SystemClauseType::ResetGlobalVarAtKey),
+            ("$reset_global_var_at_offset", 3) => Some(SystemClauseType::ResetGlobalVarAtOffset),
             ("$retract_clause", 4) => Some(SystemClauseType::RetractClause),
             ("$return_from_attribute_goals", 0) => Some(SystemClauseType::ReturnFromAttributeGoals),
             ("$return_from_verify_attr", 0) => Some(SystemClauseType::ReturnFromVerifyAttr),
@@ -440,6 +452,7 @@ impl SystemClauseType {
             ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$store_global_var", 2) => Some(SystemClauseType::StoreGlobalVar),
+            ("$store_global_var_with_offset", 2) => Some(SystemClauseType::StoreGlobalVarWithOffset),
             ("$submit_query_and_print_results", 2) => Some(SystemClauseType::REPL(
                 REPLCodePtr::SubmitQueryAndPrintResults,
             )),

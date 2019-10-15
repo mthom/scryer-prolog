@@ -419,6 +419,8 @@ pub(crate) trait CallPolicy: Any {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
+        // necessary because of restore_snapshot. similarly for other choice instructions.
+        machine_st.num_of_args = n;
         machine_st.e = machine_st.or_stack[b].e;
         machine_st.cp = machine_st.or_stack[b].cp.clone();
 
@@ -462,6 +464,7 @@ pub(crate) trait CallPolicy: Any {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
+        machine_st.num_of_args = n;
         machine_st.e = machine_st.or_stack[b].e;
         machine_st.cp = machine_st.or_stack[b].cp.clone();
 
@@ -505,6 +508,7 @@ pub(crate) trait CallPolicy: Any {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
+        machine_st.num_of_args = n;
         machine_st.e = machine_st.or_stack[b].e;
         machine_st.cp = machine_st.or_stack[b].cp.clone();
 
@@ -549,6 +553,7 @@ pub(crate) trait CallPolicy: Any {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
+        machine_st.num_of_args = n;
         machine_st.e = machine_st.or_stack[b].e;
         machine_st.cp = machine_st.or_stack[b].cp.clone();
 

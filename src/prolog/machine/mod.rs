@@ -744,7 +744,7 @@ impl Machine {
 
                 self.machine_st.p = top_level_code_ptr!(cn, p);
             }
-
+            
             self.machine_st.query_stepper(
                 &mut self.indices,
                 &mut self.policies,

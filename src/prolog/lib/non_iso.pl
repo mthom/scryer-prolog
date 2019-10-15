@@ -12,20 +12,31 @@ forall(Generate, Test) :-
 
 %% (non-)backtrackable global variables.
 
-bb_put(Key, Value) :- atom(Key),
-		      !,
-		      '$store_global_var'(Key, Value).
+bb_put(Key, Value) :- atom(Key), !, '$store_global_var'(Key, Value).
 bb_put(Key, _) :- throw(error(type_error(atom, Key), bb_put/2)).
 
+%% backtrackable global variables.
+
 bb_b_put(Key, NewValue) :-
-    (  bb_get(Key, OldValue) ->
-       call_cleanup((store_global_var(Key, NewValue) ; false), store_global_var(Key, OldValue))
-    ;  call_cleanup((store_global_var(Key, NewValue) ; false), reset_global_var_at_key(Key))
+    (  '$bb_get_with_offset'(Key, OldValue, OldOffset) ->
+       call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
+		    reset_global_var_at_offset(Key, OldValue, OldOffset))
+    ;  call_cleanup((store_global_var(Key, NewValue, _) ; false),
+		    reset_global_var_at_key(Key))
     ).
+
+store_global_var_with_offset(Key, Value) :- '$store_global_var_with_offset'(Key, Value).
 
 store_global_var(Key, Value) :- '$store_global_var'(Key, Value).
 
 reset_global_var_at_key(Key) :- '$reset_global_var_at_key'(Key).
+
+reset_global_var_at_offset(Key, Value, Offset) :- '$reset_global_var_at_offset'(Key, Value, Offset).
+
+'$bb_get_with_offset'(Key, OldValue, Offset) :-
+    atom(Key), !, '$fetch_global_var_with_offset'(Key, OldValue, Offset).
+'$bb_get_with_offset'(Key, _, _) :-
+    throw(error(type_error(atom, Key), bb_b_put/2)).
 
 bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
 bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).

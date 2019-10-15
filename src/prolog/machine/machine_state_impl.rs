@@ -114,8 +114,8 @@ impl MachineState {
     }
 
     #[allow(dead_code)]
-    pub fn print_heap(&self) {
-        for h in 0..self.heap.h {
+    pub fn print_heap(&self, start: usize) {
+        for h in start .. self.heap.h {
             println!("{} : {}", h, self.heap[h]);
         }
     }
@@ -2058,7 +2058,7 @@ impl MachineState {
                     for i in 1..narity + 1 {
                         self.registers[i] = self.heap[a + i].as_addr(a + i);
                     }
-
+                    
                     (name, narity)
                 } else {
                     self.fail = true;
@@ -3111,7 +3111,7 @@ impl MachineState {
         let gi = self.next_global_index();
 
         self.p += 1;
-
+        
         if self.e + 1 < self.and_stack.len() {
             let and_gi = self.and_stack[self.e].global_index;
             let or_gi = self

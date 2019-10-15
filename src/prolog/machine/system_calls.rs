@@ -307,7 +307,7 @@ impl MachineState {
             }
         }
     }
-    
+
     #[inline]
     fn install_new_block(&mut self, r: RegType) -> usize {
         self.block = self.b;
@@ -840,15 +840,52 @@ impl MachineState {
 
                 let addr = self[temp_v!(2)].clone();
 
-                match indices.global_variables.get(&key) {
-                    Some(ref ball) => {
+                match indices.global_variables.get_mut(&key) {
+                    Some((ref mut ball, None)) => {
                         let h = self.heap.h;
                         let stub = ball.copy_and_align(h);
 
                         self.heap.extend(stub.into_iter());
                         self.unify(addr, Addr::HeapCell(h));
                     }
+                    Some((_, Some(h))) => {
+                        self.unify(addr, Addr::HeapCell(*h))
+                    }
                     None => self.fail = true,
+                };
+            }
+            &SystemClauseType::FetchGlobalVarWithOffset => {
+                let key = self[temp_v!(1)].clone();
+
+                let key = match self.store(self.deref(key)) {
+                    Addr::Con(Constant::Atom(atom, _)) => atom,
+                    _ => unreachable!(),
+                };
+
+                let addr = self[temp_v!(2)].clone();
+
+                match indices.global_variables.get_mut(&key) {
+                    Some((ref mut ball, ref mut offset @ None)) => {
+                        let h = self.heap.h;
+                        let stub = ball.copy_and_align(h);
+
+                        self.heap.extend(stub.into_iter());
+                        self.unify(addr, Addr::HeapCell(h));
+
+                        *offset = Some(h);
+                    }
+                    Some((_, Some(h))) => {
+                        let offset = self[temp_v!(3)].clone();
+
+                        self.unify(offset, Addr::Con(Constant::Usize(*h)));
+
+                        if !self.fail {
+                            self.unify(addr, Addr::HeapCell(*h));
+                        }
+                    }
+                    None => {
+                        self.fail = true
+                    }
                 };
             }
             &SystemClauseType::GetChar => {
@@ -980,7 +1017,7 @@ impl MachineState {
                         } else {
                             tail
                         };
-                       
+
                         self.heap[l1 + 1] = HeapCellValue::Addr(tail);
                         self.trail(TrailRef::AttrVarLink(l1 + 1, old_addr));
                     }
@@ -1273,7 +1310,7 @@ impl MachineState {
             &SystemClauseType::GetAttributedVariableList => {
                 let attr_var = self.store(self.deref(self[temp_v!(1)].clone()));
                 let attr_var_list = match attr_var {
-                    Addr::AttrVar(h) => h + 1,                    
+                    Addr::AttrVar(h) => h + 1,
                     attr_var @ Addr::HeapCell(_) | attr_var @ Addr::StackCell(..) => {
                         // create an AttrVar in the heap.
                         let h = self.heap.h;
@@ -1535,6 +1572,35 @@ impl MachineState {
 
                 indices.global_variables.swap_remove(&key);
             }
+            &SystemClauseType::ResetGlobalVarAtOffset => {
+                let key = self[temp_v!(1)].clone();
+
+                let key = match self.store(self.deref(key)) {
+                    Addr::Con(Constant::Atom(atom, _)) => atom,
+                    _ => unreachable!(),
+                };
+
+                let value = self[temp_v!(2)].clone();
+                let mut ball = Ball::new();
+                let h = self.heap.h;
+
+                ball.boundary = h;
+                copy_term(
+                    CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut ball.stub),
+                    value,
+                );
+
+                let offset = self[temp_v!(3)].clone();
+
+                match self.store(self.deref(offset)) {
+                    Addr::Con(Constant::Usize(offset)) => {
+                        indices.global_variables.insert(key, (ball, Some(offset)))
+                    }
+                    _ => {
+                        indices.global_variables.insert(key, (ball, None))
+                    }
+                };
+            },
             &SystemClauseType::RemoveCallPolicyCheck => {
                 let restore_default = match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
                     Some(call_policy) => {
@@ -1617,10 +1683,10 @@ impl MachineState {
                 if let &Addr::Con(Constant::Usize(num_of_args)) = &self.and_stack[e][frame_len] {
                     self.num_of_args = num_of_args;
                 }
-                
+
                 self.deallocate();
                 self.p = CodePtr::Local(self.and_stack[e].interrupt_cp);
-                
+
                 return Ok(());
             }
             &SystemClauseType::RestoreCutPolicy => {
@@ -1771,7 +1837,7 @@ impl MachineState {
             &SystemClauseType::SkipMaxList =>
                 if let Err(err) = self.skip_max_list() {
                     return Err(err);
-                },            
+                },
             &SystemClauseType::StoreGlobalVar => {
                 let key = self[temp_v!(1)].clone();
 
@@ -1780,16 +1846,40 @@ impl MachineState {
                     _ => unreachable!(),
                 };
 
-                let value = self[temp_v!(2)].clone();                
+                let value = self[temp_v!(2)].clone();
                 let mut ball = Ball::new();
-                
+
                 ball.boundary = self.heap.h;
                 copy_term(
                     CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut ball.stub),
                     value,
                 );
-                
-                indices.global_variables.insert(key, ball);
+
+                indices.global_variables.insert(key, (ball, None));
+            }
+            &SystemClauseType::StoreGlobalVarWithOffset => {
+                let key = self[temp_v!(1)].clone();
+
+                let key = match self.store(self.deref(key)) {
+                    Addr::Con(Constant::Atom(atom, _)) => atom,
+                    _ => unreachable!(),
+                };
+
+                let value = self[temp_v!(2)].clone();
+                let mut ball = Ball::new();
+                let h = self.heap.h;
+
+                ball.boundary = h;
+                copy_term(
+                    CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut ball.stub),
+                    value.clone(),
+                );
+
+                let stub = ball.copy_and_align(h);
+                self.heap.extend(stub.into_iter());
+                indices.global_variables.insert(key, (ball, Some(h)));
+
+                self.unify(value, Addr::HeapCell(h));
             }
             &SystemClauseType::Succeed => {}
             &SystemClauseType::TermVariables => {

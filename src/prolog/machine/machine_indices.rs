@@ -455,7 +455,7 @@ pub type InSituCodeDir = IndexMap<PredicateKey, usize>;
 // key type: module name, predicate indicator.
 pub type DynamicCodeDir = IndexMap<(ClauseName, ClauseName, usize), DynamicPredicateInfo>;
 
-pub type GlobalVarDir = IndexMap<ClauseName, Ball>;
+pub type GlobalVarDir = IndexMap<ClauseName, (Ball, Option<usize>)>;
 
 pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,
