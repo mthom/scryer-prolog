@@ -34,7 +34,7 @@
 :- use_module(library(lists)).
 :- use_module(library(non_iso)).
 :- use_module(library(dcgs)).
-%:- use_module(library(types)).
+:- use_module(library(error), []).
 
 :- attribute
         clpb/1,
@@ -77,8 +77,8 @@ must_be(list(What), Where, Term) :- !,
 must_be(ground, _, Term) :- !,
         functor(Term, _, _).
 
-must_be(Type, Goal-Arg, Term) :-
-        must_be(Term, Type, Goal, Arg).
+must_be(Type, _, Term) :-
+        error:must_be(Type, Term).
 
 clpz_list(Nil, _) :- Nil == [].
 clpz_list(Ls, Where) :-
@@ -87,7 +87,6 @@ clpz_list(Ls, Where) :-
     ;   Ls = [_|Rest],
         clpz_list(Rest, Where)
     ).
-    
 
 
 instantiation_error(Term) :- instantiation_error(Term, unknown(Term)-1).
@@ -139,7 +138,10 @@ partition(Pred, Ls0, As, Bs) :-
         include(Pred, Ls0, As),
         exclude(Pred, Ls0, Bs).
 
-sum_list(Ls, S) :- sumlist(Ls, S).
+sum_list(Ls, S) :-
+        foldl(sum_, Ls, 0, S).
+
+sum_(L, S0, S) :- S is S0 + L.
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   Pairs.
