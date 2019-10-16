@@ -33,6 +33,10 @@ must_be(Type, Term) :-
 must_be_(Type, _) :-
         var(Type),
         instantiation_error(Type).
+must_be_(var, Term) :-
+        (   var(Term) -> true
+        ;   throw(error(uninstantiation_error, _))
+        ).
 must_be_(integer, Term) :- check_(integer, integer, Term).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
 must_be_(list, Term)    :- check_(ilist, list, Term).
@@ -52,6 +56,7 @@ type(type).
 type(integer).
 type(atom).
 type(list).
+type(var).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    can_be(Type, Term)
