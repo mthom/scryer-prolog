@@ -173,7 +173,7 @@ impl MachineState {
             }
             _ => {
                 self.push_attr_var_binding(h, addr.clone());
-                self.heap[h] = HeapCellValue::Addr(addr);                
+                self.heap[h] = HeapCellValue::Addr(addr);
                 self.trail(TrailRef::Ref(Ref::AttrVar(h)));
             }
         }
@@ -1665,7 +1665,7 @@ impl MachineState {
         } else if s.is_expandable() {
             self.heap
                 .push(HeapCellValue::Addr(Addr::Con(Constant::String(s.clone()))));
-
+            
             self.s = h;
             self.mode = MachineMode::Read;
         } else {
@@ -1711,8 +1711,8 @@ impl MachineState {
                         _ => self.fail = true,
                     },
                     addr @ Addr::AttrVar(_)
-                    | addr @ Addr::StackCell(..)
-                    | addr @ Addr::HeapCell(_) => {
+                  | addr @ Addr::StackCell(..)
+                  | addr @ Addr::HeapCell(_) => {
                         let h = self.heap.h;
 
                         self.heap.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
@@ -1860,8 +1860,12 @@ impl MachineState {
                 let offset = match addr {
                     Addr::HeapCell(_) | Addr::StackCell(..) | Addr::AttrVar(..) => v,
                     Addr::Con(Constant::String(ref s)) if !self.flags.double_quotes.is_atom() => {
-                        if s.is_empty() && !s.is_expandable() {
-                            c
+                        if s.is_empty() {
+                            if s.is_expandable() {
+                                v
+                            } else {
+                                c
+                            }
                         } else {
                             l
                         }
@@ -1883,7 +1887,7 @@ impl MachineState {
             &IndexingInstruction::SwitchOnConstant(_, ref hm) => {
                 let a1 = self.registers[1].clone();
                 let addr = self.store(self.deref(a1));
-                
+
                 let offset = match addr {
                     Addr::Con(constant) => match hm.get(&constant) {
                         Some(offset) => *offset,
@@ -2058,7 +2062,7 @@ impl MachineState {
                     for i in 1..narity + 1 {
                         self.registers[i] = self.heap[a + i].as_addr(a + i);
                     }
-                    
+
                     (name, narity)
                 } else {
                     self.fail = true;
@@ -2268,7 +2272,7 @@ impl MachineState {
                 (HeapCellValue::Addr(a1), HeapCellValue::Addr(a2)) =>
                     if a1 != a2 {
                         return true;
-                    },                
+                    },
                 _ => return true,
             }
         }
@@ -3111,7 +3115,7 @@ impl MachineState {
         let gi = self.next_global_index();
 
         self.p += 1;
-        
+
         if self.e + 1 < self.and_stack.len() {
             let and_gi = self.and_stack[self.e].global_index;
             let or_gi = self
@@ -3147,6 +3151,21 @@ impl MachineState {
         self.p += 1;
     }
 
+    pub(super) fn pop_stack_frames(&mut self) {
+	if self.and_stack.len() > self.e {
+            let and_gi = self.and_stack[self.e].global_index;
+            let or_gi = self
+                .or_stack
+                .top()
+                .map(|or_fr| or_fr.global_index)
+                .unwrap_or(0);
+
+            if and_gi > or_gi {
+                self.and_stack.truncate(self.e + 1);
+            }
+        }
+    }
+
     fn handle_call_clause(
         &mut self,
         indices: &mut IndexStore,
@@ -3166,7 +3185,7 @@ impl MachineState {
 	    self.fail = true;
 	    return;
 	}
-	
+
         let mut default_call_policy: Box<dyn CallPolicy> = Box::new(DefaultCallPolicy {});
         let call_policy = if use_default_cp {
             &mut default_call_policy
