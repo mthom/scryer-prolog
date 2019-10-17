@@ -4,8 +4,8 @@
 %% ?- use_module(library(non_iso)).
 
 :- module(non_iso, [bb_b_put/2, bb_get/2, bb_put/2, call_cleanup/2,
-		    call_with_inference_limit/3, forall/2,
-		    setup_call_cleanup/3, variant/2]).
+		    call_with_inference_limit/3, forall/2, maybe/0,
+		    set_random/1, setup_call_cleanup/3, variant/2]).
 
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
@@ -125,3 +125,16 @@ call_with_inference_limit(_, _, R, Bb, B) :-
     '$call_with_default_policy'(handle_ile(B, Ball, R)).
 
 variant(X, Y) :- '$variant'(X, Y).
+
+% succeeds with probability 0.5.
+maybe :- '$maybe'.
+
+set_random(Seed) :-
+    (  nonvar(Seed) -> 
+       (  Seed = seed(S) ->
+	  (  integer(S) -> '$set_seed'(S)
+	  ;  throw(error(type_error(integer(S), set_random/1)))
+	  )    
+       )
+    ;  throw(error(instantiation_error, set_random/1))
+    ).    

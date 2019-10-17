@@ -17,6 +17,8 @@ use crate::prolog::ordered_float::OrderedFloat;
 use crate::prolog::read::{readline, PrologStream};
 use crate::prolog::rug::Integer;
 
+use crate::ref_thread_local::RefThreadLocal;
+
 use indexmap::{IndexMap, IndexSet};
 
 use std::collections::VecDeque;
@@ -679,7 +681,8 @@ impl MachineState {
                                             let c = self.int_to_char_code(&n, "atom_codes", 2)?;
                                             chars.push(c as char);
                                         }
-                                        &Addr::Con(Constant::CharCode(c)) => chars.push(c as char),
+                                        &Addr::Con(Constant::CharCode(c)) =>
+                                            chars.push(c as char),
                                         _ => {
                                             let err = MachineError::type_error(
                                                 ValidType::Integer,
@@ -1018,8 +1021,14 @@ impl MachineState {
                             tail
                         };
 
+                        let trail_ref = match old_addr {
+                            Addr::HeapCell(h) => TrailRef::AttrVarHeapLink(h),
+                            Addr::Lis(l) => TrailRef::AttrVarListLink(l1 + 1, l),
+                            _ => unreachable!()
+                        };
+
                         self.heap[l1 + 1] = HeapCellValue::Addr(tail);
-                        self.trail(TrailRef::AttrVarLink(l1 + 1, old_addr));
+                        self.trail(trail_ref);
                     }
                 }
             }
@@ -1041,7 +1050,7 @@ impl MachineState {
                                 };
 
                                 self.heap[h + 1] = HeapCellValue::Addr(tail);
-                                self.trail(TrailRef::AttrVarLink(h + 1, Addr::Lis(l)));
+                                self.trail(TrailRef::AttrVarListLink(h + 1, l));
                             }
                             _ => unreachable!(),
                         }
@@ -1254,6 +1263,19 @@ impl MachineState {
                     },
                     _ => self.fail = true,
                 }
+            }
+            &SystemClauseType::Maybe => {
+                let result = {
+                    let mut rand = RANDOM_STATE.borrow_mut();
+
+                    if rand.bits(1) == 0 {
+                        true
+                    } else {
+                        false
+                    }
+                };
+
+                self.fail = result;
             }
             &SystemClauseType::OpDeclaration => {
                 let priority = self[temp_v!(1)].clone();
@@ -1834,6 +1856,31 @@ impl MachineState {
             }
             &SystemClauseType::SetBall =>
                 self.set_ball(),
+            &SystemClauseType::SetSeed => {
+                let seed = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                let seed = match seed {
+                    Addr::Con(Constant::Integer(n)) =>
+                        n,
+                    Addr::Con(Constant::CharCode(c)) =>
+                        Integer::from(c),
+                    Addr::Con(Constant::Rational(r)) => {
+                        if r.denom() == &1 {
+                            r.numer().clone()
+                        } else {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    }
+                    _ => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                };
+
+                let mut rand = RANDOM_STATE.borrow_mut();
+                rand.seed(&seed);
+            }
             &SystemClauseType::SkipMaxList =>
                 if let Err(err) = self.skip_max_list() {
                     return Err(err);

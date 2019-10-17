@@ -648,9 +648,15 @@ impl MachineState {
                     self.tr += 1;
                 }
             }
-            TrailRef::AttrVarLink(h, prev_addr) => {
+            TrailRef::AttrVarHeapLink(h) => {
                 if h < self.hb {
-                    self.trail.push(TrailRef::AttrVarLink(h, prev_addr));
+                    self.trail.push(TrailRef::AttrVarHeapLink(h));
+                    self.tr += 1;
+                }
+            }
+            TrailRef::AttrVarListLink(h, l) => {
+                if h < self.hb {
+                    self.trail.push(TrailRef::AttrVarListLink(h, l));
                     self.tr += 1;
                 }
             }
@@ -680,7 +686,7 @@ impl MachineState {
         // additions, now that deleted attributes can be undeleted by
         // backtracking.
         for i in (a1..a2).rev() {
-            match self.trail[i].clone() {
+            match self.trail[i] {
                 TrailRef::Ref(Ref::HeapCell(h)) => {
                     self.heap[h] = HeapCellValue::Addr(Addr::HeapCell(h))
                 }
@@ -690,8 +696,11 @@ impl MachineState {
                 TrailRef::Ref(Ref::StackCell(fr, sc)) => {
                     self.and_stack[fr][sc] = Addr::StackCell(fr, sc)
                 }
-                TrailRef::AttrVarLink(h, prev_addr) => {
-                    self.heap[h] = HeapCellValue::Addr(prev_addr)
+                TrailRef::AttrVarHeapLink(h) => {
+                    self.heap[h] = HeapCellValue::Addr(Addr::HeapCell(h));
+                }
+                TrailRef::AttrVarListLink(h, l) => {
+                    self.heap[h] = HeapCellValue::Addr(Addr::Lis(l));
                 }
             }
         }
@@ -735,13 +744,14 @@ impl MachineState {
         let mut i = self.or_stack[b].tr;
 
         while i < self.tr {
-            let tr_i = self.trail[i].clone();
+            let tr_i = self.trail[i];
             let hb = self.hb;
 
             match tr_i {
                 TrailRef::Ref(Ref::AttrVar(tr_i))
-                | TrailRef::Ref(Ref::HeapCell(tr_i))
-                | TrailRef::AttrVarLink(tr_i, _) => {
+              | TrailRef::Ref(Ref::HeapCell(tr_i))
+              | TrailRef::AttrVarHeapLink(tr_i)
+              | TrailRef::AttrVarListLink(tr_i, _) => {
                     if tr_i < hb {
                         i += 1;
                     } else {
@@ -765,7 +775,7 @@ impl MachineState {
                         i += 1;
                     } else {
                         let tr = self.tr;
-                        let val = self.trail[tr - 1].clone();
+                        let val = self.trail[tr - 1];
                         self.trail[i] = val;
                         self.trail.pop();
                         self.tr -= 1;

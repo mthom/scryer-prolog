@@ -178,10 +178,11 @@ impl From<Ref> for Addr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum TrailRef {
     Ref(Ref),
-    AttrVarLink(usize, Addr),
+    AttrVarHeapLink(usize),
+    AttrVarListLink(usize, usize),
 }
 
 impl From<Ref> for TrailRef {

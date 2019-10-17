@@ -2,6 +2,7 @@ use prolog_parser::ast::*;
 
 use crate::prolog::forms::Number;
 use crate::prolog::machine::machine_indices::*;
+use crate::prolog::rug::rand::RandState;
 
 use ref_thread_local::RefThreadLocal;
 
@@ -79,6 +80,10 @@ pub enum InlinedClauseType {
     IsNonVar(RegType),
     IsPartialString(RegType),
     IsVar(RegType),
+}
+
+ref_thread_local! {
+    pub static managed RANDOM_STATE: RandState<'static> = RandState::new();
 }
 
 ref_thread_local! {
@@ -223,12 +228,14 @@ pub enum SystemClauseType {
     GetCutPoint,
     GetDoubleQuotes,
     InstallNewBlock,
+    Maybe,
     ResetBlock,
     ReturnFromAttributeGoals,
     ReturnFromVerifyAttr,
     SetBall,
     SetCutPointByDefault(RegType),
     SetDoubleQuotes,
+    SetSeed,
     SkipMaxList,
     Succeed,
     TermVariables,
@@ -319,6 +326,7 @@ impl SystemClauseType {
                 clause_name!("$install_inference_counter")
             }
             &SystemClauseType::LiftedHeapLength => clause_name!("$lh_length"),
+            &SystemClauseType::Maybe => clause_name!("maybe"),
             &SystemClauseType::ModuleHeadIsDynamic => clause_name!("$module_head_is_dynamic"),
             &SystemClauseType::ModuleOf => clause_name!("$module_of"),
             &SystemClauseType::NoSuchPredicate => clause_name!("$no_such_predicate"),
@@ -329,6 +337,7 @@ impl SystemClauseType {
             &SystemClauseType::RemoveInferenceCounter => clause_name!("$remove_inference_counter"),
             &SystemClauseType::RestoreCutPolicy => clause_name!("$restore_cut_policy"),
             &SystemClauseType::SetCutPoint(_) => clause_name!("$set_cp"),
+            &SystemClauseType::SetSeed => clause_name!("$set_seed"),
             &SystemClauseType::StoreGlobalVar => clause_name!("$store_global_var"),
             &SystemClauseType::StoreGlobalVarWithOffset => {
                 clause_name!("$store_global_var_with_offset")
@@ -417,6 +426,7 @@ impl SystemClauseType {
             ("$install_scc_cleaner", 2) => Some(SystemClauseType::InstallSCCCleaner),
             ("$install_inference_counter", 3) => Some(SystemClauseType::InstallInferenceCounter),
             ("$lh_length", 1) => Some(SystemClauseType::LiftedHeapLength),
+            ("$maybe", 0) => Some(SystemClauseType::Maybe),
             ("$module_of", 2) => Some(SystemClauseType::ModuleOf),
             ("$module_retract_clause", 5) => Some(SystemClauseType::ModuleRetractClause),
             ("$module_head_is_dynamic", 2) => Some(SystemClauseType::ModuleHeadIsDynamic),
@@ -450,6 +460,7 @@ impl SystemClauseType {
             ("$set_ball", 1) => Some(SystemClauseType::SetBall),
             ("$set_cp_by_default", 1) => Some(SystemClauseType::SetCutPointByDefault(temp_v!(1))),
             ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
+            ("$set_seed", 1) => Some(SystemClauseType::SetSeed),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$store_global_var", 2) => Some(SystemClauseType::StoreGlobalVar),
             ("$store_global_var_with_offset", 2) => Some(SystemClauseType::StoreGlobalVarWithOffset),
