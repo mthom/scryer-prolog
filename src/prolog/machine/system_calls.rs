@@ -1686,7 +1686,7 @@ impl MachineState {
                 return Ok(());
             }
             &SystemClauseType::ReturnFromAttributeGoals => {
-                self.deallocate();
+                self.deallocate();                
                 self.p = CodePtr::Local(LocalCodePtr::TopLevel(0, 0));
                 return Ok(());
             }

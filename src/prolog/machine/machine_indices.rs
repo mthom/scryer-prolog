@@ -469,6 +469,12 @@ pub struct IndexStore {
 }
 
 impl IndexStore {
+    pub fn reset_global_variable_offsets(&mut self) {
+        for (_, ref mut offset) in self.global_variables.values_mut() {
+            *offset = None;
+        }
+    }
+    
     pub fn predicate_exists(
         &self,
         name: ClauseName,

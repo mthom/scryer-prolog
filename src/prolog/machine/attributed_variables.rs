@@ -14,6 +14,7 @@ pub(super) struct AttrVarInitializer {
     pub(super) attr_var_queue: Vec<usize>,
     pub(super) bindings: Bindings,
     pub(super) cp: LocalCodePtr,
+    pub(super) instigating_p: LocalCodePtr,
     pub(super) verify_attrs_loc: usize,
     pub(super) project_attrs_loc: usize,
 }
@@ -24,6 +25,7 @@ impl AttrVarInitializer {
             attribute_goals: vec![],
             attr_var_queue: vec![],
             bindings: vec![],
+            instigating_p: LocalCodePtr::default(),
             cp: LocalCodePtr::default(),
             verify_attrs_loc,
             project_attrs_loc,
@@ -41,10 +43,12 @@ impl AttrVarInitializer {
 impl MachineState {
     pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: Addr) {
         if self.attr_var_init.bindings.is_empty() {
+            self.attr_var_init.instigating_p = self.p.local();
+            
             if self.last_call {
                 self.attr_var_init.cp = self.cp;
             } else {
-                self.attr_var_init.cp = self.p.local();
+                self.attr_var_init.cp = self.p.local() + 1;
             }
             
             self.p = CodePtr::VerifyAttrInterrupt(self.attr_var_init.verify_attrs_loc);
@@ -201,7 +205,7 @@ impl Machine {
             &mut self.code_repo,
             &mut readline::input_stream(),
         );
-
+               
         self.machine_st
             .print_attribute_goals_string(&self.indices.op_dir)
     }

@@ -25,6 +25,7 @@ verify_attrs([], _, _, []).
 
 call_verify_attributes(Attrs, _, _, []) :-
     var(Attrs), !.
+call_verify_attributes([], _, _, []).
 call_verify_attributes([Attr|Attrs], Var, Value, ListOfGoalLists) :-
     gather_modules([Attr|Attrs], Modules0),
     sort(Modules0, Modules),

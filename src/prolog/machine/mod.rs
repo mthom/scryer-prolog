@@ -6,6 +6,7 @@ use crate::prolog::fixtures::*;
 use crate::prolog::forms::*;
 use crate::prolog::heap_print::*;
 use crate::prolog::instructions::*;
+use crate::prolog::machine::heap::Heap;
 use crate::prolog::read::*;
 use crate::prolog::write::{next_keypress, ContinueResult};
 
@@ -71,6 +72,7 @@ impl MachinePolicies {
 
 pub struct Machine {
     pub(super) machine_st: MachineState,
+    pub(super) inner_heap: Heap,
     pub(super) policies: MachinePolicies,
     pub(super) indices: IndexStore,
     pub(super) code_repo: CodeRepo,
@@ -227,13 +229,13 @@ impl Machine {
     }
 
     pub fn run_init_code(&mut self, code: Code) {
-	let old_machine_st = self.machine_st.sink_to_snapshot();
+	let old_machine_st = self.sink_to_snapshot();
 	self.machine_st.reset();
 
 	self.code_repo.cached_query = code;
 	self.run_query(&AllocVarDict::new());
 
-	self.machine_st.absorb_snapshot(old_machine_st);
+	self.absorb_snapshot(old_machine_st);
     }
 
     pub fn run_top_level(&mut self) {
@@ -260,6 +262,7 @@ impl Machine {
     pub fn new(prolog_stream: PrologStream) -> Self {
         let mut wam = Machine {
             machine_st: MachineState::new(),
+            inner_heap: Heap::with_capacity(256 * 256),
             policies: MachinePolicies::new(),
             indices: IndexStore::new(),
             code_repo: CodeRepo::new(),
@@ -570,9 +573,14 @@ impl Machine {
                 };
 
                 let stream = parsing_stream(s.as_bytes());
+                let snapshot = self.sink_to_snapshot();
+                let policies = mem::replace(&mut self.policies, MachinePolicies::new());
 
-                let snapshot = self.machine_st.sink_to_snapshot();
                 self.machine_st.reset();
+                self.machine_st.heap = mem::replace(
+                    &mut self.inner_heap,
+                    Heap::with_capacity(0),
+                );
 
                 let result = match stream_to_toplevel(stream, self) {
                     Ok(packet) => compile_term(self, packet),
@@ -580,6 +588,8 @@ impl Machine {
                 };
 
                 self.handle_eval_session(result, snapshot);
+                self.indices.reset_global_variable_offsets();
+                self.policies = policies;
             }
 	    REPLCodePtr::UseModule =>
 		self.use_module(ModuleSource::Library),
@@ -594,10 +604,66 @@ impl Machine {
         self.machine_st.p = CodePtr::Local(p);
     }
 
+    fn sink_to_snapshot(&mut self) -> MachineState {
+        let mut snapshot = MachineState::with_capacity(0);
+
+        snapshot.hb = self.machine_st.hb;
+        snapshot.e = self.machine_st.e;
+        snapshot.b = self.machine_st.b;
+        snapshot.b0 = self.machine_st.b0;
+        snapshot.s = self.machine_st.s;
+        snapshot.tr = self.machine_st.tr;
+        snapshot.pstr_tr = self.machine_st.pstr_tr;
+        snapshot.num_of_args = self.machine_st.num_of_args;
+
+        snapshot.fail = self.machine_st.fail;
+        snapshot.trail = mem::replace(&mut self.machine_st.trail, vec![]);
+        snapshot.pstr_trail = mem::replace(&mut self.machine_st.pstr_trail, vec![]);
+        snapshot.heap = self.machine_st.heap.take();
+        snapshot.mode = self.machine_st.mode;
+        snapshot.and_stack = self.machine_st.and_stack.take();
+        snapshot.or_stack = self.machine_st.or_stack.take();
+        snapshot.registers = mem::replace(&mut self.machine_st.registers, vec![]);
+        snapshot.block = self.machine_st.block;
+
+        snapshot.ball = self.machine_st.ball.take();
+        snapshot.lifted_heap = mem::replace(&mut self.machine_st.lifted_heap, vec![]);
+
+        snapshot
+    }
+
+    fn absorb_snapshot(&mut self, mut snapshot: MachineState) {
+        self.machine_st.hb = snapshot.hb;
+        self.machine_st.e = snapshot.e;
+        self.machine_st.b = snapshot.b;
+        self.machine_st.b0 = snapshot.b0;
+        self.machine_st.s = snapshot.s;
+        self.machine_st.tr = snapshot.tr;
+        self.machine_st.pstr_tr = snapshot.pstr_tr;
+        self.machine_st.num_of_args = snapshot.num_of_args;
+
+        self.machine_st.fail = snapshot.fail;
+        self.machine_st.trail = mem::replace(&mut snapshot.trail, vec![]);
+        self.machine_st.pstr_trail = mem::replace(&mut snapshot.pstr_trail, vec![]);
+
+        self.inner_heap = self.machine_st.heap.take();
+        self.inner_heap.truncate(0);
+        
+        self.machine_st.heap = snapshot.heap.take();
+        self.machine_st.mode = snapshot.mode;
+        self.machine_st.and_stack = snapshot.and_stack.take();
+        self.machine_st.or_stack = snapshot.or_stack.take();
+        self.machine_st.registers = mem::replace(&mut snapshot.registers, vec![]);
+        self.machine_st.block = snapshot.block;
+
+        self.machine_st.ball = snapshot.ball.take();
+        self.machine_st.lifted_heap = mem::replace(&mut snapshot.lifted_heap, vec![]);
+    }
+
     fn propagate_exception_to_toplevel(&mut self, snapshot: MachineState) {
         let ball = self.machine_st.ball.take();
 
-        self.machine_st.absorb_snapshot(snapshot);
+        self.absorb_snapshot(snapshot);
         self.machine_st.ball = ball;
 
         let h = self.machine_st.heap.h;
@@ -617,7 +683,7 @@ impl Machine {
                 };
 
                 let attr_goals = self.attribute_goals();
-
+                
                 if !(self.machine_st.b > 0) {
                     if bindings.is_empty() {
                         let space = if requires_space(&attr_goals, ".") {
@@ -632,7 +698,7 @@ impl Machine {
                             println!("true.");
                         }
 
-                        self.machine_st.absorb_snapshot(snapshot);
+                        self.absorb_snapshot(snapshot);
                         return;
                     }
                 } else if bindings.is_empty() && attr_goals.is_empty() {
@@ -664,7 +730,7 @@ impl Machine {
                         }
                         ContinueResult::Conclude => {
 			    print!(" ...\r\n");
-                            self.machine_st.absorb_snapshot(snapshot);
+                            self.absorb_snapshot(snapshot);
                             return;
                         }
                     };
@@ -676,12 +742,12 @@ impl Machine {
                                 return;
                             } else {
 				print!("false.\r\n");
-                                self.machine_st.absorb_snapshot(snapshot);
+                                self.absorb_snapshot(snapshot);
                                 return;
                             }
                         }
                         EvalSession::Error(err) => {
-                            self.machine_st.absorb_snapshot(snapshot);
+                            self.absorb_snapshot(snapshot);
                             self.throw_session_error(err, (clause_name!("repl"), 0));
                             return;
                         }
@@ -712,7 +778,7 @@ impl Machine {
                 }
             },
             EvalSession::Error(err) => {
-                self.machine_st.absorb_snapshot(snapshot);
+                self.absorb_snapshot(snapshot);
                 self.throw_session_error(err, (clause_name!("repl"), 0));
                 return;
             }
@@ -725,7 +791,7 @@ impl Machine {
             _ => println!("true.")
         }
 
-        self.machine_st.absorb_snapshot(snapshot);
+        self.absorb_snapshot(snapshot);
     }
 
     pub(super) fn run_query(&mut self, alloc_locs: &AllocVarDict) {
@@ -1048,7 +1114,13 @@ impl MachineState {
                 CodePtr::VerifyAttrInterrupt(_) => {
                     self.p = CodePtr::Local(self.attr_var_init.cp);
 
-                    if !self.verify_attr_stepper(indices, policies, code_repo, prolog_stream) {
+                    let instigating_p = CodePtr::Local(self.attr_var_init.instigating_p);
+                    let instigating_instr = code_repo.lookup_instr(false, &instigating_p).unwrap();
+
+                    if instigating_instr.as_ref().is_head_instr() {
+                        let cp = self.p.local();
+                        self.run_verify_attr_interrupt(cp);
+                    } else if !self.verify_attr_stepper(indices, policies, code_repo, prolog_stream) {
                         if self.fail {
                             break;
                         }

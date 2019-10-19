@@ -741,29 +741,21 @@ impl MachineState {
         }
 
         let b = self.b - 1;
-        let mut i = self.or_stack[b].tr;
+        let hb = self.hb;
+        let mut offset = 0;
 
-        while i < self.tr {
-            let tr_i = self.trail[i];
-            let hb = self.hb;
-
-            match tr_i {
+        for i in self.or_stack[b].tr .. self.tr {
+            match self.trail[i] {
                 TrailRef::Ref(Ref::AttrVar(tr_i))
               | TrailRef::Ref(Ref::HeapCell(tr_i))
               | TrailRef::AttrVarHeapLink(tr_i)
-              | TrailRef::AttrVarListLink(tr_i, _) => {
-                    if tr_i < hb {
-                        i += 1;
-                    } else {
-                        let tr = self.tr;
-                        let val = self.trail[tr - 1].clone();
-                        self.trail[i] = val;
-                        self.trail.pop();
-                        self.tr -= 1;
-                    }
-                }
+              | TrailRef::AttrVarListLink(tr_i, _) =>
+                  if tr_i >= hb {
+                      offset += 1;
+                  } else {
+                      self.trail[i - offset] = self.trail[i];
+                  },     
                 TrailRef::Ref(Ref::StackCell(fr, _)) => {
-                    let b = self.b - 1;
                     let fr_gi = self.and_stack[fr].global_index;
                     let b_gi = if !self.or_stack.is_empty() {
                         self.or_stack[b].global_index
@@ -771,20 +763,19 @@ impl MachineState {
                         0
                     };
 
-                    if fr_gi < b_gi {
-                        i += 1;
+                    if fr_gi >= b_gi {
+                        offset += 1;
                     } else {
-                        let tr = self.tr;
-                        let val = self.trail[tr - 1];
-                        self.trail[i] = val;
-                        self.trail.pop();
-                        self.tr -= 1;
+                        self.trail[i - offset] = self.trail[i];
                     }
                 }
-            };
+            }
         }
-    }
 
+        self.tr -= offset;
+        self.trail.truncate(self.tr);
+    }
+        
     #[inline]
     fn write_char_to_string(&mut self, s: &mut StringList, c: char) -> bool {
         self.pstr_trail(s.clone());
@@ -1675,7 +1666,7 @@ impl MachineState {
         } else if s.is_expandable() {
             self.heap
                 .push(HeapCellValue::Addr(Addr::Con(Constant::String(s.clone()))));
-            
+
             self.s = h;
             self.mode = MachineMode::Read;
         } else {
@@ -3433,57 +3424,5 @@ impl MachineState {
         self.ball.reset();
         self.heap_locs.clear();
         self.lifted_heap.clear();
-    }
-
-    pub(super) fn sink_to_snapshot(&mut self) -> MachineState {
-        let mut snapshot = MachineState::with_capacity(0);
-
-        snapshot.hb = self.hb;
-        snapshot.e = self.e;
-        snapshot.b = self.b;
-        snapshot.b0 = self.b0;
-        snapshot.s = self.s;
-        snapshot.tr = self.tr;
-        snapshot.pstr_tr = self.pstr_tr;
-        snapshot.num_of_args = self.num_of_args;
-
-        snapshot.fail = self.fail;
-        snapshot.trail = mem::replace(&mut self.trail, vec![]);
-        snapshot.pstr_trail = mem::replace(&mut self.pstr_trail, vec![]);
-        snapshot.heap = self.heap.take();
-        snapshot.mode = self.mode;
-        snapshot.and_stack = self.and_stack.take();
-        snapshot.or_stack = self.or_stack.take();
-        snapshot.registers = mem::replace(&mut self.registers, vec![]);
-        snapshot.block = self.block;
-
-        snapshot.ball = self.ball.take();
-        snapshot.lifted_heap = mem::replace(&mut self.lifted_heap, vec![]);
-
-        snapshot
-    }
-
-    pub(super) fn absorb_snapshot(&mut self, mut snapshot: MachineState) {
-        self.hb = snapshot.hb;
-        self.e = snapshot.e;
-        self.b = snapshot.b;
-        self.b0 = snapshot.b0;
-        self.s = snapshot.s;
-        self.tr = snapshot.tr;
-        self.pstr_tr = snapshot.pstr_tr;
-        self.num_of_args = snapshot.num_of_args;
-
-        self.fail = snapshot.fail;
-        self.trail = mem::replace(&mut snapshot.trail, vec![]);
-        self.pstr_trail = mem::replace(&mut snapshot.pstr_trail, vec![]);
-        self.heap = snapshot.heap.take();
-        self.mode = snapshot.mode;
-        self.and_stack = snapshot.and_stack.take();
-        self.or_stack = snapshot.or_stack.take();
-        self.registers = mem::replace(&mut snapshot.registers, vec![]);
-        self.block = snapshot.block;
-
-        self.ball = snapshot.ball.take();
-        self.lifted_heap = mem::replace(&mut snapshot.lifted_heap, vec![]);
     }
 }
