@@ -131,24 +131,17 @@ impl MachineState {
     }
 
     pub(super) fn verify_attr_interrupt(&mut self, p: usize) {
-        let rs = MAX_ARITY;
-
-        // store temp vars in perm vars slots along with self.b0 and
-        // self.num_of_args. why self.b0? if we return to a NeckCut
-        // after finishing the interrupt, it won't work correctly if
-        // self.b == self.b0. we must change it back when we return,
-        // as if nothing happened.
-        self.allocate(rs + 2);
+        self.allocate(self.num_of_args + 2);
 
         let e = self.e;
         self.and_stack[e].interrupt_cp = self.attr_var_init.cp;
 
-        for i in 1..rs + 1 {
+        for i in 1 .. self.num_of_args + 1 {
             self.and_stack[e][i] = self[RegType::Temp(i)].clone();
         }
 
-        self.and_stack[e][rs + 1] = Addr::Con(Constant::Usize(self.b0));
-        self.and_stack[e][rs + 2] = Addr::Con(Constant::Usize(self.num_of_args));
+        self.and_stack[e][self.num_of_args + 1] = Addr::Con(Constant::Usize(self.b0));
+        self.and_stack[e][self.num_of_args + 2] = Addr::Con(Constant::Usize(self.num_of_args));
 
         self.verify_attributes();
 

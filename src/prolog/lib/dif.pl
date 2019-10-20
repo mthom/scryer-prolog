@@ -51,4 +51,5 @@ gather_dif_goals([(X \== Y) | Goals]) -->
 
 attribute_goals(X) -->
     { get_atts(X, +dif(Goals)) },
-    gather_dif_goals(Goals).
+    gather_dif_goals(Goals),
+    { put_atts(X, -dif(_)) }.

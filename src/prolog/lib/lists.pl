@@ -3,6 +3,7 @@
 		  maplist/4, maplist/5, maplist/6, maplist/7,
 		  maplist/8, maplist/9]).
 
+
 length(Xs, N) :-
     var(N), !,
     '$skip_max_list'(M, -1, Xs, Xs0),
@@ -30,16 +31,21 @@ length_rundown([_|Xs], N) :-
     N1 is N-1,
     length_rundown(Xs, N1).
 
+
 member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
+
 
 select(X, [X|Xs], Xs).
 select(X, [Y|Xs], [Y|Ys]) :- select(X, Xs, Ys).
 
+
 append([], R, R).
 append([X|L], R, [X|S]) :- append(L, R, S).
 
+
 memberchk(X, Xs) :- member(X, Xs), !.
+
 
 reverse(Xs, Ys) :-
     (  nonvar(Xs) -> reverse(Xs, Ys, [], Xs)
@@ -49,6 +55,7 @@ reverse(Xs, Ys) :-
 reverse([], [], YsRev, YsRev).
 reverse([X1|Xs], [Y1|Ys], YsPreludeRev, Xss) :-
     reverse(Xs, Ys, [Y1|YsPreludeRev], Xss).
+
 
 maplist(_, []).
 maplist(Cont1, [E1|E1s]) :-

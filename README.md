@@ -93,7 +93,7 @@ strings.
 
 First, install the latest stable version of
 [Rust](https://www.rust-lang.org/en-US/install.html) using your
-preferred method. Then install the latest Scryer Prolog with cargo,
+preferred method. Then install Scryer Prolog with cargo,
 like so:
 
 ```
@@ -101,13 +101,27 @@ $> cargo install scryer-prolog
 ```
 
 cargo will download and install the libraries Scryer Prolog uses
-automatically. You can find the `scryer-prolog` executable in
-`~/.cargo/bin`.
+automatically from crates.io. You can find the `scryer-prolog`
+executable in `~/.cargo/bin`.
+
+Publishing Rust crates to crates.io and pushing to git are entirely
+distinct, independent processes, so to be sure you have the latest
+commit, it is recommended to clone directly from this git repository,
+which can be done as follows:
+
+```
+$> git clone https://github.com/mthom/scryer-prolog
+$> cd scryer-prolog
+$> cargo run [--release]
+```
+
+The optional `--release` flag will perform various optimizations,
+producing a faster executable.
 
 Note on compatibility: Scryer Prolog should work on Linux, Mac OS X,
 and BSD variants on which Rust runs. Windows support hinges on
 rustyline and Termion being functional in that environment, which to
-my knowledge is not currently the case.
+my knowledge is not presently the case.
 
 ## Built-in predicates
 

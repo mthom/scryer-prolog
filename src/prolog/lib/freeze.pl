@@ -26,6 +26,7 @@ gather_freeze_goals(Attrs, _) -->
     !.
 gather_freeze_goals([frozen(X) | _], Var) -->
     [freeze(Var, X)],
+    { put_atts(Var, -frozen(_)) },
     !.
 gather_freeze_goals([_ | Attrs], Var) -->
     gather_freeze_goals(Attrs, Var).

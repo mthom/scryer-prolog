@@ -754,7 +754,7 @@ impl MachineState {
                       offset += 1;
                   } else {
                       self.trail[i - offset] = self.trail[i];
-                  },     
+                  },
                 TrailRef::Ref(Ref::StackCell(fr, _)) => {
                     let fr_gi = self.and_stack[fr].global_index;
                     let b_gi = if !self.or_stack.is_empty() {
@@ -775,7 +775,7 @@ impl MachineState {
         self.tr -= offset;
         self.trail.truncate(self.tr);
     }
-        
+
     #[inline]
     fn write_char_to_string(&mut self, s: &mut StringList, c: char) -> bool {
         self.pstr_trail(s.clone());
@@ -3231,6 +3231,8 @@ impl MachineState {
                 )
             ),
         };
+
+        self.last_call = false;
     }
 
     pub(super) fn execute_ctrl_instr(
@@ -3266,7 +3268,7 @@ impl MachineState {
                 self.b0 = self.b;
                 self.p += offset;
             }
-            &ControlInstruction::Proceed => self.p = CodePtr::Local(self.cp.clone()),
+            &ControlInstruction::Proceed => self.p = CodePtr::Local(self.cp.clone())
         };
     }
 

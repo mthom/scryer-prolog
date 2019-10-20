@@ -1159,7 +1159,7 @@ labeling_var(V) :- V == 1, !.
 labeling_var(V) :- domain_error(clpb_variable, V).
 
 variables_in_index_order(Vs0, Vs) :-
-        maplist(var_with_index, Vs0, IVs0),
+        maplist(var_with_index, Vs0, IVs0),	
         keysort(IVs0, IVs),
         pairs_values(IVs, Vs).
 
@@ -1245,7 +1245,7 @@ bdd_count(Node, VNum, Count) :-
                 bdd_pow(Low, V, VNum, LPow),
                 bdd_pow(High, V, VNum, HPow),
                 Count0 is LPow*LCount + HPow*HCount,
-                Count = Count0
+		Count0 = Count
             )
         ).
 
@@ -1358,7 +1358,7 @@ weighted_maximum(Ws, Vars, Max) :-
         pairs_values(IVs1, VarsIndexOrder),
         % Pairs is a list of Var-Weight terms, in index order of Vars
         pairs_keys_values(Pairs, VarsIndexOrder, WeightsIndexOrder),
-        bdd_maximum(BDD, Pairs, Max),
+        bdd_maximum(BDD, Pairs, Max), %% A,B are in BDD, but not C; A,B,C *are* in Pairs.
         max_labeling(BDD, Pairs).
 
 max_labeling(1, Pairs) :- max_upto(Pairs, _, _).
@@ -1509,7 +1509,7 @@ max_variable_node(Node, V0-N0, V-N) :-
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 ands_fusion(Ands0, Ands) :-
-        maplist(with_variables, Ands0, Pairs0),
+        maplist(with_variables, Ands0, Pairs0),	
         keysort(Pairs0, Pairs),
         group_pairs_by_key(Pairs, Groups),
         pairs_values(Groups, Andss),

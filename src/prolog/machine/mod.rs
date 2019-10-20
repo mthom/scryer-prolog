@@ -1112,12 +1112,12 @@ impl MachineState {
 
             match self.p {
                 CodePtr::VerifyAttrInterrupt(_) => {
-                    self.p = CodePtr::Local(self.attr_var_init.cp);
+                    self.p = CodePtr::Local(self.attr_var_init.cp);                    
 
                     let instigating_p = CodePtr::Local(self.attr_var_init.instigating_p);
                     let instigating_instr = code_repo.lookup_instr(false, &instigating_p).unwrap();
 
-                    if instigating_instr.as_ref().is_head_instr() {
+                    if !instigating_instr.as_ref().is_head_instr() {
                         let cp = self.p.local();
                         self.run_verify_attr_interrupt(cp);
                     } else if !self.verify_attr_stepper(indices, policies, code_repo, prolog_stream) {
