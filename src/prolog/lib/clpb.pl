@@ -1244,8 +1244,7 @@ bdd_count(Node, VNum, Count) :-
                 bdd_count(High, VNum, HCount),
                 bdd_pow(Low, V, VNum, LPow),
                 bdd_pow(High, V, VNum, HPow),
-                Count0 is LPow*LCount + HPow*HCount,
-		Count0 = Count
+                Count is LPow*LCount + HPow*HCount
             )
         ).
 
@@ -1358,7 +1357,7 @@ weighted_maximum(Ws, Vars, Max) :-
         pairs_values(IVs1, VarsIndexOrder),
         % Pairs is a list of Var-Weight terms, in index order of Vars
         pairs_keys_values(Pairs, VarsIndexOrder, WeightsIndexOrder),
-        bdd_maximum(BDD, Pairs, Max), %% A,B are in BDD, but not C; A,B,C *are* in Pairs.
+        bdd_maximum(BDD, Pairs, Max),
         max_labeling(BDD, Pairs).
 
 max_labeling(1, Pairs) :- max_upto(Pairs, _, _).
