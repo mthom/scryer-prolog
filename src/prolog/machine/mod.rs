@@ -443,10 +443,13 @@ impl Machine {
 
 	let load_result = match to_src(name) {
 	    ModuleSource::Library(name) =>
-		if !self.indices.modules.contains_key(&name) {
-		    load_library(self, name, false)
-		} else {
+                if let Some(module) = self.indices.take_module(name.clone()) {
+                    self.indices.remove_module(clause_name!("user"), &module);
+                    self.indices.modules.insert(name.clone(), module);
+
 		    Ok(name)
+		} else {
+		    load_library(self, name, false)
 		},
 	    ModuleSource::File(name) =>
                 load_module_from_file(self, name.as_str(), false)
@@ -489,7 +492,7 @@ impl Machine {
                     self.indices.modules.insert(name.clone(), module);
 
 		    Ok(name)
-		} else {		
+		} else {
 		    load_library(self, name, false)
 		},
 	    ModuleSource::File(name) =>
