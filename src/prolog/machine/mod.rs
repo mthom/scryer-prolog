@@ -128,7 +128,7 @@ impl SubModuleUser for IndexStore {
     fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: CodeIndex) {
         if let Some(ref code_idx) = self.code_dir.get(&(name.clone(), arity)) {
             if !code_idx.is_undefined() {
-                println!("warning: overwriting {}/{}", &name, arity);
+                println!("Warning: overwriting {}/{}", &name, arity);
             }
 
             let (p, module_name) = idx.0.borrow().clone();
@@ -444,28 +444,22 @@ impl Machine {
 	let load_result = match to_src(name) {
 	    ModuleSource::Library(name) =>
 		if !self.indices.modules.contains_key(&name) {
-		    load_library(self, name, false).map(Some)
+		    load_library(self, name, false)
 		} else {
-		    Ok(Some(name))
+		    Ok(name)
 		},
 	    ModuleSource::File(name) =>
                 load_module_from_file(self, name.as_str(), false)
 	};
 
-	let result = load_result.and_then(|name|
-            if let Some(name) = name {
-	        let module = self.indices.take_module(name).unwrap();
+	let result = load_result.and_then(|name| {
+	    let module = self.indices.take_module(name.clone()).unwrap();
 
-	        // remove previous exports.
-	        self.indices.remove_module(clause_name!("user"), &module);
-	        self.indices.use_module(&mut self.code_repo, self.machine_st.flags,
-                                        &module)?;
+	    self.indices.use_module(&mut self.code_repo, self.machine_st.flags,
+                                    &module)?;
 
-	        Ok(self.indices.insert_module(module))
-	    } else {
-                Ok(())
-            }
-        );
+	    Ok(self.indices.insert_module(module))
+        });
 
 	self.code_repo.cached_query = cached_query;
 
@@ -490,31 +484,28 @@ impl Machine {
 
 	let load_result = match to_src(name) {
 	    ModuleSource::Library(name) =>
-		if !self.indices.modules.contains_key(&name) {
-		    load_library(self, name, false).map(Some)
-		} else {
-		    Ok(Some(name))
+                if let Some(module) = self.indices.take_module(name.clone()) {
+                    self.indices.remove_module(clause_name!("user"), &module);
+                    self.indices.modules.insert(name.clone(), module);
+
+		    Ok(name)
+		} else {		
+		    load_library(self, name, false)
 		},
 	    ModuleSource::File(name) =>
                 load_module_from_file(self, name.as_str(), false)
 	};
 
-	let result = load_result.and_then(|name|
-            if let Some(name) = name {
-	        let module = self.indices.take_module(name).unwrap();
+	let result = load_result.and_then(|name| {
+	    let module = self.indices.take_module(name.clone()).unwrap();
 
-	        // remove previous exports.
-	        self.indices.remove_module(clause_name!("user"), &module);
-	        self.indices.use_qualified_module(&mut self.code_repo,
-					          self.machine_st.flags,
-					          &module,
-					          &exports)?;
+	    self.indices.use_qualified_module(&mut self.code_repo,
+					      self.machine_st.flags,
+					      &module,
+					      &exports)?;
 
-	        Ok(self.indices.insert_module(module))
-	    } else {
-                Ok(())
-            }
-        );
+	    Ok(self.indices.insert_module(module))
+        });
 
 	self.code_repo.cached_query = cached_query;
 
@@ -648,7 +639,7 @@ impl Machine {
 
         self.inner_heap = self.machine_st.heap.take();
         self.inner_heap.truncate(0);
-        
+
         self.machine_st.heap = snapshot.heap.take();
         self.machine_st.mode = snapshot.mode;
         self.machine_st.and_stack = snapshot.and_stack.take();
@@ -683,7 +674,7 @@ impl Machine {
                 };
 
                 let attr_goals = self.attribute_goals();
-                
+
                 if !(self.machine_st.b > 0) {
                     if bindings.is_empty() {
                         let space = if requires_space(&attr_goals, ".") {
@@ -810,7 +801,7 @@ impl Machine {
 
                 self.machine_st.p = top_level_code_ptr!(cn, p);
             }
-            
+
             self.machine_st.query_stepper(
                 &mut self.indices,
                 &mut self.policies,
@@ -1112,7 +1103,7 @@ impl MachineState {
 
             match self.p {
                 CodePtr::VerifyAttrInterrupt(_) => {
-                    self.p = CodePtr::Local(self.attr_var_init.cp);                    
+                    self.p = CodePtr::Local(self.attr_var_init.cp);
 
                     let instigating_p = CodePtr::Local(self.attr_var_init.instigating_p);
                     let instigating_instr = code_repo.lookup_instr(false, &instigating_p).unwrap();

@@ -22,6 +22,7 @@ impl Module {
             code_dir: CodeDir::new(),
             op_dir: default_op_dir(),
             inserted_expansions: false,
+            is_impromptu_module: false,
         }
     }
 
@@ -162,7 +163,7 @@ pub trait SubModuleUser {
             self.insert_dir_entry(name, arity, code_data.clone());
             true
         } else {
-            found_op
+            found_op || submodule.is_impromptu_module
         }
     }
 

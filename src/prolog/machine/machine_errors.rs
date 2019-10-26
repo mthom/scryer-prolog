@@ -143,9 +143,6 @@ impl MachineError {
                 "private_procedure",
                 clause_name!("module_does_not_exist"),
             ),
-            SessionError::NoModuleDeclaration(name) => {
-                Self::existence_error(h, ExistenceError::Module(name))
-            }
             SessionError::OpIsInfixAndPostFix(op) => {
                 Self::permission_error(PermissionError::Create, "operator", op)
             }
@@ -538,7 +535,6 @@ pub enum SessionError {
     ModuleDoesNotContainExport,
     ModuleNotFound,
     NamelessEntry,
-    NoModuleDeclaration(ClauseName),
     OpIsInfixAndPostFix(ClauseName),
     ParserError(ParserError),
     UserPrompt,

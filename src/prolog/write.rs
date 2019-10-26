@@ -268,9 +268,6 @@ impl fmt::Display for SessionError {
             &SessionError::ModuleDoesNotContainExport => {
                 write!(f, "module does not contain claimed export.")
             }
-            &SessionError::NoModuleDeclaration(ref name) => {
-                write!(f, "file {}.pl lacks an expected module declaration.", name)
-            }
             &SessionError::OpIsInfixAndPostFix(_) => {
                 write!(f, "cannot define an op to be both postfix and infix.")
             }

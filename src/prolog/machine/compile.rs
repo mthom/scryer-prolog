@@ -62,25 +62,34 @@ fn load_module<R: Read>(
     stream: ParsingStream<R>,
     suppress_warnings: bool,
     listing_src: ClauseName,
-) -> Result<Option<ClauseName>, SessionError> {
+) -> Result<ClauseName, SessionError> {
     // follow the operation of compile_user_module, but before
     // compiling, check that a module is declared in the file. if not,
     // throw an exception.
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     setup_indices(wam, clause_name!("builtins"), &mut indices)?;
-    
+
     let mut compiler = ListingCompiler::new(
         &wam.code_repo,
         suppress_warnings,
-        listing_src,
+        listing_src.clone(),
     );
 
     let results = compiler.gather_items(wam, stream, &mut indices);
-    
+
     let module_name = if let Some(ref module) = &compiler.module {
-        Some(module.module_decl.name.clone())
+        module.module_decl.name.clone()
     } else {
-        None
+        // this impromptu definition (namely, its exports) will be filled out later.
+        let module_decl = ModuleDecl { name: listing_src, exports: vec![] };
+
+        let mut module = Module::new(module_decl, wam.indices.atom_tbl.clone());
+        let module_name = module.module_decl.name.clone();
+
+        module.is_impromptu_module = true;
+
+        compiler.module = Some(module);
+        module_name
     };
 
     results.and_then(|results| compile_work_impl(&mut compiler, wam, indices, results))
@@ -97,7 +106,7 @@ fn load_module_from_file(
     wam: &mut Machine,
     filename: &str,
     suppress_warnings: bool,
-) -> Result<Option<ClauseName>, SessionError> {
+) -> Result<ClauseName, SessionError> {
     let path = fix_filename(wam.indices.atom_tbl.clone(), filename)?;
     let filename = clause_name!(path.to_string_lossy().to_string(), wam.indices.atom_tbl);
 
@@ -491,12 +500,9 @@ pub struct ListingCompiler {
     listing_src: ClauseName // a file? a module?
 }
 
-fn add_toplevel_code(wam: &mut Machine, code: Code, mut indices: IndexStore) {
-    let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
-    let op_dir = mem::replace(&mut indices.op_dir, OpDir::new());
-
-    wam.add_batched_code(code, code_dir);
-    wam.add_batched_ops(op_dir);
+fn add_toplevel_code(wam: &mut Machine, code: Code, indices: IndexStore) {
+    wam.add_batched_code(code, indices.code_dir);
+    wam.add_batched_ops(indices.op_dir);
 }
 
 #[inline]
@@ -510,8 +516,8 @@ fn add_module_code(wam: &mut Machine, mut module: Module, code: Code, mut indice
     for (name, arity) in indices.code_dir.keys().cloned() {
         if name.owning_module() == module.module_decl.name {
             wam.indices
-                .dynamic_code_dir
-                .swap_remove(&(name.owning_module(), name, arity));
+               .dynamic_code_dir
+               .swap_remove(&(name.owning_module(), name, arity));
         }
     }
 
@@ -543,9 +549,8 @@ fn load_library(
 ) -> Result<ClauseName, SessionError> {
     match LIBRARIES.borrow().get(name.as_str()) {
         Some(code) => {
-            let module_name = load_module(wam, parsing_stream(code.as_bytes()),
-                                          suppress_warnings, name.clone())?;
-            module_name.ok_or(SessionError::NoModuleDeclaration(name))
+            load_module(wam, parsing_stream(code.as_bytes()),
+                        suppress_warnings, name.clone())
         }
         None => Err(SessionError::ModuleNotFound)
     }
@@ -848,28 +853,19 @@ impl ListingCompiler {
             }
             Declaration::UseModule(ModuleSource::File(filename)) => {
                 let name = load_module_from_file(wam, filename.as_str(), true)?;
-
-                if let Some(name) = name {
-                    self.use_module(name, &mut wam.code_repo, flags, &mut wam.indices, indices)
-                } else {
-                    Ok(())
-                }
+                self.use_module(name, &mut wam.code_repo, flags, &mut wam.indices, indices)
             }
             Declaration::UseQualifiedModule(ModuleSource::File(filename), exports) => {
                 let name = load_module_from_file(wam, filename.as_str(), true)?;
 
-                if let Some(name) = name {
-                    self.use_qualified_module(
-                        name,
-                        &mut wam.code_repo,
-                        flags,
-                        &exports,
-                        &mut wam.indices,
-                        indices,
-                    )
-                } else {
-                    Ok(())
-                }
+                self.use_qualified_module(
+                    name,
+                    &mut wam.code_repo,
+                    flags,
+                    &exports,
+                    &mut wam.indices,
+                    indices,
+                )
             }
 	    Declaration::ModuleInitialization(query_terms, queue) => {
 		self.initialization_goals.0.extend(query_terms.into_iter());
@@ -901,7 +897,7 @@ impl ListingCompiler {
                                         CodeIndex::dynamic_undefined(self.get_module_name()));
             }
             &Declaration::Hook(hook, _, ref queue) if self.module.is_none() => worker
-                .term_stream                
+                .term_stream
                 .incr_expansion_lens(hook.user_scope(), 1, queue.len()),
             &Declaration::Hook(hook, _, ref queue) if !hook.has_module_scope() => {
                 worker.term_stream.incr_expansion_lens(hook, 1, queue.len())
@@ -996,6 +992,7 @@ fn compile_work_impl(
         &mut indices.code_dir,
         0
     )?;
+
     let toplvl_code = compiler.generate_code(
         results.toplevel_results,
         wam,
@@ -1004,8 +1001,10 @@ fn compile_work_impl(
     )?;
 
     if let Some(ref mut module) = &mut compiler.module {
-        module.user_term_expansions = results.addition_results.take_term_expansions();
-        module.user_goal_expansions = results.addition_results.take_goal_expansions();
+        if !module.is_impromptu_module {
+            module.user_term_expansions = results.addition_results.take_term_expansions();
+            module.user_goal_expansions = results.addition_results.take_goal_expansions();
+        }
     }
 
     let flags = wam.machine_flags();
@@ -1013,13 +1012,23 @@ fn compile_work_impl(
     wam.code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags)?;
     wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags)?;
 
-    if let Some(module) = compiler.module.take() {
+    if let Some(mut module) = compiler.module.take() {
+        if module.is_impromptu_module {
+            module.module_decl.exports = indices.code_dir.keys().cloned()
+                .filter(|(name, _)| name.owning_module().as_str() != "builtins")
+                .collect();
+        }
+
         let mut clause_code_generator =
             ClauseCodeGenerator::new(module_code.len() + toplvl_code.len(),
                                      module.module_decl.name.clone());
 
         wam.check_toplevel_code(&results.toplevel_indices)?;
         clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;
+
+        if let Some(ref module) = wam.indices.modules.swap_remove(&module.module_decl.name) {
+            wam.indices.remove_module(clause_name!("user"), module);
+        }
 
         add_module_code(wam, module, module_code, indices);
         add_toplevel_code(wam, toplvl_code, results.toplevel_indices);

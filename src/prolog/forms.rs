@@ -338,6 +338,7 @@ pub struct Module {
     pub user_term_expansions: (Predicate, VecDeque<TopLevel>), // term expansions inherited from the user scope.
     pub user_goal_expansions: (Predicate, VecDeque<TopLevel>), // same for goal_expansions.
     pub inserted_expansions: bool, // has the module been successfully inserted into toplevel??
+    pub is_impromptu_module: bool,
  }
 
 #[derive(Clone, PartialEq, Eq)]
