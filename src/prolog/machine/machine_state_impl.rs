@@ -1381,9 +1381,9 @@ impl MachineState {
         if n.is_positive() {
             Integer::from(1)
         } else if n.is_negative() {
-            Integer::from(0)
-        } else {
             Integer::from(-1)
+        } else {
+            Integer::from(0)
         }
     }
 
