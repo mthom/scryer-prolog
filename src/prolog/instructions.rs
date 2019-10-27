@@ -189,6 +189,8 @@ pub enum ArithmeticInstruction {
     Or(ArithmeticTerm, ArithmeticTerm, usize),
     Mod(ArithmeticTerm, ArithmeticTerm, usize),
     Rem(ArithmeticTerm, ArithmeticTerm, usize),
+    Gcd(ArithmeticTerm, ArithmeticTerm, usize),
+    Sign(ArithmeticTerm, usize),
     Cos(ArithmeticTerm, usize),
     Sin(ArithmeticTerm, usize),
     Tan(ArithmeticTerm, usize),
@@ -314,6 +316,10 @@ impl ArithmeticInstruction {
             &ArithmeticInstruction::ATan2(ref at_1, ref at_2, t) => {
                 arith_instr_bin_functor(h, "rem", at_1, at_2, t)
             }
+            &ArithmeticInstruction::Gcd(ref at_1, ref at_2, t) => {
+                arith_instr_bin_functor(h, "gcd", at_1, at_2, t)
+            }
+            &ArithmeticInstruction::Sign(ref at, t) => arith_instr_unary_functor(h, "sign", at, t),
             &ArithmeticInstruction::Cos(ref at, t) => arith_instr_unary_functor(h, "cos", at, t),
             &ArithmeticInstruction::Sin(ref at, t) => arith_instr_unary_functor(h, "sin", at, t),
             &ArithmeticInstruction::Tan(ref at, t) => arith_instr_unary_functor(h, "tan", at, t),

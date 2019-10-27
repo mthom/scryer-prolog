@@ -940,6 +940,7 @@ impl MachineState {
                         "mod" => interms.push(Number::Integer(self.modulus(a1, a2)?)),
                         "rem" => interms.push(Number::Integer(self.remainder(a1, a2)?)),
                         "atan2" => interms.push(Number::Float(OrderedFloat(self.atan2(a1, a2)?))),
+                        "gcd" => interms.push(Number::Integer(self.gcd(a1, a2)?)),
                         _ => {
                             return Err(self.error_form(MachineError::instantiation_error(), caller))
                         }
@@ -967,6 +968,7 @@ impl MachineState {
                         "ceiling" => interms.push(Number::Integer(self.ceiling(a1))),
                         "floor" => interms.push(Number::Integer(self.floor(a1))),
                         "\\" => interms.push(Number::Integer(self.bitwise_complement(a1)?)),
+                        "sign" => interms.push(Number::Integer(self.sign(a1))),
                         _ => {
                             return Err(self.error_form(MachineError::instantiation_error(), caller))
                         }
@@ -1099,6 +1101,26 @@ impl MachineState {
         }
     }
 
+    fn gcd(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub> {
+        match (n1, n2) {
+            (Number::Integer(n1), Number::Integer(n2)) => {
+                Ok(n1.gcd(&n2))
+            }
+            (Number::Float(f), _) | (_, Number::Float(f)) => {
+                let n = Addr::Con(Constant::Float(f));
+                let stub = MachineError::functor_stub(clause_name!("gcd"), 2);
+                
+                Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
+            }
+            (Number::Rational(r), _) | (_, Number::Rational(r)) => {
+                let n = Addr::Con(Constant::Rational(r));
+                let stub = MachineError::functor_stub(clause_name!("gcd"), 2);
+                
+                Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
+            }
+        }
+    }
+    
     fn float_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
         let f1 = result_f(&n1, rnd_f);
         let f2 = result_f(&n2, rnd_f);
@@ -1355,6 +1377,16 @@ impl MachineState {
         }
     }
 
+    fn sign(&self, n: Number) -> Integer {
+        if n.is_positive() {
+            Integer::from(1)
+        } else if n.is_negative() {
+            Integer::from(0)
+        } else {
+            Integer::from(-1)
+        }
+    }
+
     fn remainder(&self, n1: Number, n2: Number) -> Result<Integer, MachineStub> {
         let stub = MachineError::functor_stub(clause_name!("(rem)"), 2);
 
@@ -1440,6 +1472,13 @@ impl MachineState {
                 self.interms[t - 1] = try_or_fail!(self, self.int_pow(n1, n2));
                 self.p += 1;
             }
+            &ArithmeticInstruction::Gcd(ref a1, ref a2, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+                let n2 = try_or_fail!(self, self.get_number(a2));
+
+                self.interms[t - 1] = Number::Integer(try_or_fail!(self, self.gcd(n1, n2)));
+                self.p += 1;
+            }
             &ArithmeticInstruction::Pow(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
@@ -1475,6 +1514,12 @@ impl MachineState {
                 let n1 = try_or_fail!(self, self.get_number(a1));
 
                 self.interms[t - 1] = n1.abs();
+                self.p += 1;
+            }
+            &ArithmeticInstruction::Sign(ref a1, t) => {
+                let n = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = Number::Integer(self.sign(n));
                 self.p += 1;
             }
             &ArithmeticInstruction::Neg(ref a1, t) => {

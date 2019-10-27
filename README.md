@@ -50,11 +50,11 @@ Extend Scryer Prolog to include the following, among other features:
 - [x] Backtrackable and non-backtrackable global variables via `bb_get/2`
       `bb_put/2` (non-backtrackable) and `bb_b_put/2`
       (backtrackable).
+- [ ] clp(B) and clp($\mathbb{Z}$) as builtin libraries (_in progress_).
 - [ ] Streams and predicates for stream control (_in progress_).
 - [ ] An incremental compacting garbage collector satisfying the five
       properties of "Precise Garbage Collection in Prolog."
 - [ ] Mode declarations.
-- [ ] Extensions for clp(FD).
 
 ## Phase 3
 
@@ -134,7 +134,7 @@ The following predicates are built-in to Scryer.
       `abs/1`, `sin/1`, `cos/1`, `tan/1`, `asin/1`, `acos/1`,
       `atan/1`, `atan2/2`, `log/1`, `exp/1`, `sqrt/1`, `float/1`,
       `truncate/1`, `round/1`, `floor/1`, `ceiling/1`, `pi/0`,
-      `min/1`, `max/1`      
+      `min/1`, `max/1`, `gcd/2`, `sign/1`
     * Comparison operators: `>`, `<`, `=<`, `>=`, `=:=`, `=\=`.
 * `(:)/2`
 * `(@>)/2`

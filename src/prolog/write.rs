@@ -352,6 +352,9 @@ impl fmt::Display for ArithmeticInstruction {
             &ArithmeticInstruction::RDiv(ref a1, ref a2, ref t) => {
                 write!(f, "rdiv {}, {}, @{}", a1, a2, t)
             }
+            &ArithmeticInstruction::Gcd(ref a1, ref a2, ref t) => {
+                write!(f, "gcd {}, {}, @{}", a1, a2, t)
+            }
             &ArithmeticInstruction::Shl(ref a1, ref a2, ref t) => {
                 write!(f, "shl {}, {}, @{}", a1, a2, t)
             }
@@ -377,6 +380,7 @@ impl fmt::Display for ArithmeticInstruction {
                 write!(f, "atan2 {}, {}, @{}", a1, a2, t)
             }
             &ArithmeticInstruction::Plus(ref a, ref t) => write!(f, "plus {}, @{}", a, t),
+            &ArithmeticInstruction::Sign(ref a, ref t) => write!(f, "sign {}, @{}", a, t),
             &ArithmeticInstruction::Neg(ref a, ref t) => write!(f, "neg {}, @{}", a, t),
             &ArithmeticInstruction::Cos(ref a, ref t) => write!(f, "cos {}, @{}", a, t),
             &ArithmeticInstruction::Sin(ref a, ref t) => write!(f, "sin {}, @{}", a, t),

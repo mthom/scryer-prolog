@@ -159,6 +159,7 @@ impl<'a> ArithmeticEvaluator<'a> {
             "round" => Ok(ArithmeticInstruction::Round(a1, t)),
             "ceiling" => Ok(ArithmeticInstruction::Ceiling(a1, t)),
             "floor" => Ok(ArithmeticInstruction::Floor(a1, t)),
+            "sign" => Ok(ArithmeticInstruction::Sign(a1, t)),
             "\\" => Ok(ArithmeticInstruction::BitwiseComplement(a1, t)),
             _ => Err(ArithmeticError::NonEvaluableFunctor(
                 Constant::Atom(name, None),
@@ -192,6 +193,7 @@ impl<'a> ArithmeticEvaluator<'a> {
             "xor" => Ok(ArithmeticInstruction::Xor(a1, a2, t)),
             "mod" => Ok(ArithmeticInstruction::Mod(a1, a2, t)),
             "rem" => Ok(ArithmeticInstruction::Rem(a1, a2, t)),
+            "gcd" => Ok(ArithmeticInstruction::Gcd(a1, a2, t)),
             "atan2" => Ok(ArithmeticInstruction::ATan2(a1, a2, t)),
             _ => Err(ArithmeticError::NonEvaluableFunctor(
                 Constant::Atom(name, None),
