@@ -27,8 +27,16 @@
 % make '$compile_batch', a system routine, callable.
 '$$compile_batch' :- '$compile_batch'.
 
-'$instruction_match'([user], []) :-
-    !, catch('$$compile_batch', E, '$print_exception_with_check'(E)).
+'$instruction_match'([Item], []) :-
+    (  atom(Item) ->
+       (  Item == user ->
+	  !,
+	  catch('$$compile_batch', E, '$print_exception_with_check'(E))
+       ;  consult(Item)
+       )
+    ;  catch(throw(error(type_error(atom, Item), repl/0)),
+	     '$print_exception_with_check'(E))
+    ).
 '$instruction_match'(Term, VarList) :-
     '$submit_query_and_print_results'(Term, VarList),
     !.
@@ -59,6 +67,11 @@
        ;  throw(error(type_error(predicate_indicator, PI), Source))
        )
     ;  throw(error(instantiation_error, Source))
+    ).
+
+consult(Item) :-
+    (  atom(Item) -> use_module(Item)
+    ;  throw(error(type_error(atom, Item), consult/1))
     ).
 
 use_module(Module) :-
@@ -101,7 +114,7 @@ expand_goals(Goals, ExpandedGoals) :-
        ;  expand_goals(Goals0, Goals1),
 	  ExpandedGoals = (Goal0, Goals1)
        )
-    ;  expand_goal(Goals, ExpandedGoals0) ->     
+    ;  expand_goal(Goals, ExpandedGoals0) ->
        thread_goals(ExpandedGoals0, ExpandedGoals)
     ;  Goals = ExpandedGoals
     ).
