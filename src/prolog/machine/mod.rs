@@ -722,11 +722,11 @@ impl Machine {
 
                     let result = match keypress {
                         ContinueResult::ContinueQuery => {
-			    print!(" ;\r\n");
+			    print!(" ;\n");
                             self.continue_query(&alloc_locs)
                         }
                         ContinueResult::Conclude => {
-			    print!(" ...\r\n");
+			    print!(" ...\n");
                             self.absorb_snapshot(snapshot);
                             return;
                         }
@@ -738,7 +738,7 @@ impl Machine {
                                 self.propagate_exception_to_toplevel(snapshot);
                                 return;
                             } else {
-				print!("false.\r\n");
+				print!("false.\n");
                                 self.absorb_snapshot(snapshot);
                                 return;
                             }
@@ -752,7 +752,7 @@ impl Machine {
                     }
                 } else {
                     if bindings.is_empty() && attr_goals.is_empty() {
-                        print!("true.\r\n");
+                        print!("true.\n");
                     } else {
                         let space = if !attr_goals.is_empty() {
                             if requires_space(&attr_goals, ".") {
@@ -768,7 +768,7 @@ impl Machine {
                             }
                         };
 
-			print!("{}.\r\n", space);
+			print!("{}.\n", space);
                     }
 
                     break;

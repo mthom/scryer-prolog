@@ -706,7 +706,7 @@ pub(crate) trait CallPolicy: Any {
             &BuiltInClauseType::Nl => {
                 let mut stdout = stdout();
 
-                write!(stdout, "\n\r").unwrap();
+                write!(stdout, "\n").unwrap();
                 stdout.flush().unwrap();
                 return_from_clause!(machine_st.last_call, machine_st)
             }
