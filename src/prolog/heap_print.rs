@@ -329,8 +329,7 @@ pub fn requires_space(atom: &str, op: &str) -> bool {
             .next()
             .map(|oc| {
                 if ac == '0' {
-                    oc == 'b' || oc == 'x' || oc == 'o' || oc == '\''
-                 || oc == '(' || alpha_numeric_char!(oc)
+                    oc == '\'' || oc == '(' || alpha_numeric_char!(oc)
                 } else if alpha_numeric_char!(ac) {
                     oc == '(' || alpha_numeric_char!(oc)
                 } else if graphic_token_char!(ac) {

@@ -1015,8 +1015,8 @@ fn compile_work_impl(
     if let Some(mut module) = compiler.module.take() {
         if module.is_impromptu_module {
             module.module_decl.exports = indices.code_dir.keys().cloned()
-                .filter(|(name, _)| name.owning_module().as_str() != "builtins")
-                .collect();
+                  .filter(|(name, _)| name.owning_module().as_str() != "builtins")
+                  .collect();
         }
 
         let mut clause_code_generator =
@@ -1030,9 +1030,18 @@ fn compile_work_impl(
             wam.indices.remove_module(clause_name!("user"), module);
         }
 
-        add_module_code(wam, module, module_code, indices);
-        add_toplevel_code(wam, toplvl_code, results.toplevel_indices);
+        if module.is_impromptu_module {
+            add_module_code(wam, module, module_code, indices);
+            
+            let module = wam.indices.take_module(compiler.listing_src.clone()).unwrap();
+            
+            wam.indices.use_module(&mut wam.code_repo, wam.machine_st.flags, &module)?;
+            wam.indices.insert_module(module);
+        } else {
+            add_module_code(wam, module, module_code, indices);
+        }
 
+        add_toplevel_code(wam, toplvl_code, results.toplevel_indices);
         clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
     } else {
         add_non_module_code(

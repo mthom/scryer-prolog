@@ -456,14 +456,15 @@ impl Machine {
 	};
 
 	let result = load_result.and_then(|name| {
-	    let module = self.indices.take_module(name.clone()).unwrap();
+            let module = self.indices.take_module(name.clone()).unwrap();
 
-	    self.indices.use_module(&mut self.code_repo, self.machine_st.flags,
-                                    &module)?;
-
-	    Ok(self.indices.insert_module(module))
+            if !module.is_impromptu_module {
+                self.indices.use_module(&mut self.code_repo, self.machine_st.flags, &module)?;
+            }
+            
+            Ok(self.indices.insert_module(module))
         });
-
+        
 	self.code_repo.cached_query = cached_query;
 
 	if let Err(e) = result {
@@ -502,10 +503,12 @@ impl Machine {
 	let result = load_result.and_then(|name| {
 	    let module = self.indices.take_module(name.clone()).unwrap();
 
-	    self.indices.use_qualified_module(&mut self.code_repo,
-					      self.machine_st.flags,
-					      &module,
-					      &exports)?;
+            if !module.is_impromptu_module {
+	        self.indices.use_qualified_module(&mut self.code_repo,
+					          self.machine_st.flags,
+					          &module,
+					          &exports)?;
+            }
 
 	    Ok(self.indices.insert_module(module))
         });

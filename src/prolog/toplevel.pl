@@ -28,9 +28,8 @@
 '$$compile_batch' :- '$compile_batch'.
 
 '$instruction_match'([Item], []) :-
-    (  atom(Item) ->
+    (  atom(Item) -> !,
        (  Item == user ->
-	  !,
 	  catch('$$compile_batch', E, '$print_exception_with_check'(E))
        ;  consult(Item)
        )
