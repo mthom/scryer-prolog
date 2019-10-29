@@ -277,19 +277,19 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession {
     }
 }
 
-fn update_module_indices(wam: &Machine, module_name: ClauseName, mut indices: IndexStore) {
-    match wam.indices.modules.get(&module_name) {
-        Some(module) => {
+fn update_module_indices(wam: &mut Machine, module_name: ClauseName, mut indices: IndexStore) {
+    match wam.indices.modules.get_mut(&module_name) {
+        Some(ref mut module) => {
             let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
 
             // replace the "user" module src's in the indices with module_name.
             for (key, idx) in code_dir.iter() {
                 let p = idx.0.borrow().0;
-
-                match module.code_dir.get(&key) {
-                    Some(idx) => set_code_index!(idx, p, module_name.clone()),
-                    _ => {}
-                }
+                
+                let idx = CodeIndex::dynamic_undefined(module_name.clone());                
+                let idx = module.code_dir.entry(key.clone()).or_insert(idx);
+                
+                set_code_index!(idx, p, module_name.clone());
 
                 match wam.indices.code_dir.get(&key) {
                     Some(idx) => {
@@ -419,6 +419,7 @@ impl ClauseCodeGenerator {
         }
     }
 
+    // compiles the latest version of clause/2.
     fn generate_clause_code(
         &mut self,
         dynamic_clause_map: &DynamicClauseMap,

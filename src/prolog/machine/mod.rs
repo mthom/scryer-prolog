@@ -184,7 +184,8 @@ impl Machine {
             Ok(p) => {
                 self.machine_st.attr_var_init.verify_attrs_loc = p;
             }
-            Err(_) => panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS"),
+            Err(_) =>
+                panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS"),
         }
 
         match compile_special_form(self, parsing_stream(PROJECT_ATTRS.as_bytes()), project_attrs_src)
@@ -192,7 +193,8 @@ impl Machine {
             Ok(p) => {
                 self.machine_st.attr_var_init.project_attrs_loc = p;
             }
-            Err(e) => panic!("Machine::compile_special_forms() failed at PROJECT_ATTRS: {}", e),
+            Err(e) =>
+                panic!("Machine::compile_special_forms() failed at PROJECT_ATTRS: {}", e),
         }
     }
 
