@@ -230,14 +230,17 @@ impl Machine {
         self.machine_st.reset();
     }
 
-    pub fn run_init_code(&mut self, code: Code) {
+    pub fn run_init_code(&mut self, code: Code) -> bool {
 	let old_machine_st = self.sink_to_snapshot();
 	self.machine_st.reset();
 
 	self.code_repo.cached_query = code;
 	self.run_query(&AllocVarDict::new());
 
+        let result = self.machine_st.fail;
 	self.absorb_snapshot(old_machine_st);
+        
+        !result
     }
 
     pub fn run_top_level(&mut self) {

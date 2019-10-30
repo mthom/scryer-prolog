@@ -301,7 +301,7 @@ fn setup_module_expansions(wam: &mut Machine, module: &Module) {
         CompileTimeHook::TermExpansion,
         term_expansions,
     );
-    
+
     add_hooks_to_mockup(
         &mut wam.code_repo,
         CompileTimeHook::GoalExpansion,
@@ -330,7 +330,7 @@ pub(super) fn compile_into_module<R: Read>(
             if let Some(module) = compiler.module.take() {
                 wam.indices.insert_module(module);
             }
-            
+
             compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo);
             EvalSession::from(e)
         }
@@ -349,7 +349,7 @@ fn compile_into_module_impl<R: Read>(
     let module_name = module.module_decl.name.clone();
     compiler.module = Some(module);
 
-    let flags = wam.machine_flags();    
+    let flags = wam.machine_flags();
 
     wam.code_repo.compile_hook(CompileTimeHook::TermExpansion, flags)?;
     wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion, flags)?;
@@ -360,7 +360,7 @@ fn compile_into_module_impl<R: Read>(
 
     let mut clause_code_generator = ClauseCodeGenerator::new(module_code.len(), module_name.clone());
 
-    clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;   
+    clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;
     add_module_code(wam, compiler.module.take().unwrap(), module_code, indices);
     clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
 
@@ -997,9 +997,9 @@ fn compile_work_impl(
 
         if module.is_impromptu_module {
             add_module_code(wam, module, module_code, indices);
-            
+
             let module = wam.indices.take_module(compiler.listing_src.clone()).unwrap();
-            
+
             wam.indices.use_module(&mut wam.code_repo, wam.machine_st.flags, &module)?;
             wam.indices.insert_module(module);
         } else {
@@ -1022,7 +1022,10 @@ fn compile_work_impl(
     )?;
 
     if init_goal_code.len() > 0 {
-	wam.run_init_code(init_goal_code);
+	if !wam.run_init_code(init_goal_code) {
+            println!("Warning: initialization goal for {} failed",
+                     compiler.listing_src);
+        }
     }
 
     if !compiler.suppress_warnings {
