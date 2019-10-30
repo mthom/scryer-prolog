@@ -561,8 +561,9 @@ assertz(Clause) :-
     ).
 
 first_match_index([Clause0 | Clauses], Clause1, N0, N) :-
-    (  Clause0 \= Clause1 -> N1 is N0 + 1,
-			     first_match_index(Clauses, Clause1, N1, N)
+    (  Clause0 \= Clause1 ->
+       N1 is N0 + 1,
+       first_match_index(Clauses, Clause1, N1, N)
     ;  N0 = N, Clause0 = Clause1
     ).
 

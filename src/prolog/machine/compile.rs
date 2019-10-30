@@ -277,34 +277,6 @@ pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession {
     }
 }
 
-fn update_module_indices(wam: &mut Machine, module_name: ClauseName, mut indices: IndexStore) {
-    match wam.indices.modules.get_mut(&module_name) {
-        Some(ref mut module) => {
-            let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
-
-            // replace the "user" module src's in the indices with module_name.
-            for (key, idx) in code_dir.iter() {
-                let p = idx.0.borrow().0;
-                
-                let idx = CodeIndex::dynamic_undefined(module_name.clone());                
-                let idx = module.code_dir.entry(key.clone()).or_insert(idx);
-                
-                set_code_index!(idx, p, module_name.clone());
-
-                match wam.indices.code_dir.get(&key) {
-                    Some(idx) => {
-                        if idx.0.borrow().1 == module_name {
-                            set_code_index!(idx, p, module_name.clone());
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-        _ => unreachable!(),
-    };
-}
-
 fn add_hooks_to_mockup(
     code_repo: &mut CodeRepo,
     hook: CompileTimeHook,
@@ -320,25 +292,21 @@ fn add_hooks_to_mockup(
     preds.1.extend(expansions.1.into_iter());
 }
 
-fn setup_module_expansions(wam: &mut Machine, module_name: ClauseName) {
-    match wam.indices.modules.get(&module_name) {
-        Some(module) => {
-            let term_expansions = module.term_expansions.clone();
-            let goal_expansions = module.goal_expansions.clone();
+fn setup_module_expansions(wam: &mut Machine, module: &Module) {
+    let term_expansions = module.term_expansions.clone();
+    let goal_expansions = module.goal_expansions.clone();
 
-            add_hooks_to_mockup(
-                &mut wam.code_repo,
-                CompileTimeHook::TermExpansion,
-                term_expansions,
-            );
-            add_hooks_to_mockup(
-                &mut wam.code_repo,
-                CompileTimeHook::GoalExpansion,
-                goal_expansions,
-            );
-        }
-        _ => unreachable!(),
-    }
+    add_hooks_to_mockup(
+        &mut wam.code_repo,
+        CompileTimeHook::TermExpansion,
+        term_expansions,
+    );
+    
+    add_hooks_to_mockup(
+        &mut wam.code_repo,
+        CompileTimeHook::GoalExpansion,
+        goal_expansions,
+    );
 }
 
 pub(super) fn compile_into_module<R: Read>(
@@ -348,13 +316,21 @@ pub(super) fn compile_into_module<R: Read>(
     name: ClauseName,
 ) -> EvalSession {
     let mut indices = default_index_store!(wam.atom_tbl_of(&name));
-    try_eval_session!(setup_indices(wam, module_name.clone(), &mut indices));
+    let module = wam.indices.take_module(module_name.clone()).unwrap();
+
+    indices.code_dir = module.code_dir.clone();
+    indices.op_dir   = module.op_dir.clone();
+    indices.atom_tbl = module.atom_tbl.clone();
 
     let mut compiler = ListingCompiler::new(&wam.code_repo, true, module_name.clone());
 
-    match compile_into_module_impl(wam, &mut compiler, module_name, src, indices) {
+    match compile_into_module_impl(wam, &mut compiler, module, src, indices) {
         Ok(()) => EvalSession::EntrySuccess,
         Err(e) => {
+            if let Some(module) = compiler.module.take() {
+                wam.indices.insert_module(module);
+            }
+            
             compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo);
             EvalSession::from(e)
         }
@@ -364,29 +340,28 @@ pub(super) fn compile_into_module<R: Read>(
 fn compile_into_module_impl<R: Read>(
     wam: &mut Machine,
     compiler: &mut ListingCompiler,
-    module_name: ClauseName,
+    module: Module,
     src: ParsingStream<R>,
     mut indices: IndexStore,
 ) -> Result<(), SessionError> {
-    setup_module_expansions(wam, module_name.clone());
+    setup_module_expansions(wam, &module);
 
-    let flags = wam.machine_flags();
+    let module_name = module.module_decl.name.clone();
+    compiler.module = Some(module);
 
-    wam.code_repo
-        .compile_hook(CompileTimeHook::TermExpansion, flags)?;
-    wam.code_repo
-        .compile_hook(CompileTimeHook::GoalExpansion, flags)?;
+    let flags = wam.machine_flags();    
+
+    wam.code_repo.compile_hook(CompileTimeHook::TermExpansion, flags)?;
+    wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion, flags)?;
 
     let results = compiler.gather_items(wam, src, &mut indices)?;
     let module_code =
         compiler.generate_code(results.worker_results, wam, &mut indices.code_dir, 0)?;
 
     let mut clause_code_generator = ClauseCodeGenerator::new(module_code.len(), module_name.clone());
-    clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;
 
-    update_module_indices(wam, module_name, indices);
-
-    wam.code_repo.code.extend(module_code.into_iter());
+    clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;   
+    add_module_code(wam, compiler.module.take().unwrap(), module_code, indices);
     clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
 
     Ok(compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo))
@@ -507,20 +482,9 @@ fn add_toplevel_code(wam: &mut Machine, code: Code, indices: IndexStore) {
 }
 
 #[inline]
-fn add_module_code(wam: &mut Machine, mut module: Module, code: Code, mut indices: IndexStore) {
-    let code_dir = mem::replace(&mut indices.code_dir, CodeDir::new());
-    let op_dir = mem::replace(&mut indices.op_dir, OpDir::new());
-
-    module.code_dir.extend(code_dir);
-    module.op_dir.extend(op_dir.into_iter());
-
-    for (name, arity) in indices.code_dir.keys().cloned() {
-        if name.owning_module() == module.module_decl.name {
-            wam.indices
-               .dynamic_code_dir
-               .swap_remove(&(name.owning_module(), name, arity));
-        }
-    }
+fn add_module_code(wam: &mut Machine, mut module: Module, code: Code, indices: IndexStore) {
+    module.code_dir.extend(indices.code_dir);
+    module.op_dir.extend(indices.op_dir.into_iter());
 
     wam.add_module(module, code);
 }
