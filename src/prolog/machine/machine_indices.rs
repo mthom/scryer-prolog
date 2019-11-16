@@ -329,7 +329,7 @@ impl CodePtr {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum LocalCodePtr {
     DirEntry(usize), // offset.
     InSituDirEntry(usize),

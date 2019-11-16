@@ -3,14 +3,13 @@ use prolog_parser::string_list::*;
 
 use crate::prolog::clause_types::*;
 use crate::prolog::forms::*;
-use crate::prolog::machine::and_stack::*;
 use crate::prolog::machine::attributed_variables::*;
 use crate::prolog::machine::copier::*;
 use crate::prolog::machine::heap::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::modules::*;
-use crate::prolog::machine::or_stack::*;
+use crate::prolog::machine::stack::*;
 use crate::prolog::read::PrologStream;
 use crate::prolog::rug::Integer;
 
@@ -108,13 +107,13 @@ impl<'a> CopierTarget for CopyTerm<'a> {
         self.state.deref(a)
     }
 
-    fn stack(&mut self) -> &mut AndStack {
-        &mut self.state.and_stack
+    fn stack(&mut self) -> &mut Stack {
+        &mut self.state.stack
     }
 }
 
 pub(super) struct CopyBallTerm<'a> {
-    and_stack: &'a mut AndStack,
+    stack: &'a mut Stack,
     heap: &'a mut Heap,
     heap_boundary: usize,
     stub: &'a mut MachineStub,
@@ -122,13 +121,13 @@ pub(super) struct CopyBallTerm<'a> {
 
 impl<'a> CopyBallTerm<'a> {
     pub(super) fn new(
-        and_stack: &'a mut AndStack,
+        stack: &'a mut Stack,
         heap: &'a mut Heap,
         stub: &'a mut MachineStub,
     ) -> Self {
         let hb = heap.len();
         CopyBallTerm {
-            and_stack,
+            stack,
             heap,
             heap_boundary: hb,
             stub,
@@ -179,7 +178,7 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
                 let index = h - self.heap_boundary;
                 self.stub[index].as_addr(h)
             }
-            Addr::StackCell(fr, sc) => self.and_stack[fr][sc].clone(),
+            Addr::StackCell(fr, sc) => self.stack.index_and_frame(fr)[sc].clone(),
             addr => addr,
         }
     }
@@ -197,8 +196,8 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
         }
     }
 
-    fn stack(&mut self) -> &mut AndStack {
-        self.and_stack
+    fn stack(&mut self) -> &mut Stack {
+        self.stack
     }
 }
 
@@ -210,7 +209,7 @@ impl Index<RegType> for MachineState {
             RegType::Temp(temp) => &self.registers[temp],
             RegType::Perm(perm) => {
                 let e = self.e;
-                &self.and_stack[e][perm]
+                &self.stack.index_and_frame(e)[perm]
             }
         }
     }
@@ -222,7 +221,7 @@ impl IndexMut<RegType> for MachineState {
             RegType::Temp(temp) => &mut self.registers[temp],
             RegType::Perm(perm) => {
                 let e = self.e;
-                &mut self.and_stack[e][perm]
+                &mut self.stack.index_and_frame_mut(e)[perm]
             }
         }
     }
@@ -248,8 +247,7 @@ pub struct MachineState {
     pub(super) fail: bool,
     pub(crate) heap: Heap,
     pub(super) mode: MachineMode,
-    pub(crate) and_stack: AndStack,
-    pub(super) or_stack: OrStack,
+    pub(crate) stack: Stack,
     pub(super) registers: Registers,
     pub(super) trail: Vec<TrailRef>,
     pub(super) pstr_trail: Vec<(usize, StringList, usize)>, // b, String, trunc_pt
@@ -412,40 +410,38 @@ pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
 pub(crate) trait CallPolicy: Any {
     fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
-        let b = machine_st.b - 1;
-        let n = machine_st.or_stack[b].num_args();
+        let b = machine_st.b;
+        let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
 
-        for i in 1..n + 1 {
-            machine_st.registers[i] = machine_st.or_stack[b][i].clone();
+        for i in 1 .. n + 1 {
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1].clone();
         }
 
         machine_st.num_of_args = n;
-        machine_st.e = machine_st.or_stack[b].e;
-        machine_st.cp = machine_st.or_stack[b].cp.clone();
+        machine_st.e = machine_st.stack.index_or_frame(b).prelude.e;
+        machine_st.cp = machine_st.stack.index_or_frame(b).prelude.cp;
 
-        machine_st.pop_stack_frames();
-        
-        machine_st.or_stack[b].bp = machine_st.p.clone() + offset;
+        machine_st.stack.index_or_frame_mut(b).prelude.bp = machine_st.p.clone() + offset;
 
-        let old_tr = machine_st.or_stack[b].tr;
+        let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
-        machine_st.tr = machine_st.or_stack[b].tr;
+        machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
 
-        let old_pstr_tr = machine_st.or_stack[b].pstr_tr;
+        let old_pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
         let curr_pstr_tr = machine_st.pstr_tr;
 
         machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
-        machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
+        machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
 
-        machine_st.heap.truncate(machine_st.or_stack[b].h);
+        machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
+        let attr_var_init_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_b;
         machine_st
             .attr_var_init
             .attr_var_queue
@@ -458,40 +454,38 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
-        let b = machine_st.b - 1;
-        let n = machine_st.or_stack[b].num_args();
+        let b = machine_st.b;
+        let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
 
-        for i in 1..n + 1 {
-            machine_st.registers[i] = machine_st.or_stack[b][i].clone();
+        for i in 1 .. n + 1 {
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1].clone();
         }
 
         machine_st.num_of_args = n;
-        machine_st.e = machine_st.or_stack[b].e;
-        machine_st.cp = machine_st.or_stack[b].cp.clone();
+        machine_st.e = machine_st.stack.index_or_frame(b).prelude.e;
+        machine_st.cp = machine_st.stack.index_or_frame(b).prelude.cp;
 
-        machine_st.pop_stack_frames();
-        
-        machine_st.or_stack[b].bp = machine_st.p.clone() + 1;
+        machine_st.stack.index_or_frame_mut(b).prelude.bp = machine_st.p.clone() + 1;
 
-        let old_tr = machine_st.or_stack[b].tr;
+        let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
-        machine_st.tr = machine_st.or_stack[b].tr;
+        machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
 
-        let old_pstr_tr = machine_st.or_stack[b].pstr_tr;
+        let old_pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
         let curr_pstr_tr = machine_st.pstr_tr;
 
         machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
-        machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
+        machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
 
-        machine_st.heap.truncate(machine_st.or_stack[b].h);
+        machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
+        let attr_var_init_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_b;
         machine_st
             .attr_var_init
             .attr_var_queue
@@ -504,45 +498,43 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
-        let b = machine_st.b - 1;
-        let n = machine_st.or_stack[b].num_args();
+        let b = machine_st.b;
+        let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
 
-        for i in 1..n + 1 {
-            machine_st.registers[i] = machine_st.or_stack[b][i].clone();
+        for i in 1 .. n + 1 {
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1].clone();
         }
 
         machine_st.num_of_args = n;
-        machine_st.e = machine_st.or_stack[b].e;
-        machine_st.cp = machine_st.or_stack[b].cp.clone();
+        machine_st.e = machine_st.stack.index_or_frame(b).prelude.e;
+        machine_st.cp = machine_st.stack.index_or_frame(b).prelude.cp;
 
-        let old_tr = machine_st.or_stack[b].tr;
+        let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
-        machine_st.tr = machine_st.or_stack[b].tr;
+        machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
 
-        let old_pstr_tr = machine_st.or_stack[b].pstr_tr;
+        let old_pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
         let curr_pstr_tr = machine_st.pstr_tr;
 
         machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
-        machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
+        machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
 
-        machine_st.heap.truncate(machine_st.or_stack[b].h);
+        machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
+        let attr_var_init_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_b;
         machine_st
             .attr_var_init
             .attr_var_queue
             .truncate(attr_var_init_b);
 
-        machine_st.b = machine_st.or_stack[b].b;
-        machine_st.or_stack.truncate(machine_st.b);
-
-        machine_st.pop_stack_frames();
+        machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
+        machine_st.truncate_stack();
 
         machine_st.hb = machine_st.heap.h;
         machine_st.p += offset;
@@ -551,46 +543,44 @@ pub(crate) trait CallPolicy: Any {
     }
 
     fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult {
-        let b = machine_st.b - 1;
-        let n = machine_st.or_stack[b].num_args();
+        let b = machine_st.b;
+        let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
 
-        for i in 1..n + 1 {
-            machine_st.registers[i] = machine_st.or_stack[b][i].clone();
+        for i in 1 .. n + 1 {
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1].clone();
         }
 
         machine_st.num_of_args = n;
-        machine_st.e = machine_st.or_stack[b].e;
-        machine_st.cp = machine_st.or_stack[b].cp.clone();
+        machine_st.e = machine_st.stack.index_or_frame(b).prelude.e;
+        machine_st.cp = machine_st.stack.index_or_frame(b).prelude.cp;
 
-        let old_tr = machine_st.or_stack[b].tr;
+        let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
         let curr_tr = machine_st.tr;
 
         machine_st.unwind_trail(old_tr, curr_tr);
-        machine_st.tr = machine_st.or_stack[b].tr;
+        machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
 
-        let old_pstr_tr = machine_st.or_stack[b].pstr_tr;
+        let old_pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
         let curr_pstr_tr = machine_st.pstr_tr;
 
         machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
-        machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
+        machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
 
-        machine_st.heap.truncate(machine_st.or_stack[b].h);
+        machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
+        let attr_var_init_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_b;
         machine_st
             .attr_var_init
             .attr_var_queue
             .truncate(attr_var_init_b);
 
-        machine_st.b = machine_st.or_stack[b].b;
-        machine_st.or_stack.truncate(machine_st.b);
-
-        machine_st.pop_stack_frames();
-
+        machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
+        machine_st.truncate_stack();
+        
         machine_st.hb = machine_st.heap.h;
         machine_st.p += 1;
 
@@ -1050,7 +1040,7 @@ fn cut_body(machine_st: &mut MachineState, addr: Addr) -> bool {
             machine_st.b = b0;
             machine_st.tidy_trail();
             machine_st.tidy_pstr_trail();
-            machine_st.or_stack.truncate(machine_st.b);
+            machine_st.truncate_stack();
         }
     } else {
         machine_st.fail = true;
@@ -1135,7 +1125,6 @@ impl CutPolicy for SCCCutPolicy {
                 machine_st.b = b0;
                 machine_st.tidy_trail();
                 machine_st.tidy_pstr_trail();
-                machine_st.or_stack.truncate(machine_st.b);
             }
         } else {
             machine_st.fail = true;

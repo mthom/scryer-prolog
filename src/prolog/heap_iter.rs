@@ -90,7 +90,7 @@ impl<'a> Iterator for HCPreOrderIterator<'a> {
         self.state_stack.pop().map(|a| match self.follow(a) {
             Addr::HeapCell(h) => self.machine_st.heap[h].clone(),
             Addr::StackCell(fr, sc) => {
-                HeapCellValue::Addr(self.machine_st.and_stack[fr][sc].clone())
+                HeapCellValue::Addr(self.machine_st.stack.index_and_frame(fr)[sc].clone())
             }
             da => HeapCellValue::Addr(da),
         })

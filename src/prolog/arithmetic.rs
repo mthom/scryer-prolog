@@ -1,5 +1,6 @@
 use prolog_parser::ast::*;
 
+use crate::prolog::allocator::Allocator;
 use crate::prolog::clause_types::*;
 use crate::prolog::fixtures::*;
 use crate::prolog::forms::*;
@@ -69,7 +70,7 @@ impl<'a> ArithInstructionIterator<'a> {
 pub enum ArithTermRef<'a> {
     Constant(&'a Constant),
     Op(ClauseName, usize), // name, arity.
-    Var(&'a Cell<VarReg>, Rc<Var>),
+    Var(Level, &'a Cell<VarReg>, Rc<Var>),
 }
 
 impl<'a> Iterator for ArithInstructionIterator<'a> {
@@ -96,8 +97,8 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                     }
                 }
                 TermIterState::Constant(_, _, c) => return Some(Ok(ArithTermRef::Constant(c))),
-                TermIterState::Var(_, cell, var) => {
-                    return Some(Ok(ArithTermRef::Var(cell, var.clone())))
+                TermIterState::Var(lvl, cell, var) => {
+                    return Some(Ok(ArithTermRef::Var(lvl, cell, var.clone())))
                 }
                 _ => return Some(Err(ArithmeticError::NonEvaluableFunctor(atom!("'.'"), 2))),
             };
@@ -107,10 +108,10 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
     }
 }
 
-pub struct ArithmeticEvaluator<'a> {
-    bindings: &'a AllocVarDict,
+pub struct ArithmeticEvaluator {
     interm: Vec<ArithmeticTerm>,
     interm_c: usize,
+    arg_c: usize
 }
 
 pub trait ArithmeticTermIter<'a> {
@@ -127,12 +128,12 @@ impl<'a> ArithmeticTermIter<'a> for &'a Term {
     }
 }
 
-impl<'a> ArithmeticEvaluator<'a> {
-    pub fn new(bindings: &'a AllocVarDict, target_int: usize) -> Self {
+impl ArithmeticEvaluator {
+    pub fn new(target_int: usize, arg_c: usize) -> Self {
         ArithmeticEvaluator {
-            bindings,
             interm: Vec::new(),
             interm_c: target_int,
+            arg_c
         }
     }
 
@@ -283,27 +284,33 @@ impl<'a> ArithmeticEvaluator<'a> {
         Ok(())
     }
 
-    pub fn eval<Iter>(&mut self, src: Iter) -> Result<ArithCont, ArithmeticError>
+    pub fn eval<'a, Iter, TermMarker>(
+        &mut self,
+        marker: &mut TermMarker,
+        src: Iter,
+        term_loc: GenContext,
+    ) -> Result<ArithCont, ArithmeticError>
     where
         Iter: ArithmeticTermIter<'a>,
+        TermMarker: Allocator<'a>
     {
         let mut code = vec![];
 
         for term_ref in src.iter()? {
             match term_ref? {
                 ArithTermRef::Constant(c) => self.push_constant(c)?,
-                ArithTermRef::Var(cell, name) => {
-                    let r = if cell.get().norm().reg_num() == 0 {
-                        match self.bindings.get(&name) {
-                            Some(&VarData::Temp(_, t, _)) if t != 0 => RegType::Temp(t),
-                            Some(&VarData::Perm(p)) if p != 0 => RegType::Perm(p),
-                            _ => return Err(ArithmeticError::UninstantiatedVar),
-                        }
-                    } else {
-                        cell.get().norm()
-                    };
+                ArithTermRef::Var(lvl, cell, name) => {
+                    match marker.bindings().get(&name) {
+                        Some(&VarData::Temp(_, t, _)) if t != 0 => {},
+                        Some(&VarData::Perm(p)) if p != 0 => {},
+                        _ => return Err(ArithmeticError::UninstantiatedVar),
+                    }
 
-                    self.interm.push(ArithmeticTerm::Reg(r));
+                    let mut target = vec![];
+                    marker.mark_var(name.clone(), lvl, cell, term_loc, &mut target);
+                    code.extend(target.into_iter().map(Line::Query));
+                    
+                    self.interm.push(ArithmeticTerm::Reg(cell.get().norm()));
                 }
                 ArithTermRef::Op(name, arity) => {
                     code.push(Line::Arithmetic(self.instr_from_clause(name, arity)?));
@@ -311,7 +318,21 @@ impl<'a> ArithmeticEvaluator<'a> {
             }
         }
 
+        if let GenContext::Last(_) = term_loc {
+            self.tempify_perm_reg();
+        }
+
         Ok((code, self.interm.pop()))
+    }
+
+    fn tempify_perm_reg(&mut self) {
+        if let Some(interm) = self.interm.pop() {
+            if let ArithmeticTerm::Reg(RegType::Perm(_)) = interm {
+                self.interm.push(ArithmeticTerm::Reg(RegType::Temp(self.arg_c)));
+            } else {
+                self.interm.push(interm);
+            }
+        }
     }
 }
 

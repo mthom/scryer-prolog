@@ -324,7 +324,7 @@ impl MachineState {
     fn copy_findall_solution(&mut self, lh_offset: usize, copy_target: Addr) -> usize {
         let threshold = self.lifted_heap.len() - lh_offset;
         let mut copy_ball_term =
-            CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut self.lifted_heap);
+            CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut self.lifted_heap);
 
         copy_ball_term.push(HeapCellValue::Addr(Addr::Lis(threshold + 1)));
         copy_ball_term.push(HeapCellValue::Addr(Addr::HeapCell(threshold + 3)));
@@ -1608,7 +1608,7 @@ impl MachineState {
 
                 ball.boundary = h;
                 copy_term(
-                    CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut ball.stub),
+                    CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut ball.stub),
                     value,
                 );
 
@@ -1692,22 +1692,22 @@ impl MachineState {
             }
             &SystemClauseType::ReturnFromVerifyAttr => {
                 let e = self.e;
-                let frame_len = self.and_stack[e].len();
+                let frame_len = self.stack.index_and_frame(e).prelude.univ_prelude.num_cells;
 
-                for i in 1..frame_len - 1 {
-                    self[RegType::Temp(i)] = self.and_stack[e][i].clone();
+                for i in 1 .. frame_len - 1 {
+                    self[RegType::Temp(i)] = self.stack.index_and_frame(e)[i].clone();
                 }
 
-                if let &Addr::Con(Constant::Usize(b0)) = &self.and_stack[e][frame_len - 1] {
+                if let &Addr::Con(Constant::Usize(b0)) = &self.stack.index_and_frame(e)[frame_len - 1] {
                     self.b0 = b0;
                 }
 
-                if let &Addr::Con(Constant::Usize(num_of_args)) = &self.and_stack[e][frame_len] {
+                if let &Addr::Con(Constant::Usize(num_of_args)) = &self.stack.index_and_frame(e)[frame_len] {
                     self.num_of_args = num_of_args;
                 }
 
                 self.deallocate();
-                self.p = CodePtr::Local(self.and_stack[e].interrupt_cp);
+                self.p = CodePtr::Local(self.stack.index_and_frame(e).prelude.interrupt_cp);
 
                 return Ok(());
             }
@@ -1763,11 +1763,11 @@ impl MachineState {
 
                 match nb {
                     Addr::Con(Constant::Usize(nb)) => {
-                        let b = self.b - 1;
+                        let b = self.b;
 
-                        if nb > 0 && self.or_stack[b].b == nb {
-                            self.b = self.or_stack[nb - 1].b;
-                            self.or_stack.truncate(self.b);
+                        if nb > 0 && self.stack.index_or_frame(b).prelude.b == nb {
+                            self.b = self.stack.index_or_frame(nb).prelude.b;
+                            self.truncate_stack();
                         }
                     }
                     _ => self.fail = true,
@@ -1898,7 +1898,7 @@ impl MachineState {
 
                 ball.boundary = self.heap.h;
                 copy_term(
-                    CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut ball.stub),
+                    CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut ball.stub),
                     value,
                 );
 
@@ -1918,7 +1918,7 @@ impl MachineState {
 
                 ball.boundary = h;
                 copy_term(
-                    CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut ball.stub),
+                    CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut ball.stub),
                     value.clone(),
                 );
 

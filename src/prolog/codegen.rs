@@ -281,11 +281,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
 
     fn collect_var_data(&mut self, mut iter: ChunkedIterator<'a>) -> ConjunctInfo<'a> {
         let mut vs = VariableFixtures::new();
-        
+
         while let Some((chunk_num, lt_arity, chunked_terms)) = iter.next() {
             for (i, chunked_term) in chunked_terms.iter().enumerate() {
                 let term_loc = match chunked_term {
-                    &ChunkedTerm::HeadClause(..) =>                       
+                    &ChunkedTerm::HeadClause(..) =>
                         GenContext::Head,
                     &ChunkedTerm::BodyTerm(_) => {
                         if i < chunked_terms.len() - 1 {
@@ -360,8 +360,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                     self.mark_non_callable(name.clone(), 2, term_loc, vr, code);
                 }
 
-                let (mut lcode, at_1) = self.call_arith_eval(terms[0].as_ref(), 1)?;
-                let (mut rcode, at_2) = self.call_arith_eval(terms[1].as_ref(), 2)?;
+                self.marker.reset_arg(2);
+                
+                let (mut lcode, at_1) = self.call_arith_eval(terms[0].as_ref(), 1, term_loc, 1)?;
+                let (mut rcode, at_2) = self.call_arith_eval(terms[1].as_ref(), 2, term_loc, 2)?;
 
                 code.append(&mut lcode);
                 code.append(&mut rcode);
@@ -496,12 +498,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
     }
 
     fn call_arith_eval(
-        &self,
+        &mut self,
         term: &'a Term,
         target_int: usize,
+        term_loc: GenContext,
+        arg_c: usize
     ) -> Result<ArithCont, ArithmeticError> {
-        let mut evaluator = ArithmeticEvaluator::new(self.marker.bindings(), target_int);
-        evaluator.eval(term)
+        let mut evaluator = ArithmeticEvaluator::new(target_int, arg_c);
+        evaluator.eval(&mut self.marker, term, term_loc)
     }
 
     fn compile_is_call(
@@ -511,20 +515,17 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         term_loc: GenContext,
         use_default_call_policy: bool,
     ) -> Result<(), ParserError> {
-        let (mut acode, at) = self.call_arith_eval(terms[1].as_ref(), 1)?;
-        code.append(&mut acode);
+        self.marker.reset_arg(2);
 
         Ok(match terms[0].as_ref() {
             &Term::Var(ref vr, ref name) => {
                 let mut target = vec![];
+                self.marker.mark_var(name.clone(), Level::Shallow, vr, term_loc, &mut target);
 
-                self.marker.reset_arg(2);
-                self.marker
-                    .mark_var(name.clone(), Level::Shallow, vr, term_loc, &mut target);
+                code.extend(target.into_iter().map(Line::Query));
 
-                if !target.is_empty() {
-                    code.extend(target.into_iter().map(Line::Query));
-                }
+                let (acode, at) = self.call_arith_eval(terms[1].as_ref(), 1, term_loc, 2)?;
+                code.extend(acode.into_iter());
 
                 if use_default_call_policy {
                     code.push(is_call_by_default!(temp_v!(1), at.unwrap_or(interm!(1))))
@@ -533,6 +534,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 }
             }
             &Term::Constant(_, ref c @ Constant::Integer(_)) => {
+                let (acode, at) = self.call_arith_eval(terms[1].as_ref(), 1, term_loc, 2)?;
+                code.extend(acode.into_iter());
+
                 code.push(Line::Query(put_constant!(
                     Level::Shallow,
                     c.clone(),
@@ -546,6 +550,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 }
             }
             &Term::Constant(_, ref c @ Constant::Float(_)) => {
+                let (acode, at) = self.call_arith_eval(terms[1].as_ref(), 1, term_loc, 2)?;
+                code.extend(acode.into_iter());
+
                 code.push(Line::Query(put_constant!(
                     Level::Shallow,
                     c.clone(),
@@ -559,6 +566,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 }
             }
             &Term::Constant(_, ref c @ Constant::Rational(_)) => {
+                let (acode, at) = self.call_arith_eval(terms[1].as_ref(), 1, term_loc, 2)?;
+                code.extend(acode.into_iter());
+
                 code.push(Line::Query(put_constant!(
                     Level::Shallow,
                     c.clone(),
@@ -574,7 +584,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             _ => code.push(fail!()),
         })
     }
-
+    
     #[inline]
     fn compile_unblocked_cut(&mut self, code: &mut Code, cell: &'a Cell<VarReg>) {
         let r = self.marker.get(Rc::new(String::from("!")));
@@ -715,7 +725,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         let iter = ChunkedIterator::from_rule_body(p1, clauses);
         self.compile_seq(iter, &conjunct_info, &mut code, false)?;
 
-        conjunct_info.mark_unsafe_vars(unsafe_var_marker, &self.marker, &mut code);        
+        conjunct_info.mark_unsafe_vars(unsafe_var_marker, &self.marker, &mut code);
 
         Self::compile_cleanup(&mut code, &conjunct_info, clauses.last().unwrap_or(p1));
         Ok(code)

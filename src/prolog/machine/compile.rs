@@ -25,7 +25,7 @@ use std::mem;
 use std::path::PathBuf;
 
 #[allow(dead_code)]
-fn print_code(code: &Code) {
+pub fn print_code(code: &Code) {
     for clause in code {
         match clause {
             &Line::Arithmetic(ref arith) => println!("{}", arith),

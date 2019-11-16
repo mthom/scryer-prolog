@@ -10,7 +10,6 @@ use crate::prolog::machine::heap::Heap;
 use crate::prolog::read::*;
 use crate::prolog::write::{next_keypress, ContinueResult};
 
-mod and_stack;
 mod attributed_variables;
 pub(super) mod code_repo;
 pub mod compile;
@@ -21,7 +20,7 @@ pub mod machine_errors;
 pub mod machine_indices;
 pub(super) mod machine_state;
 pub mod modules;
-mod or_stack;
+mod stack;
 pub(super) mod term_expansion;
 pub mod toplevel;
 
@@ -623,8 +622,7 @@ impl Machine {
         snapshot.pstr_trail = mem::replace(&mut self.machine_st.pstr_trail, vec![]);
         snapshot.heap = self.machine_st.heap.take();
         snapshot.mode = self.machine_st.mode;
-        snapshot.and_stack = self.machine_st.and_stack.take();
-        snapshot.or_stack = self.machine_st.or_stack.take();
+        snapshot.stack = self.machine_st.stack.take();
         snapshot.registers = mem::replace(&mut self.machine_st.registers, vec![]);
         snapshot.block = self.machine_st.block;
 
@@ -653,8 +651,7 @@ impl Machine {
 
         self.machine_st.heap = snapshot.heap.take();
         self.machine_st.mode = snapshot.mode;
-        self.machine_st.and_stack = snapshot.and_stack.take();
-        self.machine_st.or_stack = snapshot.or_stack.take();
+        self.machine_st.stack = snapshot.stack;
         self.machine_st.registers = mem::replace(&mut snapshot.registers, vec![]);
         self.machine_st.block = snapshot.block;
 
@@ -853,9 +850,9 @@ impl Machine {
     }
 
     pub fn continue_query(&mut self, alloc_locs: &AllocVarDict) -> EvalSession {
-        if !self.or_stack_is_empty() {
-            let b = self.machine_st.b - 1;
-            self.machine_st.p = self.machine_st.or_stack[b].bp.clone();
+        if self.machine_st.b > 0 {
+            let b = self.machine_st.b;
+            self.machine_st.p = self.machine_st.stack.index_or_frame(b).prelude.bp.clone();
 
             if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
                 self.machine_st.fail = true;
@@ -904,10 +901,6 @@ impl Machine {
 
         output
     }
-
-    pub fn or_stack_is_empty(&self) -> bool {
-        self.machine_st.b == 0
-    }
 }
 
 impl MachineState {
@@ -918,7 +911,7 @@ impl MachineState {
                     if !self.heap_locs.contains_key(var) {
                         let e = self.e;
                         let r = var_data.as_reg_type().reg_num();
-                        let addr = self.and_stack[e][r].clone();
+                        let addr = self.stack.index_and_frame(e)[r].clone();
 
                         self.heap_locs.insert(var.clone(), addr);
                     }
@@ -1017,10 +1010,10 @@ impl MachineState {
 
     fn backtrack(&mut self) {
         if self.b > 0 {
-            let b = self.b - 1;
+            let b = self.b;
 
-            self.b0 = self.or_stack[b].b0;
-            self.p = self.or_stack[b].bp.clone();
+            self.b0 = self.stack.index_or_frame(b).prelude.b0;
+            self.p = self.stack.index_or_frame(b).prelude.bp.clone();
 
             if let CodePtr::Local(LocalCodePtr::TopLevel(_, p)) = self.p {
                 self.fail = p == 0;

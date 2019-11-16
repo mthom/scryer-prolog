@@ -1,5 +1,5 @@
-use crate::prolog::machine::and_stack::*;
 use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::stack::*;
 
 use std::ops::IndexMut;
 
@@ -10,7 +10,7 @@ pub(crate) trait CopierTarget: IndexMut<usize, Output = HeapCellValue> {
     fn push(&mut self, _: HeapCellValue);
     fn store(&self, _: Addr) -> Addr;
     fn deref(&self, _: Addr) -> Addr;
-    fn stack(&mut self) -> &mut AndStack;
+    fn stack(&mut self) -> &mut Stack;
 }
 
 pub(crate) fn copy_term<T: CopierTarget>(target: T, addr: Addr) {
@@ -51,7 +51,7 @@ impl<T: CopierTarget> CopyTermState<T> {
             }
             Addr::StackCell(fr, sc) => {
                 self.target[threshold] = HeapCellValue::Addr(Addr::HeapCell(threshold));
-                self.target.stack()[fr][sc] = Addr::HeapCell(threshold);
+                self.target.stack().index_and_frame_mut(fr)[sc] = Addr::HeapCell(threshold);
                 self.trail.push((
                     Ref::StackCell(fr, sc),
                     HeapCellValue::Addr(Addr::StackCell(fr, sc)),
@@ -199,8 +199,10 @@ impl<T: CopierTarget> CopyTermState<T> {
     fn unwind_trail(&mut self) {
         for (r, value) in self.trail.drain(0..) {
             match r {
-                Ref::AttrVar(h) | Ref::HeapCell(h) => self.target[h] = value,
-                Ref::StackCell(fr, sc) => self.target.stack()[fr][sc] = value.as_addr(0),
+                Ref::AttrVar(h) | Ref::HeapCell(h) =>
+                    self.target[h] = value,
+                Ref::StackCell(fr, sc) =>
+                    self.target.stack().index_and_frame_mut(fr)[sc] = value.as_addr(0),
             }
         }
     }

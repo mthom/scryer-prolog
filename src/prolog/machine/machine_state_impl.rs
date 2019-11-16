@@ -9,7 +9,6 @@ use crate::prolog::heap_iter::*;
 use crate::prolog::heap_print::*;
 use crate::prolog::instructions::*;
 use crate::prolog::machine::INTERRUPT;
-use crate::prolog::machine::and_stack::*;
 use crate::prolog::machine::attributed_variables::*;
 use crate::prolog::machine::code_repo::CodeRepo;
 use crate::prolog::machine::copier::*;
@@ -17,7 +16,7 @@ use crate::prolog::machine::heap::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
-use crate::prolog::machine::or_stack::*;
+use crate::prolog::machine::stack::*;
 use crate::prolog::ordered_float::*;
 use crate::prolog::read::PrologStream;
 use crate::prolog::rug::{Integer, Rational};
@@ -64,8 +63,7 @@ impl MachineState {
             fail: false,
             heap: Heap::with_capacity(1024),
             mode: MachineMode::Write,
-            and_stack: AndStack::new(),
-            or_stack: OrStack::new(),
+            stack: Stack::new(),
             registers: vec![Addr::HeapCell(0); MAX_ARITY + 1], // self.registers[0] is never used.
             trail: vec![],
             pstr_trail: vec![],
@@ -95,8 +93,7 @@ impl MachineState {
             fail: false,
             heap: Heap::with_capacity(capacity),
             mode: MachineMode::Write,
-            and_stack: AndStack::new(),
-            or_stack: OrStack::new(),
+            stack: Stack::new(),
             registers: vec![Addr::HeapCell(0); MAX_ARITY + 1], // self.registers[0] is never used.
             trail: vec![],
             pstr_trail: vec![],
@@ -125,25 +122,10 @@ impl MachineState {
         self.flags
     }
 
-    fn next_global_index(&self) -> usize {
-        max(
-            if self.and_stack.len() > 0 {
-                self.and_stack[self.e].global_index
-            } else {
-                0
-            },
-            if self.b > 0 {
-                self.or_stack[self.b - 1].global_index
-            } else {
-                0
-            },
-        ) + 1
-    }
-
     pub(crate) fn store(&self, addr: Addr) -> Addr {
         match addr {
             Addr::AttrVar(h) | Addr::HeapCell(h) => self.heap[h].as_addr(h),
-            Addr::StackCell(fr, sc) => self.and_stack[fr][sc].clone(),
+            Addr::StackCell(fr, sc) => self.stack.index_and_frame(fr)[sc].clone(),
             addr => addr,
         }
     }
@@ -168,7 +150,7 @@ impl MachineState {
                 self.trail(TrailRef::Ref(Ref::HeapCell(hc)));
             }
             Some(Ref::StackCell(fr, sc)) => {
-                self.and_stack[fr][sc] = Addr::AttrVar(h);
+                self.stack.index_and_frame_mut(fr)[sc] = Addr::AttrVar(h);
                 self.trail(TrailRef::Ref(Ref::StackCell(fr, sc)));
             }
             _ => {
@@ -185,7 +167,7 @@ impl MachineState {
 
         if t1.is_ref() && (!t2.is_ref() || a2 < r1) {
             match r1 {
-                Ref::StackCell(fr, sc) => self.and_stack[fr][sc] = t2,
+                Ref::StackCell(fr, sc) => self.stack.index_and_frame_mut(fr)[sc] = t2,
                 Ref::HeapCell(h) => self.heap[h] = HeapCellValue::Addr(t2),
                 Ref::AttrVar(h) => return self.bind_attr_var(h, t2),
             };
@@ -194,7 +176,7 @@ impl MachineState {
         } else {
             match a2.as_var() {
                 Some(Ref::StackCell(fr, sc)) => {
-                    self.and_stack[fr][sc] = t1;
+                    self.stack.index_and_frame_mut(fr)[sc] = t1;
                     self.trail(TrailRef::Ref(Ref::StackCell(fr, sc)));
                 }
                 Some(Ref::HeapCell(h)) => {
@@ -660,21 +642,9 @@ impl MachineState {
                     self.tr += 1;
                 }
             }
-            TrailRef::Ref(Ref::StackCell(fr, sc)) => {
-                let fr_gi = self.and_stack[fr].global_index;
-                let b_gi = if !self.or_stack.is_empty() {
-                    if self.b > 0 {
-                        let b = self.b - 1;
-                        self.or_stack[b].global_index
-                    } else {
-                        0
-                    }
-                } else {
-                    0
-                };
-
-                if fr_gi < b_gi {
-                    self.trail.push(TrailRef::Ref(Ref::StackCell(fr, sc)));
+            TrailRef::Ref(Ref::StackCell(b, sc)) => {
+                if b <= self.b {
+                    self.trail.push(TrailRef::Ref(Ref::StackCell(b, sc)));
                     self.tr += 1;
                 }
             }
@@ -694,7 +664,7 @@ impl MachineState {
                     self.heap[h] = HeapCellValue::Addr(Addr::AttrVar(h))
                 }
                 TrailRef::Ref(Ref::StackCell(fr, sc)) => {
-                    self.and_stack[fr][sc] = Addr::StackCell(fr, sc)
+                    self.stack.index_and_frame_mut(fr)[sc] = Addr::StackCell(fr, sc)
                 }
                 TrailRef::AttrVarHeapLink(h) => {
                     self.heap[h] = HeapCellValue::Addr(Addr::HeapCell(h));
@@ -718,8 +688,8 @@ impl MachineState {
             return;
         }
 
-        let b = self.b - 1;
-        let mut i = self.or_stack[b].pstr_tr;
+        let b = self.b;
+        let mut i = self.stack.index_or_frame(b).prelude.pstr_tr;
 
         while i < self.pstr_tr {
             let str_b = self.pstr_trail[i].0;
@@ -727,6 +697,7 @@ impl MachineState {
             if b < str_b {
                 let pstr_tr = self.pstr_tr;
                 let val = self.pstr_trail[pstr_tr - 1].clone();
+
                 self.pstr_trail[i] = val;
                 self.pstr_tr -= 1;
             } else {
@@ -740,33 +711,27 @@ impl MachineState {
             return;
         }
 
-        let b = self.b - 1;
+        let b = self.b;
         let hb = self.hb;
         let mut offset = 0;
 
-        for i in self.or_stack[b].tr .. self.tr {
+        for i in self.stack.index_or_frame(b).prelude.tr .. self.tr {
             match self.trail[i] {
                 TrailRef::Ref(Ref::AttrVar(tr_i))
               | TrailRef::Ref(Ref::HeapCell(tr_i))
               | TrailRef::AttrVarHeapLink(tr_i)
-              | TrailRef::AttrVarListLink(tr_i, _) =>
-                  if tr_i >= hb {
-                      offset += 1;
-                  } else {
-                      self.trail[i - offset] = self.trail[i];
-                  },
-                TrailRef::Ref(Ref::StackCell(fr, _)) => {
-                    let fr_gi = self.and_stack[fr].global_index;
-                    let b_gi = if !self.or_stack.is_empty() {
-                        self.or_stack[b].global_index
-                    } else {
-                        0
-                    };
-
-                    if fr_gi >= b_gi {
+              | TrailRef::AttrVarListLink(tr_i, _) => {
+                    if tr_i >= hb {
                         offset += 1;
                     } else {
                         self.trail[i - offset] = self.trail[i];
+                    }
+                }
+                TrailRef::Ref(Ref::StackCell(b, _)) => {
+                    if b <= self.b {
+                        self.trail[i - offset] = self.trail[i];
+                    } else {
+                        offset += 1;
                     }
                 }
             }
@@ -857,7 +822,8 @@ impl MachineState {
             }
             Addr::Con(c1) =>
                 self.fail = self.eq_test(Addr::Con(c), Addr::Con(c1)),
-            Addr::Lis(l) => self.unify(Addr::Lis(l), Addr::Con(c)),
+            Addr::Lis(l) =>
+                self.unify(Addr::Lis(l), Addr::Con(c)),
             addr => {
                 if let Some(r) = addr.as_var() {
                     self.bind(r, Addr::Con(c));
@@ -1109,18 +1075,18 @@ impl MachineState {
             (Number::Float(f), _) | (_, Number::Float(f)) => {
                 let n = Addr::Con(Constant::Float(f));
                 let stub = MachineError::functor_stub(clause_name!("gcd"), 2);
-                
+
                 Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
             }
             (Number::Rational(r), _) | (_, Number::Rational(r)) => {
                 let n = Addr::Con(Constant::Rational(r));
                 let stub = MachineError::functor_stub(clause_name!("gcd"), 2);
-                
+
                 Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
             }
         }
     }
-    
+
     fn float_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
         let f1 = result_f(&n1, rnd_f);
         let f2 = result_f(&n2, rnd_f);
@@ -2077,7 +2043,7 @@ impl MachineState {
         let addr = self[temp_v!(1)].clone();
         self.ball.boundary = self.heap.h;
         copy_term(
-            CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut self.ball.stub),
+            CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut self.ball.stub),
             addr,
         );
     }
@@ -2101,11 +2067,11 @@ impl MachineState {
                         return None;
                     }
 
-                    for i in (1..arity).rev() {
+                    for i in (1 .. arity).rev() {
                         self.registers[i + narity] = self.registers[i].clone();
                     }
 
-                    for i in 1..narity + 1 {
+                    for i in 1 .. narity + 1 {
                         self.registers[i] = self.heap[a + i].as_addr(a + i);
                     }
 
@@ -2137,11 +2103,16 @@ impl MachineState {
 
     pub(super) fn unwind_stack(&mut self) {
         self.b = self.block;
-        self.or_stack.truncate(self.b);
-
+        self.truncate_stack();
         self.fail = true;
     }
 
+    pub(super) fn truncate_stack(&mut self) {
+        if self.b > self.e {
+            self.stack.truncate_to_frame(self.b);
+        }
+    }
+    
     pub(crate) fn is_cyclic_term(&self, addr: Addr) -> bool {
         let mut seen = IndexSet::new();
         let mut fail = false;
@@ -3158,58 +3129,24 @@ impl MachineState {
     }
 
     pub(super) fn allocate(&mut self, num_cells: usize) {
-        let gi = self.next_global_index();
+        let e = self.stack.allocate_and_frame(num_cells);
+        let and_frame = self.stack.index_and_frame_mut(e);
 
+        and_frame.prelude.e  = self.e;
+        and_frame.prelude.cp = self.cp;
+        
+        self.e = e;
         self.p += 1;
-
-        if self.e + 1 < self.and_stack.len() {
-            let and_gi = self.and_stack[self.e].global_index;
-            let or_gi = self
-                .or_stack
-                .top()
-                .map(|or_fr| or_fr.global_index)
-                .unwrap_or(0);
-
-            if and_gi > or_gi {
-                let new_e = self.e + 1;
-
-                self.and_stack[new_e].e = self.e;
-                self.and_stack[new_e].cp = self.cp.clone();
-                self.and_stack[new_e].global_index = gi;
-
-                self.and_stack.resize(new_e, num_cells);
-                self.e = new_e;
-
-                return;
-            }
-        }
-
-        self.and_stack.push(gi, self.e, self.cp.clone(), num_cells);
-        self.e = self.and_stack.len() - 1;
     }
 
     pub(super) fn deallocate(&mut self) {
         let e = self.e;
-
-        self.cp = self.and_stack[e].cp.clone();
-        self.e = self.and_stack[e].e;
+        let frame = self.stack.index_and_frame(e);
+        
+        self.cp = frame.prelude.cp;
+        self.e  = frame.prelude.e;
 
         self.p += 1;
-    }
-
-    pub(super) fn pop_stack_frames(&mut self) {
-	if self.and_stack.len() > self.e {
-            let and_gi = self.and_stack[self.e].global_index;
-            let or_gi = self
-                .or_stack
-                .top()
-                .map(|or_fr| or_fr.global_index)
-                .unwrap_or(0);
-
-            if and_gi > or_gi {
-                self.and_stack.truncate(self.e + 1);
-            }
-        }
     }
 
     fn handle_call_clause(
@@ -3323,33 +3260,31 @@ impl MachineState {
         call_policy: &mut Box<dyn CallPolicy>,
     ) {
         match instr {
-            &IndexedChoiceInstruction::Try(l) => {
+            &IndexedChoiceInstruction::Try(offset) => {
                 let n = self.num_of_args;
-                let gi = self.next_global_index();
+                let b = self.stack.allocate_or_frame(n);
+                let or_frame = self.stack.index_or_frame_mut(b);
 
-                self.or_stack.push(
-                    gi,
-                    self.e,
-                    self.cp.clone(),
-                    self.attr_var_init.attr_var_queue.len(),
-                    self.b,
-                    self.p.clone() + 1,
-                    self.tr,
-                    self.pstr_tr,
-                    self.heap.h,
-                    self.b0,
-                    self.num_of_args,
-                );
+                or_frame.prelude.univ_prelude.num_cells = n;
+                or_frame.prelude.e = self.e;
+                or_frame.prelude.cp = self.cp;
+                or_frame.prelude.b = self.b;
+                or_frame.prelude.bp = self.p.clone() + 1;
+                or_frame.prelude.tr = self.tr;
+                or_frame.prelude.pstr_tr = self.pstr_tr;
+                or_frame.prelude.h  = self.heap.h;
+                or_frame.prelude.b0 = self.b0;
+                or_frame.prelude.attr_var_init_b =
+                    self.attr_var_init.attr_var_queue.len();
 
-                self.b = self.or_stack.len();
-                let b = self.b - 1;
+                self.b = b;
 
-                for i in 1..n + 1 {
-                    self.or_stack[b][i] = self.registers[i].clone();
+                for i in 1 .. n + 1 {
+                    self.stack.index_or_frame_mut(b)[i-1] = self.registers[i].clone();
                 }
 
                 self.hb = self.heap.h;
-                self.p += l;
+                self.p += offset;
             }
             &IndexedChoiceInstruction::Retry(l) => try_or_fail!(self, call_policy.retry(self, l)),
             &IndexedChoiceInstruction::Trust(l) => try_or_fail!(self, call_policy.trust(self, l)),
@@ -3364,27 +3299,25 @@ impl MachineState {
         match instr {
             &ChoiceInstruction::TryMeElse(offset) => {
                 let n = self.num_of_args;
-                let gi = self.next_global_index();
+                let b = self.stack.allocate_or_frame(n);
+                let or_frame = self.stack.index_or_frame_mut(b);
 
-                self.or_stack.push(
-                    gi,
-                    self.e,
-                    self.cp.clone(),
-                    self.attr_var_init.attr_var_queue.len(),
-                    self.b,
-                    self.p.clone() + offset,
-                    self.tr,
-                    self.pstr_tr,
-                    self.heap.h,
-                    self.b0,
-                    self.num_of_args,
-                );
+                or_frame.prelude.univ_prelude.num_cells = n;
+                or_frame.prelude.e = self.e;
+                or_frame.prelude.cp = self.cp;
+                or_frame.prelude.b = self.b;
+                or_frame.prelude.bp = self.p.clone() + offset;                
+                or_frame.prelude.tr = self.tr;
+                or_frame.prelude.pstr_tr = self.pstr_tr;
+                or_frame.prelude.h  = self.heap.h;
+                or_frame.prelude.b0 = self.b0;
+                or_frame.prelude.attr_var_init_b =
+                    self.attr_var_init.attr_var_queue.len();
 
-                self.b = self.or_stack.len();
-                let b = self.b - 1;
+                self.b = b;
 
-                for i in 1..n + 1 {
-                    self.or_stack[b][i] = self.registers[i].clone();
+                for i in 1 .. n + 1  {
+                    self.stack.index_or_frame_mut(b)[i-1] = self.registers[i].clone();
                 }
 
                 self.hb = self.heap.h;
@@ -3419,7 +3352,7 @@ impl MachineState {
                     self.b = b0;
                     self.tidy_trail();
                     self.tidy_pstr_trail();
-                    self.or_stack.truncate(self.b);
+                    self.truncate_stack();
                 }
 
                 self.p += 1;
@@ -3446,6 +3379,8 @@ impl MachineState {
     }
 
     pub fn reset(&mut self) {
+        self.stack.drop_in_place();
+
         self.hb = 0;
         self.e = 0;
         self.b = 0;
@@ -3463,8 +3398,6 @@ impl MachineState {
         self.pstr_trail.clear();
         self.heap.clear();
         self.mode = MachineMode::Write;
-        self.and_stack.clear();
-        self.or_stack.clear();
         self.registers = vec![Addr::HeapCell(0); MAX_ARITY + 1]; // self.registers[0] is never used.
         self.block = 0;
 
