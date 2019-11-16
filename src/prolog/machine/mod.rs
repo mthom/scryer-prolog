@@ -2,13 +2,11 @@ use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
 use crate::prolog::clause_types::*;
-use crate::prolog::fixtures::*;
 use crate::prolog::forms::*;
 use crate::prolog::heap_print::*;
 use crate::prolog::instructions::*;
 use crate::prolog::machine::heap::Heap;
 use crate::prolog::read::*;
-use crate::prolog::write::{next_keypress, ContinueResult};
 
 mod and_stack;
 mod attributed_variables;
@@ -36,20 +34,17 @@ use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 use crate::prolog::machine::modules::*;
-use crate::prolog::machine::toplevel::stream_to_toplevel;
 use crate::prolog::read::PrologStream;
 
 use indexmap::IndexMap;
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{stdout, Read, Write};
+use std::io::Read;
 use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
-
-use termion::raw::IntoRawMode;
 
 pub struct MachinePolicies {
     call_policy: Box<dyn CallPolicy>,
@@ -198,10 +193,23 @@ impl Machine {
         }
     }
 
-    fn compile_top_level(&mut self) {
+    fn compile_top_level(&mut self) -> Result<(), SessionError>
+    {
         self.toplevel_idx = self.code_repo.code.len();
         compile_user_module(self, parsing_stream(TOPLEVEL.as_bytes()),
                             true, clause_name!("toplevel.pl"));
+
+        if let Some(module) = self.indices.take_module(clause_name!("$toplevel")) {
+            self.indices.use_module(
+                &mut self.code_repo,
+                self.machine_st.flags,
+                &module,
+            )?;
+
+            Ok(self.indices.insert_module(module))
+        } else {
+            Err(SessionError::ModuleNotFound)
+        }
     }
 
     fn compile_scryerrc(&mut self) {
@@ -235,7 +243,7 @@ impl Machine {
 	self.machine_st.reset();
 
 	self.code_repo.cached_query = code;
-	self.run_query(&AllocVarDict::new());
+	self.run_query();
 
         let result = self.machine_st.fail;
 	self.absorb_snapshot(old_machine_st);
@@ -261,7 +269,7 @@ impl Machine {
 	self.machine_st[temp_v!(1)] = list_addr;
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
 
-        self.run_query(&AllocVarDict::new());
+        self.run_query();
     }
 
     pub fn new(prolog_stream: PrologStream) -> Self {
@@ -296,7 +304,10 @@ impl Machine {
         compile_user_module(&mut wam, parsing_stream(SI.as_bytes()), true,
                             clause_name!("si"));
 
-        wam.compile_top_level();
+        if wam.compile_top_level().is_err() {
+            panic!("Loading '$toplevel' module failed");
+        }
+        
         wam.compile_scryerrc();
 
         wam
@@ -376,17 +387,6 @@ impl Machine {
             .modules
             .insert(module.module_decl.name.clone(), module);
         self.code_repo.code.extend(code.into_iter());
-    }
-
-    pub fn submit_query(&mut self, code: Code, alloc_locs: AllocVarDict) -> EvalSession {
-        self.code_repo.cached_query = code;
-        self.run_query(&alloc_locs);
-
-        if self.machine_st.fail {
-            EvalSession::QueryFailure
-        } else {
-            EvalSession::InitialQuerySuccess(alloc_locs)
-        }
     }
 
     fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
@@ -537,6 +537,7 @@ impl Machine {
                     self.throw_session_error(e, (clause_name!("repl"), 0));
                 }
             }
+            /*
             REPLCodePtr::SubmitQueryAndPrintResults => {
                 let term = self.machine_st[temp_v!(1)].clone();
                 let stub = MachineError::functor_stub(clause_name!("repl"), 0);
@@ -593,6 +594,7 @@ impl Machine {
                 self.indices.reset_global_variable_offsets();
                 self.policies = policies;
             }
+            */
 	    REPLCodePtr::UseModule =>
 		self.use_module(ModuleSource::Library),
 	    REPLCodePtr::UseModuleFromFile =>
@@ -662,20 +664,7 @@ impl Machine {
         self.machine_st.lifted_heap = mem::replace(&mut snapshot.lifted_heap, vec![]);
     }
 
-    fn propagate_exception_to_toplevel(&mut self, snapshot: MachineState) {
-        let ball = self.machine_st.ball.take();
-
-        self.absorb_snapshot(snapshot);
-        self.machine_st.ball = ball;
-
-        let h = self.machine_st.heap.h;
-        let stub = self.machine_st.ball.copy_and_align(h);
-
-        self.machine_st.throw_exception(stub);
-
-        return;
-    }
-
+/*
     fn handle_eval_session(&mut self, result: EvalSession, snapshot: MachineState) {
         match result {
             EvalSession::InitialQuerySuccess(alloc_locs) => loop {
@@ -795,24 +784,13 @@ impl Machine {
 
         self.absorb_snapshot(snapshot);
     }
+*/
 
-    pub(super) fn run_query(&mut self, alloc_locs: &AllocVarDict) {
+    pub(super) fn run_query(&mut self) {
 	self.machine_st.cp = LocalCodePtr::TopLevel(0, self.code_repo.size_of_cached_query());
         let end_ptr = CodePtr::Local(self.machine_st.cp);
 
         while self.machine_st.p < end_ptr {
-            if let CodePtr::Local(LocalCodePtr::TopLevel(mut cn, p)) = self.machine_st.p {
-                match &self.code_repo[LocalCodePtr::TopLevel(cn, p)] {
-                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
-                        self.machine_st.record_var_places(cn, alloc_locs);
-                        cn += 1;
-                    }
-                    _ => {}
-                }
-
-                self.machine_st.p = top_level_code_ptr!(cn, p);
-            }
-
             self.machine_st.query_stepper(
                 &mut self.indices,
                 &mut self.policies,
@@ -831,61 +809,16 @@ impl Machine {
                     self.dynamic_transaction(trans_type, p);
 
                     if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                        if self.machine_st.heap_locs.is_empty() {
-                            self.machine_st.record_var_places(0, alloc_locs);
-                        }
-
                         self.code_repo.cached_query = cached_query;
                         break;
                     }
 
                     self.code_repo.cached_query = cached_query;
                 }
-                _ => {
-                    if self.machine_st.heap_locs.is_empty() {
-                        self.machine_st.record_var_places(0, alloc_locs);
-                    }
-
-                    break;
-                }
+                _ =>
+                    break                
             };
         }
-    }
-
-    pub fn continue_query(&mut self, alloc_locs: &AllocVarDict) -> EvalSession {
-        if !self.or_stack_is_empty() {
-            let b = self.machine_st.b - 1;
-            self.machine_st.p = self.machine_st.or_stack[b].bp.clone();
-
-            if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                self.machine_st.fail = true;
-                return EvalSession::QueryFailure;
-            }
-
-            self.run_query(alloc_locs);
-
-            if self.machine_st.fail {
-                EvalSession::QueryFailure
-            } else {
-                EvalSession::SubsequentQuerySuccess
-            }
-        } else {
-            EvalSession::QueryFailure
-        }
-    }
-
-    pub fn toplevel_heap_view<Outputter>(&self, mut output: Outputter) -> Outputter
-    where
-        Outputter: HCValueOutputter,
-    {
-        for (var, addr) in self.machine_st.heap_locs.iter() {
-            let addr = self.machine_st.store(self.machine_st.deref(addr.clone()));
-            output = self
-                .machine_st
-                .print_var_eq(var.clone(), addr, &self.indices.op_dir, output);
-        }
-
-        output
     }
 
     #[cfg(test)]
@@ -904,63 +837,9 @@ impl Machine {
 
         output
     }
-
-    pub fn or_stack_is_empty(&self) -> bool {
-        self.machine_st.b == 0
-    }
 }
 
 impl MachineState {
-    fn record_var_places(&mut self, chunk_num: usize, alloc_locs: &AllocVarDict) {
-        for (var, var_data) in alloc_locs {
-            match var_data {
-                &VarData::Perm(p) if p > 0 => {
-                    if !self.heap_locs.contains_key(var) {
-                        let e = self.e;
-                        let r = var_data.as_reg_type().reg_num();
-                        let addr = self.and_stack[e][r].clone();
-
-                        self.heap_locs.insert(var.clone(), addr);
-                    }
-                }
-                &VarData::Temp(cn, _, _) if cn == chunk_num => {
-                    let r = var_data.as_reg_type();
-
-                    if r.reg_num() != 0 {
-                        let addr = self[r].clone();
-                        self.heap_locs.insert(var.clone(), addr);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn print_query(&mut self, addr: Addr, op_dir: &OpDir) -> PrinterOutputter {
-        let flags = self.flags;
-
-        let mut output = {
-            self.flags = MachineFlags {
-                double_quotes: DoubleQuotes::Atom,
-            };
-
-            let output = PrinterOutputter::new();
-            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);
-
-            printer.quoted = true;
-            printer.numbervars = false;
-            printer.drop_toplevel_spec();
-
-            printer.see_all_locs();
-            printer.print(addr)
-        };
-
-        self.flags = flags;
-
-        output.append(".");
-        output
-    }
-
     fn dispatch_instr(
         &mut self,
         instr: &Line,

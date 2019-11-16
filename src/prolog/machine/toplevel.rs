@@ -303,13 +303,6 @@ fn is_consistent(tl: &TopLevel, clauses: &Vec<PredicateClause>) -> bool {
     }
 }
 
-fn deque_to_packet(head: TopLevel, deque: VecDeque<TopLevel>) -> TopLevelPacket {
-    match head {
-        TopLevel::Query(query) => TopLevelPacket::Query(query, deque),
-        tl => TopLevelPacket::Decl(tl, deque),
-    }
-}
-
 fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError> {
     let mut clauses: Vec<PredicateClause> = vec![];
 
@@ -494,11 +487,6 @@ fn setup_declaration<'a, 'b, 'c, R: Read>(
 	    },
         _ => return Err(ParserError::InconsistentEntry),
     }
-}
-
-pub enum TopLevelPacket {
-    Query(Vec<QueryTerm>, VecDeque<TopLevel>),
-    Decl(TopLevel, VecDeque<TopLevel>),
 }
 
 struct RelationWorker {
@@ -900,39 +888,6 @@ impl RelationWorker {
         self.dynamic_clauses
             .extend(other.dynamic_clauses.into_iter());
     }
-}
-
-pub fn stream_to_toplevel<R: Read>(
-    mut buffer: ParsingStream<R>,
-    wam: &mut Machine,
-) -> Result<TopLevelPacket, SessionError> {
-    let flags = wam.machine_flags();
-    let mut term_stream = TermStream::new(
-        &mut buffer,
-        wam.indices.atom_tbl(),
-        wam.machine_flags(),
-        wam,
-    );
-
-    term_stream.add_to_top("?- ");
-
-    let term = term_stream.read_term(&OpDir::new())?;
-    let mut code_dir = CodeDir::new();
-
-    let line_num = term_stream.line_num();
-    let col_num  = term_stream.col_num();
-
-    let mut rel_worker = RelationWorker::new(flags, line_num, col_num);
-    let mut indices = CompositeIndices::new(
-        &mut term_stream,
-        IndexSource::TermStream,
-        Some(IndexSource::Local(&mut code_dir))
-    );
-
-    let tl = rel_worker.try_term_to_tl(&mut indices, term, true)?;
-    let queue = rel_worker.parse_queue(&mut indices)?;
-
-    Ok(deque_to_packet(tl, queue))
 }
 
 pub type DynamicClauseMap = IndexMap<(ClauseName, usize), Vec<(Term, Term)>>;

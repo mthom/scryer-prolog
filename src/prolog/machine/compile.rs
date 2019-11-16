@@ -243,40 +243,6 @@ fn compile_query(
     Ok((code, cg.take_vars()))
 }
 
-fn compile_decl(
-    wam: &mut Machine,
-    compiler: &mut ListingCompiler,
-    decl: Declaration,
-) -> Result<IndexStore, SessionError> {
-    let flags = wam.machine_flags();
-    let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
-
-    compiler.process_decl(decl, wam, &mut indices, flags)?;
-
-    Ok(indices)
-}
-
-pub fn compile_term(wam: &mut Machine, packet: TopLevelPacket) -> EvalSession {
-    match packet {
-        TopLevelPacket::Query(terms, queue) => {
-            match compile_query(terms, queue, wam.machine_flags()) {
-                Ok((code, vars)) => wam.submit_query(code, vars),
-                Err(e) => EvalSession::from(e),
-            }
-        }
-        TopLevelPacket::Decl(TopLevel::Declaration(decl), _) => {
-            let mut compiler = ListingCompiler::new(&wam.code_repo, false, clause_name!("user"));
-            let indices = try_eval_session!(compile_decl(wam, &mut compiler, decl));
-
-            try_eval_session!(wam.check_toplevel_code(&indices));
-            add_toplevel_code(wam, vec![], indices);
-
-            EvalSession::EntrySuccess
-        }
-        _ => EvalSession::from(SessionError::UserPrompt),
-    }
-}
-
 fn add_hooks_to_mockup(
     code_repo: &mut CodeRepo,
     hook: CompileTimeHook,

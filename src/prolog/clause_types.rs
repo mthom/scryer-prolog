@@ -162,8 +162,7 @@ pub enum SystemClauseType {
     AtomChars,
     AtomCodes,
     AtomLength,
-    ModuleAssertDynamicPredicateToFront,
-    ModuleAssertDynamicPredicateToBack,
+    CallAttributeGoals,
     CharCode,
     CharsToNumber,
     CodesToNumber,
@@ -176,6 +175,7 @@ pub enum SystemClauseType {
     EnqueueAttributedVar,
     ExpandGoal,
     ExpandTerm,
+    FetchAttributeGoals,
     FetchGlobalVar,
     FetchGlobalVarWithOffset,
     GetChar,
@@ -200,6 +200,8 @@ pub enum SystemClauseType {
     InstallSCCCleaner,
     InstallInferenceCounter,
     LiftedHeapLength,
+    ModuleAssertDynamicPredicateToFront,
+    ModuleAssertDynamicPredicateToBack,
     ModuleOf,
     ModuleRetractClause,
     NoSuchPredicate,
@@ -229,8 +231,8 @@ pub enum SystemClauseType {
     GetDoubleQuotes,
     InstallNewBlock,
     Maybe,
+    RawInputReadChar,
     ResetBlock,
-    ReturnFromAttributeGoals,
     ReturnFromVerifyAttr,
     SetBall,
     SetCutPointByDefault(RegType),
@@ -257,20 +259,12 @@ impl SystemClauseType {
             &SystemClauseType::AtomChars => clause_name!("$atom_chars"),
             &SystemClauseType::AtomCodes => clause_name!("$atom_codes"),
             &SystemClauseType::AtomLength => clause_name!("$atom_length"),
-            &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
-                clause_name!("$module_asserta")
-            }
-            &SystemClauseType::ModuleAssertDynamicPredicateToBack => {
-                clause_name!("$module_assertz")
-            }
+            &SystemClauseType::CallAttributeGoals => clause_name!("$call_attribute_goals"),
             &SystemClauseType::CharCode => clause_name!("$char_code"),
             &SystemClauseType::CharsToNumber => clause_name!("$chars_to_number"),
             &SystemClauseType::CodesToNumber => clause_name!("$codes_to_number"),
             &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
-            &SystemClauseType::REPL(REPLCodePtr::SubmitQueryAndPrintResults) => {
-                clause_name!("$submit_query_and_print_results")
-            }
 	    &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
 	    &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
 		clause_name!("$use_qualified_module")
@@ -289,6 +283,7 @@ impl SystemClauseType {
             &SystemClauseType::EnqueueAttributedVar => clause_name!("$enqueue_attr_var"),
             &SystemClauseType::ExpandTerm => clause_name!("$expand_term"),
             &SystemClauseType::ExpandGoal => clause_name!("$expand_goal"),
+            &SystemClauseType::FetchAttributeGoals => clause_name!("$fetch_attribute_goals"),
             &SystemClauseType::FetchGlobalVar => clause_name!("$fetch_global_var"),
             &SystemClauseType::FetchGlobalVarWithOffset => {
                 clause_name!("$fetch_global_var_with_offset")
@@ -327,11 +322,18 @@ impl SystemClauseType {
             }
             &SystemClauseType::LiftedHeapLength => clause_name!("$lh_length"),
             &SystemClauseType::Maybe => clause_name!("maybe"),
+            &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
+                clause_name!("$module_asserta")
+            }
+            &SystemClauseType::ModuleAssertDynamicPredicateToBack => {
+                clause_name!("$module_assertz")
+            }
             &SystemClauseType::ModuleHeadIsDynamic => clause_name!("$module_head_is_dynamic"),
             &SystemClauseType::ModuleOf => clause_name!("$module_of"),
             &SystemClauseType::NoSuchPredicate => clause_name!("$no_such_predicate"),
             &SystemClauseType::NumberToChars => clause_name!("$number_to_chars"),
             &SystemClauseType::NumberToCodes => clause_name!("$number_to_codes"),
+            &SystemClauseType::RawInputReadChar => clause_name!("$raw_input_read_char"),
             &SystemClauseType::RedoAttrVarBindings => clause_name!("$redo_attr_var_bindings"),
             &SystemClauseType::RemoveCallPolicyCheck => clause_name!("$remove_call_policy_check"),
             &SystemClauseType::RemoveInferenceCounter => clause_name!("$remove_inference_counter"),
@@ -357,9 +359,6 @@ impl SystemClauseType {
             &SystemClauseType::ResetGlobalVarAtOffset => clause_name!("$reset_global_var_at_offset"),
             &SystemClauseType::RetractClause => clause_name!("$retract_clause"),
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
-            &SystemClauseType::ReturnFromAttributeGoals => {
-                clause_name!("$return_from_attribute_goals")
-            }
             &SystemClauseType::ReturnFromVerifyAttr => clause_name!("$return_from_verify_attr"),
             &SystemClauseType::SetBall => clause_name!("$set_ball"),
             &SystemClauseType::SetCutPointByDefault(_) => clause_name!("$set_cp_by_default"),
@@ -387,6 +386,7 @@ impl SystemClauseType {
             ("$module_assertz", 5) => Some(SystemClauseType::ModuleAssertDynamicPredicateToBack),
             ("$asserta", 4) => Some(SystemClauseType::AssertDynamicPredicateToFront),
             ("$assertz", 4) => Some(SystemClauseType::AssertDynamicPredicateToBack),
+            ("$call_attribute_goals", 2) => Some(SystemClauseType::CallAttributeGoals),
             ("$char_code", 2) => Some(SystemClauseType::CharCode),
             ("$chars_to_number", 2) => Some(SystemClauseType::CharsToNumber),
             ("$codes_to_number", 2) => Some(SystemClauseType::CodesToNumber),
@@ -404,6 +404,7 @@ impl SystemClauseType {
             ("$enqueue_attr_var", 1) => Some(SystemClauseType::EnqueueAttributedVar),
             ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
+            ("$fetch_attribute_goals", 1) => Some(SystemClauseType::FetchAttributeGoals),
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
             ("$get_char", 1) => Some(SystemClauseType::GetChar),
@@ -449,13 +450,13 @@ impl SystemClauseType {
             ("$get_current_block", 1) => Some(SystemClauseType::GetCurrentBlock),
             ("$get_cp", 1) => Some(SystemClauseType::GetCutPoint),
             ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
+            ("$raw_input_read_char", 1) => Some(SystemClauseType::RawInputReadChar),
             ("$read_query_term", 2) => Some(SystemClauseType::ReadQueryTerm),
             ("$read_term", 2) => Some(SystemClauseType::ReadTerm),
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
             ("$reset_global_var_at_key", 1) => Some(SystemClauseType::ResetGlobalVarAtKey),
             ("$reset_global_var_at_offset", 3) => Some(SystemClauseType::ResetGlobalVarAtOffset),
             ("$retract_clause", 4) => Some(SystemClauseType::RetractClause),
-            ("$return_from_attribute_goals", 0) => Some(SystemClauseType::ReturnFromAttributeGoals),
             ("$return_from_verify_attr", 0) => Some(SystemClauseType::ReturnFromVerifyAttr),
             ("$set_ball", 1) => Some(SystemClauseType::SetBall),
             ("$set_cp_by_default", 1) => Some(SystemClauseType::SetCutPointByDefault(temp_v!(1))),
@@ -464,9 +465,6 @@ impl SystemClauseType {
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$store_global_var", 2) => Some(SystemClauseType::StoreGlobalVar),
             ("$store_global_var_with_offset", 2) => Some(SystemClauseType::StoreGlobalVarWithOffset),
-            ("$submit_query_and_print_results", 2) => Some(SystemClauseType::REPL(
-                REPLCodePtr::SubmitQueryAndPrintResults,
-            )),
             ("$term_variables", 2) => Some(SystemClauseType::TermVariables),
             ("$truncate_lh_to", 1) => Some(SystemClauseType::TruncateLiftedHeapTo),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),

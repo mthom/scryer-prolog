@@ -364,14 +364,6 @@ pub enum ControlInstruction {
 }
 
 impl ControlInstruction {
-    pub fn is_jump_instr(&self) -> bool {
-        match self {
-            &ControlInstruction::CallClause(..) => true,
-            &ControlInstruction::JmpBy(..) => true,
-            _ => false,
-        }
-    }
-
     pub fn to_functor(&self) -> MachineStub {
         match self {
             &ControlInstruction::Allocate(num_frames) => {

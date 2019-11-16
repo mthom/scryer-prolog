@@ -6,7 +6,6 @@ use crate::prolog::arithmetic::*;
 use crate::prolog::clause_types::*;
 use crate::prolog::forms::*;
 use crate::prolog::heap_iter::*;
-use crate::prolog::heap_print::*;
 use crate::prolog::instructions::*;
 use crate::prolog::machine::INTERRUPT;
 use crate::prolog::machine::and_stack::*;
@@ -27,7 +26,6 @@ use indexmap::{IndexMap, IndexSet};
 use std::cmp::{max, min, Ordering};
 use std::f64;
 use std::mem;
-use std::rc::Rc;
 
 macro_rules! try_numeric_result {
     ($s: ident, $e: expr, $caller: expr) => {{
@@ -206,39 +204,6 @@ impl MachineState {
                 None => {}
             }
         }
-    }
-
-    pub(super) fn print_var_eq<Outputter>(
-        &self,
-        var: Rc<Var>,
-        addr: Addr,
-        op_dir: &OpDir,
-        mut output: Outputter,
-    ) -> Outputter
-    where
-        Outputter: HCValueOutputter,
-    {
-        let orig_len = output.len();
-
-        output.begin_new_var();
-
-        output.append(var.as_str());
-        output.append(" = ");
-
-        let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);
-
-        printer.numbervars = false;
-        printer.quoted = true;
-
-        let mut output = printer.print(addr);
-
-        let bad_ending = format!("= {}", &var);
-
-        if output.ends_with(&bad_ending) {
-            output.truncate(orig_len);
-        }
-
-        output
     }
 
     pub(super) fn unify_strings(

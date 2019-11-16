@@ -1,11 +1,12 @@
-/*
- *  inserting the modules should not result in the insertion of
- *  code. this is because they're already loaded by this point -- see
- *  Machine::new.
-*/
+:- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2]).
 
 :- use_module(library(lists)).
 :- use_module(library(si)).
+
+% internal operators defined for spacing purposes.
+:- op(1200, xf, ('.')).
+:- op(700, xfx, (' = ')).
+:- op(1000, xfy, (', ')).
 
 '$repl'(ListOfModules) :-
     maplist('$use_list_of_modules', ListOfModules),
@@ -39,6 +40,56 @@
 '$instruction_match'(Term, VarList) :-
     '$submit_query_and_print_results'(Term, VarList),
     !.
+
+'$submit_query_and_print_results'(Term0, VarList) :-
+    (  expand_goals(Term0, Term) -> true
+    ;  Term = Term0
+    ),
+    (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList), !
+    ;  write('false.'), nl
+    ).
+
+'$write_eqs_and_read_input'(B, VarList) :-
+    sort(VarList, SortedVarList),
+    '$get_b_value'(B0),
+    '$gather_goals'(SortedVarList, VarList, Goals),
+    (  B0 == B ->
+       (  Goals == [] ->
+	  write('true.'), nl
+       ;  thread_goals(Goals, ThreadedGoals, (', ')),
+	  write_term((ThreadedGoals)., [quoted(false), variable_names(VarList)]),
+	  nl
+       )
+    ;  repeat,
+       thread_goals(Goals, ThreadedGoals, (', ')),
+       write_term(ThreadedGoals, [quoted(false), variable_names(VarList)]),
+       '$raw_input_read_char'(C),
+       (  C == (';'), !,
+	  write_term(' ;', [quoted(false)]), nl, false
+       ;  C == ('.'), !,
+	  write_term(' ...', [quoted(false)]), nl
+       )
+    ).
+
+'$gather_query_vars'([_ = Var | Vars], QueryVars) :-
+    (  var(Var) ->
+       QueryVars = [Var | QueryVars1],
+       '$gather_query_vars'(Vars, QueryVars1)
+    ;  '$gather_query_vars'(Vars, QueryVars)
+    ).
+'$gather_query_vars'([], []).
+
+'$gather_goals'([], VarList, Goals) :-
+    '$get_attr_var_queue_beyond'(0, AttrVars),
+    '$gather_query_vars'(VarList, QueryVars),
+    '$call_attribute_goals'(QueryVars, AttrVars),
+    '$fetch_attribute_goals'(Goals).
+'$gather_goals'([Var = Value | Pairs], VarList, Goals) :-
+    (  nonvar(Value) ->
+       Goals = [Var ' = ' Value | Goals0],
+       '$gather_goals'(Pairs, VarList, Goals0)
+    ;  '$gather_goals'(Pairs, VarList, Goals)
+    ).
 
 '$print_exception'(E) :-
     write_term('caught: ', [quoted(false)]),
@@ -102,40 +153,50 @@ user:term_expansion(Term0, (:- initialization(ExpandedGoals))) :-
     expand_goals(Goals, ExpandedGoals),
     Goals \== ExpandedGoals.
 
-expand_goals(Goals, ExpandedGoals) :-
-    nonvar(Goals),
+expand_goals(UnexpandedGoals, ExpandedGoals) :-
+    nonvar(UnexpandedGoals),
     var(ExpandedGoals),
+    (  expand_goal(UnexpandedGoals, Goals) -> true
+    ;  Goals = UnexpandedGoals
+    ),
     (  Goals = (Goal0, Goals0) ->
        (  expand_goal(Goal0, Goal1) ->
 	  Expanded = true,
 	  expand_goals(Goals0, Goals1),
-	  thread_goals(Goal1, ExpandedGoals, Goals1)
+	  thread_goals(Goal1, ExpandedGoals, Goals1, (','))
        ;  expand_goals(Goals0, Goals1),
 	  ExpandedGoals = (Goal0, Goals1)
        )
-    ;  expand_goal(Goals, ExpandedGoals0) ->
-       thread_goals(ExpandedGoals0, ExpandedGoals)
+    ;  Goals = (Goals0 -> Goals1) ->
+       expand_goals(Goals0, ExpandedGoals0),
+       expand_goals(Goals1, ExpandedGoals1),
+       ExpandedGoals = (ExpandedGoals0 -> ExpandedGoals1)
+    ;  Goals = (Goals0 ; Goals1) ->
+       expand_goals(Goals0, ExpandedGoals0),
+       expand_goals(Goals1, ExpandedGoals1),
+       ExpandedGoals = (ExpandedGoals0 ; ExpandedGoals1)
+    ;  thread_goals(Goals, ExpandedGoals, (','))
     ;  Goals = ExpandedGoals
     ).
 
-thread_goals(Goals0, Goals1, Hole) :-
+thread_goals(Goals0, Goals1, Hole, Functor) :-
     nonvar(Goals0),
     (  Goals0 = [G | Gs] ->
        (  Gs == [] ->
-	  Goals1 = (G, Hole)
-       ;  Goals1 = (G, Goals2),
-	  thread_goals(Gs, Goals2, Hole)
+	  Goals1 =.. [Functor, G, Hole]
+       ;  Goals1 =.. [Functor, G, Goals2],
+	  thread_goals(Gs, Goals2, Hole, Functor)
        )
-    ;  Goals1 = (Goals0, Hole)
+    ;  Goals1 =.. [Functor, Goals0, Hole]
     ).
 
-thread_goals(Goals0, Goals1) :-
+thread_goals(Goals0, Goals1, Functor) :-
     nonvar(Goals0),
     (  Goals0 = [G | Gs] ->
        (  Gs = [] ->
 	  Goals1 = G
-       ;  Goals1 = (G, Goals2),
-	  thread_goals(Gs, Goals2)
+       ;  Goals1 =.. [Functor, G, Goals2],
+	  thread_goals(Gs, Goals2, Functor)
        )
     ;  Goals1 = Goals0
     ).

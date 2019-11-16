@@ -4,11 +4,7 @@ use crate::prolog::instructions::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 
-use termion::event::Key;
-use termion::input::TermRead;
-
 use std::fmt;
-use std::io::stdin;
 
 impl fmt::Display for LocalCodePtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -29,10 +25,8 @@ impl fmt::Display for LocalCodePtr {
 impl fmt::Display for REPLCodePtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            REPLCodePtr::CompileBatch => write!(f, "REPLCodePtr::CompileBatch"),
-            REPLCodePtr::SubmitQueryAndPrintResults => {
-                write!(f, "REPLCodePtr::SubmitQueryAndPrintResults")
-            }
+            REPLCodePtr::CompileBatch =>
+                write!(f, "REPLCodePtr::CompileBatch"),
 	    REPLCodePtr::UseModule =>
 		write!(f, "REPLCodePtr::UseModule"),
 	    REPLCodePtr::UseQualifiedModule =>
@@ -275,7 +269,6 @@ impl fmt::Display for SessionError {
                 write!(f, "the predicate head is not an atom or clause.")
             }
             &SessionError::ParserError(ref e) => write!(f, "syntax_error({})", e.as_str()),
-            &SessionError::UserPrompt => write!(f, "enter predicate at [user] prompt"),
         }
     }
 }
@@ -421,23 +414,4 @@ impl fmt::Display for Level {
             &Level::Deep => write!(f, "X"),
         }
     }
-}
-
-pub enum ContinueResult {
-    ContinueQuery,
-    Conclude,
-}
-
-pub fn next_keypress() -> ContinueResult {
-    let stdin = stdin();
-
-    for c in stdin.keys() {
-        match c.unwrap() {
-            Key::Char(' ') | Key::Char(';') => return ContinueResult::ContinueQuery,
-            Key::Char('.') => return ContinueResult::Conclude,
-            _ => {}
-        }
-    }
-
-    ContinueResult::Conclude
 }

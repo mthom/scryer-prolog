@@ -318,7 +318,7 @@ impl MachineState {
         Ok(codes)
     }
 
-    fn call_at_index(&mut self, arity: usize, p: usize) {
+    pub(super) fn call_at_index(&mut self, arity: usize, p: usize) {
         self.cp.assign_if_local(self.p.clone() + 1);
         self.num_of_args = arity;
         self.b0 = self.b;
