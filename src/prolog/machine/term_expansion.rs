@@ -136,11 +136,6 @@ impl<'a, R: Read> TermStream<'a, R> {
     pub fn top_level_terms(&mut self) -> Vec<(Term, usize, usize)> {
         mem::replace(&mut self.top_level_terms, vec![])
     }
-    
-    #[inline]
-    pub fn add_to_top(&mut self, buf: &str) {
-        self.parser.add_to_top(buf);
-    }
 
     #[inline]
     pub fn incr_expansion_lens(&mut self, hook: CompileTimeHook, len: usize, queue_len: usize) {

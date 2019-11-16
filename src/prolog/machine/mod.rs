@@ -2,13 +2,11 @@ use prolog_parser::ast::*;
 use prolog_parser::tabled_rc::*;
 
 use crate::prolog::clause_types::*;
-use crate::prolog::fixtures::*;
 use crate::prolog::forms::*;
 use crate::prolog::heap_print::*;
 use crate::prolog::instructions::*;
 use crate::prolog::machine::heap::Heap;
 use crate::prolog::read::*;
-use crate::prolog::write::{next_keypress, ContinueResult};
 
 mod attributed_variables;
 pub(super) mod code_repo;
@@ -35,20 +33,17 @@ use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 use crate::prolog::machine::modules::*;
-use crate::prolog::machine::toplevel::stream_to_toplevel;
 use crate::prolog::read::PrologStream;
 
 use indexmap::IndexMap;
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{stdout, Read, Write};
+use std::io::Read;
 use std::mem;
 use std::ops::Index;
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
-
-use termion::raw::IntoRawMode;
 
 pub struct MachinePolicies {
     call_policy: Box<dyn CallPolicy>,
@@ -197,10 +192,23 @@ impl Machine {
         }
     }
 
-    fn compile_top_level(&mut self) {
+    fn compile_top_level(&mut self) -> Result<(), SessionError>
+    {
         self.toplevel_idx = self.code_repo.code.len();
         compile_user_module(self, parsing_stream(TOPLEVEL.as_bytes()),
                             true, clause_name!("toplevel.pl"));
+
+        if let Some(module) = self.indices.take_module(clause_name!("$toplevel")) {
+            self.indices.use_module(
+                &mut self.code_repo,
+                self.machine_st.flags,
+                &module,
+            )?;
+
+            Ok(self.indices.insert_module(module))
+        } else {
+            Err(SessionError::ModuleNotFound)
+        }
     }
 
     fn compile_scryerrc(&mut self) {
@@ -231,14 +239,14 @@ impl Machine {
 
     pub fn run_init_code(&mut self, code: Code) -> bool {
 	let old_machine_st = self.sink_to_snapshot();
-	self.machine_st.reset();
+	self.machine_st.reset();        
 
 	self.code_repo.cached_query = code;
-	self.run_query(&AllocVarDict::new());
+	self.run_query();
 
         let result = self.machine_st.fail;
 	self.absorb_snapshot(old_machine_st);
-        
+
         !result
     }
 
@@ -260,7 +268,7 @@ impl Machine {
 	self.machine_st[temp_v!(1)] = list_addr;
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
 
-        self.run_query(&AllocVarDict::new());
+        self.run_query();
     }
 
     pub fn new(prolog_stream: PrologStream) -> Self {
@@ -295,7 +303,10 @@ impl Machine {
         compile_user_module(&mut wam, parsing_stream(SI.as_bytes()), true,
                             clause_name!("si"));
 
-        wam.compile_top_level();
+        if wam.compile_top_level().is_err() {
+            panic!("Loading '$toplevel' module failed");
+        }
+
         wam.compile_scryerrc();
 
         wam
@@ -377,17 +388,6 @@ impl Machine {
         self.code_repo.code.extend(code.into_iter());
     }
 
-    pub fn submit_query(&mut self, code: Code, alloc_locs: AllocVarDict) -> EvalSession {
-        self.code_repo.cached_query = code;
-        self.run_query(&alloc_locs);
-
-        if self.machine_st.fail {
-            EvalSession::QueryFailure
-        } else {
-            EvalSession::InitialQuerySuccess(alloc_locs)
-        }
-    }
-
     fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
         let h = self.machine_st.heap.h;
 
@@ -465,10 +465,10 @@ impl Machine {
             if !module.is_impromptu_module {
                 self.indices.use_module(&mut self.code_repo, self.machine_st.flags, &module)?;
             }
-            
+
             Ok(self.indices.insert_module(module))
         });
-        
+
 	self.code_repo.cached_query = cached_query;
 
 	if let Err(e) = result {
@@ -536,62 +536,6 @@ impl Machine {
                     self.throw_session_error(e, (clause_name!("repl"), 0));
                 }
             }
-            REPLCodePtr::SubmitQueryAndPrintResults => {
-                let term = self.machine_st[temp_v!(1)].clone();
-                let stub = MachineError::functor_stub(clause_name!("repl"), 0);
-
-                let s = match self.machine_st.try_from_list(temp_v!(2), stub) {
-                    Ok(addrs) => {
-                        let mut var_dict = HeapVarDict::new();
-
-                        for addr in addrs {
-                            match addr {
-                                Addr::Str(s) => {
-                                    let var_atom = match self.machine_st.heap[s + 1].as_addr(s + 1)
-                                    {
-                                        Addr::Con(Constant::Atom(var_atom, _)) => {
-                                            Rc::new(var_atom.to_string())
-                                        }
-                                        _ => unreachable!(),
-                                    };
-
-                                    let var_addr = self.machine_st.heap[s + 2].as_addr(s + 2);
-                                    var_dict.insert(var_atom, var_addr);
-                                }
-                                _ => unreachable!(),
-                            };
-                        }
-
-                        self.machine_st.heap_locs = var_dict;
-                        let term_output = self.machine_st.print_query(term, &self.indices.op_dir);
-
-                        term_output.result()
-                    }
-                    Err(err_stub) => {
-                        self.machine_st.throw_exception(err_stub);
-                        return;
-                    }
-                };
-
-                let stream = parsing_stream(s.as_bytes());
-                let snapshot = self.sink_to_snapshot();
-                let policies = mem::replace(&mut self.policies, MachinePolicies::new());
-
-                self.machine_st.reset();
-                self.machine_st.heap = mem::replace(
-                    &mut self.inner_heap,
-                    Heap::with_capacity(0),
-                );
-
-                let result = match stream_to_toplevel(stream, self) {
-                    Ok(packet) => compile_term(self, packet),
-                    Err(e) => EvalSession::from(e),
-                };
-
-                self.handle_eval_session(result, snapshot);
-                self.indices.reset_global_variable_offsets();
-                self.policies = policies;
-            }
 	    REPLCodePtr::UseModule =>
 		self.use_module(ModuleSource::Library),
 	    REPLCodePtr::UseModuleFromFile =>
@@ -607,7 +551,7 @@ impl Machine {
 
     fn sink_to_snapshot(&mut self) -> MachineState {
         let mut snapshot = MachineState::with_capacity(0);
-
+        
         snapshot.hb = self.machine_st.hb;
         snapshot.e = self.machine_st.e;
         snapshot.b = self.machine_st.b;
@@ -615,6 +559,12 @@ impl Machine {
         snapshot.s = self.machine_st.s;
         snapshot.tr = self.machine_st.tr;
         snapshot.pstr_tr = self.machine_st.pstr_tr;
+        snapshot.p = self.machine_st.p.clone();
+        snapshot.cp = self.machine_st.cp;
+        snapshot.attr_var_init = mem::replace(
+            &mut self.machine_st.attr_var_init,
+            AttrVarInitializer::new(0, 0)
+        );
         snapshot.num_of_args = self.machine_st.num_of_args;
 
         snapshot.fail = self.machine_st.fail;
@@ -627,12 +577,13 @@ impl Machine {
         snapshot.block = self.machine_st.block;
 
         snapshot.ball = self.machine_st.ball.take();
+        snapshot.heap_locs = mem::replace(&mut self.machine_st.heap_locs, IndexMap::new());
         snapshot.lifted_heap = mem::replace(&mut self.machine_st.lifted_heap, vec![]);
 
         snapshot
     }
 
-    fn absorb_snapshot(&mut self, mut snapshot: MachineState) {
+    fn absorb_snapshot(&mut self, mut snapshot: MachineState) {       
         self.machine_st.hb = snapshot.hb;
         self.machine_st.e = snapshot.e;
         self.machine_st.b = snapshot.b;
@@ -640,6 +591,9 @@ impl Machine {
         self.machine_st.s = snapshot.s;
         self.machine_st.tr = snapshot.tr;
         self.machine_st.pstr_tr = snapshot.pstr_tr;
+        self.machine_st.p = snapshot.p;
+        self.machine_st.cp = snapshot.cp;
+        self.machine_st.attr_var_init = snapshot.attr_var_init;
         self.machine_st.num_of_args = snapshot.num_of_args;
 
         self.machine_st.fail = snapshot.fail;
@@ -656,160 +610,15 @@ impl Machine {
         self.machine_st.block = snapshot.block;
 
         self.machine_st.ball = snapshot.ball.take();
+        self.machine_st.heap_locs = mem::replace(&mut snapshot.heap_locs, IndexMap::new());
         self.machine_st.lifted_heap = mem::replace(&mut snapshot.lifted_heap, vec![]);
     }
 
-    fn propagate_exception_to_toplevel(&mut self, snapshot: MachineState) {
-        let ball = self.machine_st.ball.take();
-
-        self.absorb_snapshot(snapshot);
-        self.machine_st.ball = ball;
-
-        let h = self.machine_st.heap.h;
-        let stub = self.machine_st.ball.copy_and_align(h);
-
-        self.machine_st.throw_exception(stub);
-
-        return;
-    }
-
-    fn handle_eval_session(&mut self, result: EvalSession, snapshot: MachineState) {
-        match result {
-            EvalSession::InitialQuerySuccess(alloc_locs) => loop {
-                let bindings = {
-                    let output = PrinterOutputter::new();
-                    self.toplevel_heap_view(output).result()
-                };
-
-                let attr_goals = self.attribute_goals();
-
-                if !(self.machine_st.b > 0) {
-                    if bindings.is_empty() {
-                        let space = if requires_space(&attr_goals, ".") {
-                            " "
-                        } else {
-                            ""
-                        };
-
-                        if !attr_goals.is_empty() {
-                            println!("{}{}.", attr_goals, space);
-                        } else {
-                            println!("true.");
-                        }
-
-                        self.absorb_snapshot(snapshot);
-                        return;
-                    }
-                } else if bindings.is_empty() && attr_goals.is_empty() {
-                    print!("true");
-                    stdout().flush().unwrap();
-                }
-
-                if !attr_goals.is_empty() {
-                    if bindings.is_empty() {
-			print!("{}", attr_goals);
-                    } else {
-			print!("{}, {}", bindings, attr_goals);
-                    }
-                } else if !bindings.is_empty() {
-		    print!("{}", bindings);
-                }
-
-                if self.machine_st.b > 0 {
-		    let keypress = {
-			let mut raw_stdout = stdout().into_raw_mode().unwrap();
-			raw_stdout.flush().unwrap();
-			next_keypress()
-		    };
-
-                    let result = match keypress {
-                        ContinueResult::ContinueQuery => {
-			    print!(" ;\n");
-                            self.continue_query(&alloc_locs)
-                        }
-                        ContinueResult::Conclude => {
-			    print!(" ...\n");
-                            self.absorb_snapshot(snapshot);
-                            return;
-                        }
-                    };
-
-                    match result {
-                        EvalSession::QueryFailure => {
-                            if self.machine_st.ball.stub.len() > 0 {
-                                self.propagate_exception_to_toplevel(snapshot);
-                                return;
-                            } else {
-				print!("false.\n");
-                                self.absorb_snapshot(snapshot);
-                                return;
-                            }
-                        }
-                        EvalSession::Error(err) => {
-                            self.absorb_snapshot(snapshot);
-                            self.throw_session_error(err, (clause_name!("repl"), 0));
-                            return;
-                        }
-                        _ => {}
-                    }
-                } else {
-                    if bindings.is_empty() && attr_goals.is_empty() {
-                        print!("true.\n");
-                    } else {
-                        let space = if !attr_goals.is_empty() {
-                            if requires_space(&attr_goals, ".") {
-                                " "
-                            } else {
-                                ""
-                            }
-                        } else {
-                            if requires_space(&bindings, ".") {
-                                " "
-                            } else {
-                                ""
-                            }
-                        };
-
-			print!("{}.\n", space);
-                    }
-
-                    break;
-                }
-            },
-            EvalSession::Error(err) => {
-                self.absorb_snapshot(snapshot);
-                self.throw_session_error(err, (clause_name!("repl"), 0));
-                return;
-            }
-            EvalSession::QueryFailure =>
-                if self.machine_st.ball.stub.len() > 0 {
-                    return self.propagate_exception_to_toplevel(snapshot);
-                } else {
-                    println!("false.");
-                },
-            _ => println!("true.")
-        }
-
-        self.absorb_snapshot(snapshot);
-    }
-
-    pub(super) fn run_query(&mut self, alloc_locs: &AllocVarDict) {
+    pub(super) fn run_query(&mut self) {
 	self.machine_st.cp = LocalCodePtr::TopLevel(0, self.code_repo.size_of_cached_query());
         let end_ptr = CodePtr::Local(self.machine_st.cp);
 
         while self.machine_st.p < end_ptr {
-            if let CodePtr::Local(LocalCodePtr::TopLevel(mut cn, p)) = self.machine_st.p {
-                match &self.code_repo[LocalCodePtr::TopLevel(cn, p)] {
-                    &Line::Control(ref ctrl_instr) if ctrl_instr.is_jump_instr() => {
-                        self.machine_st.record_var_places(cn, alloc_locs);
-                        cn += 1;
-                    }
-                    _ => {}
-                }
-
-                self.machine_st.p = top_level_code_ptr!(cn, p);
-            }
-
             self.machine_st.query_stepper(
                 &mut self.indices,
                 &mut self.policies,
@@ -828,61 +637,16 @@ impl Machine {
                     self.dynamic_transaction(trans_type, p);
 
                     if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                        if self.machine_st.heap_locs.is_empty() {
-                            self.machine_st.record_var_places(0, alloc_locs);
-                        }
-
                         self.code_repo.cached_query = cached_query;
                         break;
                     }
 
                     self.code_repo.cached_query = cached_query;
                 }
-                _ => {
-                    if self.machine_st.heap_locs.is_empty() {
-                        self.machine_st.record_var_places(0, alloc_locs);
-                    }
-
-                    break;
-                }
+                _ =>
+                    break
             };
         }
-    }
-
-    pub fn continue_query(&mut self, alloc_locs: &AllocVarDict) -> EvalSession {
-        if self.machine_st.b > 0 {
-            let b = self.machine_st.b;
-            self.machine_st.p = self.machine_st.stack.index_or_frame(b).prelude.bp.clone();
-
-            if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                self.machine_st.fail = true;
-                return EvalSession::QueryFailure;
-            }
-
-            self.run_query(alloc_locs);
-
-            if self.machine_st.fail {
-                EvalSession::QueryFailure
-            } else {
-                EvalSession::SubsequentQuerySuccess
-            }
-        } else {
-            EvalSession::QueryFailure
-        }
-    }
-
-    pub fn toplevel_heap_view<Outputter>(&self, mut output: Outputter) -> Outputter
-    where
-        Outputter: HCValueOutputter,
-    {
-        for (var, addr) in self.machine_st.heap_locs.iter() {
-            let addr = self.machine_st.store(self.machine_st.deref(addr.clone()));
-            output = self
-                .machine_st
-                .print_var_eq(var.clone(), addr, &self.indices.op_dir, output);
-        }
-
-        output
     }
 
     #[cfg(test)]
@@ -904,56 +668,6 @@ impl Machine {
 }
 
 impl MachineState {
-    fn record_var_places(&mut self, chunk_num: usize, alloc_locs: &AllocVarDict) {
-        for (var, var_data) in alloc_locs {
-            match var_data {
-                &VarData::Perm(p) if p > 0 => {
-                    if !self.heap_locs.contains_key(var) {
-                        let e = self.e;
-                        let r = var_data.as_reg_type().reg_num();
-                        let addr = self.stack.index_and_frame(e)[r].clone();
-
-                        self.heap_locs.insert(var.clone(), addr);
-                    }
-                }
-                &VarData::Temp(cn, _, _) if cn == chunk_num => {
-                    let r = var_data.as_reg_type();
-
-                    if r.reg_num() != 0 {
-                        let addr = self[r].clone();
-                        self.heap_locs.insert(var.clone(), addr);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn print_query(&mut self, addr: Addr, op_dir: &OpDir) -> PrinterOutputter {
-        let flags = self.flags;
-
-        let mut output = {
-            self.flags = MachineFlags {
-                double_quotes: DoubleQuotes::Atom,
-            };
-
-            let output = PrinterOutputter::new();
-            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);
-
-            printer.quoted = true;
-            printer.numbervars = false;
-            printer.drop_toplevel_spec();
-
-            printer.see_all_locs();
-            printer.print(addr)
-        };
-
-        self.flags = flags;
-
-        output.append(".");
-        output
-    }
-
     fn dispatch_instr(
         &mut self,
         instr: &Line,

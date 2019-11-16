@@ -300,7 +300,6 @@ pub enum DynamicTransactionType {
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum REPLCodePtr {
     CompileBatch,
-    SubmitQueryAndPrintResults,
     UseModule,
     UseQualifiedModule,
     UseModuleFromFile,
@@ -468,13 +467,7 @@ pub struct IndexStore {
     pub(super) op_dir: OpDir,
 }
 
-impl IndexStore {
-    pub fn reset_global_variable_offsets(&mut self) {
-        for (_, ref mut offset) in self.global_variables.values_mut() {
-            *offset = None;
-        }
-    }
-    
+impl IndexStore {    
     pub fn predicate_exists(
         &self,
         name: ClauseName,

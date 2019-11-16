@@ -1,10 +1,9 @@
-driver(QueryVars, AttrVars) :-
+'$attribute_goals_driver'(QueryVars, AttrVars) :-
     gather_modules(AttrVars, Modules0, _),
     sort(Modules0, Modules),
     call_project_attributes(Modules, QueryVars, AttrVars),
     call_attribute_goals(Modules, call_query_var_goals, QueryVars),
-    call_attribute_goals(Modules, call_attr_var_goals, AttrVars),
-    '$return_from_attribute_goals'.
+    call_attribute_goals(Modules, call_attr_var_goals, AttrVars).
 
 enqueue_goals(Goals0) :-
     nonvar(Goals0),

@@ -22,10 +22,33 @@ use crate::ref_thread_local::RefThreadLocal;
 use indexmap::{IndexMap, IndexSet};
 
 use std::collections::VecDeque;
-use std::io::{stdout, Write};
+use std::io::{stdin, stdout, Write};
 use std::iter::once;
 use std::mem;
 use std::rc::Rc;
+
+use crate::termion::event::Key;
+use crate::termion::input::TermRead;
+use crate::termion::raw::IntoRawMode;
+
+pub enum ContinueResult {
+    ContinueQuery,
+    Conclude,
+}
+
+pub fn next_keypress() -> ContinueResult {
+    let stdin = stdin();
+
+    for c in stdin.keys() {
+        match c.unwrap() {
+            Key::Char(' ') | Key::Char(';') => return ContinueResult::ContinueQuery,
+            Key::Char('.') => return ContinueResult::Conclude,
+            _ => {}
+        }
+    }
+
+    ContinueResult::Conclude
+}
 
 struct BrentAlgState {
     hare: usize,
@@ -716,6 +739,17 @@ impl MachineState {
 
                 self.unify(a2, Addr::Con(Constant::Integer(len)));
             }
+            &SystemClauseType::CallAttributeGoals => {
+                let p = self.attr_var_init.project_attrs_loc;
+
+                if self.last_call {
+                    self.execute_at_index(2, p);
+                } else {
+                    self.call_at_index(2, p);
+                }
+
+                return Ok(());
+            }
             &SystemClauseType::CharsToNumber => {
                 let stub = MachineError::functor_stub(clause_name!("number_chars"), 2);
 
@@ -1329,6 +1363,17 @@ impl MachineState {
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
                 self.truncate_if_no_lifted_heap_diff(|_| Addr::Con(Constant::EmptyList))
             }
+            &SystemClauseType::FetchAttributeGoals => {
+                let mut attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
+
+                attr_goals.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
+                self.term_dedup(&mut attr_goals);
+
+                let attr_goals = Addr::HeapCell(self.heap.to_list(attr_goals.into_iter()));
+                let target = self[temp_v!(1)].clone();
+
+                self.unify(attr_goals, target);
+            }
             &SystemClauseType::GetAttributedVariableList => {
                 let attr_var = self.store(self.deref(self[temp_v!(1)].clone()));
                 let attr_var_list = match attr_var {
@@ -1369,6 +1414,18 @@ impl MachineState {
                         let list_addr = self[temp_v!(2)].clone();
 
                         self.unify(var_list_addr, list_addr);
+                    }
+                    Addr::Con(Constant::Integer(n)) => {
+                        if let Some(b) = n.to_usize() {
+                            let iter = self.gather_attr_vars_created_since(b);
+
+                            let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
+                            let list_addr = self[temp_v!(2)].clone();
+                            
+                            self.unify(var_list_addr, list_addr);
+                        } else {
+                            self.fail = true;
+                        }
                     }
                     _ => self.fail = true,
                 }
@@ -1685,11 +1742,6 @@ impl MachineState {
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
             }
-            &SystemClauseType::ReturnFromAttributeGoals => {
-                self.deallocate();                
-                self.p = CodePtr::Local(LocalCodePtr::TopLevel(0, 0));
-                return Ok(());
-            }
             &SystemClauseType::ReturnFromVerifyAttr => {
                 let e = self.e;
                 let frame_len = self.stack.index_and_frame(e).prelude.univ_prelude.num_cells;
@@ -1838,6 +1890,21 @@ impl MachineState {
             }
             &SystemClauseType::InstallNewBlock => {
                 self.install_new_block(temp_v!(1));
+            }
+            &SystemClauseType::RawInputReadChar => {
+		let keypress = {
+		    let mut raw_stdout = stdout().into_raw_mode().unwrap();
+		    raw_stdout.flush().unwrap();
+		    next_keypress()
+		};
+
+                let c = match keypress {
+                    ContinueResult::ContinueQuery => ';',
+                    ContinueResult::Conclude => '.'
+                };
+
+                let target = self[temp_v!(1)].clone();
+                self.unify(Addr::Con(Constant::Char(c)), target);
             }
             &SystemClauseType::ReadQueryTerm => {
                 readline::set_prompt(true);

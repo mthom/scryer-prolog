@@ -1,7 +1,5 @@
 use crate::prolog::machine::*;
 
-use indexmap::IndexSet;
-
 use std::vec::IntoIter;
 
 pub static VERIFY_ATTRS: &str = include_str!("attributed_variables.pl");
@@ -101,35 +99,6 @@ impl MachineState {
         attr_vars.into_iter()
     }
 
-    fn populate_project_attr_lists(&mut self) -> (Addr, Addr) {
-        let mut query_vars = IndexSet::new();
-        let attr_vars = self.gather_attr_vars_created_since(0);
-
-        for (_, addr) in self.heap_locs.iter() {
-            let iter = self.acyclic_pre_order_iter(addr.clone());
-
-            for value in iter {
-                match value {
-                    HeapCellValue::Addr(Addr::HeapCell(h)) => {
-                        query_vars.insert(Addr::HeapCell(h));
-                    }
-                    HeapCellValue::Addr(Addr::StackCell(fr, sc)) => {
-                        query_vars.insert(Addr::StackCell(fr, sc));
-                    }
-                    HeapCellValue::Addr(Addr::AttrVar(h)) => {
-                        query_vars.insert(Addr::AttrVar(h));
-                    }
-                    _ => {}
-                };
-            }
-        }
-
-        let query_var_list = Addr::HeapCell(self.heap.to_list(query_vars.into_iter()));
-        let attr_var_list = Addr::HeapCell(self.heap.to_list(attr_vars));
-
-        (query_var_list, attr_var_list)
-    }
-
     pub(super) fn verify_attr_interrupt(&mut self, p: usize) {
         self.allocate(self.num_of_args + 2);
 
@@ -148,58 +117,5 @@ impl MachineState {
         self.num_of_args = 2;
         self.b0 = self.b;
         self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
-    }
-
-    fn print_attribute_goals_string(&mut self, op_dir: &OpDir) -> String {
-        let mut attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
-
-        if attr_goals.is_empty() {
-            return String::from("");
-        }
-
-        attr_goals.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
-        self.term_dedup(&mut attr_goals);
-
-        let mut output = PrinterOutputter::new();
-
-        for goal_addr in attr_goals {
-            let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);
-            printer.see_all_locs();
-
-            printer.numbervars = false;
-            printer.quoted = true;
-
-            output = printer.print(goal_addr);
-            output.append(", ");
-        }
-
-        // cut trailing ", "
-        let output_len = output.len();
-        output.truncate(output_len - 2);
-
-        output.result()
-    }
-}
-
-impl Machine {
-    pub fn attribute_goals(&mut self) -> String {
-        let p = self.machine_st.attr_var_init.project_attrs_loc;
-        let (query_vars, attr_vars) = self.machine_st.populate_project_attr_lists();
-
-        self.machine_st.allocate(0);
-
-        self.machine_st[temp_v!(1)] = query_vars;
-        self.machine_st[temp_v!(2)] = attr_vars;
-
-        self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
-        self.machine_st.query_stepper(
-            &mut self.indices,
-            &mut self.policies,
-            &mut self.code_repo,
-            &mut readline::input_stream(),
-        );
-               
-        self.machine_st
-            .print_attribute_goals_string(&self.indices.op_dir)
     }
 }

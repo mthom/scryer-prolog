@@ -537,15 +537,11 @@ pub enum SessionError {
     NamelessEntry,
     OpIsInfixAndPostFix(ClauseName),
     ParserError(ParserError),
-    UserPrompt,
 }
 
 pub enum EvalSession {
     EntrySuccess,
     Error(SessionError),
-    InitialQuerySuccess(AllocVarDict),
-    QueryFailure,
-    SubsequentQuerySuccess,
 }
 
 impl From<SessionError> for EvalSession {

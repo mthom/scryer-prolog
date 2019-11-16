@@ -625,6 +625,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         iter.stack().last().cloned().and_then(|addr| {
             let addr = self.machine_st.store(self.machine_st.deref(addr));
 
+            if let Some(var) = self.var_names.get(&addr) {
+                self.heap_locs.insert(addr.clone(), Rc::new(var.clone()));
+            }
+
             match self.heap_locs.get(&addr).cloned() {
                 Some(var) => {
                     if !self.printed_vars.contains(&addr) {
