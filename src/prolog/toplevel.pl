@@ -49,6 +49,8 @@
        write(Var),
        write(' = '),
        write_term(Value, [quoted(true), variable_names(VarList)])
+    ;  G == [] ->
+       write('true')
     ;  write_term(G, [quoted(true), variable_names(VarList)])
     ).
 
