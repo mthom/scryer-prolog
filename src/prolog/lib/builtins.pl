@@ -150,7 +150,8 @@ comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 ','(!, Atom, B) :- Atom == !, '$set_cp'(B).
 ','(!, G, B)  :- '$set_cp'(B), G.
 ','(G, CF, B) :- compound(CF),
-		 '$call_with_default_policy'(CF = ','(G1, G2)), !, G,
+		 '$call_with_default_policy'(CF = ','(G1, G2)),
+		 !, G,
 		 '$call_with_default_policy'(comma_errors(G1, G2, B)).
 ','(G, Atom, B) :- Atom == !, !, G, '$set_cp'(B).
 ','(G1, G2, _)  :- G1, G2.
@@ -567,7 +568,7 @@ first_match_index([Clause0 | Clauses], Clause1, N0, N) :-
     ;  N0 = N, Clause0 = Clause1
     ).
 
-retract_clauses([Clause|Clauses0], Head, Body, Name, Arity) :-
+retract_clauses([Clause | Clauses0], Head, Body, Name, Arity) :-
     functor(VarHead, Name, Arity),
     findall((VarHead :- VarBody), clause(VarHead, VarBody), Clauses1),
     first_match_index(Clauses1, (Head :- Body), 0, N),
@@ -575,7 +576,7 @@ retract_clauses([Clause|Clauses0], Head, Body, Name, Arity) :-
     ;  true
     ),
     '$retract_clause'(Name, Arity, N, Clauses1).
-retract_clauses([_|Clauses0], Head, Body, Name, Arity) :-
+retract_clauses([_ | Clauses0], Head, Body, Name, Arity) :-
     retract_clauses(Clauses0, Head, Body, Name, Arity).
 
 call_retract(Head, Body, Name, Arity) :-

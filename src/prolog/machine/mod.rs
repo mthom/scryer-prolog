@@ -240,14 +240,14 @@ impl Machine {
 
     pub fn run_init_code(&mut self, code: Code) -> bool {
 	let old_machine_st = self.sink_to_snapshot();
-	self.machine_st.reset();
+	self.machine_st.reset();        
 
 	self.code_repo.cached_query = code;
 	self.run_query();
 
         let result = self.machine_st.fail;
 	self.absorb_snapshot(old_machine_st);
-        
+
         !result
     }
 
@@ -307,7 +307,7 @@ impl Machine {
         if wam.compile_top_level().is_err() {
             panic!("Loading '$toplevel' module failed");
         }
-        
+
         wam.compile_scryerrc();
 
         wam
@@ -466,10 +466,10 @@ impl Machine {
             if !module.is_impromptu_module {
                 self.indices.use_module(&mut self.code_repo, self.machine_st.flags, &module)?;
             }
-            
+
             Ok(self.indices.insert_module(module))
         });
-        
+
 	self.code_repo.cached_query = cached_query;
 
 	if let Err(e) = result {
@@ -537,64 +537,6 @@ impl Machine {
                     self.throw_session_error(e, (clause_name!("repl"), 0));
                 }
             }
-            /*
-            REPLCodePtr::SubmitQueryAndPrintResults => {
-                let term = self.machine_st[temp_v!(1)].clone();
-                let stub = MachineError::functor_stub(clause_name!("repl"), 0);
-
-                let s = match self.machine_st.try_from_list(temp_v!(2), stub) {
-                    Ok(addrs) => {
-                        let mut var_dict = HeapVarDict::new();
-
-                        for addr in addrs {
-                            match addr {
-                                Addr::Str(s) => {
-                                    let var_atom = match self.machine_st.heap[s + 1].as_addr(s + 1)
-                                    {
-                                        Addr::Con(Constant::Atom(var_atom, _)) => {
-                                            Rc::new(var_atom.to_string())
-                                        }
-                                        _ => unreachable!(),
-                                    };
-
-                                    let var_addr = self.machine_st.heap[s + 2].as_addr(s + 2);
-                                    var_dict.insert(var_atom, var_addr);
-                                }
-                                _ => unreachable!(),
-                            };
-                        }
-
-                        self.machine_st.heap_locs = var_dict;
-                        let term_output = self.machine_st.print_query(term, &self.indices.op_dir);
-
-                        term_output.result()
-                    }
-                    Err(err_stub) => {
-                        self.machine_st.throw_exception(err_stub);
-                        return;
-                    }
-                };
-
-                let stream = parsing_stream(s.as_bytes());
-                let snapshot = self.sink_to_snapshot();
-                let policies = mem::replace(&mut self.policies, MachinePolicies::new());
-
-                self.machine_st.reset();
-                self.machine_st.heap = mem::replace(
-                    &mut self.inner_heap,
-                    Heap::with_capacity(0),
-                );
-
-                let result = match stream_to_toplevel(stream, self) {
-                    Ok(packet) => compile_term(self, packet),
-                    Err(e) => EvalSession::from(e),
-                };
-
-                self.handle_eval_session(result, snapshot);
-                self.indices.reset_global_variable_offsets();
-                self.policies = policies;
-            }
-            */
 	    REPLCodePtr::UseModule =>
 		self.use_module(ModuleSource::Library),
 	    REPLCodePtr::UseModuleFromFile =>
@@ -610,7 +552,7 @@ impl Machine {
 
     fn sink_to_snapshot(&mut self) -> MachineState {
         let mut snapshot = MachineState::with_capacity(0);
-
+        
         snapshot.hb = self.machine_st.hb;
         snapshot.e = self.machine_st.e;
         snapshot.b = self.machine_st.b;
@@ -618,6 +560,12 @@ impl Machine {
         snapshot.s = self.machine_st.s;
         snapshot.tr = self.machine_st.tr;
         snapshot.pstr_tr = self.machine_st.pstr_tr;
+        snapshot.p = self.machine_st.p.clone();
+        snapshot.cp = self.machine_st.cp;
+        snapshot.attr_var_init = mem::replace(
+            &mut self.machine_st.attr_var_init,
+            AttrVarInitializer::new(0, 0)
+        );
         snapshot.num_of_args = self.machine_st.num_of_args;
 
         snapshot.fail = self.machine_st.fail;
@@ -631,12 +579,13 @@ impl Machine {
         snapshot.block = self.machine_st.block;
 
         snapshot.ball = self.machine_st.ball.take();
+        snapshot.heap_locs = mem::replace(&mut self.machine_st.heap_locs, IndexMap::new());
         snapshot.lifted_heap = mem::replace(&mut self.machine_st.lifted_heap, vec![]);
 
         snapshot
     }
 
-    fn absorb_snapshot(&mut self, mut snapshot: MachineState) {
+    fn absorb_snapshot(&mut self, mut snapshot: MachineState) {       
         self.machine_st.hb = snapshot.hb;
         self.machine_st.e = snapshot.e;
         self.machine_st.b = snapshot.b;
@@ -644,6 +593,9 @@ impl Machine {
         self.machine_st.s = snapshot.s;
         self.machine_st.tr = snapshot.tr;
         self.machine_st.pstr_tr = snapshot.pstr_tr;
+        self.machine_st.p = snapshot.p;
+        self.machine_st.cp = snapshot.cp;
+        self.machine_st.attr_var_init = snapshot.attr_var_init;
         self.machine_st.num_of_args = snapshot.num_of_args;
 
         self.machine_st.fail = snapshot.fail;
@@ -661,130 +613,9 @@ impl Machine {
         self.machine_st.block = snapshot.block;
 
         self.machine_st.ball = snapshot.ball.take();
+        self.machine_st.heap_locs = mem::replace(&mut snapshot.heap_locs, IndexMap::new());
         self.machine_st.lifted_heap = mem::replace(&mut snapshot.lifted_heap, vec![]);
     }
-
-/*
-    fn handle_eval_session(&mut self, result: EvalSession, snapshot: MachineState) {
-        match result {
-            EvalSession::InitialQuerySuccess(alloc_locs) => loop {
-                let bindings = {
-                    let output = PrinterOutputter::new();
-                    self.toplevel_heap_view(output).result()
-                };
-
-                let attr_goals = self.attribute_goals();
-
-                if !(self.machine_st.b > 0) {
-                    if bindings.is_empty() {
-                        let space = if requires_space(&attr_goals, ".") {
-                            " "
-                        } else {
-                            ""
-                        };
-
-                        if !attr_goals.is_empty() {
-                            println!("{}{}.", attr_goals, space);
-                        } else {
-                            println!("true.");
-                        }
-
-                        self.absorb_snapshot(snapshot);
-                        return;
-                    }
-                } else if bindings.is_empty() && attr_goals.is_empty() {
-                    print!("true");
-                    stdout().flush().unwrap();
-                }
-
-                if !attr_goals.is_empty() {
-                    if bindings.is_empty() {
-			print!("{}", attr_goals);
-                    } else {
-			print!("{}, {}", bindings, attr_goals);
-                    }
-                } else if !bindings.is_empty() {
-		    print!("{}", bindings);
-                }
-
-                if self.machine_st.b > 0 {
-		    let keypress = {
-			let mut raw_stdout = stdout().into_raw_mode().unwrap();
-			raw_stdout.flush().unwrap();
-			next_keypress()
-		    };
-
-                    let result = match keypress {
-                        ContinueResult::ContinueQuery => {
-			    print!(" ;\n");
-                            self.continue_query(&alloc_locs)
-                        }
-                        ContinueResult::Conclude => {
-			    print!(" ...\n");
-                            self.absorb_snapshot(snapshot);
-                            return;
-                        }
-                    };
-
-                    match result {
-                        EvalSession::QueryFailure => {
-                            if self.machine_st.ball.stub.len() > 0 {
-                                self.propagate_exception_to_toplevel(snapshot);
-                                return;
-                            } else {
-				print!("false.\n");
-                                self.absorb_snapshot(snapshot);
-                                return;
-                            }
-                        }
-                        EvalSession::Error(err) => {
-                            self.absorb_snapshot(snapshot);
-                            self.throw_session_error(err, (clause_name!("repl"), 0));
-                            return;
-                        }
-                        _ => {}
-                    }
-                } else {
-                    if bindings.is_empty() && attr_goals.is_empty() {
-                        print!("true.\n");
-                    } else {
-                        let space = if !attr_goals.is_empty() {
-                            if requires_space(&attr_goals, ".") {
-                                " "
-                            } else {
-                                ""
-                            }
-                        } else {
-                            if requires_space(&bindings, ".") {
-                                " "
-                            } else {
-                                ""
-                            }
-                        };
-
-			print!("{}.\n", space);
-                    }
-
-                    break;
-                }
-            },
-            EvalSession::Error(err) => {
-                self.absorb_snapshot(snapshot);
-                self.throw_session_error(err, (clause_name!("repl"), 0));
-                return;
-            }
-            EvalSession::QueryFailure =>
-                if self.machine_st.ball.stub.len() > 0 {
-                    return self.propagate_exception_to_toplevel(snapshot);
-                } else {
-                    println!("false.");
-                },
-            _ => println!("true.")
-        }
-
-        self.absorb_snapshot(snapshot);
-    }
-*/
 
     pub(super) fn run_query(&mut self) {
 	self.machine_st.cp = LocalCodePtr::TopLevel(0, self.code_repo.size_of_cached_query());
@@ -816,7 +647,7 @@ impl Machine {
                     self.code_repo.cached_query = cached_query;
                 }
                 _ =>
-                    break                
+                    break
             };
         }
     }

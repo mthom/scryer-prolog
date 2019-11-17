@@ -289,6 +289,7 @@ fn test_queries_on_rules() {
 
     assert_prolog_success!(&mut wam, "p(X, Y).", [["X = x", "Y = _1"]]);
 
+    // p5, q5
     submit(&mut wam, "p(X, Y) :- q(X, Y), r(X, Y).");
     submit(&mut wam, "q(s, t).");
     submit(&mut wam, "r(X, Y) :- r(a).");
@@ -580,7 +581,7 @@ fn test_queries_on_cuts() {
     submit(
         &mut wam,
         "memberchk(X, [X|_]) :- !.
-                      memberchk(X, [_|Xs]) :- memberchk(X, Xs).",
+         memberchk(X, [_|Xs]) :- memberchk(X, Xs).",
     );
 
     assert_prolog_success!(&mut wam, "memberchk(X, [a,b,c]).", [["X = a"]]);

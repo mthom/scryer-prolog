@@ -3,11 +3,6 @@
 :- use_module(library(lists)).
 :- use_module(library(si)).
 
-% internal operators defined for spacing purposes.
-:- op(1200, xf, ('.')).
-:- op(700, xfx, (' = ')).
-:- op(1000, xfy, (', ')).
-
 '$repl'(ListOfModules) :-
     maplist('$use_list_of_modules', ListOfModules),
     false.
@@ -49,6 +44,22 @@
     ;  write('false.'), nl
     ).
 
+'$write_goal'(G, VarList) :-
+    (  G = (Var = Value) ->
+       write(Var),
+       write(' = '),
+       write_term(Value, [quoted(true), variable_names(VarList)])
+    ;  write_term(G, [quoted(true), variable_names(VarList)])
+    ).
+
+'$write_eq'((G1, G2), VarList) :-
+    !,
+    '$write_goal'(G1, VarList),
+    write(', '),
+    '$write_eq'(G2, VarList).
+'$write_eq'(G, VarList) :-
+    '$write_goal'(G, VarList).
+
 '$write_eqs_and_read_input'(B, VarList) :-
     sort(VarList, SortedVarList),
     '$get_b_value'(B0),
@@ -56,18 +67,19 @@
     (  B0 == B ->
        (  Goals == [] ->
 	  write('true.'), nl
-       ;  thread_goals(Goals, ThreadedGoals, (', ')),
-	  write_term((ThreadedGoals)., [quoted(false), variable_names(VarList)]),
+       ;  thread_goals(Goals, ThreadedGoals, (',')),
+	  '$write_eq'(ThreadedGoals, VarList),
+	  write(' .'),
 	  nl
        )
     ;  repeat,
-       thread_goals(Goals, ThreadedGoals, (', ')),
-       write_term(ThreadedGoals, [quoted(false), variable_names(VarList)]),
+       thread_goals(Goals, ThreadedGoals, (',')),
+       '$write_eq'(ThreadedGoals, VarList),
        '$raw_input_read_char'(C),
        (  C == (';'), !,
-	  write_term(' ;', [quoted(false)]), nl, false
+	  write(' ;'), nl, false
        ;  C == ('.'), !,
-	  write_term(' ...', [quoted(false)]), nl
+	  write(' ...'), nl
        )
     ).
 
@@ -86,7 +98,7 @@
     '$fetch_attribute_goals'(Goals).
 '$gather_goals'([Var = Value | Pairs], VarList, Goals) :-
     (  nonvar(Value) ->
-       Goals = [Var ' = ' Value | Goals0],
+       Goals = [Var = Value | Goals0],
        '$gather_goals'(Pairs, VarList, Goals0)
     ;  '$gather_goals'(Pairs, VarList, Goals)
     ).

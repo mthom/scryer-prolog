@@ -30,7 +30,7 @@ impl Machine {
 
                     match module.as_str() {
                         "user" => compile_user_module(self, src, true, user_src),
-                        _ => compile_into_module(self, module, src, name)                                                 
+                        _ => compile_into_module(self, module, src, name)
                     }
                 }
                 None => compile_user_module(self, src, true, user_src),
@@ -76,16 +76,27 @@ impl Machine {
         output.result()
     }
 
+    fn make_undefined(&mut self, name: ClauseName, arity: usize) {
+        if let Some(idx) = self.indices.code_dir.get(&(name, arity)) {
+            set_code_index!(idx, IndexPtr::DynamicUndefined, clause_name!("user"));
+        }
+    }
+
+    fn make_undefined_in_module(&mut self, module_name: ClauseName, name: ClauseName, arity: usize) {
+        if let Some(idx) = self.indices.code_dir.get(&(name, arity)) {
+            if idx.module_name() == module_name {
+                set_code_index!(idx, IndexPtr::DynamicUndefined, clause_name!("user"));
+            }
+        }
+    }
+    
     fn abolish_dynamic_clause(&mut self, name: RegType, arity: RegType) {
         let (name, arity) = self.get_predicate_key(name, arity);
 
-        if let Some(idx) = self.indices.code_dir.get(&(name.clone(), arity)) {
-            set_code_index!(idx, IndexPtr::DynamicUndefined, clause_name!("user"));
-        }
+        self.make_undefined(name.clone(), arity);
 
         self.indices.remove_code_index((name.clone(), arity));
-        self.indices
-            .remove_clause_subsection(name.owning_module(), name, arity);
+        self.indices.remove_clause_subsection(name.owning_module(), name, arity);
     }
 
     fn abolish_dynamic_clause_in_module(&mut self, name: RegType, arity: RegType, module: RegType) {
@@ -106,15 +117,10 @@ impl Machine {
             _ => unreachable!(),
         };
 
-        if let Some(idx) = self.indices.code_dir.get(&(name.clone(), arity)) {
-            if idx.module_name() == module_name {
-                set_code_index!(idx, IndexPtr::DynamicUndefined, clause_name!("user"));
-            }
-        }
+        self.make_undefined_in_module(module_name.clone(), name.clone(), arity);
 
         self.indices.remove_code_index((name.clone(), arity));
-        self.indices
-            .remove_clause_subsection(module_name, name, arity);
+        self.indices.remove_clause_subsection(module_name, name, arity);
     }
 
     fn handle_eval_result_from_dynamic_compile(
@@ -210,6 +216,10 @@ impl Machine {
                     let mut addrs = VecDeque::from(addrs);
                     addrs.remove(index);
 
+                    if addrs.is_empty() {
+                        self.make_undefined(name.clone(), arity);
+                    }
+                    
                     self.print_new_dynamic_clause(addrs, name.clone(), arity)
                 }
                 Err(err) => return self.machine_st.throw_exception(err),
@@ -239,6 +249,10 @@ impl Machine {
                 let mut addrs = VecDeque::from(addrs);
                 addrs.remove(index);
 
+                if addrs.is_empty() {
+                    self.make_undefined(name.clone(), arity);
+                }
+                 
                 self.print_new_dynamic_clause(addrs, name.clone(), arity)
             }
             Err(err) => return self.machine_st.throw_exception(err),
