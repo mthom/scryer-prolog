@@ -560,12 +560,6 @@ impl Machine {
         snapshot.s = self.machine_st.s;
         snapshot.tr = self.machine_st.tr;
         snapshot.pstr_tr = self.machine_st.pstr_tr;
-        snapshot.p = self.machine_st.p.clone();
-        snapshot.cp = self.machine_st.cp;
-        snapshot.attr_var_init = mem::replace(
-            &mut self.machine_st.attr_var_init,
-            AttrVarInitializer::new(0, 0)
-        );
         snapshot.num_of_args = self.machine_st.num_of_args;
 
         snapshot.fail = self.machine_st.fail;
@@ -579,7 +573,6 @@ impl Machine {
         snapshot.block = self.machine_st.block;
 
         snapshot.ball = self.machine_st.ball.take();
-        snapshot.heap_locs = mem::replace(&mut self.machine_st.heap_locs, IndexMap::new());
         snapshot.lifted_heap = mem::replace(&mut self.machine_st.lifted_heap, vec![]);
 
         snapshot
@@ -593,9 +586,6 @@ impl Machine {
         self.machine_st.s = snapshot.s;
         self.machine_st.tr = snapshot.tr;
         self.machine_st.pstr_tr = snapshot.pstr_tr;
-        self.machine_st.p = snapshot.p;
-        self.machine_st.cp = snapshot.cp;
-        self.machine_st.attr_var_init = snapshot.attr_var_init;
         self.machine_st.num_of_args = snapshot.num_of_args;
 
         self.machine_st.fail = snapshot.fail;
@@ -613,7 +603,6 @@ impl Machine {
         self.machine_st.block = snapshot.block;
 
         self.machine_st.ball = snapshot.ball.take();
-        self.machine_st.heap_locs = mem::replace(&mut snapshot.heap_locs, IndexMap::new());
         self.machine_st.lifted_heap = mem::replace(&mut snapshot.lifted_heap, vec![]);
     }
 
@@ -637,36 +626,18 @@ impl Machine {
                     // so hold onto it locally and restore it after the compiler has finished.
                     self.machine_st.fail = false;
                     let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
+                    
                     self.dynamic_transaction(trans_type, p);
+                    self.code_repo.cached_query = cached_query;
 
                     if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                        self.code_repo.cached_query = cached_query;
                         break;
                     }
-
-                    self.code_repo.cached_query = cached_query;
                 }
                 _ =>
                     break
             };
         }
-    }
-
-    #[cfg(test)]
-    pub fn test_heap_view<Outputter>(&self, mut output: Outputter) -> Outputter
-    where
-        Outputter: HCValueOutputter,
-    {
-        for (var, addr) in self.machine_st.heap_locs.iter() {
-            output = self.machine_st.print_var_eq(
-                var.clone(),
-                addr.clone(),
-                &self.indices.op_dir,
-                output,
-            );
-        }
-
-        output
     }
 }
 
