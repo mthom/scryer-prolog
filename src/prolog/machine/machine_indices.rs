@@ -309,7 +309,7 @@ pub enum REPLCodePtr {
 #[derive(Clone, PartialEq)]
 pub enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
-    CallN(usize, LocalCodePtr),                     // arity, local.
+    CallN(usize, LocalCodePtr, bool),               // arity, local, last call.
     Local(LocalCodePtr),
     DynamicTransaction(DynamicTransactionType, LocalCodePtr), // the type of transaction, the return pointer.
     REPL(REPLCodePtr, LocalCodePtr),                          // the REPL code, the return pointer.
@@ -320,7 +320,7 @@ impl CodePtr {
     pub fn local(&self) -> LocalCodePtr {
         match self {
             &CodePtr::BuiltInClause(_, ref local)
-          | &CodePtr::CallN(_, ref local)
+          | &CodePtr::CallN(_, ref local, _)
           | &CodePtr::Local(ref local) => local.clone(),
             &CodePtr::VerifyAttrInterrupt(p) => LocalCodePtr::DirEntry(p),
             &CodePtr::REPL(_, p) | &CodePtr::DynamicTransaction(_, p) => p,
@@ -418,7 +418,7 @@ impl Add<usize> for CodePtr {
           | p @ CodePtr::VerifyAttrInterrupt(_)
           | p @ CodePtr::DynamicTransaction(..) => p,
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
-            CodePtr::CallN(_, local) | CodePtr::BuiltInClause(_, local) => {
+            CodePtr::CallN(_, local, _) | CodePtr::BuiltInClause(_, local) => {
                 CodePtr::Local(local + rhs)
             }
         }

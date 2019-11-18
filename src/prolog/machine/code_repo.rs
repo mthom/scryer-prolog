@@ -134,7 +134,7 @@ impl CodeRepo {
                 );
                 Some(RefOrOwned::Owned(call_clause))
             }
-            &CodePtr::CallN(arity, _) => {
+            &CodePtr::CallN(arity, _, last_call) => {
                 let call_clause = call_clause!(ClauseType::CallN, arity, 0, last_call);
                 Some(RefOrOwned::Owned(call_clause))
             }
