@@ -50,7 +50,7 @@ Extend Scryer Prolog to include the following, among other features:
 - [x] Backtrackable and non-backtrackable global variables via `bb_get/2`
       `bb_put/2` (non-backtrackable) and `bb_b_put/2`
       (backtrackable).
-- [ ] clp(B) and clp($\mathbb{Z}$) as builtin libraries (_in progress_).
+- [ ] clp(B) and clp(ℤ) as builtin libraries (_in progress_).
 - [ ] Streams and predicates for stream control (_in progress_).
 - [ ] An incremental compacting garbage collector satisfying the five
       properties of "Precise Garbage Collection in Prolog."
