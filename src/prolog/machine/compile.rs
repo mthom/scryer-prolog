@@ -824,8 +824,9 @@ impl ListingCompiler {
                     .entry((name.clone(), arity))
                     .or_insert(vec![]);
 
-                indices.code_dir.insert((name.clone(), arity),
-                                        CodeIndex::dynamic_undefined(self.get_module_name()));
+		indices.code_dir
+		       .entry((name.clone(), arity))
+		       .or_insert(CodeIndex::dynamic_undefined(self.get_module_name()));
             }
             &Declaration::Hook(hook, _, ref queue) if self.module.is_none() => worker
                 .term_stream
