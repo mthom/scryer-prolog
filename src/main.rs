@@ -20,9 +20,6 @@ use crate::prolog::read::*;
 
 use std::sync::atomic::Ordering;
 
-#[cfg(test)]
-mod tests;
-
 extern fn handle_sigint(signal: libc::c_int) {
     let signal = signal::Signal::from_c_int(signal).unwrap();
     if signal == signal::Signal::SIGINT {
