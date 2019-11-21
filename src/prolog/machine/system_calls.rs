@@ -1302,11 +1302,7 @@ impl MachineState {
                 let result = {
                     let mut rand = RANDOM_STATE.borrow_mut();
 
-                    if rand.bits(1) == 0 {
-                        true
-                    } else {
-                        false
-                    }
+                    rand.bits(1) == 0
                 };
 
                 self.fail = result;
