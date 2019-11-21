@@ -461,7 +461,7 @@ pub(crate) trait CallPolicy: Any {
         let b = machine_st.b - 1;
         let n = machine_st.or_stack[b].num_args();
 
-        for i in 1..n + 1 {
+        for i in 1 .. n + 1 {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
