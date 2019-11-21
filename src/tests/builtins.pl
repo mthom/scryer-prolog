@@ -21,7 +21,7 @@ test_queries_on_builtins :-
     atomic(0.0),
     \+ atomic([a,b,c]),
     \+ atomic(atop(the_trees)),
-    findall(X, ( var(X), X = 3, atomic(X) ), [3]),
+    \+ \+ findall(X, ( var(X), X = 3, atomic(X) ), [3]),
     \+ ( var(X), X = 3, var(X) ),
     arg(1, f(a,b,c,d), a),
     arg(2, f(a,b,c,d), b),
@@ -35,7 +35,7 @@ test_queries_on_builtins :-
     catch(functor(_,"sdf",3),error(type_error(atom,[s,d,f]),_),true),
     f(1,2,3) =.. [f,1,2,3],
     length([a,b,c], 3),
-    copy_term([[[[X,Y],Y],X]],[[[[Z,V],V],Z]]),
+    \+ \+ copy_term([[[[X,Y],Y],X]],[[[[Z,V],V],Z]]),
     \+ ( X = g(X,Y), Y = f(X), copy_term(Y,g(Z)) ),
     float(3.14159269),
     \+ float(3),
@@ -123,7 +123,7 @@ test_queries_on_builtins :-
     \+ \+ (variant([X,Y,X], [V,W,V])),
     \+ \+ (g(B) = B, g(A) = A, variant(A, B)),
     keysort([1-1,1-1],[1-1,1-1]),
-    findall(Sorted, keysort([2-99,1-a,3-f(_),1-z,1-a,2-44],Sorted), [[1-a,1-z,1-a,2-99,2-44,3-f(_)]]),
-    findall(X, keysort([X-1,1-1],[2-1,1-1]), [2]).
+    \+ \+ findall(Sorted, keysort([2-99,1-a,3-f(_),1-z,1-a,2-44],Sorted), [[1-a,1-z,1-a,2-99,2-44,3-f(_)]]),
+    \+ \+ findall(X, keysort([X-1,1-1],[2-1,1-1]), [2]).
 
 :- initialization(test_queries_on_builtins).

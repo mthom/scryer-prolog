@@ -30,6 +30,7 @@
        ;  consult(Item)
        )
     ;  catch(throw(error(type_error(atom, Item), repl/0)),
+	     E,
 	     '$print_exception_with_check'(E))
     ).
 '$instruction_match'(Term, VarList) :-
