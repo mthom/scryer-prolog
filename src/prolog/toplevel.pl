@@ -45,11 +45,27 @@
     ;  write('false.'), nl
     ).
 
+'$needs_bracketing'(Value, Op) :-
+    catch((functor(Value, F, _),
+	   current_op(EqPrec, EqSpec, Op),
+	   current_op(FPrec, _, F)),
+	  _,
+	  false),
+    (  EqPrec < FPrec -> true
+    ;  EqPrec == FPrec,
+       memberchk(EqSpec, [fx,xfx,yfx])
+    ).
+
 '$write_goal'(G, VarList) :-
     (  G = (Var = Value) ->
        write(Var),
        write(' = '),
-       write_term(Value, [quoted(true), variable_names(VarList)])
+       (  '$needs_bracketing'(Value, (=)) ->
+	  write('('),
+	  write_term(Value, [quoted(true), variable_names(VarList)]),
+	  write(')')
+       ;  write_term(Value, [quoted(true), variable_names(VarList)])
+       )
     ;  G == [] ->
        write('true')
     ;  write_term(G, [quoted(true), variable_names(VarList)])
