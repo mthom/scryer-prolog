@@ -1,7 +1,7 @@
-:- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2]).
-
 :- use_module(library(lists)).
 :- use_module(library(si)).
+
+:- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2]).
 
 '$repl'(ListOfModules) :-
     maplist('$use_list_of_modules', ListOfModules),
@@ -29,9 +29,10 @@
 	  catch('$$compile_batch', E, '$print_exception_with_check'(E))
        ;  consult(Item)
        )
-    ;  catch(throw(error(type_error(atom, Item), repl/0)),
+    ;  !,
+       catch(throw(error(type_error(atom, Item), repl/0)),
 	     E,
-	     '$print_exception_with_check'(E))
+	     '$print_exception_with_check'(E))       
     ).
 '$instruction_match'(Term, VarList) :-
     '$submit_query_and_print_results'(Term, VarList),
@@ -91,8 +92,7 @@
 	  write(' .'),
 	  nl
        )
-    ;  repeat,
-       thread_goals(Goals, ThreadedGoals, (',')),
+    ;  thread_goals(Goals, ThreadedGoals, (',')),
        '$write_eq'(ThreadedGoals, VarList),
        '$raw_input_read_char'(C),
        (  C == (';'), !,
