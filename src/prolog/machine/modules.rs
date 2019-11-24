@@ -7,6 +7,7 @@ use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 
 use std::collections::VecDeque;
+use std::mem;
 
 // Module's and related types are defined in forms.
 impl Module {
@@ -19,6 +20,8 @@ impl Module {
             user_goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
             term_expansions: (Predicate::new(), VecDeque::from(vec![])),
             goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
+            local_term_expansions: (Predicate::new(), VecDeque::from(vec![])),
+            local_goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
             code_dir: CodeDir::new(),
             op_dir: default_op_dir(),
             inserted_expansions: false,
@@ -61,7 +64,7 @@ impl Module {
         Ok(())
     }
 
-    pub fn add_module_expansion_record(
+    pub fn add_expansion_record(
         &mut self,
         hook: CompileTimeHook,
         clause: PredicateClause,
@@ -77,6 +80,45 @@ impl Module {
                 self.goal_expansions.1.extend(queue.into_iter());
             }
         }
+    }
+
+    pub fn add_local_expansion(
+        &mut self,
+        hook: CompileTimeHook,
+        clause: PredicateClause,
+        queue: VecDeque<TopLevel>,
+    ) {
+        match hook {
+            CompileTimeHook::TermExpansion => {
+                (self.local_term_expansions.0).0.push(clause);
+                self.local_term_expansions.1.extend(queue.into_iter());
+            }
+            CompileTimeHook::GoalExpansion => {
+                (self.local_goal_expansions.0).0.push(clause);
+                self.local_goal_expansions.1.extend(queue.into_iter());
+            }
+            _ => {}
+        }
+    }
+
+    pub fn take_local_expansions(&mut self) -> Vec<(Predicate, VecDeque<TopLevel>)>
+    {
+        let term_expansions =
+            mem::replace(&mut self.local_term_expansions, (Predicate::new(), VecDeque::new()));
+        let goal_expansions =
+            mem::replace(&mut self.local_goal_expansions, (Predicate::new(), VecDeque::new()));
+
+        let mut result = vec![];
+
+        if !(term_expansions.0).0.is_empty() {
+            result.push(term_expansions);
+        }
+
+        if !(goal_expansions.0).0.is_empty() {
+            result.push(goal_expansions);
+        }
+
+        result
     }
 }
 
@@ -283,7 +325,7 @@ impl SubModuleUser for Module {
         self.user_goal_expansions
             .1
             .extend(submodule.goal_expansions.1.iter().cloned());
-	
+
         Ok(())
     }
 }

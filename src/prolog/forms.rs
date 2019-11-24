@@ -337,6 +337,8 @@ pub struct Module {
     pub goal_expansions: (Predicate, VecDeque<TopLevel>),
     pub user_term_expansions: (Predicate, VecDeque<TopLevel>), // term expansions inherited from the user scope.
     pub user_goal_expansions: (Predicate, VecDeque<TopLevel>), // same for goal_expansions.
+    pub local_term_expansions: (Predicate, VecDeque<TopLevel>), // expansions local to the module.
+    pub local_goal_expansions: (Predicate, VecDeque<TopLevel>),
     pub inserted_expansions: bool, // has the module been successfully inserted into toplevel??
     pub is_impromptu_module: bool,
  }

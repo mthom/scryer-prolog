@@ -448,7 +448,8 @@ fn add_toplevel_code(wam: &mut Machine, code: Code, indices: IndexStore) {
 }
 
 #[inline]
-fn add_module_code(wam: &mut Machine, mut module: Module, code: Code, indices: IndexStore) {
+fn add_module_code(wam: &mut Machine, mut module: Module, code: Code, indices: IndexStore)
+{
     module.code_dir.extend(indices.code_dir);
     module.op_dir.extend(indices.op_dir.into_iter());
 
@@ -683,7 +684,8 @@ impl ListingCompiler {
                 .or_insert((Predicate::new(), VecDeque::from(vec![])));
 
             if let Some(ref mut module) = &mut self.module {
-                module.add_module_expansion_record(hook, clause.clone(), queue.clone());
+                module.add_expansion_record(hook, clause.clone(), queue.clone());
+                module.add_local_expansion(hook, clause.clone(), queue.clone());
             }
 
             (module_preds.0).0.push(clause);
@@ -918,7 +920,7 @@ fn compile_work_impl(
     mut indices: IndexStore,
     mut results: GatherResult,
 ) -> Result<(), SessionError> {
-    let module_code = compiler.generate_code(
+    let mut module_code = compiler.generate_code(
         results.worker_results,
         wam,
         &mut indices.code_dir,
@@ -969,7 +971,17 @@ fn compile_work_impl(
 
             wam.indices.use_module(&mut wam.code_repo, wam.machine_st.flags, &module)?;
             wam.indices.insert_module(module);
-        } else {
+        } else {                  
+            // compile the module-level goal and term expansions and store
+            // their locations to the module's code_dir.
+            let offset = module_code.len() + toplvl_code.len();
+            let decls = module.take_local_expansions();
+            
+            if !decls.is_empty() {
+                let code = compiler.generate_code(decls, &wam, &mut indices.code_dir, offset)?;
+                module_code.extend(code.into_iter());
+            }
+
             add_module_code(wam, module, module_code, indices);
         }
 
