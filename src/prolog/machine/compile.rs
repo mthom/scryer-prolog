@@ -920,7 +920,17 @@ fn compile_work_impl(
     mut indices: IndexStore,
     mut results: GatherResult,
 ) -> Result<(), SessionError> {
-    let mut module_code = compiler.generate_code(
+    if let Some(ref mut module) = &mut compiler.module {
+        // compile the module-level goal and term expansions and store
+        // their locations to the module's code_dir.
+        let decls = module.take_local_expansions();
+            
+        if !decls.is_empty() {
+            results.worker_results.extend(decls.into_iter());
+        }
+    }
+    
+    let module_code = compiler.generate_code(
         results.worker_results,
         wam,
         &mut indices.code_dir,
@@ -972,16 +982,6 @@ fn compile_work_impl(
             wam.indices.use_module(&mut wam.code_repo, wam.machine_st.flags, &module)?;
             wam.indices.insert_module(module);
         } else {                  
-            // compile the module-level goal and term expansions and store
-            // their locations to the module's code_dir.
-            let offset = module_code.len() + toplvl_code.len();
-            let decls = module.take_local_expansions();
-            
-            if !decls.is_empty() {
-                let code = compiler.generate_code(decls, &wam, &mut indices.code_dir, offset)?;
-                module_code.extend(code.into_iter());
-            }
-
             add_module_code(wam, module, module_code, indices);
         }
 
