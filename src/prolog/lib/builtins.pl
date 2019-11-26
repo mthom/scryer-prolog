@@ -1,35 +1,19 @@
 :- op(400, yfx, /).
 
-/* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
-   and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
-   instructions are unchanged. */
-:- op(700, fx, non_counted_backtracking).
-
-:- module(builtins, [(=)/2, (\=)/2, (\+)/1, (^)/2, (\)/1, (+)/1,
-	(+)/2, (**)/2, (*)/2, (-)/1, (-)/2, (/)/2, (/\)/2, (\/)/2,
-	(is)/2, (xor)/2, (div)/2, (//)/2, (rdiv)/2, (<<)/2, (>>)/2,
-	(mod)/2, (rem)/2, (>)/2, (<)/2, (=\=)/2, (=:=)/2, (>=)/2,
-	(=<)/2, (',')/2, (->)/2, (;)/2, (=..)/2, (==)/2, (\==)/2,
-	(@=<)/2, (@>=)/2, (@<)/2, (@>)/2, (:)/2, abolish/1, asserta/1,
-	assertz/1, atom_chars/2, atom_codes/2, atom_concat/3,
-	atom_length/2, bagof/3, catch/3, char_code/2, clause/2,
-	current_op/3, current_predicate/1, current_prolog_flag/2,
-	expand_goal/2, expand_term/2, fail/0, false/0, findall/3,
-	findall/4, get_char/1, halt/0, number_chars/2, number_codes/2,
-	once/1, op/3, read_term/2, repeat/0, retract/1,
-	set_prolog_flag/2, setof/3, sub_atom/5, subsumes_term/2,
-	term_variables/2, throw/1, true/0, unify_with_occurs_check/2,
-	write/1, write_canonical/1, write_term/2, writeq/1]).
-
 % module resolution operator.
 :- op(600, xfy, :).
 
 user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
-    expand_op_list([Op | OtherOps], Pred, Spec, OpResults).
+    '$expand_op_list'([Op | OtherOps], Pred, Spec, OpResults).
 
-expand_op_list([], _, _, []).
-expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResults]) :-
-    expand_op_list(OtherOps, Pred, Spec, OtherResults).
+'$expand_op_list'([], _, _, []).
+'$expand_op_list'([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResults]) :-
+    '$expand_op_list'(OtherOps, Pred, Spec, OtherResults).
+
+/* this is an implementation specific declarative operator used to implement call_with_inference_limit/3
+   and setup_call_cleanup/3. switches to the default trust_me and retry_me_else. Indexing choice
+   instructions are unchanged. */
+:- op(700, fx, non_counted_backtracking).
 
 % arithmetic operators.
 :- op(700, xfx, is).
@@ -37,8 +21,7 @@ expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResu
 :- op(400, yfx, *).
 :- op(200, xfy, [**, ^]).
 :- op(500, yfx, [/\, \/, xor]).
-:- op(400, yfx, [div, //, rdiv]).
-:- op(400, yfx, [<<, >>, mod, rem]).
+:- op(400, yfx, [div, //, rdiv, <<, >>, mod, rem]).
 :- op(200, fy, [+, -, \]).
 
 % arithmetic comparison operators.
@@ -47,9 +30,6 @@ expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResu
 % term comparison.
 :- op(700, xfx, [==, \==, @=<, @>=, @<, @>]).
 
-% the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
-max_arity(255).
-
 % conditional operators.
 :- op(1050, xfy, ->).
 :- op(1100, xfy, ;).
@@ -57,6 +37,24 @@ max_arity(255).
 % control.
 :- op(700, xfx, [=, =.., \=]).
 :- op(900, fy, \+).
+
+:- module(builtins, [(=)/2, (\=)/2, (\+)/1, (',')/2, (->)/2, (;)/2,
+                     (=..)/2, (:)/2, abolish/1, asserta/1, assertz/1,
+                     atom_chars/2, atom_codes/2, atom_concat/3,
+                     atom_length/2, bagof/3, catch/3, char_code/2,
+                     clause/2, current_op/3, current_predicate/1,
+                     current_prolog_flag/2, expand_goal/2,
+                     expand_term/2, fail/0, false/0, findall/3,
+                     findall/4, get_char/1, halt/0, max_arity/1,
+                     number_chars/2, number_codes/2, once/1, op/3,
+                     read_term/2, repeat/0, retract/1,
+                     set_prolog_flag/2, setof/3, sub_atom/5,
+                     subsumes_term/2, term_variables/2, throw/1,
+                     true/0, unify_with_occurs_check/2, write/1,
+                     write_canonical/1, write_term/2, writeq/1]).
+
+% the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
+max_arity(255).
 
 % unify.
 X = X.

@@ -34,6 +34,7 @@ use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 use crate::prolog::machine::modules::*;
+use crate::prolog::machine::toplevel::*;
 use crate::prolog::read::PrologStream;
 
 use indexmap::IndexMap;
@@ -139,7 +140,7 @@ impl SubModuleUser for IndexStore {
         code_repo: &mut CodeRepo,
         flags: MachineFlags,
         submodule: &Module,
-        exports: &Vec<PredicateKey>,
+        exports: &Vec<ModuleExport>,
     ) -> Result<(), SessionError> {
         use_qualified_module(self, submodule, exports)?;
         submodule
@@ -400,30 +401,64 @@ impl Machine {
         return;
     }
 
-    fn extract_predicate_indicator_list(&mut self) -> Vec<PredicateKey>
+    fn extract_module_export_list(&mut self) -> Result<Vec<ModuleExport>, ParserError>
     {
-	let export_list = self.machine_st[temp_v!(2)].clone();
-	let mut export_list = self.machine_st.store(self.machine_st.deref(export_list));
+	let mut export_list = self.machine_st[temp_v!(2)].clone();
 	let mut exports = vec![];
 
-	while let Addr::Lis(l) = export_list {
+	while let Addr::Lis(l) = self.machine_st.store(self.machine_st.deref(export_list)) {
 	    match &self.machine_st.heap[l] {
 		&HeapCellValue::Addr(Addr::Str(s)) => {
-		    let name = match &self.machine_st.heap[s+1] {
-			&HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
-			    name.clone(),
-			_ =>
-			    unreachable!()
-		    };
+                    match &self.machine_st.heap[s] {
+                        HeapCellValue::NamedStr(arity, ref name, _)
+                            if *arity == 2 && name.as_str() == "/" => {
+		                let name = match &self.machine_st.heap[s+1] {
+			            &HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
+			                name.clone(),
+			            _ =>
+			                unreachable!()
+		                };
+                                
+		                let arity = match &self.machine_st.heap[s+2] {
+			            &HeapCellValue::Addr(Addr::Con(Constant::Integer(ref arity))) =>
+			                arity.to_usize().unwrap(),
+			            _ =>
+			                unreachable!()
+		                };
+                                
+		                exports.push(ModuleExport::PredicateKey((name, arity)));
+                            }
+                        HeapCellValue::NamedStr(arity, ref name, _)
+                            if *arity == 3 && name.as_str() == "op" => {
+                                let name = match &self.machine_st.heap[s+3] {
+			            &HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
+			                name.clone(),
+			            _ =>
+			                unreachable!()
+		                };
 
-		    let arity = match &self.machine_st.heap[s+2] {
-			&HeapCellValue::Addr(Addr::Con(Constant::Integer(ref arity))) =>
-			    arity.to_usize().unwrap(),
-			_ =>
-			    unreachable!()
-		    };
+                                let spec = match &self.machine_st.heap[s+2] {
+			            &HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
+			                name.clone(),
+			            _ =>
+			                unreachable!()
+		                };
+                                
+		                let prec = match &self.machine_st.heap[s+1] {
+			            &HeapCellValue::Addr(Addr::Con(Constant::Integer(ref arity))) =>
+			                arity.to_usize().unwrap(),
+			            _ =>
+			                unreachable!()
+		                };
 
-		    exports.push((name, arity));
+                                exports.push(ModuleExport::OpDecl(to_op_decl(
+                                    prec,
+                                    spec.as_str(),
+                                    name,
+                                )?));
+                            }
+                        _ => unreachable!()
+                    }
 		}
 		_ => unreachable!()
 	    }
@@ -431,7 +466,7 @@ impl Machine {
 	    export_list = self.machine_st.heap[l+1].as_addr(l+1);
 	}
 
-	exports
+	Ok(exports)
     }
 
     fn use_module<ToSource>(&mut self, to_src: ToSource)
@@ -489,7 +524,13 @@ impl Machine {
 	    _ => unreachable!()
 	};
 
-	let exports = self.extract_predicate_indicator_list();
+	let exports = match self.extract_module_export_list() {
+            Ok(exports) => exports,
+            Err(e) => {
+                self.throw_session_error(SessionError::from(e), (clause_name!("use_module"), 2));
+                return;
+            }
+        };
 
 	let load_result = match to_src(name) {
 	    ModuleSource::Library(name) =>
@@ -521,7 +562,7 @@ impl Machine {
 	self.code_repo.cached_query = cached_query;
 
 	if let Err(e) = result {
-	    self.throw_session_error(e, (clause_name!("use_module"), 1));
+	    self.throw_session_error(e, (clause_name!("use_module"), 2));
 	}
     }
 

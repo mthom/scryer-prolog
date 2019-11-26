@@ -1,7 +1,6 @@
-:- op(1200, xfx, -->).
 % :- op(1105, xfy, ('|')).
 
-:- module(dcgs, [phrase/2, phrase/3]).
+:- module(dcgs, [op(1200, xfx, -->), phrase/2, phrase/3]).
 
 :- use_module(library(lists), [append/3]).
 

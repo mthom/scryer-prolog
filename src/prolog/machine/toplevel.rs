@@ -196,13 +196,13 @@ fn setup_op_decl(
     to_op_decl(prec, spec.as_str(), name)
 }
 
-fn setup_predicate_indicator(mut term: Term) -> Result<PredicateKey, ParserError> {
+fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, ParserError> {
     match term {
         Term::Clause(_, ref name, ref mut terms, Some(_))
             if name.as_str() == "/" && terms.len() == 2 =>
         {
             let arity = *terms.pop().unwrap();
-            let name = *terms.pop().unwrap();
+            let name  = *terms.pop().unwrap();
 
             let arity = arity
                 .to_constant()
@@ -210,7 +210,7 @@ fn setup_predicate_indicator(mut term: Term) -> Result<PredicateKey, ParserError
                 .and_then(|n| n.to_usize())
                 .ok_or(ParserError::InvalidModuleExport)?;
 
-            let name = name
+            let name  = name
                 .to_constant()
                 .and_then(|c| c.to_atom())
                 .ok_or(ParserError::InvalidModuleExport)?;
@@ -221,7 +221,32 @@ fn setup_predicate_indicator(mut term: Term) -> Result<PredicateKey, ParserError
     }
 }
 
-fn setup_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleDecl, ParserError> {
+fn setup_module_export(
+    mut term: Term,
+    atom_tbl: TabledData<Atom>,
+) -> Result<ModuleExport, ParserError> {
+    setup_predicate_indicator(&mut term)
+        .map(ModuleExport::PredicateKey)
+        .or_else(|_| {
+            if let Term::Clause(_, name, terms, _) = term {
+                if terms.len() == 3 && name.as_str() == "op" {
+                    Ok(ModuleExport::OpDecl(setup_op_decl(
+                        terms,
+                        atom_tbl
+                    )?))
+                } else {
+                    Err(ParserError::InvalidModuleDecl)
+                }
+            } else {
+                Err(ParserError::InvalidModuleDecl)
+            }
+        })    
+}
+
+fn setup_module_decl(
+    mut terms: Vec<Box<Term>>,
+    atom_tbl: TabledData<Atom>,
+) -> Result<ModuleDecl, ParserError> {
     let mut export_list = *terms.pop().unwrap();
     let name = terms
         .pop()
@@ -230,10 +255,12 @@ fn setup_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleDecl, ParserErro
         .and_then(|c| c.to_atom())
         .ok_or(ParserError::InvalidModuleDecl)?;
 
-    let mut exports = Vec::new();
+    let mut exports = vec![];
 
     while let Term::Cons(_, t1, t2) = export_list {
-        exports.push(setup_predicate_indicator(*t1)?);
+        let module_export = setup_module_export(*t1, atom_tbl.clone())?;
+    
+        exports.push(module_export);
         export_list = *t2;
     }
 
@@ -257,14 +284,18 @@ fn setup_use_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleSource, Pars
                 .map(|c| ModuleSource::Library(c))
                 .ok_or(ParserError::InvalidUseModuleDecl)
         }
-        Term::Constant(_, Constant::Atom(ref name, _)) => Ok(ModuleSource::File(name.clone())),
+        Term::Constant(_, Constant::Atom(ref name, _)) =>
+            Ok(ModuleSource::File(name.clone())),
         _ => Err(ParserError::InvalidUseModuleDecl),
     }
 }
 
-type UseModuleExport = (ModuleSource, Vec<PredicateKey>);
+type UseModuleExport = (ModuleSource, Vec<ModuleExport>);
 
-fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, ParserError> {
+fn setup_qualified_import(
+    mut terms: Vec<Box<Term>>,
+    atom_tbl: TabledData<Atom>,
+) -> Result<UseModuleExport, ParserError> {
     let mut export_list = *terms.pop().unwrap();
     let module_src = match *terms.pop().unwrap() {
         Term::Clause(_, ref name, ref mut terms, None)
@@ -282,10 +313,10 @@ fn setup_qualified_import(mut terms: Vec<Box<Term>>) -> Result<UseModuleExport, 
         _ => Err(ParserError::InvalidUseModuleDecl),
     }?;
 
-    let mut exports = Vec::new();
+    let mut exports = vec![];
 
     while let Term::Cons(_, t1, t2) = export_list {
-        exports.push(setup_predicate_indicator(*t1)?);
+        exports.push(setup_module_export(*t1, atom_tbl.clone())?);
         export_list = *t2;
     }
 
@@ -460,19 +491,19 @@ fn setup_declaration<'a, 'b, 'c, R: Read>(
 		("op", 3) =>
 		    Ok(Declaration::Op(setup_op_decl(terms, indices.atom_tbl())?)),
 		("module", 2) =>
-		    Ok(Declaration::Module(setup_module_decl(terms)?)),
+		    Ok(Declaration::Module(setup_module_decl(terms, indices.atom_tbl())?)),
 		("use_module", 1) =>
 		    Ok(Declaration::UseModule(setup_use_module_decl(terms)?)),
 		("use_module", 2) => {
-		    let (name, exports) = setup_qualified_import(terms)?;
+		    let (name, exports) = setup_qualified_import(terms, indices.atom_tbl())?;
 		    Ok(Declaration::UseQualifiedModule(name, exports))
 		}
 		("non_counted_backtracking", 1) => {
-		    let (name, arity) = setup_predicate_indicator(*terms.pop().unwrap())?;
+		    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
 		    Ok(Declaration::NonCountedBacktracking(name, arity))
 		}
 		("dynamic", 1) => {
-		    let (name, arity) = setup_predicate_indicator(*terms.pop().unwrap())?;
+		    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
 		    Ok(Declaration::Dynamic(name, arity))
 		}
 		("initialization", 1) => {

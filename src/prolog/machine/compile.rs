@@ -574,7 +574,7 @@ impl ListingCompiler {
         submodule: ClauseName,
         code_repo: &mut CodeRepo,
         flags: MachineFlags,
-        exports: &Vec<PredicateKey>,
+        exports: &Vec<ModuleExport>,
         wam_indices: &mut IndexStore,
         indices: &mut IndexStore,
     ) -> Result<(), SessionError> {
@@ -712,6 +712,24 @@ impl ListingCompiler {
         (len, queue_len)
     }
 
+    fn submit_op(
+        &mut self,
+        wam: &Machine,
+        indices: &mut IndexStore,
+        op_decl: &OpDecl,
+    ) -> Result<(), SessionError> {
+        let spec = get_desc(
+            op_decl.name(),
+            composite_op!(
+                self.module.is_some(),
+                &wam.indices.op_dir,
+                &mut indices.op_dir
+            ),
+        );
+
+        op_decl.submit(self.get_module_name(), spec, &mut indices.op_dir)        
+    }
+
     fn process_decl(
         &mut self,
         decl: Declaration,
@@ -730,6 +748,7 @@ impl ListingCompiler {
                     .code_repo
                     .compile_hook(hook, flags)
                     .map_err(SessionError::from);
+                
                 wam.code_repo.truncate_terms(key, len, queue_len);
 
                 result
@@ -738,16 +757,7 @@ impl ListingCompiler {
                 Ok(self.add_non_counted_bt_flag(name, arity))
             }
             Declaration::Op(op_decl) => {
-                let spec = get_desc(
-                    op_decl.name(),
-                    composite_op!(
-                        self.module.is_some(),
-                        &wam.indices.op_dir,
-                        &mut indices.op_dir
-                    ),
-                );
-
-                op_decl.submit(self.get_module_name(), spec, &mut indices.op_dir)
+                self.submit_op(wam, indices, &op_decl)
             }
             Declaration::UseModule(ModuleSource::Library(name)) => {
                 let name = if !wam.indices.modules.contains_key(&name) {
@@ -778,6 +788,12 @@ impl ListingCompiler {
                 if self.module.is_none() {
                     let module_name = module_decl.name.clone();
                     let atom_tbl = TabledData::new(module_name.to_rc());
+
+                    for export in module_decl.exports.iter() {
+                        if let ModuleExport::OpDecl(ref op_decl) = export {
+                            self.submit_op(wam, indices, op_decl)?;
+                        }
+                    }
 
                     Ok(self.module = Some(Module::new(module_decl, atom_tbl)))
                 } else {
@@ -959,8 +975,9 @@ fn compile_work_impl(
     if let Some(mut module) = compiler.module.take() {
         if module.is_impromptu_module {
             module.module_decl.exports = indices.code_dir.keys().cloned()
-                  .filter(|(name, _)| name.owning_module().as_str() != "builtins")
-                  .collect();
+                .filter(|(name, _)| name.owning_module().as_str() != "builtins")
+                .map(ModuleExport::PredicateKey)
+                .collect();
         }
 
         let mut clause_code_generator =

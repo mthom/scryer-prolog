@@ -16,11 +16,9 @@
    Public operators.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-:- op(300, fy, ~).
-:- op(500, yfx, #).
-
-:- module(clpb, [
-                 sat/1,
+:- module(clpb, [op(300, fy, ~),
+		 op(500, yfx, #),
+		 sat/1,
                  taut/2,
                  labeling/1,
                  sat_count/2,

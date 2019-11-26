@@ -134,7 +134,7 @@
     ;  '$print_exception'(E)
     ).
 
-'$predicate_indicator'(Source, PI) :-
+'$module_export'(Source, PI) :-
     (  nonvar(PI) ->
        (  PI = Name / Arity ->
 	  (  var(Name) -> throw(error(instantiation_error, Source))
@@ -145,7 +145,20 @@
 	     )
 	  ;  throw(error(type_error(integer, Arity), Source))
 	  )
-       ;  throw(error(type_error(predicate_indicator, PI), Source))
+       ;  PI = op(Prec, Spec, Name) ->
+	  (  integer(Prec) ->
+	     (  \+ atom(Name) ->
+		throw(error(type_error(atom, Name), Source))
+	     ;  Prec < 0 ->
+		throw(error(domain_error(not_less_than_zero, Prec), Source))
+	     ;  Prec > 1200 ->
+		throw(error(domain_error(operator_precision, Prec), Source))
+	     ;  memberchk(Spec, [xfy, yfx, xfx, fx, fy, yf, xf])
+	     ;  throw(error(domain_error(operator_specification, Spec), Source))
+	     )
+	  ;  throw(error(type_error(integer, Prec), Source))
+	  )
+       ;  throw(error(type_error(module_export, PI), Source))
        )
     ;  throw(error(instantiation_error, Source))
     ).
@@ -167,9 +180,11 @@ use_module(Module) :-
 use_module(Module, QualifiedExports) :-
     (  nonvar(Module) ->
        (  list_si(QualifiedExports) ->
-	  maplist('$predicate_indicator'(use_module/2), QualifiedExports), !,
-	  (  Module = library(Filename) -> '$use_qualified_module'(Filename, QualifiedExports)
-	  ;  atom(Module) -> '$use_qualified_module_from_file'(Module, QualifiedExports)
+	  maplist('$module_export'(use_module/2), QualifiedExports) ->
+	  (  Module = library(Filename) ->
+	     '$use_qualified_module'(Filename, QualifiedExports)
+	  ;  atom(Module) ->
+	     '$use_qualified_module_from_file'(Module, QualifiedExports)
 	  ;  throw(error(invalid_module_specifier, use_module/2))
 	  )
        ;  throw(error(type_error(list, QualifiedExports), use_module/2))
