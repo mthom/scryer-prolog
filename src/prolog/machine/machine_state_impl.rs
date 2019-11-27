@@ -3109,6 +3109,7 @@ impl MachineState {
             match v {
                 HeapCellValue::Addr(Addr::HeapCell(..)) => return true,
                 HeapCellValue::Addr(Addr::StackCell(..)) => return true,
+                HeapCellValue::Addr(Addr::AttrVar(..)) => return true,
                 _ => {}
             }
         }
