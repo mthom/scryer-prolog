@@ -72,13 +72,46 @@
     ;  write_term(G, [quoted(true), variable_names(VarList)])
     ).
 
+'$write_last_goal'(G, VarList) :-
+    (  G = (Var = Value) ->
+       write(Var),
+       write(' = '),
+       (  '$needs_bracketing'(Value, (=)) ->
+	  write('('),
+	  write_term(Value, [quoted(true), variable_names(VarList)]),
+	  write(')')       	  
+       ;  write_term(Value, [quoted(true), variable_names(VarList)]),
+	  (  '$trailing_period_is_ambiguous'(Value) ->
+	     write(' ')
+	  ;  true
+	  )
+       )
+    ;  G == [] ->
+       write('true')
+    ;  write_term(G, [quoted(true), variable_names(VarList)])
+    ).
+
 '$write_eq'((G1, G2), VarList) :-
     !,
     '$write_goal'(G1, VarList),
     write(', '),
     '$write_eq'(G2, VarList).
 '$write_eq'(G, VarList) :-
-    '$write_goal'(G, VarList).
+    '$write_last_goal'(G, VarList).
+    
+'$graphic_token_char'(C) :-
+    memberchk(C, ['#', '$', '&', '*', '+', '-', '.', ('/'), ':',
+                  '<', '=', '>', '?', '@', '^', '~', ('\\')]).
+
+'$list_last_item'([C], C) :- !.
+'$list_last_item'([_|Cs], D) :-
+    '$list_last_item'(Cs, D).
+
+'$trailing_period_is_ambiguous'(Value) :-
+    atom(Value),
+    atom_chars(Value, ValueChars),
+    '$list_last_item'(ValueChars, Char),
+    '$graphic_token_char'(Char).
 
 '$write_eqs_and_read_input'(B, VarList) :-
     sort(VarList, SortedVarList),
@@ -89,7 +122,7 @@
 	  write('true.'), nl
        ;  thread_goals(Goals, ThreadedGoals, (',')),
 	  '$write_eq'(ThreadedGoals, VarList),
-	  write(' .'),
+	  write('.'),
 	  nl
        )
     ;  thread_goals(Goals, ThreadedGoals, (',')),
