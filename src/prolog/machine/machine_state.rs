@@ -873,13 +873,7 @@ pub(crate) trait CallPolicy: Any {
                     if let Some(idx) = indices.get_code_index((name.clone(), arity), module) {
                         self.context_call(machine_st, name, arity, idx, indices)?;
                     } else {
-                        let h = machine_st.heap.h;
-                        let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
-                        let key = ExistenceError::Procedure(name, arity);
-
-                        return Err(
-                            machine_st.error_form(MachineError::existence_error(h, key), stub)
-                        );
+                        try_in_situ(machine_st, name, arity, indices, machine_st.last_call)?;
                     }
                 }
                 ClauseType::Hook(_) | ClauseType::System(_) => {

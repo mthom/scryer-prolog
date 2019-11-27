@@ -161,7 +161,7 @@ impl<'a, R: Read> TermStream<'a, R> {
     pub fn col_num(&self) -> usize {
         self.parser.col_num()
     }
-    
+
     #[inline]
     pub fn update_expansion_lens(&mut self) {
         let te_key = (clause_name!("term_expansion"), 2);
@@ -267,7 +267,7 @@ impl<'a, R: Read> TermStream<'a, R> {
 
             let line_num = self.line_num();
             let col_num = self.col_num();
-            
+
             let term = self.parser.read_term(composite_op!(
                 self.in_module,
                 &self.wam.indices.op_dir,
@@ -308,7 +308,7 @@ impl<'a, R: Read> TermStream<'a, R> {
                     initial_term,
                     clause_name!(","),
                 )));
-                
+
                 Ok(Term::Clause(cell, name, terms, arity))
             }
             _ => Ok(term),
@@ -324,7 +324,7 @@ impl<'a, R: Read> TermStream<'a, R> {
     ) -> Result<Vec<Term>, ParserError> {
         let mut results = vec![];
 
-        while let Some(term) = terms.pop_front() {            
+        while let Some(term) = terms.pop_front() {
             match machine_st.try_expand_term(self.wam, &term, CompileTimeHook::GoalExpansion) {
                 Some(term_string) => {
                     let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;
@@ -382,14 +382,14 @@ impl MachineState {
     ) -> Option<String> {
         let term_write_result = write_term_to_heap(term, self);
         let h = self.heap.h;
-        
+
         self[temp_v!(1)] = Addr::HeapCell(term_write_result.heap_loc);
         self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
         self[temp_v!(2)] = Addr::HeapCell(h);
 
         let code = vec![call_clause!(ClauseType::Hook(hook), 2, 0, true)];
         wam.code_repo.cached_query = code;
-	
+
         self.query_stepper(
             &mut wam.indices,
             &mut wam.policies,

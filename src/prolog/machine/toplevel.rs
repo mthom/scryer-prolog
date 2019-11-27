@@ -60,8 +60,8 @@ impl<'a, 'b, 'c, R: Read> CompositeIndices<'a, 'b, 'c, R> {
             IndexSource::TermStream => &mut self.term_stream.wam.indices.code_dir,
             IndexSource::Local(ref mut indices) => &mut indices.code_dir,
         }
-    }
-
+    }    
+    
     fn static_code_dir(&self) -> Option<&CodeDir> {
         match self.static_code_dir {
             Some(IndexSource::TermStream) => Some(&self.term_stream.wam.indices.code_dir),
@@ -81,11 +81,11 @@ impl<'a, 'b, 'c, R: Read> CompositeIndices<'a, 'b, 'c, R> {
         };
 
         if let Some(idx) = idx_opt {
-            self.local_code_dir().insert((name, arity), idx.clone());
+            self.local_code_dir().insert((name.clone(), arity), idx.clone());
             idx
         } else {
-            let idx = CodeIndex::default();
-            self.local_code_dir().insert((name, arity), idx.clone());
+            let idx = CodeIndex::default();            
+            self.local_code_dir().insert((name.clone(), arity), idx.clone());
             idx
         }
     }
@@ -594,7 +594,7 @@ impl RelationWorker {
 
     fn fabricate_disjunct(&self, body_term: Term) -> (JumpStub, VecDeque<Term>) {
         let vars = self.compute_head(&body_term);
-        let clauses: Vec<_> = unfold_by_str(body_term, ";")
+        let results = unfold_by_str(body_term, ";")
             .into_iter()
             .map(|term| {
                 let mut subterms = unfold_by_str(term, ",");
@@ -603,13 +603,10 @@ impl RelationWorker {
                 check_for_internal_if_then(&mut subterms);
 
                 let term = subterms.pop().unwrap();
-                fold_by_str(subterms.into_iter(), term, clause_name!(","))
-            })
-            .collect();
+                let clause = fold_by_str(subterms.into_iter(), term, clause_name!(","));
 
-        let results = clauses
-            .into_iter()
-            .map(|clause| self.fabricate_rule_body(&vars, clause))
+                self.fabricate_rule_body(&vars, clause)
+            })
             .collect();
 
         (vars, results)
@@ -984,7 +981,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
             if self.in_module { None } else { Some(IndexSource::TermStream) }
         );
 
-        let queue = self.rel_worker.parse_queue(&mut indices)?;
+        let queue  = self.rel_worker.parse_queue(&mut indices)?;
         let result = (append_preds(preds), queue);
 
         let in_situ_code_dir = &mut indices.term_stream.wam.indices.in_situ_code_dir;
