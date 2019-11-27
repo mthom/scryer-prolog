@@ -1092,27 +1092,31 @@ impl MachineState {
                     _ => unreachable!(),
                 }
             }
-            &SystemClauseType::DynamicModuleResolution => {
-                let module_name = self.store(self.deref(self[temp_v!(1)].clone()));
+            &SystemClauseType::DynamicModuleResolution(narity) => {
+                let module_name = self.store(self.deref(self[temp_v!(1 + narity)].clone()));
 
                 if let Addr::Con(Constant::Atom(module_name, _)) = module_name {
-                    match self.store(self.deref(self[temp_v!(2)].clone())) {
+                    match self.store(self.deref(self[temp_v!(2 + narity)].clone())) {
                         Addr::Str(a) => {
                             if let HeapCellValue::NamedStr(arity, name, _) = self.heap[a].clone() {
-                                for i in 1..arity + 1 {
+                                for i in (arity + 1 .. arity + narity + 1).rev() {
+                                    self.registers[i] = self.registers[i - arity].clone();
+                                }
+                                
+                                for i in 1 .. arity + 1 {
                                     self.registers[i] = self.heap[a + i].as_addr(a + i);
                                 }
 
                                 return self.module_lookup(
                                     indices,
-                                    (name, arity),
+                                    (name, arity + narity),
                                     module_name,
                                     true,
                                 );
                             }
                         }
-                        Addr::Con(Constant::Atom(name, _)) => {
-                            return self.module_lookup(indices, (name, 0), module_name, true)
+                        Addr::Con(Constant::Atom(name, _)) => {                            
+                            return self.module_lookup(indices, (name, narity), module_name, true)
                         }
                         addr => {
                             let stub = MachineError::functor_stub(clause_name!("(:)"), 2);

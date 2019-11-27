@@ -39,10 +39,12 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
 :- op(900, fy, \+).
 
 :- module(builtins, [(=)/2, (\=)/2, (\+)/1, (',')/2, (->)/2, (;)/2,
-                     (=..)/2, (:)/2, abolish/1, asserta/1, assertz/1,
-                     atom_chars/2, atom_codes/2, atom_concat/3,
-                     atom_length/2, bagof/3, catch/3, char_code/2,
-                     clause/2, current_op/3, current_predicate/1,
+                     (=..)/2, (:)/2, (:)/3, (:)/4, (:)/5, (:)/6,
+                     (:)/7, (:)/8, (:)/9, (:)/10, (:)/11, (:)/12,
+                     abolish/1, asserta/1, assertz/1, atom_chars/2,
+                     atom_codes/2, atom_concat/3, atom_length/2,
+                     bagof/3, catch/3, char_code/2, clause/2,
+                     current_op/3, current_predicate/1,
                      current_prolog_flag/2, expand_goal/2,
                      expand_term/2, fail/0, false/0, findall/3,
                      findall/4, get_char/1, halt/0, max_arity/1,
@@ -53,7 +55,8 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      true/0, unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, writeq/1]).
 
-% the maximum arity flag. needs to be replaced with current_prolog_flag(max_arity, MAX_ARITY).
+% the maximum arity flag. needs to be replaced with
+% current_prolog_flag(max_arity, MAX_ARITY).
 max_arity(255).
 
 % unify.
@@ -69,6 +72,57 @@ Module : Predicate :-
     ( atom(Module) -> '$module_call'(Module, Predicate)
     ; throw(error(type_error(atom, Module), (:)/2))
     ).
+
+:(Module, Predicate, A1) :-
+    ( atom(Module) -> '$module_call'(A1, Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
+    ).
+
+:(Module, Predicate, A1, A2) :-
+    ( atom(Module) -> '$module_call'(A1, A2, Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
+    ).
+
+:(Module, Predicate, A1, A2, A3) :-
+    ( atom(Module) -> '$module_call'(A1, A2, A3, Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
+    ).
+
+:(Module, Predicate, A1, A2, A3, A4) :-
+    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
+    ).
+
+:(Module, Predicate, A1, A2, A3, A4, A5) :-
+    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
+    ).
+
+:(Module, Predicate, A1, A2, A3, A4, A5, A6) :-
+    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
+    ).
+
+:(Module, Predicate, A1, A2, A3, A4, A5, A6, A7) :-
+    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
+    ).
+
+:(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8) :-
+    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, A8, Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
+    ).
+
+:(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8, A9) :-
+    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, A8, A9, Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
+    ).
+
+:(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10) :-
+    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
+    ).
+
 
 % flags.
 
