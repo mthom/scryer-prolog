@@ -257,7 +257,6 @@ impl<'a, R: Read> TermStream<'a, R> {
                         self.enqueue_term(term)?
                     }
                     None => {
-                        let term = self.run_goal_expanders(&mut machine_st, op_dir, term)?;
                         return Ok(term);
                     }
                 };
@@ -278,40 +277,6 @@ impl<'a, R: Read> TermStream<'a, R> {
             // if that stage is reached.
             self.top_level_terms.push((term.clone(), line_num, col_num));
             self.stack.push(term);
-        }
-    }
-
-    pub(crate) fn run_goal_expanders(
-        &mut self,
-        machine_st: &mut MachineState,
-        op_dir: &OpDir,
-        term: Term,
-    ) -> Result<Term, ParserError> {
-        match term {
-            Term::Clause(cell, name, mut terms, arity) => {
-                let mut new_terms = {
-                    let old_terms = match (name.as_str(), terms.len()) {
-                        (":-", 2) => {
-                            let comma_term = *terms.pop().unwrap();
-                            unfold_by_str(comma_term, ",")
-                        }
-                        ("?-", 1) => unfold_by_str(*terms.pop().unwrap(), ","),
-                        _ => return Ok(Term::Clause(cell, name, terms, arity)),
-                    };
-
-                    self.expand_goals(machine_st, op_dir, VecDeque::from(old_terms))?
-                };
-
-                let initial_term = new_terms.pop().unwrap();
-                terms.push(Box::new(fold_by_str(
-                    new_terms.into_iter(),
-                    initial_term,
-                    clause_name!(","),
-                )));
-
-                Ok(Term::Clause(cell, name, terms, arity))
-            }
-            _ => Ok(term),
         }
     }
 
@@ -374,6 +339,15 @@ impl MachineState {
         output
     }
 
+    // reset the machine, but keep the heap contents as they were.
+    // this prevents clashes between underscored variable names
+    // in the same query.
+    fn reset_with_heap_preservation(&mut self) {
+        let heap = self.heap.take();            
+        self.reset();
+        self.heap = heap;
+    }
+
     fn try_expand_term(
         &mut self,
         wam: &mut Machine,
@@ -398,7 +372,7 @@ impl MachineState {
         );
 
         if self.fail {
-            self.reset();
+            self.reset_with_heap_preservation();            
             None
         } else {
             let TermWriteResult { var_dict, .. } = term_write_result;
@@ -406,7 +380,7 @@ impl MachineState {
             self.heap_locs = var_dict;
             let output = self.print_with_locs(Addr::HeapCell(h), &wam.indices.op_dir);
 
-            self.reset();
+            self.reset_with_heap_preservation();            
             Some(output.result())
         }
     }
