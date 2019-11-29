@@ -353,7 +353,7 @@ impl MachineState {
         copy_ball_term.push(HeapCellValue::Addr(Addr::HeapCell(threshold + 3)));
         copy_ball_term.push(HeapCellValue::Addr(Addr::HeapCell(threshold + 2)));
 
-        copy_term(copy_ball_term, copy_target);
+        copy_term(copy_ball_term, copy_target, AttrVarPolicy::DeepCopy);
         threshold + lh_offset + 2
     }
 
@@ -867,6 +867,9 @@ impl MachineState {
                     _ => self.fail = true,
                 };
             }
+            &SystemClauseType::CopyTermWithoutAttrVars => {
+                self.copy_term(AttrVarPolicy::StripAttributes);
+            }
             &SystemClauseType::FetchGlobalVar => {
                 let key = self[temp_v!(1)].clone();
 
@@ -1364,7 +1367,7 @@ impl MachineState {
                 self.truncate_if_no_lifted_heap_diff(|_| Addr::Con(Constant::EmptyList))
             }
             &SystemClauseType::FetchAttributeGoals => {
-                let mut attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
+                let mut attr_goals = self.attr_var_init.attribute_goals.clone();
 
                 attr_goals.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
                 self.term_dedup(&mut attr_goals);
@@ -1667,6 +1670,7 @@ impl MachineState {
                 copy_term(
                     CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut ball.stub),
                     value,
+                    AttrVarPolicy::DeepCopy,
                 );
 
                 let offset = self[temp_v!(3)].clone();
@@ -1905,7 +1909,7 @@ impl MachineState {
                     ContinueResult::ContinueQuery => ';',
                     ContinueResult::Conclude => '.'
                 };
-
+                
                 let target = self[temp_v!(1)].clone();
                 self.unify(Addr::Con(Constant::Char(c)), target);
             }
@@ -1970,6 +1974,7 @@ impl MachineState {
                 copy_term(
                     CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut ball.stub),
                     value,
+                    AttrVarPolicy::DeepCopy,
                 );
 
                 indices.global_variables.insert(key, (ball, None));
@@ -1990,6 +1995,7 @@ impl MachineState {
                 copy_term(
                     CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut ball.stub),
                     value.clone(),
+                    AttrVarPolicy::DeepCopy,
                 );
 
                 let stub = ball.copy_and_align(h);

@@ -83,3 +83,10 @@ gather_modules_for_attrs(Attrs, Modules, Modules) :-
 gather_modules_for_attrs([Attr|Attrs], [Module|Modules], Modules0) :-
     '$module_of'(Module, Attr),
     gather_modules_for_attrs(Attrs, Modules, Modules0).
+
+copy_term(Source, Dest, Goals) :-
+    term_variables(Source, Vars),
+    gather_modules(Vars, Modules, _),
+    call_attribute_goals(Modules, call_query_var_goals, Vars),
+    '$fetch_attribute_goals'(Goals0),
+    '$copy_term_without_attr_vars'([Source | Goals0], [Dest | Goals]).

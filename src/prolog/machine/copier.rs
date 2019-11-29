@@ -5,6 +5,12 @@ use std::ops::IndexMut;
 
 type Trail = Vec<(Ref, HeapCellValue)>;
 
+#[derive(Clone, Copy)]
+pub enum AttrVarPolicy {
+    DeepCopy,
+    StripAttributes
+}
+
 pub(crate) trait CopierTarget: IndexMut<usize, Output = HeapCellValue> {
     fn threshold(&self) -> usize;
     fn push(&mut self, _: HeapCellValue);
@@ -13,9 +19,10 @@ pub(crate) trait CopierTarget: IndexMut<usize, Output = HeapCellValue> {
     fn stack(&mut self) -> &mut AndStack;
 }
 
-pub(crate) fn copy_term<T: CopierTarget>(target: T, addr: Addr) {
-    let mut copy_term_state = CopyTermState::new(target);
-    copy_term_state.copy_term_impl(addr);    
+pub(crate)
+fn copy_term<T: CopierTarget>(target: T, addr: Addr, attr_var_policy: AttrVarPolicy) {
+    let mut copy_term_state = CopyTermState::new(target, attr_var_policy);
+    copy_term_state.copy_term_impl(addr);
 }
 
 struct CopyTermState<T: CopierTarget> {
@@ -23,15 +30,17 @@ struct CopyTermState<T: CopierTarget> {
     scan: usize,
     old_h: usize,
     target: T,
+    attr_var_policy: AttrVarPolicy
 }
 
 impl<T: CopierTarget> CopyTermState<T> {
-    fn new(target: T) -> Self {
+    fn new(target: T, attr_var_policy: AttrVarPolicy) -> Self {
         CopyTermState {
             trail: vec![],
             scan: 0,
             old_h: target.threshold(),
             target,
+            attr_var_policy
         }
     }
 
@@ -39,6 +48,14 @@ impl<T: CopierTarget> CopyTermState<T> {
     fn value_at_scan(&mut self) -> &mut HeapCellValue {
         let scan = self.scan;
         &mut self.target[scan]
+    }
+
+    fn attr_var_redirect_tag(&self) -> impl Fn(usize) -> Addr {
+        if let AttrVarPolicy::DeepCopy = self.attr_var_policy {
+            Addr::AttrVar
+        } else {
+            Addr::HeapCell
+        }
     }
 
     fn reinstantiate_var(&mut self, addr: Addr, threshold: usize) {
@@ -58,8 +75,10 @@ impl<T: CopierTarget> CopyTermState<T> {
                 ));
             }
             Addr::AttrVar(h) => {
-                self.target[threshold] = HeapCellValue::Addr(Addr::AttrVar(threshold));
-                self.target[h] = HeapCellValue::Addr(Addr::AttrVar(threshold));
+                let redirect_tag = self.attr_var_redirect_tag();
+
+                self.target[threshold] = HeapCellValue::Addr(redirect_tag(threshold));
+                self.target[h] = HeapCellValue::Addr(redirect_tag(threshold));
                 self.trail
                     .push((Ref::AttrVar(h), HeapCellValue::Addr(Addr::AttrVar(h))));
             }
@@ -94,10 +113,22 @@ impl<T: CopierTarget> CopyTermState<T> {
         let rd = self.target.store(self.target.deref(ra));
 
         match rd.clone() {
-            Addr::AttrVar(h) | Addr::HeapCell(h) if h >= self.old_h => {
+            Addr::AttrVar(h) if h >= self.old_h => {
+                let redirect_tag = self.attr_var_redirect_tag();
+                self.target[threshold] = HeapCellValue::Addr(redirect_tag(h));
+            }
+            Addr::HeapCell(h) if h >= self.old_h => {
                 self.target[threshold] = HeapCellValue::Addr(rd)
             }
-            ra @ Addr::AttrVar(_) | ra @ Addr::HeapCell(..) | ra @ Addr::StackCell(..) => {
+            Addr::AttrVar(h) => {
+                if Addr::AttrVar(h) == rd {
+                    self.reinstantiate_var(Addr::AttrVar(h), threshold);
+                } else {
+                    let redirect_tag = self.attr_var_redirect_tag();
+                    self.target[threshold] = HeapCellValue::Addr(redirect_tag(h));
+                }
+            }
+            ra @ Addr::HeapCell(..) | ra @ Addr::StackCell(..) => {
                 if ra == rd {
                     self.reinstantiate_var(ra, threshold);
                 } else {
@@ -121,20 +152,29 @@ impl<T: CopierTarget> CopyTermState<T> {
         let rd = self.target.store(self.target.deref(addr.clone()));
 
         match rd.clone() {
-            Addr::AttrVar(h) | Addr::HeapCell(h) if h >= self.old_h => {
+            Addr::AttrVar(h) if h >= self.old_h => {
+                let redirect_tag = self.attr_var_redirect_tag();
+                *self.value_at_scan() = HeapCellValue::Addr(redirect_tag(h));
+                self.scan += 1;
+            }
+            Addr::HeapCell(h) if h >= self.old_h => {
                 *self.value_at_scan() = HeapCellValue::Addr(rd);
                 self.scan += 1;
             }
             Addr::AttrVar(h) if addr == rd => {
+                let redirect_tag = self.attr_var_redirect_tag();
                 let threshold = self.target.threshold();
-                self.target
-                    .push(HeapCellValue::Addr(Addr::AttrVar(threshold)));
 
-                let list_val = self.target[h + 1].clone();
-                self.target.push(list_val);
+                self.target
+                    .push(HeapCellValue::Addr(redirect_tag(threshold)));
+
+                if let Addr::AttrVar(_) = redirect_tag(threshold) {
+                    let list_val = self.target[h + 1].clone();
+                    self.target.push(list_val);
+                }
 
                 self.reinstantiate_var(addr, threshold);
-                *self.value_at_scan() = HeapCellValue::Addr(Addr::AttrVar(threshold));
+                *self.value_at_scan() = HeapCellValue::Addr(redirect_tag(threshold));
             }
             _ if addr == rd => {
                 let scan = self.scan;
@@ -185,8 +225,8 @@ impl<T: CopierTarget> CopyTermState<T> {
                 HeapCellValue::Addr(addr) => match addr {
                     Addr::Lis(addr) => self.copy_list(addr),
                     addr @ Addr::AttrVar(_)
-                    | addr @ Addr::HeapCell(_)
-                    | addr @ Addr::StackCell(..) => self.copy_var(addr),
+                  | addr @ Addr::HeapCell(_)
+                  | addr @ Addr::StackCell(..) => self.copy_var(addr),
                     Addr::Str(addr) => self.copy_structure(addr),
                     Addr::Con(_) | Addr::DBRef(_) => self.scan += 1,
                 },

@@ -149,3 +149,4 @@ call_residue_vars(Goal, Vars) :-
     '$get_attr_var_queue_delim'(B),
     call(Goal),
     '$get_attr_var_queue_beyond'(B, Vars).
+    

@@ -729,7 +729,7 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::CopyTerm => {
-                machine_st.copy_term();
+                machine_st.copy_term(AttrVarPolicy::DeepCopy);
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Eq => {
