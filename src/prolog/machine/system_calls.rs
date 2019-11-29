@@ -527,6 +527,16 @@ impl MachineState {
         Ok(())
     }
 
+    fn fetch_attribute_goals(&mut self, mut attr_goals: Vec<Addr>) {
+        attr_goals.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
+        self.term_dedup(&mut attr_goals);
+
+        let attr_goals = Addr::HeapCell(self.heap.to_list(attr_goals.into_iter()));
+        let target = self[temp_v!(1)].clone();
+
+        self.unify(attr_goals, target);
+    }
+
     fn create_instruction_functors(&mut self, code: &Code, first_idx: usize) -> Vec<Addr> {
         let mut queue = VecDeque::new();
         let mut functors = vec![];
@@ -1105,7 +1115,7 @@ impl MachineState {
                                 for i in (arity + 1 .. arity + narity + 1).rev() {
                                     self.registers[i] = self.registers[i - arity].clone();
                                 }
-                                
+
                                 for i in 1 .. arity + 1 {
                                     self.registers[i] = self.heap[a + i].as_addr(a + i);
                                 }
@@ -1118,7 +1128,7 @@ impl MachineState {
                                 );
                             }
                         }
-                        Addr::Con(Constant::Atom(name, _)) => {                            
+                        Addr::Con(Constant::Atom(name, _)) => {
                             return self.module_lookup(indices, (name, narity), module_name, true)
                         }
                         addr => {
@@ -1366,16 +1376,13 @@ impl MachineState {
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
                 self.truncate_if_no_lifted_heap_diff(|_| Addr::Con(Constant::EmptyList))
             }
+            &SystemClauseType::CloneAttributeGoals => {
+                let attr_goals = self.attr_var_init.attribute_goals.clone();
+                self.fetch_attribute_goals(attr_goals);
+            }
             &SystemClauseType::FetchAttributeGoals => {
-                let mut attr_goals = self.attr_var_init.attribute_goals.clone();
-
-                attr_goals.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
-                self.term_dedup(&mut attr_goals);
-
-                let attr_goals = Addr::HeapCell(self.heap.to_list(attr_goals.into_iter()));
-                let target = self[temp_v!(1)].clone();
-
-                self.unify(attr_goals, target);
+                let attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
+                self.fetch_attribute_goals(attr_goals);
             }
             &SystemClauseType::GetAttributedVariableList => {
                 let attr_var = self.store(self.deref(self[temp_v!(1)].clone()));
@@ -1424,7 +1431,7 @@ impl MachineState {
 
                             let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
                             let list_addr = self[temp_v!(2)].clone();
-                            
+
                             self.unify(var_list_addr, list_addr);
                         } else {
                             self.fail = true;
@@ -1909,7 +1916,7 @@ impl MachineState {
                     ContinueResult::ContinueQuery => ';',
                     ContinueResult::Conclude => '.'
                 };
-                
+
                 let target = self[temp_v!(1)].clone();
                 self.unify(Addr::Con(Constant::Char(c)), target);
             }

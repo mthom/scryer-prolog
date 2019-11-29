@@ -88,5 +88,5 @@ copy_term(Source, Dest, Goals) :-
     term_variables(Source, Vars),
     gather_modules(Vars, Modules, _),
     call_attribute_goals(Modules, call_query_var_goals, Vars),
-    '$fetch_attribute_goals'(Goals0),
+    '$clone_attribute_goals'(Goals0),
     '$copy_term_without_attr_vars'([Source | Goals0], [Dest | Goals]).
