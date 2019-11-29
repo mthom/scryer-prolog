@@ -49,8 +49,8 @@ call_attribute_goals([Module | Modules], GoalCaller, AttrVars) :-
 
 call_query_var_goals([], _, []).
 call_query_var_goals([AttrVar|AttrVars], Module, Goals) :-
-    (  catch((  Module:attribute_goals(AttrVar, Goals, RGoals0),
-	        atts:'$default_attr_list'(Module, AttrVar, RGoals0, RGoals)
+    (  catch((  Module:attribute_goals(AttrVar, Goals, RGoals0)
+	     ;  atts:'$default_attr_list'(Module, AttrVar, RGoals0, RGoals)
 	     ),
 	     E,
 	     (  '$print_attribute_goals_exception'(Module, E),
@@ -84,9 +84,25 @@ gather_modules_for_attrs([Attr|Attrs], [Module|Modules], Modules0) :-
     '$module_of'(Module, Attr),
     gather_modules_for_attrs(Attrs, Modules, Modules0).
 
+module_prefixed_goals([], _, Gs, Gs).
+module_prefixed_goals([G|Gs], Module, [MG|MGs], TailGs) :-
+    (  G = _:_ -> MG = G
+    ;  MG = Module:G
+    ),
+    module_prefixed_goals(Gs, Module, MGs, TailGs).
+
+call_attribute_goals_with_module_prefix([], _, _, []).
+call_attribute_goals_with_module_prefix([Module | Modules], GoalCaller, AttrVars, Goals) :-
+    call(GoalCaller, AttrVars, Module, Goals0),
+    enqueue_goals(Goals0),
+    module_prefixed_goals(Goals0, Module, Goals, Gs),
+    call_attribute_goals_with_module_prefix(Modules, GoalCaller, AttrVars, Gs).
+
 copy_term(Source, Dest, Goals) :-
     term_variables(Source, Vars),
-    gather_modules(Vars, Modules, _),
-    call_attribute_goals(Modules, call_query_var_goals, Vars),
-    '$clone_attribute_goals'(Goals0),
-    '$copy_term_without_attr_vars'([Source | Goals0], [Dest | Goals]).
+    gather_modules(Vars, Modules0, _),
+    sort(Modules0, Modules),
+    call_attribute_goals_with_module_prefix(Modules, call_query_var_goals, Vars, Goals0),
+    sort(Goals0, Goals1),
+    !,
+    '$copy_term_without_attr_vars'([Source | Goals1], [Dest | Goals]).
