@@ -3051,14 +3051,15 @@ impl MachineState {
                 | (
                     HeapCellValue::Addr(v1 @ Addr::StackCell(..)),
                     HeapCellValue::Addr(v2 @ Addr::HeapCell(_)),
-                ) => match (var_pairs.get(&v1).cloned(), var_pairs.get(&v2).cloned()) {
-                    (Some(ref v2_p), Some(ref v1_p)) if *v1_p == v1 && *v2_p == v2 => continue,
-                    (Some(_), _) | (_, Some(_)) => return true,
-                    (None, None) => {
-                        var_pairs.insert(v1.clone(), v2.clone());
-                        var_pairs.insert(v2, v1);
-                    }
-                },
+                ) =>
+                    match (var_pairs.get(&v1).cloned(), var_pairs.get(&v2).cloned()) {
+                        (Some(ref v2_p), Some(ref v1_p)) if *v1_p == v1 && *v2_p == v2 => continue,
+                        (Some(_), _) | (_, Some(_)) => return true,
+                        (None, None) => {
+                            var_pairs.insert(v1.clone(), v2.clone());
+                            var_pairs.insert(v2, v1);
+                        }
+                    },
                 (HeapCellValue::Addr(a1), HeapCellValue::Addr(a2)) => {
                     if a1 != a2 {
                         return true;
@@ -3079,6 +3080,7 @@ impl MachineState {
             match v {
                 HeapCellValue::Addr(Addr::HeapCell(..)) => return true,
                 HeapCellValue::Addr(Addr::StackCell(..)) => return true,
+                HeapCellValue::Addr(Addr::AttrVar(..)) => return true,
                 _ => {}
             }
         }

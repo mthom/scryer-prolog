@@ -179,7 +179,7 @@ pub enum Declaration {
     NonCountedBacktracking(ClauseName, usize), // name, arity
     Op(OpDecl),
     UseModule(ModuleSource),
-    UseQualifiedModule(ModuleSource, Vec<PredicateKey>),
+    UseQualifiedModule(ModuleSource, Vec<ModuleExport>),
 }
 
 impl Declaration {
@@ -216,15 +216,20 @@ impl OpDecl {
         self.insert_into_op_dir(clause_name!(""), op_dir, 0);
     }
 
-    fn insert_into_op_dir(&self, module: ClauseName, op_dir: &mut OpDir, prec: usize) {
-        let (spec, name) = (self.1, self.2.clone());
-
-        let fixity = match spec {
+    #[inline]
+    pub fn fixity(&self) -> Fixity {
+        match self.1 {
             XFY | XFX | YFX => Fixity::In,
             XF | YF => Fixity::Post,
             FX | FY => Fixity::Pre,
-            _ => return,
-        };
+            _ => unreachable!()
+        }
+    }
+
+    pub fn insert_into_op_dir(&self, module: ClauseName, op_dir: &mut OpDir, prec: usize) {
+        let (spec, name) = (self.1, self.2.clone());
+
+        let fixity = self.fixity();
 
         match op_dir.get(&(name.clone(), fixity)) {
             Some(cell) => {
@@ -322,10 +327,16 @@ pub fn fetch_op_spec(
 
 pub type ModuleDir = IndexMap<ClauseName, Module>;
 
+#[derive(Clone, PartialEq)]
+pub enum ModuleExport {
+    OpDecl(OpDecl),
+    PredicateKey(PredicateKey),    
+}
+
 #[derive(Clone)]
 pub struct ModuleDecl {
     pub name: ClauseName,
-    pub exports: Vec<PredicateKey>,
+    pub exports: Vec<ModuleExport>,
 }
 
 pub struct Module {
@@ -337,6 +348,8 @@ pub struct Module {
     pub goal_expansions: (Predicate, VecDeque<TopLevel>),
     pub user_term_expansions: (Predicate, VecDeque<TopLevel>), // term expansions inherited from the user scope.
     pub user_goal_expansions: (Predicate, VecDeque<TopLevel>), // same for goal_expansions.
+    pub local_term_expansions: (Predicate, VecDeque<TopLevel>), // expansions local to the module.
+    pub local_goal_expansions: (Predicate, VecDeque<TopLevel>),
     pub inserted_expansions: bool, // has the module been successfully inserted into toplevel??
     pub is_impromptu_module: bool,
  }

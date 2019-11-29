@@ -161,7 +161,7 @@ impl<'a, R: Read> TermStream<'a, R> {
     pub fn col_num(&self) -> usize {
         self.parser.col_num()
     }
-    
+
     #[inline]
     pub fn update_expansion_lens(&mut self) {
         let te_key = (clause_name!("term_expansion"), 2);
@@ -257,7 +257,6 @@ impl<'a, R: Read> TermStream<'a, R> {
                         self.enqueue_term(term)?
                     }
                     None => {
-                        let term = self.run_goal_expanders(&mut machine_st, op_dir, term)?;
                         return Ok(term);
                     }
                 };
@@ -267,7 +266,7 @@ impl<'a, R: Read> TermStream<'a, R> {
 
             let line_num = self.line_num();
             let col_num = self.col_num();
-            
+
             let term = self.parser.read_term(composite_op!(
                 self.in_module,
                 &self.wam.indices.op_dir,
@@ -281,40 +280,6 @@ impl<'a, R: Read> TermStream<'a, R> {
         }
     }
 
-    pub(crate) fn run_goal_expanders(
-        &mut self,
-        machine_st: &mut MachineState,
-        op_dir: &OpDir,
-        term: Term,
-    ) -> Result<Term, ParserError> {
-        match term {
-            Term::Clause(cell, name, mut terms, arity) => {
-                let mut new_terms = {
-                    let old_terms = match (name.as_str(), terms.len()) {
-                        (":-", 2) => {
-                            let comma_term = *terms.pop().unwrap();
-                            unfold_by_str(comma_term, ",")
-                        }
-                        ("?-", 1) => unfold_by_str(*terms.pop().unwrap(), ","),
-                        _ => return Ok(Term::Clause(cell, name, terms, arity)),
-                    };
-
-                    self.expand_goals(machine_st, op_dir, VecDeque::from(old_terms))?
-                };
-
-                let initial_term = new_terms.pop().unwrap();
-                terms.push(Box::new(fold_by_str(
-                    new_terms.into_iter(),
-                    initial_term,
-                    clause_name!(","),
-                )));
-                
-                Ok(Term::Clause(cell, name, terms, arity))
-            }
-            _ => Ok(term),
-        }
-    }
-
     pub(super)
     fn expand_goals(
         &mut self,
@@ -324,7 +289,7 @@ impl<'a, R: Read> TermStream<'a, R> {
     ) -> Result<Vec<Term>, ParserError> {
         let mut results = vec![];
 
-        while let Some(term) = terms.pop_front() {            
+        while let Some(term) = terms.pop_front() {
             match machine_st.try_expand_term(self.wam, &term, CompileTimeHook::GoalExpansion) {
                 Some(term_string) => {
                     let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;
@@ -374,6 +339,15 @@ impl MachineState {
         output
     }
 
+    // reset the machine, but keep the heap contents as they were.
+    // this prevents clashes between underscored variable names
+    // in the same query.
+    fn reset_with_heap_preservation(&mut self) {
+        let heap = self.heap.take();            
+        self.reset();
+        self.heap = heap;
+    }
+
     fn try_expand_term(
         &mut self,
         wam: &mut Machine,
@@ -382,14 +356,14 @@ impl MachineState {
     ) -> Option<String> {
         let term_write_result = write_term_to_heap(term, self);
         let h = self.heap.h;
-        
+
         self[temp_v!(1)] = Addr::HeapCell(term_write_result.heap_loc);
         self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
         self[temp_v!(2)] = Addr::HeapCell(h);
 
         let code = vec![call_clause!(ClauseType::Hook(hook), 2, 0, true)];
         wam.code_repo.cached_query = code;
-	
+
         self.query_stepper(
             &mut wam.indices,
             &mut wam.policies,
@@ -398,7 +372,7 @@ impl MachineState {
         );
 
         if self.fail {
-            self.reset();
+            self.reset_with_heap_preservation();            
             None
         } else {
             let TermWriteResult { var_dict, .. } = term_write_result;
@@ -406,7 +380,7 @@ impl MachineState {
             self.heap_locs = var_dict;
             let output = self.print_with_locs(Addr::HeapCell(h), &wam.indices.op_dir);
 
-            self.reset();
+            self.reset_with_heap_preservation();            
             Some(output.result())
         }
     }

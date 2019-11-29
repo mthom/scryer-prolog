@@ -33,6 +33,7 @@ use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 use crate::prolog::machine::modules::*;
+use crate::prolog::machine::toplevel::*;
 use crate::prolog::read::PrologStream;
 
 use indexmap::IndexMap;
@@ -105,13 +106,13 @@ impl SubModuleUser for IndexStore {
         &mut self.op_dir
     }
 
-    fn get_code_index(&self, key: PredicateKey, module: ClauseName) -> Option<CodeIndex> {
-        match module.as_str() {
+    fn get_code_index(&self, key: PredicateKey, module_name: ClauseName) -> Option<CodeIndex> {
+        match module_name.as_str() {
             "user" | "builtin" => self.code_dir.get(&key).cloned(),
             _ => self
-                .modules
-                .get(&module)
-                .and_then(|ref module| module.code_dir.get(&key).cloned().map(CodeIndex::from)),
+              .modules
+              .get(&module_name)
+              .and_then(|ref module| module.code_dir.get(&key).cloned().map(CodeIndex::from))
         }
     }
 
@@ -130,7 +131,7 @@ impl SubModuleUser for IndexStore {
             return;
         }
 
-        self.code_dir.insert((name, arity), idx);
+        self.code_dir.insert((name.clone(), arity), idx.clone());
     }
 
     fn use_qualified_module(
@@ -138,7 +139,7 @@ impl SubModuleUser for IndexStore {
         code_repo: &mut CodeRepo,
         flags: MachineFlags,
         submodule: &Module,
-        exports: &Vec<PredicateKey>,
+        exports: &Vec<ModuleExport>,
     ) -> Result<(), SessionError> {
         use_qualified_module(self, submodule, exports)?;
         submodule
@@ -239,7 +240,7 @@ impl Machine {
 
     pub fn run_init_code(&mut self, code: Code) -> bool {
 	let old_machine_st = self.sink_to_snapshot();
-	self.machine_st.reset();        
+	self.machine_st.reset();
 
 	self.code_repo.cached_query = code;
 	self.run_query();
@@ -399,30 +400,64 @@ impl Machine {
         return;
     }
 
-    fn extract_predicate_indicator_list(&mut self) -> Vec<PredicateKey>
+    fn extract_module_export_list(&mut self) -> Result<Vec<ModuleExport>, ParserError>
     {
-	let export_list = self.machine_st[temp_v!(2)].clone();
-	let mut export_list = self.machine_st.store(self.machine_st.deref(export_list));
+	let mut export_list = self.machine_st[temp_v!(2)].clone();
 	let mut exports = vec![];
 
-	while let Addr::Lis(l) = export_list {
+	while let Addr::Lis(l) = self.machine_st.store(self.machine_st.deref(export_list)) {
 	    match &self.machine_st.heap[l] {
 		&HeapCellValue::Addr(Addr::Str(s)) => {
-		    let name = match &self.machine_st.heap[s+1] {
-			&HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
-			    name.clone(),
-			_ =>
-			    unreachable!()
-		    };
+                    match &self.machine_st.heap[s] {
+                        HeapCellValue::NamedStr(arity, ref name, _)
+                            if *arity == 2 && name.as_str() == "/" => {
+		                let name = match &self.machine_st.heap[s+1] {
+			            &HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
+			                name.clone(),
+			            _ =>
+			                unreachable!()
+		                };
 
-		    let arity = match &self.machine_st.heap[s+2] {
-			&HeapCellValue::Addr(Addr::Con(Constant::Integer(ref arity))) =>
-			    arity.to_usize().unwrap(),
-			_ =>
-			    unreachable!()
-		    };
+		                let arity = match &self.machine_st.heap[s+2] {
+			            &HeapCellValue::Addr(Addr::Con(Constant::Integer(ref arity))) =>
+			                arity.to_usize().unwrap(),
+			            _ =>
+			                unreachable!()
+		                };
 
-		    exports.push((name, arity));
+		                exports.push(ModuleExport::PredicateKey((name, arity)));
+                            }
+                        HeapCellValue::NamedStr(arity, ref name, _)
+                            if *arity == 3 && name.as_str() == "op" => {
+                                let name = match &self.machine_st.heap[s+3] {
+			            &HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
+			                name.clone(),
+			            _ =>
+			                unreachable!()
+		                };
+
+                                let spec = match &self.machine_st.heap[s+2] {
+			            &HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
+			                name.clone(),
+			            _ =>
+			                unreachable!()
+		                };
+
+		                let prec = match &self.machine_st.heap[s+1] {
+			            &HeapCellValue::Addr(Addr::Con(Constant::Integer(ref arity))) =>
+			                arity.to_usize().unwrap(),
+			            _ =>
+			                unreachable!()
+		                };
+
+                                exports.push(ModuleExport::OpDecl(to_op_decl(
+                                    prec,
+                                    spec.as_str(),
+                                    name,
+                                )?));
+                            }
+                        _ => unreachable!()
+                    }
 		}
 		_ => unreachable!()
 	    }
@@ -430,7 +465,7 @@ impl Machine {
 	    export_list = self.machine_st.heap[l+1].as_addr(l+1);
 	}
 
-	exports
+	Ok(exports)
     }
 
     fn use_module<ToSource>(&mut self, to_src: ToSource)
@@ -488,7 +523,13 @@ impl Machine {
 	    _ => unreachable!()
 	};
 
-	let exports = self.extract_predicate_indicator_list();
+	let exports = match self.extract_module_export_list() {
+            Ok(exports) => exports,
+            Err(e) => {
+                self.throw_session_error(SessionError::from(e), (clause_name!("use_module"), 2));
+                return;
+            }
+        };
 
 	let load_result = match to_src(name) {
 	    ModuleSource::Library(name) =>
@@ -520,7 +561,7 @@ impl Machine {
 	self.code_repo.cached_query = cached_query;
 
 	if let Err(e) = result {
-	    self.throw_session_error(e, (clause_name!("use_module"), 1));
+	    self.throw_session_error(e, (clause_name!("use_module"), 2));
 	}
     }
 
@@ -551,7 +592,7 @@ impl Machine {
 
     fn sink_to_snapshot(&mut self) -> MachineState {
         let mut snapshot = MachineState::with_capacity(0);
-        
+
         snapshot.hb = self.machine_st.hb;
         snapshot.e = self.machine_st.e;
         snapshot.b = self.machine_st.b;
@@ -576,7 +617,7 @@ impl Machine {
         snapshot
     }
 
-    fn absorb_snapshot(&mut self, mut snapshot: MachineState) {       
+    fn absorb_snapshot(&mut self, mut snapshot: MachineState) {
         self.machine_st.hb = snapshot.hb;
         self.machine_st.e = snapshot.e;
         self.machine_st.b = snapshot.b;
@@ -623,36 +664,18 @@ impl Machine {
                     // so hold onto it locally and restore it after the compiler has finished.
                     self.machine_st.fail = false;
                     let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
+
                     self.dynamic_transaction(trans_type, p);
+                    self.code_repo.cached_query = cached_query;
 
                     if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                        self.code_repo.cached_query = cached_query;
                         break;
                     }
-
-                    self.code_repo.cached_query = cached_query;
                 }
                 _ =>
                     break
             };
         }
-    }
-
-    #[cfg(test)]
-    pub fn test_heap_view<Outputter>(&self, mut output: Outputter) -> Outputter
-    where
-        Outputter: HCValueOutputter,
-    {
-        for (var, addr) in self.machine_st.heap_locs.iter() {
-            output = self.machine_st.print_var_eq(
-                var.clone(),
-                addr.clone(),
-                &self.indices.op_dir,
-                output,
-            );
-        }
-
-        output
     }
 }
 

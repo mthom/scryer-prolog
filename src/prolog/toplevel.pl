@@ -1,7 +1,7 @@
-:- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2]).
-
 :- use_module(library(lists)).
 :- use_module(library(si)).
+
+:- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2]).
 
 '$repl'(ListOfModules) :-
     maplist('$use_list_of_modules', ListOfModules),
@@ -29,8 +29,10 @@
 	  catch('$$compile_batch', E, '$print_exception_with_check'(E))
        ;  consult(Item)
        )
-    ;  catch(throw(error(type_error(atom, Item), repl/0)),
-	     '$print_exception_with_check'(E))
+    ;  !,
+       catch(throw(error(type_error(atom, Item), repl/0)),
+	     E,
+	     '$print_exception_with_check'(E))       
     ).
 '$instruction_match'(Term, VarList) :-
     '$submit_query_and_print_results'(Term, VarList),
@@ -42,13 +44,49 @@
     ),
     (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList), !
     ;  write('false.'), nl
+    ),
+    '$reset_attr_var_state'.
+
+'$needs_bracketing'(Value, Op) :-
+    catch((functor(Value, F, _),
+	   current_op(EqPrec, EqSpec, Op),
+	   current_op(FPrec, _, F)),
+	  _,
+	  false),
+    (  EqPrec < FPrec -> true
+    ;  EqPrec == FPrec,
+       memberchk(EqSpec, [fx,xfx,yfx])
     ).
 
 '$write_goal'(G, VarList) :-
     (  G = (Var = Value) ->
        write(Var),
        write(' = '),
-       write_term(Value, [quoted(true), variable_names(VarList)])
+       (  '$needs_bracketing'(Value, (=)) ->
+	  write('('),
+	  write_term(Value, [quoted(true), variable_names(VarList)]),
+	  write(')')
+       ;  write_term(Value, [quoted(true), variable_names(VarList)])
+       )
+    ;  G == [] ->
+       write('true')
+    ;  write_term(G, [quoted(true), variable_names(VarList)])
+    ).
+
+'$write_last_goal'(G, VarList) :-
+    (  G = (Var = Value) ->
+       write(Var),
+       write(' = '),
+       (  '$needs_bracketing'(Value, (=)) ->
+	  write('('),
+	  write_term(Value, [quoted(true), variable_names(VarList)]),
+	  write(')')       	  
+       ;  write_term(Value, [quoted(true), variable_names(VarList)]),
+	  (  '$trailing_period_is_ambiguous'(Value) ->
+	     write(' ')
+	  ;  true
+	  )
+       )
     ;  G == [] ->
        write('true')
     ;  write_term(G, [quoted(true), variable_names(VarList)])
@@ -60,7 +98,21 @@
     write(', '),
     '$write_eq'(G2, VarList).
 '$write_eq'(G, VarList) :-
-    '$write_goal'(G, VarList).
+    '$write_last_goal'(G, VarList).
+    
+'$graphic_token_char'(C) :-
+    memberchk(C, ['#', '$', '&', '*', '+', '-', '.', ('/'), ':',
+                  '<', '=', '>', '?', '@', '^', '~', ('\\')]).
+
+'$list_last_item'([C], C) :- !.
+'$list_last_item'([_|Cs], D) :-
+    '$list_last_item'(Cs, D).
+
+'$trailing_period_is_ambiguous'(Value) :-
+    atom(Value),
+    atom_chars(Value, ValueChars),
+    '$list_last_item'(ValueChars, Char),
+    '$graphic_token_char'(Char).
 
 '$write_eqs_and_read_input'(B, VarList) :-
     sort(VarList, SortedVarList),
@@ -71,11 +123,10 @@
 	  write('true.'), nl
        ;  thread_goals(Goals, ThreadedGoals, (',')),
 	  '$write_eq'(ThreadedGoals, VarList),
-	  write(' .'),
+	  write('.'),
 	  nl
        )
-    ;  repeat,
-       thread_goals(Goals, ThreadedGoals, (',')),
+    ;  thread_goals(Goals, ThreadedGoals, (',')),
        '$write_eq'(ThreadedGoals, VarList),
        '$raw_input_read_char'(C),
        (  C == (';'), !,
@@ -117,7 +168,7 @@
     ;  '$print_exception'(E)
     ).
 
-'$predicate_indicator'(Source, PI) :-
+'$module_export'(Source, PI) :-
     (  nonvar(PI) ->
        (  PI = Name / Arity ->
 	  (  var(Name) -> throw(error(instantiation_error, Source))
@@ -128,7 +179,20 @@
 	     )
 	  ;  throw(error(type_error(integer, Arity), Source))
 	  )
-       ;  throw(error(type_error(predicate_indicator, PI), Source))
+       ;  PI = op(Prec, Spec, Name) ->
+	  (  integer(Prec) ->
+	     (  \+ atom(Name) ->
+		throw(error(type_error(atom, Name), Source))
+	     ;  Prec < 0 ->
+		throw(error(domain_error(not_less_than_zero, Prec), Source))
+	     ;  Prec > 1200 ->
+		throw(error(domain_error(operator_precision, Prec), Source))
+	     ;  memberchk(Spec, [xfy, yfx, xfx, fx, fy, yf, xf])
+	     ;  throw(error(domain_error(operator_specification, Spec), Source))
+	     )
+	  ;  throw(error(type_error(integer, Prec), Source))
+	  )
+       ;  throw(error(type_error(module_export, PI), Source))
        )
     ;  throw(error(instantiation_error, Source))
     ).
@@ -150,9 +214,11 @@ use_module(Module) :-
 use_module(Module, QualifiedExports) :-
     (  nonvar(Module) ->
        (  list_si(QualifiedExports) ->
-	  maplist('$predicate_indicator'(use_module/2), QualifiedExports), !,
-	  (  Module = library(Filename) -> '$use_qualified_module'(Filename, QualifiedExports)
-	  ;  atom(Module) -> '$use_qualified_module_from_file'(Module, QualifiedExports)
+	  maplist('$module_export'(use_module/2), QualifiedExports) ->
+	  (  Module = library(Filename) ->
+	     '$use_qualified_module'(Filename, QualifiedExports)
+	  ;  atom(Module) ->
+	     '$use_qualified_module_from_file'(Module, QualifiedExports)
 	  ;  throw(error(invalid_module_specifier, use_module/2))
 	  )
        ;  throw(error(type_error(list, QualifiedExports), use_module/2))

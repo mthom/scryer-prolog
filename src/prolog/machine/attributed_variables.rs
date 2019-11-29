@@ -32,9 +32,9 @@ impl AttrVarInitializer {
 
     #[inline]
     pub(super) fn reset(&mut self) {
+	self.attribute_goals.clear();
         self.attr_var_queue.clear();
         self.bindings.clear();
-	self.attribute_goals.clear();
     }
 }
 

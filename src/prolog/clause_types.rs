@@ -170,7 +170,7 @@ pub enum SystemClauseType {
     CopyToLiftedHeap,
     DeleteAttribute,
     DeleteHeadAttribute,
-    DynamicModuleResolution,
+    DynamicModuleResolution(usize),
     EnqueueAttributeGoal,
     EnqueueAttributedVar,
     ExpandGoal,
@@ -179,6 +179,7 @@ pub enum SystemClauseType {
     FetchGlobalVar,
     FetchGlobalVarWithOffset,
     GetChar,
+    ResetAttrVarState,
     TruncateIfNoLiftedHeapGrowthDiff,
     TruncateIfNoLiftedHeapGrowth,
     GetAttributedVariableList,
@@ -278,7 +279,7 @@ impl SystemClauseType {
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
-            &SystemClauseType::DynamicModuleResolution => clause_name!("$module_call"),
+            &SystemClauseType::DynamicModuleResolution(_) => clause_name!("$module_call"),
             &SystemClauseType::EnqueueAttributeGoal => clause_name!("$enqueue_attribute_goal"),
             &SystemClauseType::EnqueueAttributedVar => clause_name!("$enqueue_attr_var"),
             &SystemClauseType::ExpandTerm => clause_name!("$expand_term"),
@@ -289,6 +290,7 @@ impl SystemClauseType {
                 clause_name!("$fetch_global_var_with_offset")
             }
             &SystemClauseType::GetChar => clause_name!("$get_char"),
+            &SystemClauseType::ResetAttrVarState => clause_name!("$reset_attr_var_state"),
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
                 clause_name!("$truncate_if_no_lh_growth")
             }
@@ -399,7 +401,7 @@ impl SystemClauseType {
             ("$get_next_op_db_ref", 2) => Some(SystemClauseType::GetNextOpDBRef),
             ("$lookup_db_ref", 3) => Some(SystemClauseType::LookupDBRef),
             ("$lookup_op_db_ref", 4) => Some(SystemClauseType::LookupOpDBRef),
-            ("$module_call", 2) => Some(SystemClauseType::DynamicModuleResolution),
+            ("$module_call", _) => Some(SystemClauseType::DynamicModuleResolution(arity - 2)),
             ("$enqueue_attribute_goal", 1) => Some(SystemClauseType::EnqueueAttributeGoal),
             ("$enqueue_attr_var", 1) => Some(SystemClauseType::EnqueueAttributedVar),
             ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
@@ -408,6 +410,7 @@ impl SystemClauseType {
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
             ("$get_char", 1) => Some(SystemClauseType::GetChar),
+            ("$reset_attr_var_state", 0) => Some(SystemClauseType::ResetAttrVarState),
             ("$truncate_if_no_lh_growth", 1) => {
                 Some(SystemClauseType::TruncateIfNoLiftedHeapGrowth)
             }

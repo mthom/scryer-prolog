@@ -7,6 +7,7 @@ use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 
 use std::collections::VecDeque;
+use std::mem;
 
 // Module's and related types are defined in forms.
 impl Module {
@@ -19,6 +20,8 @@ impl Module {
             user_goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
             term_expansions: (Predicate::new(), VecDeque::from(vec![])),
             goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
+            local_term_expansions: (Predicate::new(), VecDeque::from(vec![])),
+            local_goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
             code_dir: CodeDir::new(),
             op_dir: default_op_dir(),
             inserted_expansions: false,
@@ -61,7 +64,7 @@ impl Module {
         Ok(())
     }
 
-    pub fn add_module_expansion_record(
+    pub fn add_expansion_record(
         &mut self,
         hook: CompileTimeHook,
         clause: PredicateClause,
@@ -77,6 +80,45 @@ impl Module {
                 self.goal_expansions.1.extend(queue.into_iter());
             }
         }
+    }
+
+    pub fn add_local_expansion(
+        &mut self,
+        hook: CompileTimeHook,
+        clause: PredicateClause,
+        queue: VecDeque<TopLevel>,
+    ) {
+        match hook {
+            CompileTimeHook::TermExpansion => {
+                (self.local_term_expansions.0).0.push(clause);
+                self.local_term_expansions.1.extend(queue.into_iter());
+            }
+            CompileTimeHook::GoalExpansion => {
+                (self.local_goal_expansions.0).0.push(clause);
+                self.local_goal_expansions.1.extend(queue.into_iter());
+            }
+            _ => {}
+        }
+    }
+
+    pub fn take_local_expansions(&mut self) -> Vec<(Predicate, VecDeque<TopLevel>)>
+    {
+        let term_expansions =
+            mem::replace(&mut self.local_term_expansions, (Predicate::new(), VecDeque::new()));
+        let goal_expansions =
+            mem::replace(&mut self.local_goal_expansions, (Predicate::new(), VecDeque::new()));
+
+        let mut result = vec![];
+
+        if !(term_expansions.0).0.is_empty() {
+            result.push(term_expansions);
+        }
+
+        if !(goal_expansions.0).0.is_empty() {
+            result.push(goal_expansions);
+        }
+
+        result
     }
 }
 
@@ -95,64 +137,55 @@ pub trait SubModuleUser {
     }
 
     fn remove_module(&mut self, mod_name: ClauseName, module: &Module) {
-        for (name, arity) in module.module_decl.exports.iter().cloned() {
-            let name = name.defrock_brackets();
+        for export in module.module_decl.exports.iter().cloned() {
+            match export {
+                ModuleExport::PredicateKey((name, arity)) => {
+                    let name = name.defrock_brackets();
 
-            match self.get_code_index((name.clone(), arity), mod_name.clone()) {
-                Some(CodeIndex(ref code_idx)) => {
-                    if &code_idx.borrow().1 != &module.module_decl.name {
-                        continue;
-                    }
-
-                    self.remove_code_index((name.clone(), arity));
-
-                    // remove or respecify ops.
-                    if arity == 2 {
-                        if let Some(mod_name) = self.get_op_module_name(name.clone(), Fixity::In) {
-                            if mod_name == module.module_decl.name {
-                                self.op_dir().remove(&(name.clone(), Fixity::In));
+                    match self.get_code_index((name.clone(), arity), mod_name.clone()) {
+                        Some(CodeIndex(ref code_idx)) => {
+                            if &code_idx.borrow().1 != &module.module_decl.name {
+                                continue;
                             }
-                        }
-                    } else if arity == 1 {
-                        if let Some(mod_name) = self.get_op_module_name(name.clone(), Fixity::Pre) {
-                            if mod_name == module.module_decl.name {
-                                self.op_dir().remove(&(name.clone(), Fixity::Pre));
-                            }
-                        }
 
-                        if let Some(mod_name) = self.get_op_module_name(name.clone(), Fixity::Post)
-                        {
-                            if mod_name == module.module_decl.name {
-                                self.op_dir().remove(&(name.clone(), Fixity::Post));
+                            self.remove_code_index((name.clone(), arity));
+
+                            // remove or respecify ops.
+                            if arity == 2 {
+                                if let Some(mod_name) = self.get_op_module_name(name.clone(), Fixity::In) {
+                                    if mod_name == module.module_decl.name {
+                                        self.op_dir().remove(&(name.clone(), Fixity::In));
+                                    }
+                                }
+                            } else if arity == 1 {
+                                if let Some(mod_name) = self.get_op_module_name(name.clone(), Fixity::Pre) {
+                                    if mod_name == module.module_decl.name {
+                                        self.op_dir().remove(&(name.clone(), Fixity::Pre));
+                                    }
+                                }
+
+                                if let Some(mod_name) = self.get_op_module_name(name.clone(), Fixity::Post)
+                                {
+                                    if mod_name == module.module_decl.name {
+                                        self.op_dir().remove(&(name.clone(), Fixity::Post));
+                                    }
+                                }
                             }
-                        }
-                    }
+                        }                    
+                        _ => {}
+                    };
+                },
+                ModuleExport::OpDecl(op_decl) => {
+                    let op_dir = self.op_dir();
+                    op_dir.remove(&(op_decl.name(), op_decl.fixity()));
                 }
-                _ => {}
-            };
+            }
         }
     }
 
     // returns true on successful import.
     fn import_decl(&mut self, name: ClauseName, arity: usize, submodule: &Module) -> bool {
         let name = name.defrock_brackets();
-        let mut found_op = false;
-
-        {
-            let mut insert_op_dir = |fix| {
-                if let Some(op_data) = submodule.op_dir.get(&(name.clone(), fix)) {
-                    self.op_dir().insert((name.clone(), fix), op_data.clone());
-                    found_op = true;
-                }
-            };
-
-            if arity == 1 {
-                insert_op_dir(Fixity::Pre);
-                insert_op_dir(Fixity::Post);
-            } else if arity == 2 {
-                insert_op_dir(Fixity::In);
-            }
-        }
 
         if let Some(code_data) = submodule.code_dir.get(&(name.clone(), arity)) {
             let name = name.with_table(submodule.atom_tbl.clone());
@@ -163,7 +196,7 @@ pub trait SubModuleUser {
             self.insert_dir_entry(name, arity, code_data.clone());
             true
         } else {
-            found_op || submodule.is_impromptu_module
+            submodule.is_impromptu_module
         }
     }
 
@@ -172,30 +205,58 @@ pub trait SubModuleUser {
         _: &mut CodeRepo,
         _: MachineFlags,
         _: &Module,
-        _: &Vec<PredicateKey>,
+        _: &Vec<ModuleExport>,
     ) -> Result<(), SessionError>;
-    fn use_module(&mut self, _: &mut CodeRepo, _: MachineFlags, _: &Module) -> Result<(), SessionError>;
+    
+    fn use_module(
+        &mut self,
+        _: &mut CodeRepo,
+        _: MachineFlags,
+        _: &Module
+    ) -> Result<(), SessionError>;
 }
 
 pub fn use_qualified_module<User>(
     user: &mut User,
     submodule: &Module,
-    exports: &Vec<PredicateKey>,
+    exports: &Vec<ModuleExport>,
 ) -> Result<(), SessionError>
 where
     User: SubModuleUser,
 {
-    for (name, arity) in exports.iter().cloned() {
-        if !submodule
-            .module_decl
-            .exports
-            .contains(&(name.clone(), arity))
-        {
-            continue;
-        }
+    for export in exports.iter().cloned() {
+        match export {
+            ModuleExport::PredicateKey((name, arity)) => {
+                if !submodule
+                    .module_decl
+                    .exports
+                    .contains(&ModuleExport::PredicateKey((name.clone(), arity)))
+                {
+                    continue;
+                }
 
-        if !user.import_decl(name, arity, submodule) {
-            return Err(SessionError::ModuleDoesNotContainExport);
+                if !user.import_decl(name, arity, submodule) {
+                    return Err(SessionError::ModuleDoesNotContainExport);
+                }
+            },
+            ModuleExport::OpDecl(op_decl) => {
+                if !submodule
+                    .module_decl
+                    .exports
+                    .contains(&ModuleExport::OpDecl(op_decl.clone()))
+                {
+                    continue;
+                }
+
+                let op_dir = user.op_dir();
+                let prec = op_decl.0;
+                
+                op_decl.insert_into_op_dir(
+                    submodule.module_decl.name.clone(),
+                    op_dir,
+                    prec,
+                );                   
+            }
         }
     }
 
@@ -206,9 +267,23 @@ pub fn use_module<User: SubModuleUser>(
     user: &mut User,
     submodule: &Module,
 ) -> Result<(), SessionError> {
-    for (name, arity) in submodule.module_decl.exports.iter().cloned() {
-        if !user.import_decl(name, arity, submodule) {
-            return Err(SessionError::ModuleDoesNotContainExport);
+    for export in submodule.module_decl.exports.iter().cloned() {
+        match export {
+            ModuleExport::PredicateKey((name, arity)) => {
+                if !user.import_decl(name, arity, submodule) {
+                    return Err(SessionError::ModuleDoesNotContainExport);
+                }
+            }
+            ModuleExport::OpDecl(op_decl) => {
+                let op_dir = user.op_dir();
+                let prec = op_decl.0;
+                
+                op_decl.insert_into_op_dir(
+                    submodule.module_decl.name.clone(),
+                    op_dir,
+                    prec,
+                );                
+            }
         }
     }
 
@@ -241,7 +316,7 @@ impl SubModuleUser for Module {
         _: &mut CodeRepo,
         _: MachineFlags,
         submodule: &Module,
-        exports: &Vec<PredicateKey>,
+        exports: &Vec<ModuleExport>,
     ) -> Result<(), SessionError> {
         use_qualified_module(self, submodule, exports)?;
 
@@ -283,7 +358,7 @@ impl SubModuleUser for Module {
         self.user_goal_expansions
             .1
             .extend(submodule.goal_expansions.1.iter().cloned());
-	
+
         Ok(())
     }
 }

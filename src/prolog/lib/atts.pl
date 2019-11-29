@@ -1,13 +1,12 @@
-:- module(atts, [attribute/1, call_residue_vars/2, '$absent_attr'/2,
-		 '$copy_attr_list'/2, '$get_attr'/2, '$put_attr'/2,
-		 '$absent_from_list'/2, '$get_from_list'/3,
-		 '$add_to_list'/3, '$del_attr'/3, '$del_attr_step'/3,
-		 '$del_attr_buried'/4, '$default_attr_list'/4]).
+:- module(atts, [op(1199, fx, attribute), call_residue_vars/2,
+		 '$absent_attr'/2, '$copy_attr_list'/2, '$get_attr'/2,
+		 '$put_attr'/2, '$absent_from_list'/2,
+		 '$get_from_list'/3, '$add_to_list'/3, '$del_attr'/3,
+		 '$del_attr_step'/3, '$del_attr_buried'/4,
+		 '$default_attr_list'/4]).
 
 :- use_module(library(dcgs)).
 :- use_module(library(terms)).
-
-:- op(1199, fx, attribute).
 
 /* represent the list of attributes belonging to a variable,
    of a particular module, as a list of terms of the form

@@ -11,6 +11,10 @@ edition = "2018"
 [build-dependencies]
 indexmap = "1.0.2"
 
+[features]
+default = ["rug", "prolog_parser/rug"]
+num = ["num-rug-adapter", "prolog_parser/num"]
+
 [dependencies]
 dirs = "2.0.2"
 downcast = "0.10.0"
@@ -18,11 +22,10 @@ indexmap = "1.0.2"
 lazy_static = "1.4.0"
 libc = "0.2.62"
 nix = "0.15.0"
+num-rug-adapter = { optional = true, version = "0.1.1" }
 ordered-float = "0.5.0"
-prolog_parser = "0.8.34"
+prolog_parser = { version = "0.8.36", default-features = false }
 ref_thread_local = "0.0.0"
-rug = "1.4.0"
+rug = { version = "1.4.0", optional = true }
 rustyline = "5.0.3"
-
-[dependencies.termion]
-version = "1.4.0"
+termion = "1.4.0"
