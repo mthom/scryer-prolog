@@ -863,7 +863,14 @@ impl MachineState {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));
 
                 match addr {
-                    Addr::Con(Constant::Usize(old_b)) if self.b <= old_b + 2 => {}
+                    Addr::Con(Constant::Usize(old_b)) => {
+                        let prev_b = self.stack.index_or_frame(self.b).prelude.b;
+                        let prev_b = self.stack.index_or_frame(prev_b).prelude.b;
+
+                        if prev_b > old_b {
+                            self.fail = true;
+                        }
+                    }
                     _ => self.fail = true,
                 };
             }
@@ -1421,7 +1428,7 @@ impl MachineState {
 
                             let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
                             let list_addr = self[temp_v!(2)].clone();
-                            
+
                             self.unify(var_list_addr, list_addr);
                         } else {
                             self.fail = true;
@@ -1511,7 +1518,9 @@ impl MachineState {
                 match cut_policy.downcast_mut::<SCCCutPolicy>().ok() {
                     Some(sgc_policy) => {
                         if let Some((addr, b_cutoff, prev_b)) = sgc_policy.pop_cont_pt() {
-                            if self.b <= b_cutoff + 1 {
+                            let b = self.stack.index_or_frame(self.b).prelude.b;
+
+                            if b <= b_cutoff {
                                 self.block = prev_b;
 
                                 if let Some(r) = dest.as_var() {
@@ -1799,7 +1808,9 @@ impl MachineState {
 
                 match a2 {
                     Addr::Con(Constant::Usize(bp)) => {
-                        if self.b <= bp + 1 {
+                        let prev_b = self.stack.index_or_frame(self.b).prelude.b;
+
+                        if prev_b <= bp {
                             let a2 = Addr::Con(atom!("!"));
                             self.unify(a1, a2);
                         } else {

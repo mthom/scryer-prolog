@@ -608,7 +608,7 @@ impl MachineState {
                 }
             }
             TrailRef::Ref(Ref::StackCell(b, sc)) => {
-                if b <= self.b {
+                if b < self.b {
                     self.trail.push(TrailRef::Ref(Ref::StackCell(b, sc)));
                     self.tr += 1;
                 }
@@ -693,7 +693,7 @@ impl MachineState {
                     }
                 }
                 TrailRef::Ref(Ref::StackCell(b, _)) => {
-                    if b <= self.b {
+                    if b < self.b {
                         self.trail[i - offset] = self.trail[i];
                     } else {
                         offset += 1;

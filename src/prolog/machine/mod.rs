@@ -559,12 +559,6 @@ impl Machine {
         snapshot.s = self.machine_st.s;
         snapshot.tr = self.machine_st.tr;
         snapshot.pstr_tr = self.machine_st.pstr_tr;
-        snapshot.p = self.machine_st.p.clone();
-        snapshot.cp = self.machine_st.cp;
-        snapshot.attr_var_init = mem::replace(
-            &mut self.machine_st.attr_var_init,
-            AttrVarInitializer::new(0, 0)
-        );
         snapshot.num_of_args = self.machine_st.num_of_args;
 
         snapshot.fail = self.machine_st.fail;
@@ -577,7 +571,6 @@ impl Machine {
         snapshot.block = self.machine_st.block;
 
         snapshot.ball = self.machine_st.ball.take();
-        snapshot.heap_locs = mem::replace(&mut self.machine_st.heap_locs, IndexMap::new());
         snapshot.lifted_heap = mem::replace(&mut self.machine_st.lifted_heap, vec![]);
 
         snapshot
@@ -591,9 +584,6 @@ impl Machine {
         self.machine_st.s = snapshot.s;
         self.machine_st.tr = snapshot.tr;
         self.machine_st.pstr_tr = snapshot.pstr_tr;
-        self.machine_st.p = snapshot.p;
-        self.machine_st.cp = snapshot.cp;
-        self.machine_st.attr_var_init = snapshot.attr_var_init;
         self.machine_st.num_of_args = snapshot.num_of_args;
 
         self.machine_st.fail = snapshot.fail;
@@ -610,7 +600,6 @@ impl Machine {
         self.machine_st.block = snapshot.block;
 
         self.machine_st.ball = snapshot.ball.take();
-        self.machine_st.heap_locs = mem::replace(&mut snapshot.heap_locs, IndexMap::new());
         self.machine_st.lifted_heap = mem::replace(&mut snapshot.lifted_heap, vec![]);
     }
 

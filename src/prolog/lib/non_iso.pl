@@ -48,8 +48,29 @@ call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
 setup_call_cleanup(S, G, C) :- '$get_b_value'(B),
     S, '$set_cp_by_default'(B), '$get_current_block'(Bb),
-    ( '$call_with_default_policy'(var(C)) -> throw(error(instantiation_error, setup_call_cleanup/3))
-    ; '$call_with_default_policy'(scc_helper(C, G, Bb)) ).
+    (  '$call_with_default_policy'(var(C)) ->
+       throw(error(instantiation_error, setup_call_cleanup/3))
+    ;  '$call_with_default_policy'(scc_helper(C, G, Bb))
+    ).
+
+:- non_counted_backtracking scc_helper/3.
+scc_helper(C, G, Bb) :-
+    '$get_cp'(Cp), '$install_scc_cleaner'(C, NBb), call(G),
+    ( '$check_cp'(Cp) ->
+      '$reset_block'(Bb),
+      '$call_with_default_policy'(run_cleaners_without_handling(Cp))
+    ; '$call_with_default_policy'(true)
+    ; '$reset_block'(NBb),
+      '$fail').
+scc_helper(_, _, Bb) :-
+    '$reset_block'(Bb), '$get_ball'(Ball),
+    '$call_with_default_policy'(run_cleaners_with_handling),
+    '$erase_ball',
+    '$call_with_default_policy'(throw(Ball)).
+scc_helper(_, _, _) :-
+    '$get_cp'(Cp),
+    '$call_with_default_policy'(run_cleaners_without_handling(Cp)),
+    '$fail'.
 
 :- non_counted_backtracking run_cleaners_with_handling/0.
 run_cleaners_with_handling :-
@@ -66,23 +87,6 @@ run_cleaners_without_handling(Cp) :-
     '$call_with_default_policy'(run_cleaners_without_handling(Cp)).
 run_cleaners_without_handling(Cp) :-
     '$set_cp_by_default'(Cp), '$restore_cut_policy'.
-
-:- non_counted_backtracking scc_helper/3.
-scc_helper(C, G, Bb) :-
-    '$get_cp'(Cp), '$install_scc_cleaner'(C, NBb), call(G),
-    ( '$check_cp'(Cp) -> '$reset_block'(Bb),
-			 '$call_with_default_policy'(run_cleaners_without_handling(Cp))
-    ; '$call_with_default_policy'(true)
-    ; '$reset_block'(NBb), '$fail').
-scc_helper(_, _, Bb) :-
-    '$reset_block'(Bb), '$get_ball'(Ball),
-    '$call_with_default_policy'(run_cleaners_with_handling),
-    '$erase_ball',
-    '$call_with_default_policy'(throw(Ball)).
-scc_helper(_, _, _) :-
-    '$get_cp'(Cp),
-    '$call_with_default_policy'(run_cleaners_without_handling(Cp)),
-    '$fail'.
 
 % call_with_inference_limit
 
@@ -119,8 +123,8 @@ call_with_inference_limit(G, L, R, Bb, B) :-
 call_with_inference_limit(_, _, R, Bb, B) :-
     '$reset_block'(Bb),
     '$remove_inference_counter'(B, _),
-    ( '$get_ball'(Ball), '$get_level'(Cp), '$set_cp_by_default'(Cp)
-    ; '$remove_call_policy_check'(B), '$fail' ),
+    (  '$get_ball'(Ball), '$get_level'(Cp), '$set_cp_by_default'(Cp)
+    ;  '$remove_call_policy_check'(B), '$fail' ),
     '$erase_ball',
     '$call_with_default_policy'(handle_ile(B, Ball, R)).
 

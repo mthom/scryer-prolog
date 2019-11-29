@@ -1186,7 +1186,7 @@ indomain(1).
 % Examples:
 %
 % ==
-% ?- sat(A =< B), Vs = [A,B], sat_count(+[1|Vs], Count).
+% ?- 
 % Vs = [A, B],
 % Count = 3,
 % sat(A=:=A*B).
@@ -1197,7 +1197,7 @@ indomain(1).
 % Vs = [...],
 % CountOr = 1329227995784915872903807060280344575,
 % CountAnd = 1.
-% ==
+% ==sat(A =< B), Vs = [A,B], sat_count(+[1|Vs], Count).
 
 sat_count(Sat0, N) :-
         catch((parse_sat(Sat0, Sat),

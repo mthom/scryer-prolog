@@ -844,7 +844,7 @@ pub(crate) trait CallPolicy: Any {
                         return Ok(());
                     }
 
-                    machine_st.p = CodePtr::CallN(arity, machine_st.p.local());
+                    machine_st.p = CodePtr::CallN(arity, machine_st.p.local(), machine_st.last_call);
                 }
                 ClauseType::BuiltIn(built_in) => {
                     machine_st.setup_built_in_call(built_in.clone());
