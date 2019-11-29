@@ -36,19 +36,25 @@ impl AttrVarInitializer {
         self.attr_var_queue.clear();
         self.bindings.clear();
     }
+
+    #[inline]
+    pub(super) fn backtrack(&mut self, queue_b: usize, bindings_b: usize) {
+        self.attr_var_queue.truncate(queue_b);
+        self.bindings.truncate(bindings_b);
+    }
 }
 
 impl MachineState {
     pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: Addr) {
         if self.attr_var_init.bindings.is_empty() {
             self.attr_var_init.instigating_p = self.p.local();
-            
+
             if self.last_call {
                 self.attr_var_init.cp = self.cp;
             } else {
                 self.attr_var_init.cp = self.p.local() + 1;
             }
-            
+
             self.p = CodePtr::VerifyAttrInterrupt(self.attr_var_init.verify_attrs_loc);
         }
 
@@ -61,6 +67,7 @@ impl MachineState {
             .bindings
             .iter()
             .map(|(ref h, _)| Addr::AttrVar(*h));
+
         let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
 
         let iter = self
@@ -68,6 +75,7 @@ impl MachineState {
             .bindings
             .iter()
             .map(|(_, ref addr)| addr.clone());
+
         let value_list_addr = Addr::HeapCell(self.heap.to_list(iter));
 
         (var_list_addr, value_list_addr)

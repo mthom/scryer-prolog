@@ -445,11 +445,13 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
-        let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
-        machine_st
-            .attr_var_init
-            .attr_var_queue
-            .truncate(attr_var_init_b);
+        let attr_var_init_queue_b = machine_st.or_stack[b].attr_var_init_queue_b;
+        let attr_var_init_bindings_b = machine_st.or_stack[b].attr_var_init_bindings_b;
+
+        machine_st.attr_var_init.backtrack(
+            attr_var_init_queue_b,
+            attr_var_init_bindings_b,
+        );
 
         machine_st.hb = machine_st.heap.h;
         machine_st.p += 1;
@@ -491,11 +493,13 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
-        let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
-        machine_st
-            .attr_var_init
-            .attr_var_queue
-            .truncate(attr_var_init_b);
+        let attr_var_init_queue_b = machine_st.or_stack[b].attr_var_init_queue_b;
+        let attr_var_init_bindings_b = machine_st.or_stack[b].attr_var_init_bindings_b;
+
+        machine_st.attr_var_init.backtrack(
+            attr_var_init_queue_b,
+            attr_var_init_bindings_b,
+        );
 
         machine_st.hb = machine_st.heap.h;
         machine_st.p += offset;
@@ -533,11 +537,13 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
-        let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
-        machine_st
-            .attr_var_init
-            .attr_var_queue
-            .truncate(attr_var_init_b);
+        let attr_var_init_queue_b = machine_st.or_stack[b].attr_var_init_queue_b;
+        let attr_var_init_bindings_b = machine_st.or_stack[b].attr_var_init_bindings_b;
+
+        machine_st.attr_var_init.backtrack(
+            attr_var_init_queue_b,
+            attr_var_init_bindings_b,
+        );
 
         machine_st.b = machine_st.or_stack[b].b;
         machine_st.or_stack.truncate(machine_st.b);
@@ -580,12 +586,14 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
-        let attr_var_init_b = machine_st.or_stack[b].attr_var_init_b;
-        machine_st
-            .attr_var_init
-            .attr_var_queue
-            .truncate(attr_var_init_b);
+        let attr_var_init_queue_b = machine_st.or_stack[b].attr_var_init_queue_b;
+        let attr_var_init_bindings_b = machine_st.or_stack[b].attr_var_init_bindings_b;
 
+        machine_st.attr_var_init.backtrack(
+            attr_var_init_queue_b,
+            attr_var_init_bindings_b,
+        );
+        
         machine_st.b = machine_st.or_stack[b].b;
         machine_st.or_stack.truncate(machine_st.b);
 

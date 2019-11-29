@@ -28,7 +28,7 @@ call_verify_attributes(Attrs, _, _, []) :-
 call_verify_attributes([], _, _, []).
 call_verify_attributes([Attr|Attrs], Var, Value, ListOfGoalLists) :-
     gather_modules([Attr|Attrs], Modules0),
-    sort(Modules0, Modules),
+    sort(Modules0, Modules),    
     verify_attrs(Modules, Var, Value, ListOfGoalLists).
 
 call_goals([ListOfGoalLists | ListsCubed]) :-
