@@ -44,7 +44,8 @@
     ),
     (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList), !
     ;  write('false.'), nl
-    ).
+    ),
+    '$reset_attr_var_state'.
 
 '$needs_bracketing'(Value, Op) :-
     catch((functor(Value, F, _),

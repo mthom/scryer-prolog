@@ -179,6 +179,7 @@ pub enum SystemClauseType {
     FetchGlobalVar,
     FetchGlobalVarWithOffset,
     GetChar,
+    ResetAttrVarState,
     TruncateIfNoLiftedHeapGrowthDiff,
     TruncateIfNoLiftedHeapGrowth,
     GetAttributedVariableList,
@@ -289,6 +290,7 @@ impl SystemClauseType {
                 clause_name!("$fetch_global_var_with_offset")
             }
             &SystemClauseType::GetChar => clause_name!("$get_char"),
+            &SystemClauseType::ResetAttrVarState => clause_name!("$reset_attr_var_state"),
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
                 clause_name!("$truncate_if_no_lh_growth")
             }
@@ -408,6 +410,7 @@ impl SystemClauseType {
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
             ("$get_char", 1) => Some(SystemClauseType::GetChar),
+            ("$reset_attr_var_state", 0) => Some(SystemClauseType::ResetAttrVarState),
             ("$truncate_if_no_lh_growth", 1) => {
                 Some(SystemClauseType::TruncateIfNoLiftedHeapGrowth)
             }

@@ -1680,6 +1680,9 @@ impl MachineState {
                     }
                 };
             },
+            &SystemClauseType::ResetAttrVarState => {
+                self.attr_var_init.reset();
+            }
             &SystemClauseType::RemoveCallPolicyCheck => {
                 let restore_default = match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
                     Some(call_policy) => {
