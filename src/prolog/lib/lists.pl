@@ -104,7 +104,7 @@ maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7
 sumlist_([], S, S).
 sumlist_([N|Ns], S, S0) :-
     S1 is S0 + N,
-    sumlist(Ns, S, S1).
+    sumlist_(Ns, S, S1).
 
 sumlist(Ns, S) :-
     must_be(list, Ns),
