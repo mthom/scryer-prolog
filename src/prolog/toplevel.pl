@@ -32,7 +32,7 @@
     ;  !,
        catch(throw(error(type_error(atom, Item), repl/0)),
 	     E,
-	     '$print_exception_with_check'(E))       
+	     '$print_exception_with_check'(E))
     ).
 '$instruction_match'(Term, VarList) :-
     '$submit_query_and_print_results'(Term, VarList),
@@ -42,7 +42,9 @@
     (  expand_goals(Term0, Term) -> true
     ;  Term = Term0
     ),
-    (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList), !
+    (  '$get_b_value'(B), call(Term),
+       '$write_eqs_and_read_input'(B, VarList),
+       !
     ;  write('false.'), nl
     ).
 
@@ -79,7 +81,7 @@
        (  '$needs_bracketing'(Value, (=)) ->
 	  write('('),
 	  write_term(Value, [quoted(true), variable_names(VarList)]),
-	  write(')')       	  
+	  write(')')
        ;  write_term(Value, [quoted(true), variable_names(VarList)]),
 	  (  '$trailing_period_is_ambiguous'(Value) ->
 	     write(' ')
@@ -98,7 +100,7 @@
     '$write_eq'(G2, VarList).
 '$write_eq'(G, VarList) :-
     '$write_last_goal'(G, VarList).
-    
+
 '$graphic_token_char'(C) :-
     memberchk(C, ['#', '$', '&', '*', '+', '-', '.', ('/'), ':',
                   '<', '=', '>', '?', '@', '^', '~', ('\\')]).

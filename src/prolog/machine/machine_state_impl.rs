@@ -123,7 +123,7 @@ impl MachineState {
         self.flags
     }
 
-    fn next_global_index(&self) -> usize {
+    pub(super) fn next_global_index(&self) -> usize {
         max(
             if self.and_stack.len() > 0 {
                 self.and_stack[self.e].global_index
@@ -3127,10 +3127,18 @@ impl MachineState {
 
     pub(super) fn allocate(&mut self, num_cells: usize) {
         let gi = self.next_global_index();
+//        let new_e = self.e + 1;
 
         self.p += 1;
 
-        if self.e + 1 < self.and_stack.len() {
+/*
+        /* See issue #244 for an example of a program broken (at the 
+           top level) by the inclusion of this code. A proper GC must determine if an 
+           existing AND frame is safe to resize; the check here is not 
+           enough.
+        */
+
+        if new_e < self.and_stack.len() {
             let and_gi = self.and_stack[self.e].global_index;
             let or_gi = self
                 .or_stack
@@ -3139,10 +3147,8 @@ impl MachineState {
                 .unwrap_or(0);
 
             if and_gi > or_gi {
-                let new_e = self.e + 1;
-
                 self.and_stack[new_e].e = self.e;
-                self.and_stack[new_e].cp = self.cp.clone();
+                self.and_stack[new_e].cp = self.cp;
                 self.and_stack[new_e].global_index = gi;
 
                 self.and_stack.resize(new_e, num_cells);
@@ -3151,7 +3157,7 @@ impl MachineState {
                 return;
             }
         }
-
+*/
         self.and_stack.push(gi, self.e, self.cp.clone(), num_cells);
         self.e = self.and_stack.len() - 1;
     }
@@ -3353,7 +3359,7 @@ impl MachineState {
                 self.b = self.or_stack.len();
                 let b = self.b - 1;
 
-                for i in 1..n + 1 {
+                for i in 1 .. n + 1 {
                     self.or_stack[b][i] = self.registers[i].clone();
                 }
 

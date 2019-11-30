@@ -55,6 +55,10 @@ impl AndStack {
         self.0.clear()
     }
 
+    /* 
+
+    // See MachineState::allocate for why this is commented out.
+
     pub fn resize(&mut self, fr: usize, n: usize) {
         let len = self[fr].perms.len();
 
@@ -66,7 +70,8 @@ impl AndStack {
             }
         }
     }
-
+    */
+    
     #[inline]
     pub fn truncate(&mut self, len: usize) {
         self.0.truncate(len);
