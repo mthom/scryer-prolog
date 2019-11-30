@@ -63,7 +63,7 @@ call_query_var_goals([AttrVar|AttrVars], Module, Goals) :-
 
 call_attr_var_goals([], _, []).
 call_attr_var_goals([AttrVar|AttrVars], Module, Goals) :-
-    (  catch(Module:attribute_goals(AttrVar, Goals, RGoals),	        	     
+    (  catch(Module:attribute_goals(AttrVar, Goals, RGoals),
 	     E,
 	     '$print_attribute_goals_exception'(Module, E)
 	     )
