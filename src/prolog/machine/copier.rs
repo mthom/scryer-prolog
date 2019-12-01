@@ -50,14 +50,6 @@ impl<T: CopierTarget> CopyTermState<T> {
         &mut self.target[scan]
     }
 
-    fn attr_var_redirect_tag(&self) -> impl Fn(usize) -> Addr {
-        if let AttrVarPolicy::DeepCopy = self.attr_var_policy {
-            Addr::AttrVar
-        } else {
-            Addr::HeapCell
-        }
-    }
-
     fn copied_list(&mut self, addr: usize) -> bool {
         if let HeapCellValue::Addr(Addr::Lis(addr)) = self.target[addr].clone() {
             if addr >= self.old_h {
@@ -79,62 +71,55 @@ impl<T: CopierTarget> CopyTermState<T> {
         *self.value_at_scan() = HeapCellValue::Addr(Addr::Lis(threshold));
 
         let hcv = self.target[addr].clone();
-        self.target.push(hcv.clone());
-
-        let ra = hcv.as_addr(threshold);
-        let rd = self.target.store(self.target.deref(ra));
-
-        match rd.clone() {
-            Addr::AttrVar(h) | Addr::HeapCell(h) if h >= self.old_h => {
-                self.target[threshold] = HeapCellValue::Addr(rd)
-            }
-            ra @ Addr::AttrVar(..) | ra @ Addr::HeapCell(_) | ra @ Addr::StackCell(..) => {
-                if ra == rd {
-                    self.reinstantiate_var(ra, threshold);
-                } else {
-                    self.target[threshold] = HeapCellValue::Addr(ra);
-                }
-            }
-            _ => {
-                self.trail
-                    .push((Ref::HeapCell(addr), self.target[addr].clone()));
-                self.target[addr] = HeapCellValue::Addr(Addr::Lis(threshold))
-            }
-        };
+        self.target.push(hcv);
 
         let hcv = self.target[addr + 1].clone();
         self.target.push(hcv);
 
+        self.trail.push((Ref::HeapCell(addr), self.target[addr].clone()));
+        self.target[addr] = HeapCellValue::Addr(Addr::Lis(threshold));
+
         self.scan += 1;
     }
 
-    fn reinstantiate_var(&mut self, addr: Addr, threshold: usize) {
+    fn reinstantiate_var(&mut self, addr: Addr, frontier: usize) {
         match addr {
             Addr::HeapCell(h) => {
-                self.target[threshold] = HeapCellValue::Addr(Addr::HeapCell(threshold));
-                self.target[h] = HeapCellValue::Addr(Addr::HeapCell(threshold));
+                self.target[frontier] = HeapCellValue::Addr(Addr::HeapCell(frontier));
+                self.target[h] = HeapCellValue::Addr(Addr::HeapCell(frontier));
                 self.trail.push((
                     Ref::HeapCell(h),
                     HeapCellValue::Addr(Addr::HeapCell(h)),
                 ));
             }
             Addr::StackCell(fr, sc) => {
-                self.target[threshold] = HeapCellValue::Addr(Addr::HeapCell(threshold));
-                self.target.stack()[fr][sc] = Addr::HeapCell(threshold);
+                self.target[frontier] = HeapCellValue::Addr(Addr::HeapCell(frontier));
+                self.target.stack()[fr][sc] = Addr::HeapCell(frontier);
                 self.trail.push((
                     Ref::StackCell(fr, sc),
                     HeapCellValue::Addr(Addr::StackCell(fr, sc)),
                 ));
             }
             Addr::AttrVar(h) => {
-                let redirect_tag = self.attr_var_redirect_tag();
+                let threshold = if let AttrVarPolicy::DeepCopy = self.attr_var_policy {
+                    self.target.threshold()
+                } else {
+                    frontier
+                };
 
-                self.target[threshold] = HeapCellValue::Addr(redirect_tag(threshold));
-                self.target[h] = HeapCellValue::Addr(redirect_tag(threshold));
+                self.target[frontier] = HeapCellValue::Addr(Addr::HeapCell(threshold));
+                self.target[h] = HeapCellValue::Addr(Addr::HeapCell(threshold));
                 self.trail.push((
                     Ref::AttrVar(h),
                     HeapCellValue::Addr(Addr::AttrVar(h)),
                 ));
+
+                if let AttrVarPolicy::DeepCopy = self.attr_var_policy {
+                    self.target.push(HeapCellValue::Addr(Addr::AttrVar(threshold)));
+
+                    let list_val = self.target[h + 1].clone();
+                    self.target.push(list_val);
+                }
             }
             _ => unreachable!()
         }
@@ -144,33 +129,12 @@ impl<T: CopierTarget> CopyTermState<T> {
         let rd = self.target.store(self.target.deref(addr.clone()));
 
         match rd.clone() {
-            Addr::AttrVar(h) if h >= self.old_h => {
-                let redirect_tag = self.attr_var_redirect_tag();
-                *self.value_at_scan() = HeapCellValue::Addr(redirect_tag(h));
-                self.scan += 1;
-            }
-            Addr::HeapCell(h) if h >= self.old_h => {
+            Addr::AttrVar(h) | Addr::HeapCell(h) if h >= self.old_h => {
                 *self.value_at_scan() = HeapCellValue::Addr(rd);
                 self.scan += 1;
             }
-            Addr::AttrVar(h) if addr == rd => {
-                let redirect_tag = self.attr_var_redirect_tag();
-                let threshold = self.target.threshold();
-
-                self.target
-                    .push(HeapCellValue::Addr(redirect_tag(threshold)));
-
-                if let AttrVarPolicy::DeepCopy = self.attr_var_policy {
-                    let list_val = self.target[h + 1].clone();
-                    self.target.push(list_val);
-                }
-
-                self.reinstantiate_var(addr, threshold);
-                *self.value_at_scan() = HeapCellValue::Addr(redirect_tag(threshold));
-            }
             _ if addr == rd => {
-                let scan = self.scan;
-                self.reinstantiate_var(addr, scan);
+                self.reinstantiate_var(addr, self.scan);
                 self.scan += 1;
             }
             _ => {
@@ -192,8 +156,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                     HeapCellValue::NamedStr(arity, name.clone(), fixity.clone()),
                 ));
 
-                self.target
-                    .push(HeapCellValue::NamedStr(arity, name, fixity));
+                self.target.push(HeapCellValue::NamedStr(arity, name, fixity));
 
                 for i in 0..arity {
                     let hcv = self.target[addr + 1 + i].clone();
