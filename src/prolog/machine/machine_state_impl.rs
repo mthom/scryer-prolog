@@ -125,16 +125,14 @@ impl MachineState {
 
     pub(super) fn next_global_index(&self) -> usize {
         max(
-            if self.and_stack.len() > 0 {
-                self.and_stack[self.e].global_index
-            } else {
-                0
-            },
-            if self.b > 0 {
-                self.or_stack[self.b - 1].global_index
-            } else {
-                0
-            },
+            self.or_stack
+                .top()
+                .map(|or_fr| or_fr.global_index)
+                .unwrap_or(0),
+            self.and_stack
+                .top()
+                .map(|or_fr| or_fr.global_index)
+                .unwrap_or(0),
         ) + 1
     }
 
@@ -1074,18 +1072,18 @@ impl MachineState {
             (Number::Float(f), _) | (_, Number::Float(f)) => {
                 let n = Addr::Con(Constant::Float(f));
                 let stub = MachineError::functor_stub(clause_name!("gcd"), 2);
-                
+
                 Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
             }
             (Number::Rational(r), _) | (_, Number::Rational(r)) => {
                 let n = Addr::Con(Constant::Rational(r));
                 let stub = MachineError::functor_stub(clause_name!("gcd"), 2);
-                
+
                 Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
             }
         }
     }
-    
+
     fn float_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
         let f1 = result_f(&n1, rnd_f);
         let f2 = result_f(&n2, rnd_f);
@@ -2039,8 +2037,11 @@ impl MachineState {
     }
 
     pub(super) fn set_ball(&mut self) {
+        self.ball.reset();
+
         let addr = self[temp_v!(1)].clone();
         self.ball.boundary = self.heap.h;
+
         copy_term(
             CopyBallTerm::new(&mut self.and_stack, &mut self.heap, &mut self.ball.stub),
             addr,
@@ -3127,14 +3128,14 @@ impl MachineState {
 
     pub(super) fn allocate(&mut self, num_cells: usize) {
         let gi = self.next_global_index();
-//        let new_e = self.e + 1;
+//      let new_e = self.e + 1;
 
         self.p += 1;
 
 /*
-        /* See issue #244 for an example of a program broken (at the 
-           top level) by the inclusion of this code. A proper GC must determine if an 
-           existing AND frame is safe to resize; the check here is not 
+        /* See issue #244 for an example of a program broken (at the
+           top level) by the inclusion of this code. A proper GC must determine if an
+           existing AND frame is safe to resize; the check here is not
            enough.
         */
 
@@ -3185,7 +3186,7 @@ impl MachineState {
             }
         }
     }
-
+    
     fn handle_call_clause(
         &mut self,
         indices: &mut IndexStore,

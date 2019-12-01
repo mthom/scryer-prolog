@@ -42,8 +42,7 @@
     (  expand_goals(Term0, Term) -> true
     ;  Term = Term0
     ),
-    (  '$get_b_value'(B), call(Term),
-       '$write_eqs_and_read_input'(B, VarList),
+    (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList),
        !
     ;  write('false.'), nl
     ).

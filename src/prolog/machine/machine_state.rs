@@ -62,7 +62,7 @@ impl Ball {
             });
         }
 
-        stub        
+        stub
     }
 }
 
@@ -486,7 +486,6 @@ pub(crate) trait CallPolicy: Any {
         machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
-
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         let attr_var_init_queue_b = machine_st.or_stack[b].attr_var_init_queue_b;
@@ -532,7 +531,6 @@ pub(crate) trait CallPolicy: Any {
         machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
-
         machine_st.heap.truncate(machine_st.or_stack[b].h);
 
         let attr_var_init_queue_b = machine_st.or_stack[b].attr_var_init_queue_b;
@@ -578,8 +576,8 @@ pub(crate) trait CallPolicy: Any {
         let curr_pstr_tr = machine_st.pstr_tr;
 
         machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
-        machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
 
+        machine_st.pstr_tr = machine_st.or_stack[b].pstr_tr;
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
 
         machine_st.heap.truncate(machine_st.or_stack[b].h);
@@ -591,7 +589,7 @@ pub(crate) trait CallPolicy: Any {
             attr_var_init_queue_b,
             attr_var_init_bindings_b,
         );
-        
+
         machine_st.b = machine_st.or_stack[b].b;
         machine_st.or_stack.truncate(machine_st.b);
 

@@ -42,17 +42,25 @@ impl AndStack {
         AndStack(mem::replace(&mut self.0, vec![]))
     }
 
+    #[inline]    
     pub fn push(&mut self, global_index: usize, e: usize, cp: LocalCodePtr, n: usize) {
         let len = self.0.len();
         self.0.push(Frame::new(global_index, len, e, cp, n));
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    #[inline]
     pub fn clear(&mut self) {
         self.0.clear()
+    }
+    
+    #[inline]
+    pub fn top(&self) -> Option<&Frame> {
+        self.0.last()
     }
 
     /* 
