@@ -51,13 +51,16 @@ impl<T: CopierTarget> CopyTermState<T> {
     }
 
     fn copied_list(&mut self, addr: usize) -> bool {
-        if let HeapCellValue::Addr(Addr::Lis(addr)) = self.target[addr].clone() {
-            if addr >= self.old_h {
-                *self.value_at_scan() = HeapCellValue::Addr(Addr::Lis(addr));
-                self.scan += 1;
-                return true;
+        match self.target[addr].clone() {
+            HeapCellValue::Addr(Addr::Lis(addr)) | HeapCellValue::Addr(Addr::HeapCell(addr)) => {
+                if addr >= self.old_h {
+                    *self.value_at_scan() = HeapCellValue::Addr(Addr::Lis(addr));
+                    self.scan += 1;
+                    return true;
+                }
             }
-        }
+            _ => {}
+        };
 
         false
     }
@@ -71,13 +74,31 @@ impl<T: CopierTarget> CopyTermState<T> {
         *self.value_at_scan() = HeapCellValue::Addr(Addr::Lis(threshold));
 
         let hcv = self.target[addr].clone();
-        self.target.push(hcv);
 
+        let ra = hcv.as_addr(threshold);
+        let rd = self.target.store(self.target.deref(ra));
+
+        self.target.push(hcv);
+        
         let hcv = self.target[addr + 1].clone();
         self.target.push(hcv);
 
-        self.trail.push((Ref::HeapCell(addr), self.target[addr].clone()));
-        self.target[addr] = HeapCellValue::Addr(Addr::Lis(threshold));
+        match rd.clone() {
+            Addr::AttrVar(h) | Addr::HeapCell(h) if h >= self.old_h => {
+                self.target[threshold] = HeapCellValue::Addr(rd)
+            }
+            ra @ Addr::AttrVar(_) | ra @ Addr::HeapCell(..) | ra @ Addr::StackCell(..) => {
+                if ra == rd {
+                    self.reinstantiate_var(ra, threshold);
+                } else {
+                    self.target[threshold] = HeapCellValue::Addr(ra);
+                }
+            }
+            _ => {
+                self.trail.push((Ref::HeapCell(addr), self.target[addr].clone()));
+                self.target[addr] = HeapCellValue::Addr(Addr::Lis(threshold))
+            }
+        };
 
         self.scan += 1;
     }
