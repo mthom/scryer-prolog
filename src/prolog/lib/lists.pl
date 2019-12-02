@@ -1,7 +1,8 @@
-:- module(lists, [member/2, select/3, append/3, memberchk/2,
-		  reverse/2, length/2, maplist/2, maplist/3,
-		  maplist/4, maplist/5, maplist/6, maplist/7,
-		  maplist/8, maplist/9, sumlist/2]).
+:- module(lists, [member/2, select/3, append/3, foldl/4, foldl/5,
+		  memberchk/2, reverse/2, length/2, maplist/2,
+		  maplist/3, maplist/4, maplist/5, maplist/6,
+		  maplist/7, maplist/8, maplist/9, same_length/2,
+		  sumlist/2]).
 
 
 :- use_module(library(error)).
@@ -109,3 +110,27 @@ sumlist_([N|Ns], S, S0) :-
 sumlist(Ns, S) :-
     must_be(list, Ns),
     sumlist_(Ns, S, 0).
+
+
+
+same_length([], []).
+same_length([_|As], [_|Bs]) :-
+        same_length(As, Bs).
+
+
+foldl(Goal_3, Ls, A0, A) :-
+        foldl_(Ls, Goal_3, A0, A).
+
+foldl_([], _, A, A).
+foldl_([L|Ls], G_3, A0, A) :-
+        call(G_3, L, A0, A1),
+        foldl_(Ls, G_3, A1, A).
+
+
+foldl(Goal_4, Xs, Ys, A0, A) :-
+        foldl_(Xs, Ys, Goal_4, A0, A).
+
+foldl_([], [], _, A, A).
+foldl_([X|Xs], [Y|Ys], G_4, A0, A) :-
+        call(G_4, X, Y, A0, A1),
+        foldl_(Xs, Ys, G_4, A1, A).
