@@ -614,7 +614,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
 
         match addr {
-            Addr::AttrVar(h) => Some(format!("_{}", h + 1)),
+            Addr::AttrVar(h) => Some(format!("_{}", h)),
             Addr::HeapCell(h) | Addr::Lis(h) | Addr::Str(h) => Some(format!("_{}", h)),
             Addr::StackCell(fr, sc) => Some(format!("_s_{}_{}", fr, sc)),
             _ => None,
