@@ -51,13 +51,16 @@ impl<T: CopierTarget> CopyTermState<T> {
     }
 
     fn copied_list(&mut self, addr: usize) -> bool {
-        if let HeapCellValue::Addr(Addr::Lis(addr)) = self.target[addr].clone() {
-            if addr >= self.old_h {
-                *self.value_at_scan() = HeapCellValue::Addr(Addr::Lis(addr));
-                self.scan += 1;
-                return true;
+        match self.target[addr].clone() {
+            HeapCellValue::Addr(Addr::Lis(addr)) | HeapCellValue::Addr(Addr::HeapCell(addr)) => {
+                if addr >= self.old_h {
+                    *self.value_at_scan() = HeapCellValue::Addr(Addr::Lis(addr));
+                    self.scan += 1;
+                    return true;
+                }
             }
-        }
+            _ => {}
+        };
 
         false
     }
