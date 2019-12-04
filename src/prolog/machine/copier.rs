@@ -90,6 +90,11 @@ impl<T: CopierTarget> CopyTermState<T> {
             ra @ Addr::AttrVar(_) | ra @ Addr::HeapCell(..) | ra @ Addr::StackCell(..) => {
                 if ra == rd {
                     self.reinstantiate_var(ra, threshold);
+
+                    if let AttrVarPolicy::StripAttributes = self.attr_var_policy {
+                        self.trail.push((Ref::HeapCell(addr), self.target[addr].clone()));
+                        self.target[addr] = HeapCellValue::Addr(Addr::HeapCell(threshold));
+                    }
                 } else {
                     self.target[threshold] = HeapCellValue::Addr(ra);
                 }
