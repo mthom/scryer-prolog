@@ -25,3 +25,4 @@ attribute_goals(Var) -->
     { get_atts(Var, frozen(Goals)),
       put_atts(Var, -frozen(_)) },
     [freeze(Var, Goals)].
+

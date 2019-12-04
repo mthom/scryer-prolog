@@ -50,7 +50,7 @@ call_attribute_goals([Module | Modules], GoalCaller, AttrVars) :-
 call_query_var_goals([], _, []).
 call_query_var_goals([AttrVar|AttrVars], Module, Goals) :-
     (  catch((  Module:attribute_goals(AttrVar, Goals, RGoals0)
-	     ;  atts:'$default_attr_list'(Module, AttrVar, RGoals0, RGoals)
+	     ,  atts:'$default_attr_list'(Module, AttrVar, RGoals0, RGoals)
 	     ),
 	     E,
 	     (  '$print_attribute_goals_exception'(Module, E),
