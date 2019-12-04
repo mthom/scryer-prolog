@@ -510,8 +510,8 @@ pub(crate) trait CallPolicy: Any {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
-        machine_st.pop_stack_frames();
-
+        let old_e = machine_st.e;
+        
         machine_st.num_of_args = n;
         machine_st.e = machine_st.or_stack[b].e;
         machine_st.cp = machine_st.or_stack[b].cp.clone();
@@ -521,6 +521,8 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.unwind_trail(old_tr, curr_tr);
         machine_st.tr = machine_st.or_stack[b].tr;
+
+        machine_st.pop_stack_frames(old_e);
 
         machine_st.trail.truncate(machine_st.tr);
 
@@ -558,7 +560,7 @@ pub(crate) trait CallPolicy: Any {
             machine_st.registers[i] = machine_st.or_stack[b][i].clone();
         }
 
-        machine_st.pop_stack_frames();
+        let old_e = machine_st.e;
 
         machine_st.num_of_args = n;
         machine_st.e = machine_st.or_stack[b].e;
@@ -569,6 +571,8 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.unwind_trail(old_tr, curr_tr);
         machine_st.tr = machine_st.or_stack[b].tr;
+
+        machine_st.pop_stack_frames(old_e);
 
         machine_st.trail.truncate(machine_st.tr);
 

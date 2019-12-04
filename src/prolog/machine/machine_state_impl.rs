@@ -3172,9 +3172,9 @@ impl MachineState {
         self.p += 1;
     }
 
-    pub(super) fn pop_stack_frames(&mut self) {
-	if self.and_stack.len() > self.e {
-            let and_gi = self.and_stack[self.e].global_index;
+    pub(super) fn pop_stack_frames(&mut self, e: usize) {
+	if self.and_stack.len() > e {
+            let and_gi = self.and_stack[e].global_index;
             let or_gi = self
                 .or_stack
                 .top()
@@ -3182,7 +3182,7 @@ impl MachineState {
                 .unwrap_or(0);
 
             if and_gi > or_gi {
-                self.and_stack.truncate(self.e + 1);
+                self.and_stack.truncate(e + 1);
             }
         }
     }
