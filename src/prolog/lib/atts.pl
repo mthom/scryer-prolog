@@ -46,7 +46,8 @@
     '$get_attr_list'(V, Ls), '$add_to_list'(Ls, V, Attr).
 
 '$add_to_list'(Ls, V, Attr) :-
-    ( var(Ls) -> Ls = [Attr | _], '$enqueue_attr_var'(V)
+    ( var(Ls) ->
+      Ls = [Attr | _], '$enqueue_attr_var'(V)
     ; Ls = [_ | Ls0], '$add_to_list'(Ls0, V, Attr)
     ).
 
@@ -56,7 +57,8 @@
     Ls0 = [Att | Ls1],
     nonvar(Att),
     ( Att \= Attr -> '$del_attr_buried'(Ls0, Ls1, V, Attr)
-    ; '$enqueue_attr_var'(V), '$del_attr_head'(V), '$del_attr'(Ls1, V, Attr)
+    ; '$enqueue_attr_var'(V),
+      '$del_attr_head'(V), '$del_attr'(Ls1, V, Attr)
     ).
 
 '$del_attr_step'(Ls1, V, Attr) :-
@@ -122,13 +124,18 @@ put_attr(Name, Arity) -->
     { functor(Attr, Name, Arity),
       numbervars(Attr, 0, Arity),
       V = '$VAR'(Arity) },
-    [(put_atts(V, +Attr) :- !, functor(Attr, Head, Arity), functor(AttrForm, Head, Arity),
-			    '$get_attr_list'(V, Ls), '$del_attr'(Ls, V, AttrForm),
+    [(put_atts(V, +Attr) :- !, functor(Attr, Head, Arity),
+			    functor(AttrForm, Head, Arity),
+			    '$get_attr_list'(V, Ls),
+			    '$del_attr'(Ls, V, AttrForm),
 			    '$put_attr'(V, Attr)),
-     (put_atts(V,  Attr) :- !, functor(Attr, Head, Arity), functor(AttrForm, Head, Arity),
-			    '$get_attr_list'(V, Ls), '$del_attr'(Ls, V, AttrForm), 
+     (put_atts(V,  Attr) :- !, functor(Attr, Head, Arity),
+			    functor(AttrForm, Head, Arity),
+			    '$get_attr_list'(V, Ls), 
+			    '$del_attr'(Ls, V, AttrForm), 
 			    '$put_attr'(V, Attr)),
-     (put_atts(V, -Attr) :- !, functor(Attr, _, _), '$get_attr_list'(V, Ls), 
+     (put_atts(V, -Attr) :- !, functor(Attr, _, _),
+			    '$get_attr_list'(V, Ls), 
 			    '$del_attr'(Ls, V, Attr))].
 
 get_attr(Name, Arity) -->

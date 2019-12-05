@@ -1644,11 +1644,32 @@ impl MachineState {
                     }
                 };
             }
-            &SystemClauseType::RedoAttrVarBindings => {
-                let bindings = mem::replace(&mut self.attr_var_init.bindings, vec![]);
+            &SystemClauseType::ClearAttrVarBindings => {
+                self.attr_var_init.bindings.clear();
+            }
+            &SystemClauseType::RedoAttrVarBinding => {
+                let var = self.store(self.deref(self[temp_v!(1)].clone()));
+                let value = self.store(self.deref(self[temp_v!(2)].clone()));
 
-                for (h, addr) in bindings {
-                    self.heap[h] = HeapCellValue::Addr(addr);
+                match var {
+                    Addr::AttrVar(h) => {
+                        if let Addr::AttrVar(h1) = value {
+                            self.heap[h] = HeapCellValue::Addr(Addr::AttrVar(h1));
+
+                            // append h's attributes list to h1's.
+                            let mut l = h1 + 1;
+
+                            while let Addr::Lis(l1) = self.store(self.deref(self.heap[l].as_addr(l))) {
+                                l = l1 + 1;
+                            }
+
+                            self.heap[l] = HeapCellValue::Addr(Addr::HeapCell(h + 1));
+                            self.trail(TrailRef::Ref(Ref::HeapCell(l)));
+                        } else {
+                            self.heap[h] = HeapCellValue::Addr(value);
+                        }
+                    }
+                    _ => unreachable!()
                 }
             }
             &SystemClauseType::ResetGlobalVarAtKey => {
