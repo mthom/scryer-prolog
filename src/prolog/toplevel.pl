@@ -44,7 +44,9 @@
     ),
     (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList),
        !
-    ;  write('false.'), nl
+    %  clear attribute goal lists, which may be populated by
+    %  copy_term/3 prior to failure.
+    ;  '$clear_attribute_goals', write('false.'), nl 
     ).
 
 '$needs_bracketing'(Value, Op) :-
@@ -144,7 +146,7 @@
     ).
 '$gather_query_vars'([], []).
 
-'$is_a_different_variable'([Var = Binding | Pairs], Value) :-
+'$is_a_different_variable'([_ = Binding | Pairs], Value) :-
     (  Value == Binding, !
     ;  '$is_a_different_variable'(Pairs, Value)
     ).

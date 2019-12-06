@@ -1376,6 +1376,9 @@ impl MachineState {
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
                 self.truncate_if_no_lifted_heap_diff(|_| Addr::Con(Constant::EmptyList))
             }
+            &SystemClauseType::ClearAttributeGoals => {
+                self.attr_var_init.attribute_goals.clear();
+            }
             &SystemClauseType::CloneAttributeGoals => {
                 let attr_goals = self.attr_var_init.attribute_goals.clone();
                 self.fetch_attribute_goals(attr_goals);
