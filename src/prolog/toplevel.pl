@@ -144,13 +144,20 @@
     ).
 '$gather_query_vars'([], []).
 
+'$is_a_different_variable'([Var = Binding | Pairs], Value) :-
+    (  Value == Binding, !
+    ;  '$is_a_different_variable'(Pairs, Value)
+    ).
+
 '$gather_goals'([], VarList, Goals) :-
     '$get_attr_var_queue_beyond'(0, AttrVars),
     '$gather_query_vars'(VarList, QueryVars),
     '$call_attribute_goals'(QueryVars, AttrVars),
     '$fetch_attribute_goals'(Goals).
 '$gather_goals'([Var = Value | Pairs], VarList, Goals) :-
-    (  nonvar(Value) ->
+    (  (  nonvar(Value)
+       ;  '$is_a_different_variable'(Pairs, Value)
+       ) ->
        Goals = [Var = Value | Goals0],
        '$gather_goals'(Pairs, VarList, Goals0)
     ;  '$gather_goals'(Pairs, VarList, Goals)
