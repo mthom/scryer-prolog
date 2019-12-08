@@ -1,6 +1,6 @@
 driver(Vars, Values) :-
     iterate(Vars, Values, ListOfListsOfGoalLists),
-    '$redo_attr_var_bindings', % the bindings list is emptied here.
+    '$clear_attr_var_bindings',
     !,
     call_goals(ListOfListsOfGoalLists),
     '$return_from_verify_attr'.
@@ -8,6 +8,7 @@ driver(Vars, Values) :-
 iterate([Var|VarBindings], [Value|ValueBindings], [ListOfGoalLists | ListsCubed]) :-
     '$get_attr_list'(Var, Ls),
     call_verify_attributes(Ls, Var, Value, ListOfGoalLists),
+    '$redo_attr_var_binding'(Var, Value),
     iterate(VarBindings, ValueBindings, ListsCubed).
 iterate([], [], []).
 
@@ -28,7 +29,7 @@ call_verify_attributes(Attrs, _, _, []) :-
 call_verify_attributes([], _, _, []).
 call_verify_attributes([Attr|Attrs], Var, Value, ListOfGoalLists) :-
     gather_modules([Attr|Attrs], Modules0),
-    sort(Modules0, Modules),
+    sort(Modules0, Modules),    
     verify_attrs(Modules, Var, Value, ListOfGoalLists).
 
 call_goals([ListOfGoalLists | ListsCubed]) :-

@@ -61,7 +61,7 @@ impl Ball {
             });
         }
 
-        stub        
+        stub
     }
 }
 
@@ -444,7 +444,10 @@ pub(crate) trait CallPolicy: Any {
         let attr_var_init_queue_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
         let attr_var_init_bindings_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
 
-        machine_st.attr_var_init.backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
+        machine_st.attr_var_init.backtrack(
+            attr_var_init_queue_b,
+            attr_var_init_bindings_b,
+        );
 
         machine_st.hb = machine_st.heap.h;
         machine_st.p += 1;
@@ -481,7 +484,6 @@ pub(crate) trait CallPolicy: Any {
         machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
-
         machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
         let attr_var_init_queue_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
@@ -522,13 +524,14 @@ pub(crate) trait CallPolicy: Any {
         machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
 
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
-
         machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
         let attr_var_init_queue_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
         let attr_var_init_bindings_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
 
-        machine_st.attr_var_init.backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
+        machine_st.attr_var_init.backtrack(
+            attr_var_init_queue_b,
+            attr_var_init_bindings_b);
 
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
         machine_st.truncate_stack();
@@ -565,6 +568,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
         machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
 
+        machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
         machine_st.pstr_trail.truncate(machine_st.pstr_tr);
 
         machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
@@ -572,11 +576,14 @@ pub(crate) trait CallPolicy: Any {
         let attr_var_init_queue_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
         let attr_var_init_bindings_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
 
-        machine_st.attr_var_init.backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
+        machine_st.attr_var_init.backtrack(
+            attr_var_init_queue_b,
+            attr_var_init_bindings_b
+        );
 
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
         machine_st.truncate_stack();
-        
+
         machine_st.hb = machine_st.heap.h;
         machine_st.p += 1;
 
@@ -715,7 +722,7 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::CopyTerm => {
-                machine_st.copy_term();
+                machine_st.copy_term(AttrVarPolicy::DeepCopy);
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Eq => {

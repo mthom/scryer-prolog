@@ -175,7 +175,7 @@ The following predicates are built-in to Scryer.
 * `clause/2`
 * `compare/3`
 * `compound/1`
-* `copy_term/2`
+* `copy_term/{2,3}`
 * `current_predicate/1`
 * `current_op/3`
 * `cyclic_term/1`
@@ -186,6 +186,7 @@ The following predicates are built-in to Scryer.
 * `false/0`
 * `findall/{3,4}`
 * `float/1`
+* `foldl/{4,5}`
 * `forall/2`
 * `freeze/2`
 * `functor/3`
@@ -219,6 +220,7 @@ The following predicates are built-in to Scryer.
 * `repeat/{0,1}`
 * `retract/1`
 * `reverse/2`
+* `same_length/2`
 * `select/3`
 * `setof/3`
 * `setup_call_cleanup/3`
@@ -226,6 +228,7 @@ The following predicates are built-in to Scryer.
 * `string/1`
 * `sub_atom/5`
 * `subsumes_term/2`
+* `sumlist/2`
 * `term_expansion/2`
 * `term_variables/2`
 * `throw/1`

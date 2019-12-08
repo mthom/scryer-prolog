@@ -2005,11 +2005,15 @@ impl MachineState {
     }
 
     pub(super) fn set_ball(&mut self) {
+        self.ball.reset();
+
         let addr = self[temp_v!(1)].clone();
         self.ball.boundary = self.heap.h;
+
         copy_term(
             CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut self.ball.stub),
             addr,
+            AttrVarPolicy::DeepCopy,
         );
     }
 
@@ -2912,13 +2916,13 @@ impl MachineState {
         }
     }
 
-    pub(super) fn copy_term(&mut self) {
+    pub(super) fn copy_term(&mut self, attr_var_policy: AttrVarPolicy) {
         let old_h = self.heap.h;
 
         let a1 = self[temp_v!(1)].clone();
         let a2 = self[temp_v!(2)].clone();
 
-        copy_term(CopyTerm::new(self), a1);
+        copy_term(CopyTerm::new(self), a1, attr_var_policy);
         self.unify(Addr::HeapCell(old_h), a2);
     }
 

@@ -353,7 +353,7 @@ impl MachineState {
         copy_ball_term.push(HeapCellValue::Addr(Addr::HeapCell(threshold + 3)));
         copy_ball_term.push(HeapCellValue::Addr(Addr::HeapCell(threshold + 2)));
 
-        copy_term(copy_ball_term, copy_target);
+        copy_term(copy_ball_term, copy_target, AttrVarPolicy::DeepCopy);
         threshold + lh_offset + 2
     }
 
@@ -525,6 +525,16 @@ impl MachineState {
         }
 
         Ok(())
+    }
+
+    fn fetch_attribute_goals(&mut self, mut attr_goals: Vec<Addr>) {
+        attr_goals.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
+        self.term_dedup(&mut attr_goals);
+
+        let attr_goals = Addr::HeapCell(self.heap.to_list(attr_goals.into_iter()));
+        let target = self[temp_v!(1)].clone();
+
+        self.unify(attr_goals, target);
     }
 
     fn create_instruction_functors(&mut self, code: &Code, first_idx: usize) -> Vec<Addr> {
@@ -874,6 +884,9 @@ impl MachineState {
                     _ => self.fail = true,
                 };
             }
+            &SystemClauseType::CopyTermWithoutAttrVars => {
+                self.copy_term(AttrVarPolicy::StripAttributes);
+            }
             &SystemClauseType::FetchGlobalVar => {
                 let key = self[temp_v!(1)].clone();
 
@@ -1109,7 +1122,7 @@ impl MachineState {
                                 for i in (arity + 1 .. arity + narity + 1).rev() {
                                     self.registers[i] = self.registers[i - arity].clone();
                                 }
-                                
+
                                 for i in 1 .. arity + 1 {
                                     self.registers[i] = self.heap[a + i].as_addr(a + i);
                                 }
@@ -1122,7 +1135,7 @@ impl MachineState {
                                 );
                             }
                         }
-                        Addr::Con(Constant::Atom(name, _)) => {                            
+                        Addr::Con(Constant::Atom(name, _)) => {
                             return self.module_lookup(indices, (name, narity), module_name, true)
                         }
                         addr => {
@@ -1370,16 +1383,16 @@ impl MachineState {
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
                 self.truncate_if_no_lifted_heap_diff(|_| Addr::Con(Constant::EmptyList))
             }
+            &SystemClauseType::ClearAttributeGoals => {
+                self.attr_var_init.attribute_goals.clear();
+            }
+            &SystemClauseType::CloneAttributeGoals => {
+                let attr_goals = self.attr_var_init.attribute_goals.clone();
+                self.fetch_attribute_goals(attr_goals);
+            }
             &SystemClauseType::FetchAttributeGoals => {
-                let mut attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
-
-                attr_goals.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
-                self.term_dedup(&mut attr_goals);
-
-                let attr_goals = Addr::HeapCell(self.heap.to_list(attr_goals.into_iter()));
-                let target = self[temp_v!(1)].clone();
-
-                self.unify(attr_goals, target);
+                let attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
+                self.fetch_attribute_goals(attr_goals);
             }
             &SystemClauseType::GetAttributedVariableList => {
                 let attr_var = self.store(self.deref(self[temp_v!(1)].clone()));
@@ -1643,11 +1656,32 @@ impl MachineState {
                     }
                 };
             }
-            &SystemClauseType::RedoAttrVarBindings => {
-                let bindings = mem::replace(&mut self.attr_var_init.bindings, vec![]);
+            &SystemClauseType::ClearAttrVarBindings => {
+                self.attr_var_init.bindings.clear();
+            }
+            &SystemClauseType::RedoAttrVarBinding => {
+                let var = self.store(self.deref(self[temp_v!(1)].clone()));
+                let value = self.store(self.deref(self[temp_v!(2)].clone()));
 
-                for (h, addr) in bindings {
-                    self.heap[h] = HeapCellValue::Addr(addr);
+                match var {
+                    Addr::AttrVar(h) => {
+                        if let Addr::AttrVar(h1) = value {
+                            self.heap[h] = HeapCellValue::Addr(Addr::AttrVar(h1));
+
+                            // append h's attributes list to h1's.
+                            let mut l = h1 + 1;
+
+                            while let Addr::Lis(l1) = self.store(self.deref(self.heap[l].as_addr(l))) {
+                                l = l1 + 1;
+                            }
+
+                            self.heap[l] = HeapCellValue::Addr(Addr::HeapCell(h + 1));
+                            self.trail(TrailRef::Ref(Ref::HeapCell(l)));
+                        } else {
+                            self.heap[h] = HeapCellValue::Addr(value);
+                        }
+                    }
+                    _ => unreachable!()
                 }
             }
             &SystemClauseType::ResetGlobalVarAtKey => {
@@ -1676,6 +1710,7 @@ impl MachineState {
                 copy_term(
                     CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut ball.stub),
                     value,
+                    AttrVarPolicy::DeepCopy,
                 );
 
                 let offset = self[temp_v!(3)].clone();
@@ -1981,6 +2016,7 @@ impl MachineState {
                 copy_term(
                     CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut ball.stub),
                     value,
+                    AttrVarPolicy::DeepCopy,
                 );
 
                 indices.global_variables.insert(key, (ball, None));
@@ -2001,6 +2037,7 @@ impl MachineState {
                 copy_term(
                     CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut ball.stub),
                     value.clone(),
+                    AttrVarPolicy::DeepCopy,
                 );
 
                 let stub = ball.copy_and_align(h);
