@@ -17,10 +17,6 @@ const fn prelude_size<Prelude>() -> usize {
     (size & !(align - 1)) + align
 }
 
-/* The Stack is dropped manually at the discretion of the WAM, despite
-   having no Drop implementation. That's because it needs to know whether
-   the top frame is an AND frame or an OR frame. The WAM can
-   tell it. */
 pub struct Stack {
     size: usize,
     base: *const u8,
@@ -350,7 +346,6 @@ impl Stack {
                     let size_of_frame = AndFrame::size_of(frame.prelude.univ_prelude.num_cells);
 
                     ptr::drop_in_place(frame_ptr);
-                    ptr::write(frame_ptr, mem::zeroed::<AndFrame>());
 
                     b + size_of_frame
                 } else {
@@ -361,7 +356,6 @@ impl Stack {
                     let size_of_frame = OrFrame::size_of(frame.prelude.univ_prelude.num_cells);
 
                     ptr::drop_in_place(frame_ptr);
-                    ptr::write(frame_ptr, mem::zeroed::<OrFrame>());
 
                     b + size_of_frame
                 };
