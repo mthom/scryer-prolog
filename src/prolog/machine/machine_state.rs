@@ -421,7 +421,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.e = machine_st.stack.index_or_frame(b).prelude.e;
         machine_st.cp = machine_st.stack.index_or_frame(b).prelude.cp;
 
-        machine_st.stack.index_or_frame_mut(b).prelude.bp = machine_st.p.clone() + offset;
+        machine_st.stack.index_or_frame_mut(b).prelude.bp = machine_st.p.local() + offset;
 
         let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
         let curr_tr = machine_st.tr;
@@ -467,7 +467,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.e = machine_st.stack.index_or_frame(b).prelude.e;
         machine_st.cp = machine_st.stack.index_or_frame(b).prelude.cp;
 
-        machine_st.stack.index_or_frame_mut(b).prelude.bp = machine_st.p.clone() + 1;
+        machine_st.stack.index_or_frame_mut(b).prelude.bp = machine_st.p.local() + 1;
 
         let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
         let curr_tr = machine_st.tr;

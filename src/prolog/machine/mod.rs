@@ -739,7 +739,7 @@ impl MachineState {
             let b = self.b;
 
             self.b0 = self.stack.index_or_frame(b).prelude.b0;
-            self.p = self.stack.index_or_frame(b).prelude.bp.clone();
+            self.p = CodePtr::Local(self.stack.index_or_frame(b).prelude.bp);
 
             if let CodePtr::Local(LocalCodePtr::TopLevel(_, p)) = self.p {
                 self.fail = p == 0;
