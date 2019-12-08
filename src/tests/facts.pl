@@ -1,3 +1,5 @@
+:- module(tests_on_facts, []).
+
 :- dynamic(p/2).
 :- dynamic(p/3).
 

@@ -1,3 +1,5 @@
+:- module(tests_on_rules, []).
+
 :- dynamic(p/3).
 :- dynamic(p/2).
 :- dynamic(q/2).
