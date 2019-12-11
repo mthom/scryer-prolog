@@ -166,7 +166,7 @@ The following predicates are built-in to Scryer.
 * `bb_get/2`
 * `bb_put/2`
 * `between/3`
-* `call/1..62`
+* `call/1..17`
 * `call_cleanup/2`
 * `call_with_inference_limit/3`
 * `call_residue_vars/2`

@@ -343,7 +343,7 @@ impl MachineState {
     // this prevents clashes between underscored variable names
     // in the same query.
     fn reset_with_heap_preservation(&mut self) {
-        let heap = self.heap.take();            
+        let heap = self.heap.take();
         self.reset();
         self.heap = heap;
     }
@@ -364,6 +364,9 @@ impl MachineState {
         let code = vec![call_clause!(ClauseType::Hook(hook), 2, 0, true)];
         wam.code_repo.cached_query = code;
 
+        self.cp = LocalCodePtr::TopLevel(0, 0);
+        self.at_end_of_expansion = self.cp;
+
         self.query_stepper(
             &mut wam.indices,
             &mut wam.policies,
@@ -371,8 +374,8 @@ impl MachineState {
             &mut readline::input_stream(),
         );
 
-        if self.fail {
-            self.reset_with_heap_preservation();            
+        if self.fail || wam.code_repo.at_end_of_hook(hook, self.at_end_of_expansion) {
+            self.reset_with_heap_preservation();
             None
         } else {
             let TermWriteResult { var_dict, .. } = term_write_result;
@@ -380,7 +383,7 @@ impl MachineState {
             self.heap_locs = var_dict;
             let output = self.print_with_locs(Addr::HeapCell(h), &wam.indices.op_dir);
 
-            self.reset_with_heap_preservation();            
+            self.reset_with_heap_preservation();
             Some(output.result())
         }
     }

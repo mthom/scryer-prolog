@@ -693,13 +693,11 @@ impl RelationWorker {
                     let ct = indices.get_clause_type(name, terms.len(), fixity);
                     Ok(QueryTerm::Clause(Cell::default(), ct, terms, false))
                 }
-            },
-            Term::Var(..) => Ok(QueryTerm::Clause(
-                Cell::default(),
-                ClauseType::CallN,
-                vec![Box::new(term)],
-                false,
-            )),
+            }
+            arg @ Term::Var(..) => {
+                let ct = ClauseType::Named(clause_name!("call"), 1, CodeIndex::default());
+                Ok(QueryTerm::Clause(Cell::default(), ct, vec![Box::new(arg)], false))
+            }
             _ => Err(ParserError::InadmissibleQueryTerm),
         }
     }

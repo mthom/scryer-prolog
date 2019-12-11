@@ -108,17 +108,7 @@ impl Module {
         let goal_expansions =
             mem::replace(&mut self.local_goal_expansions, (Predicate::new(), VecDeque::new()));
 
-        let mut result = vec![];
-
-        if !(term_expansions.0).0.is_empty() {
-            result.push(term_expansions);
-        }
-
-        if !(goal_expansions.0).0.is_empty() {
-            result.push(goal_expansions);
-        }
-
-        result
+        vec![term_expansions, goal_expansions]
     }
 }
 

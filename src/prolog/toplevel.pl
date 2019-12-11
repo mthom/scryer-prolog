@@ -39,14 +39,14 @@
     !.
 
 '$submit_query_and_print_results'(Term0, VarList) :-
-    (  expand_goals(Term0, Term) -> true
-    ;  Term = Term0
+    (  expand_goal(Term0, Term) -> true
+    ;  Term0 = Term
     ),
     (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList),
        !
     %  clear attribute goal lists, which may be populated by
     %  copy_term/3 prior to failure.
-    ;  '$clear_attribute_goals', write('false.'), nl 
+    ;  '$clear_attribute_goals', write('false.'), nl
     ).
 
 '$needs_bracketing'(Value, Op) :-
@@ -239,18 +239,22 @@ use_module(Module, QualifiedExports) :-
 user:term_expansion(Term0, (:- initialization(ExpandedGoals))) :-
     nonvar(Term0),
     Term0 = (:- initialization(Goals)),
-    expand_goals(Goals, ExpandedGoals),
-    Goals \== ExpandedGoals.
+    expand_goals(Goals, ExpandedGoals).
+
+
+module_expand_goal(UnexpandedGoals, ExpandedGoals) :-
+    '$module_of'(Module, UnexpandedGoals),
+    Module:goal_expansion(UnexpandedGoals, ExpandedGoals).
 
 expand_goals(UnexpandedGoals, ExpandedGoals) :-
     nonvar(UnexpandedGoals),
     var(ExpandedGoals),
-    (  expand_goal(UnexpandedGoals, Goals) -> true
+    (  expand_goal(UnexpandedGoals, Goals) ->
+       true
     ;  Goals = UnexpandedGoals
     ),
     (  Goals = (Goal0, Goals0) ->
        (  expand_goal(Goal0, Goal1) ->
-	  Expanded = true,
 	  expand_goals(Goals0, Goals1),
 	  thread_goals(Goal1, ExpandedGoals, Goals1, (','))
        ;  expand_goals(Goals0, Goals1),

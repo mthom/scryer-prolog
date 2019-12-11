@@ -261,6 +261,7 @@ pub struct MachineState {
     pub(super) last_call: bool,
     pub(crate) heap_locs: HeapVarDict,
     pub(crate) flags: MachineFlags,
+    pub(crate) at_end_of_expansion: LocalCodePtr
 }
 
 impl MachineState {
@@ -316,17 +317,17 @@ impl MachineState {
         Ok(codes)
     }
 
-    pub(super) fn call_at_index(&mut self, arity: usize, p: usize) {
+    pub(super) fn call_at_index(&mut self, arity: usize, p: LocalCodePtr) {
         self.cp.assign_if_local(self.p.clone() + 1);
         self.num_of_args = arity;
         self.b0 = self.b;
-        self.p = dir_entry!(p);
+        self.p = CodePtr::Local(p);
     }
 
-    pub(super) fn execute_at_index(&mut self, arity: usize, p: usize) {
+    pub(super) fn execute_at_index(&mut self, arity: usize, p: LocalCodePtr) {
         self.num_of_args = arity;
         self.b0 = self.b;
-        self.p = dir_entry!(p);
+        self.p = CodePtr::Local(p);
     }
 
     pub(super) fn module_lookup(
@@ -342,15 +343,33 @@ impl MachineState {
             match idx.0.borrow().0 {
                 IndexPtr::Index(compiled_tl_index) => {
                     if last_call {
-                        self.execute_at_index(arity, compiled_tl_index);
+                        self.execute_at_index(arity, dir_entry!(compiled_tl_index));
                     } else {
-                        self.call_at_index(arity, compiled_tl_index);
+                        self.call_at_index(arity, dir_entry!(compiled_tl_index));
                     }
 
                     return Ok(());
                 }
                 IndexPtr::DynamicUndefined => {
                     self.fail = true;
+                    return Ok(());
+                }
+                IndexPtr::UserTermExpansion => {
+                    if last_call {
+                        self.execute_at_index(arity, LocalCodePtr::UserTermExpansion(0));
+                    } else {
+                        self.call_at_index(arity, LocalCodePtr::UserTermExpansion(0));
+                    }
+
+                    return Ok(());
+                }
+                IndexPtr::UserGoalExpansion => {
+                    if last_call {
+                        self.execute_at_index(arity, LocalCodePtr::UserGoalExpansion(0));
+                    } else {
+                        self.call_at_index(arity, LocalCodePtr::UserGoalExpansion(0));
+                    }
+
                     return Ok(());
                 }
                 _ => {}
@@ -390,9 +409,9 @@ fn try_in_situ(
 ) -> CallResult {
     if let Some(p) = try_in_situ_lookup(name.clone(), arity, indices) {
         if last_call {
-            machine_st.execute_at_index(arity, p);
+            machine_st.execute_at_index(arity, LocalCodePtr::DirEntry(p));
         } else {
-            machine_st.call_at_index(arity, p);
+            machine_st.call_at_index(arity, LocalCodePtr::DirEntry(p));
         }
 
         machine_st.p = in_situ_dir_entry!(p);
@@ -619,7 +638,13 @@ pub(crate) trait CallPolicy: Any {
             IndexPtr::Undefined =>
                 return try_in_situ(machine_st, name, arity, indices, false),
             IndexPtr::Index(compiled_tl_index) => {
-                machine_st.call_at_index(arity, compiled_tl_index)
+                machine_st.call_at_index(arity, LocalCodePtr::DirEntry(compiled_tl_index))
+            }
+            IndexPtr::UserTermExpansion => {
+                machine_st.call_at_index(arity, LocalCodePtr::UserTermExpansion(0));
+            }
+            IndexPtr::UserGoalExpansion => {
+                machine_st.call_at_index(arity, LocalCodePtr::UserGoalExpansion(0));
             }
         }
 
@@ -640,7 +665,13 @@ pub(crate) trait CallPolicy: Any {
             IndexPtr::Undefined =>
                 return try_in_situ(machine_st, name, arity, indices, true),
             IndexPtr::Index(compiled_tl_index) => {
-                machine_st.execute_at_index(arity, compiled_tl_index)
+                machine_st.execute_at_index(arity, dir_entry!(compiled_tl_index))
+            }
+            IndexPtr::UserTermExpansion => {
+                machine_st.execute_at_index(arity, LocalCodePtr::UserTermExpansion(0));
+            }
+            IndexPtr::UserGoalExpansion => {
+                machine_st.execute_at_index(arity, LocalCodePtr::UserGoalExpansion(0));
             }
         }
 
@@ -834,49 +865,39 @@ pub(crate) trait CallPolicy: Any {
     fn call_n(
         &mut self,
         machine_st: &mut MachineState,
+        name: ClauseName,
         arity: usize,
         indices: &mut IndexStore,
         parsing_stream: &mut PrologStream,
     ) -> CallResult {
-        if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-            match ClauseType::from(name.clone(), arity, None) {
-                ClauseType::CallN => {
-                    machine_st.handle_internal_call_n(arity);
+        match ClauseType::from(name.clone(), arity, None) {
+            ClauseType::BuiltIn(built_in) => {
+                machine_st.setup_built_in_call(built_in.clone());
+                self.call_builtin(machine_st, &built_in, indices, parsing_stream)?;
+            }
+            ClauseType::Inlined(inlined) => {
+                machine_st.execute_inlined(&inlined);
 
-                    if machine_st.fail {
-                        return Ok(());
-                    }
+                if machine_st.last_call {
+                    machine_st.p = CodePtr::Local(machine_st.cp);
+                }
+            }
+            ClauseType::Op(..) | ClauseType::Named(..) => {
+                let module = name.owning_module();
 
-                    machine_st.p = CodePtr::CallN(arity, machine_st.p.local(), machine_st.last_call);
+                if let Some(idx) = indices.get_code_index((name.clone(), arity), module) {
+                    self.context_call(machine_st, name, arity, idx, indices)?;
+                } else {
+                    try_in_situ(machine_st, name, arity, indices, machine_st.last_call)?;
                 }
-                ClauseType::BuiltIn(built_in) => {
-                    machine_st.setup_built_in_call(built_in.clone());
-                    self.call_builtin(machine_st, &built_in, indices, parsing_stream)?;
-                }
-                ClauseType::Inlined(inlined) => {
-                    machine_st.execute_inlined(&inlined);
+            }
+            ClauseType::Hook(_) | ClauseType::System(_) => {
+                let name = Addr::Con(Constant::Atom(name, None));
+                let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
 
-                    if machine_st.last_call {
-                        machine_st.p = CodePtr::Local(machine_st.cp);
-                    }
-                }
-                ClauseType::Op(..) | ClauseType::Named(..) => {
-                    let module = name.owning_module();
-
-                    if let Some(idx) = indices.get_code_index((name.clone(), arity), module) {
-                        self.context_call(machine_st, name, arity, idx, indices)?;
-                    } else {
-                        try_in_situ(machine_st, name, arity, indices, machine_st.last_call)?;
-                    }
-                }
-                ClauseType::Hook(_) | ClauseType::System(_) => {
-                    let name = Addr::Con(Constant::Atom(name, None));
-                    let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
-
-                    return Err(machine_st
-                        .error_form(MachineError::type_error(ValidType::Callable, name), stub));
-                }
-            };
+                return Err(machine_st
+                           .error_form(MachineError::type_error(ValidType::Callable, name), stub));
+            }
         }
 
         Ok(())
@@ -932,12 +953,13 @@ impl CallPolicy for CWILCallPolicy {
     fn call_n(
         &mut self,
         machine_st: &mut MachineState,
+        name: ClauseName,
         arity: usize,
         indices: &mut IndexStore,
         parsing_stream: &mut PrologStream,
     ) -> CallResult {
         self.prev_policy
-            .call_n(machine_st, arity, indices, parsing_stream)?;
+            .call_n(machine_st, name, arity, indices, parsing_stream)?;
         self.increment(machine_st)
     }
 }
@@ -1093,10 +1115,10 @@ impl SCCCutPolicy {
         if let Some(&(_, b_cutoff, prev_block)) = self.cont_pts.last() {
             if machine_st.b < b_cutoff {
                 let (idx, arity) = if machine_st.block < prev_block {
-                    (self.r_c_w_h, 0)
+                    (dir_entry!(self.r_c_w_h), 0)
                 } else {
                     machine_st[temp_v!(1)] = Addr::Con(Constant::Usize(b_cutoff));
-                    (self.r_c_wo_h, 1)
+                    (dir_entry!(self.r_c_wo_h), 1)
                 };
 
                 if machine_st.last_call {

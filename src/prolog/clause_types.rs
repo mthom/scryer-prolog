@@ -159,10 +159,12 @@ pub enum SystemClauseType {
     AbolishModuleClause,
     AssertDynamicPredicateToBack,
     AssertDynamicPredicateToFront,
+    AtEndOfExpansion,
     AtomChars,
     AtomCodes,
     AtomLength,
     CallAttributeGoals,
+    CallN,
     CharCode,
     CharsToNumber,
     ClearAttrVarBindings,
@@ -261,10 +263,12 @@ impl SystemClauseType {
             &SystemClauseType::AbolishModuleClause => clause_name!("$abolish_module_clause"),
             &SystemClauseType::AssertDynamicPredicateToBack => clause_name!("$assertz"),
             &SystemClauseType::AssertDynamicPredicateToFront => clause_name!("$asserta"),
+            &SystemClauseType::AtEndOfExpansion => clause_name!("$at_end_of_expansion"),
             &SystemClauseType::AtomChars => clause_name!("$atom_chars"),
             &SystemClauseType::AtomCodes => clause_name!("$atom_codes"),
             &SystemClauseType::AtomLength => clause_name!("$atom_length"),
             &SystemClauseType::CallAttributeGoals => clause_name!("$call_attribute_goals"),
+            &SystemClauseType::CallN => clause_name!("$call"),
             &SystemClauseType::CharCode => clause_name!("$char_code"),
             &SystemClauseType::CharsToNumber => clause_name!("$chars_to_number"),
             &SystemClauseType::ClearAttributeGoals => clause_name!("$clear_attribute_goals"),
@@ -388,6 +392,7 @@ impl SystemClauseType {
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$abolish_clause", 2) => Some(SystemClauseType::AbolishClause),
+            ("$at_end_of_expansion", 0) => Some(SystemClauseType::AtEndOfExpansion),
             ("$atom_chars", 2) => Some(SystemClauseType::AtomChars),
             ("$atom_codes", 2) => Some(SystemClauseType::AtomCodes),
             ("$atom_length", 2) => Some(SystemClauseType::AtomLength),
@@ -396,6 +401,7 @@ impl SystemClauseType {
             ("$module_assertz", 5) => Some(SystemClauseType::ModuleAssertDynamicPredicateToBack),
             ("$asserta", 4) => Some(SystemClauseType::AssertDynamicPredicateToFront),
             ("$assertz", 4) => Some(SystemClauseType::AssertDynamicPredicateToBack),
+            ("$call", 1) => Some(SystemClauseType::CallN),
             ("$call_attribute_goals", 2) => Some(SystemClauseType::CallAttributeGoals),
             ("$char_code", 2) => Some(SystemClauseType::CharCode),
             ("$chars_to_number", 2) => Some(SystemClauseType::CharsToNumber),
@@ -522,7 +528,6 @@ pub enum BuiltInClauseType {
 #[derive(Clone, PartialEq, Eq)]
 pub enum ClauseType {
     BuiltIn(BuiltInClauseType),
-    CallN,
     Hook(CompileTimeHook),
     Inlined(InlinedClauseType),
     Named(ClauseName, usize, CodeIndex), // name, arity, index.
@@ -589,7 +594,6 @@ impl ClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &ClauseType::CallN => clause_name!("call"),
             &ClauseType::BuiltIn(ref built_in) => built_in.name(),
             &ClauseType::Hook(ref hook) => hook.name(),
             &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
@@ -610,8 +614,6 @@ impl ClauseType {
                     .unwrap_or_else(|| {
                         if let Some(spec) = spec {
                             ClauseType::Op(name, spec, CodeIndex::default())
-                        } else if name.as_str() == "call" {
-                            ClauseType::CallN
                         } else {
                             ClauseType::Named(name, arity, CodeIndex::default())
                         }

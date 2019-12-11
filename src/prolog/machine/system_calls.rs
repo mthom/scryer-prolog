@@ -618,6 +618,9 @@ impl MachineState {
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
             }
+            &SystemClauseType::AtEndOfExpansion => {
+                self.at_end_of_expansion = self.p.local();
+            }
             &SystemClauseType::AtomChars => {
                 let a1 = self[temp_v!(1)].clone();
 
@@ -753,12 +756,70 @@ impl MachineState {
                 let p = self.attr_var_init.project_attrs_loc;
 
                 if self.last_call {
-                    self.execute_at_index(2, p);
+                    self.execute_at_index(2, dir_entry!(p));
                 } else {
-                    self.call_at_index(2, p);
+                    self.call_at_index(2, dir_entry!(p));
                 }
 
                 return Ok(());
+            }
+            &SystemClauseType::CallN => {
+                let (name, arity) = match self.store(self.deref(self[temp_v!(1)].clone())) {
+                    Addr::Str(a) => {
+                        let result = self.heap[a].clone();
+
+                        if let HeapCellValue::NamedStr(arity, name, _) = result {
+                            if arity > MAX_ARITY {
+                                let stub = MachineError::functor_stub(
+                                    clause_name!("$call"),
+                                    1,
+                                );
+
+                                return Err(self.error_form(
+                                    MachineError::representation_error(RepFlag::MaxArity),
+                                    stub,
+                                ));
+                            }
+
+                            for i in 1 .. arity + 1 {
+                                self.registers[i] = self.heap[a + i].as_addr(a + i);
+                            }
+
+                            (name, arity)
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    Addr::Con(Constant::Atom(name, _)) =>
+                        (name, 0),
+                    Addr::HeapCell(_) | Addr::StackCell(_, _) => {
+                        let stub = MachineError::functor_stub(
+                            clause_name!("$call"),
+                            1,
+                        );
+                        
+                        return Err(self.error_form(MachineError::instantiation_error(), stub));
+                    }
+                    addr => {
+                        let stub = MachineError::functor_stub(
+                            clause_name!("$call"),
+                            1,
+                        );
+
+                        return Err(self.error_form(
+                            MachineError::type_error(ValidType::Callable, addr),
+                            stub,
+                        ));
+                    }
+                };
+                
+                return call_policy.call_n(
+                    self,
+                    name,
+                    arity,
+                    indices,
+                    current_input_stream,
+                );
             }
             &SystemClauseType::CharsToNumber => {
                 let stub = MachineError::functor_stub(clause_name!("number_chars"), 2);
@@ -991,7 +1052,10 @@ impl MachineState {
 
                 match subsection {
                     Some(dynamic_predicate_info) => {
-                        self.execute_at_index(2, dynamic_predicate_info.clauses_subsection_p);
+                        self.execute_at_index(
+                            2,
+                            dir_entry!(dynamic_predicate_info.clauses_subsection_p)
+                        );
                         return Ok(());
                     }
                     None => self.fail = true,
@@ -1626,7 +1690,9 @@ impl MachineState {
 
                             self.unify(target, module);
                         }
-                        _ => self.fail = true,
+                        _ => {
+                            unreachable!()
+                        }
                     },
                     _ => self.fail = true,
                 };
@@ -1925,7 +1991,10 @@ impl MachineState {
 
                 match subsection {
                     Some(dynamic_predicate_info) => {
-                        self.execute_at_index(2, dynamic_predicate_info.clauses_subsection_p);
+                        self.execute_at_index(
+                            2,
+                            dir_entry!(dynamic_predicate_info.clauses_subsection_p)
+                        );
                         return Ok(());
                     }
                     _ => unreachable!(),

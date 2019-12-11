@@ -43,7 +43,11 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      (:)/7, (:)/8, (:)/9, (:)/10, (:)/11, (:)/12,
                      abolish/1, asserta/1, assertz/1, atom_chars/2,
                      atom_codes/2, atom_concat/3, atom_length/2,
-                     bagof/3, catch/3, char_code/2, clause/2,
+                     bagof/3, call/1, call/2, call/3, call/4,
+		     call/5, call/6, call/7, call/8, call/9,
+		     call/10, call/11, call/12, call/13,
+		     call/14, call/15, call/16, call/17,
+		     catch/3, char_code/2, clause/2,
                      current_op/3, current_predicate/1,
                      current_prolog_flag/2, expand_goal/2,
                      expand_term/2, fail/0, false/0, findall/3,
@@ -54,6 +58,76 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      subsumes_term/2, term_variables/2, throw/1,
                      true/0, unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, writeq/1]).
+
+
+%% call/{1..17}
+
+call(Goal) :-
+    (  '$module_of'(Module, Goal),
+       Module:goal_expansion(Goal, ExpandedGoal) ->
+       true
+    ;  Goal = ExpandedGoal
+    ),
+    '$call'(ExpandedGoal).
+
+'$call_body'(Goal, As) :-
+    Goal =.. F,
+    lists:append(F, As, Fs),
+    ExpandedGoal0 =.. Fs,
+    (  '$module_of'(Module, ExpandedGoal0),
+       Module:goal_expansion(ExpandedGoal0, ExpandedGoal1) ->
+       true
+    ;  ExpandedGoal1 = ExpandedGoal0
+    ),
+    '$call'(ExpandedGoal1).
+
+call(Goal, A1) :-
+    '$call_body'(Goal, [A1]).
+
+call(Goal, A1, A2) :-
+    '$call_body'(Goal, [A1, A2]).
+
+call(Goal, A1, A2, A3) :-
+    '$call_body'(Goal, [A1, A2, A3]).
+
+call(Goal, A1, A2, A3, A4) :-
+    '$call_body'(Goal, [A1, A2, A3, A4]).
+
+call(Goal, A1, A2, A3, A4, A5) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5]).
+
+call(Goal, A1, A2, A3, A4, A5, A6) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6]).
+
+call(Goal, A1, A2, A3, A4, A5, A6, A7) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7]).
+
+call(Goal, A1, A2, A3, A4, A5, A6, A7, A8) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8]).
+
+call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9]).
+
+call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10]).
+
+call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11]).
+
+call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12]).
+
+call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13]).
+
+call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14]).
+
+call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15]).
+
+call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16) :-
+    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16]).
 
 % the maximum arity flag. needs to be replaced with
 % current_prolog_flag(max_arity, MAX_ARITY).
@@ -177,13 +251,13 @@ set_prolog_flag(Flag, _) :-
 
 fail :- '$fail'.
 
-\+ G :- G, !, false.
+\+ G :- call(G), !, false.
 \+ _.
 
 X \= X :- !, false.
 _ \= _.
 
-once(G) :- G, !.
+once(G) :- call(G), !.
 
 repeat.
 repeat :- repeat.
@@ -200,13 +274,14 @@ comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 		 '$set_cp'(B),
 		 '$call_with_default_policy'(comma_errors(G1, G2, B)).
 ','(!, Atom, B) :- Atom == !, '$set_cp'(B).
-','(!, G, B)  :- '$set_cp'(B), G.
+','(!, G, B)  :- '$set_cp'(B), call(G).
 ','(G, CF, B) :- compound(CF),
 		 '$call_with_default_policy'(CF = ','(G1, G2)),
-		 !, G,
+		 !,
+		 call(G),
 		 '$call_with_default_policy'(comma_errors(G1, G2, B)).
-','(G, Atom, B) :- Atom == !, !, G, '$set_cp'(B).
-','(G1, G2, _)  :- G1, G2.
+','(G, Atom, B) :- Atom == !, !, call(G), '$set_cp'(B).
+','(G1, G2, _)  :- call(G1), call(G2).
 
 ;(G1, G2) :- '$get_b_value'(B), ;(G1, G2, B).
 
@@ -214,37 +289,47 @@ comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 ;(G1, G4, B) :- compound(G1),
 		'$call_with_default_policy'(G1 = ->(G2, G3)),
 		!,
-		(G2 -> G3 ; '$set_cp'(B), G4).
-;(G1, G2, B) :- G1 == !, '$set_cp'(B), G2.
-;(G1, G2, B) :- G2 == !, G1, '$set_cp'(B).
-;(G, _, _) :- G.
-;(_, G, _) :- G.
+		(  call(G2) -> call(G3)
+		;  '$set_cp'(B),
+		   call(G4)
+		).
+;(G1, G2, B) :- G1 == !, '$set_cp'(B), call(G2).
+;(G1, G2, B) :- G2 == !, call(G1), '$set_cp'(B).
+;(G, _, _) :- call(G).
+;(_, G, _) :- call(G).
 
 G1 -> G2 :- '$get_b_value'(B), '$call_with_default_policy'(->(G1, G2, B)).
 
 :- non_counted_backtracking (->)/3.
-->(G1, G2, B) :- G2 == !, G1, '$set_cp'(B).
-->(G1, G2, B) :- G1, '$set_cp'(B), G2.
+->(G1, G2, B) :- G2 == !, call(G1), '$set_cp'(B).
+->(G1, G2, B) :- call(G1), '$set_cp'(B), call(G2).
 
 % univ.
 
 :- non_counted_backtracking univ_errors/3.
 univ_errors(Term, List, N) :-
     '$skip_max_list'(N, -1, List, R),
-    ( var(R)       -> ( var(Term), throw(error(instantiation_error, (=..)/2))      % 8.5.3.3 a)
-		      ; true )
-    ; R \== []     -> throw(error(type_error(list, List), (=..)/2))                % 8.5.3.3 b)
-    ; List = [H|T] -> ( var(H), var(Term), % R == [] => List is a proper list.
-		        throw(error(instantiation_error, (=..)/2))                 % 8.5.3.3 c)
-		      ; T \== [], nonvar(H), \+ atom(H),
-			throw(error(type_error(atom, H), (=..)/2))                 % 8.5.3.3 d)
-		      ; compound(H), T == [],
-			throw(error(type_error(atomic, H), (=..)/2))               % 8.5.3.3 e)
-		      ; var(Term), max_arity(M), N - 1 > M,
-			throw(error(representation_error(max_arity), (=..)/2))     % 8.5.3.3 g)
-		      ; true )
-    ; var(Term)    -> throw(error(domain_error(non_empty_list, List), (=..)/2))    % 8.5.3.3 f)
-    ; true ).
+    ( var(R)       ->
+       (  var(Term), throw(error(instantiation_error, (=..)/2))      % 8.5.3.3 a)
+       ;  true
+       )
+    ;  R \== []     ->
+       throw(error(type_error(list, List), (=..)/2))                % 8.5.3.3 b)
+    ;  List = [H|T] ->
+       (  var(H), var(Term), % R == [] => List is a proper list.
+       	  throw(error(instantiation_error, (=..)/2))                 % 8.5.3.3 c)
+       ;  T \== [], nonvar(H), \+ atom(H),
+       	  throw(error(type_error(atom, H), (=..)/2))                 % 8.5.3.3 d)
+       ;  compound(H), T == [],
+       	  throw(error(type_error(atomic, H), (=..)/2))               % 8.5.3.3 e)
+       ;  var(Term), max_arity(M), N - 1 > M,
+       	  throw(error(representation_error(max_arity), (=..)/2))     % 8.5.3.3 g)
+       ;  true
+       )
+    ;  var(Term)    ->
+       throw(error(domain_error(non_empty_list, List), (=..)/2))    % 8.5.3.3 f)
+    ;  true
+    ).
 
 Term =.. List :- '$call_with_default_policy'(univ_errors(Term, List, N)),
 		 '$call_with_default_policy'(univ_worker(Term, List, N)).
@@ -371,7 +456,8 @@ catch(G,C,R) :- '$get_current_block'(Bb), '$call_with_default_policy'(catch(G,C,
 
 :- non_counted_backtracking catch/4.
 catch(G,C,R,Bb) :-
-    '$install_new_block'(NBb), call(G),
+    '$install_new_block'(NBb),
+    call(G),
     '$call_with_default_policy'(end_block(Bb, NBb)).
 catch(G,C,R,Bb) :-
     '$reset_block'(Bb),

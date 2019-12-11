@@ -45,6 +45,8 @@ impl fmt::Display for IndexPtr {
             &IndexPtr::DynamicUndefined => write!(f, "undefined"),
             &IndexPtr::Undefined => write!(f, "undefined"),
             &IndexPtr::Index(i) => write!(f, "{}", i),
+            &IndexPtr::UserTermExpansion => write!(f, "user:term_expansion"),
+            &IndexPtr::UserGoalExpansion => write!(f, "user:goal_expansion"),
         }
     }
 }

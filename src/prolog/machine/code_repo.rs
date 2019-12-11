@@ -134,12 +134,33 @@ impl CodeRepo {
                 );
                 Some(RefOrOwned::Owned(call_clause))
             }
-            &CodePtr::CallN(arity, _, last_call) => {
-                let call_clause = call_clause!(ClauseType::CallN, arity, 0, last_call);
-                Some(RefOrOwned::Owned(call_clause))
-            }
             &CodePtr::VerifyAttrInterrupt(p) => Some(RefOrOwned::Borrowed(&self.code[p])),
             &CodePtr::DynamicTransaction(..) => None,
         }
     }
+
+    pub(super)
+    fn at_end_of_hook(&self, hook: CompileTimeHook, cp: LocalCodePtr) -> bool {
+        match hook {
+            CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion => {
+                let len = self.goal_expanders.len();
+
+                if len > 0 {
+                    cp == LocalCodePtr::UserGoalExpansion(len - 1)
+                } else {
+                    true
+                }
+            }
+            CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion => {
+                let len = self.term_expanders.len();
+
+                if len > 0 {
+                    cp == LocalCodePtr::UserTermExpansion(len - 1)
+                } else {
+                    true
+                }
+            }
+        }
+    }
+        
 }
