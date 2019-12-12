@@ -75,7 +75,7 @@ impl MachineState {
             last_call: false,
             heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default(),
-            at_end_of_expansion: LocalCodePtr::TopLevel(0, 0),
+            at_end_of_expansion: false
         }
     }
 
@@ -106,7 +106,7 @@ impl MachineState {
             last_call: false,
             heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default(),
-            at_end_of_expansion: LocalCodePtr::TopLevel(0, 0),
+            at_end_of_expansion: false
         }
     }
 
@@ -2003,6 +2003,75 @@ impl MachineState {
         );
     }
 
+    pub(super) fn handle_internal_call_n(&mut self, arity: usize) {
+        let arity = arity + 1;
+        let pred = self.registers[1].clone();
+
+        for i in 2..arity {
+            self.registers[i - 1] = self.registers[i].clone();
+        }
+
+        if arity > 1 {
+            self.registers[arity - 1] = pred;
+            return;
+        }
+
+        self.fail = true;
+    }
+
+    pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey> {
+        let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
+        let addr = self.store(self.deref(self.registers[arity].clone()));
+
+        let (name, narity) = match addr {
+            Addr::Str(a) => {
+                let result = self.heap[a].clone();
+
+                if let HeapCellValue::NamedStr(narity, name, _) = result {
+                    if narity + arity > 63 {
+                        let representation_error = self.error_form(
+                            MachineError::representation_error(RepFlag::MaxArity),
+                            stub,
+                        );
+
+                        self.throw_exception(representation_error);
+                        return None;
+                    }
+
+                    for i in (1 .. arity).rev() {
+                        self.registers[i + narity] = self.registers[i].clone();
+                    }
+
+                    for i in 1 .. narity + 1 {
+                        self.registers[i] = self.heap[a + i].as_addr(a + i);
+                    }
+
+                    (name, narity)
+                } else {
+                    self.fail = true;
+                    return None;
+                }
+            }
+            Addr::Con(Constant::Atom(name, _)) => (name, 0),
+            Addr::HeapCell(_) | Addr::StackCell(_, _) => {
+                let instantiation_error =
+                    self.error_form(MachineError::instantiation_error(), stub);
+                self.throw_exception(instantiation_error);
+
+                return None;
+            }
+            _ => {
+                let type_error =
+                    self.error_form(MachineError::type_error(ValidType::Callable, addr), stub);
+                self.throw_exception(type_error);
+
+                return None;
+            }
+        };
+
+        Some((name, arity + narity - 1))
+    }
+
     pub(super) fn unwind_stack(&mut self) {
         self.b = self.block;
         self.truncate_stack();
@@ -3087,6 +3156,10 @@ impl MachineState {
                 self,
                 call_policy.call_builtin(self, ct, indices, parsing_stream)
             ),
+            &ClauseType::CallN => try_or_fail!(
+                self,
+                call_policy.call_n(self, arity, indices, parsing_stream)
+            ),
             &ClauseType::Hook(ref hook) => try_or_fail!(self, call_policy.compile_hook(self, hook)),
             &ClauseType::Inlined(ref ct) => {
                 self.execute_inlined(ct);
@@ -3304,7 +3377,6 @@ impl MachineState {
         self.mode = MachineMode::Write;
         self.registers = vec![Addr::HeapCell(0); MAX_ARITY + 1]; // self.registers[0] is never used.
         self.block = 0;
-        self.at_end_of_expansion = LocalCodePtr::TopLevel(0, 0);
 
         self.ball.reset();
         self.heap_locs.clear();

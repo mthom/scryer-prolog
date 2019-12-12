@@ -43,11 +43,7 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      (:)/7, (:)/8, (:)/9, (:)/10, (:)/11, (:)/12,
                      abolish/1, asserta/1, assertz/1, atom_chars/2,
                      atom_codes/2, atom_concat/3, atom_length/2,
-                     bagof/3, call/1, call/2, call/3, call/4,
-		     call/5, call/6, call/7, call/8, call/9,
-		     call/10, call/11, call/12, call/13,
-		     call/14, call/15, call/16, call/17,
-		     catch/3, char_code/2, clause/2,
+                     bagof/3, catch/3, char_code/2, clause/2,
                      current_op/3, current_predicate/1,
                      current_prolog_flag/2, expand_goal/2,
                      expand_term/2, fail/0, false/0, findall/3,
@@ -59,75 +55,6 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      true/0, unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, writeq/1]).
 
-
-%% call/{1..17}
-
-call(Goal) :-
-    (  '$module_of'(Module, Goal),
-       Module:goal_expansion(Goal, ExpandedGoal) ->
-       true
-    ;  Goal = ExpandedGoal
-    ),
-    '$call'(ExpandedGoal).
-
-'$call_body'(Goal, As) :-
-    Goal =.. F,
-    lists:append(F, As, Fs),
-    ExpandedGoal0 =.. Fs,
-    (  '$module_of'(Module, ExpandedGoal0),
-       Module:goal_expansion(ExpandedGoal0, ExpandedGoal1) ->
-       true
-    ;  ExpandedGoal1 = ExpandedGoal0
-    ),
-    '$call'(ExpandedGoal1).
-
-call(Goal, A1) :-
-    '$call_body'(Goal, [A1]).
-
-call(Goal, A1, A2) :-
-    '$call_body'(Goal, [A1, A2]).
-
-call(Goal, A1, A2, A3) :-
-    '$call_body'(Goal, [A1, A2, A3]).
-
-call(Goal, A1, A2, A3, A4) :-
-    '$call_body'(Goal, [A1, A2, A3, A4]).
-
-call(Goal, A1, A2, A3, A4, A5) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5]).
-
-call(Goal, A1, A2, A3, A4, A5, A6) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6]).
-
-call(Goal, A1, A2, A3, A4, A5, A6, A7) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7]).
-
-call(Goal, A1, A2, A3, A4, A5, A6, A7, A8) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8]).
-
-call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9]).
-
-call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10]).
-
-call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11]).
-
-call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12]).
-
-call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13]).
-
-call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14]).
-
-call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15]).
-
-call(Goal, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16) :-
-    '$call_body'(Goal, [A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16]).
 
 % the maximum arity flag. needs to be replaced with
 % current_prolog_flag(max_arity, MAX_ARITY).

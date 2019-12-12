@@ -123,6 +123,12 @@ impl<'a> QueryIterator<'a> {
 
     fn new(term: &'a QueryTerm) -> Self {
         match term {
+            &QueryTerm::Clause(ref cell, ClauseType::CallN, ref terms, _) => {
+                let state = TermIterState::Clause(Level::Root, 1, cell, ClauseType::CallN, terms);
+                QueryIterator {
+                    state_stack: vec![state],
+                }
+            }            
             &QueryTerm::Clause(ref cell, ref ct, ref terms, _) => {
                 let state = TermIterState::Clause(Level::Root, 0, cell, ct.clone(), terms);
                 QueryIterator {
@@ -167,6 +173,9 @@ impl<'a> Iterator for QueryIterator<'a> {
                 TermIterState::Clause(lvl, child_num, cell, ct, child_terms) => {
                     if child_num == child_terms.len() {
                         match ct {
+                            ClauseType::CallN => {
+                                self.push_subterm(Level::Shallow, child_terms[0].as_ref())
+                            }
                             ClauseType::Named(..) | ClauseType::Op(..) => {
                                 return match lvl {
                                     Level::Root => None,
@@ -444,6 +453,16 @@ impl<'a> ChunkedIterator<'a> {
                 ChunkedTerm::BodyTerm(&QueryTerm::UnblockedCut(..)) => result.push(term),
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::Inlined(_), ..)) => {
                     result.push(term)
+                }
+                ChunkedTerm::BodyTerm(&QueryTerm::Clause(
+                    _,
+                    ClauseType::CallN,
+                    ref subterms,
+                    _,
+                )) => {
+                    result.push(term);
+                    arity = subterms.len() + 1;
+                    break;
                 }
                 ChunkedTerm::BodyTerm(qt) => {
                     result.push(term);

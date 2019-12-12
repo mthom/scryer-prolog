@@ -236,7 +236,7 @@ impl CodeIndex {
             module_name
         ))))
     }
-    
+
     #[inline]
     pub fn module_name(&self) -> ClauseName {
         self.0.borrow().1.clone()
@@ -311,6 +311,7 @@ pub enum REPLCodePtr {
 #[derive(Clone, PartialEq)]
 pub enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
+    CallN(usize, LocalCodePtr, bool),               // arity, local, last call.
     Local(LocalCodePtr),
     DynamicTransaction(DynamicTransactionType, LocalCodePtr), // the type of transaction, the return pointer.
     REPL(REPLCodePtr, LocalCodePtr),                          // the REPL code, the return pointer.
@@ -321,6 +322,7 @@ impl CodePtr {
     pub fn local(&self) -> LocalCodePtr {
         match self {
             &CodePtr::BuiltInClause(_, ref local)
+          | &CodePtr::CallN(_, ref local, _)
           | &CodePtr::Local(ref local) => local.clone(),
             &CodePtr::VerifyAttrInterrupt(p) => LocalCodePtr::DirEntry(p),
             &CodePtr::REPL(_, p) | &CodePtr::DynamicTransaction(_, p) => p,
@@ -418,7 +420,7 @@ impl Add<usize> for CodePtr {
           | p @ CodePtr::VerifyAttrInterrupt(_)
           | p @ CodePtr::DynamicTransaction(..) => p,
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
-            CodePtr::BuiltInClause(_, local) => {
+            CodePtr::BuiltInClause(_, local) | CodePtr::CallN(_, local, _) => {
                 CodePtr::Local(local + rhs)
             }
         }
@@ -467,7 +469,7 @@ pub struct IndexStore {
     pub(super) op_dir: OpDir,
 }
 
-impl IndexStore {    
+impl IndexStore {
     pub fn predicate_exists(
         &self,
         name: ClauseName,
@@ -492,18 +494,18 @@ impl IndexStore {
     }
 
     pub fn add_term_and_goal_expansion_indices(&mut self) {
-        self.code_dir.insert((clause_name!("term_expansion"), 2), 
+        self.code_dir.insert((clause_name!("term_expansion"), 2),
                              CodeIndex(Rc::new(RefCell::new(
                                  (IndexPtr::UserTermExpansion,
                                   clause_name!("user"))
                              ))));
-        self.code_dir.insert((clause_name!("goal_expansion"), 2), 
+        self.code_dir.insert((clause_name!("goal_expansion"), 2),
                              CodeIndex(Rc::new(RefCell::new(
                                  (IndexPtr::UserGoalExpansion,
                                   clause_name!("user"))
                              ))));
     }
-    
+
     #[inline]
     pub fn remove_clause_subsection(&mut self, module: ClauseName, name: ClauseName, arity: usize) {
         self.dynamic_code_dir.swap_remove(&(module, name, arity));

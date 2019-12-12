@@ -164,7 +164,6 @@ pub enum SystemClauseType {
     AtomCodes,
     AtomLength,
     CallAttributeGoals,
-    CallN,
     CharCode,
     CharsToNumber,
     ClearAttrVarBindings,
@@ -209,6 +208,7 @@ pub enum SystemClauseType {
     LiftedHeapLength,
     ModuleAssertDynamicPredicateToFront,
     ModuleAssertDynamicPredicateToBack,
+    ModuleExists,
     ModuleOf,
     ModuleRetractClause,
     NoSuchPredicate,
@@ -268,7 +268,6 @@ impl SystemClauseType {
             &SystemClauseType::AtomCodes => clause_name!("$atom_codes"),
             &SystemClauseType::AtomLength => clause_name!("$atom_length"),
             &SystemClauseType::CallAttributeGoals => clause_name!("$call_attribute_goals"),
-            &SystemClauseType::CallN => clause_name!("$call"),
             &SystemClauseType::CharCode => clause_name!("$char_code"),
             &SystemClauseType::CharsToNumber => clause_name!("$chars_to_number"),
             &SystemClauseType::ClearAttributeGoals => clause_name!("$clear_attribute_goals"),
@@ -343,6 +342,7 @@ impl SystemClauseType {
                 clause_name!("$module_assertz")
             }
             &SystemClauseType::ModuleHeadIsDynamic => clause_name!("$module_head_is_dynamic"),
+            &SystemClauseType::ModuleExists => clause_name!("$module_exists"),
             &SystemClauseType::ModuleOf => clause_name!("$module_of"),
             &SystemClauseType::NoSuchPredicate => clause_name!("$no_such_predicate"),
             &SystemClauseType::NumberToChars => clause_name!("$number_to_chars"),
@@ -401,7 +401,6 @@ impl SystemClauseType {
             ("$module_assertz", 5) => Some(SystemClauseType::ModuleAssertDynamicPredicateToBack),
             ("$asserta", 4) => Some(SystemClauseType::AssertDynamicPredicateToFront),
             ("$assertz", 4) => Some(SystemClauseType::AssertDynamicPredicateToBack),
-            ("$call", 1) => Some(SystemClauseType::CallN),
             ("$call_attribute_goals", 2) => Some(SystemClauseType::CallAttributeGoals),
             ("$char_code", 2) => Some(SystemClauseType::CharCode),
             ("$chars_to_number", 2) => Some(SystemClauseType::CharsToNumber),
@@ -449,6 +448,7 @@ impl SystemClauseType {
             ("$install_inference_counter", 3) => Some(SystemClauseType::InstallInferenceCounter),
             ("$lh_length", 1) => Some(SystemClauseType::LiftedHeapLength),
             ("$maybe", 0) => Some(SystemClauseType::Maybe),
+            ("$module_exists", 1) => Some(SystemClauseType::ModuleExists),
             ("$module_of", 2) => Some(SystemClauseType::ModuleOf),
             ("$module_retract_clause", 5) => Some(SystemClauseType::ModuleRetractClause),
             ("$module_head_is_dynamic", 2) => Some(SystemClauseType::ModuleHeadIsDynamic),
@@ -528,6 +528,7 @@ pub enum BuiltInClauseType {
 #[derive(Clone, PartialEq, Eq)]
 pub enum ClauseType {
     BuiltIn(BuiltInClauseType),
+    CallN,
     Hook(CompileTimeHook),
     Inlined(InlinedClauseType),
     Named(ClauseName, usize, CodeIndex), // name, arity, index.
@@ -595,6 +596,7 @@ impl ClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &ClauseType::BuiltIn(ref built_in) => built_in.name(),
+            &ClauseType::CallN => clause_name!("call"),
             &ClauseType::Hook(ref hook) => hook.name(),
             &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
             &ClauseType::Op(ref name, ..) => name.clone(),
@@ -614,6 +616,8 @@ impl ClauseType {
                     .unwrap_or_else(|| {
                         if let Some(spec) = spec {
                             ClauseType::Op(name, spec, CodeIndex::default())
+                        } else if name.as_str() == "call" {
+                            ClauseType::CallN
                         } else {
                             ClauseType::Named(name, arity, CodeIndex::default())
                         }

@@ -619,7 +619,9 @@ impl MachineState {
                 return Ok(());
             }
             &SystemClauseType::AtEndOfExpansion => {
-                self.at_end_of_expansion = self.p.local();
+                if self.cp == LocalCodePtr::TopLevel(0, 0) {
+                    self.at_end_of_expansion = true;
+                }
             }
             &SystemClauseType::AtomChars => {
                 let a1 = self[temp_v!(1)].clone();
@@ -762,64 +764,6 @@ impl MachineState {
                 }
 
                 return Ok(());
-            }
-            &SystemClauseType::CallN => {
-                let (name, arity) = match self.store(self.deref(self[temp_v!(1)].clone())) {
-                    Addr::Str(a) => {
-                        let result = self.heap[a].clone();
-
-                        if let HeapCellValue::NamedStr(arity, name, _) = result {
-                            if arity > MAX_ARITY {
-                                let stub = MachineError::functor_stub(
-                                    clause_name!("$call"),
-                                    1,
-                                );
-
-                                return Err(self.error_form(
-                                    MachineError::representation_error(RepFlag::MaxArity),
-                                    stub,
-                                ));
-                            }
-
-                            for i in 1 .. arity + 1 {
-                                self.registers[i] = self.heap[a + i].as_addr(a + i);
-                            }
-
-                            (name, arity)
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    Addr::Con(Constant::Atom(name, _)) =>
-                        (name, 0),
-                    Addr::HeapCell(_) | Addr::StackCell(_, _) => {
-                        let stub = MachineError::functor_stub(
-                            clause_name!("$call"),
-                            1,
-                        );
-                        
-                        return Err(self.error_form(MachineError::instantiation_error(), stub));
-                    }
-                    addr => {
-                        let stub = MachineError::functor_stub(
-                            clause_name!("$call"),
-                            1,
-                        );
-
-                        return Err(self.error_form(
-                            MachineError::type_error(ValidType::Callable, addr),
-                            stub,
-                        ));
-                    }
-                };
-                
-                return call_policy.call_n(
-                    self,
-                    name,
-                    arity,
-                    indices,
-                    current_input_stream,
-                );
             }
             &SystemClauseType::CharsToNumber => {
                 let stub = MachineError::functor_stub(clause_name!("number_chars"), 2);
@@ -1671,6 +1615,16 @@ impl MachineState {
                             self.error_form(MachineError::type_error(ValidType::Integer, a2), stub);
                         self.throw_exception(type_error)
                     }
+                };
+            }
+            &SystemClauseType::ModuleExists => {
+                let module = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                match module {
+                    Addr::Con(Constant::Atom(ref name, _)) => {
+                        self.fail = !indices.modules.contains_key(name);
+                    }
+                    _ => unreachable!()
                 };
             }
             &SystemClauseType::ModuleOf => {

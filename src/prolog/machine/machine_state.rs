@@ -261,7 +261,7 @@ pub struct MachineState {
     pub(super) last_call: bool,
     pub(crate) heap_locs: HeapVarDict,
     pub(crate) flags: MachineFlags,
-    pub(crate) at_end_of_expansion: LocalCodePtr
+    pub(crate) at_end_of_expansion: bool
 }
 
 impl MachineState {
@@ -865,39 +865,49 @@ pub(crate) trait CallPolicy: Any {
     fn call_n(
         &mut self,
         machine_st: &mut MachineState,
-        name: ClauseName,
         arity: usize,
         indices: &mut IndexStore,
         parsing_stream: &mut PrologStream,
     ) -> CallResult {
-        match ClauseType::from(name.clone(), arity, None) {
-            ClauseType::BuiltIn(built_in) => {
-                machine_st.setup_built_in_call(built_in.clone());
-                self.call_builtin(machine_st, &built_in, indices, parsing_stream)?;
-            }
-            ClauseType::Inlined(inlined) => {
-                machine_st.execute_inlined(&inlined);
-
-                if machine_st.last_call {
-                    machine_st.p = CodePtr::Local(machine_st.cp);
+        if let Some((name, arity)) = machine_st.setup_call_n(arity) {
+            match ClauseType::from(name.clone(), arity, None) {
+                ClauseType::BuiltIn(built_in) => {
+                    machine_st.setup_built_in_call(built_in.clone());
+                    self.call_builtin(machine_st, &built_in, indices, parsing_stream)?;
                 }
-            }
-            ClauseType::Op(..) | ClauseType::Named(..) => {
-                let module = name.owning_module();
+                ClauseType::CallN => {
+                    machine_st.handle_internal_call_n(arity);
 
-                if let Some(idx) = indices.get_code_index((name.clone(), arity), module) {
-                    self.context_call(machine_st, name, arity, idx, indices)?;
-                } else {
-                    try_in_situ(machine_st, name, arity, indices, machine_st.last_call)?;
+                    if machine_st.fail {
+                        return Ok(());
+                    }
+                    
+                    machine_st.p = CodePtr::CallN(arity, machine_st.p.local(), machine_st.last_call);
                 }
-            }
-            ClauseType::Hook(_) | ClauseType::System(_) => {
-                let name = Addr::Con(Constant::Atom(name, None));
-                let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
+                ClauseType::Inlined(inlined) => {
+                    machine_st.execute_inlined(&inlined);
 
-                return Err(machine_st
-                           .error_form(MachineError::type_error(ValidType::Callable, name), stub));
-            }
+                    if machine_st.last_call {
+                        machine_st.p = CodePtr::Local(machine_st.cp);
+                    }
+                }
+                ClauseType::Op(..) | ClauseType::Named(..) => {
+                    let module = name.owning_module();
+
+                    if let Some(idx) = indices.get_code_index((name.clone(), arity), module) {
+                        self.context_call(machine_st, name, arity, idx, indices)?;
+                    } else {
+                        try_in_situ(machine_st, name, arity, indices, machine_st.last_call)?;
+                    }
+                }
+                ClauseType::Hook(_) | ClauseType::System(_) => {
+                    let name = Addr::Con(Constant::Atom(name, None));
+                    let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
+
+                    return Err(machine_st
+                               .error_form(MachineError::type_error(ValidType::Callable, name), stub));
+                }
+            };
         }
 
         Ok(())
@@ -953,13 +963,12 @@ impl CallPolicy for CWILCallPolicy {
     fn call_n(
         &mut self,
         machine_st: &mut MachineState,
-        name: ClauseName,
         arity: usize,
         indices: &mut IndexStore,
         parsing_stream: &mut PrologStream,
     ) -> CallResult {
         self.prev_policy
-            .call_n(machine_st, name, arity, indices, parsing_stream)?;
+            .call_n(machine_st, arity, indices, parsing_stream)?;
         self.increment(machine_st)
     }
 }

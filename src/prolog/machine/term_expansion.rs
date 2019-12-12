@@ -365,7 +365,7 @@ impl MachineState {
         wam.code_repo.cached_query = code;
 
         self.cp = LocalCodePtr::TopLevel(0, 0);
-        self.at_end_of_expansion = self.cp;
+        self.at_end_of_expansion = false;
 
         self.query_stepper(
             &mut wam.indices,
@@ -374,7 +374,7 @@ impl MachineState {
             &mut readline::input_stream(),
         );
 
-        if self.fail || wam.code_repo.at_end_of_hook(hook, self.at_end_of_expansion) {
+        if self.fail || self.at_end_of_expansion {
             self.reset_with_heap_preservation();
             None
         } else {

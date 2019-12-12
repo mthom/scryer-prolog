@@ -94,6 +94,7 @@ fn load_module<R: Read>(
 
     results.and_then(|results| compile_work_impl(&mut compiler, wam, indices, results))
            .or_else(|e| {
+               wam.indices.take_module(module_name.clone());
                compiler.print_error(&e);
                Err(e)
            })?;
