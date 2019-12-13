@@ -242,7 +242,7 @@ impl Stack {
 
             for idx in 0 .. num_cells {
                 let offset = prelude_size::<AndFramePrelude>() + idx * mem::size_of::<Addr>();
-                ptr::write((self.top as usize + offset) as *mut Addr, Addr::HeapCell(0));
+                ptr::write((self.top as usize + offset) as *mut Addr, Addr::StackCell(0,0));
             }
 
             let and_frame = &mut *(self.top as *mut AndFrame);
@@ -264,7 +264,7 @@ impl Stack {
 
             for idx in 0 .. num_cells {
                 let offset = prelude_size::<OrFramePrelude>() + idx * mem::size_of::<Addr>();
-                ptr::write((self.top as usize + offset) as *mut Addr, Addr::HeapCell(0));
+                ptr::write((self.top as usize + offset) as *mut Addr, Addr::StackCell(0,0));
             }
 
             let or_frame = &mut *(self.top as *mut OrFrame);
