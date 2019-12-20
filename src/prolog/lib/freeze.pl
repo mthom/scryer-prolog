@@ -21,16 +21,8 @@ freeze(X, Goal) :-
     put_atts(Fresh, frozen(Goal)),
     Fresh = X.
 
-gather_freeze_goals(Attrs, _) -->
-    { var(Attrs) },
-    !.
-gather_freeze_goals([frozen(X) | _], Var) -->
-    [freeze(Var, X)],
-    { put_atts(Var, -frozen(_)) },
-    !.
-gather_freeze_goals([_ | Attrs], Var) -->
-    gather_freeze_goals(Attrs, Var).
+attribute_goals(Var) -->
+    { get_atts(Var, frozen(Goals)),
+      put_atts(Var, -frozen(_)) },
+    [freeze(Var, Goals)].
 
-attribute_goals(X) -->
-    { '$get_attr_list'(X, Attrs) },
-    gather_freeze_goals(Attrs, X).

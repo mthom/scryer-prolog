@@ -32,7 +32,7 @@
     ;  !,
        catch(throw(error(type_error(atom, Item), repl/0)),
 	     E,
-	     '$print_exception_with_check'(E))       
+	     '$print_exception_with_check'(E))
     ).
 '$instruction_match'(Term, VarList) :-
     '$submit_query_and_print_results'(Term, VarList),
@@ -42,10 +42,12 @@
     (  expand_goals(Term0, Term) -> true
     ;  Term = Term0
     ),
-    (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList), !
-    ;  write('false.'), nl
-    ),
-    '$reset_attr_var_state'.
+    (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList),
+       !
+    %  clear attribute goal lists, which may be populated by
+    %  copy_term/3 prior to failure.
+    ;  '$clear_attribute_goals', write('false.'), nl 
+    ).
 
 '$needs_bracketing'(Value, Op) :-
     catch((functor(Value, F, _),
@@ -80,7 +82,7 @@
        (  '$needs_bracketing'(Value, (=)) ->
 	  write('('),
 	  write_term(Value, [quoted(true), variable_names(VarList)]),
-	  write(')')       	  
+	  write(')')
        ;  write_term(Value, [quoted(true), variable_names(VarList)]),
 	  (  '$trailing_period_is_ambiguous'(Value) ->
 	     write(' ')
@@ -99,7 +101,7 @@
     '$write_eq'(G2, VarList).
 '$write_eq'(G, VarList) :-
     '$write_last_goal'(G, VarList).
-    
+
 '$graphic_token_char'(C) :-
     memberchk(C, ['#', '$', '&', '*', '+', '-', '.', ('/'), ':',
                   '<', '=', '>', '?', '@', '^', '~', ('\\')]).
@@ -144,13 +146,20 @@
     ).
 '$gather_query_vars'([], []).
 
+'$is_a_different_variable'([_ = Binding | Pairs], Value) :-
+    (  Value == Binding, !
+    ;  '$is_a_different_variable'(Pairs, Value)
+    ).
+
 '$gather_goals'([], VarList, Goals) :-
     '$get_attr_var_queue_beyond'(0, AttrVars),
     '$gather_query_vars'(VarList, QueryVars),
     '$call_attribute_goals'(QueryVars, AttrVars),
     '$fetch_attribute_goals'(Goals).
 '$gather_goals'([Var = Value | Pairs], VarList, Goals) :-
-    (  nonvar(Value) ->
+    (  (  nonvar(Value)
+       ;  '$is_a_different_variable'(Pairs, Value)
+       ) ->
        Goals = [Var = Value | Goals0],
        '$gather_goals'(Pairs, VarList, Goals0)
     ;  '$gather_goals'(Pairs, VarList, Goals)
