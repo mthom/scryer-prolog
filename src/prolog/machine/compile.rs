@@ -83,7 +83,7 @@ fn load_module<R: Read>(
         // this impromptu definition (namely, its exports) will be filled out later.
         let module_decl = ModuleDecl { name: listing_src, exports: vec![] };
 
-        let mut module = Module::new(module_decl, wam.indices.atom_tbl.clone());
+        let mut module  = Module::new(module_decl, wam.indices.atom_tbl.clone());
         let module_name = module.module_decl.name.clone();
 
         module.is_impromptu_module = true;
@@ -94,6 +94,7 @@ fn load_module<R: Read>(
 
     results.and_then(|results| compile_work_impl(&mut compiler, wam, indices, results))
            .or_else(|e| {
+               wam.indices.take_module(module_name.clone());
                compiler.print_error(&e);
                Err(e)
            })?;
@@ -201,6 +202,24 @@ pub fn compile_appendix(
     Ok(())
 }
 
+fn append_trivial_goal(name: &ClauseName, pred: &mut Predicate)
+{
+    let var = Box::new(Term::Var(Cell::default(), Rc::new(String::from("X"))));
+    let body = QueryTerm::Clause(
+        Cell::default(),
+        ClauseType::from(clause_name!("$at_end_of_expansion"), 0, None),
+        vec![],
+        false
+    );
+
+    let rule = Rule {
+        head: (name.clone(), vec![var.clone(), var], body),
+        clauses: vec![]
+    };
+
+    pred.0.push(PredicateClause::Rule(rule, 0, 0));
+}
+
 impl CodeRepo {
     pub fn compile_hook(
         &mut self,
@@ -209,12 +228,16 @@ impl CodeRepo {
     ) -> Result<(), ParserError> {
         let key = (hook.name(), hook.arity());
 
-        match self.term_dir.get(&key) {
-            Some(preds) => {
+        match self.term_dir.get_mut(&key) {
+            Some(ref mut preds) => {
+                append_trivial_goal(&key.0, &mut preds.0);
+
                 let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
                 let mut code = cg.compile_predicate(&(preds.0).0)?;
 
                 compile_appendix(&mut code, &preds.1, false, flags)?;
+
+                (preds.0).0.pop();
 
                 Ok(match hook {
                     CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion => {
@@ -225,7 +248,26 @@ impl CodeRepo {
                     }
                 })
             }
-            None => Ok(()),
+            None => Ok(match hook {
+                CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion => {
+                    if self.term_expanders.is_empty() {
+                        let mut preds = Predicate::new();
+                        append_trivial_goal(&key.0, &mut preds);
+
+                        let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
+                        self.term_expanders = cg.compile_predicate(&preds.0)?;
+                    }
+                }
+                CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion => {
+                    if self.goal_expanders.is_empty() {
+                        let mut preds = Predicate::new();
+                        append_trivial_goal(&key.0, &mut preds);
+
+                        let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
+                        self.goal_expanders = cg.compile_predicate(&preds.0)?;
+                    }
+                }
+            })
         }
     }
 }
@@ -649,8 +691,8 @@ impl ListingCompiler {
             let idx = code_dir
                 .entry((name.clone(), arity))
                 .or_insert(CodeIndex::default());
-            
-            set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());            
+
+            set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
 
             self.localize_self_calls(name, arity, &mut decl_code, p);
             code.extend(decl_code.into_iter());
@@ -728,7 +770,7 @@ impl ListingCompiler {
             ),
         );
 
-        op_decl.submit(self.get_module_name(), spec, &mut indices.op_dir)        
+        op_decl.submit(self.get_module_name(), spec, &mut indices.op_dir)
     }
 
     fn process_decl(
@@ -749,7 +791,7 @@ impl ListingCompiler {
                     .code_repo
                     .compile_hook(hook, flags)
                     .map_err(SessionError::from);
-                
+
                 wam.code_repo.truncate_terms(key, len, queue_len);
 
                 result
@@ -940,13 +982,16 @@ fn compile_work_impl(
     if let Some(ref mut module) = &mut compiler.module {
         // compile the module-level goal and term expansions and store
         // their locations to the module's code_dir.
-        let decls = module.take_local_expansions();
-            
+        let mut decls = module.take_local_expansions();
+
         if !decls.is_empty() {
+            append_trivial_goal(&clause_name!("term_expansion"), &mut decls[0].0);
+            append_trivial_goal(&clause_name!("goal_expansion"), &mut decls[1].0);
+
             results.worker_results.extend(decls.into_iter());
         }
     }
-    
+
     let module_code = compiler.generate_code(
         results.worker_results,
         wam,
@@ -999,7 +1044,7 @@ fn compile_work_impl(
 
             wam.indices.use_module(&mut wam.code_repo, wam.machine_st.flags, &module)?;
             wam.indices.insert_module(module);
-        } else {                  
+        } else {
             add_module_code(wam, module, module_code, indices);
         }
 

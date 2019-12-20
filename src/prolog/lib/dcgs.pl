@@ -4,8 +4,9 @@
 
 :- use_module(library(lists), [append/3]).
 
-user:term_expansion(Term0, (Head :- Body)) :-
-    dcg_rule(Term0, Term),
+user:term_expansion(Term0, Term) :-
+    nonvar(Term0),
+    dcg_rule(Term0, (Head :- Body)),
     Term = (Head :- Body).
 
 phrase(GRBody, S0) :-
@@ -33,7 +34,7 @@ phrase_((A ; B), S0, S) :-
 %% phrase_((A | B), S0, S) :-
 %%     (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
 phrase_({G}, S0, S) :-
-    (  G, S0 = S  ).
+    (  call(G), S0 = S  ).
 phrase_(call(G), S0, S) :-
     call(G, S0, S).
 phrase_((A -> B), S0, S) :-

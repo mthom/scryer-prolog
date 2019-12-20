@@ -159,6 +159,7 @@ pub enum SystemClauseType {
     AbolishModuleClause,
     AssertDynamicPredicateToBack,
     AssertDynamicPredicateToFront,
+    AtEndOfExpansion,
     AtomChars,
     AtomCodes,
     AtomLength,
@@ -208,6 +209,7 @@ pub enum SystemClauseType {
     LiftedHeapLength,
     ModuleAssertDynamicPredicateToFront,
     ModuleAssertDynamicPredicateToBack,
+    ModuleExists,
     ModuleOf,
     ModuleRetractClause,
     NoSuchPredicate,
@@ -263,6 +265,7 @@ impl SystemClauseType {
             &SystemClauseType::AbolishModuleClause => clause_name!("$abolish_module_clause"),
             &SystemClauseType::AssertDynamicPredicateToBack => clause_name!("$assertz"),
             &SystemClauseType::AssertDynamicPredicateToFront => clause_name!("$asserta"),
+            &SystemClauseType::AtEndOfExpansion => clause_name!("$at_end_of_expansion"),
             &SystemClauseType::AtomChars => clause_name!("$atom_chars"),
             &SystemClauseType::AtomCodes => clause_name!("$atom_codes"),
             &SystemClauseType::AtomLength => clause_name!("$atom_length"),
@@ -342,6 +345,7 @@ impl SystemClauseType {
                 clause_name!("$module_assertz")
             }
             &SystemClauseType::ModuleHeadIsDynamic => clause_name!("$module_head_is_dynamic"),
+            &SystemClauseType::ModuleExists => clause_name!("$module_exists"),
             &SystemClauseType::ModuleOf => clause_name!("$module_of"),
             &SystemClauseType::NoSuchPredicate => clause_name!("$no_such_predicate"),
             &SystemClauseType::NumberToChars => clause_name!("$number_to_chars"),
@@ -392,6 +396,7 @@ impl SystemClauseType {
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$abolish_clause", 2) => Some(SystemClauseType::AbolishClause),
+            ("$at_end_of_expansion", 0) => Some(SystemClauseType::AtEndOfExpansion),
             ("$atom_chars", 2) => Some(SystemClauseType::AtomChars),
             ("$atom_codes", 2) => Some(SystemClauseType::AtomCodes),
             ("$atom_length", 2) => Some(SystemClauseType::AtomLength),
@@ -448,6 +453,7 @@ impl SystemClauseType {
             ("$install_inference_counter", 3) => Some(SystemClauseType::InstallInferenceCounter),
             ("$lh_length", 1) => Some(SystemClauseType::LiftedHeapLength),
             ("$maybe", 0) => Some(SystemClauseType::Maybe),
+            ("$module_exists", 1) => Some(SystemClauseType::ModuleExists),
             ("$module_of", 2) => Some(SystemClauseType::ModuleOf),
             ("$module_retract_clause", 5) => Some(SystemClauseType::ModuleRetractClause),
             ("$module_head_is_dynamic", 2) => Some(SystemClauseType::ModuleHeadIsDynamic),
@@ -595,8 +601,8 @@ impl ClauseType {
 
     pub fn name(&self) -> ClauseName {
         match self {
-            &ClauseType::CallN => clause_name!("call"),
             &ClauseType::BuiltIn(ref built_in) => built_in.name(),
+            &ClauseType::CallN => clause_name!("call"),
             &ClauseType::Hook(ref hook) => hook.name(),
             &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
             &ClauseType::Op(ref name, ..) => name.clone(),

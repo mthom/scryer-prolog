@@ -272,7 +272,8 @@ impl Machine {
         self.run_query();
     }
 
-    pub fn new(prolog_stream: PrologStream) -> Self {
+    pub fn new(prolog_stream: PrologStream) -> Self
+    {
         let mut wam = Machine {
             machine_st: MachineState::new(),
             inner_heap: Heap::with_capacity(256 * 256),
@@ -285,6 +286,8 @@ impl Machine {
 
         let atom_tbl = wam.indices.atom_tbl.clone();
 
+        wam.indices.add_term_and_goal_expansion_indices();
+        
         compile_listing(
             &mut wam,
             parsing_stream(BUILTINS.as_bytes()),
@@ -739,7 +742,7 @@ impl MachineState {
             let b = self.b;
 
             self.b0 = self.stack.index_or_frame(b).prelude.b0;
-            self.p = self.stack.index_or_frame(b).prelude.bp.clone();
+            self.p = CodePtr::Local(self.stack.index_or_frame(b).prelude.bp);
 
             if let CodePtr::Local(LocalCodePtr::TopLevel(_, p)) = self.p {
                 self.fail = p == 0;

@@ -217,7 +217,7 @@ macro_rules! return_from_clause {
 
 macro_rules! dir_entry {
     ($idx:expr) => {
-        CodePtr::Local(LocalCodePtr::DirEntry($idx))
+        LocalCodePtr::DirEntry($idx)
     };
 }
 

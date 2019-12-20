@@ -128,7 +128,7 @@ impl<'a> QueryIterator<'a> {
                 QueryIterator {
                     state_stack: vec![state],
                 }
-            }
+            }            
             &QueryTerm::Clause(ref cell, ref ct, ref terms, _) => {
                 let state = TermIterState::Clause(Level::Root, 0, cell, ct.clone(), terms);
                 QueryIterator {

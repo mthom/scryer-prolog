@@ -1,3 +1,4 @@
+:- module(test_on_setup_call_cleanup, []).
 
 :- use_module(library(non_iso)).
 

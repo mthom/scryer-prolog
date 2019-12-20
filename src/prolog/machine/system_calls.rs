@@ -637,6 +637,11 @@ impl MachineState {
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
             }
+            &SystemClauseType::AtEndOfExpansion => {
+                if self.cp == LocalCodePtr::TopLevel(0, 0) {
+                    self.at_end_of_expansion = true;
+                }
+            }
             &SystemClauseType::AtomChars => {
                 let a1 = self[temp_v!(1)].clone();
 
@@ -772,9 +777,9 @@ impl MachineState {
                 let p = self.attr_var_init.project_attrs_loc;
 
                 if self.last_call {
-                    self.execute_at_index(2, p);
+                    self.execute_at_index(2, dir_entry!(p));
                 } else {
-                    self.call_at_index(2, p);
+                    self.call_at_index(2, dir_entry!(p));
                 }
 
                 return Ok(());
@@ -1010,7 +1015,10 @@ impl MachineState {
 
                 match subsection {
                     Some(dynamic_predicate_info) => {
-                        self.execute_at_index(2, dynamic_predicate_info.clauses_subsection_p);
+                        self.execute_at_index(
+                            2,
+                            dir_entry!(dynamic_predicate_info.clauses_subsection_p)
+                        );
                         return Ok(());
                     }
                     None => self.fail = true,
@@ -1628,6 +1636,16 @@ impl MachineState {
                     }
                 };
             }
+            &SystemClauseType::ModuleExists => {
+                let module = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                match module {
+                    Addr::Con(Constant::Atom(ref name, _)) => {
+                        self.fail = !indices.modules.contains_key(name);
+                    }
+                    _ => unreachable!()
+                };
+            }
             &SystemClauseType::ModuleOf => {
                 let module = self.store(self.deref(self[temp_v!(2)].clone()));
 
@@ -1645,7 +1663,9 @@ impl MachineState {
 
                             self.unify(target, module);
                         }
-                        _ => self.fail = true,
+                        _ => {
+                            unreachable!()
+                        }
                     },
                     _ => self.fail = true,
                 };
@@ -1944,7 +1964,10 @@ impl MachineState {
 
                 match subsection {
                     Some(dynamic_predicate_info) => {
-                        self.execute_at_index(2, dynamic_predicate_info.clauses_subsection_p);
+                        self.execute_at_index(
+                            2,
+                            dir_entry!(dynamic_predicate_info.clauses_subsection_p)
+                        );
                         return Ok(());
                     }
                     _ => unreachable!(),

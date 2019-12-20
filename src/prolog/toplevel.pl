@@ -40,13 +40,13 @@
 
 '$submit_query_and_print_results'(Term0, VarList) :-
     (  expand_goals(Term0, Term) -> true
-    ;  Term = Term0
+    ;  Term0 = Term
     ),
     (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList),
        !
     %  clear attribute goal lists, which may be populated by
     %  copy_term/3 prior to failure.
-    ;  '$clear_attribute_goals', write('false.'), nl 
+    ;  '$clear_attribute_goals', write('false.'), nl
     ).
 
 '$needs_bracketing'(Value, Op) :-
@@ -235,6 +235,7 @@ use_module(Module, QualifiedExports) :-
     ;  throw(error(instantiation_error, use_module/2))
     ).
 
+
 % expand goals in initialization directives.
 user:term_expansion(Term0, (:- initialization(ExpandedGoals))) :-
     nonvar(Term0),
@@ -242,15 +243,25 @@ user:term_expansion(Term0, (:- initialization(ExpandedGoals))) :-
     expand_goals(Goals, ExpandedGoals),
     Goals \== ExpandedGoals.
 
+
+'$module_expand_goal'(UnexpandedGoals, ExpandedGoals) :-    
+    (  '$module_of'(Module, UnexpandedGoals),
+       '$module_exists'(Module),
+       Module:goal_expansion(UnexpandedGoals, ExpandedGoals),
+       UnexpandedGoals \== ExpandedGoals ->
+       true
+    ;  user:goal_expansion(UnexpandedGoals, ExpandedGoals)
+    ).
+
 expand_goals(UnexpandedGoals, ExpandedGoals) :-
     nonvar(UnexpandedGoals),
     var(ExpandedGoals),
-    (  expand_goal(UnexpandedGoals, Goals) -> true
+    (  '$module_expand_goal'(UnexpandedGoals, Goals) ->
+       true
     ;  Goals = UnexpandedGoals
     ),
     (  Goals = (Goal0, Goals0) ->
-       (  expand_goal(Goal0, Goal1) ->
-	  Expanded = true,
+       (  expand_goals(Goal0, Goal1) ->
 	  expand_goals(Goals0, Goals1),
 	  thread_goals(Goal1, ExpandedGoals, Goals1, (','))
        ;  expand_goals(Goals0, Goals1),
@@ -264,6 +275,9 @@ expand_goals(UnexpandedGoals, ExpandedGoals) :-
        expand_goals(Goals0, ExpandedGoals0),
        expand_goals(Goals1, ExpandedGoals1),
        ExpandedGoals = (ExpandedGoals0 ; ExpandedGoals1)
+    ;  Goals = (\+ Goals0) ->
+       expand_goals(Goals0, Goals1),
+       ExpandedGoals = (\+ Goals1)
     ;  thread_goals(Goals, ExpandedGoals, (','))
     ;  Goals = ExpandedGoals
     ).

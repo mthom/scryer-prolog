@@ -80,6 +80,7 @@ impl MachineError {
             ],
             SharedOpDesc::new(400, YFX)
         ));
+        
         stub.append(&mut functor!(
             ":",
             2,

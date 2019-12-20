@@ -56,14 +56,15 @@
 '$del_attr'(Ls0, V, Attr) :-
     Ls0 = [Att | Ls1],
     nonvar(Att),
-    ( Att \= Attr -> '$del_attr_buried'(Ls0, Ls1, V, Attr)
-    ; '$enqueue_attr_var'(V),
-      '$del_attr_head'(V), '$del_attr'(Ls1, V, Attr)
+    (  Att \= Attr -> '$del_attr_buried'(Ls0, Ls1, V, Attr)
+    ;  '$enqueue_attr_var'(V),
+       '$del_attr_head'(V),
+       '$del_attr'(Ls1, V, Attr)
     ).
 
 '$del_attr_step'(Ls1, V, Attr) :-
-    ( nonvar(Ls1) -> Ls1 = [_ | Ls2], '$del_attr_buried'(Ls1, Ls2, V, Attr)
-    ; true ).
+    (  nonvar(Ls1) -> Ls1 = [_ | Ls2], '$del_attr_buried'(Ls1, Ls2, V, Attr)
+    ;  true ).
 
 %% assumptions: Ls0 is a list, Ls1 is its tail;
 %%              the head of Ls0 can be ignored.

@@ -211,6 +211,8 @@ pub enum IndexPtr {
     DynamicUndefined, // a predicate, declared as dynamic, whose location in code is as yet undefined.
     Undefined,
     Index(usize),
+    UserGoalExpansion,
+    UserTermExpansion
 }
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -234,7 +236,7 @@ impl CodeIndex {
             module_name
         ))))
     }
-    
+
     #[inline]
     pub fn module_name(&self) -> ClauseName {
         self.0.borrow().1.clone()
@@ -418,7 +420,7 @@ impl Add<usize> for CodePtr {
           | p @ CodePtr::VerifyAttrInterrupt(_)
           | p @ CodePtr::DynamicTransaction(..) => p,
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
-            CodePtr::CallN(_, local, _) | CodePtr::BuiltInClause(_, local) => {
+            CodePtr::BuiltInClause(_, local) | CodePtr::CallN(_, local, _) => {
                 CodePtr::Local(local + rhs)
             }
         }
@@ -467,7 +469,7 @@ pub struct IndexStore {
     pub(super) op_dir: OpDir,
 }
 
-impl IndexStore {    
+impl IndexStore {
     pub fn predicate_exists(
         &self,
         name: ClauseName,
@@ -489,6 +491,19 @@ impl IndexStore {
                 _ => true,
             },
         }
+    }
+
+    pub fn add_term_and_goal_expansion_indices(&mut self) {
+        self.code_dir.insert((clause_name!("term_expansion"), 2),
+                             CodeIndex(Rc::new(RefCell::new(
+                                 (IndexPtr::UserTermExpansion,
+                                  clause_name!("user"))
+                             ))));
+        self.code_dir.insert((clause_name!("goal_expansion"), 2),
+                             CodeIndex(Rc::new(RefCell::new(
+                                 (IndexPtr::UserGoalExpansion,
+                                  clause_name!("user"))
+                             ))));
     }
 
     #[inline]

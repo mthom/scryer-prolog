@@ -55,6 +55,7 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      true/0, unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, writeq/1]).
 
+
 % the maximum arity flag. needs to be replaced with
 % current_prolog_flag(max_arity, MAX_ARITY).
 max_arity(255).
@@ -177,13 +178,13 @@ set_prolog_flag(Flag, _) :-
 
 fail :- '$fail'.
 
-\+ G :- G, !, false.
+\+ G :- call(G), !, false.
 \+ _.
 
 X \= X :- !, false.
 _ \= _.
 
-once(G) :- G, !.
+once(G) :- call(G), !.
 
 repeat.
 repeat :- repeat.
@@ -200,13 +201,14 @@ comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 		 '$set_cp'(B),
 		 '$call_with_default_policy'(comma_errors(G1, G2, B)).
 ','(!, Atom, B) :- Atom == !, '$set_cp'(B).
-','(!, G, B)  :- '$set_cp'(B), G.
+','(!, G, B)  :- '$set_cp'(B), call(G).
 ','(G, CF, B) :- compound(CF),
 		 '$call_with_default_policy'(CF = ','(G1, G2)),
-		 !, G,
+		 !,
+		 call(G),
 		 '$call_with_default_policy'(comma_errors(G1, G2, B)).
-','(G, Atom, B) :- Atom == !, !, G, '$set_cp'(B).
-','(G1, G2, _)  :- G1, G2.
+','(G, Atom, B) :- Atom == !, !, call(G), '$set_cp'(B).
+','(G1, G2, _)  :- call(G1), call(G2).
 
 ;(G1, G2) :- '$get_b_value'(B), ;(G1, G2, B).
 
@@ -214,37 +216,47 @@ comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 ;(G1, G4, B) :- compound(G1),
 		'$call_with_default_policy'(G1 = ->(G2, G3)),
 		!,
-		(G2 -> G3 ; '$set_cp'(B), G4).
-;(G1, G2, B) :- G1 == !, '$set_cp'(B), G2.
-;(G1, G2, B) :- G2 == !, G1, '$set_cp'(B).
-;(G, _, _) :- G.
-;(_, G, _) :- G.
+		(  call(G2) -> call(G3)
+		;  '$set_cp'(B),
+		   call(G4)
+		).
+;(G1, G2, B) :- G1 == !, '$set_cp'(B), call(G2).
+;(G1, G2, B) :- G2 == !, call(G1), '$set_cp'(B).
+;(G, _, _) :- call(G).
+;(_, G, _) :- call(G).
 
 G1 -> G2 :- '$get_b_value'(B), '$call_with_default_policy'(->(G1, G2, B)).
 
 :- non_counted_backtracking (->)/3.
-->(G1, G2, B) :- G2 == !, G1, '$set_cp'(B).
-->(G1, G2, B) :- G1, '$set_cp'(B), G2.
+->(G1, G2, B) :- G2 == !, call(G1), '$set_cp'(B).
+->(G1, G2, B) :- call(G1), '$set_cp'(B), call(G2).
 
 % univ.
 
 :- non_counted_backtracking univ_errors/3.
 univ_errors(Term, List, N) :-
     '$skip_max_list'(N, -1, List, R),
-    ( var(R)       -> ( var(Term), throw(error(instantiation_error, (=..)/2))      % 8.5.3.3 a)
-		      ; true )
-    ; R \== []     -> throw(error(type_error(list, List), (=..)/2))                % 8.5.3.3 b)
-    ; List = [H|T] -> ( var(H), var(Term), % R == [] => List is a proper list.
-		        throw(error(instantiation_error, (=..)/2))                 % 8.5.3.3 c)
-		      ; T \== [], nonvar(H), \+ atom(H),
-			throw(error(type_error(atom, H), (=..)/2))                 % 8.5.3.3 d)
-		      ; compound(H), T == [],
-			throw(error(type_error(atomic, H), (=..)/2))               % 8.5.3.3 e)
-		      ; var(Term), max_arity(M), N - 1 > M,
-			throw(error(representation_error(max_arity), (=..)/2))     % 8.5.3.3 g)
-		      ; true )
-    ; var(Term)    -> throw(error(domain_error(non_empty_list, List), (=..)/2))    % 8.5.3.3 f)
-    ; true ).
+    ( var(R)       ->
+       (  var(Term), throw(error(instantiation_error, (=..)/2))      % 8.5.3.3 a)
+       ;  true
+       )
+    ;  R \== []     ->
+       throw(error(type_error(list, List), (=..)/2))                % 8.5.3.3 b)
+    ;  List = [H|T] ->
+       (  var(H), var(Term), % R == [] => List is a proper list.
+       	  throw(error(instantiation_error, (=..)/2))                 % 8.5.3.3 c)
+       ;  T \== [], nonvar(H), \+ atom(H),
+       	  throw(error(type_error(atom, H), (=..)/2))                 % 8.5.3.3 d)
+       ;  compound(H), T == [],
+       	  throw(error(type_error(atomic, H), (=..)/2))               % 8.5.3.3 e)
+       ;  var(Term), max_arity(M), N - 1 > M,
+       	  throw(error(representation_error(max_arity), (=..)/2))     % 8.5.3.3 g)
+       ;  true
+       )
+    ;  var(Term)    ->
+       throw(error(domain_error(non_empty_list, List), (=..)/2))    % 8.5.3.3 f)
+    ;  true
+    ).
 
 Term =.. List :- '$call_with_default_policy'(univ_errors(Term, List, N)),
 		 '$call_with_default_policy'(univ_worker(Term, List, N)).
@@ -371,7 +383,8 @@ catch(G,C,R) :- '$get_current_block'(Bb), '$call_with_default_policy'(catch(G,C,
 
 :- non_counted_backtracking catch/4.
 catch(G,C,R,Bb) :-
-    '$install_new_block'(NBb), call(G),
+    '$install_new_block'(NBb),
+    call(G),
     '$call_with_default_policy'(end_block(Bb, NBb)).
 catch(G,C,R,Bb) :-
     '$reset_block'(Bb),

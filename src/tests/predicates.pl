@@ -1,3 +1,4 @@
+:- module(test_on_predicates, []).
 
 :- dynamic(p/2).
 :- dynamic(p/3).

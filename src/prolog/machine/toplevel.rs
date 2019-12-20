@@ -678,6 +678,26 @@ impl RelationWorker {
                     self.queue.push_back(clauses);
                     Ok(QueryTerm::Jump(stub))
                 }
+                ("\\+", 1) => {
+                    terms.push(Box::new(Term::Constant(
+                        Cell::default(),
+                        Constant::Atom(clause_name!("$fail"), None)
+                    )));
+
+                    let conq = Term::Constant(
+                        Cell::default(),
+                        Constant::Atom(clause_name!("true"), None)
+                    );
+                    
+                    let prec = Term::Clause(Cell::default(), clause_name!("->"), terms, None);
+                    let terms = vec![Box::new(prec), Box::new(conq)];
+
+                    let term = Term::Clause(Cell::default(), clause_name!(";"), terms, None);
+                    let (stub, clauses) = self.fabricate_disjunct(term);
+
+                    self.queue.push_back(clauses);
+                    Ok(QueryTerm::Jump(stub))
+                }
                 ("$get_level", 1) => {
                     if let Term::Var(_, ref var) = *terms[0] {
                         Ok(QueryTerm::GetLevelAndUnify(Cell::default(), var.clone()))
@@ -693,7 +713,7 @@ impl RelationWorker {
                     let ct = indices.get_clause_type(name, terms.len(), fixity);
                     Ok(QueryTerm::Clause(Cell::default(), ct, terms, false))
                 }
-            },
+            }
             Term::Var(..) => Ok(QueryTerm::Clause(
                 Cell::default(),
                 ClauseType::CallN,

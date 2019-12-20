@@ -75,6 +75,7 @@ impl MachineState {
             last_call: false,
             heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default(),
+            at_end_of_expansion: false
         }
     }
 
@@ -105,6 +106,7 @@ impl MachineState {
             last_call: false,
             heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default(),
+            at_end_of_expansion: false
         }
     }
 
@@ -1988,6 +1990,19 @@ impl MachineState {
         }
     }
 
+    pub(super) fn set_ball(&mut self) {
+        self.ball.reset();
+
+        let addr = self[temp_v!(1)].clone();
+        self.ball.boundary = self.heap.h;
+
+        copy_term(
+            CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut self.ball.stub),
+            addr,
+            AttrVarPolicy::DeepCopy,
+        );
+    }
+
     pub(super) fn handle_internal_call_n(&mut self, arity: usize) {
         let arity = arity + 1;
         let pred = self.registers[1].clone();
@@ -2002,19 +2017,6 @@ impl MachineState {
         }
 
         self.fail = true;
-    }
-
-    pub(super) fn set_ball(&mut self) {
-        self.ball.reset();
-
-        let addr = self[temp_v!(1)].clone();
-        self.ball.boundary = self.heap.h;
-
-        copy_term(
-            CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut self.ball.stub),
-            addr,
-            AttrVarPolicy::DeepCopy,
-        );
     }
 
     pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey> {
@@ -2081,7 +2083,7 @@ impl MachineState {
             self.stack.truncate_to_frame(self.b);
         }
     }
-    
+
     pub(crate) fn is_cyclic_term(&self, addr: Addr) -> bool {
         let mut seen = IndexSet::new();
         let mut fail = false;
@@ -3105,7 +3107,7 @@ impl MachineState {
 
         and_frame.prelude.e  = self.e;
         and_frame.prelude.cp = self.cp;
-        
+
         self.e = e;
         self.p += 1;
     }
@@ -3113,7 +3115,7 @@ impl MachineState {
     pub(super) fn deallocate(&mut self) {
         let e = self.e;
         let frame = self.stack.index_and_frame(e);
-        
+
         self.cp = frame.prelude.cp;
         self.e  = frame.prelude.e;
 
@@ -3240,7 +3242,7 @@ impl MachineState {
                 or_frame.prelude.e = self.e;
                 or_frame.prelude.cp = self.cp;
                 or_frame.prelude.b = self.b;
-                or_frame.prelude.bp = self.p.clone() + 1;
+                or_frame.prelude.bp = self.p.local() + 1;
                 or_frame.prelude.tr = self.tr;
                 or_frame.prelude.pstr_tr = self.pstr_tr;
                 or_frame.prelude.h  = self.heap.h;
@@ -3279,7 +3281,7 @@ impl MachineState {
                 or_frame.prelude.e = self.e;
                 or_frame.prelude.cp = self.cp;
                 or_frame.prelude.b = self.b;
-                or_frame.prelude.bp = self.p.clone() + offset;                
+                or_frame.prelude.bp = self.p.local() + offset;
                 or_frame.prelude.tr = self.tr;
                 or_frame.prelude.pstr_tr = self.pstr_tr;
                 or_frame.prelude.h  = self.heap.h;
