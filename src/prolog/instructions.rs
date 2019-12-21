@@ -364,6 +364,17 @@ pub enum ControlInstruction {
 }
 
 impl ControlInstruction {
+    pub fn perm_vars(&self) -> Option<usize> {
+        match self {
+            ControlInstruction::CallClause(_, _, num_cells, ..) =>
+                Some(*num_cells),
+            ControlInstruction::JmpBy(_, _, num_cells, ..) =>
+                Some(*num_cells),
+            _ =>
+                None
+        }
+    }
+
     pub fn to_functor(&self) -> MachineStub {
         match self {
             &ControlInstruction::Allocate(num_frames) => {

@@ -17,7 +17,7 @@ shift(Term) :-
 get_chunks(E, P, L) :-
     (  '$points_to_cont_reset_marker'(P) ->
        L = []
-    ;  '$get_chunk'(E,P,TB),
+    ;  '$get_cont_chunk'(E,P,TB),
        L = [TB|Rest],
        '$nextEP'(E, NextE, NextP),
        get_chunks(NextE, NextP, Rest)
@@ -26,4 +26,3 @@ get_chunks(E, P, L) :-
 call_continuation(L) :- '$call_continuation'(L).
 
 '$write_cont_and_term'(_, _, _, _).
-

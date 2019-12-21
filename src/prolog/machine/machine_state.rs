@@ -1063,17 +1063,20 @@ downcast!(dyn CutPolicy);
 fn cut_body(machine_st: &mut MachineState, addr: Addr) -> bool {
     let b = machine_st.b;
 
-    if let Addr::Con(Constant::Usize(b0)) = addr {
-        if b > b0 {
-            machine_st.b = b0;
-            machine_st.tidy_trail();
-            machine_st.tidy_pstr_trail();
-            machine_st.truncate_stack();
+    match addr {
+        Addr::Con(Constant::CutPoint(b0)) | Addr::Con(Constant::Usize(b0)) => {
+            if b > b0 {
+                machine_st.b = b0;
+                machine_st.tidy_trail();
+                machine_st.tidy_pstr_trail();
+                machine_st.truncate_stack();
+            }
         }
-    } else {
-        machine_st.fail = true;
-        return true;
-    }
+        _ => {
+            machine_st.fail = true;
+            return true;
+        }
+    };
 
     false
 }
@@ -1148,15 +1151,19 @@ impl CutPolicy for SCCCutPolicy {
     fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool {
         let b = machine_st.b;
 
-        if let Addr::Con(Constant::Usize(b0)) = machine_st[r].clone() {
-            if b > b0 {
-                machine_st.b = b0;
-                machine_st.tidy_trail();
-                machine_st.tidy_pstr_trail();
+        match machine_st[r].clone() {
+            Addr::Con(Constant::Usize(b0)) | Addr::Con(Constant::CutPoint(b0)) => {
+                if b > b0 {
+                    machine_st.b = b0;
+                    machine_st.tidy_trail();
+                    machine_st.tidy_pstr_trail();
+                    machine_st.truncate_stack();
+                }
             }
-        } else {
-            machine_st.fail = true;
-            return true;
+            _ => {
+                machine_st.fail = true;
+                return true;
+            }
         }
 
         self.run_cleaners(machine_st)

@@ -165,6 +165,7 @@ pub enum SystemClauseType {
     AtomLength,
     BindFromRegister,
     CallAttributeGoals,
+    CallContinuation,
     CharCode,
     CharsToNumber,
     ClearAttrVarBindings,
@@ -193,6 +194,7 @@ pub enum SystemClauseType {
     GetAttrVarQueueBeyond,
     GetBValue,
     GetClause,
+    GetContinuationChunk,
     GetModuleClause,
     GetNextDBRef,
     GetNextOpDBRef,
@@ -212,10 +214,12 @@ pub enum SystemClauseType {
     ModuleExists,
     ModuleOf,
     ModuleRetractClause,
+    NextEP,
     NoSuchPredicate,
     NumberToChars,
     NumberToCodes,
     OpDeclaration,
+    PointsToContinuationResetMarker,
     REPL(REPLCodePtr),
     ReadQueryTerm,
     ReadTerm,
@@ -252,6 +256,7 @@ pub enum SystemClauseType {
     TermVariables,
     TruncateLiftedHeapTo,
     UnifyWithOccursCheck,
+    UnwindEnvironments,
     UnwindStack,
     Variant,
     WAMInstructions,
@@ -271,6 +276,7 @@ impl SystemClauseType {
             &SystemClauseType::AtomLength => clause_name!("$atom_length"),
             &SystemClauseType::BindFromRegister => clause_name!("$bind_from_register"),
             &SystemClauseType::CallAttributeGoals => clause_name!("$call_attribute_goals"),
+            &SystemClauseType::CallContinuation => clause_name!("$call_continuation"),
             &SystemClauseType::CharCode => clause_name!("$char_code"),
             &SystemClauseType::CharsToNumber => clause_name!("$chars_to_number"),
             &SystemClauseType::ClearAttributeGoals => clause_name!("$clear_attribute_goals"),
@@ -316,6 +322,7 @@ impl SystemClauseType {
                 clause_name!("$get_attr_var_queue_delim")
             }
             &SystemClauseType::GetAttrVarQueueBeyond => clause_name!("$get_attr_var_queue_beyond"),
+            &SystemClauseType::GetContinuationChunk => clause_name!("$get_cont_chunk"),
             &SystemClauseType::GetLiftedHeapFromOffset => clause_name!("$get_lh_from_offset"),
             &SystemClauseType::GetLiftedHeapFromOffsetDiff => {
                 clause_name!("$get_lh_from_offset_diff")
@@ -350,6 +357,9 @@ impl SystemClauseType {
             &SystemClauseType::NoSuchPredicate => clause_name!("$no_such_predicate"),
             &SystemClauseType::NumberToChars => clause_name!("$number_to_chars"),
             &SystemClauseType::NumberToCodes => clause_name!("$number_to_codes"),
+            &SystemClauseType::PointsToContinuationResetMarker => {
+                clause_name!("$points_to_cont_reset_marker")
+            }
             &SystemClauseType::RawInputReadChar => clause_name!("$raw_input_read_char"),
             &SystemClauseType::RedoAttrVarBinding => clause_name!("$redo_attr_var_binding"),
             &SystemClauseType::RemoveCallPolicyCheck => clause_name!("$remove_call_policy_check"),
@@ -370,6 +380,7 @@ impl SystemClauseType {
             &SystemClauseType::GetCurrentBlock => clause_name!("$get_current_block"),
             &SystemClauseType::InstallNewBlock => clause_name!("$install_new_block"),
             &SystemClauseType::ModuleRetractClause => clause_name!("$module_retract_clause"),
+            &SystemClauseType::NextEP => clause_name!("$nextEP"),
             &SystemClauseType::ReadQueryTerm => clause_name!("$read_query_term"),
             &SystemClauseType::ReadTerm => clause_name!("$read_term"),
             &SystemClauseType::ResetGlobalVarAtKey => clause_name!("$reset_global_var_at_key"),
@@ -386,6 +397,7 @@ impl SystemClauseType {
             &SystemClauseType::TermVariables => clause_name!("$term_variables"),
             &SystemClauseType::TruncateLiftedHeapTo => clause_name!("$truncate_lh_to"),
             &SystemClauseType::UnifyWithOccursCheck => clause_name!("$unify_with_occurs_check"),
+            &SystemClauseType::UnwindEnvironments => clause_name!("$unwind_environments"),
             &SystemClauseType::UnwindStack => clause_name!("$unwind_stack"),
             &SystemClauseType::Variant => clause_name!("$variant"),
             &SystemClauseType::WAMInstructions => clause_name!("$wam_instructions"),
@@ -407,6 +419,7 @@ impl SystemClauseType {
             ("$asserta", 4) => Some(SystemClauseType::AssertDynamicPredicateToFront),
             ("$assertz", 4) => Some(SystemClauseType::AssertDynamicPredicateToBack),
             ("$call_attribute_goals", 2) => Some(SystemClauseType::CallAttributeGoals),
+            ("$call_continuation", 1) => Some(SystemClauseType::CallContinuation),
             ("$char_code", 2) => Some(SystemClauseType::CharCode),
             ("$chars_to_number", 2) => Some(SystemClauseType::CharsToNumber),
             ("$clear_attr_var_bindings", 0) => Some(SystemClauseType::ClearAttrVarBindings),
@@ -432,6 +445,9 @@ impl SystemClauseType {
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
             ("$get_char", 1) => Some(SystemClauseType::GetChar),
+            ("$points_to_cont_reset_marker", 1) => {
+                Some(SystemClauseType::PointsToContinuationResetMarker)
+            }
             ("$reset_attr_var_state", 0) => Some(SystemClauseType::ResetAttrVarState),
             ("$truncate_if_no_lh_growth", 1) => {
                 Some(SystemClauseType::TruncateIfNoLiftedHeapGrowth)
@@ -473,10 +489,12 @@ impl SystemClauseType {
             ("$get_attr_var_queue_beyond", 2) => Some(SystemClauseType::GetAttrVarQueueBeyond),
             ("$get_attr_var_queue_delim", 1) => Some(SystemClauseType::GetAttrVarQueueDelimiter),
             ("$get_ball", 1) => Some(SystemClauseType::GetBall),
+            ("$get_cont_chunk", 3) => Some(SystemClauseType::GetContinuationChunk),
             ("$get_current_block", 1) => Some(SystemClauseType::GetCurrentBlock),
             ("$get_cp", 1) => Some(SystemClauseType::GetCutPoint),
             ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
             ("$raw_input_read_char", 1) => Some(SystemClauseType::RawInputReadChar),
+            ("$nextEP", 3) => Some(SystemClauseType::NextEP),
             ("$read_query_term", 2) => Some(SystemClauseType::ReadQueryTerm),
             ("$read_term", 2) => Some(SystemClauseType::ReadTerm),
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
@@ -494,6 +512,7 @@ impl SystemClauseType {
             ("$store_global_var_with_offset", 2) => Some(SystemClauseType::StoreGlobalVarWithOffset),
             ("$term_variables", 2) => Some(SystemClauseType::TermVariables),
             ("$truncate_lh_to", 1) => Some(SystemClauseType::TruncateLiftedHeapTo),
+            ("$unwind_environments", 0) => Some(SystemClauseType::UnwindEnvironments),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             ("$unify_with_occurs_check", 2) => Some(SystemClauseType::UnifyWithOccursCheck),
 	    ("$use_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),

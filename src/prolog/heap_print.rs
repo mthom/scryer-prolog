@@ -809,6 +809,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 });
             }
             Constant::CharCode(c) => self.append_str(&format!("{}", c)),
+            Constant::CutPoint(b) => self.append_str(&format!("{}", b)),
             Constant::EmptyList => self.append_str("[]"),
             Constant::Integer(n) => self.print_number(Number::Integer(n), op),
             Constant::Float(n) => self.print_number(Number::Float(n), op),

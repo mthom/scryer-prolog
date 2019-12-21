@@ -4,7 +4,11 @@ use prolog_parser::tabled_rc::*;
 use crate::prolog::clause_types::*;
 use crate::prolog::fixtures::*;
 use crate::prolog::forms::*;
+use crate::prolog::machine::code_repo::CodeRepo;
 use crate::prolog::machine::Ball;
+use crate::prolog::machine::heap::Heap;
+use crate::prolog::instructions::*;
+use crate::prolog::rug::Integer;
 
 use indexmap::IndexMap;
 
@@ -346,6 +350,69 @@ impl LocalCodePtr {
             _ => {}
         }
     }
+
+    pub fn is_reset_cont_marker(&self, code_repo: &CodeRepo, last_call: bool) -> bool {
+        match code_repo.lookup_instr(last_call, &CodePtr::Local(*self)) {
+            Some(line) => {
+                match line.as_ref() {
+                    Line::Control(ControlInstruction::CallClause(ref ct, ..)) => {
+                        if let ClauseType::System(SystemClauseType::ResetContinuationMarker) = *ct {
+                            return true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            None => {}
+        }
+
+        false
+    }
+
+    pub fn as_functor(&self, heap: &mut Heap) -> Addr {
+        let addr = Addr::HeapCell(heap.h);
+
+        match self {
+            LocalCodePtr::DirEntry(p) => {
+                heap.append(functor!(
+                    "dir_entry",
+                    1,
+                    [heap_integer!(Integer::from(*p))]
+                ));
+            }
+            LocalCodePtr::InSituDirEntry(p) => {
+                heap.append(functor!(
+                    "in_situ_dir_entry",
+                    1,
+                    [heap_integer!(Integer::from(*p))]
+                ));
+            }
+            LocalCodePtr::TopLevel(chunk_num, offset) => {
+                heap.append(functor!(
+                    "top_level",
+                    2,
+                    [heap_integer!(Integer::from(*chunk_num)),
+                     heap_integer!(Integer::from(*offset))]
+                ));
+            }
+            LocalCodePtr::UserGoalExpansion(p) => {
+                heap.append(functor!(
+                    "user_goal_expansion",
+                    1,
+                    [heap_integer!(Integer::from(*p))]
+                ));
+            }
+            LocalCodePtr::UserTermExpansion(p) => {
+                heap.append(functor!(
+                    "user_term_expansion",
+                    1,
+                    [heap_integer!(Integer::from(*p))]
+                ));
+            }
+        }
+
+        addr
+    }
 }
 
 impl PartialOrd<CodePtr> for CodePtr {
@@ -395,6 +462,25 @@ impl Add<usize> for LocalCodePtr {
             LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs),
             LocalCodePtr::UserTermExpansion(p) => LocalCodePtr::UserTermExpansion(p + rhs),
             LocalCodePtr::UserGoalExpansion(p) => LocalCodePtr::UserGoalExpansion(p + rhs),
+        }
+    }
+}
+
+impl Sub<usize> for LocalCodePtr {
+    type Output = Option<LocalCodePtr>;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        match self {
+            LocalCodePtr::InSituDirEntry(p) =>
+                p.checked_sub(rhs).map(LocalCodePtr::InSituDirEntry),
+            LocalCodePtr::DirEntry(p) =>
+                p.checked_sub(rhs).map(LocalCodePtr::DirEntry),
+            LocalCodePtr::TopLevel(cn, p) =>
+                p.checked_sub(rhs).map(|r| LocalCodePtr::TopLevel(cn, r)),
+            LocalCodePtr::UserTermExpansion(p) =>
+                p.checked_sub(rhs).map(LocalCodePtr::UserTermExpansion),
+            LocalCodePtr::UserGoalExpansion(p) =>
+                p.checked_sub(rhs).map(LocalCodePtr::UserGoalExpansion),
         }
     }
 }
