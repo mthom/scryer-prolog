@@ -2197,8 +2197,12 @@ impl MachineState {
                 self.reset_block(addr);
             }
             &SystemClauseType::ResetContinuationMarker => {
-                self[temp_v!(3)] = Addr::Con(Constant::Integer(Integer::from(0)));
-                self[temp_v!(4)] = Addr::Con(Constant::Integer(Integer::from(0)));
+                self[temp_v!(3)] = Addr::Con(Constant::Atom(clause_name!("none"), None));
+
+                let h = self.heap.h;
+                self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+
+                self[temp_v!(4)] = Addr::HeapCell(h);
             }
             &SystemClauseType::SetBall =>
                 self.set_ball(),
