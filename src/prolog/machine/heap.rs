@@ -82,6 +82,50 @@ impl Heap {
             self.push(hcv);
         }
     }
+
+    pub fn to_local_code_ptr(&self, addr: &Addr) -> Option<LocalCodePtr> {
+        let extract_integer = |s: usize| -> Option<usize> {
+            match self.heap[s].as_addr(s) {
+                Addr::Con(Constant::Integer(n)) => n.to_usize(),
+                _ => None
+            }
+        };
+        
+        match addr {
+            Addr::Str(s) => {
+                match &self.heap[*s] {
+                    HeapCellValue::NamedStr(arity, ref name, _) => {
+                        match (name.as_str(), *arity) {
+                            ("dir_entry", 1) => {
+                                extract_integer(s+1).map(LocalCodePtr::DirEntry)
+                            }
+                            ("in_situ_dir_entry", 1) => {
+                                extract_integer(s+1).map(LocalCodePtr::InSituDirEntry)
+                            }
+                            ("top_level", 2) => {
+                                if let Some(chunk_num) = extract_integer(s+1) {
+                                    if let Some(p) = extract_integer(s+2) {
+                                        return Some(LocalCodePtr::TopLevel(chunk_num, p));
+                                    }
+                                }
+
+                                None
+                            }
+                            ("user_goal_expansion", 1) => {
+                                extract_integer(s+1).map(LocalCodePtr::UserGoalExpansion)
+                            }
+                            ("user_term_expansion", 1) => {
+                                extract_integer(s+1).map(LocalCodePtr::UserTermExpansion)
+                            }
+                            _ => None
+                        }
+                    }
+                    _ => unreachable!()
+                }
+            }
+            _ => None
+        }
+    }
 }
 
 impl Index<usize> for Heap {

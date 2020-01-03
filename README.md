@@ -49,7 +49,9 @@ Extend Scryer Prolog to include the following, among other features:
       `retract/1`, `abolish/1`) with logical update semantics.
 - [x] Backtrackable and non-backtrackable global variables via `bb_get/2`
       `bb_put/2` (non-backtrackable) and `bb_b_put/2`
-      (backtrackable).
+      (backtrackable).      
+- [ ] Delimited continuations based on reset/3, shift/1 (documented in
+      "Delimited Continuations for Prolog") (_in progress_).
 - [ ] clp(B) and clp(ℤ) as builtin libraries (_in progress_).
 - [ ] Streams and predicates for stream control (_in progress_).
 - [ ] An incremental compacting garbage collector satisfying the five
@@ -79,15 +81,12 @@ Programming?"
 unum implementation or an ad hoc one. Unums are described in
 Gustafson's book "The End of Error."
 
-3. Add support for shift/reset delimited continuations, see "Delimited
-Continuations for Prolog."
-
-4. Add concurrent tables to manage shared references to atoms and
+3. Add concurrent tables to manage shared references to atoms and
 strings.
 
-5. Add optional SLG resolution for fast memoization of predicates.
+4. Add optional SLG resolution for fast memoization of predicates.
 
-6. Add some form of JIT predicate indexing.
+5. Add some form of JIT predicate indexing.
 
 ## Installing Scryer Prolog
 

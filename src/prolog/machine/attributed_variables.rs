@@ -117,7 +117,7 @@ impl MachineState {
             self.stack.index_and_frame_mut(e)[i] = self[RegType::Temp(i)].clone();
         }
 
-        self.stack.index_and_frame_mut(e)[self.num_of_args + 1] = Addr::Con(Constant::Usize(self.b0));
+        self.stack.index_and_frame_mut(e)[self.num_of_args + 1] = Addr::Con(Constant::CutPoint(self.b0));
         self.stack.index_and_frame_mut(e)[self.num_of_args + 2] = Addr::Con(Constant::Usize(self.num_of_args));
 
         self.verify_attributes();

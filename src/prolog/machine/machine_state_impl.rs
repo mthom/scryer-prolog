@@ -3337,7 +3337,7 @@ impl MachineState {
             &CutInstruction::GetLevel(r) => {
                 let b0 = self.b0;
 
-                self[r] = Addr::Con(Constant::Usize(b0));
+                self[r] = Addr::Con(Constant::CutPoint(b0));
                 self.p += 1;
             }
             &CutInstruction::GetLevelAndUnify(r) => {

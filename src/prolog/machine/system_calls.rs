@@ -580,6 +580,51 @@ impl MachineState {
         functors
     }
 
+    fn call_continuation_chunk(&mut self, chunk: Addr, return_p: LocalCodePtr) -> LocalCodePtr {
+        let chunk = self.store(self.deref(chunk));
+
+        match chunk {
+            Addr::Str(s) => {
+                match &self.heap[s] {
+                    HeapCellValue::NamedStr(arity, ..) => {
+                        let num_cells = arity - 1;
+                        let p_functor = self.heap[s+1].as_addr(s+1);
+
+                        let cp = self.heap.to_local_code_ptr(&p_functor).unwrap();
+                        let prev_e = self.e;
+
+                        let e = self.stack.allocate_and_frame(num_cells);
+                        let and_frame = self.stack.index_and_frame_mut(e);
+
+                        and_frame.prelude.e  = prev_e;
+                        and_frame.prelude.cp = return_p;
+
+                        self.p = CodePtr::Local(cp + 1);
+
+                        // adjust cut point to occur after call_continuation.
+                        if num_cells > 0 {
+                            if let Addr::Con(Constant::CutPoint(_)) = self.heap[s+2].as_addr(s+2) {
+                                and_frame[1] = Addr::Con(Constant::CutPoint(self.b));
+                            } else {
+                                and_frame[1] = self.heap[s+2].as_addr(s+2);
+                            }
+                        }
+
+                        for index in s+3 .. s+2+num_cells {
+                            and_frame[index - (s+1)] = self.heap[index].as_addr(index);
+                        }
+
+                        self.e = e;
+
+                        self.p.local()
+                    }
+                    _ => unreachable!()
+                }
+            }
+            _ => unreachable!()
+        }
+    }
+
     pub(super) fn system_call(
         &mut self,
         ct: &SystemClauseType,
@@ -603,6 +648,25 @@ impl MachineState {
 
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
+            }
+            &SystemClauseType::BindFromRegister => {
+                let reg = self.store(self.deref(self[temp_v!(2)].clone()));
+                let n = match reg {
+                    Addr::Con(Constant::Integer(n)) => n.to_usize(),
+                    _ => unreachable!()
+                };
+
+                if let Some(n) = n {
+                    if n <= MAX_ARITY {
+                        let target = self[temp_v!(n)].clone();
+                        let addr   = self[temp_v!(1)].clone();
+
+                        self.unify(addr, target);
+                        return return_from_clause!(self.last_call, self);
+                    }
+                }
+
+                self.fail = true;
             }
             &SystemClauseType::AssertDynamicPredicateToFront => {
                 let p = self.cp;
@@ -765,6 +829,28 @@ impl MachineState {
 
                 return Ok(());
             }
+            &SystemClauseType::CallContinuation => {
+                let stub = MachineError::functor_stub(clause_name!("call_continuation"), 1);
+
+                match self.try_from_list(temp_v!(1), stub) {
+                    Err(e) => return Err(e),
+                    Ok(cont_chunks) => {
+                        let mut return_p = if self.last_call {
+                            self.cp
+                        } else {
+                            self.p.local() + 1
+                        };
+
+                        self.p = CodePtr::Local(return_p);
+
+                        for chunk in cont_chunks.into_iter().rev() {
+                            return_p = self.call_continuation_chunk(chunk, return_p);
+                        }
+                    }
+                }
+
+                return Ok(());
+            }
             &SystemClauseType::CharsToNumber => {
                 let stub = MachineError::functor_stub(clause_name!("number_chars"), 2);
 
@@ -878,7 +964,7 @@ impl MachineState {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));
 
                 match addr {
-                    Addr::Con(Constant::Usize(old_b)) => {
+                    Addr::Con(Constant::Usize(old_b)) | Addr::Con(Constant::CutPoint(old_b)) => {
                         let prev_b = self.stack.index_or_frame(self.b).prelude.b;
                         let prev_b = self.stack.index_or_frame(prev_b).prelude.b;
 
@@ -1458,6 +1544,50 @@ impl MachineState {
                     _ => self.fail = true,
                 }
             }
+            &SystemClauseType::GetContinuationChunk => {
+                let e = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                let e = if let Addr::Con(Constant::Usize(e)) = e {
+                    e
+                } else {
+                    self.fail = true;
+                    return Ok(());
+                };
+
+                let p_functor = self.store(self.deref(self[temp_v!(2)].clone()));
+                let p = self.heap.to_local_code_ptr(&p_functor).unwrap();
+
+                let num_cells = match code_repo.lookup_instr(self.last_call, &CodePtr::Local(p)) {
+                    Some(line) => {
+                        let perm_vars = match line.as_ref() {
+                            Line::Control(ref ctrl_instr) => ctrl_instr.perm_vars(),
+                            _ => None
+                        };
+
+                        perm_vars.unwrap()
+                    }
+                    _ => unreachable!()
+                };
+
+                let mut addrs = vec![];
+
+                for index in 1 .. num_cells + 1 {
+                    addrs.push(self.stack.index_and_frame(e)[index].clone());
+                }
+
+                let chunk = Addr::HeapCell(self.heap.h);
+
+                self.heap.push(HeapCellValue::NamedStr(
+                    1 + num_cells,
+                    clause_name!("cont_chunk"),
+                    None,
+                ));
+
+                self.heap.push(HeapCellValue::Addr(p_functor));
+                self.heap.extend(addrs.into_iter().map(HeapCellValue::Addr));
+
+                self.unify(self[temp_v!(3)].clone(), chunk);
+            }
             &SystemClauseType::GetLiftedHeapFromOffsetDiff => {
                 let lh_offset = self[temp_v!(1)].clone();
 
@@ -1590,7 +1720,8 @@ impl MachineState {
                 }
 
                 match (a1, a2.clone()) {
-                    (Addr::Con(Constant::Usize(bp)), Addr::Con(Constant::Integer(n))) => {
+                    (Addr::Con(Constant::Usize(bp)), Addr::Con(Constant::Integer(n)))
+                  | (Addr::Con(Constant::CutPoint(bp)), Addr::Con(Constant::Integer(n))) => {
                         match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
                             Some(call_policy) => {
                                 let count = call_policy.add_limit(n, bp);
@@ -1752,14 +1883,17 @@ impl MachineState {
                     Some(call_policy) => {
                         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
-                        if let Addr::Con(Constant::Usize(bp)) = a1 {
-                            if call_policy.is_empty() && bp == self.b {
-                                Some(call_policy.into_inner())
-                            } else {
-                                None
+                        match a1 {
+                            Addr::Con(Constant::Usize(bp)) | Addr::Con(Constant::CutPoint(bp)) => {
+                                if call_policy.is_empty() && bp == self.b {
+                                    Some(call_policy.into_inner())
+                                } else {
+                                    None
+                                }
                             }
-                        } else {
-                            panic!("remove_call_policy_check: expected Usize in A1.");
+                            _ => {
+                                panic!("remove_call_policy_check: expected Usize in A1.");
+                            }
                         }
                     }
                     None => panic!(
@@ -1777,15 +1911,18 @@ impl MachineState {
                     Some(call_policy) => {
                         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
-                        if let Addr::Con(Constant::Usize(bp)) = a1 {
-                            let count = call_policy.remove_limit(bp);
-                            let count = Addr::Con(Constant::Integer(count.clone()));
+                        match a1 {
+                            Addr::Con(Constant::Usize(bp)) | Addr::Con(Constant::CutPoint(bp)) => {
+                                let count = call_policy.remove_limit(bp);
+                                let count = Addr::Con(Constant::Integer(count.clone()));
 
-                            let a2 = self[temp_v!(2)].clone();
+                                let a2 = self[temp_v!(2)].clone();
 
-                            self.unify(a2, count);
-                        } else {
-                            panic!("remove_inference_counter: expected Usize in A1.");
+                                self.unify(a2, count);
+                            }
+                            _ => {
+                                panic!("remove_inference_counter: expected Usize in A1.");
+                            }
                         }
                     }
                     None => panic!(
@@ -1817,7 +1954,7 @@ impl MachineState {
                     self[RegType::Temp(i)] = self.stack.index_and_frame(e)[i].clone();
                 }
 
-                if let &Addr::Con(Constant::Usize(b0)) = &self.stack.index_and_frame(e)[frame_len - 1] {
+                if let &Addr::Con(Constant::CutPoint(b0)) = &self.stack.index_and_frame(e)[frame_len - 1] {
                     self.b0 = b0;
                 }
 
@@ -1865,7 +2002,7 @@ impl MachineState {
                 let a2 = self.store(self.deref(self[temp_v!(2)].clone()));
 
                 match a2 {
-                    Addr::Con(Constant::Usize(bp)) => {
+                    Addr::Con(Constant::CutPoint(bp)) | Addr::Con(Constant::Usize(bp)) => {
                         let prev_b = self.stack.index_or_frame(self.b).prelude.b;
 
                         if prev_b <= bp {
@@ -1956,7 +2093,7 @@ impl MachineState {
             }
             &SystemClauseType::GetCutPoint => {
                 let a1 = self[temp_v!(1)].clone();
-                let a2 = Addr::Con(Constant::Usize(self.b0));
+                let a2 = Addr::Con(Constant::CutPoint(self.b0));
 
                 self.unify(a1, a2);
             }
@@ -1978,6 +2115,72 @@ impl MachineState {
                 let target = self[temp_v!(1)].clone();
                 self.unify(Addr::Con(Constant::Char(c)), target);
             }
+            &SystemClauseType::NextEP => {
+                let first_arg = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                match first_arg {
+                    Addr::Con(Constant::Atom(ref name, _))
+                        if name.as_str() == "first" => {
+                            if self.e == 0 {
+                                self.fail = true;
+                                return Ok(());
+                            }
+
+                            let cp = (self.stack.index_and_frame(self.e).prelude.cp - 1).unwrap();
+
+                            let e = self.stack.index_and_frame(self.e).prelude.e;
+                            let e = Addr::Con(Constant::Usize(e));
+
+                            let p = cp.as_functor(&mut self.heap);
+
+                            self.unify(self[temp_v!(2)].clone(), e);
+
+                            if !self.fail {
+                                self.unify(self[temp_v!(3)].clone(), p);
+                            }
+                        },
+                    Addr::Con(Constant::Usize(e)) => {
+                        if e == 0 {
+                            self.fail = true;
+                            return Ok(());
+                        }
+
+                        // get the call site so that the number of active permanent variables can be read
+                        // from it later.
+                        let cp = (self.stack.index_and_frame(e).prelude.cp - 1).unwrap();
+
+                        let p = cp.as_functor(&mut self.heap);
+                        let e = self.stack.index_and_frame(e).prelude.e;
+
+                        let e = Addr::Con(Constant::Usize(e));
+
+                        self.unify(self[temp_v!(2)].clone(), e);
+
+                        if !self.fail {
+                            self.unify(self[temp_v!(3)].clone(), p);
+                        }
+                    }
+                    _ => unreachable!()
+                }
+            }
+            &SystemClauseType::PointsToContinuationResetMarker => {
+                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                let p = match self.heap.to_local_code_ptr(&addr) {
+                    Some(p) => p + 1,
+                    None => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                };
+
+                if p.is_reset_cont_marker(code_repo, self.last_call) {
+                    return return_from_clause!(self.last_call, self);
+                }
+
+                self.fail = true;
+                return Ok(());
+            }
             &SystemClauseType::ReadQueryTerm => {
                 readline::set_prompt(true);
                 let result = self.read_term(current_input_stream, indices);
@@ -1988,10 +2191,18 @@ impl MachineState {
             &SystemClauseType::ReadTerm => {
                 readline::set_prompt(false);
                 self.read_term(current_input_stream, indices)?;
-            },
+            }
             &SystemClauseType::ResetBlock => {
                 let addr = self.deref(self[temp_v!(1)].clone());
                 self.reset_block(addr);
+            }
+            &SystemClauseType::ResetContinuationMarker => {
+                self[temp_v!(3)] = Addr::Con(Constant::Atom(clause_name!("none"), None));
+
+                let h = self.heap.h;
+                self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+
+                self[temp_v!(4)] = Addr::HeapCell(h);
             }
             &SystemClauseType::SetBall =>
                 self.set_ball(),
@@ -2101,6 +2312,22 @@ impl MachineState {
                 let a2 = self[temp_v!(2)].clone();
 
                 self.unify_with_occurs_check(a1, a2);
+            }
+            &SystemClauseType::UnwindEnvironments => {
+                let mut e = self.e;
+                let mut cp = self.cp;
+
+                while e > 0 {
+                    if cp.is_reset_cont_marker(code_repo, self.last_call) {
+                        self.e = e;
+                        self.p = CodePtr::Local(cp + 1); // skip the reset marker.
+
+                        return Ok(());
+                    }
+
+                    cp = self.stack.index_and_frame(e).prelude.cp;
+                    e = self.stack.index_and_frame(e).prelude.e;
+                }
             }
             &SystemClauseType::UnwindStack => self.unwind_stack(),
             &SystemClauseType::Variant => self.fail = self.structural_eq_test(),
