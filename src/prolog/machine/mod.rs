@@ -43,6 +43,7 @@ use std::fs::File;
 use std::io::Read;
 use std::mem;
 use std::ops::Index;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 
@@ -165,14 +166,26 @@ impl SubModuleUser for IndexStore {
     }
 }
 
+#[inline]
+fn current_dir() -> std::path::PathBuf {
+    let mut path_buf = std::path::PathBuf::from(file!());
+    path_buf.pop();
+    path_buf
+}
+
 include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
 static TOPLEVEL: &str = include_str!("../toplevel.pl");
 
 impl Machine {
-    fn compile_special_forms(&mut self) {
-        let verify_attrs_src = clause_name!("verify_attrs.pl");
-        let project_attrs_src = clause_name!("project_attributes.pl");
+    fn compile_special_forms(&mut self)
+    {
+        let current_dir = current_dir();
+
+        let verify_attrs_src = ListingSource::from_file_and_path(
+            clause_name!("attributed_variables.pl"),
+            current_dir.clone(),
+        );
 
         match compile_special_form(self, parsing_stream(VERIFY_ATTRS.as_bytes()), verify_attrs_src)
         {
@@ -182,6 +195,11 @@ impl Machine {
             Err(_) =>
                 panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS"),
         }
+
+        let project_attrs_src = ListingSource::from_file_and_path(
+            clause_name!("project_attributes.pl"),
+            current_dir,
+        );
 
         match compile_special_form(self, parsing_stream(PROJECT_ATTRS.as_bytes()), project_attrs_src)
         {
@@ -196,8 +214,21 @@ impl Machine {
     fn compile_top_level(&mut self) -> Result<(), SessionError>
     {
         self.toplevel_idx = self.code_repo.code.len();
-        compile_user_module(self, parsing_stream(TOPLEVEL.as_bytes()),
-                            true, clause_name!("toplevel.pl"));
+
+        let mut current_dir = current_dir();
+        current_dir.pop();
+
+        let top_lvl_src = ListingSource::from_file_and_path(
+            clause_name!("toplevel.pl"),
+            current_dir,
+        );
+
+        compile_user_module(
+            self,
+            parsing_stream(TOPLEVEL.as_bytes()),
+            true,
+            top_lvl_src,
+        );
 
         if let Some(module) = self.indices.take_module(clause_name!("$toplevel")) {
             self.indices.use_module(
@@ -226,8 +257,12 @@ impl Machine {
                 Err(_) => return,
             };
 
-            compile_user_module(self, file_src, true,
-                                clause_name!("$HOME/.scryerrc"));
+            let rc_src = ListingSource::from_file_and_path(
+                clause_name!(".scryerrc"),
+                path.to_path_buf(),
+            );
+
+            compile_user_module(self, file_src, true, rc_src);
         }
     }
 
@@ -285,27 +320,50 @@ impl Machine {
         };
 
         let atom_tbl = wam.indices.atom_tbl.clone();
+        let mut lib_path = current_dir();
+
+        lib_path.pop();
+        lib_path.push("lib");
 
         wam.indices.add_term_and_goal_expansion_indices();
-        
+
         compile_listing(
             &mut wam,
             parsing_stream(BUILTINS.as_bytes()),
             default_index_store!(atom_tbl.clone()),
             true,
-            clause_name!("builtins.pl"),
+            ListingSource::from_file_and_path(
+                clause_name!("builtins.pl"), 
+                lib_path.clone(),
+            ),
         );
 
         wam.compile_special_forms();
 
         compile_user_module(&mut wam, parsing_stream(ERROR.as_bytes()), true,
-                            clause_name!("error"));
+                            ListingSource::from_file_and_path(
+                                clause_name!("error"),
+                                lib_path.clone(),
+                            )
+        );
         compile_user_module(&mut wam, parsing_stream(LISTS.as_bytes()), true,
-                            clause_name!("lists"));
+                            ListingSource::from_file_and_path(
+                                clause_name!("lists"), 
+                                lib_path.clone(),
+                            ),
+        );
         compile_user_module(&mut wam, parsing_stream(NON_ISO.as_bytes()), true,
-                            clause_name!("non_iso"));
+                            ListingSource::from_file_and_path(
+                                clause_name!("non_iso"),
+                                lib_path.clone(),
+                            )
+        );
         compile_user_module(&mut wam, parsing_stream(SI.as_bytes()), true,
-                            clause_name!("si"));
+                            ListingSource::from_file_and_path(
+                                clause_name!("si"), 
+                                lib_path.clone(),
+                            )
+        );
 
         if wam.compile_top_level().is_err() {
             panic!("Loading '$toplevel' module failed");
@@ -494,7 +552,7 @@ impl Machine {
 		    load_library(self, name, false)
 		},
 	    ModuleSource::File(name) =>
-                load_module_from_file(self, name.as_str(), false)
+                load_module_from_file(self, PathBuf::from(name.as_str()), false)
 	};
 
 	let result = load_result.and_then(|name| {
@@ -545,7 +603,7 @@ impl Machine {
 		    load_library(self, name, false)
 		},
 	    ModuleSource::File(name) =>
-                load_module_from_file(self, name.as_str(), false)
+                load_module_from_file(self, PathBuf::from(name.as_str()), false)
 	};
 
 	let result = load_result.and_then(|name| {
@@ -571,7 +629,7 @@ impl Machine {
     fn handle_toplevel_command(&mut self, code_ptr: REPLCodePtr, p: LocalCodePtr) {
         match code_ptr {
             REPLCodePtr::CompileBatch => {
-                let user_src = clause_name!("user");
+                let user_src = ListingSource::User;
 
                 let src = readline::input_stream();
                 readline::set_prompt(false);

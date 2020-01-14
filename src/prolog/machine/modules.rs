@@ -11,7 +11,11 @@ use std::mem;
 
 // Module's and related types are defined in forms.
 impl Module {
-    pub fn new(module_decl: ModuleDecl, atom_tbl: TabledData<Atom>) -> Self
+    pub fn new(
+        module_decl: ModuleDecl,
+        atom_tbl: TabledData<Atom>,
+        listing_src: ListingSource,
+    ) -> Self
     {
         Module {
             module_decl,
@@ -26,6 +30,7 @@ impl Module {
             op_dir: default_op_dir(),
             inserted_expansions: false,
             is_impromptu_module: false,
+            listing_src,
         }
     }
 

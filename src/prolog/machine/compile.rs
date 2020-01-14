@@ -40,9 +40,11 @@ pub fn print_code(code: &Code) {
     }
 }
 
-fn fix_filename(atom_tbl: TabledData<Atom>, filename: &str) -> Result<PathBuf, SessionError> {
-    let mut path = PathBuf::from(filename);
-
+fn fix_filename(
+    atom_tbl: TabledData<Atom>,
+    mut path: PathBuf,
+) -> Result<PathBuf, SessionError>
+{
     if !path.is_file() {
         if path.extension().is_none() {
             path.set_extension("pl");
@@ -61,7 +63,7 @@ fn load_module<R: Read>(
     wam: &mut Machine,
     stream: ParsingStream<R>,
     suppress_warnings: bool,
-    listing_src: ClauseName,
+    listing_src: &ListingSource,
 ) -> Result<ClauseName, SessionError> {
     // follow the operation of compile_user_module, but before
     // compiling, check that a module is declared in the file. if not,
@@ -81,9 +83,9 @@ fn load_module<R: Read>(
         module.module_decl.name.clone()
     } else {
         // this impromptu definition (namely, its exports) will be filled out later.
-        let module_decl = ModuleDecl { name: listing_src, exports: vec![] };
+        let module_decl = ModuleDecl { name: listing_src.name(), exports: vec![] };
 
-        let mut module  = Module::new(module_decl, wam.indices.atom_tbl.clone());
+        let mut module  = Module::new(module_decl, wam.indices.atom_tbl.clone(), listing_src.clone());
         let module_name = module.module_decl.name.clone();
 
         module.is_impromptu_module = true;
@@ -105,17 +107,20 @@ fn load_module<R: Read>(
 pub(super)
 fn load_module_from_file(
     wam: &mut Machine,
-    filename: &str,
+    path_buf: PathBuf,
     suppress_warnings: bool,
 ) -> Result<ClauseName, SessionError> {
-    let path = fix_filename(wam.indices.atom_tbl.clone(), filename)?;
-    let filename = clause_name!(path.to_string_lossy().to_string(), wam.indices.atom_tbl);
+    let mut path_buf = fix_filename(wam.indices.atom_tbl.clone(), path_buf)?;
+    let filename = clause_name!(path_buf.to_string_lossy().to_string(), wam.indices.atom_tbl);
 
-    let file_handle = File::open(&path).or_else(|_| {
+    let file_handle = File::open(&path_buf).or_else(|_| {
         Err(SessionError::InvalidFileName(filename.clone()))
     })?;
 
-    load_module(wam, parsing_stream(file_handle), suppress_warnings, filename)
+    path_buf.pop();
+
+    let listing_src = ListingSource::from_file_and_path(filename, path_buf);
+    load_module(wam, parsing_stream(file_handle), suppress_warnings, &listing_src)
 }
 
 pub type PredicateCompileQueue = (Predicate, VecDeque<TopLevel>);
@@ -330,7 +335,7 @@ pub(super) fn compile_into_module<R: Read>(
     indices.op_dir   = module.op_dir.clone();
     indices.atom_tbl = module.atom_tbl.clone();
 
-    let mut compiler = ListingCompiler::new(&wam.code_repo, true, module_name.clone());
+    let mut compiler = ListingCompiler::new(&wam.code_repo, true, module.listing_src.clone());
 
     match compile_into_module_impl(wam, &mut compiler, module, src, indices) {
         Ok(()) => EvalSession::EntrySuccess,
@@ -481,7 +486,7 @@ pub struct ListingCompiler {
     orig_goal_expansion_lens: (usize, usize),
     initialization_goals: (Vec<QueryTerm>, VecDeque<TopLevel>),
     suppress_warnings: bool,
-    listing_src: ClauseName // a file? a module?
+    listing_src: ListingSource, // a file? a module?
 }
 
 fn add_toplevel_code(wam: &mut Machine, code: Code, indices: IndexStore) {
@@ -523,8 +528,19 @@ fn load_library(
 ) -> Result<ClauseName, SessionError> {
     match LIBRARIES.borrow().get(name.as_str()) {
         Some(code) => {
-            load_module(wam, parsing_stream(code.as_bytes()),
-                        suppress_warnings, name.clone())
+            let mut lib_path = current_dir();
+
+            lib_path.pop();
+            lib_path.push("lib");
+            
+            let listing_src = ListingSource::from_file_and_path(name, lib_path);
+
+            load_module(
+                wam,
+                parsing_stream(code.as_bytes()),
+                suppress_warnings,
+                &listing_src,
+            )
         }
         None => Err(SessionError::ModuleNotFound)
     }
@@ -535,7 +551,7 @@ impl ListingCompiler {
     pub fn new(
         code_repo: &CodeRepo,
         suppress_warnings: bool,
-        listing_src: ClauseName,
+        listing_src: ListingSource,
     ) -> Self {
         ListingCompiler {
             non_counted_bt_preds: IndexSet::new(),
@@ -838,17 +854,25 @@ impl ListingCompiler {
                         }
                     }
 
-                    Ok(self.module = Some(Module::new(module_decl, atom_tbl)))
+                    let listing_src = self.listing_src.clone();
+
+                    Ok(self.module = Some(Module::new(module_decl, atom_tbl, listing_src)))
                 } else {
                     Err(SessionError::from(ParserError::InvalidModuleDecl))
                 }
             }
             Declaration::UseModule(ModuleSource::File(filename)) => {
-                let name = load_module_from_file(wam, filename.as_str(), true)?;
+                let mut path_buf = self.listing_src.path();
+                path_buf.push(filename.as_str());
+
+                let name = load_module_from_file(wam, path_buf, true)?;
                 self.use_module(name, &mut wam.code_repo, flags, &mut wam.indices, indices)
             }
             Declaration::UseQualifiedModule(ModuleSource::File(filename), exports) => {
-                let name = load_module_from_file(wam, filename.as_str(), true)?;
+                let mut path_buf = self.listing_src.path();
+                path_buf.push(filename.as_str());
+
+                let name = load_module_from_file(wam, path_buf, true)?;
 
                 self.use_qualified_module(
                     name,
@@ -967,7 +991,7 @@ impl ListingCompiler {
     fn print_error(&self, e: &SessionError) {
         if let &SessionError::ParserError(ref e) = e {
             if let Some((line_num, _col_num)) = e.line_and_col_num() {
-                println!("{}:{}: {}", self.listing_src, line_num, e.as_str());
+                println!("{}:{}: {}", self.listing_src.name(), line_num, e.as_str());
             }
         }
     }
@@ -1040,7 +1064,7 @@ fn compile_work_impl(
         if module.is_impromptu_module {
             add_module_code(wam, module, module_code, indices);
 
-            let module = wam.indices.take_module(compiler.listing_src.clone()).unwrap();
+            let module = wam.indices.take_module(compiler.listing_src.name()).unwrap();
 
             wam.indices.use_module(&mut wam.code_repo, wam.machine_st.flags, &module)?;
             wam.indices.insert_module(module);
@@ -1066,13 +1090,13 @@ fn compile_work_impl(
     if init_goal_code.len() > 0 {
 	if !wam.run_init_code(init_goal_code) {
             println!("Warning: initialization goal for {} failed",
-                     compiler.listing_src);
+                     compiler.listing_src.name());
         }
     }
 
     if !compiler.suppress_warnings {
         issue_singleton_warnings(
-            compiler.listing_src.clone(),
+            compiler.listing_src.name(),
             results.top_level_terms,
         );
     }
@@ -1097,7 +1121,7 @@ M:verify_attributes on attributed variables. */
 pub fn compile_special_form<R: Read>(
     wam: &mut Machine,
     src: ParsingStream<R>,
-    listing_src: ClauseName,
+    listing_src: ListingSource,
 ) -> Result<usize, SessionError> {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     setup_indices(wam, clause_name!("builtins"), &mut indices)?;
@@ -1119,7 +1143,7 @@ pub fn compile_listing<R: Read>(
     src: ParsingStream<R>,
     indices: IndexStore,
     suppress_warnings: bool,
-    listing_src: ClauseName,
+    listing_src: ListingSource,
 ) -> EvalSession {
     let mut compiler = ListingCompiler::new(&wam.code_repo, suppress_warnings, listing_src);
 
@@ -1154,7 +1178,7 @@ pub fn compile_user_module<R: Read>(
     wam: &mut Machine,
     src: ParsingStream<R>,
     suppress_warnings: bool,
-    listing_src: ClauseName,
+    listing_src: ListingSource,
 ) -> EvalSession {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     try_eval_session!(setup_indices(wam, clause_name!("builtins"), &mut indices));

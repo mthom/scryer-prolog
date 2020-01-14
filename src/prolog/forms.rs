@@ -12,6 +12,7 @@ use indexmap::IndexMap;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 pub type PredicateKey = (ClauseName, usize); // name, arity.
@@ -129,6 +130,32 @@ impl Predicate {
         self.0
             .first()
             .and_then(|clause| clause.name().map(|name| (name, clause.arity())))
+    }
+}
+
+#[derive(Clone)]
+pub enum ListingSource {
+    File(ClauseName, PathBuf), // filename, path
+    User,
+}
+
+impl ListingSource {
+    pub fn from_file_and_path(filename: ClauseName, path_buf: PathBuf) -> Self {
+        ListingSource::File(filename, path_buf)
+    }
+
+    pub fn name(&self) -> ClauseName {
+        match self {
+            ListingSource::File(ref filename, _) => filename.clone(),
+            ListingSource::User => clause_name!("[user]")
+        }
+    }
+
+    pub fn path(&self) -> PathBuf {
+        match self {
+            ListingSource::File(_, ref path) => path.clone(),
+            ListingSource::User => std::env::current_dir().unwrap(),
+        }
     }
 }
 
@@ -352,6 +379,7 @@ pub struct Module {
     pub local_goal_expansions: (Predicate, VecDeque<TopLevel>),
     pub inserted_expansions: bool, // has the module been successfully inserted into toplevel??
     pub is_impromptu_module: bool,
+    pub listing_src: ListingSource,
  }
 
 #[derive(Clone, PartialEq, Eq)]
