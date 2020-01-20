@@ -552,8 +552,8 @@ pub(crate) trait CallPolicy: Any {
             attr_var_init_queue_b,
             attr_var_init_bindings_b);
 
-        machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
         machine_st.truncate_stack();
+        machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
 
         machine_st.hb = machine_st.heap.h;
         machine_st.p += offset;
@@ -597,11 +597,11 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.attr_var_init.backtrack(
             attr_var_init_queue_b,
-            attr_var_init_bindings_b
+            attr_var_init_bindings_b,
         );
 
-        machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
         machine_st.truncate_stack();
+        machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
 
         machine_st.hb = machine_st.heap.h;
         machine_st.p += 1;
@@ -881,7 +881,7 @@ pub(crate) trait CallPolicy: Any {
                     if machine_st.fail {
                         return Ok(());
                     }
-                    
+
                     machine_st.p = CodePtr::CallN(arity, machine_st.p.local(), machine_st.last_call);
                 }
                 ClauseType::Inlined(inlined) => {
@@ -1069,7 +1069,6 @@ fn cut_body(machine_st: &mut MachineState, addr: Addr) -> bool {
                 machine_st.b = b0;
                 machine_st.tidy_trail();
                 machine_st.tidy_pstr_trail();
-                machine_st.truncate_stack();
             }
         }
         _ => {
@@ -1157,7 +1156,6 @@ impl CutPolicy for SCCCutPolicy {
                     machine_st.b = b0;
                     machine_st.tidy_trail();
                     machine_st.tidy_pstr_trail();
-                    machine_st.truncate_stack();
                 }
             }
             _ => {

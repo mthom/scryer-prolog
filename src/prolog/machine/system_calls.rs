@@ -2025,7 +2025,6 @@ impl MachineState {
 
                         if nb > 0 && self.stack.index_or_frame(b).prelude.b == nb {
                             self.b = self.stack.index_or_frame(nb).prelude.b;
-                            self.truncate_stack();
                         }
                     }
                     _ => self.fail = true,

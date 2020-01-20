@@ -21,7 +21,7 @@ bb_b_put(Key, NewValue) :-
     (  '$bb_get_with_offset'(Key, OldValue, OldOffset) ->
        call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
 		    reset_global_var_at_offset(Key, OldValue, OldOffset))
-    ;  call_cleanup((store_global_var(Key, NewValue, _) ; false),
+    ;  call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
 		    reset_global_var_at_key(Key))
     ).
 

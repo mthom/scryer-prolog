@@ -2074,7 +2074,6 @@ impl MachineState {
 
     pub(super) fn unwind_stack(&mut self) {
         self.b = self.block;
-        self.truncate_stack();
         self.fail = true;
     }
 
@@ -3329,7 +3328,6 @@ impl MachineState {
                     self.b = b0;
                     self.tidy_trail();
                     self.tidy_pstr_trail();
-                    self.truncate_stack();
                 }
 
                 self.p += 1;
