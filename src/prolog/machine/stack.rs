@@ -321,18 +321,15 @@ impl Stack {
         }
     }
 
-    pub fn truncate_to_frame(&mut self, b: usize) {
+    pub fn truncate(&mut self, b: usize) {
         if b == 0 {
-            self.truncate(mem::align_of::<Addr>());
+            self.inner_truncate(mem::align_of::<Addr>());
         } else {
-            let univ_prelude = self.index_or_frame(b).prelude.univ_prelude;
-            let size = OrFrame::size_of(univ_prelude.num_cells);
-
-            self.truncate(b + size);
+            self.inner_truncate(b);
         }
     }
 
-    fn truncate(&mut self, b: usize) {
+    fn inner_truncate(&mut self, b: usize) {
         let mut b = b + self.base as usize;
         let base =  b;
 

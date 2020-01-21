@@ -2077,12 +2077,6 @@ impl MachineState {
         self.fail = true;
     }
 
-    pub(super) fn truncate_stack(&mut self) {
-        if self.b > self.e {
-            self.stack.truncate_to_frame(self.b);
-        }
-    }
-
     pub(crate) fn is_cyclic_term(&self, addr: Addr) -> bool {
         let mut seen = IndexSet::new();
         let mut fail = false;

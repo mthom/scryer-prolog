@@ -552,7 +552,7 @@ pub(crate) trait CallPolicy: Any {
             attr_var_init_queue_b,
             attr_var_init_bindings_b);
 
-        machine_st.truncate_stack();
+        machine_st.stack.truncate(machine_st.b);
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
 
         machine_st.hb = machine_st.heap.h;
@@ -600,7 +600,7 @@ pub(crate) trait CallPolicy: Any {
             attr_var_init_bindings_b,
         );
 
-        machine_st.truncate_stack();
+        machine_st.stack.truncate(machine_st.b);
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
 
         machine_st.hb = machine_st.heap.h;
