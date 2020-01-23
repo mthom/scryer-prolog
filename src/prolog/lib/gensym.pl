@@ -7,10 +7,7 @@
 :- use_module(library(si)).
 
 gensym_key(Base, BaseKey) :-
-    atom_chars('gensym_', PrefixChars),
-    atom_chars(Base, BaseChars),
-    append(PrefixChars, BaseChars, BaseKeyChars),
-    atom_chars(BaseKey, BaseKeyChars).
+    atom_concat('gensym_', Base, BaseKey).
 
 append_id(Base, UniqueID, Unique) :-
     atom_chars(Base, BaseChars),
