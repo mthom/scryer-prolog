@@ -270,8 +270,12 @@ impl Machine {
         p: LocalCodePtr,
     ) {
         match trans_type {
-            DynamicTransactionType::Abolish => self.abolish_dynamic_clause(temp_v!(1), temp_v!(2)),
-            DynamicTransactionType::Assert(place) => self.recompile_dynamic_predicate(place),
+            DynamicTransactionType::Abolish => {
+                self.abolish_dynamic_clause(temp_v!(1), temp_v!(2))
+            }
+            DynamicTransactionType::Assert(place) => {
+                self.recompile_dynamic_predicate(place)
+            }
             DynamicTransactionType::ModuleAbolish => {
                 self.abolish_dynamic_clause_in_module(temp_v!(1), temp_v!(2), temp_v!(3))
             }
@@ -281,7 +285,9 @@ impl Machine {
             DynamicTransactionType::ModuleRetract => {
                 self.retract_from_dynamic_predicate_in_module()
             }
-            DynamicTransactionType::Retract => self.retract_from_dynamic_predicate(),
+            DynamicTransactionType::Retract => {
+                self.retract_from_dynamic_predicate()
+            }
         }
 
         self.machine_st.p = CodePtr::Local(p);

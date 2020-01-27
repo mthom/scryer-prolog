@@ -377,10 +377,6 @@ fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError> 
     }
 }
 
-fn append_preds(preds: &mut Vec<PredicateClause>) -> Predicate {
-    Predicate(mem::replace(preds, vec![]))
-}
-
 fn mark_cut_variables_as(terms: &mut Vec<Term>, name: ClauseName) {
     for term in terms.iter_mut() {
         match term {
@@ -493,20 +489,6 @@ fn setup_declaration<'a, 'b, 'c, R: Read>(
     match term {
         Term::Clause(_, name, mut terms, _) =>
 	    match (name.as_str(), terms.len()) {
-		("op", 3) =>
-		    Ok(Declaration::Op(setup_op_decl(terms, indices.atom_tbl())?)),
-		("module", 2) =>
-		    Ok(Declaration::Module(setup_module_decl(terms, indices.atom_tbl())?)),
-		("use_module", 1) =>
-		    Ok(Declaration::UseModule(setup_use_module_decl(terms)?)),
-		("use_module", 2) => {
-		    let (name, exports) = setup_qualified_import(terms, indices.atom_tbl())?;
-		    Ok(Declaration::UseQualifiedModule(name, exports))
-		}
-		("non_counted_backtracking", 1) => {
-		    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
-		    Ok(Declaration::NonCountedBacktracking(name, arity))
-		}
 		("dynamic", 1) => {
 		    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
 		    Ok(Declaration::Dynamic(name, arity))
@@ -518,10 +500,30 @@ fn setup_declaration<'a, 'b, 'c, R: Read>(
 
 		    Ok(Declaration::ModuleInitialization(query_terms, queue))
 		}
-		_ =>
+		("module", 2) =>
+		    Ok(Declaration::Module(setup_module_decl(terms, indices.atom_tbl())?)),
+		("op", 3) =>
+		    Ok(Declaration::Op(setup_op_decl(terms, indices.atom_tbl())?)),
+		("non_counted_backtracking", 1) => {
+		    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
+		    Ok(Declaration::NonCountedBacktracking(name, arity))
+		}
+                ("multifile", 1) => {
+                    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
+                    Ok(Declaration::MultiFile(name, arity))
+                }
+		("use_module", 1) => {
+		    Ok(Declaration::UseModule(setup_use_module_decl(terms)?))
+                }
+		("use_module", 2) => {
+		    let (name, exports) = setup_qualified_import(terms, indices.atom_tbl())?;
+		    Ok(Declaration::UseQualifiedModule(name, exports))
+		}
+		_ => {
 		    Err(ParserError::InconsistentEntry)
+                }
 	    },
-        _ => return Err(ParserError::InconsistentEntry),
+        _ => Err(ParserError::InconsistentEntry),
     }
 }
 
@@ -688,7 +690,7 @@ impl RelationWorker {
                         Cell::default(),
                         Constant::Atom(clause_name!("true"), None)
                     );
-                    
+
                     let prec = Term::Clause(Cell::default(), clause_name!("->"), terms, None);
                     let terms = vec![Box::new(prec), Box::new(conq)];
 
@@ -943,7 +945,64 @@ impl RelationWorker {
     }
 }
 
-pub type DynamicClauseMap = IndexMap<(ClauseName, usize), Vec<(Term, Term)>>;
+pub type DynamicClause = Vec<(Term, Term)>;
+
+pub type DynamicClauseMap = IndexMap<(ClauseName, usize), DynamicClause>;
+
+pub struct TermDirQuantum {
+    old_term_dir: TermDir,
+    new_term_dir: TermDir,
+}
+
+impl TermDirQuantum {
+    pub fn new() -> Self {
+        Self {
+            old_term_dir: TermDir::new(),
+            new_term_dir: TermDir::new()
+        }
+    }
+
+    #[inline]
+    fn get_old(&self, name: ClauseName, arity: usize) -> Option<&(Predicate, VecDeque<TopLevel>)>
+    {
+        self.old_term_dir.get(&(name, arity))
+    }
+
+    #[inline]
+    fn add_new(
+        &mut self,
+        key: PredicateKey,
+        preds: &mut Vec<PredicateClause>,
+        queue: VecDeque<TopLevel>
+    ) {
+        let preds = Predicate(mem::replace(preds, vec![]));
+        self.new_term_dir.insert(key, (preds, queue));
+    }
+
+    pub fn consolidate(self) -> TermDir {
+        let mut term_dir = self.old_term_dir;
+
+        for (key, (preds, queue)) in self.new_term_dir {
+            let (prev_preds, prev_queue) =
+                term_dir.entry(key).or_insert((Predicate::new(), VecDeque::new()));
+
+            prev_preds.0.extend(preds.0.into_iter());
+            prev_queue.extend(queue.into_iter());
+        }
+
+        term_dir
+    }
+
+    #[inline]
+    pub fn set_old(
+        &mut self,
+        key: PredicateKey,
+        pred: Predicate,
+        queue: VecDeque<TopLevel>
+    ) {
+        self.old_term_dir.insert(key, (pred, queue));
+    }
+}
 
 pub struct TopLevelBatchWorker<'a, R: Read> {
     pub(crate) term_stream: TermStream<'a, R>,
@@ -951,6 +1010,7 @@ pub struct TopLevelBatchWorker<'a, R: Read> {
     pub(crate) results: Vec<(Predicate, VecDeque<TopLevel>)>,
     pub(crate) dynamic_clause_map: DynamicClauseMap,
     pub(crate) in_module: bool,
+    pub(crate) term_dirs: TermDirQuantum
 }
 
 impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
@@ -971,6 +1031,7 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
             results: vec![],
             dynamic_clause_map: IndexMap::new(),
             in_module: false,
+            term_dirs: TermDirQuantum::new(),
         }
     }
 
@@ -999,15 +1060,29 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         &mut self,
         indices: &mut IndexStore,
         preds: &mut Vec<PredicateClause>,
-    ) -> Result<(), SessionError> {       
+    ) -> Result<(), SessionError> {
         let mut indices = CompositeIndices::new(
             &mut self.term_stream,
             IndexSource::Local(indices),
             if self.in_module { None } else { Some(IndexSource::TermStream) }
         );
 
-        let queue  = self.rel_worker.parse_queue(&mut indices)?;
-        let result = (append_preds(preds), queue);
+        let (name, arity) = (preds[0].name().unwrap(), preds[0].arity());
+
+        let (mut prev_preds, mut prev_queue) =
+            match self.term_dirs.get_old(name.clone(), arity).cloned() {
+                Some((preds, queue)) => (preds, queue),
+                None => (Predicate::new(), VecDeque::new()),
+            };
+
+        let queue = self.rel_worker.parse_queue(&mut indices)?;
+
+        prev_preds.0.extend(preds.iter().cloned());
+        prev_queue.extend(queue.iter().cloned());
+
+        let result = (prev_preds, prev_queue);
+
+        self.term_dirs.add_new((name, arity), preds, queue);
 
         let in_situ_code_dir = &mut indices.term_stream.wam.indices.in_situ_code_dir;
 
@@ -1045,18 +1120,18 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
 
         while !self.term_stream.eof()? {
             let term = self.term_stream.read_term(&indices.op_dir)?;
-            
+
             // if is_consistent is false, preds is non-empty.
             if !is_consistent(term.predicate_name(), term.predicate_arity(), &preds) {
                 self.process_result(indices, &mut preds)?;
                 self.take_dynamic_clauses();
             }
-            
+
             let (mut tl, new_rel_worker) = self.try_term_to_tl(indices, term)?;
 
             if tl.is_end_of_file_atom() {
                 tl = TopLevel::Declaration(Declaration::EndOfFile);
-            }            
+            }
 
             self.rel_worker.absorb(new_rel_worker);
 

@@ -614,9 +614,11 @@ assertz_clause(Head, Body) :-
 	 arg(1, Head, Module),
 	 arg(2, Head, F),
 	 module_assertz_clause(F, Body, Module)
-       ; '$no_such_predicate'(Head) -> call_assertz(Head, Body, Name, Arity)
-       ; '$head_is_dynamic'(Head) -> call_assertz(Head, Body, Name, Arity)
-       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), assertz/1))
+       ; '$no_such_predicate'(Head) ->
+	 call_assertz(Head, Body, Name, Arity)
+       ; '$head_is_dynamic'(Head) ->
+	 call_assertz(Head, Body, Name, Arity)
+       ; throw(error(permission_error(modify, static_procedure, Name/Arity), assertz/1))
        )
     ;  throw(error(type_error(callable, Head), assertz/1))
     ).

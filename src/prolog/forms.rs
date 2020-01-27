@@ -203,6 +203,7 @@ pub enum Declaration {
     Hook(CompileTimeHook, PredicateClause, VecDeque<TopLevel>),
     ModuleInitialization(Vec<QueryTerm>, VecDeque<TopLevel>), // goal
     Module(ModuleDecl),
+    MultiFile(ClauseName, usize),
     NonCountedBacktracking(ClauseName, usize), // name, arity
     Op(OpDecl),
     UseModule(ModuleSource),
@@ -371,6 +372,7 @@ pub struct Module {
     pub module_decl: ModuleDecl,
     pub code_dir: CodeDir,
     pub op_dir: OpDir,
+    pub term_dir: TermDir, // this contains multifile predicates.
     pub term_expansions: (Predicate, VecDeque<TopLevel>),
     pub goal_expansions: (Predicate, VecDeque<TopLevel>),
     pub user_term_expansions: (Predicate, VecDeque<TopLevel>), // term expansions inherited from the user scope.

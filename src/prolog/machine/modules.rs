@@ -18,8 +18,9 @@ impl Module {
     ) -> Self
     {
         Module {
-            module_decl,
             atom_tbl,
+            module_decl,
+            term_dir: TermDir::new(),
             user_term_expansions: (Predicate::new(), VecDeque::from(vec![])),
             user_goal_expansions: (Predicate::new(), VecDeque::from(vec![])),
             term_expansions: (Predicate::new(), VecDeque::from(vec![])),
