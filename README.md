@@ -49,9 +49,12 @@ Extend Scryer Prolog to include the following, among other features:
       `retract/1`, `abolish/1`) with logical update semantics.
 - [x] Backtrackable and non-backtrackable global variables via `bb_get/2`
       `bb_put/2` (non-backtrackable) and `bb_b_put/2`
-      (backtrackable).      
-- [ ] Delimited continuations based on reset/3, shift/1 (documented in
-      "Delimited Continuations for Prolog") (_in progress_).
+      (backtrackable).
+- [x] Delimited continuations based on reset/3, shift/1 (documented in
+      "Delimited Continuations for Prolog").
+- [ ] Add opt-in tabling library based on delimited continuations
+      (documented in "Tabling as a Library with Delimited Control") (_in
+      progress_).
 - [ ] clp(B) and clp(ℤ) as builtin libraries (_in progress_).
 - [ ] Streams and predicates for stream control (_in progress_).
 - [ ] An incremental compacting garbage collector satisfying the five
