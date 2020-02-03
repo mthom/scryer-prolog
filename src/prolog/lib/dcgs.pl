@@ -44,6 +44,17 @@ phrase_(phrase(NonTerminal), S0, S) :-
 phrase_([T|Ts], S0, S) :-
     append([T|Ts], S, S0).
 
+% The same version of the below two dcg_rule clauses, but with module scoping.
+dcg_rule(( M:NonTerminal, Terminals --> GRBody ), ( M:Head :- Body )) :-
+    dcg_non_terminal(NonTerminal, S0, S, Head),
+    dcg_body(GRBody, S0, S1, Goal1),
+    dcg_terminals(Terminals, S, S1, Goal2),
+    Body = ( Goal1, Goal2 ).
+dcg_rule(( M:NonTerminal --> GRBody ), ( M:Head :- Body )) :-
+    NonTerminal \= ( _, _ ),
+    dcg_non_terminal(NonTerminal, S0, S, Head),
+    dcg_body(GRBody, S0, S, Body).
+
 % This program uses append/3 as defined in the Prolog prologue.
 % Expands a DCG rule into a Prolog rule, when no error condition applies.
 dcg_rule(( NonTerminal, Terminals --> GRBody ), ( Head :- Body )) :-

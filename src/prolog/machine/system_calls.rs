@@ -9,6 +9,7 @@ use crate::prolog::heap_print::*;
 use crate::prolog::instructions::*;
 use crate::prolog::machine::code_repo::CodeRepo;
 use crate::prolog::machine::copier::*;
+use crate::prolog::machine::code_walker::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
@@ -21,7 +22,6 @@ use crate::ref_thread_local::RefThreadLocal;
 
 use indexmap::{IndexMap, IndexSet};
 
-use std::collections::VecDeque;
 use std::io::{stdin, stdout, Write};
 use std::iter::once;
 use std::mem;
@@ -64,22 +64,6 @@ impl BrentAlgState {
             tortoise: hare,
             power: 2,
             steps: 1,
-        }
-    }
-}
-
-fn scan_for_trust_me(code: &Code, jmp_offsets: &mut VecDeque<usize>, after_idx: &mut usize) {
-    for (idx, instr) in code[*after_idx..].iter().enumerate() {
-        match instr {
-            &Line::Choice(ChoiceInstruction::TrustMe)
-            | &Line::IndexedChoice(IndexedChoiceInstruction::Trust(..)) => {
-                *after_idx += idx;
-                return;
-            }
-            &Line::Control(ControlInstruction::JmpBy(_, offset, ..)) => {
-                jmp_offsets.push_back(*after_idx + idx + offset)
-            }
-            _ => {}
         }
     }
 }
@@ -535,49 +519,6 @@ impl MachineState {
         let target = self[temp_v!(1)].clone();
 
         self.unify(attr_goals, target);
-    }
-
-    fn create_instruction_functors(&mut self, code: &Code, first_idx: usize) -> Vec<Addr> {
-        let mut queue = VecDeque::new();
-        let mut functors = vec![];
-        let mut h = self.heap.h;
-
-        queue.push_back(first_idx);
-
-        while let Some(first_idx) = queue.pop_front() {
-            let mut last_idx = first_idx;
-
-            loop {
-                match &code[last_idx] {
-                    &Line::Choice(ChoiceInstruction::TryMeElse(..))
-                    | &Line::IndexedChoice(IndexedChoiceInstruction::Try(..)) => {
-                        last_idx += 1;
-                        scan_for_trust_me(code, &mut queue, &mut last_idx);
-                    }
-                    &Line::Control(ControlInstruction::JmpBy(_, offset, _, false)) => {
-                        queue.push_back(last_idx + offset);
-                        last_idx += 1;
-                    }
-                    &Line::Control(ControlInstruction::JmpBy(_, offset, _, true)) => {
-                        queue.push_back(last_idx + offset);
-                        break;
-                    }
-                    &Line::Control(ControlInstruction::Proceed)
-                    | &Line::Control(ControlInstruction::CallClause(_, _, _, true, _)) => break,
-                    _ => last_idx += 1,
-                };
-            }
-
-            for instr in &code[first_idx..last_idx + 1] {
-                let section = instr.to_functor(h);
-                functors.push(Addr::HeapCell(h));
-
-                h += section.len();
-                self.heap.extend(section.into_iter());
-            }
-        }
-
-        functors
     }
 
     fn call_continuation_chunk(&mut self, chunk: Addr, return_p: LocalCodePtr) -> LocalCodePtr {
@@ -2382,7 +2323,21 @@ impl MachineState {
                     }
                 };
 
-                let functors = self.create_instruction_functors(&code_repo.code, first_idx);
+                let mut h = self.heap.h;
+                let mut functors = vec![];
+                
+                walk_code(
+                    &code_repo.code,
+                    first_idx,
+                    |instr| {
+                        let section = instr.to_functor(h);
+                        functors.push(Addr::HeapCell(h));
+
+                        h += section.len();
+                        self.heap.extend(section.into_iter());                        
+                    },
+                );
+                
                 let listing = Addr::HeapCell(self.heap.to_list(functors.into_iter()));
                 let listing_var = self[temp_v!(3)].clone();
 

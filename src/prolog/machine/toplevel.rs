@@ -15,6 +15,7 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 use std::io::Read;
 use std::mem;
+use std::ops::DerefMut;
 use std::rc::Rc;
 
 enum IndexSource<'a, T> {
@@ -108,6 +109,31 @@ impl<'a, 'b, 'c, R: Read> CompositeIndices<'a, 'b, 'c, R> {
             ct => ct,
         }
     }
+
+    fn add_in_situ_module_info(&mut self, module_name: ClauseName, term: &mut Term)
+    {
+        let atom_tbl =
+            match self.term_stream.wam.indices.in_situ_module_dir.get(&module_name) {
+                Some(ref module_stub) => module_stub.atom_tbl.clone(),
+                None => {
+                    let atom_tbl = match self.term_stream.wam.indices.modules.get(&module_name) {
+                        Some(ref module) => module.atom_tbl.clone(),
+                        None => TabledData::new(module_name.to_rc()),
+                    };
+
+                    self.term_stream.wam.indices.in_situ_module_dir.insert(
+                        module_name.clone(),
+                        ModuleStub::new(atom_tbl.clone()),
+                    );
+
+                    atom_tbl
+                }
+            };
+
+        if let Some(name) = term.name() {
+            term.set_name(name.with_table(atom_tbl));
+        }
+    }
 }
 
 fn as_compile_time_hook(
@@ -196,7 +222,8 @@ fn setup_op_decl(
     to_op_decl(prec, spec.as_str(), name)
 }
 
-fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, ParserError> {
+fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, ParserError>
+{
     match term {
         Term::Clause(_, ref name, ref mut terms, Some(_))
             if name.as_str() == "/" && terms.len() == 2 =>
@@ -216,6 +243,28 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, ParserErro
                 .ok_or(ParserError::InvalidModuleExport)?;
 
             Ok((name, arity))
+        }
+        _ => Err(ParserError::InvalidModuleExport),
+    }
+}
+
+fn setup_scoped_predicate_indicator(term: &mut Term) -> Result<ScopedPredicateKey, ParserError>
+{
+    match term {
+        Term::Clause(_, ref name, ref mut terms, Some(_))
+            if name.as_str() == ":" && terms.len() == 2 =>
+        {
+            let mut predicate_indicator = *terms.pop().unwrap();
+            let module_name = *terms.pop().unwrap();
+
+            let module_name = module_name
+                .to_constant()
+                .and_then(|c| c.to_atom())
+                .ok_or(ParserError::InvalidModuleExport)?;
+
+            let key = setup_predicate_indicator(&mut predicate_indicator)?;
+
+            Ok((module_name, key))
         }
         _ => Err(ParserError::InvalidModuleExport),
     }
@@ -327,19 +376,8 @@ fn setup_qualified_import(
     }
 }
 
-fn is_consistent(
-    name: Option<ClauseName>,
-    arity: usize,
-    clauses: &Vec<PredicateClause>,
-) -> bool
+fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError>
 {
-    match clauses.first() {
-        Some(ref cl) => name == cl.name() && arity == cl.arity(),
-        None => true,
-    }
-}
-
-fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError> {
     let mut clauses: Vec<PredicateClause> = vec![];
 
     while let Some(tl) = tls.pop_front() {
@@ -347,20 +385,21 @@ fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, ParserError> 
             TopLevel::Query(_) if clauses.is_empty() && tls.is_empty() => return Ok(tl),
             TopLevel::Declaration(_) if clauses.is_empty() => return Ok(tl),
             TopLevel::Query(_) => return Err(ParserError::InconsistentEntry),
-            TopLevel::Fact(..) if is_consistent(tl.name(), tl.arity(), &clauses) =>
+            TopLevel::Fact(..) => {
                 if let TopLevel::Fact(fact, line_num, col_num) = tl {
                     let clause = PredicateClause::Fact(fact, line_num, col_num);
                     clauses.push(clause);
-                },
-            TopLevel::Rule(..) if is_consistent(tl.name(), tl.arity(), &clauses) => {
+                }
+            }
+            TopLevel::Rule(..) => {
                 if let TopLevel::Rule(rule, line_num, col_num) = tl {
                     let clause = PredicateClause::Rule(rule, line_num, col_num);
                     clauses.push(clause);
                 }
             }
-            TopLevel::Predicate(_) if is_consistent(tl.name(), tl.arity(), &clauses) => {
-                if let TopLevel::Predicate(pred) = tl {
-                    clauses.extend(pred.clauses().into_iter())
+            TopLevel::Predicate(..) => {
+                if let TopLevel::Predicate(predicate) = tl {
+                    clauses.extend(predicate.clauses().into_iter())
                 }
             }
             _ => {
@@ -442,6 +481,7 @@ fn check_for_internal_if_then(terms: &mut Vec<Term>) {
         }
 
         let tail_term = conq_terms.pop_back().unwrap();
+
         terms.push(fold_by_str(
             conq_terms.into_iter(),
             tail_term,
@@ -477,6 +517,78 @@ fn flatten_hook(mut term: Term) -> Term {
     term
 }
 
+fn draw_from_term_dir_impl(
+    term_dir: &TermDir,
+    term_dirs: &mut TermDirQuantum,
+    key: &PredicateKey,
+    preds: &mut Vec<PredicateClause>,
+    queue: &mut VecDeque<TopLevel>
+) {
+    if let Some(entry) = term_dirs.get_mut(key) {
+        if entry.is_fresh {
+            entry.is_fresh = false;
+
+            (entry.new_terms.0).0.extend(preds.drain(0 ..));
+            entry.new_terms.1.extend(queue.drain(0 ..));
+
+            *preds = (entry.old_terms.0).0
+                .iter()
+                .cloned()
+                .chain((entry.new_terms.0).0.iter().cloned())
+                .collect();
+
+            *queue = entry.old_terms.1
+                .iter()
+                .cloned()
+                .chain(entry.new_terms.1.iter().cloned())
+                .collect();
+        } else {
+            *entry = TermDirQuantumEntry::new();
+        }
+    } else if term_dir.contains_key(key) {
+        let entry = TermDirQuantumEntry::from(&Predicate::new(), &VecDeque::new());
+        term_dirs.insert(key.clone(), entry);
+    }
+}
+
+fn draw_from_term_dir<R: Read>(
+    indices: &CompositeIndices<R>,
+    intra_module_term_dirs: &mut IndexMap<ClauseName, TermDirQuantum>,
+    top_level_term_dirs: &mut TermDirQuantum,
+    key: &PredicateKey,
+    preds: &mut Vec<PredicateClause>,
+    queue: &mut VecDeque<TopLevel>,
+) {
+    let module = key.0.owning_module();
+
+    // aaarghhh..
+    match indices.term_stream.wam.indices.in_situ_module_dir.get(&module) {
+        // modify module_stub to do this right.
+        Some(ref module_stub) if key.0.has_table(&module_stub.atom_tbl) => {
+            if let Some(ref mut term_dirs) = intra_module_term_dirs.get_mut(&module) {
+                if let Some(ref module) = indices.term_stream.wam.indices.modules.get(&module) {
+                    return draw_from_term_dir_impl(
+                        &module.term_dir,
+                        term_dirs,
+                        key,
+                        preds,
+                        queue,
+                    );
+                }
+            }
+        }
+        _ => {}
+    }
+
+    draw_from_term_dir_impl(
+        &indices.term_stream.wam.code_repo.term_dir,
+        top_level_term_dirs,
+        key,
+        preds,
+        queue,
+    );
+}
+
 fn setup_declaration<'a, 'b, 'c, R: Read>(
     indices: &mut CompositeIndices<'a, 'b, 'c, R>,
     flags: MachineFlags,
@@ -509,8 +621,17 @@ fn setup_declaration<'a, 'b, 'c, R: Read>(
 		    Ok(Declaration::NonCountedBacktracking(name, arity))
 		}
                 ("multifile", 1) => {
-                    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
-                    Ok(Declaration::MultiFile(name, arity))
+                    let mut term = *terms.pop().unwrap();
+
+                    match setup_predicate_indicator(&mut term) {
+                        Ok((name, arity)) =>
+                            Ok(Declaration::MultiFile(MultiFileIndicator::LocalScoped(name, arity))),
+                        _ =>
+                            setup_scoped_predicate_indicator(&mut term)
+                                .map(|key| {
+                                    Declaration::MultiFile(MultiFileIndicator::ModuleScoped(key))
+                                })
+                    }
                 }
 		("use_module", 1) => {
 		    Ok(Declaration::UseModule(setup_use_module_decl(terms)?))
@@ -870,6 +991,34 @@ impl RelationWorker {
         )?))
     }
 
+    fn compact_module_scoped_head<'a, 'b, 'c, R: Read>(
+        &self,
+        term: &mut Term,
+        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+    ) {
+        let inner_term = match term {
+            Term::Clause(_, ref name, ref mut inner_terms, _)
+                if name.as_str() == ":" && inner_terms.len() == 2 => {
+                    let module_name = match inner_terms[0].as_ref() {
+                        &Term::Constant(_, Constant::Atom(ref module, _)) => {
+                            module.clone()
+                        }
+                        _ => {
+                            return;
+                        }
+                    };
+
+                    indices.add_in_situ_module_info(module_name, inner_terms[1].deref_mut());
+                    *inner_terms.pop().unwrap()
+                }
+            _ => {
+                return;
+            }
+        };
+
+        *term = inner_term;
+    }
+
     fn try_term_to_tl<'a, 'b, 'c, R: Read>(
         &mut self,
         indices: &mut CompositeIndices<'a, 'b, 'c, R>,
@@ -877,7 +1026,7 @@ impl RelationWorker {
         blocks_cuts: bool,
     ) -> Result<TopLevel, ParserError> {
         match term {
-            Term::Clause(r, name, terms, fixity) => {
+            Term::Clause(r, name, mut terms, fixity) => {
                 if let Some(hook) = is_compile_time_hook(&name, &terms) {
                     let term = Term::Clause(r, name, terms, fixity);
                     let (hook, clause, queue) = self.setup_hook(hook, indices, term)?;
@@ -888,6 +1037,8 @@ impl RelationWorker {
                 } else if name.as_str() == "?-" {
                     self.try_term_to_query(indices, terms, blocks_cuts)
                 } else if name.as_str() == ":-" && terms.len() == 2 {
+                    self.compact_module_scoped_head(&mut terms[0], indices);
+
                     Ok(TopLevel::Rule(self.setup_rule(
                         indices,
                         terms,
@@ -898,11 +1049,14 @@ impl RelationWorker {
                     Ok(TopLevel::Declaration(setup_declaration(indices, self.flags, terms,
                                                                self.line_num, self.col_num)?))
                 } else {
-                    let term = Term::Clause(r, name, terms, fixity);
+                    let mut term = Term::Clause(r, name, terms, fixity);
+                    self.compact_module_scoped_head(&mut term, indices);
+
                     Ok(TopLevel::Fact(self.setup_fact(term, true)?, self.line_num, self.col_num))
                 }
             }
-            term => Ok(TopLevel::Fact(self.setup_fact(term, true)?, self.line_num, self.col_num)),
+            term =>
+                Ok(TopLevel::Fact(self.setup_fact(term, true)?, self.line_num, self.col_num)),
         }
     }
 
@@ -949,68 +1103,15 @@ pub type DynamicClause = Vec<(Term, Term)>;
 
 pub type DynamicClauseMap = IndexMap<(ClauseName, usize), DynamicClause>;
 
-pub struct TermDirQuantum {
-    old_term_dir: TermDir,
-    new_term_dir: TermDir,
-}
-
-impl TermDirQuantum {
-    pub fn new() -> Self {
-        Self {
-            old_term_dir: TermDir::new(),
-            new_term_dir: TermDir::new()
-        }
-    }
-
-    #[inline]
-    fn get_old(&self, name: ClauseName, arity: usize) -> Option<&(Predicate, VecDeque<TopLevel>)>
-    {
-        self.old_term_dir.get(&(name, arity))
-    }
-
-    #[inline]
-    fn add_new(
-        &mut self,
-        key: PredicateKey,
-        preds: &mut Vec<PredicateClause>,
-        queue: VecDeque<TopLevel>
-    ) {
-        let preds = Predicate(mem::replace(preds, vec![]));
-        self.new_term_dir.insert(key, (preds, queue));
-    }
-
-    pub fn consolidate(self) -> TermDir {
-        let mut term_dir = self.old_term_dir;
-
-        for (key, (preds, queue)) in self.new_term_dir {
-            let (prev_preds, prev_queue) =
-                term_dir.entry(key).or_insert((Predicate::new(), VecDeque::new()));
-
-            prev_preds.0.extend(preds.0.into_iter());
-            prev_queue.extend(queue.into_iter());
-        }
-
-        term_dir
-    }
-
-    #[inline]
-    pub fn set_old(
-        &mut self,
-        key: PredicateKey,
-        pred: Predicate,
-        queue: VecDeque<TopLevel>
-    ) {
-        self.old_term_dir.insert(key, (pred, queue));
-    }
-}
-
 pub struct TopLevelBatchWorker<'a, R: Read> {
     pub(crate) term_stream: TermStream<'a, R>,
     rel_worker: RelationWorker,
     pub(crate) results: Vec<(Predicate, VecDeque<TopLevel>)>,
     pub(crate) dynamic_clause_map: DynamicClauseMap,
     pub(crate) in_module: bool,
-    pub(crate) term_dirs: TermDirQuantum
+    pub(crate) term_dirs: TermDirQuantum,
+    pub(crate) intra_module_term_dirs: IndexMap<ClauseName, TermDirQuantum>,
+    pub(crate) non_counted_bt_preds: IndexSet<PredicateKey>,
 }
 
 impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
@@ -1032,6 +1133,8 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
             dynamic_clause_map: IndexMap::new(),
             in_module: false,
             term_dirs: TermDirQuantum::new(),
+            intra_module_term_dirs: IndexMap::new(),
+            non_counted_bt_preds: IndexSet::new(),
         }
     }
 
@@ -1064,32 +1167,31 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
         let mut indices = CompositeIndices::new(
             &mut self.term_stream,
             IndexSource::Local(indices),
-            if self.in_module { None } else { Some(IndexSource::TermStream) }
+            if self.in_module { None } else { Some(IndexSource::TermStream) },
         );
 
-        let (name, arity) = (preds[0].name().unwrap(), preds[0].arity());
+        let key = (preds[0].name().unwrap(), preds[0].arity());
 
-        let (mut prev_preds, mut prev_queue) =
-            match self.term_dirs.get_old(name.clone(), arity).cloned() {
-                Some((preds, queue)) => (preds, queue),
-                None => (Predicate::new(), VecDeque::new()),
-            };
+        let mut preds = mem::replace(preds, vec![]);
+        let mut queue = self.rel_worker.parse_queue(&mut indices)?;
 
-        let queue = self.rel_worker.parse_queue(&mut indices)?;
+        draw_from_term_dir(
+            &indices,
+            &mut self.intra_module_term_dirs,
+            &mut self.term_dirs,
+            &key,
+            &mut preds,
+            &mut queue,
+        );
 
-        prev_preds.0.extend(preds.iter().cloned());
-        prev_queue.extend(queue.iter().cloned());
-
-        let result = (prev_preds, prev_queue);
-
-        self.term_dirs.add_new((name, arity), preds, queue);
-
-        let in_situ_code_dir = &mut indices.term_stream.wam.indices.in_situ_code_dir;
+        let result = (Predicate(preds), queue);
 
         indices.term_stream.wam.code_repo.add_in_situ_result(
             &result,
-            in_situ_code_dir,
+            &mut indices.term_stream.wam.indices.in_situ_code_dir,
+            &mut indices.term_stream.wam.indices.in_situ_module_dir,
             indices.term_stream.flags,
+            &self.non_counted_bt_preds,
         )?;
 
         Ok(self.results.push(result))
@@ -1120,12 +1222,18 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
 
         while !self.term_stream.eof()? {
             let term = self.term_stream.read_term(&indices.op_dir)?;
-
+            
             // if is_consistent is false, preds is non-empty.
-            if !is_consistent(term.predicate_name(), term.predicate_arity(), &preds) {
+            let term = if !term.is_consistent(&preds) {
                 self.process_result(indices, &mut preds)?;
                 self.take_dynamic_clauses();
-            }
+
+                // expand the term after the addition of the previous
+                // predicate.
+                self.term_stream.expand_term(term, &indices.op_dir)?
+            } else {
+                term
+            };
 
             let (mut tl, new_rel_worker) = self.try_term_to_tl(indices, term)?;
 

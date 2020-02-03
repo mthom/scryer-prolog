@@ -10,6 +10,7 @@ use crate::prolog::read::*;
 
 mod attributed_variables;
 pub(super) mod code_repo;
+pub mod code_walker;
 pub mod compile;
 mod copier;
 mod dynamic_database;
@@ -109,11 +110,33 @@ impl SubModuleUser for IndexStore {
 
     fn get_code_index(&self, key: PredicateKey, module_name: ClauseName) -> Option<CodeIndex> {
         match module_name.as_str() {
-            "user" | "builtin" => self.code_dir.get(&key).cloned(),
-            _ => self
-              .modules
-              .get(&module_name)
-              .and_then(|ref module| module.code_dir.get(&key).cloned().map(CodeIndex::from))
+            "user" => {
+                self.code_dir.get(&key).cloned()
+            }
+            _ => {
+                match self.in_situ_module_dir.get(&module_name) {
+                    Some(ref module_stub) => {
+                        match module_stub.in_situ_code_dir.get(&key) {
+                            Some(p) => {
+                                return Some(CodeIndex::new(
+                                    IndexPtr::InSituDirEntry(*p),
+                                    module_name.clone()
+                                ));
+                            }
+                            None => {
+                            }
+                        }
+                    }
+                    None => {
+                    }
+                };
+
+                self.modules
+                    .get(&module_name)
+                    .and_then(|ref module| {
+                        module.code_dir.get(&key).cloned()
+                    })
+            }
         }
     }
 
@@ -333,7 +356,7 @@ impl Machine {
             default_index_store!(atom_tbl.clone()),
             true,
             ListingSource::from_file_and_path(
-                clause_name!("builtins.pl"), 
+                clause_name!("builtins.pl"),
                 lib_path.clone(),
             ),
         );
@@ -348,7 +371,7 @@ impl Machine {
         );
         compile_user_module(&mut wam, parsing_stream(LISTS.as_bytes()), true,
                             ListingSource::from_file_and_path(
-                                clause_name!("lists"), 
+                                clause_name!("lists"),
                                 lib_path.clone(),
                             ),
         );
@@ -360,7 +383,7 @@ impl Machine {
         );
         compile_user_module(&mut wam, parsing_stream(SI.as_bytes()), true,
                             ListingSource::from_file_and_path(
-                                clause_name!("si"), 
+                                clause_name!("si"),
                                 lib_path.clone(),
                             )
         );
@@ -418,10 +441,10 @@ impl Machine {
         Ok(())
     }
 
-    pub fn add_batched_code(&mut self, code: Code, code_dir: CodeDir) {
+    pub(crate) fn add_batched_code_dir(&mut self, code_dir: CodeDir) {
         // error detection has finished, so update the master index of keys.
         for (key, idx) in code_dir {
-            if let Some(ref mut master_idx) = self.indices.code_dir.get_mut(&key) {
+            if let Some(ref master_idx) = self.indices.code_dir.get(&key) {
                 // ensure we don't double borrow if master_idx == idx.
                 // we don't need to modify anything in that case.
                 if !Rc::ptr_eq(&master_idx.0, &idx.0) {
@@ -433,21 +456,37 @@ impl Machine {
 
             self.indices.code_dir.insert(key, idx);
         }
-
-        self.code_repo.code.extend(code.into_iter());
     }
 
     #[inline]
-    pub fn add_batched_ops(&mut self, op_dir: OpDir) {
+    pub(crate) fn add_batched_ops(&mut self, op_dir: OpDir) {
         self.indices.op_dir.extend(op_dir.into_iter());
     }
 
+    pub(crate) fn add_in_situ_module_dir(&mut self, module_dir: ModuleDir) {
+        for (module_name, module_skeleton) in module_dir {
+            match self.indices.modules.get_mut(&module_name) {
+                Some(ref mut module) => {
+                    for (key, idx) in module_skeleton.code_dir {
+                        if let Some(existing_idx) = module.code_dir.get(&key) {
+                            set_code_index!(existing_idx, idx.0.borrow().0, module_name.clone());
+                        } else {
+                            module.code_dir.insert(key, idx);
+                        }
+                    }
+                }
+                None => {
+                    self.add_module(module_skeleton);
+                }
+            }
+        }
+    }
+
     #[inline]
-    pub fn add_module(&mut self, module: Module, code: Code) {
+    pub fn add_module(&mut self, module: Module) {
         self.indices
             .modules
             .insert(module.module_decl.name.clone(), module);
-        self.code_repo.code.extend(code.into_iter());
     }
 
     fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {

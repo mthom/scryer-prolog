@@ -241,11 +241,13 @@ macro_rules! index_store {
         IndexStore {
             atom_tbl: $atom_tbl,
             code_dir: $code_dir,
+            module_dir: ModuleDir::new(),
             dynamic_code_dir: DynamicCodeDir::new(),
             global_variables: GlobalVarDir::new(),
             in_situ_code_dir: InSituCodeDir::new(),
+            in_situ_module_dir: ModuleStubDir::new(),
             op_dir: $op_dir,
-            modules: $modules,
+            modules: $modules,            
         }
     };
 }

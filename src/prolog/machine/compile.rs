@@ -7,6 +7,7 @@ use crate::prolog::debray_allocator::*;
 use crate::prolog::forms::*;
 use crate::prolog::instructions::*;
 use crate::prolog::iterators::*;
+use crate::prolog::machine::code_walker::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::term_expansion::ExpansionAdditionResult;
@@ -367,24 +368,36 @@ fn compile_into_module_impl<R: Read>(
     wam.code_repo.compile_hook(CompileTimeHook::TermExpansion, flags)?;
     wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion, flags)?;
 
-    let results = compiler.gather_items(wam, src, &mut indices)?;
-    let module_code =
-        compiler.generate_code(results.worker_results, wam, &mut indices.code_dir, 0)?;
+    let mut results = compiler.gather_items(wam, src, &mut indices)?;
 
-    let mut clause_code_generator = ClauseCodeGenerator::new(module_code.len(), module_name.clone());
+    compiler.adapt_in_situ_code(
+        results.worker_results,
+        wam,
+        &mut indices.code_dir,
+        &mut indices.module_dir,
+        &mut results.in_situ_code,
+        &results.in_situ_code_dir,
+        &results.in_situ_module_dir,
+    )?;
+
+    let mut clause_code_generator = ClauseCodeGenerator::new(
+        results.in_situ_code.len(),
+        module_name.clone()
+    );
 
     clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;
 
     let top_level_term_dir = results.top_level_term_dirs.consolidate();
-    
-    add_module_code(
+
+    add_module(
         wam,
         compiler.module.take().unwrap(),
-        module_code,
         indices,
         top_level_term_dir,
     );
-    
+
+    wam.code_repo.code.extend(results.in_situ_code.into_iter());
+
     clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
 
     Ok(compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo))
@@ -399,6 +412,9 @@ pub struct GatherResult {
     top_level_terms: Vec<(Term, usize, usize)>,
     top_level_term_dirs: TermDirQuantum,
     module_term_dirs: TermDirQuantum,
+    in_situ_code_dir: InSituCodeDir,
+    in_situ_code: Code,
+    in_situ_module_dir: ModuleStubDir,
 }
 
 pub struct ClauseCodeGenerator {
@@ -490,8 +506,24 @@ impl ClauseCodeGenerator {
     }
 }
 
+fn insert_or_refresh_term_dir_quantum(
+    term_dir: &TermDir,
+    key: PredicateKey,
+    term_dirs: &mut TermDirQuantum
+) {
+    match term_dir.get(&key) {
+        Some((ref preds, ref queue)) => {
+            let entry = TermDirQuantumEntry::from(preds, queue);
+            term_dirs.insert_or_refresh(key, entry);
+        }
+        None => {
+            let entry = TermDirQuantumEntry::from(&Predicate::new(), &VecDeque::new());
+            term_dirs.insert_or_refresh(key, entry);
+        }
+    }
+}
+
 pub struct ListingCompiler {
-    non_counted_bt_preds: IndexSet<PredicateKey>,
     module: Option<Module>,
     user_term_dir: TermDir,
     orig_term_expansion_lens: (usize, usize),
@@ -501,23 +533,22 @@ pub struct ListingCompiler {
     listing_src: ListingSource, // a file? a module?
 }
 
-fn add_toplevel_code(
+fn add_toplevel(
     wam: &mut Machine,
-    code: Code,
     indices: IndexStore,
-    term_dir: TermDir,    
+    term_dir: TermDir,
 ) {
-    wam.add_batched_code(code, indices.code_dir);
+    wam.add_batched_code_dir(indices.code_dir);
     wam.add_batched_ops(indices.op_dir);
+    wam.add_in_situ_module_dir(indices.module_dir);
 
     wam.code_repo.term_dir.extend(term_dir.into_iter());
 }
 
 #[inline]
-fn add_module_code(
+fn add_module(
     wam: &mut Machine,
     mut module: Module,
-    code: Code,
     indices: IndexStore,
     term_dir: TermDir,
 ) {
@@ -525,7 +556,8 @@ fn add_module_code(
     module.op_dir.extend(indices.op_dir.into_iter());
     module.term_dir.extend(term_dir.into_iter());
 
-    wam.add_module(module, code);
+    wam.add_in_situ_module_dir(indices.module_dir);
+    wam.add_module(module);
 }
 
 fn add_non_module_code(
@@ -540,7 +572,8 @@ fn add_non_module_code(
     let mut clause_code_generator = ClauseCodeGenerator::new(code.len(), clause_name!("user"));
     clause_code_generator.generate_clause_code(&dynamic_clause_map, wam)?;
 
-    add_toplevel_code(wam, code, indices, term_dir);
+    add_toplevel(wam, indices, term_dir);
+    wam.code_repo.code.extend(code.into_iter());
     clause_code_generator.add_clause_code(wam, dynamic_clause_map);
 
     Ok(())
@@ -580,7 +613,6 @@ impl ListingCompiler {
         listing_src: ListingSource,
     ) -> Self {
         ListingCompiler {
-            non_counted_bt_preds: IndexSet::new(),
             module: None,
             user_term_dir: TermDir::new(),
             orig_term_expansion_lens: code_repo
@@ -593,31 +625,37 @@ impl ListingCompiler {
         }
     }
 
-    /*
-    Replace calls to self with a localized index cell, not available to the global CodeIndex.
-    This is done to implement logical update semantics for dynamic database updates.
+    /* Replace calls to self with a localized index cell, not
+     * available to the global CodeIndex.  This is done to implement
+     * logical update semantics for dynamic database updates.
      */
-    fn localize_self_calls(&mut self, name: ClauseName, arity: usize, code: &mut Code, p: usize) {
-        let self_idx = CodeIndex::default();
-        set_code_index!(self_idx, IndexPtr::Index(p), self.get_module_name());
+    fn localize_self_calls(&mut self, key: PredicateKey, code: &mut Code, p: usize, target_p: usize)
+    {
+        let (name, arity) = key;
 
-        for instr in code.iter_mut() {
-            if let &mut Line::Control(ControlInstruction::CallClause(ref mut ct, ..)) = instr {
-                match ct {
-                    &mut ClauseType::Named(ref ct_name, ct_arity, ref mut idx)
-                        if ct_name == &name && arity == ct_arity =>
-                    {
-                        *idx = self_idx.clone();
+        let self_idx = CodeIndex::default();
+        set_code_index!(self_idx, IndexPtr::Index(target_p), self.get_module_name());
+
+        walk_code_mut(code, p, |instr|
+            match instr {
+                Line::Control(ControlInstruction::CallClause(ref mut ct, ..)) => {
+                    match ct {
+                        ClauseType::Named(ref ct_name, ct_arity, ref mut idx)
+                            if ct_name == &name && arity == *ct_arity =>
+                        {
+                            *idx = self_idx.clone();
+                        }
+                        ClauseType::Op(ref op_name, ref shared_op_desc, ref mut idx)
+                            if op_name == &name && shared_op_desc.arity() == arity =>
+                        {
+                            *idx = self_idx.clone();
+                        }
+                        _ => {}
                     }
-                    &mut ClauseType::Op(ref op_name, ref shared_op_desc, ref mut idx)
-                        if op_name == &name && shared_op_desc.arity() == arity =>
-                    {
-                        *idx = self_idx.clone();
-                    }
-                    _ => {}
                 }
-            }
-        }
+                _ => {}
+            },
+        );
     }
 
     fn use_module(
@@ -707,45 +745,103 @@ impl ListingCompiler {
 	    .map_err(SessionError::from)
     }
 
-    pub(crate) fn generate_code(
+    fn set_code_index(
+        &mut self,
+        wam: &Machine,
+        key: PredicateKey,
+        in_situ_code: &mut Code,
+        code_dir: &mut CodeDir,
+        in_situ_code_dir: &InSituCodeDir,
+        decl: PredicateCompileQueue,
+    ) -> Result<(), SessionError> {
+        let p = wam.code_repo.code.len();
+
+        let idx = code_dir
+            .entry(key.clone())
+            .or_insert(CodeIndex::default());
+
+        Ok(match in_situ_code_dir.get(&key) {
+            Some(in_situ_p) => {
+                set_code_index!(idx, IndexPtr::Index(p + *in_situ_p), self.get_module_name());
+                self.localize_self_calls(key, in_situ_code, *in_situ_p, p + *in_situ_p);
+            }
+            None => {
+                let flags = wam.machine_flags();
+                let (decl, queue) = decl;
+
+                let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
+                let mut decl_code = cg.compile_predicate(&decl.0)?;
+
+                compile_appendix(&mut decl_code, &queue, false, flags)?;
+
+                let in_situ_p = in_situ_code.len();
+
+                in_situ_code.extend(decl_code.into_iter());
+
+                set_code_index!(idx, IndexPtr::Index(p + in_situ_p), self.get_module_name());
+                self.localize_self_calls(key, in_situ_code, in_situ_p, p + in_situ_p);
+            }
+        })
+    }
+
+    fn adapt_in_situ_code(
         &mut self,
         decls: Vec<PredicateCompileQueue>,
         wam: &Machine,
         code_dir: &mut CodeDir,
-        code_offset: usize,
-    ) -> Result<Code, SessionError> {
-        let mut code = vec![];
-
-        for (decl, queue) in decls {
-            let (name, arity) = decl
+        module_dir: &mut ModuleDir,
+        in_situ_code: &mut Code,
+        in_situ_code_dir: &InSituCodeDir,
+        in_situ_module_dir: &ModuleStubDir,
+    ) -> Result<(), SessionError> {
+        for decl in decls {
+            let key = decl.0
                 .predicate_indicator()
                 .ok_or(SessionError::NamelessEntry)?;
-            
-            let non_counted_bt = self.non_counted_bt_preds.contains(&(name.clone(), arity));
 
-            let p = code.len() + wam.code_repo.code.len() + code_offset;
-            let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt, wam.machine_flags());
+            let (name, _arity) = key.clone();
+            let module_name = name.owning_module();
 
-            let decl = TopLevel::Predicate(decl);
-            let mut decl_code = compile_relation(&mut cg, &decl)?;
+            match in_situ_module_dir.get(&module_name) {
+                Some(ref module_stub) if name.has_table(&module_stub.atom_tbl) => {
+                    let module =
+                        module_dir.entry(module_name.clone())
+                                  .or_insert_with(|| {
+                                      let module_decl = ModuleDecl {
+                                          name: module_name.clone(),
+                                          exports: vec![]
+                                      };
 
-            compile_appendix(&mut decl_code, &queue, non_counted_bt, wam.machine_flags())?;
+                                      Module::new(
+                                          module_decl,
+                                          module_stub.atom_tbl.clone(),
+                                          self.listing_src.clone(),
+                                      )
+                                  });
 
-            let idx = code_dir
-                .entry((name.clone(), arity))
-                .or_insert(CodeIndex::default());
-
-            set_code_index!(idx, IndexPtr::Index(p), self.get_module_name());
-
-            self.localize_self_calls(name, arity, &mut decl_code, p);
-            code.extend(decl_code.into_iter());
+                    self.set_code_index(
+                        wam,
+                        key,
+                        in_situ_code,
+                        &mut module.code_dir,
+                        &module_stub.in_situ_code_dir,
+                        decl,
+                    )?;
+                }
+                _ => {
+                    self.set_code_index(
+                        wam,
+                        key,
+                        in_situ_code,
+                        code_dir,
+                        in_situ_code_dir,
+                        decl,
+                    )?;
+                }
+            }
         }
 
-        Ok(code)
-    }
-
-    fn add_non_counted_bt_flag(&mut self, name: ClauseName, arity: usize) {
-        self.non_counted_bt_preds.insert((name, arity));
+        Ok(())
     }
 
     fn add_term_dir_terms(
@@ -822,6 +918,7 @@ impl ListingCompiler {
         wam: &mut Machine,
         indices: &mut IndexStore,
         flags: MachineFlags,
+        non_counted_bt_preds: &mut IndexSet<PredicateKey>,
     ) -> Result<(), SessionError> {
         match decl {
             Declaration::Dynamic(..) => {
@@ -872,7 +969,8 @@ impl ListingCompiler {
                 Ok(())
             }
             Declaration::NonCountedBacktracking(name, arity) => {
-                Ok(self.add_non_counted_bt_flag(name, arity))
+                non_counted_bt_preds.insert((name, arity));
+                Ok(())
             }
             Declaration::Op(op_decl) => {
                 self.submit_op(wam, indices, &op_decl)
@@ -929,50 +1027,35 @@ impl ListingCompiler {
 
     fn setup_multifile_decl<R: Read>(
         &self,
-        name: ClauseName,
-        arity: usize,
-        worker: &mut TopLevelBatchWorker<R>
+        indicator: MultiFileIndicator,
+        worker: &mut TopLevelBatchWorker<R>,
     ) -> Result<(), SessionError> {
-        let module_name = name.owning_module();
+        match indicator {
+            MultiFileIndicator::LocalScoped(name, arity) => {
+                let term_dir  = &worker.term_stream.wam.code_repo.term_dir;
+                let key       = (name, arity);
+                let term_dirs = &mut worker.term_dirs;
 
-        let term_dir = match module_name.as_str() {
-            "user" => {
-                &worker.term_stream.wam.code_repo.term_dir
+                insert_or_refresh_term_dir_quantum(term_dir, key, term_dirs);
             }
-            _ => {
-                if let Some(ref module) = self.module {
-                    &module.term_dir
-                } else {
-                    match worker.term_stream.wam.indices.modules.get(&module_name) {
-                        Some(ref module) => {
-                            &module.term_dir
-                        }
-                        None => {
-                            return Err(SessionError::ModuleNotFound);
-                        }
+            MultiFileIndicator::ModuleScoped((module_name, key)) => {
+                match worker.term_stream.wam.indices.modules.get(&module_name) {
+                    Some(ref module) => {
+                        let term_dir  = &module.term_dir;
+                        let term_dirs = worker.intra_module_term_dirs
+                            .entry(module_name)
+                            .or_insert(TermDirQuantum::new());
+
+                        insert_or_refresh_term_dir_quantum(term_dir, key, term_dirs);
+                    }
+                    None => {
+                        return Err(SessionError::ModuleNotFound);
                     }
                 }
             }
         };
 
-        Ok(match term_dir.get(&(name.clone(), arity)) {
-            Some((ref preds, ref queue)) => {
-                let (preds, queue) = (preds.clone(), queue.clone());
-
-                worker.term_dirs.set_old(
-                    (name.clone(), arity),
-                    preds,
-                    queue,
-                );
-            }
-            None => {
-                worker.term_dirs.set_old(
-                    (name.clone(), arity),
-                    Predicate::new(),
-                    VecDeque::new(),                        
-                );
-            }
-        })
+        Ok(())
     }
 
     fn process_and_commit_decl<R: Read>(
@@ -1001,8 +1084,8 @@ impl ListingCompiler {
             &Declaration::Hook(hook, _, ref queue) if !hook.has_module_scope() => {
                 worker.term_stream.incr_expansion_lens(hook, 1, queue.len())
             }
-            &Declaration::MultiFile(ref name, arity) => {
-                self.setup_multifile_decl(name.clone(), arity, worker)?;
+            &Declaration::MultiFile(ref indicator) => {
+                self.setup_multifile_decl(indicator.clone(), worker)?;
             }
             &Declaration::UseModule(_) | &Declaration::UseQualifiedModule(..) => {
                 update_expansion_lengths = true
@@ -1010,7 +1093,13 @@ impl ListingCompiler {
             _ => {}
         };
 
-        let result = self.process_decl(decl, &mut worker.term_stream.wam, indices, flags);
+        let result = self.process_decl(
+            decl,
+            &mut worker.term_stream.wam,
+            indices,
+            flags,
+            &mut worker.non_counted_bt_preds,
+        );
 
         if update_expansion_lengths {
             worker.term_stream.update_expansion_lens();
@@ -1018,7 +1107,7 @@ impl ListingCompiler {
 
         result
     }
-    
+
     pub(crate) fn gather_items<R: Read>(
         &mut self,
         wam: &mut Machine,
@@ -1040,10 +1129,11 @@ impl ListingCompiler {
                 mem::swap(&mut worker.results, &mut toplevel_results);
                 worker.in_module = true;
 
-                self.process_and_commit_decl(decl, &mut worker, indices, flags)?;                
-                
+                self.process_and_commit_decl(decl, &mut worker, indices, flags)?;
+
                 if let Some(ref module) = &self.module {
                     worker.term_stream.set_atom_tbl(module.atom_tbl.clone());
+
                     top_level_term_dirs = mem::replace(
                         &mut worker.term_dirs,
                         TermDirQuantum::new(),
@@ -1056,7 +1146,7 @@ impl ListingCompiler {
             }
         }
 
-        let addition_results = worker.term_stream.rollback_expansion_code()?;        
+        let addition_results = worker.term_stream.rollback_expansion_code()?;
 
         let module_term_dirs = if self.module.is_some() {
             worker.term_dirs
@@ -1064,7 +1154,7 @@ impl ListingCompiler {
             top_level_term_dirs = worker.term_dirs;
             TermDirQuantum::new()
         };
-        
+
         Ok(GatherResult {
             worker_results: worker.results,
             dynamic_clause_map: worker.dynamic_clause_map,
@@ -1074,6 +1164,9 @@ impl ListingCompiler {
             top_level_terms: worker.term_stream.top_level_terms(),
             top_level_term_dirs,
             module_term_dirs,
+            in_situ_code_dir: worker.term_stream.wam.indices.take_in_situ_code_dir(),
+            in_situ_code: worker.term_stream.wam.code_repo.take_in_situ_code(),
+            in_situ_module_dir: worker.term_stream.wam.indices.take_in_situ_module_dir(),
         })
     }
 
@@ -1119,18 +1212,29 @@ fn compile_work_impl(
     let top_level_term_dir = results.top_level_term_dirs.consolidate();
     let module_term_dir = results.module_term_dirs.consolidate();
 
-    let module_code = compiler.generate_code(
+    let mut code = results.in_situ_code;
+
+    let in_situ_code_dir = results.in_situ_code_dir;
+    let in_situ_module_dir = results.in_situ_module_dir;
+
+    compiler.adapt_in_situ_code(
         results.worker_results,
         wam,
         &mut indices.code_dir,
-        0
+        &mut indices.module_dir,
+        &mut code,
+        &in_situ_code_dir,
+        &in_situ_module_dir,
     )?;
 
-    let toplvl_code = compiler.generate_code(
+    compiler.adapt_in_situ_code(
         results.toplevel_results,
         wam,
         &mut results.toplevel_indices.code_dir,
-        module_code.len()
+        &mut indices.module_dir,
+        &mut code,
+        &in_situ_code_dir,
+        &in_situ_module_dir,
     )?;
 
     if let Some(ref mut module) = &mut compiler.module {
@@ -1154,8 +1258,7 @@ fn compile_work_impl(
         }
 
         let mut clause_code_generator =
-            ClauseCodeGenerator::new(module_code.len() + toplvl_code.len(),
-                                     module.module_decl.name.clone());
+            ClauseCodeGenerator::new(code.len(), module.module_decl.name.clone());
 
         wam.check_toplevel_code(&results.toplevel_indices)?;
         clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;
@@ -1165,23 +1268,25 @@ fn compile_work_impl(
         }
 
         if module.is_impromptu_module {
-            add_module_code(wam, module, module_code, indices, module_term_dir);
+            add_module(wam, module, indices, module_term_dir);
 
             let module = wam.indices.take_module(compiler.listing_src.name()).unwrap();
 
             wam.indices.use_module(&mut wam.code_repo, wam.machine_st.flags, &module)?;
             wam.indices.insert_module(module);
         } else {
-            add_module_code(wam, module, module_code, indices, module_term_dir);
+            add_module(wam, module, indices, module_term_dir);
         }
 
-        add_toplevel_code(wam, toplvl_code, results.toplevel_indices, top_level_term_dir);
+        add_toplevel(wam, results.toplevel_indices, top_level_term_dir);
+        wam.code_repo.code.extend(code.into_iter());
+        
         clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
     } else {
         add_non_module_code(
             wam,
             results.dynamic_clause_map,
-            module_code,
+            code,
             indices,
             top_level_term_dir,
         )?;
@@ -1231,14 +1336,24 @@ pub fn compile_special_form<R: Read>(
     setup_indices(wam, clause_name!("builtins"), &mut indices)?;
 
     let mut compiler = ListingCompiler::new(&wam.code_repo, true, listing_src);
-    let results = compiler.gather_items(wam, src, &mut indices)?;
+    let mut results = compiler.gather_items(wam, src, &mut indices)?;
 
-    let code = compiler.generate_code(results.worker_results, wam, &mut indices.code_dir, 0)?;
+    compiler.adapt_in_situ_code(
+        results.worker_results,
+        wam,
+        &mut indices.code_dir,
+        &mut indices.module_dir,
+        &mut results.in_situ_code,
+        &results.in_situ_code_dir,
+        &results.in_situ_module_dir,
+    )?;
+
     let p = wam.code_repo.code.len();
-
     let top_level_term_dir = results.top_level_term_dirs.consolidate();
-    
-    add_toplevel_code(wam, code, indices, top_level_term_dir);
+
+    add_toplevel(wam, indices, top_level_term_dir);
+
+    wam.code_repo.code.extend(results.in_situ_code.into_iter());
 
     Ok(p)
 }

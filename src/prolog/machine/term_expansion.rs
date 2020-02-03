@@ -73,11 +73,10 @@ pub struct TermStream<'a, R: Read> {
     stack: Vec<Term>,
     pub(crate) wam: &'a mut Machine,
     parser: Parser<'a, R>,
-    in_module: bool,
     pub(crate) flags: MachineFlags,
     term_expansion_lens: (usize, usize),
     goal_expansion_lens: (usize, usize),
-    top_level_terms: Vec<(Term, usize, usize)> // term, line_num, col_num.
+    top_level_terms: Vec<(Term, usize, usize)>, // term, line_num, col_num.
 }
 
 pub struct ExpansionAdditionResult {
@@ -104,6 +103,8 @@ impl ExpansionAdditionResult {
 impl<'a, R: Read> Drop for TermStream<'a, R> {
     fn drop(&mut self) {
         self.wam.indices.in_situ_code_dir.clear();
+        self.wam.indices.in_situ_module_dir.clear();
+
         self.wam.code_repo.in_situ_code.clear();
         discard_result!(self.rollback_expansion_code());
     }
@@ -126,9 +127,8 @@ impl<'a, R: Read> TermStream<'a, R> {
                 .term_dir_entry_len((clause_name!("goal_expansion"), 2)),
             wam,
             parser: Parser::new(src, atom_tbl, flags),
-            in_module: false,
             flags,
-            top_level_terms: vec![]
+            top_level_terms: vec![],
         }
     }
 
@@ -226,8 +226,12 @@ impl<'a, R: Read> TermStream<'a, R> {
                 let iter = extract_from_list(head, tail)?;
                 Ok(self.stack.extend(iter))
             }
-            Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) => Ok(self.stack.push(term)),
-            _ => Err(ParserError::ExpectedTopLevelTerm),
+            Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) => {
+                Ok(self.stack.push(term))
+            }
+            _ => {
+                Err(ParserError::ExpectedTopLevelTerm)
+            }
         }
     }
 
@@ -240,26 +244,36 @@ impl<'a, R: Read> TermStream<'a, R> {
         let mut parser = Parser::new(&mut stream, self.parser.get_atom_tbl(), self.flags);
 
         parser.read_term(composite_op!(
-            self.in_module,
+            false,
             &self.wam.indices.op_dir,
             op_dir
         ))
     }
 
-    pub fn read_term(&mut self, op_dir: &OpDir) -> Result<Term, ParserError> {
+    pub fn expand_term(&mut self, term: Term, op_dir: &OpDir) -> Result<Term, ParserError> {
         let mut machine_st = MachineState::new();
 
+        self.stack.push(term);
+
+        while let Some(term) = self.stack.pop() {
+            match machine_st.try_expand_term(self.wam, &term, CompileTimeHook::TermExpansion) {
+                Some(term_string) => {                        
+                    let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;
+                    self.enqueue_term(term)?;
+                }
+                None => {
+                    return Ok(term);
+                }
+            };
+        }
+
+        unreachable!()
+    }
+    
+    pub fn read_term(&mut self, op_dir: &OpDir) -> Result<Term, ParserError> {
         loop {
-            while let Some(term) = self.stack.pop() {
-                match machine_st.try_expand_term(self.wam, &term, CompileTimeHook::TermExpansion) {
-                    Some(term_string) => {
-                        let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;
-                        self.enqueue_term(term)?
-                    }
-                    None => {
-                        return Ok(term);
-                    }
-                };
+            if let Some(term) = self.stack.pop() {
+                return Ok(self.expand_term(term, op_dir)?);
             }
 
             self.parser.reset();
@@ -268,7 +282,7 @@ impl<'a, R: Read> TermStream<'a, R> {
             let col_num = self.col_num();
 
             let term = self.parser.read_term(composite_op!(
-                self.in_module,
+                false,
                 &self.wam.indices.op_dir,
                 op_dir
             ))?;

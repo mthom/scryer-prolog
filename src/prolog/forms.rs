@@ -31,26 +31,6 @@ pub enum TopLevel {
 }
 
 impl TopLevel {
-    pub fn name(&self) -> Option<ClauseName> {
-        match self {
-            &TopLevel::Declaration(_) => None,
-            &TopLevel::Fact(ref term, ..) => term.name(),
-            &TopLevel::Predicate(ref clauses) => clauses.0.first().and_then(|ref term| term.name()),
-            &TopLevel::Query(_) => None,
-            &TopLevel::Rule(Rule { ref head, .. }, ..) => Some(head.0.clone()),
-        }
-    }
-
-    pub fn arity(&self) -> usize {
-        match self {
-            &TopLevel::Declaration(_) => 0,
-            &TopLevel::Fact(ref term, ..) => term.arity(),
-            &TopLevel::Predicate(ref clauses) => clauses.0.first().map(|t| t.arity()).unwrap_or(0),
-            &TopLevel::Query(_) => 0,
-            &TopLevel::Rule(Rule { ref head, .. }, ..) => head.1.len(),
-        }
-    }
-
     pub fn is_end_of_file_atom(&self) -> bool {
         match self {
             &TopLevel::Fact(Term::Constant(_, Constant::Atom(ref name, _)), ..) => {
@@ -159,6 +139,190 @@ impl ListingSource {
     }
 }
 
+fn resolved_term_and_module(term: &Term) -> Option<(ClauseName, ClauseName)>
+{
+    match term {
+        Term::Clause(_, ref name, ref terms, _) => {
+            if name.as_str() == ":" && terms.len() == 2 {
+                let module_name = match terms[0].as_ref() {
+                    &Term::Constant(_, Constant::Atom(ref module_name, _)) => {
+                        module_name.clone()
+                    }
+                    _ => {
+                        return Some((name.owning_module(), name.clone()));
+                    }
+                };
+
+                match terms[1].as_ref() {
+                    Term::Clause(_, ref name, ..)
+                  | Term::Constant(_, Constant::Atom(ref name, ..)) => {
+                        return Some((module_name, name.clone()));
+                    }
+                    _ => {
+                    }
+                }
+
+                Some((name.owning_module(), name.clone()))
+            } else {
+                Some((name.owning_module(), name.clone()))
+            }
+        }
+        Term::Constant(_, Constant::Atom(ref name, _)) => {
+            Some((name.owning_module(), name.clone()))
+        }
+        _ => {
+            None
+        }
+    }
+}
+
+fn resolved_term_arity(term: &Term) -> usize
+{
+    match term {
+        Term::Clause(_, ref name, ref terms, _) => {
+            if name.as_str() == ":" && terms.len() == 2 {
+                match terms[0].as_ref() {
+                    &Term::Constant(_, Constant::Atom(..)) => {
+                    }
+                    _ => {
+                        return 2;
+                    }
+                }
+
+                match terms[1].as_ref() {
+                    Term::Clause(_, _, ref terms, _) => {
+                        terms.len()
+                    }
+                    Term::Constant(_, Constant::Atom(..)) => {
+                        0
+                    }
+                    _ => {
+                        2
+                    }
+                }
+            } else {
+                terms.len()
+            }
+        }
+        _ => {
+            0
+        }
+    }
+}
+
+pub trait ClauseConsistency {
+    fn is_consistent(&self, clauses: &Vec<PredicateClause>) -> bool {
+        match clauses.first() {
+            Some(ref cl) => {
+                self.name_and_module() == cl.name_and_module() && self.arity() == cl.arity()
+            }
+            None => {
+                true
+            }
+        }
+    }
+
+    fn name_and_module(&self) -> Option<(ClauseName, ClauseName)>;
+    fn arity(&self) -> usize;
+}
+
+/* Of course '$current_module$' isn't the name of the current
+ * module. It'll do if no module is explicitly specified through
+ * (:)/2.
+ */
+impl ClauseConsistency for Term {
+    fn name_and_module(&self) -> Option<(ClauseName, ClauseName)>
+    {
+        match self {
+            Term::Clause(_, ref name, ref terms, _) =>
+                match name.as_str() {
+                    ":-" => {
+                        match terms.len() {
+                            1 => None, // a declaration.
+                            2 => resolved_term_and_module(&terms[0]),
+                            _ => Some((name.owning_module(), clause_name!(":-"))),
+                        }
+                    }
+                    _ => {
+                        resolved_term_and_module(self)
+                    }
+                },
+            Term::Constant(_, Constant::Atom(ref name, _)) => {
+                Some((name.owning_module(), name.clone()))
+            }
+            _ => {
+                None
+            }
+        }
+    }
+
+    fn arity(&self) -> usize {
+        match self {
+            Term::Clause(_, ref name, ref terms, _) =>
+                match name.as_str() {
+                    ":-" => {
+                        match terms.len() {
+                            1 => 0,
+                            2 => resolved_term_arity(&terms[0]),
+                            _ => terms.len(),
+                        }
+                    }
+                    _ => {
+                        resolved_term_arity(self)
+                    }
+                },
+            _ => {
+                0
+            }
+        }
+    }
+}
+
+impl ClauseConsistency for Rule {
+    fn name_and_module(&self) -> Option<(ClauseName, ClauseName)> {
+        Some((self.head.0.owning_module(), self.head.0.clone()))
+    }
+    
+    fn arity(&self) -> usize {
+        self.head.1.len()    
+    }
+}
+
+impl ClauseConsistency for PredicateClause {
+    fn name_and_module(&self) -> Option<(ClauseName, ClauseName)> {
+        match self {
+            &PredicateClause::Fact(ref term, ..) => {
+                term.name_and_module()
+                    .map(|(_, name)| (name.owning_module(), name))
+            }
+            &PredicateClause::Rule(ref rule, ..) => {
+                rule.name_and_module()
+            }
+        }
+    }
+
+    fn arity(&self) -> usize {
+        match self {
+            &PredicateClause::Fact(ref term, ..) => {
+                term.arity()
+            }
+            &PredicateClause::Rule(ref rule, ..) => {
+                rule.arity()
+            }
+        }
+    }
+}
+
+impl ClauseConsistency for Predicate {
+    fn name_and_module(&self) -> Option<(ClauseName, ClauseName)> {
+        self.0.first().and_then(|clause| clause.name_and_module())
+    }
+
+    fn arity(&self) -> usize {
+        self.0.first().map(|clause| clause.arity()).unwrap_or(0)
+    }
+}
+
 pub type CompiledResult = (Predicate, VecDeque<TopLevel>);
 
 #[derive(Clone)]
@@ -177,8 +341,24 @@ impl PredicateClause {
 
     pub fn arity(&self) -> usize {
         match self {
-            &PredicateClause::Fact(ref term, ..) => term.arity(),
-            &PredicateClause::Rule(ref rule, ..) => rule.head.1.len(),
+            &PredicateClause::Fact(ref term, ..) => {
+                term.arity()
+            }
+            &PredicateClause::Rule(ref rule, ..) => {
+                if rule.head.0.as_str() == ":" && rule.head.1.len() == 2 {
+                    match (rule.head.1)[0].as_ref() {
+                        &Term::Constant(_, Constant::Atom(..)) => {
+                        }
+                        _ => {
+                            return 2;
+                        }
+                    }
+
+                    (rule.head.1)[1].arity()
+                } else {
+                    rule.head.1.len()
+                }
+            }
         }
     }
 
@@ -196,6 +376,14 @@ pub enum ModuleSource {
     File(ClauseName),
 }
 
+pub type ScopedPredicateKey = (ClauseName, PredicateKey); // module name, predicate indicator.
+
+#[derive(Clone)]
+pub enum MultiFileIndicator {
+    LocalScoped(ClauseName, usize), // name, arity
+    ModuleScoped(ScopedPredicateKey),
+}
+
 #[derive(Clone)]
 pub enum Declaration {
     Dynamic(ClauseName, usize), // name, arity
@@ -203,7 +391,7 @@ pub enum Declaration {
     Hook(CompileTimeHook, PredicateClause, VecDeque<TopLevel>),
     ModuleInitialization(Vec<QueryTerm>, VecDeque<TopLevel>), // goal
     Module(ModuleDecl),
-    MultiFile(ClauseName, usize),
+    MultiFile(MultiFileIndicator),
     NonCountedBacktracking(ClauseName, usize), // name, arity
     Op(OpDecl),
     UseModule(ModuleSource),
@@ -314,11 +502,11 @@ pub fn fetch_op_spec(
     op_dir: &OpDir,
 ) -> Option<SharedOpDesc> {
     if let Some(ref op_desc) = &spec {
-        if op_desc.arity() != arity {            
+        if op_desc.arity() != arity {
             /* it's possible to extend operator functors with
              * additional terms. When that happens,
              * void the op_spec by returning None. */
-            return None; 
+            return None;
         }
     }
 
@@ -358,7 +546,7 @@ pub type ModuleDir = IndexMap<ClauseName, Module>;
 #[derive(Clone, PartialEq)]
 pub enum ModuleExport {
     OpDecl(OpDecl),
-    PredicateKey(PredicateKey),    
+    PredicateKey(PredicateKey),
 }
 
 #[derive(Clone)]

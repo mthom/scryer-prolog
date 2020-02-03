@@ -1,6 +1,7 @@
 use prolog_parser::ast::*;
 use prolog_parser::string_list::*;
 
+use crate::prolog::forms::PredicateKey;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 use crate::prolog::rug::Integer;
@@ -134,7 +135,7 @@ impl MachineError {
             SessionError::InvalidFileName(filename) => {
                 Self::existence_error(h, ExistenceError::Module(filename))
             }
-            SessionError::ModuleDoesNotContainExport => Self::permission_error(
+            SessionError::ModuleDoesNotContainExport(..) => Self::permission_error(
                 PermissionError::Access,
                 "private_procedure",
                 clause_name!("module_does_not_contain_claimed_export"),
@@ -533,7 +534,7 @@ pub enum SessionError {
     CannotOverwriteBuiltIn(ClauseName),
     CannotOverwriteImport(ClauseName),
     InvalidFileName(ClauseName),
-    ModuleDoesNotContainExport,
+    ModuleDoesNotContainExport(ClauseName, PredicateKey),
     ModuleNotFound,
     NamelessEntry,
     OpIsInfixAndPostFix(ClauseName),

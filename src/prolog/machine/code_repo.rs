@@ -9,7 +9,10 @@ use crate::prolog::machine::compile::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 
+use indexmap::IndexSet;
+
 use std::collections::VecDeque;
+use std::mem;
 
 pub struct CodeRepo {
     pub(super) cached_query: Code,
@@ -59,11 +62,13 @@ impl CodeRepo {
             .unwrap_or((Predicate::new(), VecDeque::from(vec![])))
     }
 
-    pub fn add_in_situ_result(
+    pub(crate) fn add_in_situ_result(
         &mut self,
         result: &CompiledResult,
         in_situ_code_dir: &mut InSituCodeDir,
+        in_situ_module_dir: &mut ModuleStubDir,
         flags: MachineFlags,
+        non_counted_bt_preds: &IndexSet<PredicateKey>,
     ) -> Result<(), SessionError> {
         let (ref decl, ref queue) = result;
         let (name, arity) = decl
@@ -75,22 +80,36 @@ impl CodeRepo {
             })
             .ok_or(SessionError::NamelessEntry)?;
 
+        let non_counted_bt = non_counted_bt_preds.contains(&(name.clone(), arity));
+        let module_name = name.owning_module();
+
         let p = self.in_situ_code.len();
-        in_situ_code_dir.insert((name, arity), p);
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(true, flags);
-        // clone the decl to avoid the need to wipe its register cells later.
-        let mut decl_code = cg.compile_predicate(&decl.0.clone())?;
+        match in_situ_module_dir.get_mut(&module_name) {
+            Some(ref mut module_stub) if name.has_table(&module_stub.atom_tbl) => {
+                module_stub.in_situ_code_dir.insert((name, arity), p);
+            }
+            _ => {
+                in_situ_code_dir.insert((name, arity), p);
+            }
+        }        
 
-        compile_appendix(&mut decl_code, queue, true, flags)?;
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt, flags);
+        let mut decl_code = cg.compile_predicate(&decl.0)?;
 
-        self.in_situ_code.extend(decl_code.into_iter());
-        Ok(())
+        compile_appendix(&mut decl_code, queue, non_counted_bt, flags)?;
+
+        Ok(self.in_situ_code.extend(decl_code.into_iter()))
     }
 
     #[inline]
     pub(super) fn size_of_cached_query(&self) -> usize {
         self.cached_query.len()
+    }
+
+    #[inline]
+    pub(super) fn take_in_situ_code(&mut self) -> Code {
+        mem::replace(&mut self.in_situ_code, Code::new())
     }
 
     pub(super) fn lookup_instr<'a>(

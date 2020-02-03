@@ -231,8 +231,13 @@ where
                     continue;
                 }
 
-                if !user.import_decl(name, arity, submodule) {
-                    return Err(SessionError::ModuleDoesNotContainExport);
+                if !user.import_decl(name.clone(), arity, submodule) {
+                    let submodule_name = submodule.module_decl.name.clone();
+                    
+                    return Err(SessionError::ModuleDoesNotContainExport(
+                        submodule_name,
+                        (name, arity)
+                    ));
                 }
             },
             ModuleExport::OpDecl(op_decl) => {
@@ -266,8 +271,13 @@ pub fn use_module<User: SubModuleUser>(
     for export in submodule.module_decl.exports.iter().cloned() {
         match export {
             ModuleExport::PredicateKey((name, arity)) => {
-                if !user.import_decl(name, arity, submodule) {
-                    return Err(SessionError::ModuleDoesNotContainExport);
+                if !user.import_decl(name.clone(), arity, submodule) {
+                    let submodule_name = submodule.module_decl.name.clone();
+
+                    return Err(SessionError::ModuleDoesNotContainExport(
+                        submodule_name,
+                        (name, arity)
+                    ));
                 }
             }
             ModuleExport::OpDecl(op_decl) => {

@@ -214,6 +214,7 @@ impl HeapCellValue {
 pub enum IndexPtr {
     DynamicUndefined, // a predicate, declared as dynamic, whose location in code is as yet undefined.
     Undefined,
+    InSituDirEntry(usize),
     Index(usize),
     UserGoalExpansion,
     UserTermExpansion
@@ -223,6 +224,11 @@ pub enum IndexPtr {
 pub struct CodeIndex(pub Rc<RefCell<(IndexPtr, ClauseName)>>);
 
 impl CodeIndex {
+    #[inline]
+    pub fn new(ptr: IndexPtr, module_name: ClauseName) -> Self {
+        CodeIndex(Rc::new(RefCell::new(( ptr, module_name ))))
+    }
+
     #[inline]
     pub fn is_undefined(&self) -> bool {
         let index_ptr = &self.0.borrow().0;
@@ -540,17 +546,36 @@ impl Default for DynamicPredicateInfo {
 }
 
 pub type InSituCodeDir = IndexMap<PredicateKey, usize>;
+
 // key type: module name, predicate indicator.
 pub type DynamicCodeDir = IndexMap<(ClauseName, ClauseName, usize), DynamicPredicateInfo>;
 
 pub type GlobalVarDir = IndexMap<ClauseName, (Ball, Option<usize>)>;
 
+pub(crate) struct ModuleStub {
+    pub(crate) atom_tbl: TabledData<Atom>,
+    pub(crate) in_situ_code_dir: InSituCodeDir,
+}
+
+impl ModuleStub {
+    pub(crate) fn new(atom_tbl: TabledData<Atom>) -> Self {
+        ModuleStub {
+            atom_tbl,
+            in_situ_code_dir: InSituCodeDir::new(),
+        }
+    }
+}
+
+pub(crate) type ModuleStubDir = IndexMap<ClauseName, ModuleStub>;
+
 pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,
     pub(super) code_dir: CodeDir,
+    pub(super) module_dir: ModuleDir,
     pub(super) dynamic_code_dir: DynamicCodeDir,
     pub(super) global_variables: GlobalVarDir,
     pub(super) in_situ_code_dir: InSituCodeDir,
+    pub(super) in_situ_module_dir: ModuleStubDir,
     pub(super) modules: ModuleDir,
     pub(super) op_dir: OpDir,
 }
@@ -608,6 +633,16 @@ impl IndexStore {
     }
 
     #[inline]
+    pub(crate) fn take_in_situ_module_dir(&mut self) -> ModuleStubDir {
+        mem::replace(&mut self.in_situ_module_dir, ModuleStubDir::new())
+    }
+
+    #[inline]
+    pub fn take_in_situ_code_dir(&mut self) -> InSituCodeDir {
+        mem::replace(&mut self.in_situ_code_dir, InSituCodeDir::new())
+    }
+
+    #[inline]
     pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
         self.modules.swap_remove(&name)
     }
@@ -622,12 +657,13 @@ impl IndexStore {
         IndexStore {
             atom_tbl: TabledData::new(Rc::new("user".to_string())),
             code_dir: CodeDir::new(),
+            module_dir: ModuleDir::new(),
             dynamic_code_dir: DynamicCodeDir::new(),
             global_variables: GlobalVarDir::new(),
             in_situ_code_dir: InSituCodeDir::new(),
+            in_situ_module_dir: ModuleStubDir::new(),
             op_dir: default_op_dir(),
             modules: ModuleDir::new(),
-            //            parsing_stream: readline::parsing_stream(String::new())
         }
     }
 
@@ -679,6 +715,77 @@ impl IndexStore {
 
 pub type CodeDir = BTreeMap<PredicateKey, CodeIndex>;
 pub type TermDir = IndexMap<PredicateKey, (Predicate, VecDeque<TopLevel>)>;
+
+pub struct TermDirQuantumEntry {
+    pub old_terms: (Predicate, VecDeque<TopLevel>),
+    pub new_terms: (Predicate, VecDeque<TopLevel>),
+    pub is_fresh: bool,
+}
+
+impl TermDirQuantumEntry {
+    #[inline]
+    pub fn new() -> Self {
+        TermDirQuantumEntry {
+            old_terms: (Predicate::new(), VecDeque::new()),
+            new_terms: (Predicate::new(), VecDeque::new()),
+            is_fresh: false,
+        }
+    }
+
+    pub fn from(preds: &Predicate, queue: &VecDeque<TopLevel>) -> Self
+    {
+        let mut entry = TermDirQuantumEntry::new();
+        entry.is_fresh = false;
+
+        (entry.old_terms.0).0.extend(preds.0.iter().cloned());
+        entry.old_terms.1.extend(queue.iter().cloned());
+
+        entry
+    }
+}
+
+pub struct TermDirQuantum(IndexMap<PredicateKey, TermDirQuantumEntry>);
+
+impl TermDirQuantum {
+    #[inline]
+    pub fn new() -> Self {
+        TermDirQuantum(IndexMap::new())
+    }
+
+    #[inline]
+    pub fn insert_or_refresh(&mut self, key: PredicateKey, mut entry: TermDirQuantumEntry) {
+        if let Some(prev_entry) = self.get_mut(&key) {
+            prev_entry.is_fresh = true;
+        } else {
+            entry.is_fresh = true;
+            self.0.insert(key, entry);
+        }
+    }
+
+    #[inline]
+    pub fn insert(&mut self, key: PredicateKey, entry: TermDirQuantumEntry) {
+        self.0.insert(key, entry);
+    }
+
+    #[inline]
+    pub fn get_mut(&mut self, key: &PredicateKey) -> Option<&mut TermDirQuantumEntry> {
+        self.0.get_mut(key)
+    }
+
+    pub fn consolidate(self) -> TermDir {
+        let mut term_dir = TermDir::new();
+
+        for (key, entry) in self.0 {
+            let (preds, queue) =
+                term_dir.entry(key).or_insert((Predicate::new(), VecDeque::new()));
+
+            preds.0.extend((entry.new_terms.0).0.into_iter());
+            queue.extend(entry.new_terms.1.into_iter());
+        }
+
+        term_dir
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 pub enum CompileTimeHook {

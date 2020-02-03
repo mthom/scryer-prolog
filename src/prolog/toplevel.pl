@@ -243,7 +243,6 @@ user:term_expansion(Term0, (:- initialization(ExpandedGoals))) :-
     expand_goals(Goals, ExpandedGoals),
     Goals \== ExpandedGoals.
 
-
 '$module_expand_goal'(UnexpandedGoals, ExpandedGoals) :-    
     (  '$module_of'(Module, UnexpandedGoals),
        '$module_exists'(Module),

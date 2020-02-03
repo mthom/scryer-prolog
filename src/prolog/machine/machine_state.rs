@@ -372,6 +372,15 @@ impl MachineState {
 
                     return Ok(());
                 }
+                IndexPtr::InSituDirEntry(p) => {
+                    if last_call {
+                        self.execute_at_index(arity, LocalCodePtr::InSituDirEntry(p));
+                    } else {
+                        self.call_at_index(arity, LocalCodePtr::InSituDirEntry(p));
+                    }
+
+                    return Ok(());                    
+                }
                 _ => {}
             }
         }
@@ -384,19 +393,21 @@ impl MachineState {
     }
 }
 
-fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore) -> Option<usize> {
+fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore) -> Option<usize>
+{
     match indices.in_situ_code_dir.get(&(name.clone(), arity)) {
         Some(p) => Some(*p),
-        None => match indices.code_dir.get(&(name, arity)) {
-            Some(ref idx) => {
-                if let &IndexPtr::Index(p) = &idx.0.borrow().0 {
-                    Some(p)
-                } else {
-                    None
+        None =>
+            match indices.code_dir.get(&(name, arity)) {
+                Some(ref idx) => {
+                    if let IndexPtr::Index(p) = idx.0.borrow().0 {
+                        Some(p)
+                    } else {
+                        None
+                    }
                 }
-            }
-            _ => None,
-        },
+                _ => None,
+            },
     }
 }
 
@@ -633,10 +644,12 @@ pub(crate) trait CallPolicy: Any {
         indices: &IndexStore,
     ) -> CallResult {
         match idx.0.borrow().0 {
-            IndexPtr::DynamicUndefined =>
-                machine_st.fail = true,
-            IndexPtr::Undefined =>
-                return try_in_situ(machine_st, name, arity, indices, false),
+            IndexPtr::DynamicUndefined => {
+                machine_st.fail = true;
+            }
+            IndexPtr::Undefined => {
+                return try_in_situ(machine_st, name, arity, indices, false);
+            }
             IndexPtr::Index(compiled_tl_index) => {
                 machine_st.call_at_index(arity, LocalCodePtr::DirEntry(compiled_tl_index))
             }
@@ -645,6 +658,9 @@ pub(crate) trait CallPolicy: Any {
             }
             IndexPtr::UserGoalExpansion => {
                 machine_st.call_at_index(arity, LocalCodePtr::UserGoalExpansion(0));
+            }
+            IndexPtr::InSituDirEntry(p) => {
+                machine_st.call_at_index(arity, LocalCodePtr::InSituDirEntry(p));
             }
         }
 
@@ -672,6 +688,9 @@ pub(crate) trait CallPolicy: Any {
             }
             IndexPtr::UserGoalExpansion => {
                 machine_st.execute_at_index(arity, LocalCodePtr::UserGoalExpansion(0));
+            }
+            IndexPtr::InSituDirEntry(p) => {
+                machine_st.execute_at_index(arity, LocalCodePtr::InSituDirEntry(p));
             }
         }
 
