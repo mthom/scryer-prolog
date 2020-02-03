@@ -73,9 +73,9 @@ put_new_trie_table_link :-
     (  bb_get(trie_table_link_initialized, _) ->
        true
     ;  trie_new(Trie),
-       bb_b_put(trie_table_link, TrieFlag),
-       bb_b_put(trie_table_link_initialized, []),
-       put_atts(TrieFlag, trie_table_link(Trie))
+       put_atts(TrieFlag, trie_table_link(Trie)),
+       bb_put(trie_table_link, TrieFlag),
+       bb_put(trie_table_link_initialized, [])
     ).
 
 get_trie_table_link(Trie) :-
@@ -104,7 +104,9 @@ p_existing_table(Variant, TableIdentifier) :-
 p_link_variant_identifier(Variant, TableIdentifier) :-
     get_trie_table_link(Trie),
     variant_canonical_representation(Variant, CanonicalRepresentation),
-    trie_insert_succeed(Trie, CanonicalRepresentation, TableIdentifier).
+    trie_insert_succeed(Trie, CanonicalRepresentation, TableIdentifier),
+    put_atts(TrieFlag, trie_table_link(Trie)),
+    bb_put(trie_table_link, TrieFlag).
 
 % Returns a list of existing table identifiers.
 % Rather costly.
