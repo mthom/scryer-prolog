@@ -86,9 +86,7 @@ Gustafson's book "The End of Error."
 3. Add concurrent tables to manage shared references to atoms and
 strings.
 
-4. Add optional SLG resolution for fast memoization of predicates.
-
-5. Add some form of JIT predicate indexing.
+4. Add some form of JIT predicate indexing.
 
 ## Installing Scryer Prolog
 
