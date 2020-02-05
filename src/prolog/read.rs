@@ -29,7 +29,7 @@ pub mod readline {
     use prolog_parser::ast::*;
     use crate::prolog::rustyline::error::ReadlineError;
     use crate::prolog::rustyline::{Cmd, Editor, KeyPress};
-    use std::io::Read;
+    use std::io::{Cursor, Read};
 
     static mut PROMPT: bool = false;
 
@@ -48,68 +48,52 @@ pub mod readline {
 
     pub struct ReadlineStream {
         rl: Editor<()>,
-        pending_input: String,
+        pending_input: Cursor<String>,
     }
 
     impl ReadlineStream {
         fn input_stream(pending_input: String) -> Self {
             let mut rl = Editor::<()>::new();
             rl.bind_sequence(KeyPress::Tab, Cmd::Insert(1, "\t".to_string()));
-            ReadlineStream { rl, pending_input }
+            ReadlineStream { rl, pending_input: Cursor::new(pending_input) }
         }
 
         fn call_readline(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
             match self.rl.readline(get_prompt()) {
                 Ok(text) => {
-                    self.pending_input += &text;
+                    *self.pending_input.get_mut() = text;
+                    self.pending_input.set_position(0);
 
                     unsafe {
                         if PROMPT {
-                            self.rl.history_mut().add(&self.pending_input);
+                            self.rl.history_mut().add(self.pending_input.get_ref());
                             PROMPT = false;
                         }
                     }
 
-                    self.pending_input += "\n";
-                    Ok(self.write_to_buf(buf))
+                    *self.pending_input.get_mut() += "\n";
+                    self.pending_input.read(buf)
                 }
-                Err(ReadlineError::Eof) =>
-                    Ok(self.write_to_buf(buf)),
-                Err(e) =>
+                Err(ReadlineError::Eof) => {
+                    Ok(0)
+                }
+                Err(e) => {
                     Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+                }
             }
-        }
-
-        fn split_pending(&mut self, buf: &mut [u8], split_idx: usize) -> usize {
-            let (outgoing, _) = self.pending_input.split_at(split_idx);
-
-            for (idx, b) in outgoing.bytes().enumerate() {
-                buf[idx] = b;
-            }
-
-            outgoing.len()
-        }
-
-        fn write_to_buf(&mut self, buf: &mut [u8]) -> usize {
-            let split_idx = std::cmp::min(self.pending_input.len(), buf.len());
-            let output_len = self.split_pending(buf, split_idx);
-
-            if split_idx < self.pending_input.len() {
-                self.pending_input = self.pending_input[split_idx..].to_string();
-            } else {
-                self.pending_input.clear();
-            }
-
-            output_len
         }
     }
 
     impl Read for ReadlineStream {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            if self.pending_input.is_empty() {
-                self.call_readline(buf)
-            } else {
-                Ok(self.write_to_buf(buf))
+            match self.pending_input.read(buf) {
+                Ok(0) => {
+                    self.call_readline(buf)
+                }
+                result => {
+                    result
+                }
+                
             }
         }
     }
