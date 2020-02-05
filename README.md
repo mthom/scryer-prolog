@@ -50,7 +50,7 @@ Extend Scryer Prolog to include the following, among other features:
       (backtrackable).
 - [x] Delimited continuations based on reset/3, shift/1 (documented in
       "Delimited Continuations for Prolog").
-- [x] Add opt-in tabling library based on delimited continuations
+- [x] Tabling library based on delimited continuations
       (documented in "Tabling as a Library with Delimited Control").      
 - [ ] A _redone_ representation of strings as difference list of
       chars, using a packed internal representation (_in progress_).      
