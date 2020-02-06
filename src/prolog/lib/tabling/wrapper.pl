@@ -80,6 +80,7 @@ wrappers(Name/Arity) -->
 	[ (   Head :-
 		 start_tabling(Module:Head, WrappedHead)
 	  ),
+	  (:- multifile(table_wrapper:tabled/2)),
 	  table_wrapper:tabled(Head, Module)
 	].
 
@@ -107,10 +108,7 @@ rename_term(Name, WrapName) :-
 	atom_concat(Name, ' tabled', WrapName).
 
 
-user:term_expansion(Term0,
-		    [ (:- multifile(table_wrapper:tabled/2))
-		    | Clauses
-		    ]) :-
+user:term_expansion(Term0, Clauses) :-
         nonvar(Term0),
 	Term0 = (:- table Preds),
 	phrase(wrappers(Preds), Clauses).
