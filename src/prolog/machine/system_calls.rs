@@ -41,7 +41,7 @@ pub fn next_keypress() -> ContinueResult {
 
     for c in stdin.keys() {
         match c.unwrap() {
-            Key::Char(' ') | Key::Char(';') => return ContinueResult::ContinueQuery,
+            Key::Char(' ') | Key::Char(';') | Key::Char('n') => return ContinueResult::ContinueQuery,
             Key::Char('.') => return ContinueResult::Conclude,
             _ => {}
         }
