@@ -7,6 +7,7 @@ use std::ptr;
 pub(crate) trait RawVecTraits {
     fn init_size() -> usize;
     fn align() -> usize;
+    fn base_offset(base: *const u8) -> *const u8;
 }
 
 pub(crate) struct RawVec<T: RawVecTraits> {
@@ -24,7 +25,7 @@ impl<T: RawVecTraits> RawVec<T> {
                                top: ptr::null(),
                                _marker: PhantomData };
 
-        unsafe { 
+        unsafe {
             vec.grow();
         }
 
@@ -39,11 +40,11 @@ impl<T: RawVecTraits> RawVec<T> {
             self.base = alloc::alloc(layout) as *const _;
             self.size = T::init_size();
 
-            self.top = self.base.offset(T::align() as isize);
+            self.top = T::base_offset(self.base);
         } else {
             let layout = alloc::Layout::from_size_align_unchecked(T::init_size(), T::align());
             let top_dist = self.top as usize - self.base as usize;
-            
+
             self.base = alloc::realloc(self.base as *mut _, layout, self.size*2) as *const _;
             self.top = (self.base as usize + top_dist) as *const _;
             self.size *= 2;
@@ -75,10 +76,10 @@ impl<T: RawVecTraits> RawVec<T> {
 
     #[inline]
     pub(crate)
-    unsafe fn new_block(&mut self, block_size: usize) -> *const u8 {
+    unsafe fn new_block(&mut self, size: usize) -> *const u8 {
         loop {
-            if self.free_space() >= block_size {
-                return (self.top as usize + block_size) as *const _;
+            if self.free_space() >= size {
+                return (self.top as usize + size) as *const _;
             } else {
                 self.grow();
             }
@@ -96,5 +97,5 @@ impl<T: RawVecTraits> RawVec<T> {
             self.base = ptr::null();
             self.size = 0;
         }
-    }    
+    }
 }

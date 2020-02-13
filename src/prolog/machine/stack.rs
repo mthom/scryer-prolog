@@ -19,6 +19,13 @@ impl RawVecTraits for StackTraits {
     fn align() -> usize {
         mem::align_of::<Addr>()
     }
+
+    #[inline]
+    fn base_offset(base: *const u8) -> *const u8 {
+        unsafe {
+            base.offset(Self::align() as isize)
+        }
+    }
 }
 
 const fn prelude_size<Prelude>() -> usize {
