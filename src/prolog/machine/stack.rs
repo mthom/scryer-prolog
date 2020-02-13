@@ -1,14 +1,25 @@
 use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::raw_vec::*;
 
 use core::marker::PhantomData;
 
-use std::alloc;
 use std::mem;
 use std::ops::{Index, IndexMut};
 use std::ptr;
 
-const STACK_ALIGN: usize = mem::align_of::<Addr>();
-const INIT_STACK_SIZE: usize = 10 * 1024 * 1024;
+struct StackTraits {}
+
+impl RawVecTraits for StackTraits {
+    #[inline]
+    fn init_size() -> usize {
+        10 * 1024 * 1024
+    }
+
+    #[inline]
+    fn align() -> usize {
+        mem::align_of::<Addr>()
+    }
+}
 
 const fn prelude_size<Prelude>() -> usize {
     let size = mem::size_of::<Prelude>();
@@ -18,16 +29,14 @@ const fn prelude_size<Prelude>() -> usize {
 }
 
 pub struct Stack {
-    size: usize,
-    base: *const u8,
-    top:  *const u8,
+    buf: RawVec<StackTraits>,
     _marker: PhantomData<Addr>,
 }
 
 impl Drop for Stack {
     fn drop(&mut self) {
         self.drop_in_place();
-        self.deallocate();
+        self.buf.deallocate();
     }
 }
 
@@ -178,80 +187,28 @@ impl OrFrame {
 
 impl Stack {
     pub fn new() -> Self {
-        let mut stack = Stack { size: 0, base: ptr::null(), top: ptr::null(),
-                                _marker: PhantomData };
-
-        unsafe { stack.grow(); }
-        stack
-    }
-
-    fn empty_stack() -> Self {
-        Stack { size: 0, base: ptr::null(), top: ptr::null(),
-                _marker: PhantomData }
-    }
-
-    #[inline]
-    pub fn take(&mut self) -> Stack {
-        mem::replace(self, Stack::empty_stack())
-    }
-
-    #[inline]
-    fn free_space(&self) -> usize {
-        debug_assert!(self.top >= self.base,
-                      "self.top = {:?} < {:?} = self.base",
-                      self.top, self.base);
-
-        self.size - (self.top as usize - self.base as usize)
-    }
-
-    unsafe fn grow(&mut self) {
-        if self.size == 0 {
-            let layout = alloc::Layout::from_size_align_unchecked(INIT_STACK_SIZE, STACK_ALIGN);
-
-            self.base = alloc::alloc(layout) as *const _;
-            self.top = self.base as *const _;
-            self.size = INIT_STACK_SIZE;
-
-            self.top = self.top.offset(mem::align_of::<Addr>() as isize);
-        } else {
-            let layout = alloc::Layout::from_size_align_unchecked(self.size, STACK_ALIGN);
-            let top_dist = self.top as usize - self.base as usize;
-
-            self.base = alloc::realloc(self.base as *mut _, layout, self.size*2) as *const _;
-            self.top = (self.base as usize + top_dist) as *const _;
-            self.size *= 2;
-        }
-    }
-
-    #[inline]
-    unsafe fn new_frame_ptr(&mut self, frame_size: usize) -> *const u8 {
-        loop {
-            if self.free_space() >= frame_size {
-                return (self.top as usize + frame_size) as *const _;
-            } else {
-                self.grow();
-            }
-        }
+        Stack { buf: RawVec::new(), _marker: PhantomData }
     }
 
     pub fn allocate_and_frame(&mut self, num_cells: usize) -> usize {
         let frame_size = AndFrame::size_of(num_cells);
 
         unsafe {
-            let new_top = self.new_frame_ptr(frame_size);
+            let new_top = self.buf.new_block(frame_size);
 
             for idx in 0 .. num_cells {
                 let offset = prelude_size::<AndFramePrelude>() + idx * mem::size_of::<Addr>();
-                ptr::write((self.top as usize + offset) as *mut Addr, Addr::StackCell(0,0));
+                ptr::write((self.buf.top as usize + offset) as *mut Addr, Addr::StackCell(0,0));
             }
 
-            let and_frame = &mut *(self.top as *mut AndFrame);
+            let and_frame = &mut *(self.buf.top as *mut AndFrame);
 
             and_frame.prelude.univ_prelude.is_or_frame = 0;
             and_frame.prelude.univ_prelude.num_cells = num_cells;
 
-            let e = self.top as usize - self.base as usize;
-            self.top = new_top;
+            let e = self.buf.top as usize - self.buf.base as usize;
+            self.buf.top = new_top;
+            
             e
         }
     }
@@ -260,20 +217,21 @@ impl Stack {
         let frame_size = OrFrame::size_of(num_cells);
 
         unsafe {
-            let new_top = self.new_frame_ptr(frame_size);
+            let new_top = self.buf.new_block(frame_size);
 
             for idx in 0 .. num_cells {
                 let offset = prelude_size::<OrFramePrelude>() + idx * mem::size_of::<Addr>();
-                ptr::write((self.top as usize + offset) as *mut Addr, Addr::StackCell(0,0));
+                ptr::write((self.buf.top as usize + offset) as *mut Addr, Addr::StackCell(0,0));
             }
 
-            let or_frame = &mut *(self.top as *mut OrFrame);
+            let or_frame = &mut *(self.buf.top as *mut OrFrame);
 
             or_frame.prelude.univ_prelude.is_or_frame = 1;
             or_frame.prelude.univ_prelude.num_cells = num_cells;
 
-            let b = self.top as usize - self.base as usize;
-            self.top = new_top;
+            let b = self.buf.top as usize - self.buf.base as usize;
+            self.buf.top = new_top;
+
             b
         }
     }
@@ -281,7 +239,7 @@ impl Stack {
     #[inline]
     pub fn index_and_frame(&self, e: usize) -> &AndFrame {
         unsafe {
-            let ptr = self.base as usize + e;
+            let ptr = self.buf.base as usize + e;
             &*(ptr as *const AndFrame)
         }
     }
@@ -289,7 +247,7 @@ impl Stack {
     #[inline]
     pub fn index_and_frame_mut(&mut self, e: usize) -> &mut AndFrame {
         unsafe {
-            let ptr = self.base as usize + e;
+            let ptr = self.buf.base as usize + e;
             &mut *(ptr as *mut AndFrame)
         }
     }
@@ -297,7 +255,7 @@ impl Stack {
     #[inline]
     pub fn index_or_frame(&self, b: usize) -> &OrFrame {
         unsafe {
-            let ptr = self.base as usize + b;
+            let ptr = self.buf.base as usize + b;
             &*(ptr as *const OrFrame)
         }
     }
@@ -305,20 +263,13 @@ impl Stack {
     #[inline]
     pub fn index_or_frame_mut(&mut self, b: usize) -> &mut OrFrame {
         unsafe {
-            let ptr = self.base as usize + b;
+            let ptr = self.buf.base as usize + b;
             &mut *(ptr as *mut OrFrame)
         }
     }
 
-    pub fn deallocate(&mut self) {
-        unsafe {
-            let layout = alloc::Layout::from_size_align_unchecked(self.size, STACK_ALIGN);
-            alloc::dealloc(self.base as *mut u8, layout);
-
-            self.top  = ptr::null();
-            self.base = ptr::null();
-            self.size = 0;
-        }
+    pub fn take(&mut self) -> Self {
+        Stack { buf: self.buf.take(), _marker: PhantomData }
     }
 
     pub fn truncate(&mut self, b: usize) {
@@ -330,11 +281,11 @@ impl Stack {
     }
 
     fn inner_truncate(&mut self, b: usize) {
-        let mut b = b + self.base as usize;
-        let base =  b;
+        let mut b = b + self.buf.base as usize;
+        let base  = b;
 
         unsafe {
-            while b as *const _ < self.top {
+            while b as *const _ < self.buf.top {
                 let univ_prelude = ptr::read(b as *const FramePrelude);
 
                 let offset = if univ_prelude.is_or_frame == 0 {
@@ -360,8 +311,8 @@ impl Stack {
                 b = offset;
             }
 
-            if base < self.top as usize {
-                self.top = base as *const _;
+            if base < self.buf.top as usize {
+                self.buf.top = base as *const _;
             }
         }
     }
@@ -369,10 +320,10 @@ impl Stack {
     pub fn drop_in_place(&mut self) {
         self.truncate(mem::align_of::<Addr>());
 
-        debug_assert!(if self.top.is_null() {
-            self.top == self.base
+        debug_assert!(if self.buf.top.is_null() {
+            self.buf.top == self.buf.base
         } else {
-            self.top as usize == self.base as usize + mem::align_of::<Addr>()
+            self.buf.top as usize == self.buf.base as usize + mem::align_of::<Addr>()
         });
     }
 }
