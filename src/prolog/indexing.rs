@@ -15,16 +15,14 @@ enum IntIndex {
 }
 
 pub struct CodeOffsets {
-    flags: MachineFlags,
     pub constants: IndexMap<Constant, ThirdLevelIndex>,
     pub lists: ThirdLevelIndex,
     pub structures: IndexMap<(ClauseName, usize), ThirdLevelIndex>,
 }
 
 impl CodeOffsets {
-    pub fn new(flags: MachineFlags) -> Self {
+    pub fn new() -> Self {
         CodeOffsets {
-            flags,
             constants: IndexMap::new(),
             lists: Vec::new(),
             structures: IndexMap::new(),
@@ -65,18 +63,15 @@ impl CodeOffsets {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
             }
-            &Term::Constant(_, Constant::String(ref s))
-                if !self.flags.double_quotes.is_atom() && !s.is_empty() =>
-            {
-                // strings are lists in this case.
+            &Term::Constant(_, Constant::String(n, ref s)) => {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
-            }
-            &Term::Constant(_, Constant::String(ref s))
-                if !self.flags.double_quotes.is_atom() && s.is_expandable() =>
-            {
-                let is_initial_index = self.lists.is_empty();
-                self.lists.push(Self::add_index(is_initial_index, index));
+
+                let constant = Constant::String(n, s.clone());
+                let code = self.constants.entry(constant).or_insert(Vec::new());
+
+                let is_initial_index = code.is_empty();
+                code.push(Self::add_index(is_initial_index, index));
             }
             &Term::Constant(_, ref constant) => {
                 let code = self.constants.entry(constant.clone()).or_insert(Vec::new());
@@ -260,8 +255,8 @@ impl CodeOffsets {
         for (index, line) in prelude.iter_mut().enumerate() {
             match line {
                 &mut Line::IndexedChoice(IndexedChoiceInstruction::Try(ref mut i))
-                | &mut Line::IndexedChoice(IndexedChoiceInstruction::Retry(ref mut i))
-                | &mut Line::IndexedChoice(IndexedChoiceInstruction::Trust(ref mut i)) => {
+              | &mut Line::IndexedChoice(IndexedChoiceInstruction::Retry(ref mut i))
+              | &mut Line::IndexedChoice(IndexedChoiceInstruction::Trust(ref mut i)) => {
                     *i += prelude_length - index
                 }
                 _ => {}

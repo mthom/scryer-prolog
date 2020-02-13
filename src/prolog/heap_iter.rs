@@ -46,39 +46,42 @@ impl<'a> HCPreOrderIterator<'a> {
         let da = self.machine_st.store(self.machine_st.deref(addr));
 
         match da {
-            Addr::Con(Constant::String(ref s)) => {
-                match self.machine_st.machine_flags().double_quotes {
-                    DoubleQuotes::Chars => {
-                        if let Some(c) = s.head() {
-                            let tail = s.tail();
+            Addr::Con(Constant::String(n, s)) => {
+                if !self.machine_st.machine_flags().double_quotes.is_atom() {
+                    if s.len() > n {
+                        if let Some(c) = s[n ..].chars().next() {
+                            let o = c.len_utf8();
+                        
+                            self.state_stack.push(Addr::Con(Constant::String(n+o, s.clone())));
 
-                            self.state_stack.push(Addr::Con(Constant::String(tail)));
-                            self.state_stack.push(Addr::Con(Constant::Char(c)));
+                            if self.machine_st.machine_flags().double_quotes.is_codes() {
+                                self.state_stack.push(Addr::Con(Constant::CharCode(c as u32)));
+                            } else {
+                                self.state_stack.push(Addr::Con(Constant::Char(c)));
+                            }
                         }
+                    } else {
+                        return Addr::Con(Constant::EmptyList);
                     }
-                    DoubleQuotes::Codes => {
-                        if let Some(c) = s.head() {
-                            let tail = s.tail();
-
-                            self.state_stack.push(Addr::Con(Constant::String(tail)));
-                            self.state_stack
-                                .push(Addr::Con(Constant::CharCode(c as u8)));
-                        }
-                    }
-                    _ => {}
                 }
 
-                Addr::Con(Constant::String(s.clone()))
+                Addr::Con(Constant::String(n, s))
             }
-            Addr::Con(_) | Addr::DBRef(_) => da,
+            Addr::Con(_) | Addr::DBRef(_) => {
+                da
+            }
             Addr::Lis(a) => {
                 self.state_stack.push(Addr::HeapCell(a + 1));
                 self.state_stack.push(Addr::HeapCell(a));
 
                 da
             }
-            Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) => da,
-            Addr::Str(s) => self.follow_heap(s), // record terms of structure.
+            Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) => {
+                da
+            }
+            Addr::Str(s) => {
+                self.follow_heap(s) // record terms of structure.
+            }
         }
     }
 }
@@ -88,11 +91,15 @@ impl<'a> Iterator for HCPreOrderIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.state_stack.pop().map(|a| match self.follow(a) {
-            Addr::HeapCell(h) => self.machine_st.heap[h].clone(),
+            Addr::HeapCell(h) => {
+                self.machine_st.heap[h].clone()
+            }
             Addr::StackCell(fr, sc) => {
                 HeapCellValue::Addr(self.machine_st.stack.index_and_frame(fr)[sc].clone())
             }
-            da => HeapCellValue::Addr(da),
+            da => {
+                HeapCellValue::Addr(da)
+            }
         })
     }
 }

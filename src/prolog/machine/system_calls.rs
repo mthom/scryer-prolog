@@ -1,6 +1,5 @@
 use prolog_parser::ast::*;
 use prolog_parser::parser::*;
-use prolog_parser::string_list::*;
 use prolog_parser::tabled_rc::*;
 
 use crate::prolog::clause_types::*;
@@ -88,8 +87,8 @@ impl MachineState {
                     brent_st.steps,
                     brent_st.hare,
                 )),
-                Addr::Con(Constant::String(ref s)) if self.flags.double_quotes.is_chars() => {
-                    Some(CycleSearchResult::String(brent_st.steps, s.clone()))
+                Addr::Con(Constant::String(n, ref s)) if !self.flags.double_quotes.is_atom() => {
+                    Some(CycleSearchResult::String(brent_st.steps, n, s.clone()))
                 }
                 Addr::Lis(l) => {
                     brent_st.hare = l + 1;
@@ -104,7 +103,9 @@ impl MachineState {
 
                     None
                 }
-                _ => Some(CycleSearchResult::NotList),
+                _ => {
+                    Some(CycleSearchResult::NotList)
+                }
             },
         }
     }
@@ -115,8 +116,8 @@ impl MachineState {
             Addr::Lis(offset) if max_steps > 0 => offset + 1,
             Addr::Lis(offset) => return CycleSearchResult::UntouchedList(offset),
             Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
-            Addr::Con(Constant::String(ref s)) if !self.flags.double_quotes.is_atom() => {
-                return CycleSearchResult::String(0, s.clone())
+            Addr::Con(Constant::String(n, ref s)) if !self.flags.double_quotes.is_atom() => {
+                return CycleSearchResult::String(0, n, s.clone())
             }
             _ => return CycleSearchResult::NotList,
         };
@@ -139,8 +140,8 @@ impl MachineState {
         let hare = match addr {
             Addr::Lis(offset) => offset + 1,
             Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
-            Addr::Con(Constant::String(ref s)) if !self.flags.double_quotes.is_atom() => {
-                return CycleSearchResult::String(0, s.clone())
+            Addr::Con(Constant::String(n, ref s)) if !self.flags.double_quotes.is_atom() => {
+                return CycleSearchResult::String(0, n, s.clone())
             }
             _ => return CycleSearchResult::NotList,
         };
@@ -198,10 +199,10 @@ impl MachineState {
                                 };
 
                             match search_result {
-                                CycleSearchResult::String(n, s) => {
+                                CycleSearchResult::String(n, offset, s) => {
                                     if max_steps == -1 {
                                         self.finalize_skip_max_list(
-                                            n + s.len(),
+                                            s[offset ..].len(),
                                             Addr::Con(Constant::EmptyList),
                                         )
                                     } else {
@@ -209,15 +210,13 @@ impl MachineState {
 
                                         if s.len() < i {
                                             self.finalize_skip_max_list(
-                                                n + s.len(),
+                                                s[n + offset + i..].len(),
                                                 Addr::Con(Constant::EmptyList),
                                             )
                                         } else {
-                                            let s =
-                                                StringList::new(s.char_span(i), s.is_expandable());
                                             self.finalize_skip_max_list(
-                                                i + n,
-                                                Addr::Con(Constant::String(s)),
+                                                i + n + offset,
+                                                Addr::Con(Constant::String(n + i + offset, s)),
                                             )
                                         }
                                     }
@@ -436,8 +435,8 @@ impl MachineState {
         n: &Integer,
         stub: &'static str,
         arity: usize,
-    ) -> Result<u8, MachineStub> {
-        if let Some(c) = n.to_u8() {
+    ) -> Result<u32, MachineStub> {
+        if let Some(c) = n.to_u32() {
             Ok(c)
         } else {
             let stub = MachineError::functor_stub(clause_name!(stub), arity);
@@ -644,7 +643,16 @@ impl MachineState {
                         let list_of_chars = Addr::HeapCell(self.heap.to_list(iter));
 
                         let a2 = self[temp_v!(2)].clone();
-                        self.unify(a2, list_of_chars);
+
+                        match self.store(self.deref(a2)) {
+                            Addr::Con(Constant::String(..))
+                                if !self.flags.double_quotes.is_chars() => {
+                                    self.fail = true;
+                                }
+                            a2 => {
+                                self.unify(a2, list_of_chars);
+                            }
+                        }
                     }
                     Addr::Con(Constant::EmptyList) => {
                         let a2 = self[temp_v!(2)].clone();
@@ -682,31 +690,50 @@ impl MachineState {
 
                 match self.store(self.deref(a1)) {
                     Addr::Con(Constant::Char(c)) => {
-                        let iter = once(Addr::Con(Constant::CharCode(c as u8)));
+                        let iter = once(Addr::Con(Constant::CharCode(c as u32)));
                         let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
 
                         let a2 = self[temp_v!(2)].clone();
                         self.unify(a2, list_of_codes);
                     }
                     Addr::Con(Constant::Atom(name, _)) => {
-                        let iter = name
-                            .as_str()
-                            .chars()
-                            .map(|c| Addr::Con(Constant::CharCode(c as u8)));
-                        let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
-
                         let a2 = self[temp_v!(2)].clone();
 
-                        self.unify(a2, list_of_codes);
+                        match self.store(self.deref(a2)) {
+                            a2 @ Addr::Con(Constant::String(..)) => {
+                                if !self.flags.double_quotes.is_codes() {
+                                    self.fail = true;
+                                } else {
+                                    let iter = name
+                                        .as_str()
+                                        .chars()
+                                        .map(|c| Addr::Con(Constant::Char(c)));
+
+                                    let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
+
+                                    self.unify(a2, list_of_codes);
+                                }
+                            }
+                            a2 => {
+                                let iter = name
+                                    .as_str()
+                                    .chars()
+                                    .map(|c| Addr::Con(Constant::CharCode(c as u32)));
+
+                                let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
+
+                                self.unify(a2, list_of_codes);
+                            }
+                        }
                     }
                     Addr::Con(Constant::EmptyList) => {
-                        let a2 = self[temp_v!(2)].clone();
                         let chars = vec![
-                            Addr::Con(Constant::CharCode('[' as u8)),
-                            Addr::Con(Constant::CharCode(']' as u8)),
+                            Addr::Con(Constant::CharCode('[' as u32)),
+                            Addr::Con(Constant::CharCode(']' as u32)),
                         ];
 
                         let list_of_codes = Addr::HeapCell(self.heap.to_list(chars.into_iter()));
+                        let a2 = self[temp_v!(2)].clone();
 
                         self.unify(a2, list_of_codes);
                     }
@@ -718,14 +745,15 @@ impl MachineState {
                             Ok(addrs) => {
                                 let mut chars = String::new();
 
-                                for addr in addrs.iter() {
+                                for addr in addrs {
                                     match addr {
-                                        &Addr::Con(Constant::Integer(ref n)) => {
+                                        Addr::Con(Constant::Integer(n)) => {
                                             let c = self.int_to_char_code(&n, "atom_codes", 2)?;
-                                            chars.push(c as char);
+                                            chars.push(std::char::from_u32(c).unwrap());
                                         }
-                                        &Addr::Con(Constant::CharCode(c)) =>
-                                            chars.push(c as char),
+                                        Addr::Con(Constant::CharCode(c)) => {
+                                            chars.push(std::char::from_u32(c).unwrap());
+                                        }
                                         _ => {
                                             let err = MachineError::type_error(
                                                 ValidType::Integer,
@@ -754,7 +782,7 @@ impl MachineState {
                     _ => unreachable!(),
                 };
 
-                let len = Integer::from(atom.as_str().len());
+                let len = Integer::from(atom.as_str().chars().count());
                 let a2 = self[temp_v!(2)].clone();
 
                 self.unify(a2, Addr::Con(Constant::Integer(len)));
@@ -831,7 +859,7 @@ impl MachineState {
                 let codes = string
                     .trim()
                     .chars()
-                    .map(|c| Addr::Con(Constant::CharCode(c as u8)));
+                    .map(|c| Addr::Con(Constant::CharCode(c as u32)));
                 let codes_list = Addr::HeapCell(self.heap.to_list(codes));
 
                 self.unify(codes_list, chs);
@@ -841,10 +869,9 @@ impl MachineState {
 
                 match self.try_from_list(temp_v!(1), stub.clone()) {
                     Err(e) => return Err(e),
-                    Ok(addrs) => match self.try_code_list(addrs) {
-                        Ok(codes) => {
-                            let string = codes.iter().map(|c| *c as char).collect();
-                            self.parse_number_from_string(string, indices, stub)?
+                    Ok(addrs) => match self.try_char_list(addrs) {
+                        Ok(chars) => {
+                            self.parse_number_from_string(chars, indices, stub)?
                         }
                         Err(err) => return Err(self.error_form(err, stub)),
                     },
@@ -878,22 +905,24 @@ impl MachineState {
                         let c = name.as_str().chars().next().unwrap();
                         let a2 = self[temp_v!(2)].clone();
 
-                        self.unify(Addr::Con(Constant::CharCode(c as u8)), a2);
+                        self.unify(Addr::Con(Constant::CharCode(c as u32)), a2);
                     }
                     Addr::Con(Constant::Char(c)) => {
                         let a2 = self[temp_v!(2)].clone();
-                        self.unify(Addr::Con(Constant::CharCode(c as u8)), a2);
+                        self.unify(Addr::Con(Constant::CharCode(c as u32)), a2);
                     }
                     ref addr if addr.is_ref() => {
                         let a2 = self[temp_v!(2)].clone();
 
                         match self.store(self.deref(a2)) {
-                            Addr::Con(Constant::CharCode(code)) => {
-                                self.unify(Addr::Con(Constant::Char(code as char)), addr.clone())
+                            Addr::Con(Constant::Char(code)) => {
+                                self.unify(Addr::Con(Constant::Char(code)), addr.clone())
                             }
                             Addr::Con(Constant::Integer(n)) => {
                                 let c = self.int_to_char_code(&n, "char_code", 2)?;
-                                self.unify(Addr::Con(Constant::Char(c as char)), addr.clone());
+                                let c = std::char::from_u32(c).unwrap();
+                                
+                                self.unify(Addr::Con(Constant::Char(c)), addr.clone());
                             }
                             _ => self.fail = true,
                         };
@@ -2325,7 +2354,7 @@ impl MachineState {
 
                 let mut h = self.heap.h;
                 let mut functors = vec![];
-                
+
                 walk_code(
                     &code_repo.code,
                     first_idx,
@@ -2334,10 +2363,10 @@ impl MachineState {
                         functors.push(Addr::HeapCell(h));
 
                         h += section.len();
-                        self.heap.extend(section.into_iter());                        
+                        self.heap.extend(section.into_iter());
                     },
                 );
-                
+
                 let listing = Addr::HeapCell(self.heap.to_list(functors.into_iter()));
                 let listing_var = self[temp_v!(3)].clone();
 

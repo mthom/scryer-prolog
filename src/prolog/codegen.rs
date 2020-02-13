@@ -18,7 +18,6 @@ use std::rc::Rc;
 use std::vec::Vec;
 
 pub struct CodeGenerator<TermMarker> {
-    flags: MachineFlags,
     marker: TermMarker,
     pub var_count: IndexMap<Rc<Var>, usize>,
     non_counted_bt: bool,
@@ -107,12 +106,11 @@ impl<'a> ConjunctInfo<'a> {
 }
 
 impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
-    pub fn new(non_counted_bt: bool, flags: MachineFlags) -> Self {
+    pub fn new(non_counted_bt: bool) -> Self {
         CodeGenerator {
             marker: Allocator::new(),
             var_count: IndexMap::new(),
             non_counted_bt,
-            flags,
         }
     }
 
@@ -435,7 +433,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 }
             },
             &InlinedClauseType::IsString(..) => match terms[0].as_ref() {
-                &Term::Constant(_, Constant::String(_)) => {
+                &Term::Constant(_, Constant::String(..)) => {
                     code.push(succeed!());
                 }
                 &Term::Var(ref vr, ref name) => {
@@ -459,8 +457,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 }
             },
             &InlinedClauseType::IsInteger(..) => match terms[0].as_ref() {
-                &Term::Constant(_, Constant::CharCode(_))
-                | &Term::Constant(_, Constant::Integer(_)) => {
+                &Term::Constant(_, Constant::Integer(_)) => {
                     code.push(succeed!());
                 }
                 &Term::Var(ref vr, ref name) => {
@@ -482,13 +479,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                     let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
                     code.push(is_var!(r));
                 }
-            },
-            &InlinedClauseType::IsPartialString(..) => match terms[0].as_ref() {
-                &Term::Var(ref vr, ref name) => {
-                    let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
-                    code.push(is_partial_string!(r));
-                }
-                _ => code.push(fail!()),
             },
         }
 
@@ -867,7 +857,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         clauses: &'b [PredicateClause],
     ) -> Result<Code, ParserError> {
         let mut code_body = Vec::new();
-        let mut code_offsets = CodeOffsets::new(self.flags);
+        let mut code_offsets = CodeOffsets::new();
 
         let num_clauses = clauses.len();
 

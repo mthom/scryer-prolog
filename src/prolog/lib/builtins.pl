@@ -928,8 +928,12 @@ must_be_number(N, PI) :-
     ;  throw(error(instantiation_error, PI))
     ).
 
-can_be_chars_or_vars(Cs, _) :- var(Cs), !.
-can_be_chars_or_vars(Cs, PI) :- chars_or_vars(Cs, PI).
+can_be_chars_or_vars(Cs, _)  :- var(Cs), !.
+can_be_chars_or_vars(Cs, PI) :-
+    (  string(Cs) ->
+       current_prolog_flag(double_quotes, chars)
+    ;  chars_or_vars(Cs, PI)
+    ).
 
 chars_or_vars([], _).
 chars_or_vars([C|Cs], PI) :-
@@ -943,8 +947,12 @@ chars_or_vars([C|Cs], PI) :-
     ;  chars_or_vars(Cs, PI)
     ).
 
-can_be_codes_or_vars(Cs, _) :- var(Cs), !.
-can_be_codes_or_vars(Cs, PI) :- codes_or_vars(Cs, PI).
+can_be_codes_or_vars(Cs, _)  :- var(Cs), !.
+can_be_codes_or_vars(Cs, PI) :- 
+    (  string(Cs) ->
+       current_prolog_flag(double_quotes, codes)
+    ;  codes_or_vars(Cs, PI)
+    ).
 
 codes_or_vars([], _).
 codes_or_vars([C|Cs], PI) :-

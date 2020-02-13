@@ -1,5 +1,3 @@
-use prolog_parser::ast::MachineFlags;
-
 use crate::prolog::clause_types::*;
 use crate::prolog::codegen::*;
 use crate::prolog::debray_allocator::*;
@@ -67,7 +65,6 @@ impl CodeRepo {
         result: &CompiledResult,
         in_situ_code_dir: &mut InSituCodeDir,
         in_situ_module_dir: &mut ModuleStubDir,
-        flags: MachineFlags,
         non_counted_bt_preds: &IndexSet<PredicateKey>,
     ) -> Result<(), SessionError> {
         let (ref decl, ref queue) = result;
@@ -94,10 +91,10 @@ impl CodeRepo {
             }
         }        
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt, flags);
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt);
         let mut decl_code = cg.compile_predicate(&decl.0)?;
 
-        compile_appendix(&mut decl_code, queue, non_counted_bt, flags)?;
+        compile_appendix(&mut decl_code, queue, non_counted_bt)?;
 
         Ok(self.in_situ_code.extend(decl_code.into_iter()))
     }

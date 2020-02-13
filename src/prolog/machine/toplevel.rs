@@ -828,10 +828,6 @@ impl RelationWorker {
                         Err(ParserError::InadmissibleQueryTerm)
                     }
                 }
-                ("partial_string", 2) => {
-                    let ct = ClauseType::BuiltIn(BuiltInClauseType::PartialString);
-                    return Ok(QueryTerm::Clause(Cell::default(), ct, terms, false));
-                }
                 _ => {
                     let ct = indices.get_clause_type(name, terms.len(), fixity);
                     Ok(QueryTerm::Clause(Cell::default(), ct, terms, false))
@@ -1190,7 +1186,6 @@ impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
             &result,
             &mut indices.term_stream.wam.indices.in_situ_code_dir,
             &mut indices.term_stream.wam.indices.in_situ_module_dir,
-            indices.term_stream.flags,
             &self.non_counted_bt_preds,
         )?;
 

@@ -78,7 +78,6 @@ pub enum InlinedClauseType {
     IsString(RegType),
     IsFloat(RegType),
     IsNonVar(RegType),
-    IsPartialString(RegType),
     IsVar(RegType),
 }
 
@@ -109,7 +108,6 @@ ref_thread_local! {
         m.insert(("string", 1), ClauseType::Inlined(InlinedClauseType::IsString(r1)));
         m.insert(("float", 1), ClauseType::Inlined(InlinedClauseType::IsFloat(r1)));
         m.insert(("nonvar", 1), ClauseType::Inlined(InlinedClauseType::IsNonVar(r1)));
-        m.insert(("is_partial_string", 1), ClauseType::Inlined(InlinedClauseType::IsPartialString(r1)));
         m.insert(("var", 1), ClauseType::Inlined(InlinedClauseType::IsVar(r1)));
         m.insert(("acyclic_term", 1), ClauseType::BuiltIn(BuiltInClauseType::AcyclicTerm));
         m.insert(("arg", 3), ClauseType::BuiltIn(BuiltInClauseType::Arg));
@@ -127,7 +125,6 @@ ref_thread_local! {
         m.insert(("keysort", 2), ClauseType::BuiltIn(BuiltInClauseType::KeySort));
         m.insert(("nl", 0), ClauseType::BuiltIn(BuiltInClauseType::Nl));
         m.insert(("\\==", 2), ClauseType::BuiltIn(BuiltInClauseType::NotEq));
-        m.insert(("partial_string", 2), ClauseType::BuiltIn(BuiltInClauseType::PartialString));
         m.insert(("read", 1), ClauseType::BuiltIn(BuiltInClauseType::Read));
         m.insert(("sort", 2), ClauseType::BuiltIn(BuiltInClauseType::Sort));
 
@@ -147,7 +144,6 @@ impl InlinedClauseType {
             &InlinedClauseType::IsString(..) => "string",
             &InlinedClauseType::IsFloat(..) => "float",
             &InlinedClauseType::IsNonVar(..) => "nonvar",
-            &InlinedClauseType::IsPartialString(..) => "is_partial_string",
             &InlinedClauseType::IsVar(..) => "var",
         }
     }
@@ -545,7 +541,6 @@ pub enum BuiltInClauseType {
     KeySort,
     Nl,
     NotEq,
-    PartialString,
     Read,
     Sort,
 }
@@ -577,7 +572,6 @@ impl BuiltInClauseType {
             &BuiltInClauseType::KeySort => clause_name!("keysort"),
             &BuiltInClauseType::Nl => clause_name!("nl"),
             &BuiltInClauseType::NotEq => clause_name!("\\=="),
-            &BuiltInClauseType::PartialString => clause_name!("partial_string"),
             &BuiltInClauseType::Read => clause_name!("read"),
             &BuiltInClauseType::Sort => clause_name!("sort"),
         }
@@ -598,7 +592,6 @@ impl BuiltInClauseType {
             &BuiltInClauseType::KeySort => 2,
             &BuiltInClauseType::NotEq => 2,
             &BuiltInClauseType::Nl => 0,
-            &BuiltInClauseType::PartialString => 1,
             &BuiltInClauseType::Read => 1,
             &BuiltInClauseType::Sort => 2,
         }

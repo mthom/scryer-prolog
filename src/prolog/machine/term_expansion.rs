@@ -209,10 +209,10 @@ impl<'a, R: Read> TermStream<'a, R> {
 
         self.wam
             .code_repo
-            .compile_hook(CompileTimeHook::TermExpansion, self.flags)?;
+            .compile_hook(CompileTimeHook::TermExpansion)?;
         self.wam
             .code_repo
-            .compile_hook(CompileTimeHook::GoalExpansion, self.flags)?;
+            .compile_hook(CompileTimeHook::GoalExpansion)?;
 
         Ok(ExpansionAdditionResult {
             term_expansion_additions,

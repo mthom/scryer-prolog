@@ -161,27 +161,27 @@ impl SubModuleUser for IndexStore {
     fn use_qualified_module(
         &mut self,
         code_repo: &mut CodeRepo,
-        flags: MachineFlags,
+        _: MachineFlags,
         submodule: &Module,
         exports: &Vec<ModuleExport>,
     ) -> Result<(), SessionError> {
         use_qualified_module(self, submodule, exports)?;
         submodule
-            .dump_expansions(code_repo, flags)
+            .dump_expansions(code_repo)
             .map_err(SessionError::from)
     }
 
     fn use_module(
         &mut self,
         code_repo: &mut CodeRepo,
-        flags: MachineFlags,
+        _: MachineFlags,
         submodule: &Module,
     ) -> Result<(), SessionError> {
         use_module(self, submodule)?;
 
         if !submodule.inserted_expansions {
             submodule
-                .dump_expansions(code_repo, flags)
+                .dump_expansions(code_repo)
                 .map_err(SessionError::from)
         } else {
             Ok(())
@@ -699,12 +699,10 @@ impl Machine {
         snapshot.b0 = self.machine_st.b0;
         snapshot.s = self.machine_st.s;
         snapshot.tr = self.machine_st.tr;
-        snapshot.pstr_tr = self.machine_st.pstr_tr;
         snapshot.num_of_args = self.machine_st.num_of_args;
 
         snapshot.fail = self.machine_st.fail;
         snapshot.trail = mem::replace(&mut self.machine_st.trail, vec![]);
-        snapshot.pstr_trail = mem::replace(&mut self.machine_st.pstr_trail, vec![]);
         snapshot.heap = self.machine_st.heap.take();
         snapshot.mode = self.machine_st.mode;
         snapshot.stack = self.machine_st.stack.take();
@@ -724,12 +722,10 @@ impl Machine {
         self.machine_st.b0 = snapshot.b0;
         self.machine_st.s = snapshot.s;
         self.machine_st.tr = snapshot.tr;
-        self.machine_st.pstr_tr = snapshot.pstr_tr;
         self.machine_st.num_of_args = snapshot.num_of_args;
 
         self.machine_st.fail = snapshot.fail;
         self.machine_st.trail = mem::replace(&mut snapshot.trail, vec![]);
-        self.machine_st.pstr_trail = mem::replace(&mut snapshot.pstr_trail, vec![]);
 
         self.inner_heap = self.machine_st.heap.take();
         self.inner_heap.truncate(0);

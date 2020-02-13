@@ -38,7 +38,6 @@ impl Module {
     pub fn dump_expansions(
         &self,
         code_repo: &mut CodeRepo,
-        flags: MachineFlags,
     ) -> Result<(), ParserError> {
         {
             let te = code_repo
@@ -64,8 +63,8 @@ impl Module {
             ge.1.extend(self.user_goal_expansions.1.iter().cloned());
         }
 
-        code_repo.compile_hook(CompileTimeHook::TermExpansion, flags)?;
-        code_repo.compile_hook(CompileTimeHook::GoalExpansion, flags)?;
+        code_repo.compile_hook(CompileTimeHook::TermExpansion)?;
+        code_repo.compile_hook(CompileTimeHook::GoalExpansion)?;
 
         Ok(())
     }

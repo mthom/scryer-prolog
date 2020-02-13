@@ -106,16 +106,6 @@ macro_rules! is_var {
     };
 }
 
-macro_rules! is_partial_string {
-    ($r:expr) => {
-        call_clause!(
-            ClauseType::Inlined(InlinedClauseType::IsPartialString($r)),
-            1,
-            0
-        )
-    };
-}
-
 macro_rules! call_clause {
     ($ct:expr, $arity:expr, $pvs:expr) => {
         Line::Control(ControlInstruction::CallClause(

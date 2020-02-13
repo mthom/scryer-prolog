@@ -1,10 +1,11 @@
 use prolog_parser::ast::*;
-use prolog_parser::string_list::*;
 
 use crate::prolog::forms::PredicateKey;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 use crate::prolog::rug::Integer;
+
+use std::rc::Rc;
 
 pub(crate) type MachineStub = Vec<HeapCellValue>;
 
@@ -392,7 +393,7 @@ pub(super) enum CycleSearchResult {
     NotList,
     PartialList(usize, usize), // the list length (up to max), and an offset into the heap.
     ProperList(usize),         // the list length.
-    String(usize, StringList), // the number of elements iterated, the string tail.
+    String(usize, usize, Rc<String>), // the number of bytes iterated, the offset, the string.
     UntouchedList(usize),      // the address of an uniterated Addr::Lis(address).
 }
 

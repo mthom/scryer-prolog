@@ -1,5 +1,4 @@
 use prolog_parser::ast::*;
-use prolog_parser::string_list::*;
 
 use crate::prolog::clause_types::*;
 use crate::prolog::forms::*;
@@ -250,8 +249,6 @@ pub struct MachineState {
     pub(crate) stack: Stack,
     pub(super) registers: Registers,
     pub(super) trail: Vec<TrailRef>,
-    pub(super) pstr_trail: Vec<(usize, StringList, usize)>, // b, String, trunc_pt
-    pub(super) pstr_tr: usize,
     pub(super) tr: usize,
     pub(super) hb: usize,
     pub(super) block: usize, // an offset into the OR stack.
@@ -265,72 +262,58 @@ pub struct MachineState {
 }
 
 impl MachineState {
-    pub(super) fn try_char_list(&self, addrs: Vec<Addr>) -> Result<String, MachineError> {
+    pub(super)
+    fn try_char_list(&self, addrs: Vec<Addr>) -> Result<String, MachineError> {
         let mut chars = String::new();
         let mut iter = addrs.iter();
 
         while let Some(addr) = iter.next() {
-            match addr {
-                &Addr::Con(Constant::String(ref s)) if self.flags.double_quotes.is_chars() => {
-                    chars += s.borrow().as_str();
+            match addr {                
+                &Addr::Con(Constant::String(n, ref s))
+                    if self.flags.double_quotes.is_chars() => {
+                        if s.len() < n {
+                            chars += &s[n ..];
+                        }
 
-                    if iter.next().is_some() {
-                        return Err(MachineError::type_error(ValidType::Character, addr.clone()));
+                        if iter.next().is_some() {
+                            return Err(MachineError::type_error(ValidType::Character, addr.clone()));
+                        }
+                    }                
+                &Addr::Con(Constant::Char(c)) => {
+                    chars.push(c);
+                }
+                &Addr::Con(Constant::Atom(ref name, _))
+                    if name.as_str().len() == 1 => {
+                        chars += name.as_str();
                     }
+                _ => {
+                    return Err(
+                        MachineError::type_error(ValidType::Character, addr.clone())
+                    );
                 }
-                &Addr::Con(Constant::Char(c)) => chars.push(c),
-                &Addr::Con(Constant::Atom(ref name, _)) if name.as_str().len() == 1 => {
-                    chars += name.as_str();
-                }
-                _ => return Err(MachineError::type_error(ValidType::Character, addr.clone())),
             }
         }
 
         Ok(chars)
     }
 
-    pub(super) fn try_code_list(&self, addrs: Vec<Addr>) -> Result<Vec<u8>, MachineError> {
-        let mut codes = vec![];
-        let mut iter = addrs.iter();
-
-        while let Some(addr) = iter.next() {
-            match addr {
-                &Addr::Con(Constant::String(ref s)) if self.flags.double_quotes.is_codes() => {
-                    codes.extend(s.borrow().chars().map(|c| c as u8));
-
-                    if iter.next().is_some() {
-                        return Err(MachineError::representation_error(RepFlag::CharacterCode));
-                    }
-                }
-                &Addr::Con(Constant::CharCode(c)) => codes.push(c),
-                &Addr::Con(Constant::Integer(ref n)) => {
-                    if let Some(c) = n.to_u8() {
-                        codes.push(c);
-                    } else {
-                        return Err(MachineError::representation_error(RepFlag::CharacterCode));
-                    }
-                }
-                _ => return Err(MachineError::representation_error(RepFlag::CharacterCode)),
-            }
-        }
-
-        Ok(codes)
-    }
-
-    pub(super) fn call_at_index(&mut self, arity: usize, p: LocalCodePtr) {
+    pub(super)
+    fn call_at_index(&mut self, arity: usize, p: LocalCodePtr) {
         self.cp.assign_if_local(self.p.clone() + 1);
         self.num_of_args = arity;
         self.b0 = self.b;
         self.p = CodePtr::Local(p);
     }
 
-    pub(super) fn execute_at_index(&mut self, arity: usize, p: LocalCodePtr) {
+    pub(super)
+    fn execute_at_index(&mut self, arity: usize, p: LocalCodePtr) {
         self.num_of_args = arity;
         self.b0 = self.b;
         self.p = CodePtr::Local(p);
     }
 
-    pub(super) fn module_lookup(
+    pub(super)
+    fn module_lookup(
         &mut self,
         indices: &IndexStore,
         key: PredicateKey,
@@ -379,7 +362,7 @@ impl MachineState {
                         self.call_at_index(arity, LocalCodePtr::InSituDirEntry(p));
                     }
 
-                    return Ok(());                    
+                    return Ok(());
                 }
                 _ => {}
             }
@@ -460,19 +443,12 @@ pub(crate) trait CallPolicy: Any {
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
-
-        let old_pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
-        let curr_pstr_tr = machine_st.pstr_tr;
-
-        machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
-        machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
-
-        machine_st.pstr_trail.truncate(machine_st.pstr_tr);
-
         machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
-        let attr_var_init_bindings_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
+        let attr_var_init_queue_b =
+            machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
+        let attr_var_init_bindings_b =
+            machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
 
         machine_st.attr_var_init.backtrack(
             attr_var_init_queue_b,
@@ -506,18 +482,12 @@ pub(crate) trait CallPolicy: Any {
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
-
-        let old_pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
-        let curr_pstr_tr = machine_st.pstr_tr;
-
-        machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
-        machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
-
-        machine_st.pstr_trail.truncate(machine_st.pstr_tr);
         machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
-        let attr_var_init_bindings_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
+        let attr_var_init_queue_b =
+            machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
+        let attr_var_init_bindings_b =
+            machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
 
         machine_st.attr_var_init.backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
 
@@ -546,18 +516,12 @@ pub(crate) trait CallPolicy: Any {
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
-
-        let old_pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
-        let curr_pstr_tr = machine_st.pstr_tr;
-
-        machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
-        machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
-
-        machine_st.pstr_trail.truncate(machine_st.pstr_tr);
         machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
-        let attr_var_init_bindings_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
+        let attr_var_init_queue_b =
+            machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
+        let attr_var_init_bindings_b =
+            machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
 
         machine_st.attr_var_init.backtrack(
             attr_var_init_queue_b,
@@ -591,20 +555,12 @@ pub(crate) trait CallPolicy: Any {
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
-
-        let old_pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
-        let curr_pstr_tr = machine_st.pstr_tr;
-
-        machine_st.unwind_pstr_trail(old_pstr_tr, curr_pstr_tr);
-        machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
-
-        machine_st.pstr_tr = machine_st.stack.index_or_frame(b).prelude.pstr_tr;
-        machine_st.pstr_trail.truncate(machine_st.pstr_tr);
-
         machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
-        let attr_var_init_bindings_b = machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
+        let attr_var_init_queue_b =
+            machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
+        let attr_var_init_bindings_b =
+            machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
 
         machine_st.attr_var_init.backtrack(
             attr_var_init_queue_b,
@@ -799,15 +755,6 @@ pub(crate) trait CallPolicy: Any {
                 } else {
                     false
                 };
-
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::PartialString => {
-                let s = machine_st.try_string_list(temp_v!(1))?;
-                let a2 = machine_st[temp_v!(2)].clone();
-
-                s.set_expandable(true);
-                machine_st.write_constant_to_var(a2, Constant::String(s));
 
                 return_from_clause!(machine_st.last_call, machine_st)
             }
@@ -1087,7 +1034,6 @@ fn cut_body(machine_st: &mut MachineState, addr: Addr) -> bool {
             if b > b0 {
                 machine_st.b = b0;
                 machine_st.tidy_trail();
-                machine_st.tidy_pstr_trail();
             }
         }
         _ => {
@@ -1174,7 +1120,6 @@ impl CutPolicy for SCCCutPolicy {
                 if b > b0 {
                     machine_st.b = b0;
                     machine_st.tidy_trail();
-                    machine_st.tidy_pstr_trail();
                 }
             }
             _ => {

@@ -1,5 +1,4 @@
 use prolog_parser::ast::*;
-use prolog_parser::string_list::*;
 
 use crate::prolog::clause_types::*;
 use crate::prolog::forms::*;
@@ -12,7 +11,7 @@ use crate::prolog::rug::Integer;
 use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
-use std::iter::once;
+use std::iter::{FromIterator, once};
 use std::ops::{Range, RangeFrom};
 use std::rc::Rc;
 
@@ -789,12 +788,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
                 }
             }
+            Constant::CharCode(c) => {
+                self.append_str(&format!("{}", c as u32));
+            }
             Constant::Char(c) if non_quoted_token(once(c)) => {
                 let c = char_to_string(c);
 
                 push_space_if_amb!(self, &c, {
                     self.append_str(c.as_str());
-                });
+                });                
             }
             Constant::Char(c) => {
                 let mut result = String::new();
@@ -806,51 +808,38 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 } else {
                     result += &char_to_string(c);
                 }
-
+                
                 push_space_if_amb!(self, &result, {
                     self.append_str(result.as_str());
-                });
+                });                
             }
-            Constant::CharCode(c) => self.append_str(&format!("{}", c)),
             Constant::CutPoint(b) => self.append_str(&format!("{}", b)),
             Constant::EmptyList => self.append_str("[]"),
             Constant::Integer(n) => self.print_number(Number::Integer(n), op),
             Constant::Float(n) => self.print_number(Number::Float(n), op),
             Constant::Rational(n) => self.print_number(Number::Rational(n), op),
-            Constant::String(s) => self.print_string(s),
+            Constant::String(n, s) => self.print_string(n, s),
             Constant::Usize(i) => self.append_str(&format!("u{}", i)),
         }
     }
 
-    fn print_string(&mut self, s: StringList) {
-        match self.machine_st.machine_flags().double_quotes {
-            DoubleQuotes::Chars | DoubleQuotes::Codes => {
-                if !s.is_empty() {
-                    if self.ignore_ops {
-                        self.format_struct(2, clause_name!("."));
-                    } else {
-                        self.push_list();
-                    }
-                } else if s.is_expandable() {
-                    if !self.at_cdr("|_") {
-                        self.push_char('_');
-                    }
-                } else if !self.at_cdr("") {
-                    self.append_str("[]");
+    fn print_string(&mut self, offset: usize, s: Rc<String>) {
+        if !self.machine_st.machine_flags().double_quotes.is_atom() {
+            if !s[offset ..].is_empty() {
+                if self.ignore_ops {
+                    self.format_struct(2, clause_name!("."));
+                } else {
+                    self.push_list();
                 }
+            } else if !self.at_cdr("") {
+                self.append_str("[]");
             }
-            DoubleQuotes::Atom => {
-                let borrowed_str = s.borrow();
-                let mut atom = String::new();
+        } else {
+            let atom = String::from_iter(s[offset ..].chars().map(char_to_string));
 
-                for c in borrowed_str[s.cursor()..].chars() {
-                    atom += &char_to_string(c);
-                }
-
-                self.push_char('"');
-                self.append_str(&atom);
-                self.push_char('"');
-            }
+            self.push_char('"');
+            self.append_str(&atom);
+            self.push_char('"');        
         }
     }
 

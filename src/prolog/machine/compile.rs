@@ -196,11 +196,10 @@ pub fn compile_appendix(
     code: &mut Code,
     queue: &VecDeque<TopLevel>,
     non_counted_bt: bool,
-    flags: MachineFlags,
 ) -> Result<(), ParserError> {
     for tl in queue.iter() {
         set_first_index(code);
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt, flags);
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt);
         let decl_code = compile_relation(&mut cg, tl)?;
         code.extend(decl_code.into_iter());
     }
@@ -230,7 +229,6 @@ impl CodeRepo {
     pub fn compile_hook(
         &mut self,
         hook: CompileTimeHook,
-        flags: MachineFlags,
     ) -> Result<(), ParserError> {
         let key = (hook.name(), hook.arity());
 
@@ -238,10 +236,10 @@ impl CodeRepo {
             Some(ref mut preds) => {
                 append_trivial_goal(&key.0, &mut preds.0);
 
-                let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
+                let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
                 let mut code = cg.compile_predicate(&(preds.0).0)?;
 
-                compile_appendix(&mut code, &preds.1, false, flags)?;
+                compile_appendix(&mut code, &preds.1, false)?;
 
                 (preds.0).0.pop();
 
@@ -260,7 +258,7 @@ impl CodeRepo {
                         let mut preds = Predicate::new();
                         append_trivial_goal(&key.0, &mut preds);
 
-                        let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
+                        let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
                         self.term_expanders = cg.compile_predicate(&preds.0)?;
                     }
                 }
@@ -269,7 +267,7 @@ impl CodeRepo {
                         let mut preds = Predicate::new();
                         append_trivial_goal(&key.0, &mut preds);
 
-                        let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
+                        let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
                         self.goal_expanders = cg.compile_predicate(&preds.0)?;
                     }
                 }
@@ -281,13 +279,12 @@ impl CodeRepo {
 fn compile_query(
     terms: Vec<QueryTerm>,
     queue: VecDeque<TopLevel>,
-    flags: MachineFlags,
 ) -> Result<(Code, AllocVarDict), ParserError> {
     // count backtracking inferences.
-    let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
+    let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
     let mut code = cg.compile_query(&terms)?;
 
-    compile_appendix(&mut code, &queue, false, flags)?;
+    compile_appendix(&mut code, &queue, false)?;
     Ok((code, cg.take_vars()))
 }
 
@@ -345,7 +342,7 @@ pub(super) fn compile_into_module<R: Read>(
                 wam.indices.insert_module(module);
             }
 
-            compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo);
+            compiler.drop_expansions(&mut wam.code_repo);
             EvalSession::from(e)
         }
     }
@@ -363,10 +360,8 @@ fn compile_into_module_impl<R: Read>(
     let module_name = module.module_decl.name.clone();
     compiler.module = Some(module);
 
-    let flags = wam.machine_flags();
-
-    wam.code_repo.compile_hook(CompileTimeHook::TermExpansion, flags)?;
-    wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion, flags)?;
+    wam.code_repo.compile_hook(CompileTimeHook::TermExpansion)?;
+    wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion)?;
 
     let mut results = compiler.gather_items(wam, src, &mut indices)?;
 
@@ -400,7 +395,7 @@ fn compile_into_module_impl<R: Read>(
 
     clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
 
-    Ok(compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo))
+    Ok(compiler.drop_expansions(&mut wam.code_repo))
 }
 
 pub struct GatherResult {
@@ -462,14 +457,14 @@ impl ClauseCodeGenerator {
             );
 
             let p = self.code.len() + wam.code_repo.code.len() + self.len_offset;
-            let mut cg = CodeGenerator::<DebrayAllocator>::new(false, wam.machine_flags());
+            let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
 
             let mut decl_code = compile_relation(
                 &mut cg,
                 &TopLevel::Predicate(predicate),
             )?;
 
-            compile_appendix(&mut decl_code, &VecDeque::new(), false, wam.machine_flags())?;
+            compile_appendix(&mut decl_code, &VecDeque::new(), false)?;
 
             self.pi_to_loc.insert((name.clone(), *arity), p);
             self.code.extend(decl_code.into_iter());
@@ -735,12 +730,11 @@ impl ListingCompiler {
 
     fn generate_init_goal_code(
 	&mut self,
-	flags: MachineFlags
     ) -> Result<Code, SessionError> {
 	let query_terms = mem::replace(&mut self.initialization_goals.0, vec![]);
 	let queue = mem::replace(&mut self.initialization_goals.1, VecDeque::new());
 
-	compile_query(query_terms, queue, flags)
+	compile_query(query_terms, queue)
 	    .map(|(code, _)| code)
 	    .map_err(SessionError::from)
     }
@@ -766,13 +760,12 @@ impl ListingCompiler {
                 self.localize_self_calls(key, in_situ_code, *in_situ_p, p + *in_situ_p);
             }
             None => {
-                let flags = wam.machine_flags();
                 let (decl, queue) = decl;
 
-                let mut cg = CodeGenerator::<DebrayAllocator>::new(false, flags);
+                let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
                 let mut decl_code = cg.compile_predicate(&decl.0)?;
 
-                compile_appendix(&mut decl_code, &queue, false, flags)?;
+                compile_appendix(&mut decl_code, &queue, false)?;
 
                 let in_situ_p = in_situ_code.len();
 
@@ -934,7 +927,7 @@ impl ListingCompiler {
 
                 let result = wam
                     .code_repo
-                    .compile_hook(hook, flags)
+                    .compile_hook(hook)
                     .map_err(SessionError::from);
 
                 wam.code_repo.truncate_terms(key, len, queue_len);
@@ -1170,15 +1163,15 @@ impl ListingCompiler {
         })
     }
 
-    fn drop_expansions(&self, flags: MachineFlags, code_repo: &mut CodeRepo) {
+    fn drop_expansions(&self, code_repo: &mut CodeRepo) {
         let (te_len, te_queue_len) = self.orig_term_expansion_lens;
         let (ge_len, ge_queue_len) = self.orig_goal_expansion_lens;
 
         code_repo.truncate_terms((clause_name!("term_expansion"), 2), te_len, te_queue_len);
         code_repo.truncate_terms((clause_name!("goal_expansion"), 2), ge_len, ge_queue_len);
 
-        discard_result!(code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags));
-        discard_result!(code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags));
+        discard_result!(code_repo.compile_hook(CompileTimeHook::UserGoalExpansion));
+        discard_result!(code_repo.compile_hook(CompileTimeHook::UserTermExpansion));
     }
 
     fn print_error(&self, e: &SessionError) {
@@ -1244,10 +1237,8 @@ fn compile_work_impl(
         }
     }
 
-    let flags = wam.machine_flags();
-
-    wam.code_repo.compile_hook(CompileTimeHook::UserTermExpansion, flags)?;
-    wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion, flags)?;
+    wam.code_repo.compile_hook(CompileTimeHook::UserTermExpansion)?;
+    wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion)?;
 
     if let Some(mut module) = compiler.module.take() {
         if module.is_impromptu_module {
@@ -1280,7 +1271,7 @@ fn compile_work_impl(
 
         add_toplevel(wam, results.toplevel_indices, top_level_term_dir);
         wam.code_repo.code.extend(code.into_iter());
-        
+
         clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
     } else {
         add_non_module_code(
@@ -1292,9 +1283,7 @@ fn compile_work_impl(
         )?;
     }
 
-    let init_goal_code = compiler.generate_init_goal_code(
-	wam.machine_flags()
-    )?;
+    let init_goal_code = compiler.generate_init_goal_code()?;
 
     if init_goal_code.len() > 0 {
 	if !wam.run_init_code(init_goal_code) {
@@ -1370,7 +1359,7 @@ pub fn compile_listing<R: Read>(
 
     match compile_work(&mut compiler, wam, src, indices) {
         EvalSession::Error(e) => {
-            compiler.drop_expansions(wam.machine_flags(), &mut wam.code_repo);
+            compiler.drop_expansions(&mut wam.code_repo);
             compiler.print_error(&e);
 
             EvalSession::Error(e)
