@@ -4,32 +4,32 @@ use std::alloc;
 use std::mem;
 use std::ptr;
 
-pub(crate) trait RawVecTraits {
+pub(crate) trait RawBlockTraits {
     fn init_size() -> usize;
     fn align() -> usize;
     fn base_offset(base: *const u8) -> *const u8;
 }
 
-pub(crate) struct RawVec<T: RawVecTraits> {
+pub(crate) struct RawBlock<T: RawBlockTraits> {
     pub(crate) size: usize,
     pub(crate) base: *const u8,
     pub(crate) top: *const u8,
     _marker: PhantomData<T>,
 }
 
-impl<T: RawVecTraits> RawVec<T> {
+impl<T: RawBlockTraits> RawBlock<T> {
     pub(crate)
     fn new() -> Self {
-        let mut vec = RawVec { size: 0,
-                               base: ptr::null(),
-                               top: ptr::null(),
-                               _marker: PhantomData };
+        let mut block = RawBlock { size: 0,
+                                   base: ptr::null(),
+                                   top: ptr::null(),
+                                   _marker: PhantomData };
 
         unsafe {
-            vec.grow();
+            block.grow();
         }
 
-        vec
+        block
     }
 
     pub(crate)
@@ -51,8 +51,8 @@ impl<T: RawVecTraits> RawVec<T> {
         }
     }
 
-    fn empty_vec() -> Self {
-        RawVec { size: 0,
+    fn empty_block() -> Self {
+        RawBlock { size: 0,
                  base: ptr::null(),
                  top: ptr::null(),
                  _marker: PhantomData }
@@ -61,7 +61,7 @@ impl<T: RawVecTraits> RawVec<T> {
     #[inline]
     pub(crate)
     fn take(&mut self) -> Self {
-        mem::replace(self, Self::empty_vec())
+        mem::replace(self, Self::empty_block())
     }
 
 

@@ -1,5 +1,5 @@
 use crate::prolog::machine::machine_indices::*;
-use crate::prolog::machine::raw_vec::*;
+use crate::prolog::machine::raw_block::*;
 
 use core::marker::PhantomData;
 
@@ -9,7 +9,7 @@ use std::ptr;
 
 struct StackTraits {}
 
-impl RawVecTraits for StackTraits {
+impl RawBlockTraits for StackTraits {
     #[inline]
     fn init_size() -> usize {
         10 * 1024 * 1024
@@ -36,7 +36,7 @@ const fn prelude_size<Prelude>() -> usize {
 }
 
 pub struct Stack {
-    buf: RawVec<StackTraits>,
+    buf: RawBlock<StackTraits>,
     _marker: PhantomData<Addr>,
 }
 
@@ -194,7 +194,7 @@ impl OrFrame {
 
 impl Stack {
     pub fn new() -> Self {
-        Stack { buf: RawVec::new(), _marker: PhantomData }
+        Stack { buf: RawBlock::new(), _marker: PhantomData }
     }
 
     pub fn allocate_and_frame(&mut self, num_cells: usize) -> usize {
@@ -215,7 +215,7 @@ impl Stack {
 
             let e = self.buf.top as usize - self.buf.base as usize;
             self.buf.top = new_top;
-            
+
             e
         }
     }

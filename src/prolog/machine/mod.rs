@@ -19,7 +19,7 @@ pub mod machine_errors;
 pub mod machine_indices;
 pub(super) mod machine_state;
 pub mod modules;
-mod raw_vec;
+mod raw_block;
 mod stack;
 pub(super) mod term_expansion;
 pub mod toplevel;
