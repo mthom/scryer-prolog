@@ -141,6 +141,7 @@ pub struct OrFrame {
 impl Index<usize> for OrFrame {
     type Output = Addr;
 
+    #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         let prelude_offset = prelude_size::<OrFramePrelude>();
         let index_offset = index * mem::size_of::<Addr>();
@@ -155,6 +156,7 @@ impl Index<usize> for OrFrame {
 }
 
 impl IndexMut<usize> for OrFrame {
+    #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let prelude_offset = prelude_size::<OrFramePrelude>();
         let index_offset = index * mem::size_of::<Addr>();

@@ -134,7 +134,7 @@ impl Machine {
         self.machine_st = machine_st;
 
         if let EvalSession::Error(err) = result {
-            let h = self.machine_st.heap.h;
+            let h = self.machine_st.heap.h();
             let stub = MachineError::functor_stub(src, 1);
             let err = MachineError::session_error(h, err);
             let err = self.machine_st.error_form(err, stub);

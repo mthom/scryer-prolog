@@ -5,9 +5,13 @@ use std::mem;
 use std::ptr;
 
 pub(crate) trait RawBlockTraits {
-    fn init_size() -> usize;
+    fn init_size() -> usize;    
     fn align() -> usize;
-    fn base_offset(base: *const u8) -> *const u8;
+
+    #[inline]
+    fn base_offset(base: *const u8) -> *const u8 {
+        base
+    }
 }
 
 pub(crate) struct RawBlock<T: RawBlockTraits> {

@@ -485,7 +485,7 @@ impl MachineState {
         let location = err.location;
         let err_len = err.len();
 
-        let h = self.heap.h;
+        let h = self.heap.h();
         let mut stub = vec![
             HeapCellValue::NamedStr(2, clause_name!("error"), None),
             HeapCellValue::Addr(Addr::HeapCell(h + 3)),
@@ -512,7 +512,7 @@ impl MachineState {
     }
 
     pub(super) fn throw_exception(&mut self, err: MachineStub) {
-        let h = self.heap.h;
+        let h = self.heap.h();
 
         self.ball.boundary = 0;
         self.ball.stub.truncate(0);

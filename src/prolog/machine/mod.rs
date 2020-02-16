@@ -5,7 +5,7 @@ use crate::prolog::clause_types::*;
 use crate::prolog::forms::*;
 use crate::prolog::heap_print::*;
 use crate::prolog::instructions::*;
-use crate::prolog::machine::heap::Heap;
+use crate::prolog::machine::heap::*;
 use crate::prolog::read::*;
 
 mod attributed_variables;
@@ -335,7 +335,7 @@ impl Machine {
     {
         let mut wam = Machine {
             machine_st: MachineState::new(),
-            inner_heap: Heap::with_capacity(256 * 256),
+            inner_heap: Heap::new(),
             policies: MachinePolicies::new(),
             indices: IndexStore::new(),
             code_repo: CodeRepo::new(),
@@ -491,7 +491,7 @@ impl Machine {
     }
 
     fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
-        let h = self.machine_st.heap.h;
+        let h = self.machine_st.heap.h();
 
         let err = MachineError::session_error(h, err);
         let stub = MachineError::functor_stub(key.0, key.1);
@@ -692,7 +692,7 @@ impl Machine {
     }
 
     fn sink_to_snapshot(&mut self) -> MachineState {
-        let mut snapshot = MachineState::with_capacity(0);
+        let mut snapshot = MachineState::with_small_heap();
 
         snapshot.hb = self.machine_st.hb;
         snapshot.e = self.machine_st.e;
@@ -711,7 +711,7 @@ impl Machine {
         snapshot.block = self.machine_st.block;
 
         snapshot.ball = self.machine_st.ball.take();
-        snapshot.lifted_heap = mem::replace(&mut self.machine_st.lifted_heap, vec![]);
+        snapshot.lifted_heap = self.machine_st.lifted_heap.take();
 
         snapshot
     }
@@ -738,7 +738,7 @@ impl Machine {
         self.machine_st.block = snapshot.block;
 
         self.machine_st.ball = snapshot.ball.take();
-        self.machine_st.lifted_heap = mem::replace(&mut snapshot.lifted_heap, vec![]);
+        self.machine_st.lifted_heap = snapshot.lifted_heap.take();
     }
 
     pub(super) fn run_query(&mut self) {

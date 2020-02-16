@@ -369,7 +369,7 @@ impl MachineState {
         hook: CompileTimeHook,
     ) -> Option<String> {
         let term_write_result = write_term_to_heap(term, self);
-        let h = self.heap.h;
+        let h = self.heap.h();
 
         self[temp_v!(1)] = Addr::HeapCell(term_write_result.heap_loc);
         self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));

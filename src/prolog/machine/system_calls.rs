@@ -283,7 +283,7 @@ impl MachineState {
                     let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
                     let var_atom = Constant::Atom(var_atom, None);
 
-                    let h = self.heap.h;
+                    let h = self.heap.h();
                     let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
 
                     self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
@@ -307,7 +307,7 @@ impl MachineState {
                 // reset the input stream after an input failure.
                 *current_input_stream = readline::input_stream();
 
-                let h = self.heap.h;
+                let h = self.heap.h();
                 let syntax_error = MachineError::syntax_error(h, err);
                 let stub = MachineError::functor_stub(clause_name!("read_term"), 2);
 
@@ -328,9 +328,13 @@ impl MachineState {
     }
 
     fn copy_findall_solution(&mut self, lh_offset: usize, copy_target: Addr) -> usize {
-        let threshold = self.lifted_heap.len() - lh_offset;
-        let mut copy_ball_term =
-            CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut self.lifted_heap);
+        let threshold = self.lifted_heap.h() - lh_offset;
+        
+        let mut copy_ball_term = CopyBallTerm::new(
+            &mut self.stack,
+            &mut self.heap,
+            &mut self.lifted_heap,
+        );
 
         copy_ball_term.push(HeapCellValue::Addr(Addr::Lis(threshold + 1)));
         copy_ball_term.push(HeapCellValue::Addr(Addr::HeapCell(threshold + 3)));
@@ -356,10 +360,10 @@ impl MachineState {
     {
         match self.store(self.deref(self[temp_v!(1)].clone())) {
             Addr::Con(Constant::Usize(lh_offset)) => {
-                if lh_offset >= self.lifted_heap.len() {
+                if lh_offset >= self.lifted_heap.h() {
                     self.lifted_heap.truncate(lh_offset);
                 } else {
-                    let threshold = self.lifted_heap.len() - lh_offset;
+                    let threshold = self.lifted_heap.h() - lh_offset;
                     self.lifted_heap
                         .push(HeapCellValue::Addr(addr_constr(threshold)));
                 }
@@ -466,7 +470,7 @@ impl MachineState {
                 });
                 let err = ParserError::UnexpectedChar(c, line_num, col_num);
 
-                let h = self.heap.h;
+                let h = self.heap.h();
                 let err = MachineError::syntax_error(h, err);
 
                 return Err(self.error_form(err, stub));
@@ -480,7 +484,7 @@ impl MachineState {
 
         match parser.read_term(composite_op!(&indices.op_dir)) {
             Err(err) => {
-                let h = self.heap.h;
+                let h = self.heap.h();
                 let err = MachineError::syntax_error(h, err);
 
                 return Err(self.error_form(err, stub));
@@ -500,7 +504,7 @@ impl MachineState {
             _ => {
                 let err = ParserError::ParseBigInt(0, 0);
 
-                let h = self.heap.h;
+                let h = self.heap.h();
                 let err = MachineError::syntax_error(h, err);
 
                 return Err(self.error_form(err, stub));
@@ -893,7 +897,7 @@ impl MachineState {
             }
             &SystemClauseType::LiftedHeapLength => {
                 let a1 = self[temp_v!(1)].clone();
-                let lh_len = Addr::Con(Constant::Usize(self.lifted_heap.len()));
+                let lh_len = Addr::Con(Constant::Usize(self.lifted_heap.h()));
 
                 self.unify(a1, lh_len);
             }
@@ -960,7 +964,7 @@ impl MachineState {
 
                 match indices.global_variables.get_mut(&key) {
                     Some((ref mut ball, None)) => {
-                        let h = self.heap.h;
+                        let h = self.heap.h();
                         let stub = ball.copy_and_align(h);
 
                         self.heap.extend(stub.into_iter());
@@ -984,7 +988,7 @@ impl MachineState {
 
                 match indices.global_variables.get_mut(&key) {
                     Some((ref mut ball, ref mut offset @ None)) => {
-                        let h = self.heap.h;
+                        let h = self.heap.h();
                         let stub = ball.copy_and_align(h);
 
                         self.heap.extend(stub.into_iter());
@@ -1108,15 +1112,15 @@ impl MachineState {
                         let copy_target = self[temp_v!(2)].clone();
 
                         let old_threshold = self.copy_findall_solution(lh_offset, copy_target);
-                        let new_threshold = self.lifted_heap.len() - lh_offset;
+                        let new_threshold = self.lifted_heap.h() - lh_offset;
 
                         self.lifted_heap[old_threshold] =
                             HeapCellValue::Addr(Addr::HeapCell(new_threshold));
 
-                        for index in old_threshold + 1..self.lifted_heap.len() {
-                            match &mut self.lifted_heap[index] {
+                        for addr in self.lifted_heap.iter_mut_from(old_threshold + 1) {
+                            match addr {
                                 &mut HeapCellValue::Addr(ref mut addr) => {
-                                    *addr -= self.heap.len() + lh_offset
+                                    *addr -= self.heap.h() + lh_offset
                                 }
                                 _ => {}
                             }
@@ -1433,7 +1437,7 @@ impl MachineState {
                     Ok(()) => {}
                     Err(e) => {
                         // 8.14.3.3 l)
-                        let e = MachineError::session_error(self.heap.h, e);
+                        let e = MachineError::session_error(self.heap.h(), e);
                         let stub = MachineError::functor_stub(clause_name!("op"), 3);
                         let permission_error = self.error_form(e, stub);
 
@@ -1464,7 +1468,7 @@ impl MachineState {
                     Addr::AttrVar(h) => h + 1,
                     attr_var @ Addr::HeapCell(_) | attr_var @ Addr::StackCell(..) => {
                         // create an AttrVar in the heap.
-                        let h = self.heap.h;
+                        let h = self.heap.h();
 
                         self.heap.push(HeapCellValue::Addr(Addr::AttrVar(h)));
                         self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h + 1)));
@@ -1545,7 +1549,7 @@ impl MachineState {
                     addrs.push(self.stack.index_and_frame(e)[index].clone());
                 }
 
-                let chunk = Addr::HeapCell(self.heap.h);
+                let chunk = Addr::HeapCell(self.heap.h());
 
                 self.heap.push(HeapCellValue::NamedStr(
                     1 + num_cells,
@@ -1563,27 +1567,34 @@ impl MachineState {
 
                 match self.store(self.deref(lh_offset)) {
                     Addr::Con(Constant::Usize(lh_offset)) => {
-                        if lh_offset >= self.lifted_heap.len() {
+                        if lh_offset >= self.lifted_heap.h() {
                             let solutions = self[temp_v!(2)].clone();
                             let diff = self[temp_v!(3)].clone();
 
                             self.unify(solutions, Addr::Con(Constant::EmptyList));
                             self.unify(diff, Addr::Con(Constant::EmptyList));
                         } else {
-                            let h = self.heap.h;
+                            let h = self.heap.h();
+                            let mut last_index = h;
 
-                            for index in lh_offset..self.lifted_heap.len() {
-                                match self.lifted_heap[index].clone() {
+                            for value in self.lifted_heap.iter_from(lh_offset) {
+                                last_index = self.heap.h();
+                                
+                                match value.clone() {
                                     HeapCellValue::Addr(addr) => {
-                                        self.heap.push(HeapCellValue::Addr(addr + h))
+                                        self.heap.push(HeapCellValue::Addr(addr + h));
                                     }
-                                    value => self.heap.push(value),
+                                    value => {
+                                        self.heap.push(value);
+                                    }
                                 }
                             }
 
-                            if let Some(HeapCellValue::Addr(addr)) = self.heap.last().cloned() {
-                                let diff = self[temp_v!(3)].clone();
-                                self.unify(diff, addr);
+                            if last_index < self.heap.h() {
+                                if let HeapCellValue::Addr(addr) = self.heap[last_index].clone() {
+                                    let diff = self[temp_v!(3)].clone();
+                                    self.unify(diff, addr);
+                                }
                             }
 
                             self.lifted_heap.truncate(lh_offset);
@@ -1600,18 +1611,20 @@ impl MachineState {
 
                 match self.store(self.deref(lh_offset)) {
                     Addr::Con(Constant::Usize(lh_offset)) => {
-                        if lh_offset >= self.lifted_heap.len() {
+                        if lh_offset >= self.lifted_heap.h() {
                             let solutions = self[temp_v!(2)].clone();
                             self.unify(solutions, Addr::Con(Constant::EmptyList));
                         } else {
-                            let h = self.heap.h;
+                            let h = self.heap.h();
 
-                            for index in lh_offset..self.lifted_heap.len() {
-                                match self.lifted_heap[index].clone() {
+                            for addr in self.lifted_heap.iter_from(lh_offset).cloned() {
+                                match addr {
                                     HeapCellValue::Addr(addr) => {
                                         self.heap.push(HeapCellValue::Addr(addr + h))
                                     }
-                                    value => self.heap.push(value),
+                                    value => {
+                                        self.heap.push(value);
+                                    }
                                 }
                             }
 
@@ -1825,7 +1838,7 @@ impl MachineState {
 
                 let value = self[temp_v!(2)].clone();
                 let mut ball = Ball::new();
-                let h = self.heap.h;
+                let h = self.heap.h();
 
                 ball.boundary = h;
                 copy_term(
@@ -2004,11 +2017,11 @@ impl MachineState {
             &SystemClauseType::Fail => self.fail = true,
             &SystemClauseType::GetBall => {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));
-                let h = self.heap.h;
+                let h = self.heap.h();
 
-                if self.ball.stub.len() > 0 {
+                if self.ball.stub.h() > 0 {
                     let stub = self.ball.copy_and_align(h);
-                    self.heap.append(stub);
+                    self.heap.extend(stub.into_iter());
                 } else {
                     self.fail = true;
                     return Ok(());
@@ -2168,7 +2181,7 @@ impl MachineState {
             &SystemClauseType::ResetContinuationMarker => {
                 self[temp_v!(3)] = Addr::Con(Constant::Atom(clause_name!("none"), None));
 
-                let h = self.heap.h;
+                let h = self.heap.h();
                 self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
 
                 self[temp_v!(4)] = Addr::HeapCell(h);
@@ -2215,7 +2228,7 @@ impl MachineState {
                 let value = self[temp_v!(2)].clone();
                 let mut ball = Ball::new();
 
-                ball.boundary = self.heap.h;
+                ball.boundary = self.heap.h();
                 copy_term(
                     CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut ball.stub),
                     value,
@@ -2234,7 +2247,7 @@ impl MachineState {
 
                 let value = self[temp_v!(2)].clone();
                 let mut ball = Ball::new();
-                let h = self.heap.h;
+                let h = self.heap.h();
 
                 ball.boundary = h;
                 copy_term(
@@ -2324,7 +2337,7 @@ impl MachineState {
                         } else {
                             let arity = arity.to_usize().unwrap();
                             let stub = MachineError::functor_stub(name.clone(), arity);
-                            let h = self.heap.h;
+                            let h = self.heap.h();
 
                             let err = MachineError::existence_error(
                                 h,
@@ -2339,7 +2352,7 @@ impl MachineState {
                     None => {
                         let arity = arity.to_usize().unwrap();
                         let stub = MachineError::functor_stub(name.clone(), arity);
-                        let h = self.heap.h;
+                        let h = self.heap.h();
 
                         let err = MachineError::existence_error(
                             h,
@@ -2352,7 +2365,7 @@ impl MachineState {
                     }
                 };
 
-                let mut h = self.heap.h;
+                let mut h = self.heap.h();
                 let mut functors = vec![];
 
                 walk_code(

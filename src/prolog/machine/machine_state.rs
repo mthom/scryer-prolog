@@ -20,15 +20,15 @@ use std::mem;
 use std::ops::{Index, IndexMut};
 
 pub struct Ball {
-    pub(super) boundary: usize,   // ball.0
-    pub(super) stub: MachineStub, // ball.1
+    pub(super) boundary: usize,
+    pub(super) stub: Heap,
 }
 
 impl Ball {
     pub(super) fn new() -> Self {
         Ball {
             boundary: 0,
-            stub: MachineStub::new(),
+            stub: Heap::new(),
         }
     }
 
@@ -43,20 +43,18 @@ impl Ball {
 
         Ball {
             boundary,
-            stub: mem::replace(&mut self.stub, vec![]),
+            stub: self.stub.take(),
         }
     }
 
-    pub(super) fn copy_and_align(&self, h: usize) -> MachineStub {
+    pub(super) fn copy_and_align(&self, h: usize) -> Heap {
         let diff = self.boundary as i64 - h as i64;
-        let mut stub = vec![];
+        let mut stub = Heap::new();
 
-        for index in 0..self.stub.len() {
-            let heap_value = self.stub[index].clone();
-
+        for heap_value in self.stub.iter_from(0).cloned() {
             stub.push(match heap_value {
                 HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
-                _ => heap_value,
+                heap_value => heap_value,
             });
         }
 
@@ -91,7 +89,7 @@ impl<'a> IndexMut<usize> for CopyTerm<'a> {
 // the ordinary, heap term copier, used by duplicate_term.
 impl<'a> CopierTarget for CopyTerm<'a> {
     fn threshold(&self) -> usize {
-        self.state.heap.h
+        self.state.heap.h()
     }
 
     fn push(&mut self, hcv: HeapCellValue) {
@@ -115,16 +113,17 @@ pub(super) struct CopyBallTerm<'a> {
     stack: &'a mut Stack,
     heap: &'a mut Heap,
     heap_boundary: usize,
-    stub: &'a mut MachineStub,
+    stub: &'a mut Heap,
 }
 
 impl<'a> CopyBallTerm<'a> {
     pub(super) fn new(
         stack: &'a mut Stack,
         heap: &'a mut Heap,
-        stub: &'a mut MachineStub,
+        stub: &'a mut Heap,
     ) -> Self {
-        let hb = heap.len();
+        let hb = heap.h();
+
         CopyBallTerm {
             stack,
             heap,
@@ -161,7 +160,7 @@ impl<'a> IndexMut<usize> for CopyBallTerm<'a> {
 // the ordinary, heap term copier, used by duplicate_term.
 impl<'a> CopierTarget for CopyBallTerm<'a> {
     fn threshold(&self) -> usize {
-        self.heap_boundary + self.stub.len()
+        self.heap_boundary + self.stub.h()
     }
 
     fn push(&mut self, value: HeapCellValue) {
@@ -253,7 +252,7 @@ pub struct MachineState {
     pub(super) hb: usize,
     pub(super) block: usize, // an offset into the OR stack.
     pub(super) ball: Ball,
-    pub(super) lifted_heap: Vec<HeapCellValue>,
+    pub(super) lifted_heap: Heap,
     pub(super) interms: Vec<Number>, // intermediate numbers.
     pub(super) last_call: bool,
     pub(crate) heap_locs: HeapVarDict,
@@ -268,7 +267,7 @@ impl MachineState {
         let mut iter = addrs.iter();
 
         while let Some(addr) = iter.next() {
-            match addr {                
+            match addr {
                 &Addr::Con(Constant::String(n, ref s))
                     if self.flags.double_quotes.is_chars() => {
                         if s.len() < n {
@@ -278,7 +277,7 @@ impl MachineState {
                         if iter.next().is_some() {
                             return Err(MachineError::type_error(ValidType::Character, addr.clone()));
                         }
-                    }                
+                    }
                 &Addr::Con(Constant::Char(c)) => {
                     chars.push(c);
                 }
@@ -368,7 +367,7 @@ impl MachineState {
             }
         }
 
-        let h = self.heap.h;
+        let h = self.heap.h();
         let stub = MachineError::functor_stub(name.clone(), arity);
         let err = MachineError::module_resolution_error(h, module_name, name, arity);
 
@@ -412,7 +411,7 @@ fn try_in_situ(
         Ok(())
     } else {
         let stub = MachineError::functor_stub(name.clone(), arity);
-        let h = machine_st.heap.h;
+        let h = machine_st.heap.h();
         let key = ExistenceError::Procedure(name, arity);
 
         Err(machine_st.error_form(MachineError::existence_error(h, key), stub))
@@ -455,7 +454,7 @@ pub(crate) trait CallPolicy: Any {
             attr_var_init_bindings_b,
         );
 
-        machine_st.hb = machine_st.heap.h;
+        machine_st.hb = machine_st.heap.h();
         machine_st.p += 1;
 
         Ok(())
@@ -491,7 +490,7 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.attr_var_init.backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
 
-        machine_st.hb = machine_st.heap.h;
+        machine_st.hb = machine_st.heap.h();
         machine_st.p += offset;
 
         Ok(())
@@ -530,7 +529,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.stack.truncate(machine_st.b);
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
 
-        machine_st.hb = machine_st.heap.h;
+        machine_st.hb = machine_st.heap.h();
         machine_st.p += offset;
 
         Ok(())
@@ -570,7 +569,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st.stack.truncate(machine_st.b);
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
 
-        machine_st.hb = machine_st.heap.h;
+        machine_st.hb = machine_st.heap.h();
         machine_st.p += 1;
 
         Ok(())
@@ -716,7 +715,7 @@ pub(crate) trait CallPolicy: Any {
                         machine_st.unify(addr, Addr::HeapCell(offset.heap_loc));
                     }
                     Err(e) => {
-                        let h = machine_st.heap.h;
+                        let h = machine_st.heap.h();
                         let stub = MachineError::functor_stub(clause_name!("read"), 1);
                         let err = MachineError::syntax_error(h, e);
                         let err = machine_st.error_form(err, stub);
@@ -967,7 +966,7 @@ impl CWILCallPolicy {
     }
 
     fn increment(&mut self, machine_st: &MachineState) -> CallResult {
-        if self.inference_limit_exceeded || machine_st.ball.stub.len() > 0 {
+        if self.inference_limit_exceeded || machine_st.ball.stub.h() > 0 {
             return Ok(());
         }
 

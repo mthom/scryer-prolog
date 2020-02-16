@@ -6,7 +6,8 @@ use crate::prolog::fixtures::*;
 use crate::prolog::forms::*;
 use crate::prolog::machine::code_repo::CodeRepo;
 use crate::prolog::machine::Ball;
-use crate::prolog::machine::heap::Heap;
+use crate::prolog::machine::heap::*;
+use crate::prolog::machine::raw_block::RawBlockTraits;
 use crate::prolog::instructions::*;
 use crate::prolog::rug::Integer;
 
@@ -350,14 +351,16 @@ pub enum LocalCodePtr {
 }
 
 impl LocalCodePtr {
-    pub fn assign_if_local(&mut self, cp: CodePtr) {
+    pub(crate)
+    fn assign_if_local(&mut self, cp: CodePtr) {
         match cp {
             CodePtr::Local(local) => *self = local,
             _ => {}
         }
     }
 
-    pub fn is_reset_cont_marker(&self, code_repo: &CodeRepo, last_call: bool) -> bool {
+    pub(crate)
+    fn is_reset_cont_marker(&self, code_repo: &CodeRepo, last_call: bool) -> bool {
         match code_repo.lookup_instr(last_call, &CodePtr::Local(*self)) {
             Some(line) => {
                 match line.as_ref() {
@@ -375,8 +378,9 @@ impl LocalCodePtr {
         false
     }
 
-    pub fn as_functor(&self, heap: &mut Heap) -> Addr {
-        let addr = Addr::HeapCell(heap.h);
+    pub(crate)
+    fn as_functor<T: RawBlockTraits>(&self, heap: &mut HeapTemplate<T>) -> Addr {
+        let addr = Addr::HeapCell(heap.h());
 
         match self {
             LocalCodePtr::DirEntry(p) => {

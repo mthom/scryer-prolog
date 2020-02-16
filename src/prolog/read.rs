@@ -120,7 +120,7 @@ impl MachineState {
 }
 
 fn push_stub_addr(machine_st: &mut MachineState) {
-    let h = machine_st.heap.h;
+    let h = machine_st.heap.h();
     machine_st.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
 }
 
@@ -145,13 +145,13 @@ pub struct TermWriteResult {
 }
 
 pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteResult {
-    let heap_loc = machine_st.heap.h;
+    let heap_loc = machine_st.heap.h();
 
     let mut queue = SubtermDeque::new();
     let mut var_dict = HeapVarDict::new();
 
     for term in breadth_first_iter(term, true) {
-        let h = machine_st.heap.h;
+        let h = machine_st.heap.h();
 
         match &term {
             &TermRef::Cons(lvl, ..) => {

@@ -1,99 +1,252 @@
-use prolog_parser::ast::*;
+use core::marker::PhantomData;
+
+use crate::prolog_parser::ast::*;
 
 use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::raw_block::*;
 
 use std::mem;
 use std::ops::{Index, IndexMut};
+use std::ptr;
 
-pub struct Heap {
-    heap: Vec<HeapCellValue>,
-    pub h: usize,
+pub(crate) struct StandardHeapTraits {}
+
+impl RawBlockTraits for StandardHeapTraits {
+    #[inline]
+    fn init_size() -> usize {
+        256 * mem::size_of::<HeapCellValue>()
+    }
+
+    #[inline]
+    fn align() -> usize {
+        mem::align_of::<HeapCellValue>()
+    }
 }
 
-impl Heap {
-    pub fn with_capacity(cap: usize) -> Self {
-        Heap {
-            heap: Vec::with_capacity(cap),
-            h: 0,
+pub(crate) struct HeapTemplate<T: RawBlockTraits> {
+    buf: RawBlock<T>,
+    _marker: PhantomData<HeapCellValue>,
+}
+
+pub(crate) type Heap = HeapTemplate<StandardHeapTraits>;
+
+impl<T: RawBlockTraits> Drop for HeapTemplate<T> {
+    fn drop(&mut self) {
+        self.clear();
+        self.buf.deallocate();
+    }
+}
+
+pub(crate)
+struct HeapIntoIterator<T: RawBlockTraits> {
+    offset: usize,
+    buf: RawBlock<T>,
+}
+
+impl<T: RawBlockTraits> Drop for HeapIntoIterator<T> {
+    fn drop(&mut self) {
+        let mut heap =
+            HeapTemplate { buf: self.buf.take(), _marker: PhantomData };
+
+        heap.truncate(self.offset / mem::size_of::<HeapCellValue>());
+        heap.buf.deallocate();
+    }
+}
+
+impl<T: RawBlockTraits> Iterator for HeapIntoIterator<T> {
+    type Item = HeapCellValue;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ptr = self.buf.base as usize + self.offset;
+        self.offset += mem::size_of::<HeapCellValue>();
+
+        if ptr < self.buf.top as usize {
+            unsafe {
+                Some(ptr::read(ptr as *const HeapCellValue))
+            }
+        } else {
+            None
+        }
+    }
+}
+
+pub(crate)
+struct HeapIterator<'a, T: RawBlockTraits> {
+    offset: usize,
+    buf: &'a RawBlock<T>,
+}
+
+impl<'a, T: RawBlockTraits> HeapIterator<'a, T> {
+    pub(crate)
+    fn new(buf: &'a RawBlock<T>, offset: usize) -> Self {
+        HeapIterator { buf, offset }
+    }
+}
+
+impl<'a, T: RawBlockTraits> Iterator for HeapIterator<'a, T> {
+    type Item = &'a HeapCellValue;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ptr = self.buf.base as usize + self.offset;
+        self.offset += mem::size_of::<HeapCellValue>();
+
+        if ptr < self.buf.top as usize {
+            unsafe {
+                Some(&*(ptr as *const _))
+            }
+        } else {
+            None
+        }
+    }
+}
+
+pub(crate)
+struct HeapIteratorMut<'a, T: RawBlockTraits> {
+    offset: usize,
+    buf: &'a mut RawBlock<T>,
+}
+
+impl<'a, T: RawBlockTraits> HeapIteratorMut<'a, T> {
+    pub(crate)
+    fn new(buf: &'a mut RawBlock<T>, offset: usize) -> Self {
+        HeapIteratorMut { buf, offset }
+    }
+}
+
+impl<'a, T: RawBlockTraits> Iterator for HeapIteratorMut<'a, T> {
+    type Item = &'a mut HeapCellValue;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ptr = self.buf.base as usize + self.offset;
+        self.offset += mem::size_of::<HeapCellValue>();
+
+        if ptr < self.buf.top as usize {
+            unsafe {
+                Some(&mut *(ptr as *mut _))
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl<T: RawBlockTraits> HeapTemplate<T> {
+    #[inline]
+    pub(crate)
+    fn new() -> Self {
+        HeapTemplate { buf: RawBlock::new(), _marker: PhantomData }
+    }
+
+    #[inline]
+    pub(crate)
+    fn push(&mut self, val: HeapCellValue) {
+        unsafe {
+            let new_top = self.buf.new_block(mem::size_of::<HeapCellValue>());
+            ptr::write(self.buf.top as *mut _, val);
+            self.buf.top = new_top;
         }
     }
 
     #[inline]
-    pub fn push(&mut self, val: HeapCellValue) {
-        self.heap.push(val);
-        self.h += 1;
-    }
-
-    #[inline]
-    pub(crate) fn take(&mut self) -> Self {
-        let h = self.h;
-        self.h = 0;
-
-        Heap {
-            heap: mem::replace(&mut self.heap, vec![]),
-            h,
+    pub(crate)
+    fn take<U: RawBlockTraits>(&mut self) -> HeapTemplate<U> {
+        unsafe {
+            HeapTemplate {
+                buf: mem::transmute::<RawBlock<T>, RawBlock<U>>(self.buf.take()),
+                _marker: PhantomData,
+            }
         }
     }
 
     #[inline]
-    pub fn truncate(&mut self, h: usize) {
-        self.h = h;
-        self.heap.truncate(h);
+    pub(crate)
+    fn truncate(&mut self, h: usize) {
+        let new_top = h * mem::size_of::<HeapCellValue>() + self.buf.base as usize;
+        let mut h = new_top;
+
+        unsafe {
+            while h as *const _ < self.buf.top {
+                let val = h as *mut HeapCellValue;
+                ptr::drop_in_place(val);
+                h += mem::size_of::<HeapCellValue>();
+            }
+        }
+
+        self.buf.top = new_top as *const _;
     }
 
     #[inline]
-    pub fn last(&self) -> Option<&HeapCellValue> {
-        self.heap.last()
+    pub(crate)
+    fn h(&self) -> usize {
+        (self.buf.top as usize - self.buf.base as usize) / mem::size_of::<HeapCellValue>()
     }
 
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.heap.len()
+    pub(crate)
+    fn append(&mut self, vals: Vec<HeapCellValue>) {
+        for val in vals {
+            self.push(val);
+        }
     }
 
-    pub fn append(&mut self, vals: Vec<HeapCellValue>) {
-        let n = vals.len();
-
-        self.heap.extend(vals.into_iter());
-        self.h += n;
+    pub(crate)
+    fn clear(&mut self) {
+        if !self.buf.base.is_null() {
+            self.truncate(0);
+            self.buf.top = self.buf.base;
+        }
     }
 
-    pub fn clear(&mut self) {
-        self.heap.clear();
-        self.h = 0;
-    }
-
-    pub fn to_list<Iter: Iterator<Item = Addr>>(&mut self, values: Iter) -> usize {
-        let head_addr = self.h;
+    pub(crate)
+    fn to_list<Iter: Iterator<Item = Addr>>(&mut self, values: Iter) -> usize {
+        let head_addr = self.h();
 
         for value in values {
-            let h = self.h;
+            let h = self.h();
 
             self.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
             self.push(HeapCellValue::Addr(value));
         }
 
         self.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
+
         head_addr
     }
 
-    pub fn extend<Iter: Iterator<Item = HeapCellValue>>(&mut self, iter: Iter) {
+    /* Create an iterator starting from the passed offset. */
+    pub(crate)
+    fn iter_from<'a>(&'a self, offset: usize) -> HeapIterator<'a, T> {
+        HeapIterator::new(&self.buf, offset * mem::size_of::<HeapCellValue>())
+    }
+
+    pub(crate)
+    fn iter_mut_from<'a>(&'a mut self, offset: usize) -> HeapIteratorMut<'a, T> {
+        HeapIteratorMut::new(&mut self.buf, offset * mem::size_of::<HeapCellValue>())
+    }
+
+    pub(crate)
+    fn into_iter(mut self) -> HeapIntoIterator<T> {
+        HeapIntoIterator { buf: self.buf.take(), offset: 0 }
+    }
+
+    pub(crate)
+    fn extend<Iter: Iterator<Item = HeapCellValue>>(&mut self, iter: Iter) {
         for hcv in iter {
             self.push(hcv);
         }
     }
 
-    pub fn to_local_code_ptr(&self, addr: &Addr) -> Option<LocalCodePtr> {
+    pub(crate)
+    fn to_local_code_ptr(&self, addr: &Addr) -> Option<LocalCodePtr> {
         let extract_integer = |s: usize| -> Option<usize> {
-            match self.heap[s].as_addr(s) {
+            match self[s].as_addr(s) {
                 Addr::Con(Constant::Integer(n)) => n.to_usize(),
                 _ => None
             }
         };
-        
+
         match addr {
             Addr::Str(s) => {
-                match &self.heap[*s] {
+                match &self[*s] {
                     HeapCellValue::NamedStr(arity, ref name, _) => {
                         match (name.as_str(), *arity) {
                             ("dir_entry", 1) => {
@@ -128,16 +281,24 @@ impl Heap {
     }
 }
 
-impl Index<usize> for Heap {
+impl<T: RawBlockTraits> Index<usize> for HeapTemplate<T> {
     type Output = HeapCellValue;
 
+    #[inline]
     fn index(&self, index: usize) -> &Self::Output {
-        &self.heap[index]
+        unsafe {
+            let ptr = self.buf.base as usize + index * mem::size_of::<HeapCellValue>();
+            &*(ptr as *const HeapCellValue)
+        }
     }
 }
 
-impl IndexMut<usize> for Heap {
+impl<T: RawBlockTraits> IndexMut<usize> for HeapTemplate<T> {
+    #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.heap[index]
+        unsafe {
+            let ptr = self.buf.base as usize + index * mem::size_of::<HeapCellValue>();
+            &mut *(ptr as *mut HeapCellValue)
+        }
     }
 }
