@@ -65,8 +65,13 @@
 % For a term of the form p(a,q(b)), "returns" functor_data(p,2) and [a,q(b)].
 % p_trie_arity_univ(+Term,-FunctorData,-ArgumentsList).
 p_trie_arity_univ(Term,functor_data(Name,Arity),Arguments) :-
-  Term =.. [Name|Arguments],
-  functor(Term,_,Arity).
+  (  var(Term) ->
+     Name = var,
+     Arity = 0,
+     Arguments = []
+  ;  Term =.. [Name|Arguments],
+     functor(Term,_,Arity)
+  ).
 
 % Returns a new empty trie.
 trie_new(Trie) :-
@@ -110,7 +115,7 @@ trie_insert_succeed(Trie,Key,Value) :-
 % We don't use an extra argument to indicate earlier presence, as this increases the trail size.
 trie_insert(Trie,Key,Value) :-
   p_trie_arity_univ(Key,FunctorData,KeyList),
-  trie_insert_1(KeyList,FunctorData,Trie,Value). 
+  trie_insert_1(KeyList,FunctorData,Trie,Value).
 
 trie_insert_1([],FunctorData,Trie,Value) :-
   trie_get_children(Trie,Assoc),
@@ -182,7 +187,7 @@ trie_insert_1_1_1(>,_V,_L,R,Assoc,FunctorData,Trie,First,Rest,Value) :-
   % Look in the right part of the assoc tree.
   trie_insert_1_1(R,Assoc,FunctorData,Trie,First,Rest,Value).
 
-trie_insert_2(RegularTerm,Rest,Trie,Value) :-
+trie_insert_2(RegularTerm,Rest,Trie,Value) :-  
   p_trie_arity_univ(RegularTerm,FunctorData,KList),
   append(KList,Rest,KList2),
   trie_insert_1(KList2,FunctorData,Trie,Value).
