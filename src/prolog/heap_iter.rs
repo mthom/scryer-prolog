@@ -84,7 +84,7 @@ impl<'a> HCPreOrderIterator<'a> {
             Addr::PStrLocation(h, n) => {
                 if let HeapCellValue::PartialString(ref pstr) = &self.machine_st.heap[h] {
                     let s = pstr.block_as_str();
-
+                    
                     if let Some(c) = s[n ..].chars().next() {
                         if pstr.len() > n + c.len_utf8() {                        
                             self.state_stack.push(Addr::PStrLocation(h, n + c.len_utf8()));

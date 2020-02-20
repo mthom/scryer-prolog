@@ -191,7 +191,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         let threshold = self.target.threshold();
 
         self.target[self.scan] =
-            HeapCellValue::Addr(Addr::PStrLocation(threshold, n));
+            HeapCellValue::Addr(Addr::PStrLocation(threshold, 0));
 
         self.scan += 1;
 
