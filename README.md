@@ -52,8 +52,8 @@ Extend Scryer Prolog to include the following, among other features:
       "Delimited Continuations for Prolog").
 - [x] Tabling library based on delimited continuations
       (documented in "Tabling as a Library with Delimited Control").      
-- [ ] A _redone_ representation of strings as difference list of
-      chars, using a packed internal representation (_in progress_).      
+- [x] A _redone_ representation of strings as difference list of
+      chars, using a packed internal representation.
 - [ ] clp(B) and clp(ℤ) as builtin libraries (_in progress_).
 - [ ] Streams and predicates for stream control (_in progress_).
 - [ ] An incremental compacting garbage collector satisfying the five
@@ -121,128 +121,6 @@ Note on compatibility: Scryer Prolog should work on Linux, Mac OS X,
 and BSD variants on which Rust runs. Windows support hinges on
 rustyline and Termion being functional in that environment, which to
 my knowledge is not presently the case.
-
-## Built-in predicates
-
-The following predicates are built-in to Scryer.
-
-* Arithmetic support:
-    * `is/2` works for `(+)/{1,2}`, `(-)/{1,2}`, `(*)/2`, `(//)/2`, `(**)/2`,
-      `(^)/2`, `(div)/2`, `(/)/2`, `(rdiv)/2`, `(xor)/2`, `(rem)/2`,
-      `(mod)/2`, `(/\)/2`, `(\/)/2`, `(>>)/2`,`(<<)/2`, `(\)/1`,
-      `abs/1`, `sin/1`, `cos/1`, `tan/1`, `asin/1`, `acos/1`,
-      `atan/1`, `atan2/2`, `log/1`, `exp/1`, `sqrt/1`, `float/1`,
-      `truncate/1`, `round/1`, `floor/1`, `ceiling/1`, `pi/0`,
-      `min/1`, `max/1`, `gcd/2`, `sign/1`
-    * Comparison operators: `>`, `<`, `=<`, `>=`, `=:=`, `=\=`.
-* `(:)/2`
-* `(@>)/2`
-* `(@>=)/2`
-* `(@=<)/2`
-* `(@<)/2`
-* `(\+)/1`
-* `(==)/2`
-* `(\==)/2`
-* `(=)/2`
-* `(\=)/2`
-* `(=..)/2`
-* `(->)/2`
-* `(;)/2`
-* `abolish/1`
-* `acyclic_term/2`
-* `append/3`
-* `arg/3`
-* `asserta/1`
-* `assertz/1`
-* `atom/1`
-* `atomic/1`
-* `atom_chars/2`
-* `atom_codes/2`
-* `atom_concat/3`
-* `atom_length/2`
-* `bagof/3`
-* `bb_b_put/2`
-* `bb_get/2`
-* `bb_put/2`
-* `between/3`
-* `call/1..62`
-* `call_cleanup/2`
-* `call_with_inference_limit/3`
-* `call_residue_vars/2`
-* `can_be/2`
-* `catch/3`
-* `clause/2`
-* `compare/3`
-* `compound/1`
-* `copy_term/{2,3}`
-* `current_predicate/1`
-* `current_op/3`
-* `cyclic_term/1`
-* `dif/2`
-* `expand_goal/2`
-* `expand_term/2`
-* `fail/0`
-* `false/0`
-* `findall/{3,4}`
-* `float/1`
-* `foldl/{4,5}`
-* `forall/2`
-* `freeze/2`
-* `functor/3`
-* `gen_int/1`
-* `gen_nat/1`
-* `get_char/1`
-* `goal_expansion/2`
-* `ground/1`
-* `halt/0`
-* `integer/1`
-* `is_list/1`
-* `is_partial_string/1`
-* `keysort/2`
-* `length/2`
-* `maplist/2..9`
-* `member/2`
-* `memberchk/2`
-* `must_be/2`
-* `nl/0`
-* `nonvar/1`
-* `number_chars/2`
-* `number_codes/2`
-* `numbervars/2`
-* `numlist/{2,3}`
-* `once/1`
-* `op/3`
-* `partial_string/2`
-* `phrase/{2,3}`
-* `rational/1`
-* `read/1`
-* `repeat/{0,1}`
-* `retract/1`
-* `reverse/2`
-* `same_length/2`
-* `select/3`
-* `setof/3`
-* `setup_call_cleanup/3`
-* `sort/2`
-* `string/1`
-* `sub_atom/5`
-* `subsumes_term/2`
-* `sumlist/2`
-* `term_expansion/2`
-* `term_variables/2`
-* `throw/1`
-* `true/0`
-* `unify_with_occurs_check/2`
-* `use_module/{1,2}`
-* `user:goal_expansion/2`
-* `user:term_expansion/2`
-* `var/1`
-* `variant/2`
-* `wam_instructions/2`
-* `write/1`
-* `write_canonical/1`
-* `writeq/1`
-* `write_term/2`
 
 ## Tutorial
 To enter a multi-clause predicate, the directive "[user]" is used.
@@ -321,22 +199,26 @@ New operators can be defined using the `op` declaration.
 
 ### Partial strings
 
-Scryer has two specialized, non-ISO builtin predicates for handling
-so-called "partial strings". Partial strings imitate difference lists
-of characters, but are much more space efficient. This efficiency
-comes at the cost of full generality -- you cannot unify the tail
-variables of two distinct partial strings, because their buffers will
-always be distinct.
+Scryer has three specialized non-ISO predicates for handling so-called
+"partial strings." Partial strings imitate difference lists of
+characters, but their characters are packed in UTF-8 format, a much
+more efficient alternative to how lists of characters are represented
+in many other Prologs.
+
+To use partial strings, the `non_iso` library must be loaded:
+
+`?- use_module(library(non_iso)).`
 
 If `X` is a free variable, the query
 
-`?- partial_string("abc", X), X = [a, b, c | Y], is_partial_string(X),
-is_partial_string(Y).`
+`?- partial_string("abc", X, _), X = [a, b, c | Y], partial_string(X),
+partial_string_tail(X, Tail), Tail == Y.`
 
-will succeed. Further, if `Y` a free variable, unifying `Y` against
-another string, "def" in this case, produces the equations
+will succeed, posting:
 
-`X = [a, b, c, d, e, f], Y = [d, e, f].`
+`Tail = Y, X = [a,b,c|Y].`
+
+By all appearances, partial strings are plain Prolog lists.
 
 ### Modules
 
