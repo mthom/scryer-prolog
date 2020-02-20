@@ -616,10 +616,18 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
 
         match addr {
-            Addr::AttrVar(h) => Some(format!("_{}", h)),
-            Addr::HeapCell(h) | Addr::Lis(h) | Addr::Str(h) => Some(format!("_{}", h)),
-            Addr::StackCell(fr, sc) => Some(format!("_s_{}_{}", fr, sc)),
-            _ => None,
+            Addr::AttrVar(h) => {
+                Some(format!("_{}", h))
+            }
+            Addr::HeapCell(h) | Addr::Lis(h) | Addr::Str(h) | Addr::PStrTail(h, _) => {
+                Some(format!("_{}", h))
+            }
+            Addr::StackCell(fr, sc) => {
+                Some(format!("_s_{}_{}", fr, sc))
+            }
+            _ => {
+                None
+            }
         }
     }
 
@@ -944,7 +952,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
             }
             HeapCellValue::Addr(Addr::Con(c)) => self.print_constant(c, &op),
-            HeapCellValue::Addr(Addr::Lis(_)) => {
+            HeapCellValue::Addr(Addr::Lis(_)) | HeapCellValue::Addr(Addr::PStrLocation(..)) => {
                 if self.ignore_ops {
                     self.format_struct(2, clause_name!("."));
                 } else {
@@ -957,6 +965,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         self.append_str(offset_str.as_str());
                     })
                 }
+            }
+            _ => {
+                // This is the partial string case. We never clone a partial string
+                // for printing purposes, so.. this.
+                unreachable!()
             }
         }
     }

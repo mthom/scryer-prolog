@@ -28,14 +28,19 @@ impl<'a> HCPreOrderIterator<'a> {
 
     fn follow_heap(&mut self, h: usize) -> Addr {
         match &self.machine_st.heap[h] {
-            &HeapCellValue::NamedStr(arity, _, _) => {
+            HeapCellValue::NamedStr(arity, _, _) => {
                 for idx in (1..arity + 1).rev() {
                     self.state_stack.push(Addr::HeapCell(h + idx));
                 }
 
-                Addr::HeapCell(h)
+                Addr::Str(h)
             }
-            &HeapCellValue::Addr(ref a) => self.follow(a.clone()),
+            HeapCellValue::Addr(ref a) => {
+                self.follow(a.clone())
+            }
+            HeapCellValue::PartialString(_) => {
+                self.follow(Addr::PStrLocation(h, 0))
+            }
         }
     }
 
@@ -51,7 +56,7 @@ impl<'a> HCPreOrderIterator<'a> {
                     if s.len() > n {
                         if let Some(c) = s[n ..].chars().next() {
                             let o = c.len_utf8();
-                        
+
                             self.state_stack.push(Addr::Con(Constant::String(n+o, s.clone())));
 
                             if self.machine_st.machine_flags().double_quotes.is_codes() {
@@ -76,7 +81,28 @@ impl<'a> HCPreOrderIterator<'a> {
 
                 da
             }
-            Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) => {
+            Addr::PStrLocation(h, n) => {
+                if let HeapCellValue::PartialString(ref pstr) = &self.machine_st.heap[h] {
+                    let s = pstr.block_as_str();
+
+                    if let Some(c) = s[n ..].chars().next() {
+                        if pstr.len() > n + c.len_utf8() {                        
+                            self.state_stack.push(Addr::PStrLocation(h, n + c.len_utf8()));
+                        } else {
+                            self.state_stack.push(Addr::PStrTail(h, n + c.len_utf8()));
+                        }
+
+                        self.state_stack.push(Addr::Con(Constant::Char(c)));
+                    } else {
+                        unreachable!()
+                    }
+                } else {
+                    unreachable!()
+                }
+
+                Addr::PStrLocation(h, n)
+            }
+            Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) | Addr::PStrTail(..) => {
                 da
             }
             Addr::Str(s) => {
@@ -92,7 +118,31 @@ impl<'a> Iterator for HCPreOrderIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.state_stack.pop().map(|a| match self.follow(a) {
             Addr::HeapCell(h) => {
-                self.machine_st.heap[h].clone()
+                HeapCellValue::Addr(self.machine_st.heap[h].as_addr(h))
+            }
+            Addr::Str(s) => {
+                match &self.machine_st.heap[s] {
+                    val @ HeapCellValue::NamedStr(..) => {
+                        val.clone()
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                }
+            }
+            Addr::PStrTail(h, n) => {
+                match &self.machine_st.heap[h] {
+                    HeapCellValue::PartialString(ref pstr) => {
+                        if pstr.len() > n {
+                            HeapCellValue::Addr(Addr::PStrLocation(h, n))
+                        } else {
+                            HeapCellValue::Addr(pstr.tail_addr().clone())
+                        }
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                }
             }
             Addr::StackCell(fr, sc) => {
                 HeapCellValue::Addr(self.machine_st.stack.index_and_frame(fr)[sc].clone())

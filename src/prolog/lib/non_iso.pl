@@ -5,7 +5,9 @@
 
 :- module(non_iso, [bb_b_put/2, bb_get/2, bb_put/2, call_cleanup/2,
 		    call_with_inference_limit/3, forall/2, maybe/0,
-		    set_random/1, setup_call_cleanup/3, variant/2]).
+		    partial_string/1, partial_string/3,
+		    partial_string_tail/2, set_random/1,
+		    setup_call_cleanup/3, variant/2]).
 
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
@@ -153,4 +155,21 @@ set_random(Seed) :-
 	  )
        )
     ;  throw(error(instantiation_error, set_random/1))
+    ).
+
+partial_string(String, L, L0) :-
+    (  String == [] -> throw(error(type_error(list, []), partial_string/3))
+    ;  catch(atom_chars(Atom, String),
+	     error(E, _),
+	     throw(error(E, partial_string/3)))
+    ),
+    '$create_partial_string'(Atom, L, L0).
+
+partial_string(String) :-
+    '$is_partial_string'(String).
+
+partial_string_tail(String, Tail) :-
+    (  partial_string(String) ->
+       '$partial_string_tail'(String, Tail)
+    ;  throw(error(type_error(partial_string, String), partial_string_tail/2))
     ).

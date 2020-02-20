@@ -171,6 +171,7 @@ pub enum SystemClauseType {
     CopyTermWithoutAttrVars,
     CheckCutPoint,
     CopyToLiftedHeap,
+    CreatePartialString,
     DeleteAttribute,
     DeleteHeadAttribute,
     DynamicModuleResolution(usize),
@@ -194,6 +195,7 @@ pub enum SystemClauseType {
     GetModuleClause,
     GetNextDBRef,
     GetNextOpDBRef,
+    IsPartialString,
     LookupDBRef,
     LookupOpDBRef,
     Halt,
@@ -215,6 +217,7 @@ pub enum SystemClauseType {
     NumberToChars,
     NumberToCodes,
     OpDeclaration,
+    PartialStringTail,
     PointsToContinuationResetMarker,
     REPL(REPLCodePtr),
     ReadQueryTerm,
@@ -275,11 +278,12 @@ impl SystemClauseType {
             &SystemClauseType::CallContinuation => clause_name!("$call_continuation"),
             &SystemClauseType::CharCode => clause_name!("$char_code"),
             &SystemClauseType::CharsToNumber => clause_name!("$chars_to_number"),
+            &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
             &SystemClauseType::ClearAttributeGoals => clause_name!("$clear_attribute_goals"),
             &SystemClauseType::CloneAttributeGoals => clause_name!("$clone_attribute_goals"),
             &SystemClauseType::CodesToNumber => clause_name!("$codes_to_number"),
             &SystemClauseType::CopyTermWithoutAttrVars => clause_name!("$copy_term_without_attr_vars"),
-            &SystemClauseType::CheckCutPoint => clause_name!("$check_cp"),
+            &SystemClauseType::CreatePartialString => clause_name!("$create_partial_string"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
 	    &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
 	    &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
@@ -339,6 +343,8 @@ impl SystemClauseType {
             &SystemClauseType::InstallInferenceCounter => {
                 clause_name!("$install_inference_counter")
             }
+            &SystemClauseType::IsPartialString => clause_name!("$is_partial_string"),
+            &SystemClauseType::PartialStringTail => clause_name!("$partial_string_tail"),
             &SystemClauseType::LiftedHeapLength => clause_name!("$lh_length"),
             &SystemClauseType::Maybe => clause_name!("maybe"),
             &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
@@ -423,6 +429,7 @@ impl SystemClauseType {
             ("$clone_attribute_goals", 1) => Some(SystemClauseType::CloneAttributeGoals),
             ("$codes_to_number", 2) => Some(SystemClauseType::CodesToNumber),
             ("$copy_term_without_attr_vars", 2) => Some(SystemClauseType::CopyTermWithoutAttrVars),
+            ("$create_partial_string", 3) => Some(SystemClauseType::CreatePartialString),
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
             ("$compile_batch", 0) => Some(SystemClauseType::REPL(REPLCodePtr::CompileBatch)),
             ("$copy_to_lh", 2) => Some(SystemClauseType::CopyToLiftedHeap),
@@ -435,6 +442,8 @@ impl SystemClauseType {
             ("$module_call", _) => Some(SystemClauseType::DynamicModuleResolution(arity - 2)),
             ("$enqueue_attribute_goal", 1) => Some(SystemClauseType::EnqueueAttributeGoal),
             ("$enqueue_attr_var", 1) => Some(SystemClauseType::EnqueueAttributedVar),
+            ("$partial_string_tail", 2) => Some(SystemClauseType::PartialStringTail),
+            ("$is_partial_string", 1) => Some(SystemClauseType::IsPartialString),
             ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$fetch_attribute_goals", 1) => Some(SystemClauseType::FetchAttributeGoals),

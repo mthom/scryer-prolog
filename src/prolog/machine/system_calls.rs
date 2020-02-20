@@ -50,19 +50,54 @@ pub fn next_keypress() -> ContinueResult {
 }
 
 struct BrentAlgState {
-    hare: usize,
-    tortoise: usize,
+    hare: Addr,
+    tortoise: Addr,
     power: usize,
     steps: usize,
 }
 
 impl BrentAlgState {
-    fn new(hare: usize) -> Self {
+    fn new(hare: Addr) -> Self {
         BrentAlgState {
-            hare,
+            hare: hare.clone(),
             tortoise: hare,
             power: 2,
-            steps: 1,
+            steps: 0,
+        }
+    }
+
+    fn step(&mut self, hare: Addr) -> Option<CycleSearchResult> {
+        self.hare = hare;
+        self.steps += 1;
+
+        if self.tortoise == self.hare {
+            return Some(CycleSearchResult::NotList);
+        } else if self.steps == self.power {
+            self.tortoise = self.hare.clone();
+            self.power <<= 1;
+        }
+
+
+        None
+    }
+
+    fn to_result(self) -> CycleSearchResult {
+        match self.hare {
+            addr @ Addr::HeapCell(_) | addr @ Addr::StackCell(..) | addr @ Addr::AttrVar(_) => {
+                CycleSearchResult::PartialList(self.steps, addr.as_var().unwrap())
+            }
+            Addr::PStrLocation(h, n) => {
+                CycleSearchResult::PStrLocation(self.steps, h, n)
+            }
+            Addr::PStrTail(h, n) => {
+                CycleSearchResult::PStrTail(self.steps, h, n)
+            }
+            Addr::Con(Constant::EmptyList) => {
+                CycleSearchResult::ProperList(self.steps)
+            }
+            _ => {
+                CycleSearchResult::NotList
+            }
         }
     }
 }
@@ -77,56 +112,107 @@ fn is_builtin_predicate(name: &ClauseName) -> bool {
 impl MachineState {
     // a step in Brent's algorithm.
     fn brents_alg_step(&self, brent_st: &mut BrentAlgState) -> Option<CycleSearchResult> {
-        match self.heap[brent_st.hare].clone() {
-            HeapCellValue::NamedStr(..) => Some(CycleSearchResult::NotList),
-            HeapCellValue::Addr(addr) => match self.store(self.deref(addr)) {
-                Addr::Con(Constant::EmptyList) => {
-                    Some(CycleSearchResult::ProperList(brent_st.steps))
-                }
-                Addr::HeapCell(_) | Addr::StackCell(..) => Some(CycleSearchResult::PartialList(
+        match self.store(self.deref(brent_st.hare.clone())) {
+            Addr::Con(Constant::EmptyList) => {
+                Some(CycleSearchResult::ProperList(brent_st.steps))
+            }
+            addr @ Addr::HeapCell(_) | addr @ Addr::StackCell(..) | addr @ Addr::AttrVar(_) => {
+                Some(CycleSearchResult::PartialList(
                     brent_st.steps,
-                    brent_st.hare,
-                )),
-                Addr::Con(Constant::String(n, ref s)) if !self.flags.double_quotes.is_atom() => {
-                    Some(CycleSearchResult::String(brent_st.steps, n, s.clone()))
+                    addr.as_var().unwrap(),
+                ))
+            }
+            Addr::Con(Constant::String(n, s)) if !self.flags.double_quotes.is_atom() => {
+                if let Some(c) = s.chars().next() {
+                    brent_st.step(Addr::Con(Constant::String(n + c.len_utf8(), s)))
+                } else {
+                    Some(CycleSearchResult::CompleteString(s.len(), s))
                 }
-                Addr::Lis(l) => {
-                    brent_st.hare = l + 1;
-                    brent_st.steps += 1;
+            }
+            Addr::PStrTail(h, n) => {
+                Some(CycleSearchResult::PStrTail(brent_st.steps, h, n))
+            }
+            Addr::PStrLocation(h, n) => {
+                match &self.heap[h] {
+                    HeapCellValue::PartialString(ref pstr) => {
+                        let s = pstr.block_as_str();
 
-                    if brent_st.tortoise == brent_st.hare {
-                        return Some(CycleSearchResult::NotList);
-                    } else if brent_st.steps == brent_st.power {
-                        brent_st.tortoise = brent_st.hare;
-                        brent_st.power <<= 1;
+                        if let Some(c) = s[n ..].chars().next() {
+                            brent_st.step(Addr::PStrTail(h, n + c.len_utf8()))
+                        } else {
+                            unreachable!()
+                        }
                     }
-
-                    None
+                    _ => {
+                        unreachable!()
+                    }
                 }
-                _ => {
-                    Some(CycleSearchResult::NotList)
-                }
-            },
+            }
+            Addr::Lis(l) => {
+                brent_st.step(Addr::HeapCell(l + 1))
+            }
+            _ => {
+                Some(CycleSearchResult::NotList)
+            }
         }
     }
 
-    pub(super) fn detect_cycles_with_max(&self, max_steps: usize, addr: Addr) -> CycleSearchResult {
-        let addr = self.store(self.deref(addr));
-        let hare = match addr {
-            Addr::Lis(offset) if max_steps > 0 => offset + 1,
-            Addr::Lis(offset) => return CycleSearchResult::UntouchedList(offset),
-            Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
-            Addr::Con(Constant::String(n, ref s)) if !self.flags.double_quotes.is_atom() => {
-                return CycleSearchResult::String(0, n, s.clone())
+    pub(super)
+    fn detect_cycles_with_max(&self, max_steps: usize, addr: Addr) -> CycleSearchResult {
+        let hare = match self.store(self.deref(addr)) {
+            Addr::Lis(offset) if max_steps > 0 => {
+                Addr::Lis(offset)
             }
-            _ => return CycleSearchResult::NotList,
+            Addr::Lis(offset) => {
+                return CycleSearchResult::UntouchedList(offset);
+            }
+            Addr::PStrLocation(h, n) if max_steps > 0 => {
+                Addr::PStrLocation(h, n)
+            }
+            Addr::PStrLocation(h, _) => {
+                return CycleSearchResult::UntouchedList(h);
+            }
+            Addr::PStrTail(h, n) => {
+                return CycleSearchResult::PStrTail(0, h, n);
+            }
+            Addr::Con(Constant::EmptyList) => {
+                return CycleSearchResult::EmptyList;
+            }
+            Addr::Con(Constant::String(0, ref s))
+                if max_steps > 0 && !self.flags.double_quotes.is_atom() => {
+                    if max_steps >= s.len() {
+                        return CycleSearchResult::CompleteString(s.len(), s.clone());
+                    } else {
+                        return CycleSearchResult::UntouchedString(max_steps, s.clone());
+                    }
+                }
+            Addr::Con(Constant::String(0, ref s))
+                if !self.flags.double_quotes.is_atom() => {
+                    return CycleSearchResult::UntouchedString(0, s.clone());
+                }
+            Addr::Con(Constant::String(n, ref s))
+                if max_steps > 0 && !self.flags.double_quotes.is_atom() => {
+                    if max_steps >= s.len() - n {
+                        let s = Rc::new(String::from(&s[n ..]));
+                        return CycleSearchResult::CompleteString(s.len(), s);
+                    } else {
+                        return CycleSearchResult::UntouchedString(max_steps, s.clone());
+                    }
+                }
+            Addr::Con(Constant::String(n, ref s))
+                if !self.flags.double_quotes.is_atom() => {
+                    return CycleSearchResult::UntouchedString(n, s.clone());
+                }
+            _ => {
+                return CycleSearchResult::NotList;
+            }
         };
 
         let mut brent_st = BrentAlgState::new(hare);
 
         loop {
             if brent_st.steps == max_steps {
-                return CycleSearchResult::PartialList(brent_st.steps, brent_st.hare);
+                return brent_st.to_result();
             }
 
             if let Some(result) = self.brents_alg_step(&mut brent_st) {
@@ -135,15 +221,32 @@ impl MachineState {
         }
     }
 
-    pub(super) fn detect_cycles(&self, addr: Addr) -> CycleSearchResult {
+    pub(super)
+    fn detect_cycles(&self, addr: Addr) -> CycleSearchResult {
         let addr = self.store(self.deref(addr));
         let hare = match addr {
-            Addr::Lis(offset) => offset + 1,
-            Addr::Con(Constant::EmptyList) => return CycleSearchResult::EmptyList,
-            Addr::Con(Constant::String(n, ref s)) if !self.flags.double_quotes.is_atom() => {
-                return CycleSearchResult::String(0, n, s.clone())
+            Addr::Lis(offset) => {
+                Addr::Lis(offset)
             }
-            _ => return CycleSearchResult::NotList,
+            Addr::Con(Constant::EmptyList) => {
+                return CycleSearchResult::EmptyList;
+            }
+            Addr::PStrLocation(h, n) => {
+                Addr::PStrLocation(h, n)
+            }
+            Addr::PStrTail(h, n) => {
+                return CycleSearchResult::PStrTail(0, h, n);
+            }
+            Addr::Con(Constant::String(0, ref s)) if !self.flags.double_quotes.is_atom() => {
+                return CycleSearchResult::CompleteString(s.len(), s.clone());
+            }
+            Addr::Con(Constant::String(n, ref s)) if !self.flags.double_quotes.is_atom() => {
+                let s = Rc::new(String::from(&s[n ..]));
+                return CycleSearchResult::CompleteString(s.len(), s);
+            }
+            _ => {
+                return CycleSearchResult::NotList;
+            }
         };
 
         let mut brent_st = BrentAlgState::new(hare);
@@ -181,45 +284,32 @@ impl MachineState {
                             self.unify(xs0, xs);
                         }
                         _ => {
-                            let (max_steps, search_result) =
+                            let search_result =
                                 if let Some(max_steps) = max_steps.to_isize() {
-                                    (
-                                        max_steps,
-                                        if max_steps == -1 {
-                                            self.detect_cycles(self[temp_v!(3)].clone())
-                                        } else {
-                                            self.detect_cycles_with_max(
-                                                max_steps as usize,
-                                                self[temp_v!(3)].clone(),
-                                            )
-                                        },
-                                    )
+                                    if max_steps == -1 {
+                                        self.detect_cycles(self[temp_v!(3)].clone())
+                                    } else {
+                                        self.detect_cycles_with_max(
+                                            max_steps as usize,
+                                            self[temp_v!(3)].clone(),
+                                        )
+                                    }
                                 } else {
-                                    (-1, self.detect_cycles(self[temp_v!(3)].clone()))
+                                    self.detect_cycles(self[temp_v!(3)].clone())
                                 };
 
                             match search_result {
-                                CycleSearchResult::String(n, offset, s) => {
-                                    if max_steps == -1 {
-                                        self.finalize_skip_max_list(
-                                            s[offset ..].len(),
-                                            Addr::Con(Constant::EmptyList),
-                                        )
-                                    } else {
-                                        let i = (max_steps as usize) - n;
-
-                                        if s.len() < i {
-                                            self.finalize_skip_max_list(
-                                                s[n + offset + i..].len(),
-                                                Addr::Con(Constant::EmptyList),
-                                            )
-                                        } else {
-                                            self.finalize_skip_max_list(
-                                                i + n + offset,
-                                                Addr::Con(Constant::String(n + i + offset, s)),
-                                            )
-                                        }
-                                    }
+                                CycleSearchResult::PStrTail(steps, h, n) => {
+                                    self.finalize_skip_max_list(steps, Addr::PStrTail(h, n));
+                                }
+                                CycleSearchResult::PStrLocation(steps, h, n) => {
+                                    self.finalize_skip_max_list(steps, Addr::PStrLocation(h, n));
+                                }
+                                CycleSearchResult::CompleteString(n, _) => {
+                                    self.finalize_skip_max_list(n, Addr::Con(Constant::EmptyList));
+                                }
+                                CycleSearchResult::UntouchedString(n, s) => {
+                                    self.finalize_skip_max_list(0, Addr::Con(Constant::String(n, s)));
                                 }
                                 CycleSearchResult::UntouchedList(l) => {
                                     self.finalize_skip_max_list(0, Addr::Lis(l))
@@ -227,11 +317,11 @@ impl MachineState {
                                 CycleSearchResult::EmptyList => {
                                     self.finalize_skip_max_list(0, Addr::Con(Constant::EmptyList))
                                 }
-                                CycleSearchResult::PartialList(n, hc) => {
-                                    self.finalize_skip_max_list(n, Addr::HeapCell(hc))
+                                CycleSearchResult::PartialList(n, r) => {
+                                    self.finalize_skip_max_list(n, r.as_addr())
                                 }
-                                CycleSearchResult::ProperList(n) => {
-                                    self.finalize_skip_max_list(n, Addr::Con(Constant::EmptyList))
+                                CycleSearchResult::ProperList(steps) => {
+                                    self.finalize_skip_max_list(steps, Addr::Con(Constant::EmptyList))
                                 }
                                 CycleSearchResult::NotList => {
                                     let xs0 = self[temp_v!(3)].clone();
@@ -329,7 +419,7 @@ impl MachineState {
 
     fn copy_findall_solution(&mut self, lh_offset: usize, copy_target: Addr) -> usize {
         let threshold = self.lifted_heap.h() - lh_offset;
-        
+
         let mut copy_ball_term = CopyBallTerm::new(
             &mut self.stack,
             &mut self.heap,
@@ -341,6 +431,7 @@ impl MachineState {
         copy_ball_term.push(HeapCellValue::Addr(Addr::HeapCell(threshold + 2)));
 
         copy_term(copy_ball_term, copy_target, AttrVarPolicy::DeepCopy);
+
         threshold + lh_offset + 2
     }
 
@@ -364,8 +455,7 @@ impl MachineState {
                     self.lifted_heap.truncate(lh_offset);
                 } else {
                     let threshold = self.lifted_heap.h() - lh_offset;
-                    self.lifted_heap
-                        .push(HeapCellValue::Addr(addr_constr(threshold)));
+                    self.lifted_heap.push(HeapCellValue::Addr(addr_constr(threshold)));
                 }
             }
             _ => self.fail = true,
@@ -569,7 +659,8 @@ impl MachineState {
         }
     }
 
-    pub(super) fn system_call(
+    pub(super)
+    fn system_call(
         &mut self,
         ct: &SystemClauseType,
         code_repo: &CodeRepo,
@@ -835,6 +926,78 @@ impl MachineState {
                     },
                 }
             }
+            &SystemClauseType::CreatePartialString => {
+                let atom = match self.store(self.deref(self[temp_v!(1)].clone())) {
+                    Addr::Con(Constant::Atom(atom, _)) => {
+                        atom
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                let h = self.heap.h();
+                let pstr =
+                    match self.heap.allocate_pstr(atom.as_str()) {
+                        Some(pstr_addr) => {
+                            pstr_addr
+                        }
+                        None => {
+                            let stub = MachineError::functor_stub(clause_name!("partial_string"), 3);
+                            let err = MachineError::type_error(
+                                ValidType::Character,
+                                Addr::Con(Constant::Char('\u{0}')),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+                    };
+
+                let pstr_tail = match &self.heap[h] {
+                    HeapCellValue::PartialString(ref pstr) => {
+                        pstr.tail_addr().clone()
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                self.unify(self[temp_v!(2)].clone(), pstr);
+
+                if !self.fail {
+                    self.unify(self[temp_v!(3)].clone(), pstr_tail);
+                }
+            }
+            &SystemClauseType::IsPartialString => {
+                let pstr = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                match pstr {
+                    Addr::PStrLocation(..) => {
+                    }
+                    _ => {
+                        self.fail = true;
+                    }
+                }
+            }
+            &SystemClauseType::PartialStringTail => {
+                let pstr = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                match pstr {
+                    Addr::PStrLocation(h, _) => {
+                        let tail = if let HeapCellValue::PartialString(ref pstr) = &self.heap[h] {
+                            pstr.tail.clone()
+                        } else {
+                            unreachable!()
+                        };
+
+                        let target = self[temp_v!(2)].clone();
+                        self.unify(tail, target);
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                }
+            }
             &SystemClauseType::NumberToChars => {
                 let n = self[temp_v!(1)].clone();
                 let chs = self[temp_v!(2)].clone();
@@ -925,7 +1088,7 @@ impl MachineState {
                             Addr::Con(Constant::Integer(n)) => {
                                 let c = self.int_to_char_code(&n, "char_code", 2)?;
                                 let c = std::char::from_u32(c).unwrap();
-                                
+
                                 self.unify(Addr::Con(Constant::Char(c)), addr.clone());
                             }
                             _ => self.fail = true,
@@ -1119,8 +1282,11 @@ impl MachineState {
 
                         for addr in self.lifted_heap.iter_mut_from(old_threshold + 1) {
                             match addr {
-                                &mut HeapCellValue::Addr(ref mut addr) => {
+                                HeapCellValue::Addr(ref mut addr) => {
                                     *addr -= self.heap.h() + lh_offset
+                                }
+                                HeapCellValue::PartialString(ref mut pstr) => {
+                                    pstr.tail -= self.heap.h() + lh_offset;
                                 }
                                 _ => {}
                             }
@@ -1579,22 +1745,34 @@ impl MachineState {
 
                             for value in self.lifted_heap.iter_from(lh_offset) {
                                 last_index = self.heap.h();
-                                
-                                match value.clone() {
-                                    HeapCellValue::Addr(addr) => {
-                                        self.heap.push(HeapCellValue::Addr(addr + h));
+
+                                match value {
+                                    HeapCellValue::Addr(ref addr) => {
+                                        self.heap.push(HeapCellValue::Addr(addr.clone() + h));
+                                    }
+                                    HeapCellValue::PartialString(ref pstr) => {
+                                        let mut new_pstr = pstr.clone();
+                                        new_pstr.tail = pstr.tail.clone() + h;
+                                        self.heap.push(HeapCellValue::PartialString(new_pstr));
                                     }
                                     value => {
-                                        self.heap.push(value);
+                                        self.heap.push(value.clone());
                                     }
                                 }
                             }
 
                             if last_index < self.heap.h() {
-                                if let HeapCellValue::Addr(addr) = self.heap[last_index].clone() {
+                                let addr_opt =
+                                    if let HeapCellValue::Addr(ref addr) = &self.heap[last_index] {
+                                        Some(addr.clone())
+                                    } else {
+                                        None
+                                    };
+
+                                addr_opt.map(|addr| {
                                     let diff = self[temp_v!(3)].clone();
                                     self.unify(diff, addr);
-                                }
+                                });
                             }
 
                             self.lifted_heap.truncate(lh_offset);
@@ -1617,13 +1795,18 @@ impl MachineState {
                         } else {
                             let h = self.heap.h();
 
-                            for addr in self.lifted_heap.iter_from(lh_offset).cloned() {
+                            for addr in self.lifted_heap.iter_from(lh_offset) {
                                 match addr {
-                                    HeapCellValue::Addr(addr) => {
-                                        self.heap.push(HeapCellValue::Addr(addr + h))
+                                    HeapCellValue::Addr(ref addr) => {
+                                        self.heap.push(HeapCellValue::Addr(addr.clone() + h))
+                                    }
+                                    HeapCellValue::PartialString(ref pstr) => {
+                                        let mut new_pstr = pstr.clone();
+                                        new_pstr.tail = pstr.tail.clone() + h;
+                                        self.heap.push(HeapCellValue::PartialString(new_pstr));
                                     }
                                     value => {
-                                        self.heap.push(value);
+                                        self.heap.push(value.clone());
                                     }
                                 }
                             }

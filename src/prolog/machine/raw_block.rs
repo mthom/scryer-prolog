@@ -37,14 +37,32 @@ impl<T: RawBlockTraits> RawBlock<T> {
     }
 
     pub(crate)
+    fn with_capacity(cap: usize) -> Self {
+        let mut block = RawBlock { size: 0,
+                                   base: ptr::null(),
+                                   top: ptr::null(),
+                                   _marker: PhantomData };
+
+        unsafe {
+            block.init_at_size(cap);
+        }
+
+        block
+    }
+
+    unsafe fn init_at_size(&mut self, cap: usize) {
+        let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
+
+        self.base = alloc::alloc(layout) as *const _;
+        self.size = cap;
+
+        self.top = T::base_offset(self.base);
+    }
+
+    pub(super)
     unsafe fn grow(&mut self) {
         if self.size == 0 {
-            let layout = alloc::Layout::from_size_align_unchecked(T::init_size(), T::align());
-
-            self.base = alloc::alloc(layout) as *const _;
-            self.size = T::init_size();
-
-            self.top = T::base_offset(self.base);
+            self.init_at_size(T::init_size());
         } else {
             let layout = alloc::Layout::from_size_align_unchecked(T::init_size(), T::align());
             let top_dist = self.top as usize - self.base as usize;

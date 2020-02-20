@@ -3,6 +3,7 @@ use core::marker::PhantomData;
 use crate::prolog_parser::ast::*;
 
 use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::partial_string::*;
 use crate::prolog::machine::raw_block::*;
 
 use std::mem;
@@ -149,12 +150,93 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
 
     #[inline]
     pub(crate)
-    fn take<U: RawBlockTraits>(&mut self) -> HeapTemplate<U> {
-        unsafe {
-            HeapTemplate {
-                buf: mem::transmute::<RawBlock<T>, RawBlock<U>>(self.buf.take()),
-                _marker: PhantomData,
+    fn allocate_pstr(&mut self, mut src: &str) -> Option<Addr> {
+        let orig_h = self.h();
+        
+        loop {
+            if src == "" {
+                return if orig_h == self.h() {
+                    None
+                } else {
+                    let prev_h = self.h() - 1;
+
+                    match &mut self[prev_h] {
+                        HeapCellValue::PartialString(ref mut pstr) => {
+                            let s = pstr.block_as_str();
+                            pstr.tail = Addr::PStrTail(prev_h, s.len());
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    }
+
+                    Some(Addr::PStrLocation(orig_h, 0))
+                };
             }
+            
+            let h = self.h();
+
+            let (mut pstr, rest_src) =
+                match PartialString::new(src, h) {
+                    Some(tuple) => {
+                        tuple
+                    }
+                    None => {
+                        if src.len() > '\u{0}'.len_utf8() {
+                            src = &src['\u{0}'.len_utf8() ..];
+                            continue;
+                        } else if orig_h == h {
+                            return None;
+                        } else {
+                            let prev_h = h - 1;
+
+                            match &mut self[prev_h] {
+                                HeapCellValue::PartialString(ref mut pstr) => {
+                                    let s = pstr.block_as_str();
+                                    pstr.tail = Addr::PStrTail(prev_h, s.len());
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+
+                            return Some(Addr::PStrLocation(orig_h, 0));
+                        }
+                    }
+                };
+
+            let new_top = unsafe {
+                self.buf.new_block(mem::size_of::<HeapCellValue>())
+            };
+
+            if rest_src != "" {
+                pstr.tail = Addr::PStrLocation(h+1, 0);
+                src = rest_src;
+            } else {
+                pstr.tail = Addr::PStrTail(h, src.len());
+            }
+
+            unsafe{
+                ptr::write(
+                    self.buf.top as *mut _,
+                    HeapCellValue::PartialString(pstr),
+                );
+            }
+            
+            self.buf.top = new_top;
+            
+            if rest_src == "" {                
+                return Some(Addr::PStrLocation(orig_h, 0));
+            }            
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn take(&mut self) -> Self {
+        HeapTemplate {
+            buf: self.buf.take(),
+            _marker: PhantomData,
         }
     }
 

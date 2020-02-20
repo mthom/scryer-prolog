@@ -25,19 +25,22 @@ pub struct Ball {
 }
 
 impl Ball {
-    pub(super) fn new() -> Self {
+    pub(super)
+    fn new() -> Self {
         Ball {
             boundary: 0,
             stub: Heap::new(),
         }
     }
 
-    pub(super) fn reset(&mut self) {
+    pub(super)
+    fn reset(&mut self) {
         self.boundary = 0;
         self.stub.clear();
     }
 
-    pub(super) fn take(&mut self) -> Ball {
+    pub(super)
+    fn take(&mut self) -> Ball {
         let boundary = self.boundary;
         self.boundary = 0;
 
@@ -47,14 +50,20 @@ impl Ball {
         }
     }
 
-    pub(super) fn copy_and_align(&self, h: usize) -> Heap {
+    pub(super)
+    fn copy_and_align(&self, h: usize) -> Heap {
         let diff = self.boundary as i64 - h as i64;
         let mut stub = Heap::new();
 
-        for heap_value in self.stub.iter_from(0).cloned() {
+        for heap_value in self.stub.iter_from(0) {
             stub.push(match heap_value {
-                HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
-                heap_value => heap_value,
+                HeapCellValue::Addr(ref addr) => HeapCellValue::Addr(addr.clone() - diff),
+                HeapCellValue::PartialString(ref pstr) => {
+                    let mut new_pstr = pstr.clone();
+                    new_pstr.tail = pstr.tail.clone() - diff;
+                    HeapCellValue::PartialString(new_pstr)
+                }
+                heap_value => heap_value.clone(),
             });
         }
 
@@ -524,7 +533,8 @@ pub(crate) trait CallPolicy: Any {
 
         machine_st.attr_var_init.backtrack(
             attr_var_init_queue_b,
-            attr_var_init_bindings_b);
+            attr_var_init_bindings_b,
+        );
 
         machine_st.stack.truncate(machine_st.b);
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;

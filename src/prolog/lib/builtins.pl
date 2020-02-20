@@ -236,7 +236,7 @@ G1 -> G2 :- '$get_b_value'(B), '$call_with_default_policy'(->(G1, G2, B)).
 :- non_counted_backtracking univ_errors/3.
 univ_errors(Term, List, N) :-
     '$skip_max_list'(N, -1, List, R),
-    ( var(R)       ->
+    ( var(R)        ->
        (  var(Term), throw(error(instantiation_error, (=..)/2))      % 8.5.3.3 a)
        ;  true
        )

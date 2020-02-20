@@ -391,10 +391,13 @@ impl EvalError {
 pub(super) enum CycleSearchResult {
     EmptyList,
     NotList,
-    PartialList(usize, usize), // the list length (up to max), and an offset into the heap.
-    ProperList(usize),         // the list length.
-    String(usize, usize, Rc<String>), // the number of bytes iterated, the offset, the string.
-    UntouchedList(usize),      // the address of an uniterated Addr::Lis(address).
+    PartialList(usize, Ref),  // the list length (up to max), and an offset into the heap.
+    ProperList(usize),          // the list length.
+    CompleteString(usize, Rc<String>), // the string length (in bytes), the string.
+    UntouchedString(usize, Rc<String>),    // the cut off, past which is the untouched string.
+    PStrLocation(usize, usize, usize), // the list length (up to max), the heap offset, byte offset into the string.
+    PStrTail(usize, usize, usize),     // the list length (up to max), the heap offset, byte offset into the string.
+    UntouchedList(usize),       // the address of an uniterated Addr::Lis(address).
 }
 
 impl MachineState {
