@@ -73,11 +73,10 @@ impl MachineState {
         let iter = self
             .attr_var_init
             .bindings
-            .iter()
-            .map(|(_, ref addr)| addr.clone());
+            .drain(0 ..)
+            .map(|(_, addr)| addr);
 
         let value_list_addr = Addr::HeapCell(self.heap.to_list(iter));
-
         (var_list_addr, value_list_addr)
     }
 

@@ -1973,9 +1973,6 @@ impl MachineState {
                     }
                 };
             }
-            &SystemClauseType::ClearAttrVarBindings => {
-                self.attr_var_init.bindings.clear();
-            }
             &SystemClauseType::RedoAttrVarBinding => {
                 let var = self.store(self.deref(self[temp_v!(1)].clone()));
                 let value = self.store(self.deref(self[temp_v!(2)].clone()));

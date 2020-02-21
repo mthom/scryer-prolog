@@ -191,7 +191,8 @@ impl MachineState {
         self.trail(TrailRef::from(Ref::PStrTail(h, pstr_len)));
     }
 
-    pub(super) fn bind(&mut self, r1: Ref, a2: Addr) {
+    pub(super)
+    fn bind(&mut self, r1: Ref, a2: Addr) {
         let t1 = self.store(r1.as_addr());
         let t2 = self.store(a2.clone());
 

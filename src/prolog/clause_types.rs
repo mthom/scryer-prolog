@@ -164,7 +164,6 @@ pub enum SystemClauseType {
     CallContinuation,
     CharCode,
     CharsToNumber,
-    ClearAttrVarBindings,
     ClearAttributeGoals,
     CloneAttributeGoals,
     CodesToNumber,
@@ -295,7 +294,6 @@ impl SystemClauseType {
 	    &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile) => {
 		clause_name!("$use_qualified_module_from_file")
 	    }
-            &SystemClauseType::ClearAttrVarBindings => clause_name!("$clear_attr_var_bindings"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
@@ -424,7 +422,6 @@ impl SystemClauseType {
             ("$call_continuation", 1) => Some(SystemClauseType::CallContinuation),
             ("$char_code", 2) => Some(SystemClauseType::CharCode),
             ("$chars_to_number", 2) => Some(SystemClauseType::CharsToNumber),
-            ("$clear_attr_var_bindings", 0) => Some(SystemClauseType::ClearAttrVarBindings),
             ("$clear_attribute_goals", 0) => Some(SystemClauseType::ClearAttributeGoals),
             ("$clone_attribute_goals", 1) => Some(SystemClauseType::CloneAttributeGoals),
             ("$codes_to_number", 2) => Some(SystemClauseType::CodesToNumber),
