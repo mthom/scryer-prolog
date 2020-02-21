@@ -2201,6 +2201,9 @@ impl MachineState {
                     if ar1 != ar2 || n1 != n2 {
                         return true;
                     },
+                (HeapCellValue::Addr(Addr::PStrLocation(..)),
+                 HeapCellValue::Addr(Addr::PStrLocation(..))) =>
+                    continue,
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
                     continue,
                 (HeapCellValue::Addr(Addr::Con(Constant::EmptyList)),
