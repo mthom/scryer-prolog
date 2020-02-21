@@ -1,8 +1,8 @@
-:- module(lists, [member/2, select/3, append/3, foldl/4, foldl/5,
+:- module(lists, [member/2, select/3, append/2, append/3, foldl/4, foldl/5,
 		  memberchk/2, reverse/2, length/2, maplist/2,
 		  maplist/3, maplist/4, maplist/5, maplist/6,
 		  maplist/7, maplist/8, maplist/9, same_length/2,
-		  sumlist/2]).
+		  sum_list/2, transpose/2]).
 
 
 :- use_module(library(error)).
@@ -42,6 +42,12 @@ member(X, [_|Xs]) :- member(X, Xs).
 
 select(X, [X|Xs], Xs).
 select(X, [Y|Xs], [Y|Ys]) :- select(X, Xs, Ys).
+
+
+append([], []).
+append([L0|Ls0], Ls) :-
+    append(L0, Rest, Ls),
+    append(Ls0, Rest).
 
 
 append([], R, R).
@@ -102,14 +108,10 @@ maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7
     maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s, E7s, E8s).
 
 
-sumlist_([], S, S).
-sumlist_([N|Ns], S, S0) :-
-    S1 is S0 + N,
-    sumlist_(Ns, S, S1).
+sum_list(Ls, S) :-
+        foldl(sum_, Ls, 0, S).
 
-sumlist(Ns, S) :-
-    must_be(list, Ns),
-    sumlist_(Ns, S, 0).
+sum_(L, S0, S) :- S is S0 + L.
 
 
 
@@ -134,3 +136,16 @@ foldl_([], [], _, A, A).
 foldl_([X|Xs], [Y|Ys], G_4, A0, A) :-
         call(G_4, X, Y, A0, A1),
         foldl_(Xs, Ys, G_4, A1, A).
+
+transpose(Ls, Ts) :-
+        lists_transpose(Ls, Ts).
+
+lists_transpose([], []).
+lists_transpose([L|Ls], Ts) :-
+        maplist(same_length(L), Ls),
+        foldl(transpose_, L, Ts, [L|Ls], _).
+
+transpose_(_, Fs, Lists0, Lists) :-
+        maplist(list_first_rest, Lists0, Fs, Lists).
+
+list_first_rest([L|Ls], L, Ls).

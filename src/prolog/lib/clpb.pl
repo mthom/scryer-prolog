@@ -31,6 +31,7 @@
 :- use_module(library(atts)).
 :- use_module(library(lists)).
 :- use_module(library(non_iso)).
+:- use_module(library(pairs)).
 :- use_module(library(dcgs)).
 :- use_module(library(error), []).
 
@@ -106,64 +107,9 @@ type_error(Expectation, Term) :-
 type_error(Expectation, Term, Goal-Arg) :-
         throw(error(type_error(Expectation, Term), type_error(Goal, Arg, Expectation, Term))).
 
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   foldl/4
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-foldl(Goal_3, Ls, A0, A) :-
-        foldl_(Ls, Goal_3, A0, A).
-
-foldl_([], _, A, A).
-foldl_([L|Ls], G_3, A0, A) :-
-        call(G_3, L, A0, A1),
-        foldl_(Ls, G_3, A1, A).
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   foldl/5
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-foldl(Goal_4, Xs, Ys, A0, A) :-
-        foldl_(Xs, Ys, Goal_4, A0, A).
-
-foldl_([], [], _, A, A).
-foldl_([X|Xs], [Y|Ys], G_4, A0, A) :-
-        call(G_4, X, Y, A0, A1),
-        foldl_(Xs, Ys, G_4, A1, A).
-
-
 partition(Pred, Ls0, As, Bs) :-
         include(Pred, Ls0, As),
         exclude(Pred, Ls0, Bs).
-
-sum_list(Ls, S) :-
-        foldl(sum_, Ls, 0, S).
-
-sum_(L, S0, S) :- S is S0 + L.
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  Pairs.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-pairs_keys_values([], [], []).
-pairs_keys_values([A-B|ABs], [A|As], [B|Bs]) :-
-        pairs_keys_values(ABs, As, Bs).
-
-pairs_keys(Ps, Ks) :- pairs_keys_values(Ps, Ks, _).
-
-pairs_values(Ps, Vs) :- pairs_keys_values(Ps, _, Vs).
-
-map_list_to_pairs(Pred, Ls, Ps) :-
-        map_list_to_pairs2(Ls, Pred, Ps).
-
-map_list_to_pairs2([], _, []).
-map_list_to_pairs2([H|T0], Pred, [K-H|T]) :-
-        call(Pred, H, K),
-        map_list_to_pairs2(T0, Pred, T).
-
-
-
-
 
 goal_expansion(get_attr(Var, Module, Value), (var(Var),get_atts(Var, Access))) :-
         Access =.. [Module,Value].
@@ -1157,7 +1103,7 @@ labeling_var(V) :- V == 1, !.
 labeling_var(V) :- domain_error(clpb_variable, V).
 
 variables_in_index_order(Vs0, Vs) :-
-        maplist(var_with_index, Vs0, IVs0),	
+        maplist(var_with_index, Vs0, IVs0),
         keysort(IVs0, IVs),
         pairs_values(IVs, Vs).
 
@@ -1184,7 +1130,7 @@ indomain(1).
 % Examples:
 %
 % ==
-% ?- sat(A =< B), Vs = [A,B], sat_count(+[1|Vs], Count). 
+% ?- sat(A =< B), Vs = [A,B], sat_count(+[1|Vs], Count).
 % Vs = [A, B],
 % Count = 3,
 % sat(A=:=A*B).
@@ -1506,7 +1452,7 @@ max_variable_node(Node, V0-N0, V-N) :-
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 ands_fusion(Ands0, Ands) :-
-        maplist(with_variables, Ands0, Pairs0),	
+        maplist(with_variables, Ands0, Pairs0),
         keysort(Pairs0, Pairs),
         group_pairs_by_key(Pairs, Groups),
         pairs_values(Groups, Andss),
