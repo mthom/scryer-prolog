@@ -274,10 +274,12 @@ impl MachineState {
     fn try_char_list(&self, addrs: Vec<Addr>) -> Result<String, MachineError> {
         let mut chars = String::new();
         let mut iter = addrs.iter();
-
+        
         while let Some(addr) = iter.next() {
+            let addr = self.store(self.deref(addr.clone()));
+            
             match addr {
-                &Addr::Con(Constant::String(n, ref s))
+                Addr::Con(Constant::String(n, ref s))
                     if self.flags.double_quotes.is_chars() => {
                         if s.len() < n {
                             chars += &s[n ..];
@@ -287,10 +289,10 @@ impl MachineState {
                             return Err(MachineError::type_error(ValidType::Character, addr.clone()));
                         }
                     }
-                &Addr::Con(Constant::Char(c)) => {
+                Addr::Con(Constant::Char(c)) => {
                     chars.push(c);
                 }
-                &Addr::Con(Constant::Atom(ref name, _))
+                Addr::Con(Constant::Atom(ref name, _))
                     if name.as_str().len() == 1 => {
                         chars += name.as_str();
                     }
