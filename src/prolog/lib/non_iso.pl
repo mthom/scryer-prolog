@@ -158,12 +158,13 @@ set_random(Seed) :-
     ).
 
 partial_string(String, L, L0) :-
-    (  String == [] -> throw(error(type_error(list, []), partial_string/3))
+    (  String == [] ->
+       L = L0
     ;  catch(atom_chars(Atom, String),
 	     error(E, _),
-	     throw(error(E, partial_string/3)))
-    ),
-    '$create_partial_string'(Atom, L, L0).
+	     throw(error(E, partial_string/3))),
+       '$create_partial_string'(Atom, L, L0)
+    ).
 
 partial_string(String) :-
     '$is_partial_string'(String).
