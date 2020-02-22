@@ -24,20 +24,23 @@
 % make '$compile_batch', a system routine, callable.
 '$$compile_batch' :- '$compile_batch'.
 
-'$instruction_match'([Item], []) :-
-    (  atom(Item) -> !,
-       (  Item == user ->
-	  catch('$$compile_batch', E, '$print_exception_with_check'(E))
-       ;  consult(Item)
-       )
-    ;  !,
-       catch(throw(error(type_error(atom, Item), repl/0)),
-	     E,
-	     '$print_exception_with_check'(E))
-    ).
 '$instruction_match'(Term, VarList) :-
-    '$submit_query_and_print_results'(Term, VarList),
-    !.
+    (  var(Term) ->
+       throw(error(instantiation_error, repl/0))
+    ;
+       Term = [Item] -> !,
+       (  atom(Item) ->
+	  (  Item == user ->
+	     catch('$$compile_batch', E, '$print_exception_with_check'(E))
+	  ;  consult(Item)
+	  )
+       ;
+	  catch(throw(error(type_error(atom, Item), repl/0)),
+		E,
+		'$print_exception_with_check'(E))
+       )
+    ;  '$submit_query_and_print_results'(Term, VarList)
+    ).
 
 '$submit_query_and_print_results'(Term0, VarList) :-
     (  expand_goals(Term0, Term) -> true
@@ -244,7 +247,7 @@ user:term_expansion(Term0, (:- initialization(ExpandedGoals))) :-
     expand_goals(Goals, ExpandedGoals),
     Goals \== ExpandedGoals.
 
-'$module_expand_goal'(UnexpandedGoals, ExpandedGoals) :-    
+'$module_expand_goal'(UnexpandedGoals, ExpandedGoals) :-
     (  '$module_of'(Module, UnexpandedGoals),
        '$module_exists'(Module),
        Module:goal_expansion(UnexpandedGoals, ExpandedGoals),
