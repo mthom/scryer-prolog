@@ -538,8 +538,8 @@ pub(crate) trait CallPolicy: Any {
             attr_var_init_bindings_b,
         );
 
-        machine_st.stack.truncate(machine_st.b);
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
+        machine_st.stack.truncate(b);
 
         machine_st.hb = machine_st.heap.h();
         machine_st.p += offset;
@@ -578,8 +578,8 @@ pub(crate) trait CallPolicy: Any {
             attr_var_init_bindings_b,
         );
 
-        machine_st.stack.truncate(machine_st.b);
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
+        machine_st.stack.truncate(b);
 
         machine_st.hb = machine_st.heap.h();
         machine_st.p += 1;
@@ -1032,7 +1032,7 @@ impl CWILCallPolicy {
 
 pub(crate) trait CutPolicy: Any {
     // returns true iff we fail or cut redirected the MachineState's p itself
-    fn cut(&mut self, _: &mut MachineState, _: RegType) -> bool;
+    fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool;
 }
 
 downcast!(dyn CutPolicy);

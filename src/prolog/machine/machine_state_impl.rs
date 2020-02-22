@@ -2204,6 +2204,13 @@ impl MachineState {
                 (HeapCellValue::Addr(Addr::PStrLocation(..)),
                  HeapCellValue::Addr(Addr::PStrLocation(..))) =>
                     continue,
+                (HeapCellValue::Addr(Addr::PStrLocation(..)),
+                 HeapCellValue::Addr(Addr::Con(Constant::String(..))))
+              | (HeapCellValue::Addr(Addr::Con(Constant::String(..))),
+                 HeapCellValue::Addr(Addr::PStrLocation(..))) 
+                    if self.flags.double_quotes.is_chars() => {
+                        continue;
+                    }
                 (HeapCellValue::Addr(Addr::Lis(_)), HeapCellValue::Addr(Addr::Lis(_))) =>
                     continue,
                 (HeapCellValue::Addr(Addr::Con(Constant::EmptyList)),

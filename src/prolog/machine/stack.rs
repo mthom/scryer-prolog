@@ -89,6 +89,8 @@ impl Index<usize> for AndFrame {
 
 impl IndexMut<usize> for AndFrame {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        debug_assert!(self.prelude.univ_prelude.is_or_frame == 0);
+
         let prelude_offset = prelude_size::<AndFramePrelude>();
         let index_offset = (index - 1) * mem::size_of::<Addr>();
 
@@ -143,6 +145,8 @@ impl Index<usize> for OrFrame {
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
+        debug_assert!(self.prelude.univ_prelude.is_or_frame == 1);
+
         let prelude_offset = prelude_size::<OrFramePrelude>();
         let index_offset = index * mem::size_of::<Addr>();
 
@@ -158,6 +162,8 @@ impl Index<usize> for OrFrame {
 impl IndexMut<usize> for OrFrame {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        debug_assert!(self.prelude.univ_prelude.is_or_frame == 1);
+
         let prelude_offset = prelude_size::<OrFramePrelude>();
         let index_offset = index * mem::size_of::<Addr>();
 
