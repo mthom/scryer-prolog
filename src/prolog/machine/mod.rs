@@ -377,9 +377,9 @@ impl Machine {
                                 lib_path.clone(),
                             ),
         );
-        compile_user_module(&mut wam, parsing_stream(NON_ISO.as_bytes()), true,
+        compile_user_module(&mut wam, parsing_stream(ISO_EXT.as_bytes()), true,
                             ListingSource::from_file_and_path(
-                                clause_name!("non_iso"),
+                                clause_name!("iso_ext"),
                                 lib_path.clone(),
                             )
         );

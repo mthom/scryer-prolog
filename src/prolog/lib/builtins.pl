@@ -448,7 +448,7 @@ set_difference([], _, []) :- !.
 set_difference(Xs, [], Xs).
 
 group_by_variant([V2-S2 | Pairs], V1-S1, [S2 | Solutions], Pairs0) :-
-    non_iso:variant(V1, V2), !, V1 = V2, group_by_variant(Pairs, V2-S2, Solutions, Pairs0).
+    iso_ext:variant(V1, V2), !, V1 = V2, group_by_variant(Pairs, V2-S2, Solutions, Pairs0).
 group_by_variant(Pairs, _, [], Pairs).
 
 group_by_variants([V-S|Pairs], [V-Solution|Solutions]) :-

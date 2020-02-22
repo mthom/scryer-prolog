@@ -1,7 +1,7 @@
 :- module(tests_on_call_with_inference_limit, []).
 
 :- use_module(library(lists)).
-:- use_module(library(non_iso)).
+:- use_module(library(iso_ext)).
 
 :- dynamic(f/1).
 :- dynamic(g/1).

@@ -740,13 +740,13 @@ impl IndexStore {
         let r_w_h = clause_name!("run_cleaners_with_handling");
         let r_wo_h = clause_name!("run_cleaners_without_handling");
 
-        let non_iso = clause_name!("non_iso");
+        let iso_ext = clause_name!("iso_ext");
 
         let r_w_h = self
-            .get_internal(r_w_h, 0, non_iso.clone())
+            .get_internal(r_w_h, 0, iso_ext.clone())
             .and_then(|item| item.local());
         let r_wo_h = self
-            .get_internal(r_wo_h, 1, non_iso)
+            .get_internal(r_wo_h, 1, iso_ext)
             .and_then(|item| item.local());
 
         if let Some(r_w_h) = r_w_h {

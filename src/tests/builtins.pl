@@ -1,7 +1,7 @@
 :- module(tests_on_builtins, []).
 
 :- use_module(library(lists)).
-:- use_module(library(non_iso)).
+:- use_module(library(iso_ext)).
 
 test_queries_on_builtins :-
     \+ atom(_),

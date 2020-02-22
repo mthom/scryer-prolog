@@ -3,7 +3,7 @@
 
 :- use_module(library(error)).
 :- use_module(library(lists)).
-:- use_module(library(non_iso)).
+:- use_module(library(iso_ext)).
 :- use_module(library(si)).
 
 gensym_key(Base, BaseKey) :-

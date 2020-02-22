@@ -9,7 +9,7 @@
 	  ]).
 
 :- use_module(library(atts)).
-:- use_module(library(non_iso)).
+:- use_module(library(iso_ext)).
 
 :- attribute table_global_worklist/1.
 

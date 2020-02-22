@@ -1,6 +1,6 @@
 :- module(test_on_setup_call_cleanup, []).
 
-:- use_module(library(non_iso)).
+:- use_module(library(iso_ext)).
 
 test_queries_on_setup_call_cleanup :-
     \+ setup_call_cleanup(false, _, _),

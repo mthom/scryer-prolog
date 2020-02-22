@@ -1,9 +1,9 @@
 %% for builtins that are not part of the ISO standard.
 %% must be loaded at the REPL with
 
-%% ?- use_module(library(non_iso)).
+%% ?- use_module(library(iso_ext)).
 
-:- module(non_iso, [bb_b_put/2, bb_get/2, bb_put/2, call_cleanup/2,
+:- module(iso_ext, [bb_b_put/2, bb_get/2, bb_put/2, call_cleanup/2,
 		    call_with_inference_limit/3, forall/2, maybe/0,
 		    partial_string/1, partial_string/3,
 		    partial_string_tail/2, set_random/1,

@@ -205,9 +205,9 @@ characters, but their characters are packed in UTF-8 format, a much
 more efficient alternative to how lists of characters are represented
 in many other Prologs.
 
-To use partial strings, the `non_iso` library must be loaded:
+To use partial strings, the `iso_ext` library must be loaded:
 
-`?- use_module(library(non_iso)).`
+`?- use_module(library(iso_ext)).`
 
 If `X` is a free variable, the query
 

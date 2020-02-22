@@ -18,7 +18,7 @@
 :- use_module(library(cont)).
 :- use_module(library(lists)).
 %:- use_module(library(debug)).
-:- use_module(library(non_iso)).
+:- use_module(library(iso_ext)).
 
 %% :- meta_predicate
 %% 	start_tabling(+, 0).
