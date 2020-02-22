@@ -674,10 +674,6 @@ existential(V, BDD, Node) :-
    Counter network for card(Is,Fs).
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-same_length([], []).
-same_length([_|As], [_|Bs]) :-
-        same_length(As, Bs).
-
 counter_network(Cs, Fs, Node) :-
         same_length([_|Fs], Indicators),
         fill_indicators(Indicators, 0, Cs),
