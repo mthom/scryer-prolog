@@ -456,7 +456,10 @@ group_by_variants([V-S|Pairs], [V-Solution|Solutions]) :-
     group_by_variants(Pairs0, Solutions).
 group_by_variants([], []).
 
-iterate_variants([V-Solution|GroupSolutions], V, Solution).
+iterate_variants([V-Solution|GroupSolutions], V, Solution) :-
+    (  GroupSolutions == [] -> !
+    ;  true
+    ).
 iterate_variants([_|GroupSolutions], Ws, Solution) :-
     iterate_variants(GroupSolutions, Ws, Solution).
 
@@ -491,7 +494,10 @@ bagof(Template, Goal, Solution) :-
     iterate_variants(GroupedSolutions, Witnesses, Solution).
 
 iterate_variants_and_sort([V-Solution0|GroupSolutions], V, Solution) :-
-    sort(Solution0, Solution).
+    sort(Solution0, Solution),
+    (  GroupSolutions == [] -> !
+    ;  true
+    ).
 iterate_variants_and_sort([_|GroupSolutions], Ws, Solution) :-
     iterate_variants_and_sort(GroupSolutions, Ws, Solution).
 
@@ -948,7 +954,7 @@ chars_or_vars([C|Cs], PI) :-
     ).
 
 can_be_codes_or_vars(Cs, _)  :- var(Cs), !.
-can_be_codes_or_vars(Cs, PI) :- 
+can_be_codes_or_vars(Cs, PI) :-
     (  string(Cs) ->
        current_prolog_flag(double_quotes, codes)
     ;  codes_or_vars(Cs, PI)

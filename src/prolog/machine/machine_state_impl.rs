@@ -2207,7 +2207,7 @@ impl MachineState {
                 (HeapCellValue::Addr(Addr::PStrLocation(..)),
                  HeapCellValue::Addr(Addr::Con(Constant::String(..))))
               | (HeapCellValue::Addr(Addr::Con(Constant::String(..))),
-                 HeapCellValue::Addr(Addr::PStrLocation(..))) 
+                 HeapCellValue::Addr(Addr::PStrLocation(..)))
                     if self.flags.double_quotes.is_chars() => {
                         continue;
                     }
@@ -3169,7 +3169,8 @@ impl MachineState {
         false
     }
 
-    pub(super) fn setup_built_in_call(&mut self, ct: BuiltInClauseType) {
+    pub(super)
+    fn setup_built_in_call(&mut self, ct: BuiltInClauseType) {
         self.num_of_args = ct.arity();
         self.b0 = self.b;
 
