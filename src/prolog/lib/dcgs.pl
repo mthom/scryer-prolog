@@ -1,6 +1,7 @@
-% :- op(1105, xfy, ('|')).
-
-:- module(dcgs, [op(1200, xfx, -->), phrase/2, phrase/3]).
+:- module(dcgs, [op(1200, xfx, -->),
+		 op(1105, xfy, '|'),
+		 phrase/2,
+		 phrase/3]).
 
 :- use_module(library(lists), [append/3]).
 
@@ -31,8 +32,8 @@ phrase_((A -> B ; C), S0, S) :-
     ).
 phrase_((A ; B), S0, S) :-
     (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
-%% phrase_((A | B), S0, S) :-
-%%     (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
+phrase_((A | B), S0, S) :-
+    (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
 phrase_({G}, S0, S) :-
     (  call(G), S0 = S  ).
 phrase_(call(G), S0, S) :-
@@ -95,7 +96,7 @@ dcg_constr([]). % 7.14.1
 dcg_constr([_|_]). % 7.14.2 - terminal sequence
 dcg_constr(( _, _ )). % 7.14.3 - concatenation
 dcg_constr(( _ ; _ )). % 7.14.4 - alternative
-%% dcg_constr(( _'|'_ )). % 7.14.6 - alternative
+dcg_constr(( _'|'_ )). % 7.14.6 - alternative
 dcg_constr({_}). % 7.14.7
 dcg_constr(call(_)). % 7.14.8
 dcg_constr(phrase(_)). % 7.14.9
@@ -119,9 +120,9 @@ dcg_cbody(( GRCond ; GRElse ), S0, S, ( Cond ; Else )) :-
     subsumes_term(( _GRIf -> _GRThen ), GRCond),
     dcg_cbody(GRCond, S0, S, Cond),
     dcg_body(GRElse, S0, S, Else).
-%% dcg_cbody(( GREither '|' GROr ), S0, S, ( Either ; Or )) :-
-%%     dcg_body(GREither, S0, S, Either),
-%%     dcg_body(GROr, S0, S, Or).
+dcg_cbody(( GREither '|' GROr ), S0, S, ( Either ; Or )) :-
+    dcg_body(GREither, S0, S, Either),
+    dcg_body(GROr, S0, S, Or).
 dcg_cbody({Goal}, S0, S, ( Goal, S0 = S )).
 dcg_cbody(call(Cont), S0, S, call(Cont, S0, S)).
 dcg_cbody(phrase(Body), S0, S, phrase(Body, S0, S)).
