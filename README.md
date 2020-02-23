@@ -51,7 +51,7 @@ Extend Scryer Prolog to include the following, among other features:
 - [x] Delimited continuations based on reset/3, shift/1 (documented in
       "Delimited Continuations for Prolog").
 - [x] Tabling library based on delimited continuations
-      (documented in "Tabling as a Library with Delimited Control").      
+      (documented in "Tabling as a Library with Delimited Control").
 - [x] A _redone_ representation of strings as difference list of
       chars, using a packed internal representation.
 - [ ] clp(B) and clp(ℤ) as builtin libraries (_in progress_).
@@ -92,8 +92,14 @@ strings.
 
 First, install the latest stable version of
 [Rust](https://www.rust-lang.org/en-US/install.html) using your
-preferred method. Then install Scryer Prolog with cargo,
-like so:
+preferred method. Scryer tends to use features from newer Rust
+releases, whereas Rust packages in Linux distributions, Macports,
+etc. tend to lag behind. [rustup](http://rustup.rs) will keep your
+Rust updated to the latest stable release; any existing Rust
+distribution should be uninstalled from your system before rustup is
+used.
+
+Scryer Prolog can be installed with cargo, like so:
 
 ```
 $> cargo install scryer-prolog
