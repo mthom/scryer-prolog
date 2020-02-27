@@ -117,7 +117,6 @@ ref_thread_local! {
         m.insert(("@>=", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::GreaterThanOrEqual)));
         m.insert(("@=<", 2), ClauseType::BuiltIn(BuiltInClauseType::CompareTerm(CompareTermQT::LessThanOrEqual)));
         m.insert(("copy_term", 2), ClauseType::BuiltIn(BuiltInClauseType::CopyTerm));
-        m.insert(("cyclic_term", 1), ClauseType::BuiltIn(BuiltInClauseType::CyclicTerm));
         m.insert(("==", 2), ClauseType::BuiltIn(BuiltInClauseType::Eq));
         m.insert(("functor", 3), ClauseType::BuiltIn(BuiltInClauseType::Functor));
         m.insert(("ground", 1), ClauseType::BuiltIn(BuiltInClauseType::Ground));
@@ -538,7 +537,6 @@ pub enum BuiltInClauseType {
     Arg,
     Compare,
     CompareTerm(CompareTermQT),
-    CyclicTerm,
     CopyTerm,
     Eq,
     Functor,
@@ -569,7 +567,6 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Arg => clause_name!("arg"),
             &BuiltInClauseType::Compare => clause_name!("compare"),
             &BuiltInClauseType::CompareTerm(qt) => clause_name!(qt.name()),
-            &BuiltInClauseType::CyclicTerm => clause_name!("cyclic_term"),
             &BuiltInClauseType::CopyTerm => clause_name!("copy_term"),
             &BuiltInClauseType::Eq => clause_name!("=="),
             &BuiltInClauseType::Functor => clause_name!("functor"),
@@ -589,7 +586,6 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Arg => 3,
             &BuiltInClauseType::Compare => 2,
             &BuiltInClauseType::CompareTerm(_) => 2,
-            &BuiltInClauseType::CyclicTerm => 1,
             &BuiltInClauseType::CopyTerm => 2,
             &BuiltInClauseType::Eq => 2,
             &BuiltInClauseType::Functor => 3,

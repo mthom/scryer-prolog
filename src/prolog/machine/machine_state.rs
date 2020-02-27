@@ -711,11 +711,6 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.compare_term(qt);
                 return_from_clause!(machine_st.last_call, machine_st)
             }
-            &BuiltInClauseType::CyclicTerm => {
-                let addr = machine_st[temp_v!(1)].clone();
-                machine_st.fail = !machine_st.is_cyclic_term(addr);
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
             &BuiltInClauseType::Nl => {
                 let mut stdout = stdout();
 
