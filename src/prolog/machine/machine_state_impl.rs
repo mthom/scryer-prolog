@@ -49,7 +49,8 @@ macro_rules! try_or_fail {
 }
 
 impl MachineState {
-    pub(crate) fn new() -> Self {
+    pub(crate)
+    fn new() -> Self {
         MachineState {
             s: 0,
             p: CodePtr::default(),
@@ -78,7 +79,8 @@ impl MachineState {
         }
     }
 
-    pub(crate) fn with_small_heap() -> Self {
+    pub(crate)
+    fn with_small_heap() -> Self {
         MachineState {
             s: 0,
             p: CodePtr::default(),
@@ -441,6 +443,7 @@ impl MachineState {
     pub(super)
     fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
+        
         let mut tabu_list: IndexSet<(Addr, Addr)> = IndexSet::new();
 
         self.fail = false;
@@ -600,7 +603,8 @@ impl MachineState {
         }
     }
 
-    pub(super) fn trail(&mut self, r: TrailRef) {
+    pub(super)
+    fn trail(&mut self, r: TrailRef) {
         match r {
             TrailRef::Ref(Ref::HeapCell(h)) => {
                 if h < self.hb {
@@ -641,7 +645,8 @@ impl MachineState {
         }
     }
 
-    pub(super) fn unwind_trail(&mut self, a1: usize, a2: usize) {
+    pub(super)
+    fn unwind_trail(&mut self, a1: usize, a2: usize) {
         // the sequence is reversed to respect the chronology of trail
         // additions, now that deleted attributes can be undeleted by
         // backtracking.
@@ -674,7 +679,8 @@ impl MachineState {
         }
     }
 
-    pub(super) fn tidy_trail(&mut self) {
+    pub(super)
+    fn tidy_trail(&mut self) {
         if self.b == 0 {
             return;
         }
@@ -846,7 +852,9 @@ impl MachineState {
                 {
                     interms.push(Number::Float(OrderedFloat(f64::consts::PI)))
                 }
-                _ => return Err(self.error_form(MachineError::instantiation_error(), caller)),
+                _ => {
+                    return Err(self.error_form(MachineError::instantiation_error(), caller));
+                }
             }
         }
 
@@ -1284,7 +1292,8 @@ impl MachineState {
         }
     }
 
-    pub(super) fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
+    pub(super)
+    fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
         let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
 
         match instr {
@@ -1594,7 +1603,8 @@ impl MachineState {
         self.mode = MachineMode::Read;
     }
 
-    pub(super) fn execute_fact_instr(&mut self, instr: &FactInstruction) {
+    pub(super)
+    fn execute_fact_instr(&mut self, instr: &FactInstruction) {
         match instr {
             &FactInstruction::GetConstant(_, ref c, reg) => {
                 let addr = self[reg].clone();
@@ -1759,7 +1769,8 @@ impl MachineState {
         };
     }
 
-    pub(super) fn execute_indexing_instr(&mut self, instr: &IndexingInstruction) {
+    pub(super)
+    fn execute_indexing_instr(&mut self, instr: &IndexingInstruction) {
         match instr {
             &IndexingInstruction::SwitchOnTerm(v, c, l, s) => {
                 let a1 = self.registers[1].clone();
@@ -1898,12 +1909,9 @@ impl MachineState {
                 let addr = self.deref(self[reg].clone());
                 let h = self.heap.h();
 
-                if let Addr::HeapCell(hc) = addr {
-                    if hc < h {
-                        let heap_val = self.heap[hc].clone();
-                        self.heap.push(heap_val);
-                        return;
-                    }
+                if addr < Ref::HeapCell(h) {
+                    self.heap.push(HeapCellValue::Addr(addr));
+                    return;                    
                 }
 
                 self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
@@ -1915,7 +1923,7 @@ impl MachineState {
                 self[reg] = Addr::HeapCell(h);
             }
             &QueryInstruction::SetValue(reg) => {
-                let heap_val = self[reg].clone();
+                let heap_val = self.store(self[reg].clone());
                 self.heap.push(HeapCellValue::Addr(heap_val));
             }
             &QueryInstruction::SetVoid(n) => {
@@ -3197,6 +3205,10 @@ impl MachineState {
         self.cp = frame.prelude.cp;
         self.e  = frame.prelude.e;
 
+        if e > self.b {
+            self.stack.truncate(e);
+        }
+
         self.p += 1;
     }
 
@@ -3406,6 +3418,10 @@ impl MachineState {
                 if b > b0 {
                     self.b = b0;
                     self.tidy_trail();
+
+                    if b > self.e {
+                        self.stack.truncate(b);
+                    }
                 }
 
                 self.p += 1;

@@ -225,9 +225,12 @@ impl Index<RegType> for MachineState {
 impl IndexMut<RegType> for MachineState {
     fn index_mut(&mut self, reg: RegType) -> &mut Self::Output {
         match reg {
-            RegType::Temp(temp) => &mut self.registers[temp],
+            RegType::Temp(temp) => {
+                &mut self.registers[temp]
+            }
             RegType::Perm(perm) => {
                 let e = self.e;
+
                 &mut self.stack.index_and_frame_mut(e)[perm]
             }
         }
@@ -274,10 +277,10 @@ impl MachineState {
     fn try_char_list(&self, addrs: Vec<Addr>) -> Result<String, MachineError> {
         let mut chars = String::new();
         let mut iter = addrs.iter();
-        
+
         while let Some(addr) = iter.next() {
             let addr = self.store(self.deref(addr.clone()));
-            
+
             match addr {
                 Addr::Con(Constant::String(n, ref s))
                     if self.flags.double_quotes.is_chars() => {

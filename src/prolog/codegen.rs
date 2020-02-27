@@ -11,7 +11,7 @@ use crate::prolog::iterators::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::targets::*;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -50,56 +50,45 @@ impl<'a> ConjunctInfo<'a> {
         self.has_deep_cut as usize
     }
 
-    fn mark_unsafe_vars<Alloc: Allocator<'a>>(
+    fn mark_unsafe_vars(
         &self,
         mut unsafe_var_marker: UnsafeVarMarker,
-        marker: &Alloc,
-        code: &mut Code
+        code: &mut Code,
     ) {
-        // target the last goal of the rule for handling unsafe variables.
-        // we use this weird logic to find the last goal.
-        let right_index = if let Some(Line::Control(_)) = code.last() {
-            if code.len() >= 2 {
-                code.len() - 2
-            } else {
-                return;
-            }
-        } else {
-            if code.len() >= 1 {
-                code.len() - 1
-            } else {
-                return;
-            }
-        };
+        if code.is_empty() {
+            return;
+        }
 
-        let mut index = right_index;
+        let mut code_index = 0;
 
-        if let Line::Query(_) = &code[right_index] {
-            while let Line::Query(_) = &code[index] {
-                if index == 0 {
-                    break;
-                } else {
-                    index -= 1;
+        for phase in 0 .. {
+            while let Line::Query(ref query_instr) = &code[code_index] {
+                if !unsafe_var_marker.mark_safe_vars(query_instr) {
+                    unsafe_var_marker.mark_phase(query_instr, phase);
                 }
+
+                code_index += 1;
             }
 
-            if let Line::Query(_) = &code[index] {
+            if code_index + 1 < code.len() {
+                code_index += 1;
             } else {
-                index += 1;
+                break;
+            }
+        }
+
+        code_index = 0;
+
+        for phase in 0 .. {
+            while let Line::Query(ref mut query_instr) = &mut code[code_index] {
+                unsafe_var_marker.mark_unsafe_vars(query_instr, phase);
+                code_index += 1;
             }
 
-            unsafe_var_marker.record_unsafe_vars(&self.perm_vs, marker);
-
-            for line in code.iter() {
-                if let Line::Query(ref query_instr) = line {
-                    unsafe_var_marker.mark_safe_vars(query_instr);
-                }
-            }
-
-            for index in index..right_index + 1 {
-                if let &mut Line::Query(ref mut query_instr) = &mut code[index] {
-                    unsafe_var_marker.mark_unsafe_vars(query_instr);
-                }
+            if code_index + 1 < code.len() {
+                code_index += 1;
+            } else {
+                break;
             }
         }
     }
@@ -684,6 +673,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             head: (_, ref args, ref p1),
             ref clauses,
         } = rule;
+
         let mut code = Vec::new();
 
         self.marker.reset_at_head(args);
@@ -705,39 +695,31 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         let iter = ChunkedIterator::from_rule_body(p1, clauses);
         self.compile_seq(iter, &conjunct_info, &mut code, false)?;
 
-        conjunct_info.mark_unsafe_vars(unsafe_var_marker, &self.marker, &mut code);
+        conjunct_info.mark_unsafe_vars(unsafe_var_marker, &mut code);
 
         Self::compile_cleanup(&mut code, &conjunct_info, clauses.last().unwrap_or(p1));
         Ok(code)
     }
 
     fn mark_unsafe_fact_vars(&self, fact: &mut CompiledFact) -> UnsafeVarMarker {
-        let mut unsafe_vars = IndexMap::new();
-
-        for var_status in self.marker.bindings().values() {
-            unsafe_vars.insert(var_status.as_reg_type(), false);
-        }
+        let mut safe_vars = IndexSet::new();
 
         for fact_instr in fact.iter_mut() {
             match fact_instr {
-                &mut FactInstruction::UnifyValue(reg) => {
-                    if let Some(found) = unsafe_vars.get_mut(&reg) {
-                        if !*found {
-                            *found = true;
-                            *fact_instr = FactInstruction::UnifyLocalValue(reg);
-                        }
+                &mut FactInstruction::UnifyValue(r) => {
+                    if !safe_vars.contains(&r) {
+                        *fact_instr = FactInstruction::UnifyLocalValue(r);                        
+                        safe_vars.insert(r);
                     }
                 }
-                &mut FactInstruction::UnifyVariable(reg) => {
-                    if let Some(found) = unsafe_vars.get_mut(&reg) {
-                        *found = true;
-                    }
+                &mut FactInstruction::UnifyVariable(r) => {
+                    safe_vars.insert(r);
                 }
                 _ => {}
-            };
+            }
         }
 
-        UnsafeVarMarker { unsafe_vars }
+        UnsafeVarMarker::from_safe_vars(safe_vars)
     }
 
     pub fn compile_fact<'b: 'a>(&mut self, term: &'b Term) -> Code {
@@ -802,7 +784,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         let iter = ChunkedIterator::from_term_sequence(query);
         self.compile_seq(iter, &conjunct_info, &mut code, true)?;
 
-        conjunct_info.mark_unsafe_vars(UnsafeVarMarker::new(), &self.marker, &mut code);
+        conjunct_info.mark_unsafe_vars(UnsafeVarMarker::new(), &mut code);
 
         if let Some(query_term) = query.last() {
             Self::compile_cleanup(&mut code, &conjunct_info, query_term);

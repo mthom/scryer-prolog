@@ -1,6 +1,5 @@
 use prolog_parser::ast::*;
 
-use crate::prolog::allocator::*;
 use crate::prolog::forms::*;
 use crate::prolog::instructions::*;
 use crate::prolog::iterators::*;
@@ -91,7 +90,7 @@ impl<'a> VariableFixtures<'a> {
             perm_vars: IndexMap::new(),
             last_chunk_temp_vars: IndexSet::new()
         }
-                          
+
     }
 
     pub fn insert(&mut self, var: Rc<Var>, vs: VariableFixture<'a>) {
@@ -250,67 +249,67 @@ impl<'a> VariableFixtures<'a> {
 }
 
 pub struct UnsafeVarMarker {
-    pub unsafe_vars: IndexMap<RegType, bool>,
+    pub unsafe_vars: IndexMap<RegType, usize>,
+    pub safe_vars: IndexSet<RegType>,
 }
 
 impl UnsafeVarMarker {
     pub fn new() -> Self {
         UnsafeVarMarker {
             unsafe_vars: IndexMap::new(),
+            safe_vars: IndexSet::new()
         }
     }
 
-    pub fn record_unsafe_vars<'a, Alloc: Allocator<'a>>(
-        &mut self,
-        fixtures: &VariableFixtures,
-        marker: &Alloc
-    ) {
-        for &(_, ref cb) in fixtures.values() {           
-            if let Some(index) = cb.first() {
-                if !self.unsafe_vars.contains_key(&index.get().norm()) {
-                    self.unsafe_vars.insert(index.get().norm(), false);
-                }
-            }
-        }
-
-        for var in fixtures.last_chunk_temp_vars.iter().cloned() {
-            let r = marker.get(var);
-            self.unsafe_vars.insert(r, false);
+    pub fn from_safe_vars(safe_vars: IndexSet<RegType>) -> Self {
+        UnsafeVarMarker {
+            unsafe_vars: IndexMap::new(),
+            safe_vars
         }
     }
 
-    pub fn mark_safe_vars(&mut self, query_instr: &QueryInstruction) {
+    pub fn mark_safe_vars(&mut self, query_instr: &QueryInstruction) -> bool {
         match query_instr {
-            QueryInstruction::PutVariable(RegType::Temp(r), _) => {
-                if let Some(found) = self.unsafe_vars.get_mut(&RegType::Temp(*r)) {
-                    *found = true;
-                }
+            &QueryInstruction::PutVariable(r @ RegType::Temp(_), _)
+          | &QueryInstruction::SetVariable(r) =>  {
+                self.safe_vars.insert(r);
+                true
             }
-            QueryInstruction::SetVariable(reg) => {
-                if let Some(found) = self.unsafe_vars.get_mut(reg) {
-                    *found = true;
-                }
+            _ => {
+                false
+            }
+        }
+    }
+
+    pub fn mark_phase(&mut self, query_instr: &QueryInstruction, phase: usize) {
+        match query_instr {
+            &QueryInstruction::PutValue(r @ RegType::Perm(_), _)
+          | &QueryInstruction::SetValue(r) => {
+                let p = self.unsafe_vars.entry(r).or_insert(0);
+                *p = phase;
             }
             _ => {}
         }
     }
 
-    pub fn mark_unsafe_vars(&mut self, query_instr: &mut QueryInstruction) {
+    pub fn mark_unsafe_vars(&mut self, query_instr: &mut QueryInstruction, phase: usize) {
         match query_instr {
             &mut QueryInstruction::PutValue(RegType::Perm(i), arg) => {
-                if let Some(found) = self.unsafe_vars.get_mut(&RegType::Perm(i)) {
-                    if !*found {
-                        *found = true;
+                if let Some(p) = self.unsafe_vars.swap_remove(&RegType::Perm(i)) {
+                    if p == phase {
                         *query_instr = QueryInstruction::PutUnsafeValue(i, arg);
+                        self.safe_vars.insert(RegType::Perm(i));
+                    } else {
+                        self.unsafe_vars.insert(RegType::Perm(i), p);
                     }
                 }
             }
-            &mut QueryInstruction::SetValue(reg) => {
-                if let Some(found) = self.unsafe_vars.get_mut(&reg) {
-                    if !*found {
-                        *found = true;
-                        *query_instr = QueryInstruction::SetLocalValue(reg);
-                    }
+            &mut QueryInstruction::SetValue(r) => {
+                if !self.safe_vars.contains(&r) {
+                    *query_instr = QueryInstruction::SetLocalValue(r);
+
+                    self.safe_vars.insert(r);
+                    self.unsafe_vars.remove(&r);
                 }
             }
             _ => {}
