@@ -968,6 +968,10 @@ impl ListingCompiler {
             Declaration::Op(op_decl) => {
                 self.submit_op(wam, indices, &op_decl)
             }
+            Declaration::SetPrologFlag(dbl_quotes) => {
+                wam.machine_st.flags.double_quotes = dbl_quotes;
+                Ok(())
+            }
             Declaration::UseModule(ModuleSource::Library(name)) => {
                 let name = if !wam.indices.modules.contains_key(&name) {
                     load_library(wam, name, true)?

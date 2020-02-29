@@ -339,6 +339,32 @@ fn setup_use_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleSource, Pars
     }
 }
 
+fn setup_double_quotes(mut terms: Vec<Box<Term>>) -> Result<DoubleQuotes, ParserError> {
+    let dbl_quotes = *terms.pop().unwrap();
+    
+    match terms[0].as_ref() {
+        Term::Constant(_, Constant::Atom(ref name, _))
+            if name.as_str() == "double_quotes" => {
+                match dbl_quotes {
+                    Term::Constant(_, Constant::Atom(name, _)) => {
+                        match name.as_str() {
+                            "atom"  => Ok(DoubleQuotes::Atom),
+                            "chars" => Ok(DoubleQuotes::Chars),
+                            "codes" => Ok(DoubleQuotes::Codes),
+                            _ => Err(ParserError::InvalidDoubleQuotesDecl),
+                        }
+                    }
+                    _ => {
+                        Err(ParserError::InvalidDoubleQuotesDecl)
+                    }
+                }
+            },
+        _ => {
+            Err(ParserError::InvalidDoubleQuotesDecl)
+        }
+    }
+}
+
 type UseModuleExport = (ModuleSource, Vec<ModuleExport>);
 
 fn setup_qualified_import(
@@ -620,6 +646,9 @@ fn setup_declaration<'a, 'b, 'c, R: Read>(
 		    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
 		    Ok(Declaration::NonCountedBacktracking(name, arity))
 		}
+                ("set_prolog_flag", 2) => {
+                    Ok(Declaration::SetPrologFlag(setup_double_quotes(terms)?))
+                }
                 ("multifile", 1) => {
                     let mut term = *terms.pop().unwrap();
 

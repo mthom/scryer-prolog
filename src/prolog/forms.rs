@@ -394,6 +394,7 @@ pub enum Declaration {
     MultiFile(MultiFileIndicator),
     NonCountedBacktracking(ClauseName, usize), // name, arity
     Op(OpDecl),
+    SetPrologFlag(DoubleQuotes),
     UseModule(ModuleSource),
     UseQualifiedModule(ModuleSource, Vec<ModuleExport>),
 }
