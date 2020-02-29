@@ -30,7 +30,7 @@ Extend Scryer Prolog to include the following, among other features:
 - [x] Built-in predicates for list processing and top-level declarative
       control (`setup_call_cleanup/3`, `call_with_inference_limit/3`,
       etc.)
-- [x] ~~Default representation of strings as list of chars, using a packed
+- [x] ~~Default representation of strings as lists of characters, using a packed
       internal representation.~~
 - [x] `term_expansion/2` and `goal_expansion/2`.
 - [x] Definite Clause Grammars.
@@ -52,8 +52,8 @@ Extend Scryer Prolog to include the following, among other features:
       "Delimited Continuations for Prolog").
 - [x] Tabling library based on delimited continuations
       (documented in "Tabling as a Library with Delimited Control").
-- [x] A _redone_ representation of strings as difference list of
-      chars, using a packed internal representation.
+- [x] A _redone_ representation of strings as difference lists of
+      characters, using a packed internal representation.
 - [ ] clp(B) and clp(ℤ) as builtin libraries (_in progress_).
 - [ ] Streams and predicates for stream control (_in progress_).
 - [ ] An incremental compacting garbage collector satisfying the five
