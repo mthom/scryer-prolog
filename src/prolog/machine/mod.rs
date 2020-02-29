@@ -699,7 +699,7 @@ impl Machine {
         snapshot.e = self.machine_st.e;
         snapshot.b = self.machine_st.b;
         snapshot.b0 = self.machine_st.b0;
-        snapshot.s = self.machine_st.s;
+        snapshot.s = self.machine_st.s.clone();
         snapshot.tr = self.machine_st.tr;
         snapshot.num_of_args = self.machine_st.num_of_args;
 

@@ -18,6 +18,7 @@ use std::cmp::Ordering;
 use std::io::{stdout, Write};
 use std::mem;
 use std::ops::{Index, IndexMut};
+use std::rc::Rc;
 
 pub struct Ball {
     pub(super) boundary: usize,
@@ -245,8 +246,33 @@ pub(super) enum MachineMode {
     Write,
 }
 
+#[derive(Clone)]
+pub(super) enum HeapPtr {
+    HeapCell(usize),
+    PStrLocation(usize, usize),
+    String(usize, Rc<String>),
+}
+
+impl HeapPtr {
+    #[inline]
+    pub(super)
+    fn as_addr(&self) -> Addr {
+        match self {
+            &HeapPtr::HeapCell(h) => Addr::HeapCell(h),
+            &HeapPtr::PStrLocation(h, n) => Addr::PStrLocation(h, n),
+            &HeapPtr::String(n, ref s) => Addr::Con(Constant::String(n, s.clone())),
+        }
+    }
+}
+
+impl Default for HeapPtr {
+    fn default() -> Self {
+        HeapPtr::HeapCell(0)
+    }
+}
+
 pub struct MachineState {
-    pub(super) s: usize,
+    pub(super) s: HeapPtr,
     pub(super) p: CodePtr,
     pub(super) b: usize,
     pub(super) b0: usize,

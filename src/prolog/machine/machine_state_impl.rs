@@ -52,7 +52,7 @@ impl MachineState {
     pub(crate)
     fn new() -> Self {
         MachineState {
-            s: 0,
+            s: HeapPtr::default(),
             p: CodePtr::default(),
             b: 0,
             b0: 0,
@@ -82,7 +82,7 @@ impl MachineState {
     pub(crate)
     fn with_small_heap() -> Self {
         MachineState {
-            s: 0,
+            s: HeapPtr::default(),
             p: CodePtr::default(),
             b: 0,
             b0: 0,
@@ -640,6 +640,33 @@ impl MachineState {
                 if b < self.b {
                     self.trail.push(TrailRef::Ref(Ref::StackCell(b, sc)));
                     self.tr += 1;
+                }
+            }
+        }
+    }
+
+    fn increment_s_ptr(&mut self, rhs: usize) {
+        match &mut self.s {
+            HeapPtr::HeapCell(ref mut h) => {
+                *h += rhs;
+            }
+            HeapPtr::PStrLocation(h, n) => {
+                match &self.heap[*h] {
+                    HeapCellValue::PartialString(ref pstr) => {
+                        let s = pstr.block_as_str();
+
+                        for c in s[*n ..].chars().take(rhs) {
+                            *n += c.len_utf8();
+                        }
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                }
+            }
+            HeapPtr::String(ref mut n, ref s) => {
+                for c in s[*n ..].chars().take(rhs) {
+                    *n += c.len_utf8();
                 }
             }
         }
@@ -1564,45 +1591,6 @@ impl MachineState {
         };
     }
 
-    fn get_char_list(&mut self, offset: usize, s: Rc<String>)
-    {
-        if let Some(c) = s[offset ..].chars().next() {
-            let h = self.heap.h();
-
-            self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Char(c))));
-            self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::String(
-                offset + c.len_utf8(),
-                s,
-            ))));
-
-            self.s = h;
-            self.mode = MachineMode::Read;
-        }
-    }
-
-    fn get_partial_string_list(&mut self, pstr_h: usize, offset: usize)
-    {
-        let (c, pstr_tail) =
-            if let HeapCellValue::PartialString(ref pstr) = &self.heap[pstr_h] {
-                let s = pstr.block_as_str();
-
-                if let Some(c) = s[offset ..].chars().next() {
-                    (c, Addr::PStrTail(pstr_h, offset + c.len_utf8()))
-                } else {
-                    unreachable!()
-                }
-            } else {
-                unreachable!()
-            };
-
-        self.s = self.heap.h();
-
-        self.heap.push(HeapCellValue::Addr(Addr::Con(Constant::Char(c))));
-        self.heap.push(HeapCellValue::Addr(pstr_tail));
-
-        self.mode = MachineMode::Read;
-    }
-
     pub(super)
     fn execute_fact_instr(&mut self, instr: &FactInstruction) {
         match instr {
@@ -1618,14 +1606,16 @@ impl MachineState {
                         match self.flags.double_quotes {
                             DoubleQuotes::Chars | DoubleQuotes::Codes
                                 if s.len() > n => {
-                                    self.get_char_list(n, s)
+                                    self.s = HeapPtr::String(n, s);
+                                    self.mode = MachineMode::Read;
                                 }
                             _ => {
                                 self.fail = true
                             }
                         },
                     Addr::PStrLocation(h, n) => {
-                        self.get_partial_string_list(h, n)
+                        self.s = HeapPtr::PStrLocation(h, n);
+                        self.mode = MachineMode::Read;
                     }
                     addr @ Addr::AttrVar(_)
                   | addr @ Addr::StackCell(..)
@@ -1639,7 +1629,7 @@ impl MachineState {
                         self.mode = MachineMode::Write;
                     }
                     Addr::Lis(a) => {
-                        self.s = a;
+                        self.s = HeapPtr::HeapCell(a);
                         self.mode = MachineMode::Read;
                     }
                     _ => self.fail = true,
@@ -1654,7 +1644,7 @@ impl MachineState {
 
                         if let &HeapCellValue::NamedStr(narity, ref s, _) = result {
                             if narity == arity && ct.name() == *s {
-                                self.s = a + 1;
+                                self.s = HeapPtr::HeapCell(a + 1);
                                 self.mode = MachineMode::Read;
                             } else {
                                 self.fail = true;
@@ -1685,7 +1675,7 @@ impl MachineState {
             &FactInstruction::UnifyConstant(ref c) => {
                 match self.mode {
                     MachineMode::Read => {
-                        let addr = Addr::HeapCell(self.s);
+                        let addr = self.s.as_addr();
                         self.write_constant_to_var(addr, c.clone());
                     }
                     MachineMode::Write => {
@@ -1693,11 +1683,11 @@ impl MachineState {
                     }
                 };
 
-                self.s += 1;
+                self.increment_s_ptr(1);
             }
             &FactInstruction::UnifyVariable(reg) => {
                 match self.mode {
-                    MachineMode::Read => self[reg] = self.heap[self.s].as_addr(self.s),
+                    MachineMode::Read => self[reg] = self.s.as_addr(),
                     MachineMode::Write => {
                         let h = self.heap.h();
 
@@ -1706,15 +1696,13 @@ impl MachineState {
                     }
                 };
 
-                self.s += 1;
+                self.increment_s_ptr(1);
             }
             &FactInstruction::UnifyLocalValue(reg) => {
-                let s = self.s;
-
                 match self.mode {
                     MachineMode::Read => {
                         let reg_addr = self[reg].clone();
-                        self.unify(reg_addr, Addr::HeapCell(s));
+                        self.unify(reg_addr, self.s.as_addr());
                     }
                     MachineMode::Write => {
                         let addr = self.deref(self[reg].clone());
@@ -1725,7 +1713,7 @@ impl MachineState {
                                 let val = self.heap[hc].clone();
 
                                 self.heap.push(val);
-                                self.s += 1;
+                                self.increment_s_ptr(1);
 
                                 return;
                             }
@@ -1736,15 +1724,13 @@ impl MachineState {
                     }
                 };
 
-                self.s += 1;
+                self.increment_s_ptr(1);
             }
             &FactInstruction::UnifyValue(reg) => {
-                let s = self.s;
-
                 match self.mode {
                     MachineMode::Read => {
                         let reg_addr = self[reg].clone();
-                        self.unify(reg_addr, Addr::HeapCell(s));
+                        self.unify(reg_addr, self.s.as_addr());
                     }
                     MachineMode::Write => {
                         let heap_val = self.store(self[reg].clone());
@@ -1752,11 +1738,11 @@ impl MachineState {
                     }
                 };
 
-                self.s += 1;
+                self.increment_s_ptr(1);
             }
             &FactInstruction::UnifyVoid(n) => {
                 match self.mode {
-                    MachineMode::Read => self.s += n,
+                    MachineMode::Read => self.increment_s_ptr(n),
                     MachineMode::Write => {
                         let h = self.heap.h();
 
@@ -1865,16 +1851,15 @@ impl MachineState {
             &QueryInstruction::PutStructure(ref ct, arity, reg) => {
                 let h = self.heap.h();
 
-                self.heap
-                    .push(HeapCellValue::NamedStr(arity, ct.name(), ct.spec()));
+                self.heap.push(HeapCellValue::NamedStr(arity, ct.name(), ct.spec()));
                 self[reg] = Addr::Str(h);
             }
             &QueryInstruction::PutUnsafeValue(n, arg) => {
                 let e = self.e;
-                let addr = self.deref(Addr::StackCell(e, n));
+                let addr = self.store(self.deref(Addr::StackCell(e, n)));
 
                 if addr.is_protected(e) {
-                    self.registers[arg] = self.store(addr);
+                    self.registers[arg] = addr;
                 } else {
                     let h = self.heap.h();
 
@@ -3454,7 +3439,7 @@ impl MachineState {
         self.e = 0;
         self.b = 0;
         self.b0 = 0;
-        self.s = 0;
+        self.s = HeapPtr::default();
         self.tr = 0;
         self.p = CodePtr::default();
         self.cp = LocalCodePtr::default();
