@@ -157,6 +157,7 @@ fn char_to_string(c: char) -> String {
 #[derive(Clone)]
 pub enum TokenOrRedirect {
     Atom(ClauseName),
+    BarAsOp,
     Op(ClauseName, SharedOpDesc),
     NumberedVar(String),
     CompositeRedirect(DirectedOp),
@@ -531,8 +532,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     fn format_prefix_op_with_space(&mut self, name: ClauseName, spec: SharedOpDesc) {
         let op = DirectedOp::Left(name.clone(), spec);
 
-        self.state_stack
-            .push(TokenOrRedirect::CompositeRedirect(op));
+        self.state_stack.push(TokenOrRedirect::CompositeRedirect(op));
         self.state_stack.push(TokenOrRedirect::Space);
         self.state_stack.push(TokenOrRedirect::Atom(name));
     }
@@ -541,11 +541,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let left_directed_op = DirectedOp::Left(name.clone(), spec.clone());
         let right_directed_op = DirectedOp::Right(name.clone(), spec.clone());
 
-        self.state_stack
-            .push(TokenOrRedirect::CompositeRedirect(left_directed_op));
-        self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
-        self.state_stack
-            .push(TokenOrRedirect::CompositeRedirect(right_directed_op));
+        self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
+        self.state_stack.push(TokenOrRedirect::BarAsOp);
+        self.state_stack.push(TokenOrRedirect::CompositeRedirect(right_directed_op));
     }
 
     fn format_curly_braces(&mut self) {
@@ -994,6 +992,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             if let Some(loc_data) = self.state_stack.pop() {
                 match loc_data {
                     TokenOrRedirect::Atom(atom) => self.print_atom(&atom),
+                    TokenOrRedirect::BarAsOp => self.append_str(" | "),
                     TokenOrRedirect::Op(atom, _) => self.print_op(atom.as_str()),
                     TokenOrRedirect::NumberedVar(num_var) => self.append_str(num_var.as_str()),
                     TokenOrRedirect::CompositeRedirect(op) => {

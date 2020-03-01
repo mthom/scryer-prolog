@@ -249,18 +249,41 @@ pub(super) enum MachineMode {
 #[derive(Clone)]
 pub(super) enum HeapPtr {
     HeapCell(usize),
-    PStrLocation(usize, usize),
-    String(usize, Rc<String>),
+    PStrChar(usize, usize),
+    PStrTail(usize, usize),
+    StringChar(usize, Rc<String>),
+    StringTail(usize, Rc<String>),
 }
 
 impl HeapPtr {
     #[inline]
     pub(super)
-    fn as_addr(&self) -> Addr {
+    fn read(&self, heap: &Heap) -> Addr {
         match self {
-            &HeapPtr::HeapCell(h) => Addr::HeapCell(h),
-            &HeapPtr::PStrLocation(h, n) => Addr::PStrLocation(h, n),
-            &HeapPtr::String(n, ref s) => Addr::Con(Constant::String(n, s.clone())),
+            &HeapPtr::HeapCell(h) =>
+                Addr::HeapCell(h),
+            &HeapPtr::PStrChar(h, n) =>
+                if let HeapCellValue::PartialString(ref pstr) = &heap[h] {
+                    let s = pstr.block_as_str();
+
+                    if let Some(c) = s[n ..].chars().next() {
+                        Addr::Con(Constant::Char(c))
+                    } else {
+                        Addr::PStrTail(h, n)
+                    }
+                } else {
+                    unreachable!()
+                },
+            &HeapPtr::PStrTail(h, n) =>
+                Addr::PStrTail(h, n),
+            &HeapPtr::StringChar(n, ref s) =>
+                if let Some(c) = s[n ..].chars().next() {
+                    Addr::Con(Constant::Char(c))
+                } else {
+                    Addr::Con(Constant::EmptyList)
+                },
+            &HeapPtr::StringTail(n, ref s) =>
+                Addr::Con(Constant::String(n, s.clone())),
         }
     }
 }

@@ -650,7 +650,7 @@ impl MachineState {
             HeapPtr::HeapCell(ref mut h) => {
                 *h += rhs;
             }
-            HeapPtr::PStrLocation(h, n) => {
+            HeapPtr::PStrChar(h, n) | HeapPtr::PStrTail(h, n) => {
                 match &self.heap[*h] {
                     HeapCellValue::PartialString(ref pstr) => {
                         let s = pstr.block_as_str();
@@ -658,16 +658,20 @@ impl MachineState {
                         for c in s[*n ..].chars().take(rhs) {
                             *n += c.len_utf8();
                         }
+
+                        self.s = HeapPtr::PStrTail(*h, *n);
                     }
                     _ => {
                         unreachable!()
                     }
                 }
             }
-            HeapPtr::String(ref mut n, ref s) => {
+            HeapPtr::StringChar(n, s) | HeapPtr::StringTail(n, s) => {
                 for c in s[*n ..].chars().take(rhs) {
                     *n += c.len_utf8();
                 }
+
+                self.s = HeapPtr::StringTail(*n, s.clone());
             }
         }
     }
@@ -1606,7 +1610,7 @@ impl MachineState {
                         match self.flags.double_quotes {
                             DoubleQuotes::Chars | DoubleQuotes::Codes
                                 if s.len() > n => {
-                                    self.s = HeapPtr::String(n, s);
+                                    self.s = HeapPtr::StringChar(n, s);
                                     self.mode = MachineMode::Read;
                                 }
                             _ => {
@@ -1614,7 +1618,7 @@ impl MachineState {
                             }
                         },
                     Addr::PStrLocation(h, n) => {
-                        self.s = HeapPtr::PStrLocation(h, n);
+                        self.s = HeapPtr::PStrChar(h, n);
                         self.mode = MachineMode::Read;
                     }
                     addr @ Addr::AttrVar(_)
@@ -1675,7 +1679,7 @@ impl MachineState {
             &FactInstruction::UnifyConstant(ref c) => {
                 match self.mode {
                     MachineMode::Read => {
-                        let addr = self.s.as_addr();
+                        let addr = self.s.read(&self.heap);
                         self.write_constant_to_var(addr, c.clone());
                     }
                     MachineMode::Write => {
@@ -1687,7 +1691,7 @@ impl MachineState {
             }
             &FactInstruction::UnifyVariable(reg) => {
                 match self.mode {
-                    MachineMode::Read => self[reg] = self.s.as_addr(),
+                    MachineMode::Read => self[reg] = self.s.read(&self.heap),
                     MachineMode::Write => {
                         let h = self.heap.h();
 
@@ -1702,7 +1706,7 @@ impl MachineState {
                 match self.mode {
                     MachineMode::Read => {
                         let reg_addr = self[reg].clone();
-                        self.unify(reg_addr, self.s.as_addr());
+                        self.unify(reg_addr, self.s.read(&self.heap));
                     }
                     MachineMode::Write => {
                         let addr = self.deref(self[reg].clone());
@@ -1730,7 +1734,7 @@ impl MachineState {
                 match self.mode {
                     MachineMode::Read => {
                         let reg_addr = self[reg].clone();
-                        self.unify(reg_addr, self.s.as_addr());
+                        self.unify(reg_addr, self.s.read(&self.heap));
                     }
                     MachineMode::Write => {
                         let heap_val = self.store(self[reg].clone());
