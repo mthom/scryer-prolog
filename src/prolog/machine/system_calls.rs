@@ -944,9 +944,8 @@ impl MachineState {
                         }
                         None => {
                             let stub = MachineError::functor_stub(clause_name!("partial_string"), 3);
-                            let err = MachineError::type_error(
-                                ValidType::Character,
-                                Addr::Con(Constant::Char('\u{0}')),
+                            let err = MachineError::representation_error(
+                                RepFlag::Character,
                             );
 
                             return Err(self.error_form(err, stub));
