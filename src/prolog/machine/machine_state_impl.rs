@@ -2301,6 +2301,14 @@ impl MachineState {
                     }
                 }
                 (
+                    HeapCellValue::Addr(Addr::Con(Constant::Char(c1))),
+                    HeapCellValue::Addr(Addr::Con(Constant::Char(c2))),
+                ) => {
+                    if c1 != c2 {
+                        return c1.cmp(&c2);
+                    }
+                }
+                (
                     HeapCellValue::Addr(Addr::Con(Constant::Atom(atom, _))),
                     HeapCellValue::Addr(Addr::Con(Constant::Char(c))),
                 ) => {
@@ -2366,7 +2374,9 @@ impl MachineState {
                     HeapCellValue::Addr(Addr::AttrVar(hc1)),
                     HeapCellValue::Addr(Addr::PStrTail(hc2, _)),
                 ) => {
-                    return hc1.cmp(&hc2);
+                    if hc1 != hc2 {
+                        return hc1.cmp(&hc2);
+                    }
                 }
                 (HeapCellValue::Addr(Addr::HeapCell(_)), _)
               | (HeapCellValue::Addr(Addr::AttrVar(_)), _)
