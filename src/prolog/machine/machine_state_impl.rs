@@ -1806,7 +1806,7 @@ impl MachineState {
                 let a1 = self.registers[1].clone();
                 let addr = self.store(self.deref(a1));
 
-                let offset = match addr {
+                let offset = match addr {                    
                     Addr::Con(constant) => match hm.get(&constant) {
                         Some(offset) => *offset,
                         _ => 0,

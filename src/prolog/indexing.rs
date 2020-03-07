@@ -74,6 +74,15 @@ impl CodeOffsets {
                 code.push(Self::add_index(is_initial_index, index));
             }
             &Term::Constant(_, ref constant) => {
+                if let Constant::Atom(ref name, _) = constant {
+                    if !name.as_str().is_empty() && name.as_str().chars().skip(1).next().is_none() {
+                        let c = name.as_str().chars().next().unwrap();
+                        let code = self.constants.entry(Constant::Char(c)).or_insert(vec![]);
+                        
+                        code.push(Self::add_index(code.is_empty(), index));
+                    }
+                }
+                
                 let code = self.constants.entry(constant.clone()).or_insert(Vec::new());
 
                 let is_initial_index = code.is_empty();
