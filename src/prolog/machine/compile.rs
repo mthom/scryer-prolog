@@ -548,8 +548,8 @@ fn add_module(
     term_dir: TermDir,
 ) {
     module.code_dir.extend(indices.code_dir);
-    module.op_dir.extend(indices.op_dir.into_iter());
-    module.term_dir.extend(term_dir.into_iter());
+    module.op_dir.extend(indices.op_dir);
+    module.term_dir.extend(term_dir);
 
     wam.add_in_situ_module_dir(indices.module_dir);
     wam.add_module(module);
@@ -568,7 +568,7 @@ fn add_non_module_code(
     clause_code_generator.generate_clause_code(&dynamic_clause_map, wam)?;
 
     add_toplevel(wam, indices, term_dir);
-    wam.code_repo.code.extend(code.into_iter());
+    wam.code_repo.code.extend(code);
     clause_code_generator.add_clause_code(wam, dynamic_clause_map);
 
     Ok(())

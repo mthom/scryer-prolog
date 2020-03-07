@@ -52,5 +52,9 @@ fn main()
     }
 
     libraries.write_all(b"\n\n        m\n    };
-}").unwrap();
+}\n").unwrap();
+
+    libraries.write_all(b"\npub static PROJECT_DIR: &'static str = \"").unwrap();
+    libraries.write_all(env::var("CARGO_MANIFEST_DIR").unwrap().as_bytes()).unwrap();
+    libraries.write_all(b"\";\n").unwrap();
 }
