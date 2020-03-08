@@ -194,6 +194,7 @@ impl SubModuleUser for IndexStore {
 #[inline]
 fn current_dir() -> std::path::PathBuf {
     let mut path_buf = std::path::PathBuf::from(PROJECT_DIR);
+    
     // file!() always produces a path relative to PROJECT_DIR.
     path_buf = path_buf.join(std::path::PathBuf::from(file!()));
 

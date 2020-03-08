@@ -60,6 +60,7 @@
 	  _,
 	  false),
     (  EqPrec < FPrec -> true
+    ;  '$quoted_token'(F) -> true
     ;  EqPrec == FPrec,
        memberchk(EqSpec, [fx,xfx,yfx])
     ).

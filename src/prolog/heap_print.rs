@@ -396,6 +396,7 @@ fn non_quoted_graphic_token<Iter: Iterator<Item = char>>(mut iter: Iter, c: char
     }
 }
 
+pub(super)
 fn non_quoted_token<Iter: Iterator<Item = char>>(mut iter: Iter) -> bool {
     if let Some(c) = iter.next() {
         if small_letter_char!(c) {
@@ -411,7 +412,7 @@ fn non_quoted_token<Iter: Iterator<Item = char>>(mut iter: Iter) -> bool {
         } else if c == '{' {
             (iter.next() == Some('}') && iter.next().is_none())
         } else if solo_char!(c) {
-            !(c == ')' || c == '}' || c == ']' || c == ',' || c == '%' || c == '|')
+            !(c == '(' || c == ')' || c == '}' || c == ']' || c == ',' || c == '%' || c == '|')
         } else {
             false
         }

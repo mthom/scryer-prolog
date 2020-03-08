@@ -2342,6 +2342,31 @@ impl MachineState {
                 self.fail = true;
                 return Ok(());
             }
+            &SystemClauseType::QuotedToken => {
+                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+
+                match addr {
+                    Addr::Con(Constant::CharCode(c)) => {
+                        self.fail = match std::char::from_u32(c) {
+                            Some(c) => {
+                                non_quoted_token(once(c))
+                            }
+                            None => {
+                                true
+                            }
+                        };
+                    }
+                    Addr::Con(Constant::Char(c)) => {
+                        self.fail = non_quoted_token(once(c));
+                    }
+                    Addr::Con(Constant::Atom(atom, _)) => {
+                        self.fail = non_quoted_token(atom.as_str().chars());
+                    }
+                    _ => {
+                        self.fail = true;
+                    }
+                }
+            }
             &SystemClauseType::ReadQueryTerm => {
                 readline::set_prompt(true);
                 let result = self.read_term(current_input_stream, indices);

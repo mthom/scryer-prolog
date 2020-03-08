@@ -241,6 +241,7 @@ pub enum SystemClauseType {
     GetDoubleQuotes,
     InstallNewBlock,
     Maybe,
+    QuotedToken,
     RawInputReadChar,
     ResetBlock,
     ReturnFromVerifyAttr,
@@ -358,6 +359,9 @@ impl SystemClauseType {
             &SystemClauseType::NumberToCodes => clause_name!("$number_to_codes"),
             &SystemClauseType::PointsToContinuationResetMarker => {
                 clause_name!("$points_to_cont_reset_marker")
+            }
+            &SystemClauseType::QuotedToken => {
+                clause_name!("$quoted_token")
             }
             &SystemClauseType::RawInputReadChar => clause_name!("$raw_input_read_char"),
             &SystemClauseType::RedoAttrVarBinding => clause_name!("$redo_attr_var_binding"),
@@ -494,6 +498,7 @@ impl SystemClauseType {
             ("$get_current_block", 1) => Some(SystemClauseType::GetCurrentBlock),
             ("$get_cp", 1) => Some(SystemClauseType::GetCutPoint),
             ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
+            ("$quoted_token", 1) => Some(SystemClauseType::QuotedToken),
             ("$raw_input_read_char", 1) => Some(SystemClauseType::RawInputReadChar),
             ("$nextEP", 3) => Some(SystemClauseType::NextEP),
             ("$read_query_term", 2) => Some(SystemClauseType::ReadQueryTerm),
