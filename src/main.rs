@@ -1,3 +1,4 @@
+extern crate crossterm;
 #[macro_use]
 extern crate downcast;
 extern crate indexmap;
@@ -9,7 +10,6 @@ extern crate nix;
 extern crate prolog_parser;
 #[macro_use]
 extern crate ref_thread_local;
-extern crate termion;
 
 use nix::sys::signal;
 

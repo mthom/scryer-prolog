@@ -21,14 +21,13 @@ use crate::ref_thread_local::RefThreadLocal;
 
 use indexmap::{IndexMap, IndexSet};
 
-use std::io::{stdin, stdout, Write};
+use std::io::{stdout, Write};
 use std::iter::once;
 use std::mem;
 use std::rc::Rc;
 
-use crate::termion::event::Key;
-use crate::termion::input::TermRead;
-use crate::termion::raw::IntoRawMode;
+use crate::crossterm::event::{read, Event, KeyCode, KeyEvent};
+use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 pub enum ContinueResult {
     ContinueQuery,
@@ -36,17 +35,22 @@ pub enum ContinueResult {
 }
 
 pub fn next_keypress() -> ContinueResult {
-    let stdin = stdin();
-
-    for c in stdin.keys() {
-        match c.unwrap() {
-            Key::Char(' ') | Key::Char(';') | Key::Char('n') => return ContinueResult::ContinueQuery,
-            Key::Char('.') => return ContinueResult::Conclude,
+    loop {
+        match read() {
+            Ok(Event::Key(KeyEvent { code, .. })) => {
+                match code {
+                    KeyCode::Char(' ') | KeyCode::Char(';') | KeyCode::Char('n') => {
+                        return ContinueResult::ContinueQuery;
+                    }
+                    KeyCode::Char('.') => {
+                        return ContinueResult::Conclude;
+                    }
+                    _ => {}
+                }
+            }
             _ => {}
         }
     }
-
-    ContinueResult::Conclude
 }
 
 struct BrentAlgState {
@@ -2263,9 +2267,11 @@ impl MachineState {
             }
             &SystemClauseType::RawInputReadChar => {
 		let keypress = {
-		    let mut raw_stdout = stdout().into_raw_mode().unwrap();
-		    raw_stdout.flush().unwrap();
-		    next_keypress()
+                    enable_raw_mode().expect("failed to transition into raw mode");
+		    let result = next_keypress();
+                    disable_raw_mode().expect("failed to transition out of raw mode");
+                    
+                    result
 		};
 
                 let c = match keypress {
