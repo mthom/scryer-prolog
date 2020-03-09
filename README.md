@@ -56,7 +56,7 @@ Extend Scryer Prolog to include the following, among other features:
       characters, using a packed internal representation.
 - [ ] clp(B) and clp(ℤ) as builtin libraries (_in progress_).
 - [ ] Streams and predicates for stream control (_in progress_).
-- [ ] An incremental compacting garbage collector satisfying the five
+- [ ] A compacting garbage collector satisfying the five
       properties of "Precise Garbage Collection in Prolog."
 - [ ] Mode declarations.
 
@@ -122,11 +122,6 @@ $> cargo run [--release]
 
 The optional `--release` flag will perform various optimizations,
 producing a faster executable.
-
-Note on compatibility: Scryer Prolog should work on Linux, Mac OS X,
-and BSD variants on which Rust runs. Windows support hinges on
-rustyline and Termion being functional in that environment, which to
-my knowledge is not presently the case.
 
 ## Tutorial
 To enter a multi-clause predicate, the directive "[user]" is used.
