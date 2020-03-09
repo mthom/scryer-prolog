@@ -72,7 +72,7 @@ impl<'a> HCPreOrderIterator<'a> {
 
                 Addr::Con(Constant::String(n, s))
             }
-            Addr::Con(_) | Addr::DBRef(_) => {
+            Addr::Con(_) | Addr::DBRef(_) | Addr::Stream(_) => {
                 da
             }
             Addr::Lis(a) => {

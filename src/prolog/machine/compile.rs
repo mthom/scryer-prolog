@@ -21,7 +21,6 @@ use ref_thread_local::RefThreadLocal;
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::Read;
 use std::mem;
 use std::path::PathBuf;
 
@@ -60,9 +59,9 @@ fn fix_filename(
     Ok(path)
 }
 
-fn load_module<R: Read>(
+fn load_module(
     wam: &mut Machine,
-    stream: ParsingStream<R>,
+    stream: Stream,
     suppress_warnings: bool,
     listing_src: &ListingSource,
 ) -> Result<ClauseName, SessionError> {
@@ -78,7 +77,11 @@ fn load_module<R: Read>(
         listing_src.clone(),
     );
 
-    let results = compiler.gather_items(wam, stream, &mut indices);
+    let results = compiler.gather_items(
+        wam,
+        &mut parsing_stream(stream),
+        &mut indices,
+    );
 
     let module_name = if let Some(ref module) = &compiler.module {
         module.module_decl.name.clone()
@@ -114,14 +117,14 @@ fn load_module_from_file(
     let mut path_buf = fix_filename(wam.indices.atom_tbl.clone(), path_buf)?;
     let filename = clause_name!(path_buf.to_string_lossy().to_string(), wam.indices.atom_tbl);
 
-    let file_handle = File::open(&path_buf).or_else(|_| {
+    let file_handle = Stream::from(File::open(&path_buf).or_else(|_| {
         Err(SessionError::InvalidFileName(filename.clone()))
-    })?;
+    })?);
 
     path_buf.pop();
 
     let listing_src = ListingSource::from_file_and_path(filename, path_buf);
-    load_module(wam, parsing_stream(file_handle), suppress_warnings, &listing_src)
+    load_module(wam, file_handle, suppress_warnings, &listing_src)
 }
 
 pub type PredicateCompileQueue = (Predicate, VecDeque<TopLevel>);
@@ -320,10 +323,11 @@ fn setup_module_expansions(wam: &mut Machine, module: &Module) {
     );
 }
 
-pub(super) fn compile_into_module<R: Read>(
+pub(super)
+fn compile_into_module(
     wam: &mut Machine,
     module_name: ClauseName,
-    src: ParsingStream<R>,
+    src: Stream,
     name: ClauseName,
 ) -> EvalSession {
     let mut indices = default_index_store!(wam.atom_tbl_of(&name));
@@ -333,7 +337,11 @@ pub(super) fn compile_into_module<R: Read>(
     indices.op_dir   = module.op_dir.clone();
     indices.atom_tbl = module.atom_tbl.clone();
 
-    let mut compiler = ListingCompiler::new(&wam.code_repo, true, module.listing_src.clone());
+    let mut compiler = ListingCompiler::new(
+        &wam.code_repo,
+        true,
+        module.listing_src.clone(),
+    );
 
     match compile_into_module_impl(wam, &mut compiler, module, src, indices) {
         Ok(()) => EvalSession::EntrySuccess,
@@ -348,11 +356,11 @@ pub(super) fn compile_into_module<R: Read>(
     }
 }
 
-fn compile_into_module_impl<R: Read>(
+fn compile_into_module_impl(
     wam: &mut Machine,
     compiler: &mut ListingCompiler,
     module: Module,
-    src: ParsingStream<R>,
+    src: Stream,
     mut indices: IndexStore,
 ) -> Result<(), SessionError> {
     setup_module_expansions(wam, &module);
@@ -363,7 +371,11 @@ fn compile_into_module_impl<R: Read>(
     wam.code_repo.compile_hook(CompileTimeHook::TermExpansion)?;
     wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion)?;
 
-    let mut results = compiler.gather_items(wam, src, &mut indices)?;
+    let mut results = compiler.gather_items(
+        wam,
+        &mut parsing_stream(src),
+        &mut indices,
+    )?;
 
     compiler.adapt_in_situ_code(
         results.worker_results,
@@ -392,7 +404,6 @@ fn compile_into_module_impl<R: Read>(
     );
 
     wam.code_repo.code.extend(results.in_situ_code.into_iter());
-
     clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
 
     Ok(compiler.drop_expansions(&mut wam.code_repo))
@@ -591,7 +602,7 @@ fn load_library(
 
             load_module(
                 wam,
-                parsing_stream(code.as_bytes()),
+                Stream::from(*code),
                 suppress_warnings,
                 &listing_src,
             )
@@ -1022,10 +1033,10 @@ impl ListingCompiler {
         }
     }
 
-    fn setup_multifile_decl<R: Read>(
+    fn setup_multifile_decl(
         &self,
         indicator: MultiFileIndicator,
-        worker: &mut TopLevelBatchWorker<R>,
+        worker: &mut TopLevelBatchWorker,
     ) -> Result<(), SessionError> {
         match indicator {
             MultiFileIndicator::LocalScoped(name, arity) => {
@@ -1055,10 +1066,10 @@ impl ListingCompiler {
         Ok(())
     }
 
-    fn process_and_commit_decl<R: Read>(
+    fn process_and_commit_decl(
         &mut self,
         decl: Declaration,
-        worker: &mut TopLevelBatchWorker<R>,
+        worker: &mut TopLevelBatchWorker,
         indices: &mut IndexStore,
         flags: MachineFlags,
     ) -> Result<(), SessionError> {
@@ -1105,15 +1116,15 @@ impl ListingCompiler {
         result
     }
 
-    pub(crate) fn gather_items<R: Read>(
+    pub(crate) fn gather_items(
         &mut self,
         wam: &mut Machine,
-        mut src: ParsingStream<R>,
+        src: &mut ParsingStream<Stream>,
         indices: &mut IndexStore,
     ) -> Result<GatherResult, SessionError> {
         let flags = wam.machine_flags();
         let atom_tbl = indices.atom_tbl.clone();
-        let mut worker = TopLevelBatchWorker::new(&mut src, atom_tbl.clone(), flags, wam);
+        let mut worker = TopLevelBatchWorker::new(src, atom_tbl.clone(), flags, wam);
 
         let mut toplevel_results = vec![];
         let mut toplevel_indices = default_index_store!(atom_tbl.clone());
@@ -1306,28 +1317,32 @@ fn compile_work_impl(
     Ok(())
 }
 
-fn compile_work<R: Read>(
+fn compile_work(
     compiler: &mut ListingCompiler,
     wam: &mut Machine,
-    src: ParsingStream<R>,
+    src: Stream,
     mut indices: IndexStore,
 ) -> EvalSession {
+    let src = &mut parsing_stream(src);
     let results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
+
     try_eval_session!(compile_work_impl(compiler, wam, indices, results));
+
     EvalSession::EntrySuccess
 }
 
 /* This is a truncated version of compile_user_module, used for
 compiling code composing special forms, ie. the code that calls
 M:verify_attributes on attributed variables. */
-pub fn compile_special_form<R: Read>(
+pub fn compile_special_form(
     wam: &mut Machine,
-    src: ParsingStream<R>,
+    src: Stream,
     listing_src: ListingSource,
 ) -> Result<usize, SessionError> {
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     setup_indices(wam, clause_name!("builtins"), &mut indices)?;
 
+    let src = &mut parsing_stream(src);
     let mut compiler = ListingCompiler::new(&wam.code_repo, true, listing_src);
     let mut results = compiler.gather_items(wam, src, &mut indices)?;
 
@@ -1352,9 +1367,9 @@ pub fn compile_special_form<R: Read>(
 }
 
 #[inline]
-pub fn compile_listing<R: Read>(
+pub fn compile_listing(
     wam: &mut Machine,
-    src: ParsingStream<R>,
+    src: Stream,
     indices: IndexStore,
     suppress_warnings: bool,
     listing_src: ListingSource,
@@ -1388,9 +1403,9 @@ pub(super) fn setup_indices(
     }
 }
 
-pub fn compile_user_module<R: Read>(
+pub fn compile_user_module(
     wam: &mut Machine,
-    src: ParsingStream<R>,
+    src: Stream,
     suppress_warnings: bool,
     listing_src: ListingSource,
 ) -> EvalSession {

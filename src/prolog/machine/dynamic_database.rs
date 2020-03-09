@@ -1,11 +1,10 @@
 use prolog_parser::ast::*;
 
 use crate::prolog::heap_print::*;
+use crate::prolog::machine::*;
 use crate::prolog::machine::compile::*;
 use crate::prolog::machine::machine_errors::*;
-use crate::prolog::machine::*;
-
-use std::io::Read;
+use crate::prolog::machine::streams::*;
 
 impl Machine {
     pub(super) fn atom_tbl_of(&self, name: &ClauseName) -> TabledData<Atom> {
@@ -15,9 +14,9 @@ impl Machine {
         }
     }
 
-    fn compile_into_machine<R: Read>(
+    fn compile_into_machine(
         &mut self,
-        src: ParsingStream<R>,
+        src: Stream,
         name: ClauseName,
         arity: usize,
     ) -> EvalSession {
@@ -130,7 +129,12 @@ impl Machine {
     ) {
         let machine_st = mem::replace(&mut self.machine_st, MachineState::new());
 
-        let result = self.compile_into_machine(parsing_stream(pred_str.as_bytes()), name, arity);
+        let result = self.compile_into_machine(
+            Stream::from(pred_str),
+            name,
+            arity,
+        );
+        
         self.machine_st = machine_st;
 
         if let EvalSession::Error(err) = result {

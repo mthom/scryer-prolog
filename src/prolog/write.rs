@@ -184,6 +184,7 @@ impl fmt::Display for Addr {
             &Addr::Str(s) => write!(f, "Addr::Str({})", s),
             &Addr::PStrLocation(h, n) => write!(f, "Addr::PStrLocation({}, {})", h, n),
             &Addr::PStrTail(h, n) => write!(f, "Addr::PStrTail({}, {})", h, n),
+            &Addr::Stream(ref stream) => write!(f, "Addr::Stream({})", stream.as_ptr() as usize),
         }
     }
 }

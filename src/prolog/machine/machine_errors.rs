@@ -333,12 +333,14 @@ impl ValidType {
 #[derive(Clone, Copy)]
 pub enum DomainError {
     NotLessThanZero,
+    Stream,
 }
 
 impl DomainError {
     pub fn as_str(self) -> &'static str {
         match self {
             DomainError::NotLessThanZero => "not_less_than_zero",
+            DomainError::Stream => "stream",
         }
     }
 }

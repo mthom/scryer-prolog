@@ -8,7 +8,6 @@ use crate::prolog::rug::Integer;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
-use std::io::Read;
 use std::iter::Rev;
 use std::vec::IntoIter;
 
@@ -28,7 +27,11 @@ where
     term
 }
 
-fn extract_from_list(head: Box<Term>, tail: Box<Term>) -> Result<Rev<IntoIter<Term>>, ParserError> {
+fn extract_from_list(
+    head: Box<Term>,
+    tail: Box<Term>,
+) -> Result<Rev<IntoIter<Term>>, ParserError>
+{
     let mut terms = vec![*head];
     let mut tail = *tail;
 
@@ -44,10 +47,10 @@ fn extract_from_list(head: Box<Term>, tail: Box<Term>) -> Result<Rev<IntoIter<Te
     }
 }
 
-pub struct TermStream<'a, R: Read> {
+pub struct TermStream<'a> {
     stack: Vec<Term>,
     pub(crate) wam: &'a mut Machine,
-    parser: Parser<'a, R>,
+    parser: Parser<'a, Stream>,
     pub(crate) flags: MachineFlags,
     term_expansion_lens: (usize, usize),
     goal_expansion_lens: (usize, usize),
@@ -75,7 +78,7 @@ impl ExpansionAdditionResult {
     }
 }
 
-impl<'a, R: Read> Drop for TermStream<'a, R> {
+impl<'a> Drop for TermStream<'a> {
     fn drop(&mut self) {
         self.wam.indices.in_situ_code_dir.clear();
         self.wam.indices.in_situ_module_dir.clear();
@@ -85,9 +88,9 @@ impl<'a, R: Read> Drop for TermStream<'a, R> {
     }
 }
 
-impl<'a, R: Read> TermStream<'a, R> {
+impl<'a> TermStream<'a> {
     pub fn new(
-        src: &'a mut ParsingStream<R>,
+        src: &'a mut ParsingStream<Stream>,
         atom_tbl: TabledData<Atom>,
         flags: MachineFlags,
         wam: &'a mut Machine,

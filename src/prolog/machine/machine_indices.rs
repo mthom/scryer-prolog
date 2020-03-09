@@ -9,6 +9,7 @@ use crate::prolog::machine::Ball;
 use crate::prolog::machine::heap::*;
 use crate::prolog::machine::partial_string::*;
 use crate::prolog::machine::raw_block::RawBlockTraits;
+use crate::prolog::machine::streams::Stream;
 use crate::prolog::instructions::*;
 use crate::prolog::rug::Integer;
 
@@ -49,6 +50,7 @@ pub enum Addr {
     Str(usize),
     PStrLocation(usize, usize), // location of pstr in heap, offset into string in bytes.
     PStrTail(usize, usize), // location of pstr in heap, offset into string in bytes.
+    Stream(Stream),
 }
 
 #[derive(Clone, Copy, Hash, Eq, PartialEq)]

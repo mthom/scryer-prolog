@@ -12,9 +12,10 @@ use crate::prolog::machine::code_walker::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
+use crate::prolog::machine::streams::*;
 use crate::prolog::machine::toplevel::to_op_decl;
 use crate::prolog::ordered_float::OrderedFloat;
-use crate::prolog::read::{readline, PrologStream};
+use crate::prolog::read::readline;
 use crate::prolog::rug::Integer;
 
 use crate::ref_thread_local::RefThreadLocal;
@@ -354,12 +355,12 @@ impl MachineState {
     }
 
     fn read_term(&mut self,
-                 current_input_stream: &mut PrologStream,
+                 current_input_stream: &mut Stream,
                  indices: &mut IndexStore)
                  -> CallResult
     {
         match self.read(
-            current_input_stream,
+            &mut parsing_stream(current_input_stream.clone()),
             indices.atom_tbl.clone(),
             &indices.op_dir,
         ) {
@@ -671,7 +672,7 @@ impl MachineState {
         indices: &mut IndexStore,
         call_policy: &mut Box<dyn CallPolicy>,
         cut_policy: &mut Box<dyn CutPolicy>,
-        current_input_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
     ) -> CallResult {
         match ct {
             &SystemClauseType::AbolishClause => {
@@ -720,6 +721,32 @@ impl MachineState {
 
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
+            }
+            &SystemClauseType::CurrentInput => {
+                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+                let stream = current_input_stream.clone();
+
+                match addr {
+                    addr if addr.is_ref() => {                        
+                        self.unify(Addr::Stream(stream), addr);
+                    }
+                    Addr::Stream(other_stream) => {
+                        self.fail = stream != other_stream;
+                    }
+                    addr => {
+                        let stub = MachineError::functor_stub(
+                            clause_name!("current_input"),
+                            1,
+                        );
+
+                        let err = MachineError::domain_error(
+                            DomainError::Stream,
+                            addr,
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }                
             }
             &SystemClauseType::AtEndOfExpansion => {
                 if self.cp == LocalCodePtr::TopLevel(0, 0) {
@@ -1177,7 +1204,9 @@ impl MachineState {
                 };
             }
             &SystemClauseType::GetChar => {
-                let result = current_input_stream.next();
+                let mut iter = parsing_stream(current_input_stream.clone());
+                let result = iter.next();
+                
                 let a1 = self[temp_v!(1)].clone();
 
                 match result {
@@ -2315,7 +2344,7 @@ impl MachineState {
                         // get the call site so that the number of active permanent variables can be read
                         // from it later.
                         let cp = (self.stack.index_and_frame(e).prelude.cp - 1).unwrap();
-
+                        
                         let p = cp.as_functor(&mut self.heap);
                         let e = self.stack.index_and_frame(e).prelude.e;
 

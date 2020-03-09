@@ -6,9 +6,9 @@ use crate::prolog::forms::*;
 use crate::prolog::iterators::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::MachineState;
+use crate::prolog::machine::streams::Stream;
 
 use std::collections::VecDeque;
-use std::io::Read;
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
@@ -23,10 +23,10 @@ impl<'a> TermRef<'a> {
     }
 }
 
-pub type PrologStream = ParsingStream<Box<dyn Read>>;
+pub type PrologStream = ParsingStream<Stream>;
 
 pub mod readline {
-    use prolog_parser::ast::*;
+    use crate::prolog::machine::streams::Stream;
     use crate::prolog::rustyline::error::ReadlineError;
     use crate::prolog::rustyline::{Cmd, Editor, KeyPress};
     use std::io::{Cursor, Read};
@@ -52,10 +52,10 @@ pub mod readline {
     }
 
     impl ReadlineStream {
-        fn input_stream(pending_input: String) -> Self {
+        pub fn input_stream(pending_input: String) -> Stream {
             let mut rl = Editor::<()>::new();
             rl.bind_sequence(KeyPress::Tab, Cmd::Insert(1, "\t".to_string()));
-            ReadlineStream { rl, pending_input: Cursor::new(pending_input) }
+            Stream::from(ReadlineStream { rl, pending_input: Cursor::new(pending_input) })
         }
 
         fn call_readline(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -99,9 +99,9 @@ pub mod readline {
     }
 
     #[inline]
-    pub fn input_stream() -> crate::PrologStream {
-        let reader: Box<dyn Read> = Box::new(ReadlineStream::input_stream(String::from("")));
-        parsing_stream(reader)
+    pub fn input_stream() -> Stream {
+        let input_stream = ReadlineStream::input_stream(String::from(""));
+        Stream::from(input_stream)
     }
 }
 

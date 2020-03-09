@@ -330,7 +330,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                         Addr::PStrLocation(addr, n) => {
                             self.copy_partial_string_from(addr, n);
                         }
-                        Addr::Con(_) | Addr::DBRef(_) => {
+                        Addr::Con(_) | Addr::DBRef(_) | Addr::Stream(_) => {
                             self.scan += 1;
                         }
                     }

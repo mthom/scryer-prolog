@@ -9,7 +9,7 @@ use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::modules::*;
 use crate::prolog::machine::stack::*;
-use crate::prolog::read::PrologStream;
+use crate::prolog::machine::streams::*;
 use crate::prolog::rug::Integer;
 
 use downcast::Any;
@@ -721,7 +721,7 @@ pub(crate) trait CallPolicy: Any {
         machine_st: &mut MachineState,
         ct: &BuiltInClauseType,
         indices: &mut IndexStore,
-        parsing_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
     ) -> CallResult {
         match ct {
             &BuiltInClauseType::AcyclicTerm => {
@@ -768,7 +768,11 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Read => {
-                match machine_st.read(parsing_stream, indices.atom_tbl.clone(), &indices.op_dir) {
+                match machine_st.read(
+                    &mut parsing_stream(current_input_stream.clone()),
+                    indices.atom_tbl.clone(),
+                    &indices.op_dir,
+                ) {
                     Ok(offset) => {
                         let addr = machine_st[temp_v!(1)].clone();
                         machine_st.unify(addr, Addr::HeapCell(offset.heap_loc));
@@ -891,13 +895,13 @@ pub(crate) trait CallPolicy: Any {
         machine_st: &mut MachineState,
         arity: usize,
         indices: &mut IndexStore,
-        parsing_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
     ) -> CallResult {
         if let Some((name, arity)) = machine_st.setup_call_n(arity) {
             match ClauseType::from(name.clone(), arity, None) {
                 ClauseType::BuiltIn(built_in) => {
                     machine_st.setup_built_in_call(built_in.clone());
-                    self.call_builtin(machine_st, &built_in, indices, parsing_stream)?;
+                    self.call_builtin(machine_st, &built_in, indices, current_input_stream)?;
                 }
                 ClauseType::CallN => {
                     machine_st.handle_internal_call_n(arity);
@@ -977,10 +981,10 @@ impl CallPolicy for CWILCallPolicy {
         machine_st: &mut MachineState,
         ct: &BuiltInClauseType,
         indices: &mut IndexStore,
-        parsing_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
     ) -> CallResult {
         self.prev_policy
-            .call_builtin(machine_st, ct, indices, parsing_stream)?;
+            .call_builtin(machine_st, ct, indices, current_input_stream)?;
         self.increment(machine_st)
     }
 
@@ -989,10 +993,10 @@ impl CallPolicy for CWILCallPolicy {
         machine_st: &mut MachineState,
         arity: usize,
         indices: &mut IndexStore,
-        parsing_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
     ) -> CallResult {
         self.prev_policy
-            .call_n(machine_st, arity, indices, parsing_stream)?;
+            .call_n(machine_st, arity, indices, current_input_stream)?;
         self.increment(machine_st)
     }
 }

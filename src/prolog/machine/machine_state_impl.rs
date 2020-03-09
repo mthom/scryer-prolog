@@ -15,8 +15,8 @@ use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 use crate::prolog::machine::stack::*;
+use crate::prolog::machine::streams::*;
 use crate::prolog::ordered_float::*;
-use crate::prolog::read::PrologStream;
 use crate::prolog::rug::{Integer, Rational};
 
 use indexmap::{IndexMap, IndexSet};
@@ -1768,7 +1768,8 @@ impl MachineState {
 
                 let offset = match addr {
                     Addr::HeapCell(_) | Addr::StackCell(..)
-                  | Addr::AttrVar(..) | Addr::PStrTail(..) => {
+                  | Addr::AttrVar(..) | Addr::PStrTail(..) 
+                  | Addr::Stream(_) => {
                         v
                     }
                     Addr::Con(Constant::String(n, ref s)) => {
@@ -1790,7 +1791,7 @@ impl MachineState {
                     }
                     Addr::Str(_) => {
                         s
-                    }
+                    }                    
                     Addr::DBRef(_) => {
                         self.fail = true;
                         return;
@@ -2788,7 +2789,7 @@ impl MachineState {
         let a1 = self.store(self.deref(self[temp_v!(1)].clone()));
 
         match a1.clone() {
-            Addr::DBRef(_) => self.fail = true,
+            Addr::Stream(_) | Addr::DBRef(_) => self.fail = true,
             Addr::Con(Constant::String(n, ref s))
                 if !self.flags.double_quotes.is_atom() && !s[n ..].is_empty() =>
             {
@@ -3217,7 +3218,7 @@ impl MachineState {
         code_repo: &CodeRepo,
         call_policy: &mut Box<dyn CallPolicy>,
         cut_policy: &mut Box<dyn CutPolicy>,
-        parsing_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
         ct: &ClauseType,
         arity: usize,
         lco: bool,
@@ -3244,11 +3245,11 @@ impl MachineState {
         match ct {
             &ClauseType::BuiltIn(ref ct) => try_or_fail!(
                 self,
-                call_policy.call_builtin(self, ct, indices, parsing_stream)
+                call_policy.call_builtin(self, ct, indices, current_input_stream)
             ),
             &ClauseType::CallN => try_or_fail!(
                 self,
-                call_policy.call_n(self, arity, indices, parsing_stream)
+                call_policy.call_n(self, arity, indices, current_input_stream)
             ),
             &ClauseType::Hook(ref hook) => try_or_fail!(self, call_policy.compile_hook(self, hook)),
             &ClauseType::Inlined(ref ct) => {
@@ -3272,7 +3273,7 @@ impl MachineState {
                     indices,
                     call_policy,
                     cut_policy,
-                    parsing_stream
+                    current_input_stream,
                 )
             ),
         };
@@ -3286,18 +3287,20 @@ impl MachineState {
         code_repo: &CodeRepo,
         call_policy: &mut Box<dyn CallPolicy>,
         cut_policy: &mut Box<dyn CutPolicy>,
-        parsing_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
         instr: &ControlInstruction,
     ) {
         match instr {
-            &ControlInstruction::Allocate(num_cells) => self.allocate(num_cells),
+            &ControlInstruction::Allocate(num_cells) => {
+                self.allocate(num_cells);
+            }
             &ControlInstruction::CallClause(ref ct, arity, _, lco, use_default_cp) => self
                 .handle_call_clause(
                     indices,
                     code_repo,
                     call_policy,
                     cut_policy,
-                    parsing_stream,
+                    current_input_stream,
                     ct,
                     arity,
                     lco,
@@ -3313,7 +3316,9 @@ impl MachineState {
                 self.b0 = self.b;
                 self.p += offset;
             }
-            &ControlInstruction::Proceed => self.p = CodePtr::Local(self.cp.clone())
+            &ControlInstruction::Proceed => {
+                self.p = CodePtr::Local(self.cp.clone());
+            }
         };
     }
 

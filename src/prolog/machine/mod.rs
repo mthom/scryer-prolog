@@ -22,6 +22,7 @@ pub mod modules;
 mod partial_string;
 mod raw_block;
 mod stack;
+pub(super) mod streams;
 pub(super) mod term_expansion;
 pub mod toplevel;
 
@@ -36,14 +37,13 @@ use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 use crate::prolog::machine::modules::*;
+use crate::prolog::machine::streams::*;
 use crate::prolog::machine::toplevel::*;
-use crate::prolog::read::PrologStream;
 
 use indexmap::IndexMap;
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::Read;
 use std::mem;
 use std::ops::Index;
 use std::path::PathBuf;
@@ -76,7 +76,7 @@ pub struct Machine {
     pub(super) indices: IndexStore,
     pub(super) code_repo: CodeRepo,
     pub(super) toplevel_idx: usize,
-    pub(super) prolog_stream: ParsingStream<Box<dyn Read>>,
+    pub(super) current_input_stream: Stream,
 }
 
 impl Index<LocalCodePtr> for CodeRepo {
@@ -216,7 +216,11 @@ impl Machine {
             current_dir.clone(),
         );
 
-        match compile_special_form(self, parsing_stream(VERIFY_ATTRS.as_bytes()), verify_attrs_src)
+        match compile_special_form(
+            self,
+            Stream::from(VERIFY_ATTRS),
+            verify_attrs_src,
+        )
         {
             Ok(p) => {
                 self.machine_st.attr_var_init.verify_attrs_loc = p;
@@ -230,7 +234,11 @@ impl Machine {
             current_dir,
         );
 
-        match compile_special_form(self, parsing_stream(PROJECT_ATTRS.as_bytes()), project_attrs_src)
+        match compile_special_form(
+            self,
+            Stream::from(PROJECT_ATTRS),
+            project_attrs_src,
+        )
         {
             Ok(p) => {
                 self.machine_st.attr_var_init.project_attrs_loc = p;
@@ -254,7 +262,7 @@ impl Machine {
 
         compile_user_module(
             self,
-            parsing_stream(TOPLEVEL.as_bytes()),
+            Stream::from(TOPLEVEL),
             true,
             top_lvl_src,
         );
@@ -282,7 +290,7 @@ impl Machine {
 
         if path.is_file() {
             let file_src = match File::open(&path) {
-                Ok(file_handle) => parsing_stream(file_handle),
+                Ok(file_handle) => Stream::from(file_handle),
                 Err(_) => return,
             };
 
@@ -297,7 +305,7 @@ impl Machine {
 
     #[cfg(test)]
     pub fn reset(&mut self) {
-        self.prolog_stream = readline::input_stream();
+        self.current_input_stream = readline::input_stream();
         self.policies.cut_policy = Box::new(DefaultCutPolicy {});
         self.machine_st.reset();
     }
@@ -336,7 +344,7 @@ impl Machine {
         self.run_query();
     }
 
-    pub fn new(prolog_stream: PrologStream) -> Self
+    pub fn new(current_input_stream: Stream) -> Self
     {
         let mut wam = Machine {
             machine_st: MachineState::new(),
@@ -345,7 +353,7 @@ impl Machine {
             indices: IndexStore::new(),
             code_repo: CodeRepo::new(),
             toplevel_idx: 0,
-            prolog_stream,
+            current_input_stream,
         };
 
         let atom_tbl = wam.indices.atom_tbl.clone();
@@ -358,7 +366,7 @@ impl Machine {
 
         compile_listing(
             &mut wam,
-            parsing_stream(BUILTINS.as_bytes()),
+            Stream::from(BUILTINS),
             default_index_store!(atom_tbl.clone()),
             true,
             ListingSource::from_file_and_path(
@@ -369,25 +377,36 @@ impl Machine {
 
         wam.compile_special_forms();
 
-        compile_user_module(&mut wam, parsing_stream(ERROR.as_bytes()), true,
+        compile_user_module(&mut wam,
+                            Stream::from(ERROR),
+                            true,
                             ListingSource::from_file_and_path(
                                 clause_name!("error"),
                                 lib_path.clone(),
                             )
         );
-        compile_user_module(&mut wam, parsing_stream(LISTS.as_bytes()), true,
+        
+        compile_user_module(&mut wam,
+                            Stream::from(LISTS),
+                            true,
                             ListingSource::from_file_and_path(
                                 clause_name!("lists"),
                                 lib_path.clone(),
                             ),
         );
-        compile_user_module(&mut wam, parsing_stream(ISO_EXT.as_bytes()), true,
+        
+        compile_user_module(&mut wam,
+                            Stream::from(ISO_EXT),
+                            true,
                             ListingSource::from_file_and_path(
                                 clause_name!("iso_ext"),
                                 lib_path.clone(),
                             )
         );
-        compile_user_module(&mut wam, parsing_stream(SI.as_bytes()), true,
+        
+        compile_user_module(&mut wam,
+                            Stream::from(SI),
+                            true,
                             ListingSource::from_file_and_path(
                                 clause_name!("si"),
                                 lib_path.clone(),
@@ -755,12 +774,15 @@ impl Machine {
                 &mut self.indices,
                 &mut self.policies,
                 &mut self.code_repo,
-                &mut self.prolog_stream,
+                &mut self.current_input_stream,
             );
 
             match self.machine_st.p {
-                CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {}
-                CodePtr::REPL(code_ptr, p) => self.handle_toplevel_command(code_ptr, p),
+                CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {
+                }
+                CodePtr::REPL(code_ptr, p) => {
+                    self.handle_toplevel_command(code_ptr, p)
+                }
                 CodePtr::DynamicTransaction(trans_type, p) => {
                     // self.code_repo.cached_query is about to be overwritten by the term expander,
                     // so hold onto it locally and restore it after the compiler has finished.
@@ -788,7 +810,7 @@ impl MachineState {
         indices: &mut IndexStore,
         policies: &mut MachinePolicies,
         code_repo: &CodeRepo,
-        prolog_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
     ) {
         match instr {
             &Line::Arithmetic(ref arith_instr) => self.execute_arith_instr(arith_instr),
@@ -803,7 +825,7 @@ impl MachineState {
                 code_repo,
                 &mut policies.call_policy,
                 &mut policies.cut_policy,
-                prolog_stream,
+                current_input_stream,
                 control_instr,
             ),
             &Line::Fact(ref fact_instr) => {
@@ -826,14 +848,20 @@ impl MachineState {
         indices: &mut IndexStore,
         policies: &mut MachinePolicies,
         code_repo: &CodeRepo,
-        prolog_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
     ) {
         let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
             Some(instr) => instr,
             None => return,
         };
 
-        self.dispatch_instr(instr.as_ref(), indices, policies, code_repo, prolog_stream);
+        self.dispatch_instr(
+            instr.as_ref(),
+            indices,
+            policies,
+            code_repo,
+            current_input_stream,
+        );
     }
 
     fn backtrack(&mut self) {
@@ -884,7 +912,7 @@ impl MachineState {
         indices: &mut IndexStore,
         policies: &mut MachinePolicies,
         code_repo: &mut CodeRepo,
-        prolog_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
     ) -> bool {
         loop {
             let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
@@ -900,7 +928,13 @@ impl MachineState {
                 None => return false,
             };
 
-            self.dispatch_instr(instr.as_ref(), indices, policies, code_repo, prolog_stream);
+            self.dispatch_instr(
+                instr.as_ref(),
+                indices,
+                policies,
+                code_repo,
+                current_input_stream
+            );
 
             if self.fail {
                 self.backtrack();
@@ -924,10 +958,10 @@ impl MachineState {
         indices: &mut IndexStore,
         policies: &mut MachinePolicies,
         code_repo: &mut CodeRepo,
-        prolog_stream: &mut PrologStream,
+        current_input_stream: &mut Stream,
     ) {
         loop {
-            self.execute_instr(indices, policies, code_repo, prolog_stream);
+            self.execute_instr(indices, policies, code_repo, current_input_stream);
 
             if self.fail {
                 self.backtrack();
@@ -943,7 +977,7 @@ impl MachineState {
                     if !instigating_instr.as_ref().is_head_instr() {
                         let cp = self.p.local();
                         self.run_verify_attr_interrupt(cp);
-                    } else if !self.verify_attr_stepper(indices, policies, code_repo, prolog_stream) {
+                    } else if !self.verify_attr_stepper(indices, policies, code_repo, current_input_stream) {
                         if self.fail {
                             break;
                         }

@@ -13,7 +13,6 @@ use indexmap::{IndexMap, IndexSet};
 use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::collections::VecDeque;
-use std::io::Read;
 use std::mem;
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -30,15 +29,15 @@ fn op_dir<'a, 'b: 'a>(from: &'b IndexSource<'a, IndexStore>) -> RefOrOwned<'a, O
     }
 }
 
-struct CompositeIndices<'a, 'b, 'c, R: Read> {
-    term_stream: &'b mut TermStream<'a, R>,
+struct CompositeIndices<'a, 'b, 'c> {
+    term_stream: &'b mut TermStream<'a>,
     index_src: IndexSource<'c, IndexStore>,
     static_code_dir: Option<IndexSource<'c, CodeDir>>
 }
 
-impl<'a, 'b, 'c, R: Read> CompositeIndices<'a, 'b, 'c, R> {
+impl<'a, 'b, 'c> CompositeIndices<'a, 'b, 'c> {
     fn new(
-        term_stream: &'b mut TermStream<'a, R>,
+        term_stream: &'b mut TermStream<'a>,
         index_src: IndexSource<'c, IndexStore>,
         static_code_dir: Option<IndexSource<'c, CodeDir>>,
     ) -> Self {
@@ -577,8 +576,8 @@ fn draw_from_term_dir_impl(
     }
 }
 
-fn draw_from_term_dir<R: Read>(
-    indices: &CompositeIndices<R>,
+fn draw_from_term_dir(
+    indices: &CompositeIndices,
     intra_module_term_dirs: &mut IndexMap<ClauseName, TermDirQuantum>,
     top_level_term_dirs: &mut TermDirQuantum,
     key: &PredicateKey,
@@ -615,8 +614,8 @@ fn draw_from_term_dir<R: Read>(
     );
 }
 
-fn setup_declaration<'a, 'b, 'c, R: Read>(
-    indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+fn setup_declaration<'a, 'b, 'c>(
+    indices: &mut CompositeIndices<'a, 'b, 'c>,
     flags: MachineFlags,
     mut terms: Vec<Box<Term>>,
     line_num: usize,
@@ -796,9 +795,9 @@ impl RelationWorker {
         self.fabricate_rule(fold_by_str(prec_seq.into_iter(), body_term, comma_sym))
     }
 
-    fn to_query_term<'a, 'b, 'c, R: Read>(
+    fn to_query_term<'a, 'b, 'c>(
         &mut self,
-        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+        indices: &mut CompositeIndices<'a, 'b, 'c>,
         term: Term,
     ) -> Result<QueryTerm, ParserError> {
         match term {
@@ -872,9 +871,9 @@ impl RelationWorker {
         }
     }
 
-    fn pre_query_term<'a, 'b, 'c, R: Read>(
+    fn pre_query_term<'a, 'b, 'c>(
         &mut self,
-        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+        indices: &mut CompositeIndices<'a, 'b, 'c>,
         term: Term,
     ) -> Result<QueryTerm, ParserError> {
         match term {
@@ -893,9 +892,9 @@ impl RelationWorker {
         }
     }
 
-    fn setup_query<'a, 'b, 'c, R: Read>(
+    fn setup_query<'a, 'b, 'c>(
         &mut self,
-        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+        indices: &mut CompositeIndices<'a, 'b, 'c>,
         terms: Vec<Box<Term>>,
         blocks_cuts: bool,
     ) -> Result<Vec<QueryTerm>, ParserError> {
@@ -946,10 +945,10 @@ impl RelationWorker {
         Ok(query_terms)
     }
 
-    fn setup_hook<'a, 'b, 'c, R: Read>(
+    fn setup_hook<'a, 'b, 'c>(
         &mut self,
         hook: CompileTimeHook,
-        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+        indices: &mut CompositeIndices<'a, 'b, 'c>,
         term: Term,
     ) -> Result<CompileTimeHookCompileInfo, ParserError> {
         match flatten_hook(term) {
@@ -970,9 +969,9 @@ impl RelationWorker {
         }
     }
 
-    fn setup_rule<'a, 'b, 'c, R: Read>(
+    fn setup_rule<'a, 'b, 'c>(
         &mut self,
-        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+        indices: &mut CompositeIndices<'a, 'b, 'c>,
         mut terms: Vec<Box<Term>>,
         blocks_cuts: bool,
         assume_dyn: bool,
@@ -1003,9 +1002,9 @@ impl RelationWorker {
         }
     }
 
-    fn try_term_to_query<'a, 'b, 'c, R: Read>(
+    fn try_term_to_query<'a, 'b, 'c>(
         &mut self,
-        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+        indices: &mut CompositeIndices<'a, 'b, 'c>,
         terms: Vec<Box<Term>>,
         blocks_cuts: bool,
     ) -> Result<TopLevel, ParserError> {
@@ -1016,10 +1015,10 @@ impl RelationWorker {
         )?))
     }
 
-    fn compact_module_scoped_head<'a, 'b, 'c, R: Read>(
+    fn compact_module_scoped_head<'a, 'b, 'c>(
         &self,
         term: &mut Term,
-        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+        indices: &mut CompositeIndices<'a, 'b, 'c>,
     ) {
         let inner_term = match term {
             Term::Clause(_, ref name, ref mut inner_terms, _)
@@ -1044,9 +1043,9 @@ impl RelationWorker {
         *term = inner_term;
     }
 
-    fn try_term_to_tl<'a, 'b, 'c, R: Read>(
+    fn try_term_to_tl<'a, 'b, 'c>(
         &mut self,
-        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+        indices: &mut CompositeIndices<'a, 'b, 'c>,
         term: Term,
         blocks_cuts: bool,
     ) -> Result<TopLevel, ParserError> {
@@ -1085,14 +1084,14 @@ impl RelationWorker {
         }
     }
 
-    fn try_terms_to_tls<'a, 'b, 'c, I, R>(
+    fn try_terms_to_tls<'a, 'b, 'c, I>(
         &mut self,
-        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+        indices: &mut CompositeIndices<'a, 'b, 'c>,
         terms: I,
         blocks_cuts: bool,
     ) -> Result<VecDeque<TopLevel>, ParserError>
     where
-        I: IntoIterator<Item = Term>, R: Read
+        I: IntoIterator<Item = Term>
     {
         let mut results = VecDeque::new();
 
@@ -1103,9 +1102,9 @@ impl RelationWorker {
         Ok(results)
     }
 
-    fn parse_queue<'a, 'b, 'c, R: Read>(
+    fn parse_queue<'a, 'b, 'c>(
         &mut self,
-        indices: &mut CompositeIndices<'a, 'b, 'c, R>,
+        indices: &mut CompositeIndices<'a, 'b, 'c>,
     ) -> Result<VecDeque<TopLevel>, ParserError> {
         let mut queue = VecDeque::new();
 
@@ -1128,8 +1127,8 @@ pub type DynamicClause = Vec<(Term, Term)>;
 
 pub type DynamicClauseMap = IndexMap<(ClauseName, usize), DynamicClause>;
 
-pub struct TopLevelBatchWorker<'a, R: Read> {
-    pub(crate) term_stream: TermStream<'a, R>,
+pub struct TopLevelBatchWorker<'a> {
+    pub(crate) term_stream: TermStream<'a>,
     rel_worker: RelationWorker,
     pub(crate) results: Vec<(Predicate, VecDeque<TopLevel>)>,
     pub(crate) dynamic_clause_map: DynamicClauseMap,
@@ -1139,14 +1138,14 @@ pub struct TopLevelBatchWorker<'a, R: Read> {
     pub(crate) non_counted_bt_preds: IndexSet<PredicateKey>,
 }
 
-impl<'a, R: Read> TopLevelBatchWorker<'a, R> {
+impl<'a> TopLevelBatchWorker<'a> {
     pub fn new(
-        inner: &'a mut ParsingStream<R>,
+        stream: &'a mut ParsingStream<Stream>,
         atom_tbl: TabledData<Atom>,
         flags: MachineFlags,
         wam: &'a mut Machine,
     ) -> Self {
-        let term_stream = TermStream::new(inner, atom_tbl, flags, wam);
+        let term_stream = TermStream::new(stream, atom_tbl, flags, wam);
 
         let line_num = term_stream.line_num();
         let col_num  = term_stream.col_num();
