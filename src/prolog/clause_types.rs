@@ -171,6 +171,7 @@ pub enum SystemClauseType {
     CopyToLiftedHeap,
     CreatePartialString,
     CurrentInput,
+    CurrentOutput,
     DeleteAttribute,
     DeleteHeadAttribute,
     DynamicModuleResolution(usize),
@@ -285,6 +286,7 @@ impl SystemClauseType {
             &SystemClauseType::CopyTermWithoutAttrVars => clause_name!("$copy_term_without_attr_vars"),
             &SystemClauseType::CreatePartialString => clause_name!("$create_partial_string"),
             &SystemClauseType::CurrentInput => clause_name!("$current_input"),
+            &SystemClauseType::CurrentOutput => clause_name!("$current_output"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
 	    &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
 	    &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
@@ -436,6 +438,7 @@ impl SystemClauseType {
             ("$compile_batch", 0) => Some(SystemClauseType::REPL(REPLCodePtr::CompileBatch)),
             ("$copy_to_lh", 2) => Some(SystemClauseType::CopyToLiftedHeap),
             ("$current_input", 1) => Some(SystemClauseType::CurrentInput),
+            ("$current_output", 1) => Some(SystemClauseType::CurrentOutput),
             ("$del_attr_non_head", 1) => Some(SystemClauseType::DeleteAttribute),
             ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),
             ("$get_next_db_ref", 2) => Some(SystemClauseType::GetNextDBRef),

@@ -3219,6 +3219,7 @@ impl MachineState {
         call_policy: &mut Box<dyn CallPolicy>,
         cut_policy: &mut Box<dyn CutPolicy>,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
         ct: &ClauseType,
         arity: usize,
         lco: bool,
@@ -3245,11 +3246,17 @@ impl MachineState {
         match ct {
             &ClauseType::BuiltIn(ref ct) => try_or_fail!(
                 self,
-                call_policy.call_builtin(self, ct, indices, current_input_stream)
+                call_policy.call_builtin(
+                    self,
+                    ct,
+                    indices,
+                    current_input_stream,
+                    current_output_stream,
+                )
             ),
             &ClauseType::CallN => try_or_fail!(
                 self,
-                call_policy.call_n(self, arity, indices, current_input_stream)
+                call_policy.call_n(self, arity, indices, current_input_stream, current_output_stream)
             ),
             &ClauseType::Hook(ref hook) => try_or_fail!(self, call_policy.compile_hook(self, hook)),
             &ClauseType::Inlined(ref ct) => {
@@ -3274,6 +3281,7 @@ impl MachineState {
                     call_policy,
                     cut_policy,
                     current_input_stream,
+                    current_output_stream,
                 )
             ),
         };
@@ -3288,6 +3296,7 @@ impl MachineState {
         call_policy: &mut Box<dyn CallPolicy>,
         cut_policy: &mut Box<dyn CutPolicy>,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
         instr: &ControlInstruction,
     ) {
         match instr {
@@ -3301,6 +3310,7 @@ impl MachineState {
                     call_policy,
                     cut_policy,
                     current_input_stream,
+                    current_output_stream,
                     ct,
                     arity,
                     lco,

@@ -237,7 +237,8 @@ macro_rules! index_store {
             in_situ_code_dir: InSituCodeDir::new(),
             in_situ_module_dir: ModuleStubDir::new(),
             op_dir: $op_dir,
-            modules: $modules,            
+            modules: $modules,
+            stream_aliases: StreamAliasDir::new(),
         }
     };
 }

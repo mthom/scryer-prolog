@@ -15,7 +15,7 @@ use crate::prolog::rug::Integer;
 use downcast::Any;
 
 use std::cmp::Ordering;
-use std::io::{stdout, Write};
+use std::io::Write;
 use std::mem;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
@@ -722,6 +722,7 @@ pub(crate) trait CallPolicy: Any {
         ct: &BuiltInClauseType,
         indices: &mut IndexStore,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) -> CallResult {
         match ct {
             &BuiltInClauseType::AcyclicTerm => {
@@ -760,11 +761,10 @@ pub(crate) trait CallPolicy: Any {
                 machine_st.compare_term(qt);
                 return_from_clause!(machine_st.last_call, machine_st)
             }
-            &BuiltInClauseType::Nl => {
-                let mut stdout = stdout();
-
-                write!(stdout, "\n").unwrap();
-                stdout.flush().unwrap();
+            &BuiltInClauseType::Nl => {                
+                write!(current_output_stream, "\n").unwrap();
+                current_output_stream.flush().unwrap();
+                
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Read => {
@@ -896,12 +896,19 @@ pub(crate) trait CallPolicy: Any {
         arity: usize,
         indices: &mut IndexStore,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) -> CallResult {
         if let Some((name, arity)) = machine_st.setup_call_n(arity) {
             match ClauseType::from(name.clone(), arity, None) {
                 ClauseType::BuiltIn(built_in) => {
                     machine_st.setup_built_in_call(built_in.clone());
-                    self.call_builtin(machine_st, &built_in, indices, current_input_stream)?;
+                    self.call_builtin(
+                        machine_st,
+                        &built_in,
+                        indices,
+                        current_input_stream,
+                        current_output_stream,
+                    )?;
                 }
                 ClauseType::CallN => {
                     machine_st.handle_internal_call_n(arity);
@@ -982,9 +989,16 @@ impl CallPolicy for CWILCallPolicy {
         ct: &BuiltInClauseType,
         indices: &mut IndexStore,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) -> CallResult {
-        self.prev_policy
-            .call_builtin(machine_st, ct, indices, current_input_stream)?;
+        self.prev_policy.call_builtin(
+            machine_st,
+            ct,
+            indices,
+            current_input_stream,
+            current_output_stream
+        )?;
+        
         self.increment(machine_st)
     }
 
@@ -994,9 +1008,16 @@ impl CallPolicy for CWILCallPolicy {
         arity: usize,
         indices: &mut IndexStore,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) -> CallResult {
-        self.prev_policy
-            .call_n(machine_st, arity, indices, current_input_stream)?;
+        self.prev_policy.call_n(
+            machine_st,
+            arity,
+            indices,
+            current_input_stream,
+            current_output_stream,
+        )?;
+        
         self.increment(machine_st)
     }
 }

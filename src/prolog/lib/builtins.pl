@@ -44,12 +44,12 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      abolish/1, asserta/1, assertz/1, atom_chars/2,
                      atom_codes/2, atom_concat/3, atom_length/2,
                      bagof/3, catch/3, char_code/2, clause/2,
-		     current_input/1, current_op/3, current_predicate/1,
-                     current_prolog_flag/2, expand_goal/2,
-                     expand_term/2, fail/0, false/0, findall/3,
-                     findall/4, get_char/1, halt/0, max_arity/1,
-                     number_chars/2, number_codes/2, once/1, op/3,
-                     read_term/2, repeat/0, retract/1,
+                     current_input/1, current_output/1, current_op/3,
+                     current_predicate/1, current_prolog_flag/2,
+                     expand_goal/2, expand_term/2, fail/0, false/0,
+                     findall/3, findall/4, get_char/1, halt/0,
+                     max_arity/1, number_chars/2, number_codes/2,
+                     once/1, op/3, read_term/2, repeat/0, retract/1,
                      set_prolog_flag/2, setof/3, sub_atom/5,
                      subsumes_term/2, term_variables/2, throw/1,
                      true/0, unify_with_occurs_check/2, write/1,
@@ -1014,3 +1014,5 @@ subsumes_term(General, Specific) :-
 unify_with_occurs_check(X, Y) :- '$unify_with_occurs_check'(X, Y).
 
 current_input(S) :- '$current_input'(S).    
+
+current_output(S) :- '$current_output'(S).

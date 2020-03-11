@@ -22,7 +22,7 @@ pub mod modules;
 mod partial_string;
 mod raw_block;
 mod stack;
-pub(super) mod streams;
+pub(crate) mod streams;
 pub(super) mod term_expansion;
 pub mod toplevel;
 
@@ -77,6 +77,7 @@ pub struct Machine {
     pub(super) code_repo: CodeRepo,
     pub(super) toplevel_idx: usize,
     pub(super) current_input_stream: Stream,
+    pub(super) current_output_stream: Stream,
 }
 
 impl Index<LocalCodePtr> for CodeRepo {
@@ -344,7 +345,7 @@ impl Machine {
         self.run_query();
     }
 
-    pub fn new(current_input_stream: Stream) -> Self
+    pub fn new(current_input_stream: Stream, current_output_stream: Stream) -> Self
     {
         let mut wam = Machine {
             machine_st: MachineState::new(),
@@ -354,6 +355,7 @@ impl Machine {
             code_repo: CodeRepo::new(),
             toplevel_idx: 0,
             current_input_stream,
+            current_output_stream,
         };
 
         let atom_tbl = wam.indices.atom_tbl.clone();
@@ -775,6 +777,7 @@ impl Machine {
                 &mut self.policies,
                 &mut self.code_repo,
                 &mut self.current_input_stream,
+                &mut self.current_output_stream,
             );
 
             match self.machine_st.p {
@@ -811,6 +814,7 @@ impl MachineState {
         policies: &mut MachinePolicies,
         code_repo: &CodeRepo,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) {
         match instr {
             &Line::Arithmetic(ref arith_instr) => self.execute_arith_instr(arith_instr),
@@ -826,6 +830,7 @@ impl MachineState {
                 &mut policies.call_policy,
                 &mut policies.cut_policy,
                 current_input_stream,
+                current_output_stream,
                 control_instr,
             ),
             &Line::Fact(ref fact_instr) => {
@@ -849,6 +854,7 @@ impl MachineState {
         policies: &mut MachinePolicies,
         code_repo: &CodeRepo,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) {
         let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
             Some(instr) => instr,
@@ -861,6 +867,7 @@ impl MachineState {
             policies,
             code_repo,
             current_input_stream,
+            current_output_stream,
         );
     }
 
@@ -913,6 +920,7 @@ impl MachineState {
         policies: &mut MachinePolicies,
         code_repo: &mut CodeRepo,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) -> bool {
         loop {
             let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
@@ -933,7 +941,8 @@ impl MachineState {
                 indices,
                 policies,
                 code_repo,
-                current_input_stream
+                current_input_stream,
+                current_output_stream,
             );
 
             if self.fail {
@@ -959,9 +968,16 @@ impl MachineState {
         policies: &mut MachinePolicies,
         code_repo: &mut CodeRepo,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) {
         loop {
-            self.execute_instr(indices, policies, code_repo, current_input_stream);
+            self.execute_instr(
+                indices,
+                policies,
+                code_repo,
+                current_input_stream,
+                current_output_stream,
+            );
 
             if self.fail {
                 self.backtrack();
@@ -977,7 +993,13 @@ impl MachineState {
                     if !instigating_instr.as_ref().is_head_instr() {
                         let cp = self.p.local();
                         self.run_verify_attr_interrupt(cp);
-                    } else if !self.verify_attr_stepper(indices, policies, code_repo, current_input_stream) {
+                    } else if !self.verify_attr_stepper(
+                        indices,
+                        policies,
+                        code_repo,
+                        current_input_stream,
+                        current_output_stream,
+                    ) {
                         if self.fail {
                             break;
                         }

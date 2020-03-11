@@ -958,6 +958,20 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     self.push_list();
                 }
             }
+            HeapCellValue::Addr(Addr::Stream(stream)) => {
+                if let Some(alias) = &stream.options.alias {
+                    self.print_atom(alias);
+                } else {
+                    if stream.is_stdout() || stream.is_stdin() {
+                        self.append_str("user");
+                    } else {
+                        self.append_str(&format!(
+                            "'$stream'(0x{:x})",
+                            stream.as_ptr() as usize,
+                        ));
+                    }
+                }
+            }
             HeapCellValue::Addr(addr) => {
                 if let Some(offset_str) = self.offset_as_string(iter, addr) {
                     push_space_if_amb!(self, &offset_str, {

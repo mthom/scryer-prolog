@@ -615,17 +615,19 @@ impl ModuleStub {
 }
 
 pub(crate) type ModuleStubDir = IndexMap<ClauseName, ModuleStub>;
+pub(crate) type StreamAliasDir = IndexMap<ClauseName, Stream>;
 
 pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,
     pub(super) code_dir: CodeDir,
-    pub(super) module_dir: ModuleDir,
     pub(super) dynamic_code_dir: DynamicCodeDir,
     pub(super) global_variables: GlobalVarDir,
     pub(super) in_situ_code_dir: InSituCodeDir,
     pub(super) in_situ_module_dir: ModuleStubDir,
+    pub(super) module_dir: ModuleDir,
     pub(super) modules: ModuleDir,
     pub(super) op_dir: OpDir,
+    pub(super) stream_aliases: StreamAliasDir,
 }
 
 impl IndexStore {
@@ -712,6 +714,7 @@ impl IndexStore {
             in_situ_module_dir: ModuleStubDir::new(),
             op_dir: default_op_dir(),
             modules: ModuleDir::new(),
+            stream_aliases: StreamAliasDir::new(),
         }
     }
 

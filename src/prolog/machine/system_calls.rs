@@ -673,6 +673,7 @@ impl MachineState {
         call_policy: &mut Box<dyn CallPolicy>,
         cut_policy: &mut Box<dyn CutPolicy>,
         current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) -> CallResult {
         match ct {
             &SystemClauseType::AbolishClause => {
@@ -747,6 +748,32 @@ impl MachineState {
                         return Err(self.error_form(err, stub));
                     }
                 }                
+            }
+            &SystemClauseType::CurrentOutput => {
+                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+                let stream = current_output_stream.clone();
+
+                match addr {
+                    addr if addr.is_ref() => {                        
+                        self.unify(Addr::Stream(stream), addr);
+                    }
+                    Addr::Stream(other_stream) => {
+                        self.fail = stream != other_stream;
+                    }
+                    addr => {
+                        let stub = MachineError::functor_stub(
+                            clause_name!("current_input"),
+                            1,
+                        );
+
+                        let err = MachineError::domain_error(
+                            DomainError::Stream,
+                            addr,
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }
             }
             &SystemClauseType::AtEndOfExpansion => {
                 if self.cp == LocalCodePtr::TopLevel(0, 0) {

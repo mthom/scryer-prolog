@@ -16,6 +16,7 @@ use nix::sys::signal;
 mod prolog;
 
 use crate::prolog::machine::*;
+use crate::prolog::machine::streams::*;
 use crate::prolog::read::*;
 
 use std::sync::atomic::Ordering;
@@ -31,6 +32,6 @@ fn main() {
     let handler = signal::SigHandler::Handler(handle_sigint);
     unsafe { signal::signal(signal::Signal::SIGINT, handler) }.unwrap();
 
-    let mut wam = Machine::new(readline::input_stream());
+    let mut wam = Machine::new(readline::input_stream(), Stream::stdout());
     wam.run_top_level();
 }

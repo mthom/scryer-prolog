@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{Cursor, ErrorKind, Read, Write};
+use std::io::{stdin, stdout, Cursor, ErrorKind, Read, Write};
 use std::hash::{Hash, Hasher};
 use std::net::TcpStream;
 use std::rc::Rc;
@@ -31,6 +31,8 @@ pub enum StreamInstance {
     DynReadSource(Box<dyn Read>),
     File(File),    
     ReadlineStream(ReadlineStream),
+    Stdin,
+    Stdout,
     TcpStream(TcpStream),
 }
 
@@ -176,6 +178,88 @@ impl Stream {
 
         ptr
     }
+
+    #[inline]
+    pub(crate)
+    fn stdout() -> Self {
+        Stream {
+            options: StreamOptions::default(),
+            stream_inst: WrappedStreamInstance::new(
+                StreamInstance::Stdout
+            ),
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn stdin() -> Self {
+        Stream {
+            options: StreamOptions::default(),
+            stream_inst: WrappedStreamInstance::new(
+                StreamInstance::Stdin
+            ),
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn is_stdout(&self) -> bool {
+        match *self.stream_inst.0.borrow() {
+            StreamInstance::Stdout => {
+                true
+            }
+            _ => {
+                false
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn is_stdin(&self) -> bool {
+        match *self.stream_inst.0.borrow() {
+            StreamInstance::Stdin | StreamInstance::ReadlineStream(_) => {
+                true
+            }
+            _ => {
+                false
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn is_input_stream(&self) -> bool {
+        match *self.stream_inst.0.borrow() {
+            StreamInstance::Stdin
+          | StreamInstance::TcpStream(_)
+          | StreamInstance::Bytes(_) 
+          | StreamInstance::ReadlineStream(_)
+          | StreamInstance::DynReadSource(_)
+          | StreamInstance::File(_) => {
+                true
+           }
+            _ => {
+                false
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn is_output_stream(&self) -> bool {
+        match *self.stream_inst.0.borrow() {
+            StreamInstance::Stdout
+          | StreamInstance::TcpStream(_)
+          | StreamInstance::Bytes(_) 
+          | StreamInstance::File(_) => {
+                true
+           }
+            _ => {
+                false
+            }
+        }
+    }
 }
 
 impl Read for Stream {
@@ -196,6 +280,15 @@ impl Read for Stream {
             StreamInstance::Bytes(ref mut cursor) => {
                 cursor.read(buf)
             }
+            StreamInstance::Stdin => {
+                stdin().read(buf)
+            }
+            StreamInstance::Stdout => {
+                Err(std::io::Error::new(
+                    ErrorKind::PermissionDenied,
+                    StreamError::ReadFromOutputStream,
+                ))
+            }
         }
     }
 }
@@ -211,6 +304,9 @@ impl Write for Stream {
             }
             StreamInstance::Bytes(ref mut cursor) => {
                 cursor.write(buf)
+            }
+            StreamInstance::Stdout => {
+                stdout().write(buf)
             }
             _ => {
                 Err(std::io::Error::new(
@@ -231,6 +327,9 @@ impl Write for Stream {
             }
             StreamInstance::Bytes(ref mut cursor) => {
                 cursor.flush()
+            }
+            StreamInstance::Stdout => {
+                stdout().flush()
             }
             _ => {
                 Err(std::io::Error::new(
