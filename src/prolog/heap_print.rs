@@ -136,16 +136,18 @@ impl<'a> HCPreOrderIterator<'a> {
     }
 }
 
-fn char_to_string(c: char) -> String {
+fn char_to_string(is_quoted: bool, c: char) -> String {
     match c {
-        '\'' => "\\'".to_string(),
-        '\n' => "\\n".to_string(),
-        '\r' => "\\r".to_string(),
-        '\t' => "\\t".to_string(),
-        '\u{0b}' => "\\v".to_string(), // UTF-8 vertical tab
-        '\u{0c}' => "\\f".to_string(), // UTF-8 form feed
-        '\u{08}' => "\\b".to_string(), // UTF-8 backspace
-        '\u{07}' => "\\a".to_string(), // UTF-8 alert
+        '\'' if is_quoted => "\\'".to_string(),
+        '\n' if is_quoted => "\\n".to_string(),
+        '\r' if is_quoted => "\\r".to_string(),
+        '\t' if is_quoted => "\\t".to_string(),
+        '\u{0b}' if is_quoted => "\\v".to_string(), // UTF-8 vertical tab
+        '\u{0c}' if is_quoted => "\\f".to_string(), // UTF-8 form feed
+        '\u{08}' if is_quoted => "\\b".to_string(), // UTF-8 backspace
+        '\u{07}' if is_quoted => "\\a".to_string(), // UTF-8 alert
+        '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' =>
+            c.to_string(),
         '\u{a0}' ..= '\u{d6}' => c.to_string(),
         '\u{d8}' ..= '\u{f6}' => c.to_string(),
         '\u{f8}' ..= '\u{74f}' => c.to_string(),
@@ -715,7 +717,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
 
             for c in atom.chars() {
-                result += &char_to_string(c);
+                result += &char_to_string(self.quoted, c);
             }
 
             if self.quoted {
@@ -811,7 +813,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.append_str(&format!("{}", c as u32));
             }
             Constant::Char(c) if non_quoted_token(once(c)) => {
-                let c = char_to_string(c);
+                let c = char_to_string(self.quoted, c);
 
                 push_space_if_amb!(self, &c, {
                     self.append_str(c.as_str());
@@ -822,10 +824,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
                 if self.quoted {
                     result.push('\'');
-                    result += &char_to_string(c);
+                    result += &char_to_string(self.quoted, c);
                     result.push('\'');
                 } else {
-                    result += &char_to_string(c);
+                    result += &char_to_string(self.quoted, c);
                 }
 
                 push_space_if_amb!(self, &result, {
@@ -854,7 +856,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.append_str("[]");
             }
         } else {
-            let atom = String::from_iter(s[offset ..].chars().map(char_to_string));
+            let atom = String::from_iter(s[offset ..].chars().map(|c| {
+                char_to_string(self.quoted, c)
+            }));
 
             self.push_char('"');
             self.append_str(&atom);
