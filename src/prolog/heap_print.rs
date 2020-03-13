@@ -269,28 +269,32 @@ fn negated_op_needs_bracketing(iter: &HCPreOrderIterator, op: &Option<DirectedOp
     }
 }
 
+fn numbervar(n: Integer) -> Var {
+    static CHAR_CODES: [char; 26] = [
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+        'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    ];
+
+    let i = n.mod_u(26) as usize;
+    let j = n.div_rem_floor(Integer::from(26));
+    let j = <(Integer, Integer)>::from(j).1;
+
+    if j == 0 {
+        CHAR_CODES[i].to_string()
+    } else {
+        format!("{}{}", CHAR_CODES[i], j)
+    }
+}
+
 impl MachineState {
     pub fn numbervar(&self, offset: &Integer, addr: Addr) -> Option<Var> {
-        static CHAR_CODES: [char; 26] = [
-            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
-            'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-        ];
-
         match self.store(self.deref(addr)) {
             Addr::Con(Constant::Integer(ref n)) if n >= &0 => {
-                let n = Integer::from(offset + n);
-
-                let i = n.mod_u(26) as usize;
-                let j = n.div_rem_floor(Integer::from(26));
-                let j = <(Integer, Integer)>::from(j).1;
-
-                Some(if j == 0 {
-                    CHAR_CODES[i].to_string()
-                } else {
-                    format!("{}{}", CHAR_CODES[i], j)
-                })
+                Some(numbervar(Integer::from(offset + n)))
             }
-            _ => None,
+            _ => {
+                None
+            }
         }
     }
 }
@@ -306,8 +310,10 @@ pub struct HCPrinter<'a, Outputter> {
     heap_locs: ReverseHeapVarDict,
     printed_vars: IndexSet<Addr>,
     last_item_idx: usize,
+    inner_numbervar_count: usize,
     cyclic_terms: IndexMap<Addr, usize>,
-    pub(crate) var_names: IndexMap<Addr, String>,
+    var_names_set: IndexSet<Var>,
+    var_names: IndexMap<Addr, Var>,
     pub(crate) numbervars_offset: Integer,
     pub(crate) numbervars: bool,
     pub(crate) quoted: bool,
@@ -434,10 +440,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             last_item_idx: 0,
             numbervars: false,
             numbervars_offset: Integer::from(0),
+            inner_numbervar_count: 0,
             quoted: false,
             ignore_ops: false,
             cyclic_terms: IndexMap::new(),
             var_names: IndexMap::new(),
+            var_names_set: IndexSet::new(),
         }
     }
 
@@ -452,6 +460,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             clause_name!("="),
             SharedOpDesc::new(700, XFX),
         ));
+        
         printer.heap_locs = reverse_heap_locs(machine_st);
 
         printer
@@ -604,7 +613,35 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         self.outputter.append(s);
     }
 
-    fn offset_as_string(&self, iter: &mut HCPreOrderIterator, addr: Addr) -> Option<String> {
+    pub fn set_var_names(&mut self, var_names: IndexMap<Addr, Var>) {
+        for var in var_names.values().cloned() {
+            self.var_names_set.insert(var);
+        }
+
+        self.var_names = var_names;
+    }
+
+    fn inner_numbervar(&mut self, r: Ref) -> Var {
+        let mut nv;
+        
+        loop {
+            nv = numbervar(Integer::from(self.inner_numbervar_count));
+            nv = format!("_{}", nv);
+            
+            if !self.var_names_set.contains(&nv) {
+                break;
+            } else {
+                self.inner_numbervar_count += 1;
+            }
+        }
+
+        self.var_names.insert(r.as_addr(), nv.clone());
+        self.var_names_set.insert(nv.clone());
+        
+        nv
+    }
+    
+    fn offset_as_string(&mut self, iter: &mut HCPreOrderIterator, addr: Addr) -> Option<Var> {
         if let Some(var) = self.var_names.get(&addr) {
             if addr.as_var().is_some() {
                 return Some(format!("{}", var));
@@ -615,17 +652,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
 
         match addr {
-            Addr::AttrVar(h) => {
-                Some(format!("_{}", h))
-            }
-            Addr::HeapCell(h) | Addr::Lis(h) | Addr::Str(h) | Addr::PStrTail(h, _) => {
-                Some(format!("_{}", h))
-            }
-            Addr::StackCell(fr, sc) => {
-                Some(format!("_s_{}_{}", fr, sc))
+            Addr::Lis(h) | Addr::Str(h) => {
+                Some(self.inner_numbervar(Ref::HeapCell(h)))
             }
             _ => {
-                None
+                if let Some(r) = addr.as_var() {
+                    Some(self.inner_numbervar(r))
+                } else {
+                    None
+                }
             }
         }
     }
@@ -803,7 +838,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
                 push_space_if_amb!(self, &c, {
                     self.append_str(c.as_str());
-                });                
+                });
             }
             Constant::Char(c) => {
                 let mut result = String::new();
@@ -815,10 +850,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 } else {
                     result += &char_to_string(c);
                 }
-                
+
                 push_space_if_amb!(self, &result, {
                     self.append_str(result.as_str());
-                });                
+                });
             }
             Constant::CutPoint(b) => self.append_str(&format!("{}", b)),
             Constant::EmptyList => self.append_str("[]"),
@@ -846,7 +881,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
             self.push_char('"');
             self.append_str(&atom);
-            self.push_char('"');        
+            self.push_char('"');
         }
     }
 
@@ -927,7 +962,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         match heap_val {
             HeapCellValue::NamedStr(arity, name, spec) => {
                 let spec = fetch_op_spec(name.clone(), arity, spec.clone(), self.op_dir);
-                
+
                 if let Some(spec) = spec {
                     self.handle_op_as_struct(
                         name,

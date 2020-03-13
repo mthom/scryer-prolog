@@ -2707,7 +2707,7 @@ impl MachineState {
                             }
                         }
 
-                        printer.var_names = var_names;
+                        printer.set_var_names(var_names);
                     }
                     Err(err) => return Err(err),
                 }
