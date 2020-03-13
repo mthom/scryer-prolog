@@ -475,7 +475,9 @@ findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses)
     (  nonvar(Goal), Goal = _ ^ _ ->
        rightmost_power(Goal, Goal1, ExistentialVars0),
        term_variables(ExistentialVars0, ExistentialVars),
-       set_difference(Witnesses0, ExistentialVars, Witnesses),
+       sort(Witnesses0, Witnesses1),
+       sort(ExistentialVars, ExistentialVars1),
+       set_difference(Witnesses1, ExistentialVars1, Witnesses),
        findall(Witnesses-Template, Goal1, PairedSolutions)
     ;  Witnesses = Witnesses0,
        findall(Witnesses-Template, Goal, PairedSolutions)

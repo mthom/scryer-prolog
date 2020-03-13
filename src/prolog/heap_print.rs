@@ -312,8 +312,7 @@ pub struct HCPrinter<'a, Outputter> {
     last_item_idx: usize,
     inner_numbervar_count: usize,
     cyclic_terms: IndexMap<Addr, usize>,
-    var_names_set: IndexSet<Var>,
-    var_names: IndexMap<Addr, Var>,
+    pub(crate) var_names: IndexMap<Addr, Var>,
     pub(crate) numbervars_offset: Integer,
     pub(crate) numbervars: bool,
     pub(crate) quoted: bool,
@@ -445,7 +444,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             ignore_ops: false,
             cyclic_terms: IndexMap::new(),
             var_names: IndexMap::new(),
-            var_names_set: IndexSet::new(),
         }
     }
 
@@ -612,34 +610,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         self.last_item_idx = self.outputter.len();
         self.outputter.append(s);
     }
-
-    pub fn set_var_names(&mut self, var_names: IndexMap<Addr, Var>) {
-        for var in var_names.values().cloned() {
-            self.var_names_set.insert(var);
-        }
-
-        self.var_names = var_names;
-    }
-
-    fn inner_numbervar(&mut self, r: Ref) -> Var {
-        let mut nv;
-        
-        loop {
-            nv = numbervar(Integer::from(self.inner_numbervar_count));
-            nv = format!("_{}", nv);
-            
-            if !self.var_names_set.contains(&nv) {
-                break;
-            } else {
-                self.inner_numbervar_count += 1;
-            }
-        }
-
-        self.var_names.insert(r.as_addr(), nv.clone());
-        self.var_names_set.insert(nv.clone());
-        
-        nv
-    }
     
     fn offset_as_string(&mut self, iter: &mut HCPreOrderIterator, addr: Addr) -> Option<Var> {
         if let Some(var) = self.var_names.get(&addr) {
@@ -653,11 +623,18 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         match addr {
             Addr::Lis(h) | Addr::Str(h) => {
-                Some(self.inner_numbervar(Ref::HeapCell(h)))
+                Some(format!("{}", h))
             }
             _ => {
                 if let Some(r) = addr.as_var() {
-                    Some(self.inner_numbervar(r))
+                    match r {
+                        Ref::StackCell(fr, sc) => {
+                            Some(format!("_s_{}_{}", fr, sc))
+                        }
+                        Ref::HeapCell(h) | Ref::AttrVar(h) | Ref::PStrTail(h, _) => {
+                            Some(format!("_{}", h))
+                        }
+                    }
                 } else {
                     None
                 }
