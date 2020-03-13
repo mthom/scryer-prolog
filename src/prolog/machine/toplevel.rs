@@ -224,8 +224,8 @@ fn setup_op_decl(
 fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, ParserError>
 {
     match term {
-        Term::Clause(_, ref name, ref mut terms, Some(_))
-            if name.as_str() == "/" && terms.len() == 2 =>
+        Term::Clause(_, ref slash, ref mut terms, Some(_))
+            if (slash.as_str() == "/" || slash.as_str() == "//") && terms.len() == 2 =>
         {
             let arity = *terms.pop().unwrap();
             let name  = *terms.pop().unwrap();
@@ -241,8 +241,12 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, ParserErro
                 .and_then(|c| c.to_atom())
                 .ok_or(ParserError::InvalidModuleExport)?;
 
-            Ok((name, arity))
-        }
+            if slash.as_str() == "/" {
+                Ok((name, arity))
+            } else {
+                Ok((name, arity + 2))
+            }
+        }        
         _ => Err(ParserError::InvalidModuleExport),
     }
 }
