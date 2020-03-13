@@ -277,7 +277,7 @@ fn numbervar(n: Integer) -> Var {
 
     let i = n.mod_u(26) as usize;
     let j = n.div_rem_floor(Integer::from(26));
-    let j = <(Integer, Integer)>::from(j).1;
+    let j = <(Integer, Integer)>::from(j).0;
 
     if j == 0 {
         CHAR_CODES[i].to_string()
