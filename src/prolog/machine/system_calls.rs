@@ -728,7 +728,7 @@ impl MachineState {
                 let stream = current_input_stream.clone();
 
                 match addr {
-                    addr if addr.is_ref() => {                        
+                    addr if addr.is_ref() => {
                         self.unify(Addr::Stream(stream), addr);
                     }
                     Addr::Stream(other_stream) => {
@@ -747,14 +747,14 @@ impl MachineState {
 
                         return Err(self.error_form(err, stub));
                     }
-                }                
+                }
             }
             &SystemClauseType::CurrentOutput => {
                 let addr = self.store(self.deref(self[temp_v!(1)].clone()));
                 let stream = current_output_stream.clone();
 
                 match addr {
-                    addr if addr.is_ref() => {                        
+                    addr if addr.is_ref() => {
                         self.unify(Addr::Stream(stream), addr);
                     }
                     Addr::Stream(other_stream) => {
@@ -1128,25 +1128,35 @@ impl MachineState {
                     Addr::Con(Constant::Atom(name, _)) => {
                         let c = name.as_str().chars().next().unwrap();
                         let a2 = self[temp_v!(2)].clone();
+                        let c = Integer::from(c as u32);
 
-                        self.unify(Addr::Con(Constant::CharCode(c as u32)), a2);
+                        self.unify(Addr::Con(Constant::Integer(c)), a2);
                     }
                     Addr::Con(Constant::Char(c)) => {
                         let a2 = self[temp_v!(2)].clone();
-                        self.unify(Addr::Con(Constant::CharCode(c as u32)), a2);
+                        let c = Integer::from(c as u32);
+
+                        self.unify(Addr::Con(Constant::Integer(c)), a2);
                     }
-                    ref addr if addr.is_ref() => {
+                    addr if addr.is_ref() => {
                         let a2 = self[temp_v!(2)].clone();
 
                         match self.store(self.deref(a2)) {
-                            Addr::Con(Constant::Char(code)) => {
-                                self.unify(Addr::Con(Constant::Char(code)), addr.clone())
+                            Addr::Con(Constant::CharCode(code)) => {
+                                if let Some(c) = std::char::from_u32(code) {
+                                    self.unify(Addr::Con(Constant::Char(c)), addr);
+                                } else {
+                                    self.fail = true;
+                                }
                             }
                             Addr::Con(Constant::Integer(n)) => {
                                 let c = self.int_to_char_code(&n, "char_code", 2)?;
-                                let c = std::char::from_u32(c).unwrap();
 
-                                self.unify(Addr::Con(Constant::Char(c)), addr.clone());
+                                if let Some(c) = std::char::from_u32(c) {
+                                    self.unify(Addr::Con(Constant::Char(c)), addr);
+                                } else {
+                                    self.fail = true;
+                                }
                             }
                             _ => self.fail = true,
                         };
@@ -1233,7 +1243,7 @@ impl MachineState {
             &SystemClauseType::GetChar => {
                 let mut iter = parsing_stream(current_input_stream.clone());
                 let result = iter.next();
-                
+
                 let a1 = self[temp_v!(1)].clone();
 
                 match result {
@@ -2326,7 +2336,7 @@ impl MachineState {
                     enable_raw_mode().expect("failed to transition into raw mode");
 		    let result = next_keypress();
                     disable_raw_mode().expect("failed to transition out of raw mode");
-                    
+
                     result
 		};
 
@@ -2371,7 +2381,7 @@ impl MachineState {
                         // get the call site so that the number of active permanent variables can be read
                         // from it later.
                         let cp = (self.stack.index_and_frame(e).prelude.cp - 1).unwrap();
-                        
+
                         let p = cp.as_functor(&mut self.heap);
                         let e = self.stack.index_and_frame(e).prelude.e;
 
