@@ -150,7 +150,15 @@ impl SubModuleUser for IndexStore {
     fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: CodeIndex) {
         if let Some(ref code_idx) = self.code_dir.get(&(name.clone(), arity)) {
             if !code_idx.is_undefined() {
-                println!("Warning: overwriting {}/{}", &name, arity);
+                match (name.as_str(), arity) {
+                    ("term_expansion", 2) => {
+                    }
+                    ("goal_expansion", 2) => {
+                    }
+                    _ => {
+                        println!("Warning: overwriting {}/{}", &name, arity);
+                    }
+                }
             }
 
             let (p, module_name) = idx.0.borrow().clone();

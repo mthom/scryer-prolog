@@ -380,7 +380,7 @@ impl MachineState {
 
             self.reset_with_heap_preservation();
 
-            Some(output.result()))
+            Some(output.result())
         }
     }
 }
