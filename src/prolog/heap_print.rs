@@ -146,7 +146,9 @@ fn char_to_string(is_quoted: bool, c: char) -> String {
         '\u{0c}' if is_quoted => "\\f".to_string(), // UTF-8 form feed
         '\u{08}' if is_quoted => "\\b".to_string(), // UTF-8 backspace
         '\u{07}' if is_quoted => "\\a".to_string(), // UTF-8 alert
-        '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' =>
+        '"' if is_quoted => "\\\"".to_string(),
+        '\\' if is_quoted => "\\\\".to_string(),
+        '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' | '"' | '\\' =>
             c.to_string(),
         '\u{a0}' ..= '\u{d6}' => c.to_string(),
         '\u{d8}' ..= '\u{f6}' => c.to_string(),
@@ -778,7 +780,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_constant(&mut self, c: Constant, op: &Option<DirectedOp>) {
+    fn print_constant(&mut self, iter: &mut HCPreOrderIterator, c: Constant, op: &Option<DirectedOp>)
+    {
         match c {
             Constant::Atom(atom, spec) => {
                 if let Some(_) = fetch_atom_op_spec(atom.clone(), spec, self.op_dir) {
@@ -837,31 +840,27 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             Constant::Integer(n) => self.print_number(Number::Integer(n), op),
             Constant::Float(n) => self.print_number(Number::Float(n), op),
             Constant::Rational(n) => self.print_number(Number::Rational(n), op),
-            Constant::String(n, s) => self.print_string(n, s),
+            Constant::String(n, s) => self.print_string(iter, n, s),
             Constant::Usize(i) => self.append_str(&format!("u{}", i)),
         }
     }
 
-    fn print_string(&mut self, offset: usize, s: Rc<String>) {
-        if !self.machine_st.machine_flags().double_quotes.is_atom() {
-            if !s[offset ..].is_empty() {
-                if self.ignore_ops {
-                    self.format_struct(2, clause_name!("."));
-                } else {
-                    self.push_list();
-                }
-            } else if !self.at_cdr("") {
-                self.append_str("[]");
-            }
-        } else {
-            let atom = String::from_iter(s[offset ..].chars().map(|c| {
-                char_to_string(self.quoted, c)
-            }));
+    fn print_string(&mut self, iter: &mut HCPreOrderIterator, offset: usize, s: Rc<String>) {
+        let atom = String::from_iter(s[offset ..].chars().map(|c| {
+            char_to_string(true, c)
+        }));
 
-            self.push_char('"');
-            self.append_str(&atom);
-            self.push_char('"');
-        }
+        self.push_char('"');
+        self.append_str(&atom);
+        self.push_char('"');
+
+        // eliminate lingering elements on the iterator stack (the
+        // head and tail) which are there to treat the string as a
+        // list.
+        let iter_stack = iter.stack();
+
+        iter_stack.pop();
+        iter_stack.pop();
     }
 
     fn push_list(&mut self) {
@@ -964,7 +963,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     self.append_str("[]");
                 }
             }
-            HeapCellValue::Addr(Addr::Con(c)) => self.print_constant(c, &op),
+            HeapCellValue::Addr(Addr::Con(c)) => self.print_constant(iter, c, &op),
             HeapCellValue::Addr(Addr::Lis(_)) | HeapCellValue::Addr(Addr::PStrLocation(..)) => {
                 if self.ignore_ops {
                     self.format_struct(2, clause_name!("."));
