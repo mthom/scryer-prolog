@@ -320,6 +320,7 @@ pub struct HCPrinter<'a, Outputter> {
     pub(crate) numbervars: bool,
     pub(crate) quoted: bool,
     pub(crate) ignore_ops: bool,
+    pub(crate) print_strings_as_strs: bool,
 }
 
 macro_rules! push_space_if_amb {
@@ -446,6 +447,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             ignore_ops: false,
             cyclic_terms: IndexMap::new(),
             var_names: IndexMap::new(),
+            print_strings_as_strs: false,
         }
     }
 
@@ -840,13 +842,20 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             Constant::Integer(n) => self.print_number(Number::Integer(n), op),
             Constant::Float(n) => self.print_number(Number::Float(n), op),
             Constant::Rational(n) => self.print_number(Number::Rational(n), op),
-            Constant::String(n, s) => self.print_string(iter, n, s),
+            Constant::String(n, s) if self.print_strings_as_strs =>
+                self.print_string_as_str(iter, n, s),
+            Constant::String(n, s) => self.print_string(n, s),
             Constant::Usize(i) => self.append_str(&format!("u{}", i)),
         }
     }
 
-    fn print_string(&mut self, iter: &mut HCPreOrderIterator, offset: usize, s: Rc<String>) {
-        let atom = String::from_iter(s[offset ..].chars().map(|c| {
+    fn print_string_as_str(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+        offset: usize,
+        s: Rc<String>,
+    ) {
+         let atom = String::from_iter(s[offset ..].chars().map(|c| {
             char_to_string(true, c)
         }));
 
@@ -862,6 +871,28 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         iter_stack.pop();
         iter_stack.pop();
     }
+    
+    fn print_string(&mut self, offset: usize, s: Rc<String>) {
+        if !self.machine_st.machine_flags().double_quotes.is_atom() {
+            if !s[offset ..].is_empty() {
+                if self.ignore_ops {
+                    self.format_struct(2, clause_name!("."));
+                } else {
+                    self.push_list();
+                }
+            } else if !self.at_cdr("") {
+                self.append_str("[]");
+            }
+        } else {
+            let atom = String::from_iter(s[offset ..].chars().map(|c| {
+                char_to_string(self.quoted, c)
+            }));
+        
+            self.push_char('"');
+            self.append_str(&atom);
+            self.push_char('"');
+        }
+    }        
 
     fn push_list(&mut self) {
         let cell = Rc::new(Cell::new(true));

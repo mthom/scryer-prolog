@@ -315,12 +315,14 @@ impl MachineState {
 
         printer.quoted = true;
         printer.numbervars = true;
+        
         // the purpose of the offset is to avoid clashes with variable names that might
         // occur after the addresses in the expanded term are substituted with the variable
         // names in the pre-expansion term. This formula ensures that all generated "numbervars"-
         // style variable names will be longer than the keys of the var_dict, and therefore
         // not equal to any of them.
         printer.numbervars_offset = Integer::from(10).pow(max_var_length as u32) * 26;
+        printer.print_strings_as_strs = true;
         printer.drop_toplevel_spec();
 
         printer.see_all_locs();
