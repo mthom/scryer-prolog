@@ -379,7 +379,8 @@ impl MachineState {
             let output = self.print_with_locs(Addr::HeapCell(h), &wam.indices.op_dir);
 
             self.reset_with_heap_preservation();
-            Some(output.result())
+
+            Some(output.result()))
         }
     }
 }

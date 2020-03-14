@@ -107,8 +107,7 @@ dcg_constr((_->_)). % 7.14.12 - if-then (existence implementation dep.)
 % The principal functor of the first argument indicates
 % the construct to be expanded.
 dcg_cbody([], S0, S, S0 = S).
-dcg_cbody([T|Ts], S0, S, Goal) :-
-    dcg_terminals([T|Ts], S0, S, Goal).
+dcg_cbody([T|Ts], S0, S, lists:append([T|Ts], S, S0)).
 dcg_cbody(( GRFirst, GRSecond ), S0, S, ( First, Second )) :-
     dcg_body(GRFirst, S0, S1, First),
     dcg_body(GRSecond, S1, S, Second).
