@@ -34,6 +34,7 @@ pub enum ContinueResult {
     ContinueQuery,
     Conclude,
     PrintWithoutMaxDepth,
+    PrintWithMaxDepth
 }
 
 pub fn next_keypress() -> ContinueResult {
@@ -43,6 +44,9 @@ pub fn next_keypress() -> ContinueResult {
                 match code {
                     KeyCode::Char('w') => {
                         return ContinueResult::PrintWithoutMaxDepth;
+                    }
+                    KeyCode::Char('p') => {
+                        return ContinueResult::PrintWithMaxDepth;
                     }
                     KeyCode::Char(' ') | KeyCode::Char(';') | KeyCode::Char('n') => {
                         return ContinueResult::ContinueQuery;
@@ -2348,6 +2352,7 @@ impl MachineState {
                     ContinueResult::ContinueQuery => ';',
                     ContinueResult::Conclude => '.',
                     ContinueResult::PrintWithoutMaxDepth => 'w',
+                    ContinueResult::PrintWithMaxDepth => 'p',
                 };
 
                 let target = self[temp_v!(1)].clone();

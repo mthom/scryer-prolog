@@ -184,14 +184,19 @@
 
 '$read_input'(ThreadedGoals, NewVarList) :-
     '$raw_input_read_char'(C),
-    (  C == ('w'), !,
+    (  C == w ->
        nl,
        write('   '),
        '$write_eq'(ThreadedGoals, NewVarList, 0),
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  C == (';'), !,
+    ;  C == p ->
+       nl,
+       write('   '),
+       '$write_eq'(ThreadedGoals, NewVarList, 20),
+       '$read_input'(ThreadedGoals, NewVarList)
+    ;  C == (';') ->
        nl, write(';  '), false
-    ;  C == ('.'), !,
+    ;  C == '.',
        nl, write('   ...'), nl
     ).
 
