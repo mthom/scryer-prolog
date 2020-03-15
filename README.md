@@ -225,12 +225,64 @@ By all appearances, partial strings are plain Prolog lists.
 
 Scryer has a simple predicate-based module system. It provides a
 way to separate units of code into distinct namespaces, for both
-predicates and operators. See the files `src/prolog/lib/*.pl` for
+predicates and operators. See the files
+[`src/prolog/lib/*.pl`](src/prolog/lib) for
 examples.
 
-At the time of this writing, several control and list processing
-operators and predicates are hidden in their own modules that have not
-been exported to the toplevel. To export them, write
+At the time of this writing, many predicates reside in their own
+modules that need to be imported before they can be used.
+The modules that ship with Scryer&nbsp;Prolog are also called
+*library*&nbsp;modules or *libraries*, and include:
+
+* [`lists`](src/prolog/lib/lists.pl)
+  providing `length/2`, `member/2`, `select/3`, `append/[2,3]`,
+  `foldl/[4,5]`, `maplist/[2-9]`, `same_length/2`, `transpose/2` etc.
+* [`dcgs`](src/prolog/lib/dcgs.pl)
+  Definite Clause Grammars (DCGs), a built-in grammar mechanism
+  that uses the operator `(-->)/2` to define grammar rules,
+  and the predicates `phrase/[2,3]` to invoke them.
+* [`dif`](src/prolog/lib/dif.pl)
+  The predicate `dif/2` provides declarative disequality:
+  It is true if and only if its arguments are different, and
+  delays the test until a sound decision can be made.
+* [`reif`](src/prolog/lib/reif.pl)
+  providing `if_/3`, `tfilter/3` and related predicates
+  as described in *Indexing&nbsp;dif/2*.
+* [`pairs`](src/prolog/lib/pairs.pl)
+  By convention, *pairs* are Prolog terms with
+  principal&nbsp;functor `(-)/2`, written as `Key-Value`.
+  This library provides `pairs_keys_values/3`,
+  `pairs_keys/2`, and other predicates to reason about pairs.
+* [`si`](src/prolog/lib/si.pl)
+  The predicates `atom_si/1`, `integer_si/1`, `atomic_si/1`
+  and `list_si/1` implement sound type checks. They raise
+  instantiation errors of no decision can be made.
+  They are declarative replacements for logically flawed
+  lower-level type tests. For instance, instead of `integer(X)`,
+  write `integer_si(X)` to ensure soundness of your programs.
+  "si" stands for *sufficiently instantiated*, and also for
+  *sound&nbsp;inference*.
+* [`error`](src/prolog/lib/error.pl)
+  `must_be/2` and `can_be/2` complement the type checks provided
+  by `library(si)`, and are especially useful for Prolog library
+  authors.
+* [`tabling`](src/prolog/lib/tabling.pl)
+  The operator `(table)/1` is used in directives that prepare
+  predicates for tabled execution (SLG&nbsp;resolution).
+* [`format`](src/prolog/lib/format.pl)
+  The nonterminal `format_//2` is used to describe formatted output,
+  arranging arguments according to a given format&nbsp;string.
+  The predicate `format/2` is provided for impure output.
+* [`assoc`](src/prolog/lib/assoc.pl)
+  providing `empty_assoc/1`, `get_assoc/3`, `put_assoc/4` etc.
+  to manage elements in AVL&nbsp;trees which ensure
+  *O*(log(*N*))&nbsp;access.
+* [`clpb`](src/prolog/lib/clpb.pl)
+  CLP(B): Constraint Logic Programming over Boolean variables,
+  a BDD-based SAT&nbsp;solver provided via the predicates
+  `sat/1`, `taut/2`, `labeling/1` etc.
+
+To use predicates provided by the `lists` library, write:
 
 ```
 ?- use_module(library(lists)).
