@@ -196,9 +196,20 @@
        '$read_input'(ThreadedGoals, NewVarList)
     ;  C == (';') ->
        nl, write(';  '), false
+    ;  C == h ->
+       '$help_message',
+       '$read_input'(ThreadedGoals, NewVarList)
     ;  C == '.',
        nl, write('   ...'), nl
     ).
+
+'$help_message' :-
+    nl, nl,
+    write('SPACE, "n" or ";": next solution, if any\n'),
+    write('".": stop enumeration\n'),
+    write('"h": display this help message\n'),
+    write('"w": write terms without depth limit\n'),
+    write('"p": print terms with depth limit\n\n').
 
 '$gather_query_vars'([_ = Var | Vars], QueryVars) :-
     (  var(Var) ->
