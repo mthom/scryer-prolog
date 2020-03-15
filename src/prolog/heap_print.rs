@@ -462,7 +462,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             clause_name!("="),
             SharedOpDesc::new(700, XFX),
         ));
-        
+
         printer.heap_locs = reverse_heap_locs(machine_st);
 
         printer
@@ -614,7 +614,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         self.last_item_idx = self.outputter.len();
         self.outputter.append(s);
     }
-    
+
     fn offset_as_string(&mut self, iter: &mut HCPreOrderIterator, addr: Addr) -> Option<Var> {
         if let Some(var) = self.var_names.get(&addr) {
             if addr.as_var().is_some() {
@@ -782,6 +782,31 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
+    fn print_char(&mut self, c: char)
+    {
+        if non_quoted_token(once(c)) {
+            let c = char_to_string(self.quoted, c);
+
+            push_space_if_amb!(self, &c, {
+                self.append_str(c.as_str());
+            });
+        } else {
+            let mut result = String::new();
+
+            if self.quoted {
+                result.push('\'');
+                result += &char_to_string(self.quoted, c);
+                result.push('\'');
+            } else {
+                result += &char_to_string(self.quoted, c);
+            }
+
+            push_space_if_amb!(self, &result, {
+                self.append_str(result.as_str());
+            });
+        }
+    }
+
     fn print_constant(&mut self, iter: &mut HCPreOrderIterator, c: Constant, op: &Option<DirectedOp>)
     {
         match c {
@@ -815,37 +840,33 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             Constant::CharCode(c) => {
                 self.append_str(&format!("{}", c as u32));
             }
-            Constant::Char(c) if non_quoted_token(once(c)) => {
-                let c = char_to_string(self.quoted, c);
-
-                push_space_if_amb!(self, &c, {
-                    self.append_str(c.as_str());
-                });
-            }
             Constant::Char(c) => {
-                let mut result = String::new();
-
-                if self.quoted {
-                    result.push('\'');
-                    result += &char_to_string(self.quoted, c);
-                    result.push('\'');
-                } else {
-                    result += &char_to_string(self.quoted, c);
-                }
-
-                push_space_if_amb!(self, &result, {
-                    self.append_str(result.as_str());
-                });
+                self.print_char(c);
             }
-            Constant::CutPoint(b) => self.append_str(&format!("{}", b)),
-            Constant::EmptyList => self.append_str("[]"),
-            Constant::Integer(n) => self.print_number(Number::Integer(n), op),
-            Constant::Float(n) => self.print_number(Number::Float(n), op),
-            Constant::Rational(n) => self.print_number(Number::Rational(n), op),
-            Constant::String(n, s) if self.print_strings_as_strs =>
-                self.print_string_as_str(iter, n, s),
-            Constant::String(n, s) => self.print_string(n, s),
-            Constant::Usize(i) => self.append_str(&format!("u{}", i)),
+            Constant::CutPoint(b) => {
+                self.append_str(&format!("{}", b));
+            }
+            Constant::EmptyList => {
+                self.append_str("[]");
+            }
+            Constant::Integer(n) => {
+                self.print_number(Number::Integer(n), op);
+            }
+            Constant::Float(n) => {
+                self.print_number(Number::Float(n), op);
+            }
+            Constant::Rational(n) => {
+                self.print_number(Number::Rational(n), op);
+            }
+            Constant::String(n, s) if self.print_strings_as_strs => {
+                self.print_string_as_str(iter, n, s);
+            }
+            Constant::String(n, s) => {
+                self.print_string(iter, n, s);
+            }
+            Constant::Usize(i) => {
+                self.append_str(&format!("u{}", i));
+            }
         }
     }
 
@@ -866,33 +887,57 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         // eliminate lingering elements on the iterator stack (the
         // head and tail) which are there to treat the string as a
         // list.
-        let iter_stack = iter.stack();
-
-        iter_stack.pop();
-        iter_stack.pop();
+        iter.stack().pop();
+        iter.stack().pop();
     }
-    
-    fn print_string(&mut self, offset: usize, s: Rc<String>) {
+
+    fn print_string(&mut self, iter: &mut HCPreOrderIterator, offset: usize, s: Rc<String>) {
         if !self.machine_st.machine_flags().double_quotes.is_atom() {
-            if !s[offset ..].is_empty() {
-                if self.ignore_ops {
-                    self.format_struct(2, clause_name!("."));
-                } else {
-                    self.push_list();
-                }
-            } else if !self.at_cdr("") {
+            if s.len() <= offset && !self.at_cdr("") {
                 self.append_str("[]");
+            } else if self.ignore_ops {
+                let mut paren_count = 0;
+
+                for c in s[offset ..].chars() {
+                    self.print_char('.');
+                    self.push_char('(');
+
+                    self.print_char(c);
+                    self.push_char(',');
+
+                    paren_count += 1;
+                }
+
+                self.append_str("[]");
+
+                for _ in 0 .. paren_count {
+                    self.push_char(')');
+                }
+            } else {
+                self.push_char('[');
+
+                for c in s[offset ..].chars() {
+                    self.print_char(c);
+                    self.push_char(',');
+                }
+
+                self.outputter.truncate(self.outputter.len() - ','.len_utf8());
+
+                self.push_char(']');
             }
+
+            iter.stack().pop();
+            iter.stack().pop();
         } else {
             let atom = String::from_iter(s[offset ..].chars().map(|c| {
                 char_to_string(self.quoted, c)
             }));
-        
+
             self.push_char('"');
             self.append_str(&atom);
             self.push_char('"');
         }
-    }        
+    }
 
     fn push_list(&mut self) {
         let cell = Rc::new(Cell::new(true));
