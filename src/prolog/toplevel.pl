@@ -114,9 +114,9 @@
        write(' = '),
        (  '$needs_bracketing'(Value, (=)) ->
 	  write('('),
-	  write_term(Value, [quoted(true), variable_names(VarList)]),
+	  write_term(Value, [quoted(true), variable_names(VarList), max_depth(0)]),
 	  write(')')
-       ;  write_term(Value, [quoted(true), variable_names(VarList)])
+       ;  write_term(Value, [quoted(true), variable_names(VarList), max_depth(0)])
        )
     ;  G == [] ->
        write('true')
@@ -129,9 +129,9 @@
        write(' = '),
        (  '$needs_bracketing'(Value, (=)) ->
 	  write('('),
-	  write_term(Value, [quoted(true), variable_names(VarList)]),
+	  write_term(Value, [quoted(true), variable_names(VarList), max_depth(0)]),
 	  write(')')
-       ;  write_term(Value, [quoted(true), variable_names(VarList)]),
+       ;  write_term(Value, [quoted(true), variable_names(VarList), max_depth(0)]),
 	  (  '$trailing_period_is_ambiguous'(Value) ->
 	     write(' ')
 	  ;  true
@@ -139,7 +139,7 @@
        )
     ;  G == [] ->
        write('true')
-    ;  write_term(G, [quoted(true), variable_names(VarList)])
+    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(0)])
     ).
 
 '$write_eq'((G1, G2), VarList) :-
@@ -215,7 +215,7 @@
     ).
 
 '$print_exception'(E) :-
-    write_term('caught: ', [quoted(false)]),
+    write_term('caught: ', [quoted(false), max_depth(20)]),
     writeq(E),
     nl.
 

@@ -535,7 +535,7 @@ impl SystemClauseType {
 	    ("$use_qualified_module_from_file", 2) =>
 		Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile)),
             ("$variant", 2) => Some(SystemClauseType::Variant),
-            ("$write_term", 5) => Some(SystemClauseType::WriteTerm),
+            ("$write_term", 6) => Some(SystemClauseType::WriteTerm),
             ("$wam_instructions", 3) => Some(SystemClauseType::WAMInstructions),
             _ => None,
         }

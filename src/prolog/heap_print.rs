@@ -159,21 +159,21 @@ fn char_to_string(is_quoted: bool, c: char) -> String {
 }
 
 #[derive(Clone)]
-pub enum TokenOrRedirect {
+enum TokenOrRedirect {
     Atom(ClauseName),
     BarAsOp,
     Op(ClauseName, SharedOpDesc),
     NumberedVar(String),
-    CompositeRedirect(DirectedOp),
-    FunctorRedirect,
+    CompositeRedirect(usize, DirectedOp),
+    FunctorRedirect(usize),
     Open,
     Close,
     Comma,
     Space,
     LeftCurly,
     RightCurly,
-    OpenList(Rc<Cell<bool>>),
-    CloseList(Rc<Cell<bool>>),
+    OpenList(Rc<Cell<(bool, usize)>>),
+    CloseList(Rc<Cell<(bool, usize)>>),
     HeadTailSeparator,
 }
 
@@ -315,12 +315,14 @@ pub struct HCPrinter<'a, Outputter> {
     printed_vars: IndexSet<Addr>,
     last_item_idx: usize,
     cyclic_terms: IndexMap<Addr, usize>,
+    non_cyclic_terms: IndexSet<usize>,
     pub(crate) var_names: IndexMap<Addr, Var>,
     pub(crate) numbervars_offset: Integer,
     pub(crate) numbervars: bool,
     pub(crate) quoted: bool,
     pub(crate) ignore_ops: bool,
     pub(crate) print_strings_as_strs: bool,
+    pub(crate) max_depth: usize,
 }
 
 macro_rules! push_space_if_amb {
@@ -430,6 +432,18 @@ fn non_quoted_token<Iter: Iterator<Item = char>>(mut iter: Iter) -> bool {
     }
 }
 
+#[inline]
+fn functor_location(addr: &Addr) -> Option<usize> {
+    Some(match addr {
+        &Addr::Lis(l) => l,
+        &Addr::Str(s) => s,
+        &Addr::PStrLocation(h, _) | &Addr::PStrTail(h, _) => h,
+        _ => {
+            return None;
+        }
+    })
+}
+
 impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     pub fn new(machine_st: &'a MachineState, op_dir: &'a OpDir, output: Outputter) -> Self {
         HCPrinter {
@@ -446,8 +460,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             quoted: false,
             ignore_ops: false,
             cyclic_terms: IndexMap::new(),
+            non_cyclic_terms: IndexSet::new(),
             var_names: IndexMap::new(),
             print_strings_as_strs: false,
+            max_depth: 0,
         }
     }
 
@@ -485,53 +501,110 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         requires_space(tail, atom)
     }
 
-    fn enqueue_op(&mut self, ct: ClauseType, spec: SharedOpDesc) {
+    fn enqueue_op(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+        mut max_depth: usize,
+        ct: ClauseType,
+        spec: SharedOpDesc,
+    ) {
         if is_postfix!(spec.assoc()) {
+            if self.check_max_depth(&mut max_depth) {
+                iter.stack().pop();
+
+                self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
+                self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+
+                return;
+            }
+
             let right_directed_op = DirectedOp::Right(ct.name(), spec.clone());
 
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
-            self.state_stack
-                .push(TokenOrRedirect::CompositeRedirect(right_directed_op));
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(
+                max_depth,
+                right_directed_op,
+            ));
         } else if is_prefix!(spec.assoc()) {
             match ct.name().as_str() {
                 "-" | "\\" => {
-                    self.format_prefix_op_with_space(ct.name(), spec);
+                    self.format_prefix_op_with_space(iter, max_depth, ct.name(), spec);
                     return;
                 }
                 _ => {}
             };
 
+            if self.check_max_depth(&mut max_depth) {
+                iter.stack().pop();
+
+                self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+                self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
+
+                return;
+            }
+
             let left_directed_op = DirectedOp::Left(ct.name(), spec.clone());
 
-            self.state_stack
-                .push(TokenOrRedirect::CompositeRedirect(left_directed_op));
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, left_directed_op));
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
         } else {
             // if is_infix!(spec.assoc())
             match ct.name().as_str() {
                 "|" => {
-                    self.format_bar_separator_op(ct.name(), spec);
+                    self.format_bar_separator_op(iter, max_depth, ct.name(), spec);
                     return;
                 }
                 _ => {}
             };
 
+            if self.check_max_depth(&mut max_depth) {
+                iter.stack().pop();
+                iter.stack().pop();
+
+                self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+                self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
+                self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+
+                return;
+            }
+
             let left_directed_op = DirectedOp::Left(ct.name(), spec.clone());
             let right_directed_op = DirectedOp::Right(ct.name(), spec.clone());
 
             self.state_stack
-                .push(TokenOrRedirect::CompositeRedirect(left_directed_op));
+                .push(TokenOrRedirect::CompositeRedirect(max_depth, left_directed_op));
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
             self.state_stack
-                .push(TokenOrRedirect::CompositeRedirect(right_directed_op));
+                .push(TokenOrRedirect::CompositeRedirect(max_depth, right_directed_op));
         }
     }
 
-    fn format_struct(&mut self, arity: usize, name: ClauseName) {
+    fn format_struct(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+        mut max_depth: usize,
+        arity: usize,
+        name: ClauseName,
+    ) -> bool
+    {
+        if self.check_max_depth(&mut max_depth) {
+            for _ in 0 .. arity {
+                iter.stack().pop();
+            }
+
+            self.state_stack.push(TokenOrRedirect::Close);
+            self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+            self.state_stack.push(TokenOrRedirect::Open);
+
+            self.state_stack.push(TokenOrRedirect::Atom(name));
+
+            return false;
+        }
+
         self.state_stack.push(TokenOrRedirect::Close);
 
-        for _ in 0..arity {
-            self.state_stack.push(TokenOrRedirect::FunctorRedirect);
+        for _ in 0 .. arity {
+            self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
             self.state_stack.push(TokenOrRedirect::Comma);
         }
 
@@ -539,29 +612,77 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         self.state_stack.push(TokenOrRedirect::Open);
 
         self.state_stack.push(TokenOrRedirect::Atom(name));
+
+        true
     }
 
-    fn format_prefix_op_with_space(&mut self, name: ClauseName, spec: SharedOpDesc) {
+    fn format_prefix_op_with_space(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+        mut max_depth: usize,
+        name: ClauseName,
+        spec: SharedOpDesc)
+    {
+        if self.check_max_depth(&mut max_depth) {
+            iter.stack().pop();
+
+            self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+            self.state_stack.push(TokenOrRedirect::Space);
+            self.state_stack.push(TokenOrRedirect::Atom(name));
+
+            return;
+        }
+
         let op = DirectedOp::Left(name.clone(), spec);
 
-        self.state_stack.push(TokenOrRedirect::CompositeRedirect(op));
+        self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, op));
         self.state_stack.push(TokenOrRedirect::Space);
         self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
-    fn format_bar_separator_op(&mut self, name: ClauseName, spec: SharedOpDesc) {
+    fn format_bar_separator_op(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+        mut max_depth: usize,
+        name: ClauseName,
+        spec: SharedOpDesc,
+    )
+    {
+        if self.check_max_depth(&mut max_depth) {
+            iter.stack().pop();
+
+            self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+            self.state_stack.push(TokenOrRedirect::BarAsOp);
+            self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+
+            return;
+        }
+
         let left_directed_op = DirectedOp::Left(name.clone(), spec.clone());
         let right_directed_op = DirectedOp::Right(name.clone(), spec.clone());
 
-        self.state_stack.push(TokenOrRedirect::CompositeRedirect(left_directed_op));
+        self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, left_directed_op));
         self.state_stack.push(TokenOrRedirect::BarAsOp);
-        self.state_stack.push(TokenOrRedirect::CompositeRedirect(right_directed_op));
+        self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, right_directed_op));
     }
 
-    fn format_curly_braces(&mut self) {
+    fn format_curly_braces(&mut self, iter: &mut HCPreOrderIterator, mut max_depth: usize) -> bool
+    {
+        if self.check_max_depth(&mut max_depth) {
+            iter.stack().pop();
+
+            self.state_stack.push(TokenOrRedirect::RightCurly);
+            self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+            self.state_stack.push(TokenOrRedirect::LeftCurly);
+
+            return false;
+        }
+
         self.state_stack.push(TokenOrRedirect::RightCurly);
-        self.state_stack.push(TokenOrRedirect::FunctorRedirect);
+        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
         self.state_stack.push(TokenOrRedirect::LeftCurly);
+
+        true
     }
 
     fn format_numbered_vars(&mut self, iter: &mut HCPreOrderIterator) -> bool {
@@ -577,29 +698,36 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         false
     }
 
-    fn format_clause(&mut self, iter: &mut HCPreOrderIterator, arity: usize, ct: ClauseType) {
+    fn format_clause(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+        max_depth: usize,
+        arity: usize,
+        ct: ClauseType,
+    ) -> bool {
         if self.numbervars && is_numbered_var(&ct, arity) {
             if self.format_numbered_vars(iter) {
-                return;
+                return true;
             }
         }
 
         if let Some(spec) = ct.spec() {
             if "." == ct.name().as_str() && is_infix!(spec.assoc()) {
                 if !self.ignore_ops {
-                    self.push_list();
-                    return;
+                    self.push_list(iter, max_depth);
+                    return true;
                 }
             }
 
             if !self.ignore_ops && spec.prec() > 0 {
-                return self.enqueue_op(ct, spec);
+                self.enqueue_op(iter, max_depth, ct, spec);
+                return true;
             }
         }
 
-        match (ct.name().as_str(), arity) {
-            ("{}", 1) if !self.ignore_ops => self.format_curly_braces(),
-            _ => self.format_struct(arity, ct.name()),
+        return match (ct.name().as_str(), arity) {
+            ("{}", 1) if !self.ignore_ops => self.format_curly_braces(iter, max_depth),
+            _ => self.format_struct(iter, max_depth, arity, ct.name()),
         };
     }
 
@@ -646,7 +774,60 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn check_for_seen(&mut self, iter: &mut HCPreOrderIterator) -> Option<HeapCellValue> {
+    fn record_children_as_non_cyclic(&mut self, addr: &Addr) {
+        match addr {
+            &Addr::Lis(l) => {
+                let c1 = self.machine_st.store(self.machine_st.deref(Addr::HeapCell(l)));
+                let c2 = self.machine_st.store(self.machine_st.deref(Addr::HeapCell(l + 1)));
+
+                if let Some(c) = functor_location(&c1) {
+                    self.non_cyclic_terms.insert(c);
+                }
+
+                if let Some(c) = functor_location(&c2) {
+                    self.non_cyclic_terms.insert(c);
+                }
+            }
+            &Addr::Str(s) => {
+                let arity =
+                    match &self.machine_st.heap[s] {
+                        HeapCellValue::NamedStr(arity, ..) => {
+                            arity
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                for i in 1 .. arity + 1 {
+                    let c = self.machine_st.store(self.machine_st.deref(Addr::HeapCell(s + i)));
+
+                    if let Some(c) = functor_location(&c) {
+                        self.non_cyclic_terms.insert(c);
+                    }
+                }
+            }
+            &Addr::PStrLocation(h, _) | &Addr::PStrTail(h, _) => {
+                let tail = match &self.machine_st.heap[h] {
+                    &HeapCellValue::PartialString(ref pstr) => pstr.tail_addr().clone(),
+                    _ => unreachable!()
+                };
+
+                let tail = self.machine_st.store(self.machine_st.deref(tail));
+
+                if let Some(c) = functor_location(&tail) {
+                    self.non_cyclic_terms.insert(c);
+                }
+            }
+            _ => {
+            }
+        }
+    }
+
+    fn check_for_seen(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+    ) -> Option<HeapCellValue> {
         iter.stack().last().cloned().and_then(|addr| {
             let addr = self.machine_st.store(self.machine_st.deref(addr));
 
@@ -661,6 +842,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         return iter.next();
                     } else {
                         iter.stack().pop();
+                        
                         push_space_if_amb!(self, &var, {
                             self.append_str(&var);
                         });
@@ -669,30 +851,38 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     }
                 }
                 None => {
-                    if self.machine_st.is_cyclic_term(addr.clone()) {
-                        match self.cyclic_terms.get(&addr).cloned() {
-                            Some(reps) => {
-                                if reps > 0 {
-                                    self.cyclic_terms.insert(addr, reps - 1);
-                                    iter.next()
-                                } else {
-                                    push_space_if_amb!(self, "...", {
-                                        self.append_str("...");
-                                    });
+                    let offset = match functor_location(&addr) {
+                        Some(offset) => offset,
+                        None => {
+                            return iter.next();
+                        }
+                    };
 
-                                    iter.stack().pop();
-                                    self.cyclic_terms.swap_remove(&addr);
-                                    None
-                                }
-                            }
-                            None => {
+                    if !self.non_cyclic_terms.contains(&offset) {
+                        if let Some(reps) = self.cyclic_terms.get(&addr).cloned() {
+                            if reps > 0 {
+                                self.cyclic_terms.insert(addr, reps - 1);
+                            } else {
+                                push_space_if_amb!(self, "...", {
+                                    self.append_str("...");
+                                });
+
+                                iter.stack().pop();
                                 self.cyclic_terms.insert(addr, 2);
-                                iter.next()
+
+                                return None;
                             }
+                        } else if self.machine_st.is_cyclic_term(addr.clone()) {
+                            self.cyclic_terms.insert(addr, 2);
+                        } else {
+                            self.record_children_as_non_cyclic(&addr);
+                            self.non_cyclic_terms.insert(offset);
                         }
                     } else {
-                        iter.next()
+                        self.record_children_as_non_cyclic(&addr);
                     }
+
+                    iter.next()
                 }
             }
         })
@@ -807,8 +997,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_constant(&mut self, iter: &mut HCPreOrderIterator, c: Constant, op: &Option<DirectedOp>)
-    {
+    fn print_constant(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+        max_depth: usize,
+        c: Constant,
+        op: &Option<DirectedOp>,
+    ) {
         match c {
             Constant::Atom(atom, spec) => {
                 if let Some(_) = fetch_atom_op_spec(atom.clone(), spec, self.op_dir) {
@@ -862,7 +1057,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.print_string_as_str(iter, n, s);
             }
             Constant::String(n, s) => {
-                self.print_string(iter, n, s);
+                self.print_string(iter, max_depth, n, s);
             }
             Constant::Usize(i) => {
                 self.append_str(&format!("u{}", i));
@@ -891,39 +1086,77 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         iter.stack().pop();
     }
 
-    fn print_string(&mut self, iter: &mut HCPreOrderIterator, offset: usize, s: Rc<String>) {
+    fn print_string(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+        mut max_depth: usize,
+        offset: usize,
+        s: Rc<String>)
+    {
         if !self.machine_st.machine_flags().double_quotes.is_atom() {
+            if self.check_max_depth(&mut max_depth) {
+                self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+                return;
+            }
+
             if s.len() <= offset && !self.at_cdr("") {
                 self.append_str("[]");
             } else if self.ignore_ops {
-                let mut paren_count = 0;
+                let mut char_count = 0;
+                let mut byte_len = 0;
 
-                for c in s[offset ..].chars() {
+                let iter: Box<dyn Iterator<Item=char>> =
+                    if self.max_depth == 0 {
+                        Box::new(s[offset ..].chars())
+                    } else {
+                        Box::new(s[offset ..].chars().take(max_depth))
+                    };
+
+                for c in iter {
                     self.print_char('.');
                     self.push_char('(');
 
                     self.print_char(c);
                     self.push_char(',');
 
-                    paren_count += 1;
+                    char_count += 1;
+                    byte_len += c.len_utf8();
                 }
 
-                self.append_str("[]");
+                if self.max_depth > 0 && byte_len < s[offset ..].len() {
+                    self.append_str("...");
+                }  else {
+                    self.append_str("[]");
+                }
 
-                for _ in 0 .. paren_count {
+                for _ in 0 .. char_count {
                     self.push_char(')');
                 }
             } else {
                 self.push_char('[');
 
-                for c in s[offset ..].chars() {
+                let iter: Box<dyn Iterator<Item=char>> =
+                    if self.max_depth == 0 {
+                        Box::new(s[offset ..].chars())
+                    } else {
+                        Box::new(s[offset ..].chars().take(max_depth))
+                    };
+
+                let mut byte_len = 0;
+
+                for c in iter {
                     self.print_char(c);
                     self.push_char(',');
+
+                    byte_len += c.len_utf8();
                 }
 
-                self.outputter.truncate(self.outputter.len() - ','.len_utf8());
-
-                self.push_char(']');
+                if self.max_depth > 0 && byte_len < s[offset ..].len() {
+                    self.append_str("...|...]");
+                }  else {
+                    self.outputter.truncate(self.outputter.len() - ','.len_utf8());
+                    self.push_char(']');
+                }
             }
 
             iter.stack().pop();
@@ -939,15 +1172,43 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn push_list(&mut self) {
-        let cell = Rc::new(Cell::new(true));
+    fn check_max_depth(&mut self, max_depth: &mut usize) -> bool {
+        if self.max_depth > 0 && *max_depth == 0 {
+            return true;
+        }
 
-        self.state_stack
-            .push(TokenOrRedirect::CloseList(cell.clone()));
+        if *max_depth > 0 {
+            *max_depth -= 1;
+        }
 
-        self.state_stack.push(TokenOrRedirect::FunctorRedirect);
+        false
+    }
+
+    fn push_list(&mut self, iter: &mut HCPreOrderIterator, mut max_depth: usize) {
+        if self.check_max_depth(&mut max_depth) {
+            iter.stack().pop();
+            iter.stack().pop();
+
+            let cell = Rc::new(Cell::new((true, 0)));
+
+            self.state_stack.push(TokenOrRedirect::CloseList(cell.clone()));
+
+            self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+            self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
+            self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+
+            self.state_stack.push(TokenOrRedirect::OpenList(cell));
+
+            return;
+        }
+
+        let cell = Rc::new(Cell::new((true, max_depth)));
+
+        self.state_stack.push(TokenOrRedirect::CloseList(cell.clone()));
+
+        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
         self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
-        self.state_stack.push(TokenOrRedirect::FunctorRedirect);
+        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
 
         self.state_stack.push(TokenOrRedirect::OpenList(cell));
     }
@@ -961,6 +1222,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         is_functor_redirect: bool,
         spec: SharedOpDesc,
         negated_operand: bool,
+        max_depth: usize,
     ) {
         let add_brackets = if !self.ignore_ops {
             negated_operand
@@ -987,14 +1249,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
 
         let ct = ClauseType::from(name.clone(), arity, Some(spec));
-        self.format_clause(iter, arity, ct);
 
-        if add_brackets {
-            self.state_stack.push(TokenOrRedirect::Open);
+        if self.format_clause(iter, max_depth, arity, ct) {
+            if add_brackets {
+                self.state_stack.push(TokenOrRedirect::Open);
 
-            if let Some(ref op) = &op {
-                if op.is_left() && requires_space(op.as_str(), "(") {
-                    self.state_stack.push(TokenOrRedirect::Space);
+                if let Some(ref op) = &op {
+                    if op.is_left() && requires_space(op.as_str(), "(") {
+                        self.state_stack.push(TokenOrRedirect::Space);
+                    }
                 }
             }
         }
@@ -1005,6 +1268,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         iter: &mut HCPreOrderIterator,
         op: Option<DirectedOp>,
         is_functor_redirect: bool,
+        max_depth: usize,
     ) {
         let negated_operand = negated_op_needs_bracketing(iter, &op);
 
@@ -1026,11 +1290,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         is_functor_redirect,
                         spec,
                         negated_operand,
+                        max_depth,
                     );
                 } else {
                     push_space_if_amb!(self, name.as_str(), {
                         let ct = ClauseType::from(name, arity, spec);
-                        self.format_clause(iter, arity, ct);
+                        self.format_clause(iter, max_depth, arity, ct);
                     });
                 }
             }
@@ -1039,12 +1304,14 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     self.append_str("[]");
                 }
             }
-            HeapCellValue::Addr(Addr::Con(c)) => self.print_constant(iter, c, &op),
+            HeapCellValue::Addr(Addr::Con(c)) => {
+                self.print_constant(iter, max_depth, c, &op);
+            }
             HeapCellValue::Addr(Addr::Lis(_)) | HeapCellValue::Addr(Addr::PStrLocation(..)) => {
                 if self.ignore_ops {
-                    self.format_struct(2, clause_name!("."));
+                    self.format_struct(iter, max_depth, 2, clause_name!("."));
                 } else {
-                    self.push_list();
+                    self.push_list(iter, max_depth);
                 }
             }
             HeapCellValue::Addr(Addr::Stream(stream)) => {
@@ -1099,11 +1366,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     TokenOrRedirect::BarAsOp => self.append_str(" | "),
                     TokenOrRedirect::Op(atom, _) => self.print_op(atom.as_str()),
                     TokenOrRedirect::NumberedVar(num_var) => self.append_str(num_var.as_str()),
-                    TokenOrRedirect::CompositeRedirect(op) => {
-                        self.handle_heap_term(&mut iter, Some(op), false)
+                    TokenOrRedirect::CompositeRedirect(max_depth, op) => {
+                        self.handle_heap_term(&mut iter, Some(op), false, max_depth)
                     }
-                    TokenOrRedirect::FunctorRedirect => {
-                        self.handle_heap_term(&mut iter, None, true)
+                    TokenOrRedirect::FunctorRedirect(max_depth) => {
+                        self.handle_heap_term(&mut iter, None, true, max_depth)
                     }
                     TokenOrRedirect::Close => self.push_char(')'),
                     TokenOrRedirect::Open => self.push_char('('),
@@ -1111,11 +1378,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         if !self.at_cdr(",") {
                             self.push_char('[');
                         } else {
-                            delimit.set(false);
+                            let (_, max_depth) = delimit.get();
+                            delimit.set((false, max_depth));
                         }
                     }
                     TokenOrRedirect::CloseList(delimit) => {
-                        if delimit.get() {
+                        if delimit.get().0 {
                             self.push_char(']');
                         }
                     }
@@ -1127,7 +1395,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
             } else if !iter.stack().is_empty() {
                 let spec = self.toplevel_spec.take();
-                self.handle_heap_term(&mut iter, spec, false);
+                self.handle_heap_term(&mut iter, spec, false, self.max_depth);
             } else {
                 break;
             }

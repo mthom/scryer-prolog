@@ -2667,6 +2667,7 @@ impl MachineState {
                 let ignore_ops = self.store(self.deref(self[temp_v!(2)].clone()));
                 let numbervars = self.store(self.deref(self[temp_v!(3)].clone()));
                 let quoted = self.store(self.deref(self[temp_v!(4)].clone()));
+                let max_depth = self.store(self.deref(self[temp_v!(6)].clone()));                
 
                 let mut printer = HCPrinter::new(&self, &indices.op_dir, PrinterOutputter::new());
 
@@ -2680,6 +2681,15 @@ impl MachineState {
 
                 if let &Addr::Con(Constant::Atom(ref name, ..)) = &quoted {
                     printer.quoted = name.as_str() == "true";
+                }
+
+                if let &Addr::Con(Constant::Integer(ref n)) = &max_depth {
+                    if let Some(n) = n.to_usize() {
+                        printer.max_depth = n;
+                    } else {
+                        self.fail = true;
+                        return Ok(());
+                    }
                 }
 
                 let stub = MachineError::functor_stub(clause_name!("write_term"), 2);

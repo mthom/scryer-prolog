@@ -289,6 +289,7 @@ is_write_option(Functor) :-
     ( Arg == true -> true
     ; Arg == false -> true
     ; Name == variable_names -> must_be_var_names_list(Arg)
+    ; Name == max_depth -> integer(Arg), Arg >= 0
     ; var(Arg) -> throw(error(instantiation_error, write_term/2))
     ; throw(error(domain_error(write_option, Functor), write_term/2))
     ), % 8.14.2.3 e)
@@ -296,6 +297,7 @@ is_write_option(Functor) :-
     ; Name == quoted -> true
     ; Name == numbervars -> true
     ; Name == variable_names -> true
+    ; Name == max_depth -> true
     ; throw(error(domain_error(write_option, Functor), write_term/2))
     ). % 8.14.2.3 e)
 
@@ -338,7 +340,8 @@ write_term(Term, Options) :-
     inst_member_or(Options, numbervars(NumberVars), numbervars(false)),
     inst_member_or(Options, quoted(Quoted), quoted(false)),
     inst_member_or(Options, variable_names(VarNames), variable_names([])),
-    '$write_term'(Term, IgnoreOps, NumberVars, Quoted, VarNames).
+    inst_member_or(Options, max_depth(MaxDepth), max_depth(0)),
+    '$write_term'(Term, IgnoreOps, NumberVars, Quoted, VarNames, MaxDepth).
 
 write(Term) :- write_term(Term, [numbervars(true)]).
 
