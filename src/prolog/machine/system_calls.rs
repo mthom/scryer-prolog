@@ -33,6 +33,7 @@ use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 pub enum ContinueResult {
     ContinueQuery,
     Conclude,
+    PrintWithoutMaxDepth,
 }
 
 pub fn next_keypress() -> ContinueResult {
@@ -40,6 +41,9 @@ pub fn next_keypress() -> ContinueResult {
         match read() {
             Ok(Event::Key(KeyEvent { code, .. })) => {
                 match code {
+                    KeyCode::Char('w') => {
+                        return ContinueResult::PrintWithoutMaxDepth;
+                    }
                     KeyCode::Char(' ') | KeyCode::Char(';') | KeyCode::Char('n') => {
                         return ContinueResult::ContinueQuery;
                     }
@@ -2342,7 +2346,8 @@ impl MachineState {
 
                 let c = match keypress {
                     ContinueResult::ContinueQuery => ';',
-                    ContinueResult::Conclude => '.'
+                    ContinueResult::Conclude => '.',
+                    ContinueResult::PrintWithoutMaxDepth => 'w',
                 };
 
                 let target = self[temp_v!(1)].clone();
@@ -2667,7 +2672,7 @@ impl MachineState {
                 let ignore_ops = self.store(self.deref(self[temp_v!(2)].clone()));
                 let numbervars = self.store(self.deref(self[temp_v!(3)].clone()));
                 let quoted = self.store(self.deref(self[temp_v!(4)].clone()));
-                let max_depth = self.store(self.deref(self[temp_v!(6)].clone()));                
+                let max_depth = self.store(self.deref(self[temp_v!(6)].clone()));
 
                 let mut printer = HCPrinter::new(&self, &indices.op_dir, PrinterOutputter::new());
 

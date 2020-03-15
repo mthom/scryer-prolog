@@ -842,7 +842,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         return iter.next();
                     } else {
                         iter.stack().pop();
-                        
+
                         push_space_if_amb!(self, &var, {
                             self.append_str(&var);
                         });
@@ -1192,11 +1192,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             let cell = Rc::new(Cell::new((true, 0)));
 
             self.state_stack.push(TokenOrRedirect::CloseList(cell.clone()));
-
             self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
-            self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
-            self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
-
             self.state_stack.push(TokenOrRedirect::OpenList(cell));
 
             return;

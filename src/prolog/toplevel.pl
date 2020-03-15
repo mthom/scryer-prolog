@@ -46,7 +46,7 @@
     (  expand_goals(Term0, Term) -> true
     ;  Term0 = Term
     ),
-    (  '$get_b_value'(B), call(Term), '$write_eqs_and_read_input'(B, VarList),
+    (  '$get_b_value'(B), write('   '), call(Term), '$write_eqs_and_read_input'(B, VarList),
        !
     %  clear attribute goal lists, which may be populated by
     %  copy_term/3 prior to failure.
@@ -94,7 +94,7 @@
     ;  VarName = VarName0,
        N1 is N + 1
     ).
-    
+
 '$extend_var_list'(Value, VarList, NewVarList) :-
     term_variables(Value, Vars),
     '$extend_var_list_'(Vars, 0, VarList, NewVarList).
@@ -108,30 +108,30 @@
        '$extend_var_list_'(Vs, N1, VarList, NewVarList0)
     ).
 
-'$write_goal'(G, VarList) :-
+'$write_goal'(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
        write(Var),
        write(' = '),
        (  '$needs_bracketing'(Value, (=)) ->
 	  write('('),
-	  write_term(Value, [quoted(true), variable_names(VarList), max_depth(0)]),
+	  write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
 	  write(')')
-       ;  write_term(Value, [quoted(true), variable_names(VarList), max_depth(0)])
+       ;  write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)])
        )
     ;  G == [] ->
        write('true')
-    ;  write_term(G, [quoted(true), variable_names(VarList)])
+    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth)])
     ).
 
-'$write_last_goal'(G, VarList) :-
+'$write_last_goal'(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
        write(Var),
        write(' = '),
        (  '$needs_bracketing'(Value, (=)) ->
 	  write('('),
-	  write_term(Value, [quoted(true), variable_names(VarList), max_depth(0)]),
+	  write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
 	  write(')')
-       ;  write_term(Value, [quoted(true), variable_names(VarList), max_depth(0)]),
+       ;  write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
 	  (  '$trailing_period_is_ambiguous'(Value) ->
 	     write(' ')
 	  ;  true
@@ -139,16 +139,16 @@
        )
     ;  G == [] ->
        write('true')
-    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(0)])
+    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth)])
     ).
 
-'$write_eq'((G1, G2), VarList) :-
+'$write_eq'((G1, G2), VarList, MaxDepth) :-
     !,
-    '$write_goal'(G1, VarList),
+    '$write_goal'(G1, VarList, MaxDepth),
     write(', '),
-    '$write_eq'(G2, VarList).
-'$write_eq'(G, VarList) :-
-    '$write_last_goal'(G, VarList).
+    '$write_eq'(G2, VarList, MaxDepth).
+'$write_eq'(G, VarList, MaxDepth) :-
+    '$write_last_goal'(G, VarList, MaxDepth).
 
 '$graphic_token_char'(C) :-
     memberchk(C, ['#', '$', '&', '*', '+', '-', '.', ('/'), ':',
@@ -173,18 +173,26 @@
        (  Goals == [] ->
 	  write('true.'), nl
        ;  thread_goals(Goals, ThreadedGoals, (',')),
-	  '$write_eq'(ThreadedGoals, NewVarList),
+	  '$write_eq'(ThreadedGoals, NewVarList, 20),
 	  write('.'),
 	  nl
        )
     ;  thread_goals(Goals, ThreadedGoals, (',')),
-       '$write_eq'(ThreadedGoals, NewVarList),
-       '$raw_input_read_char'(C),
-       (  C == (';'), !,
-	  write(' ;'), nl, false
-       ;  C == ('.'), !,
-	  write(' ...'), nl
-       )
+       '$write_eq'(ThreadedGoals, NewVarList, 20),
+       '$read_input'(ThreadedGoals, NewVarList)
+    ).
+
+'$read_input'(ThreadedGoals, NewVarList) :-
+    '$raw_input_read_char'(C),
+    (  C == ('w'), !,
+       nl,
+       write('   '),
+       '$write_eq'(ThreadedGoals, NewVarList, 0),
+       '$read_input'(ThreadedGoals, NewVarList)
+    ;  C == (';'), !,
+       nl, write(';  '), false
+    ;  C == ('.'), !,
+       nl, write('   ...'), nl
     ).
 
 '$gather_query_vars'([_ = Var | Vars], QueryVars) :-
