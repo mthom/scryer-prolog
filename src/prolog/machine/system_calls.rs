@@ -33,7 +33,9 @@ use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 pub enum ContinueResult {
     ContinueQuery,
     Conclude,
+    Help,
     PrintWithoutMaxDepth,
+    PrintWithMaxDepth
 }
 
 pub fn next_keypress() -> ContinueResult {
@@ -44,11 +46,17 @@ pub fn next_keypress() -> ContinueResult {
                     KeyCode::Char('w') => {
                         return ContinueResult::PrintWithoutMaxDepth;
                     }
+                    KeyCode::Char('p') => {
+                        return ContinueResult::PrintWithMaxDepth;
+                    }
                     KeyCode::Char(' ') | KeyCode::Char(';') | KeyCode::Char('n') => {
                         return ContinueResult::ContinueQuery;
                     }
                     KeyCode::Char('.') => {
                         return ContinueResult::Conclude;
+                    }
+                    KeyCode::Char('h') => {
+                        return ContinueResult::Help;
                     }
                     _ => {}
                 }
@@ -2347,7 +2355,9 @@ impl MachineState {
                 let c = match keypress {
                     ContinueResult::ContinueQuery => ';',
                     ContinueResult::Conclude => '.',
+                    ContinueResult::Help => 'h',
                     ContinueResult::PrintWithoutMaxDepth => 'w',
+                    ContinueResult::PrintWithMaxDepth => 'p',
                 };
 
                 let target = self[temp_v!(1)].clone();

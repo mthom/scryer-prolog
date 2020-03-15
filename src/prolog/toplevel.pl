@@ -184,16 +184,32 @@
 
 '$read_input'(ThreadedGoals, NewVarList) :-
     '$raw_input_read_char'(C),
-    (  C == ('w'), !,
+    (  C == w ->
        nl,
        write('   '),
        '$write_eq'(ThreadedGoals, NewVarList, 0),
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  C == (';'), !,
+    ;  C == p ->
+       nl,
+       write('   '),
+       '$write_eq'(ThreadedGoals, NewVarList, 20),
+       '$read_input'(ThreadedGoals, NewVarList)
+    ;  C == (';') ->
        nl, write(';  '), false
-    ;  C == ('.'), !,
+    ;  C == h ->
+       '$help_message',
+       '$read_input'(ThreadedGoals, NewVarList)
+    ;  C == '.',
        nl, write('   ...'), nl
     ).
+
+'$help_message' :-
+    nl, nl,
+    write('SPACE, "n" or ";": next solution, if any\n'),
+    write('".": stop enumeration\n'),
+    write('"h": display this help message\n'),
+    write('"w": write terms without depth limit\n'),
+    write('"p": print terms with depth limit\n\n').
 
 '$gather_query_vars'([_ = Var | Vars], QueryVars) :-
     (  var(Var) ->
