@@ -50,9 +50,10 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      findall/3, findall/4, get_char/1, halt/0,
                      max_arity/1, number_chars/2, number_codes/2,
                      once/1, op/3, read_term/2, repeat/0, retract/1,
-                     set_prolog_flag/2, setof/3, sub_atom/5,
-                     subsumes_term/2, term_variables/2, throw/1,
-                     true/0, unify_with_occurs_check/2, write/1,
+                     set_prolog_flag/2, set_input/1, set_output/1,
+                     setof/3, sub_atom/5, subsumes_term/2,
+                     term_variables/2, throw/1, true/0,
+                     unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, writeq/1]).
 
 
@@ -1021,3 +1022,15 @@ unify_with_occurs_check(X, Y) :- '$unify_with_occurs_check'(X, Y).
 current_input(S) :- '$current_input'(S).    
 
 current_output(S) :- '$current_output'(S).
+
+set_input(S) :-
+    (  var(S) ->
+       throw(error(instantiation_error, set_input/1))
+    ;  '$set_input'(S)
+    ).
+
+set_output(S) :-
+    (  var(S) ->
+       throw(error(instantiation_error, set_output/1))
+    ;  '$set_output'(S)
+    ).

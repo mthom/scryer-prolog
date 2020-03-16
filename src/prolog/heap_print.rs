@@ -1315,12 +1315,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     self.print_atom(alias);
                 } else {
                     if stream.is_stdout() || stream.is_stdin() {
-                        self.append_str("user");
+                        self.print_atom(&clause_name!("user"));
                     } else {
-                        self.append_str(&format!(
-                            "'$stream'(0x{:x})",
-                            stream.as_ptr() as usize,
-                        ));
+                        self.format_struct(iter, max_depth, 1, clause_name!("$stream"));
                     }
                 }
             }

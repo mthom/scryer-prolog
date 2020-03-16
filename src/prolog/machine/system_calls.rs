@@ -366,6 +366,46 @@ impl MachineState {
         Ok(())
     }
 
+    fn get_stream_or_alias(
+        &self,
+        addr: Addr,
+        indices: &IndexStore,
+        caller: &'static str,
+    ) -> Result<Stream, MachineStub>
+    {
+        Ok(match addr {
+            Addr::Con(Constant::Atom(atom, op_spec)) => {
+                match indices.stream_aliases.get(&atom) {
+                    Some(stream) => {
+                        stream.clone()
+                    }
+                    None => {
+                        let stub = MachineError::functor_stub(clause_name!(caller), 1);
+                        let addr = Addr::Con(Constant::Atom(atom, op_spec));
+
+                        let h = self.heap.h();
+                        
+                        return Err(self.error_form(
+                            MachineError::existence_error(h, ExistenceError::Stream(addr)),
+                            stub,
+                        ));
+                    }
+                }
+            }
+            Addr::Stream(stream) => {
+                stream
+            }
+            _ => {
+                let stub = MachineError::functor_stub(clause_name!(caller), 1);
+                
+                return Err(self.error_form(
+                    MachineError::domain_error(DomainError::StreamOrAlias, addr),
+                    stub,
+                ));
+            }
+        })     
+    }
+
     fn read_term(&mut self,
                  current_input_stream: &mut Stream,
                  indices: &mut IndexStore)
@@ -2228,7 +2268,43 @@ impl MachineState {
                     return Ok(());
                 }
             }
-            &SystemClauseType::SetCutPointByDefault(r) => deref_cut(self, r),
+            &SystemClauseType::SetCutPointByDefault(r) => {
+                deref_cut(self, r)
+            }
+            &SystemClauseType::SetInput => {
+                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+                let stream = self.get_stream_or_alias(addr, indices, "set_input")?;
+
+                if stream.is_output_stream() {
+                    let stub = MachineError::functor_stub(clause_name!("set_input"), 1);
+                    let err = MachineError::permission_error(
+                        PermissionError::InputStream,
+                        "stream",
+                        Addr::Stream(stream),
+                    );
+
+                    return Err(self.error_form(err, stub));
+                }
+                
+                *current_input_stream = stream;
+            }
+            &SystemClauseType::SetOutput => {
+                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+                let stream = self.get_stream_or_alias(addr, indices, "set_output")?;
+
+                if stream.is_input_stream() {
+                    let stub = MachineError::functor_stub(clause_name!("set_input"), 1);
+                    let err = MachineError::permission_error(
+                        PermissionError::OutputStream,
+                        "stream",
+                        Addr::Stream(stream),
+                    );
+
+                    return Err(self.error_form(err, stub));
+                }
+
+                *current_output_stream = stream;
+            }
             &SystemClauseType::SetDoubleQuotes => match self[temp_v!(1)].clone() {
                 Addr::Con(Constant::Atom(ref atom, _)) if atom.as_str() == "chars" => {
                     self.flags.double_quotes = DoubleQuotes::Chars
