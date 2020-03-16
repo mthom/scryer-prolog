@@ -972,10 +972,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_char(&mut self, c: char)
-    {
+    fn print_char(&mut self, is_quoted: bool, c: char)
+    {        
         if non_quoted_token(once(c)) {
-            let c = char_to_string(self.quoted, c);
+            let c = char_to_string(false, c);
 
             push_space_if_amb!(self, &c, {
                 self.append_str(c.as_str());
@@ -985,10 +985,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
             if self.quoted {
                 result.push('\'');
-                result += &char_to_string(self.quoted, c);
+                result += &char_to_string(is_quoted, c);
                 result.push('\'');
             } else {
-                result += &char_to_string(self.quoted, c);
+                result += &char_to_string(is_quoted, c);
             }
 
             push_space_if_amb!(self, &result, {
@@ -1036,7 +1036,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.append_str(&format!("{}", c as u32));
             }
             Constant::Char(c) => {
-                self.print_char(c);
+                self.print_char(self.quoted, c);
             }
             Constant::CutPoint(b) => {
                 self.append_str(&format!("{}", b));
@@ -1113,10 +1113,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     };
 
                 for c in iter {
-                    self.print_char('.');
+                    self.print_char(self.quoted, '.');
                     self.push_char('(');
 
-                    self.print_char(c);
+                    self.print_char(self.quoted, c);
                     self.push_char(',');
 
                     char_count += 1;
@@ -1145,7 +1145,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 let mut byte_len = 0;
 
                 for c in iter {
-                    self.print_char(c);
+                    self.print_char(false, c);
                     self.push_char(',');
 
                     byte_len += c.len_utf8();
