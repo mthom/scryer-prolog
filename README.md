@@ -156,11 +156,10 @@ Wildcards work as well:
 member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
 ?- member(X, [a, b, c]).
-true .
-X = a ;
-X = b ;
-X = c ;
-false.
+   X = a
+;  X = b
+;  X = c
+;  false.
 ```
 and so do conjunctive queries:
 ```
@@ -170,10 +169,9 @@ f(X) :- g(X).
 g(x). g(y). g(z).
 h(call(f, X)).
 ?- h(X), X.
-true .
-X = call(f, x) ;
-X = call(f, y) ;
-X = call(f, z).
+   X = call(f,x)
+;  X = call(f,y)
+;  X = call(f,z).
 ```
 
 Note that the values of variables belonging to successful queries are
@@ -191,8 +189,8 @@ Scryer supports dynamic operators. Using the built-in
 arithmetic operators with the usual precedences,
 
 ```
-?- write_canonical(-5 + 3 - (2 * 4) // 8).
--(+(-(5), 3), //(*(2, 4), 8))
+?- write_canonical(-5 + 3 - (2 * 4) // 8), nl.
+   -(+(-5,3),//(*(2,4),8))
 true.
 ```
 
@@ -256,7 +254,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`si`](src/prolog/lib/si.pl)
   The predicates `atom_si/1`, `integer_si/1`, `atomic_si/1`
   and `list_si/1` implement sound type checks. They raise
-  instantiation errors of no decision can be made.
+  instantiation errors if no decision can be made.
   They are declarative replacements for logically flawed
   lower-level type tests. For instance, instead of `integer(X)`,
   write `integer_si(X)` to ensure soundness of your programs.
