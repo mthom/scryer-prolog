@@ -58,13 +58,12 @@ impl Ball {
 
         for heap_value in self.stub.iter_from(0) {
             stub.push(match heap_value {
-                HeapCellValue::Addr(ref addr) => HeapCellValue::Addr(addr.clone() - diff),
-                HeapCellValue::PartialString(ref pstr) => {
-                    let mut new_pstr = pstr.clone();
-                    new_pstr.tail = pstr.tail.clone() - diff;
-                    HeapCellValue::PartialString(new_pstr)
+                HeapCellValue::Addr(ref addr) => {
+                    HeapCellValue::Addr(addr.clone() - diff)
                 }
-                heap_value => heap_value.clone(),
+                heap_value => {
+                    heap_value.clone()
+                }
             });
         }
 
@@ -250,9 +249,9 @@ pub(super) enum MachineMode {
 pub(super) enum HeapPtr {
     HeapCell(usize),
     PStrChar(usize, usize),
-    PStrTail(usize, usize),
+    PStrLocation(usize, usize),
     StringChar(usize, Rc<String>),
-    StringTail(usize, Rc<String>),
+    StringLocation(usize, Rc<String>),
 }
 
 impl HeapPtr {
@@ -269,20 +268,20 @@ impl HeapPtr {
                     if let Some(c) = s[n ..].chars().next() {
                         Addr::Con(Constant::Char(c))
                     } else {
-                        Addr::PStrTail(h, n)
+                        Addr::HeapCell(h + 1)
                     }
                 } else {
                     unreachable!()
                 },
-            &HeapPtr::PStrTail(h, n) =>
-                Addr::PStrTail(h, n),
+            &HeapPtr::PStrLocation(h, n) =>
+                Addr::PStrLocation(h, n),
             &HeapPtr::StringChar(n, ref s) =>
                 if let Some(c) = s[n ..].chars().next() {
                     Addr::Con(Constant::Char(c))
                 } else {
                     Addr::Con(Constant::EmptyList)
                 },
-            &HeapPtr::StringTail(n, ref s) =>
+            &HeapPtr::StringLocation(n, ref s) =>
                 Addr::Con(Constant::String(n, s.clone())),
         }
     }

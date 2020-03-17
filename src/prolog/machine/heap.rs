@@ -152,32 +152,23 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     pub(crate)
     fn allocate_pstr(&mut self, mut src: &str) -> Option<Addr> {
         let orig_h = self.h();
-        
+
         loop {
             if src == "" {
                 return if orig_h == self.h() {
                     None
                 } else {
-                    let prev_h = self.h() - 1;
-
-                    match &mut self[prev_h] {
-                        HeapCellValue::PartialString(ref mut pstr) => {
-                            let s = pstr.block_as_str();
-                            pstr.tail = Addr::PStrTail(prev_h, s.len());
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    }
+                    let tail_h = self.h() - 1;
+                    self[tail_h] = HeapCellValue::Addr(Addr::HeapCell(tail_h));
 
                     Some(Addr::PStrLocation(orig_h, 0))
                 };
             }
-            
+
             let h = self.h();
 
-            let (mut pstr, rest_src) =
-                match PartialString::new(src, h) {
+            let (pstr, rest_src) =
+                match PartialString::new(src) {
                     Some(tuple) => {
                         tuple
                     }
@@ -188,46 +179,21 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
                         } else if orig_h == h {
                             return None;
                         } else {
-                            let prev_h = h - 1;
-
-                            match &mut self[prev_h] {
-                                HeapCellValue::PartialString(ref mut pstr) => {
-                                    let s = pstr.block_as_str();
-                                    pstr.tail = Addr::PStrTail(prev_h, s.len());
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            }
-
+                            self[h - 1] = HeapCellValue::Addr(Addr::HeapCell(h - 1));
                             return Some(Addr::PStrLocation(orig_h, 0));
                         }
                     }
                 };
 
-            let new_top = unsafe {
-                self.buf.new_block(mem::size_of::<HeapCellValue>())
-            };
+            self.push(HeapCellValue::PartialString(pstr));
 
             if rest_src != "" {
-                pstr.tail = Addr::PStrLocation(h+1, 0);
+                self.push(HeapCellValue::Addr(Addr::PStrLocation(h + 2, 0)));
                 src = rest_src;
             } else {
-                pstr.tail = Addr::PStrTail(h, src.len());
-            }
-
-            unsafe{
-                ptr::write(
-                    self.buf.top as *mut _,
-                    HeapCellValue::PartialString(pstr),
-                );
-            }
-            
-            self.buf.top = new_top;
-            
-            if rest_src == "" {                
+                self.push(HeapCellValue::Addr(Addr::HeapCell(h + 1)));
                 return Some(Addr::PStrLocation(orig_h, 0));
-            }            
+            }
         }
     }
 

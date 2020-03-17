@@ -49,7 +49,6 @@ pub enum Addr {
     StackCell(usize, usize),
     Str(usize),
     PStrLocation(usize, usize), // location of pstr in heap, offset into string in bytes.
-    PStrTail(usize, usize), // location of pstr in heap, offset into string in bytes.
     Stream(Stream),
 }
 
@@ -58,7 +57,6 @@ pub enum Ref {
     AttrVar(usize),
     HeapCell(usize),
     StackCell(usize, usize),
-    PStrTail(usize, usize),
 }
 
 impl Ref {
@@ -67,7 +65,6 @@ impl Ref {
             Ref::AttrVar(h) => Addr::AttrVar(h),
             Ref::HeapCell(h) => Addr::HeapCell(h),
             Ref::StackCell(fr, sc) => Addr::StackCell(fr, sc),
-            Ref::PStrTail(h, n) => Addr::PStrTail(h, n),
         }
     }
 }
@@ -84,7 +81,7 @@ impl PartialOrd<Ref> for Addr {
         match self {
             &Addr::StackCell(fr, sc) => {
                 match *r {
-                    Ref::AttrVar(_) | Ref::HeapCell(_) | Ref::PStrTail(..) => {
+                    Ref::AttrVar(_) | Ref::HeapCell(_) => {
                         Some(Ordering::Greater)
                     }
                     Ref::StackCell(fr1, sc1) => {
@@ -106,22 +103,6 @@ impl PartialOrd<Ref> for Addr {
                     Ref::AttrVar(h1) | Ref::HeapCell(h1) => {
                         h.partial_cmp(h1)
                     }
-                    Ref::PStrTail(h1, _) => {
-                        h.partial_cmp(h1)
-                    }
-                }
-            }
-            &Addr::PStrTail(h, n) => {
-                match r {
-                    Ref::StackCell(..) => {
-                        Some(Ordering::Less)
-                    }
-                    Ref::AttrVar(h1) | Ref::HeapCell(h1) => {
-                        h.partial_cmp(h1)
-                    }
-                    Ref::PStrTail(h1, n1) => {
-                        Some(h.cmp(h1).then_with(|| n.cmp(n1)))
-                    }
                 }
             }
             _ => {
@@ -134,7 +115,7 @@ impl PartialOrd<Ref> for Addr {
 impl Addr {
     pub fn is_ref(&self) -> bool {
         match self {
-            Addr::HeapCell(_) | Addr::StackCell(_, _) | Addr::AttrVar(_) | Addr::PStrTail(..) => {
+            Addr::HeapCell(_) | Addr::StackCell(_, _) | Addr::AttrVar(_) => {
                 true
             }
             _ => {
@@ -148,7 +129,6 @@ impl Addr {
             &Addr::AttrVar(h) => Some(Ref::AttrVar(h)),
             &Addr::HeapCell(h) => Some(Ref::HeapCell(h)),
             &Addr::StackCell(fr, sc) => Some(Ref::StackCell(fr, sc)),
-            &Addr::PStrTail(h, n) => Some(Ref::PStrTail(h, n)),
             _ => None,
         }
     }
@@ -171,7 +151,6 @@ impl Add<usize> for Addr {
             Addr::HeapCell(h) => Addr::HeapCell(h + rhs),
             Addr::Str(s) => Addr::Str(s + rhs),
             Addr::PStrLocation(h, n) => Addr::PStrLocation(h + rhs, n),
-            Addr::PStrTail(h, n) => Addr::PStrTail(h + rhs, n),
             _ => self,
         }
     }
@@ -187,7 +166,6 @@ impl Sub<i64> for Addr {
                 Addr::AttrVar(h) => Addr::AttrVar(h + rhs.abs() as usize),
                 Addr::HeapCell(h) => Addr::HeapCell(h + rhs.abs() as usize),
                 Addr::Str(s) => Addr::Str(s + rhs.abs() as usize),
-                Addr::PStrTail(h, n) => Addr::PStrTail(h + rhs.abs() as usize, n),
                 Addr::PStrLocation(h, n) => Addr::PStrLocation(h + rhs.abs() as usize, n),
                 _ => self,
             }
@@ -206,7 +184,6 @@ impl Sub<usize> for Addr {
             Addr::AttrVar(h) => Addr::AttrVar(h - rhs),
             Addr::HeapCell(h) => Addr::HeapCell(h - rhs),
             Addr::Str(s) => Addr::Str(s - rhs),
-            Addr::PStrTail(h, n) => Addr::PStrTail(h - rhs, n),
             Addr::PStrLocation(h, n) => Addr::PStrLocation(h - rhs, n),
             _ => self,
         }

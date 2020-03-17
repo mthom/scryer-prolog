@@ -1,4 +1,3 @@
-use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::raw_block::*;
 
 use std::mem;
@@ -22,7 +21,6 @@ impl RawBlockTraits for PartialStringTraits {
 
 pub struct PartialString {
     pub(super) buf: RawBlock<PartialStringTraits>,
-    pub(super) tail: Addr,
 }
 
 impl Clone for PartialString {
@@ -55,10 +53,9 @@ fn scan_for_terminator(src: &str) -> usize {
 
 impl PartialString {
     pub(super)
-    fn new(src: &str, h: usize) -> Option<(Self, &str)> {
+    fn new(src: &str) -> Option<(Self, &str)> {
         let pstr = PartialString {
             buf: RawBlock::with_capacity(src.len() + '\u{0}'.len_utf8()),
-            tail: Addr::PStrTail(h, 0),
         };
 
         unsafe {
@@ -68,11 +65,11 @@ impl PartialString {
 
     unsafe fn append_chars(mut self, src: &str) -> Option<(Self, &str)> {
         let terminator_idx = scan_for_terminator(src);
-        
+
         if terminator_idx == 0 {
             return None;
         }
-        
+
         let new_top = self.buf.new_block(terminator_idx + '\u{0}'.len_utf8());
 
         ptr::copy(
@@ -91,18 +88,14 @@ impl PartialString {
         })
     }
 
-    /* Ordinarily cloning of heap cell values is done in copy_term,
-     * so we rely on it to set the tail correctly. here it's set to PStrTail(0, 0),
-     * because we don't know its heap location. */
     pub(super)
     fn clone_from_offset(&self, n: usize) -> Self {
         let mut pstr = PartialString {
             buf: RawBlock::with_capacity(self.len() + '\u{0}'.len_utf8()),
-            tail: Addr::PStrTail(0, 0),
         };
 
         unsafe {
-            let len = if self.len() > n { self.len() - n } else { 0 };            
+            let len = if self.len() > n { self.len() - n } else { 0 };
             let new_top = pstr.buf.new_block(len + '\u{0}'.len_utf8());
 
             if len > 0 {
@@ -110,7 +103,7 @@ impl PartialString {
                     (self.buf.base as usize + n) as *mut u8,
                     pstr.buf.base as *mut _,
                     len,
-                );                
+                );
             }
 
             pstr.write_terminator_at(len);
@@ -141,21 +134,7 @@ impl PartialString {
     }
 
     #[inline]
-    pub(crate)
-    fn tail_addr(&self) -> &Addr {
-        &self.tail
-    }
-
-    #[inline]
     pub fn len(&self) -> usize {
         self.buf.top as usize - self.buf.base as usize
-    }
-
-    #[inline]
-    pub fn truncate(&mut self, len: usize) {
-        if (len + self.buf.base as usize) < self.buf.top as usize {
-            self.buf.top = (len + self.buf.base as usize) as *const _;
-            self.write_terminator_at(len);
-        }
     }
 }

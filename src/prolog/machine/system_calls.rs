@@ -83,10 +83,8 @@ impl BrentAlgState {
         }
     }
 
-    fn step(&mut self, hare: Addr) -> Option<CycleSearchResult> {
-        self.hare = hare;
-        self.steps += 1;
-
+    #[inline]
+    fn conclude_or_move_tortoise(&mut self) -> Option<CycleSearchResult> {
         if self.tortoise == self.hare {
             return Some(CycleSearchResult::NotList);
         } else if self.steps == self.power {
@@ -94,8 +92,15 @@ impl BrentAlgState {
             self.power <<= 1;
         }
 
-
         None
+    }
+
+    #[inline]
+    fn step(&mut self, hare: Addr) -> Option<CycleSearchResult> {
+        self.hare = hare;
+        self.steps += 1;
+
+        self.conclude_or_move_tortoise()
     }
 
     fn to_result(self) -> CycleSearchResult {
@@ -105,9 +110,6 @@ impl BrentAlgState {
             }
             Addr::PStrLocation(h, n) => {
                 CycleSearchResult::PStrLocation(self.steps, h, n)
-            }
-            Addr::PStrTail(h, n) => {
-                CycleSearchResult::PStrTail(self.steps, h, n)
             }
             Addr::Con(Constant::EmptyList) => {
                 CycleSearchResult::ProperList(self.steps)
@@ -146,16 +148,13 @@ impl MachineState {
                     Some(CycleSearchResult::CompleteString(s.len(), s))
                 }
             }
-            Addr::PStrTail(h, n) => {
-                Some(CycleSearchResult::PStrTail(brent_st.steps, h, n))
-            }
             Addr::PStrLocation(h, n) => {
                 match &self.heap[h] {
                     HeapCellValue::PartialString(ref pstr) => {
                         let s = pstr.block_as_str();
 
                         if let Some(c) = s[n ..].chars().next() {
-                            brent_st.step(Addr::PStrTail(h, n + c.len_utf8()))
+                            brent_st.step(Addr::PStrLocation(h, n + c.len_utf8()))
                         } else {
                             unreachable!()
                         }
@@ -188,9 +187,6 @@ impl MachineState {
             }
             Addr::PStrLocation(h, _) => {
                 return CycleSearchResult::UntouchedList(h);
-            }
-            Addr::PStrTail(h, n) => {
-                return CycleSearchResult::PStrTail(0, h, n);
             }
             Addr::Con(Constant::EmptyList) => {
                 return CycleSearchResult::EmptyList;
@@ -250,9 +246,6 @@ impl MachineState {
             }
             Addr::PStrLocation(h, n) => {
                 Addr::PStrLocation(h, n)
-            }
-            Addr::PStrTail(h, n) => {
-                return CycleSearchResult::PStrTail(0, h, n);
             }
             Addr::Con(Constant::String(0, ref s)) if !self.flags.double_quotes.is_atom() => {
                 return CycleSearchResult::CompleteString(s.len(), s.clone());
@@ -316,9 +309,6 @@ impl MachineState {
                                 };
 
                             match search_result {
-                                CycleSearchResult::PStrTail(steps, h, n) => {
-                                    self.finalize_skip_max_list(steps, Addr::PStrTail(h, n));
-                                }
                                 CycleSearchResult::PStrLocation(steps, h, n) => {
                                     self.finalize_skip_max_list(steps, Addr::PStrLocation(h, n));
                                 }
@@ -1062,15 +1052,8 @@ impl MachineState {
                         }
                     };
 
-                let pstr_tail = match &self.heap[h] {
-                    HeapCellValue::PartialString(ref pstr) => {
-                        pstr.tail_addr().clone()
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
-
+                let pstr_tail = self.heap[h + 1].as_addr(h + 1);
+                
                 self.unify(self[temp_v!(2)].clone(), pstr);
 
                 if !self.fail {
@@ -1093,13 +1076,9 @@ impl MachineState {
 
                 match pstr {
                     Addr::PStrLocation(h, _) => {
-                        let tail = if let HeapCellValue::PartialString(ref pstr) = &self.heap[h] {
-                            pstr.tail.clone()
-                        } else {
-                            unreachable!()
-                        };
-
+                        let tail = self.heap[h + 1].as_addr(h + 1);
                         let target = self[temp_v!(2)].clone();
+                        
                         self.unify(tail, target);
                     }
                     _ => {
@@ -1405,9 +1384,6 @@ impl MachineState {
                             match addr {
                                 HeapCellValue::Addr(ref mut addr) => {
                                     *addr -= self.heap.h() + lh_offset
-                                }
-                                HeapCellValue::PartialString(ref mut pstr) => {
-                                    pstr.tail -= self.heap.h() + lh_offset;
                                 }
                                 _ => {}
                             }
@@ -1872,8 +1848,7 @@ impl MachineState {
                                         self.heap.push(HeapCellValue::Addr(addr.clone() + h));
                                     }
                                     HeapCellValue::PartialString(ref pstr) => {
-                                        let mut new_pstr = pstr.clone();
-                                        new_pstr.tail = pstr.tail.clone() + h;
+                                        let new_pstr = pstr.clone();
                                         self.heap.push(HeapCellValue::PartialString(new_pstr));
                                     }
                                     value => {
@@ -1922,8 +1897,7 @@ impl MachineState {
                                         self.heap.push(HeapCellValue::Addr(addr.clone() + h))
                                     }
                                     HeapCellValue::PartialString(ref pstr) => {
-                                        let mut new_pstr = pstr.clone();
-                                        new_pstr.tail = pstr.tail.clone() + h;
+                                        let new_pstr = pstr.clone();
                                         self.heap.push(HeapCellValue::PartialString(new_pstr));
                                     }
                                     value => {

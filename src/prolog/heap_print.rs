@@ -437,7 +437,7 @@ fn functor_location(addr: &Addr) -> Option<usize> {
     Some(match addr {
         &Addr::Lis(l) => l,
         &Addr::Str(s) => s,
-        &Addr::PStrLocation(h, _) | &Addr::PStrTail(h, _) => h,
+        &Addr::PStrLocation(h, _) => h,
         _ => {
             return None;
         }
@@ -763,7 +763,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         Ref::StackCell(fr, sc) => {
                             Some(format!("_s_{}_{}", fr, sc))
                         }
-                        Ref::HeapCell(h) | Ref::AttrVar(h) | Ref::PStrTail(h, _) => {
+                        Ref::HeapCell(h) | Ref::AttrVar(h) => {
                             Some(format!("_{}", h))
                         }
                     }
@@ -807,12 +807,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     }
                 }
             }
-            &Addr::PStrLocation(h, _) | &Addr::PStrTail(h, _) => {
-                let tail = match &self.machine_st.heap[h] {
-                    &HeapCellValue::PartialString(ref pstr) => pstr.tail_addr().clone(),
-                    _ => unreachable!()
-                };
-
+            &Addr::PStrLocation(h, _) => {
+                let tail = self.machine_st.heap[h + 1].as_addr(h + 1);
                 let tail = self.machine_st.store(self.machine_st.deref(tail));
 
                 if let Some(c) = functor_location(&tail) {

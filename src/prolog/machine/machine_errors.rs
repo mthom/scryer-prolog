@@ -432,7 +432,6 @@ pub(super) enum CycleSearchResult {
     CompleteString(usize, Rc<String>), // the string length (in bytes), the string.
     UntouchedString(usize, Rc<String>),    // the cut off, past which is the untouched string.
     PStrLocation(usize, usize, usize), // the list length (up to max), the heap offset, byte offset into the string.
-    PStrTail(usize, usize, usize),     // the list length (up to max), the heap offset, byte offset into the string.
     UntouchedList(usize),       // the address of an uniterated Addr::Lis(address).
 }
 

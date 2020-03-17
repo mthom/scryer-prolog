@@ -130,12 +130,12 @@ impl MachineState {
             Addr::StackCell(fr, sc) => {
                 self.stack.index_and_frame(fr)[sc].clone()
             }
-            Addr::PStrTail(h, n) => {
+            Addr::PStrLocation(h, n) => {
                 if let HeapCellValue::PartialString(ref pstr) = &self.heap[h] {
                     if pstr.len() > n {
                         Addr::PStrLocation(h, n)
                     } else {
-                        pstr.tail.clone()
+                        Addr::HeapCell(h + 1)
                     }
                 } else {
                     unreachable!()
@@ -179,20 +179,6 @@ impl MachineState {
         }
     }
 
-    fn bind_pstr_tail(&mut self, h: usize, t2: Addr) {
-        let pstr_len = match &mut self.heap[h] {
-            HeapCellValue::PartialString(ref mut pstr) => {
-                pstr.tail = t2;
-                pstr.len()
-            }
-            _ => {
-                unreachable!()
-            }
-        };
-
-        self.trail(TrailRef::from(Ref::PStrTail(h, pstr_len)));
-    }
-
     pub(super)
     fn bind(&mut self, r1: Ref, a2: Addr) {
         let t1 = self.store(r1.as_addr());
@@ -209,9 +195,6 @@ impl MachineState {
                 Ref::AttrVar(h) => {
                     return self.bind_attr_var(h, t2);
                 }
-                Ref::PStrTail(h, _) => {
-                    return self.bind_pstr_tail(h, t2);
-                }
             };
 
             self.trail(TrailRef::from(r1));
@@ -227,9 +210,6 @@ impl MachineState {
                 }
                 Some(Ref::AttrVar(h)) => {
                     self.bind_attr_var(h, t1);
-                }
-                Some(Ref::PStrTail(h, _)) => {
-                    self.bind_pstr_tail(h, t1);
                 }
                 None => {
                 }
@@ -308,9 +288,6 @@ impl MachineState {
                     (Addr::StackCell(fr, sc), addr) | (addr, Addr::StackCell(fr, sc)) => {
                         self.bind_with_occurs_check(Ref::StackCell(fr, sc), addr)
                     }
-                    (Addr::PStrTail(h, n), addr) | (addr, Addr::PStrTail(h, n)) => {
-                        self.bind_with_occurs_check(Ref::PStrTail(h, n), addr);
-                    }
                     (Addr::Lis(a1), Addr::Str(a2)) | (Addr::Str(a2), Addr::Lis(a1)) => {
                         if let &HeapCellValue::NamedStr(n2, ref f2, _) = &self.heap[a2] {
                             if f2.as_str() == "." && n2 == 2 {
@@ -352,7 +329,7 @@ impl MachineState {
                             let s = pstr.block_as_str();
 
                             if let Some(c) = s[n ..].chars().next() {
-                                pdl.push(Addr::PStrTail(h, n + c.len_utf8()));
+                                pdl.push(Addr::PStrLocation(h, n + c.len_utf8()));
                                 pdl.push(Addr::HeapCell(l + 1));
 
                                 pdl.push(Addr::Con(Constant::Char(c)));
@@ -366,15 +343,20 @@ impl MachineState {
                             if let HeapCellValue::PartialString(ref pstr) = &self.heap[h] {
                                 let pstr_s = pstr.block_as_str();
 
-                                if let Some(c) = pstr_s[n ..].chars().next() {
-                                    if let Some(c1) = s[n1 ..].chars().next() {
-                                        if c == c1 {
-                                            pdl.push(Addr::Con(Constant::String(n1 + c.len_utf8(), s)));
-                                            pdl.push(Addr::PStrTail(h, n + c.len_utf8()));
+                                let pstr_len = pstr_s[n ..].len();
+                                let s_len = s[n1 ..].len();
+                                let m_len = std::cmp::min(s_len, pstr_len);
 
-                                            continue;
-                                        }
+                                if pstr_s[n .. n + m_len] == s[n1 .. n1 + m_len] {
+                                    if s_len <= pstr_len {
+                                        pdl.push(Addr::Con(Constant::EmptyList));
+                                        pdl.push(Addr::PStrLocation(h, n + m_len));
+                                    } else {
+                                        pdl.push(Addr::Con(Constant::String(n1 + m_len, s)));
+                                        pdl.push(Addr::HeapCell(h + 1));
                                     }
+
+                                    continue;
                                 }
 
                                 self.fail = true;
@@ -387,15 +369,20 @@ impl MachineState {
                                 let pstr_s1 = pstr1.block_as_str();
                                 let pstr_s2 = pstr2.block_as_str();
 
-                                if let Some(c1) = pstr_s1[n1 ..].chars().next() {
-                                    if let Some(c2) = pstr_s2[n2 ..].chars().next() {
-                                        if c1 == c2 {
-                                            pdl.push(Addr::PStrTail(h1, n1 + c1.len_utf8()));
-                                            pdl.push(Addr::PStrTail(h2, n2 + c2.len_utf8()));
+                                let pstr_s1_len = pstr_s1[n1 ..].len();
+                                let pstr_s2_len = pstr_s2[n2 ..].len();
+                                let m_len = std::cmp::min(pstr_s1_len, pstr_s2_len);
 
-                                            continue;
-                                        }
+                                if pstr_s1[n1 .. n1 + m_len] == pstr_s2[n2 .. n2 + m_len] {
+                                    if pstr_s1_len <= pstr_s2_len {
+                                        pdl.push(Addr::HeapCell(h1 + 1));
+                                        pdl.push(Addr::PStrLocation(h2, n2 + m_len));
+                                    } else {
+                                        pdl.push(Addr::HeapCell(h2 + 1));
+                                        pdl.push(Addr::PStrLocation(h1, n1 + m_len));
                                     }
+
+                                    continue;
                                 }
 
                                 self.fail = true;
@@ -443,7 +430,7 @@ impl MachineState {
     pub(super)
     fn unify(&mut self, a1: Addr, a2: Addr) {
         let mut pdl = vec![a1, a2];
-        
+
         let mut tabu_list: IndexSet<(Addr, Addr)> = IndexSet::new();
 
         self.fail = false;
@@ -471,9 +458,6 @@ impl MachineState {
                     }
                     (Addr::StackCell(fr, sc), addr) | (addr, Addr::StackCell(fr, sc)) => {
                         self.bind(Ref::StackCell(fr, sc), addr);
-                    }
-                    (Addr::PStrTail(h, n), addr) | (addr, Addr::PStrTail(h, n)) => {
-                        self.bind(Ref::PStrTail(h, n), addr);
                     }
                     (Addr::Lis(a1), Addr::Str(a2)) | (Addr::Str(a2), Addr::Lis(a1)) => {
                         if let &HeapCellValue::NamedStr(n2, ref f2, _) = &self.heap[a2] {
@@ -515,7 +499,7 @@ impl MachineState {
                             let s = pstr.block_as_str();
 
                             if let Some(c) = s[n ..].chars().next() {
-                                pdl.push(Addr::PStrTail(h, n + c.len_utf8()));
+                                pdl.push(Addr::PStrLocation(h, n + c.len_utf8()));
                                 pdl.push(Addr::HeapCell(l + 1));
 
                                 pdl.push(Addr::Con(Constant::Char(c)));
@@ -529,15 +513,20 @@ impl MachineState {
                             if let HeapCellValue::PartialString(ref pstr) = &self.heap[h] {
                                 let pstr_s = pstr.block_as_str();
 
-                                if let Some(c) = pstr_s[n ..].chars().next() {
-                                    if let Some(c1) = s[n1 ..].chars().next() {
-                                        if c == c1 {
-                                            pdl.push(Addr::Con(Constant::String(n1 + c.len_utf8(), s)));
-                                            pdl.push(Addr::PStrTail(h, n + c.len_utf8()));
+                                let pstr_len = pstr_s[n ..].len();
+                                let s_len = s[n1 ..].len();
+                                let m_len = std::cmp::min(s_len, pstr_len);
 
-                                            continue;
-                                        }
+                                if pstr_s[n .. n + m_len] == s[n1 .. n1 + m_len] {
+                                    if s_len <= pstr_len {
+                                        pdl.push(Addr::Con(Constant::EmptyList));
+                                        pdl.push(Addr::PStrLocation(h, n + m_len));
+                                    } else {
+                                        pdl.push(Addr::Con(Constant::String(n1 + m_len, s)));
+                                        pdl.push(Addr::HeapCell(h + 1));
                                     }
+
+                                    continue;
                                 }
 
                                 self.fail = true;
@@ -550,15 +539,20 @@ impl MachineState {
                                 let pstr_s1 = pstr1.block_as_str();
                                 let pstr_s2 = pstr2.block_as_str();
 
-                                if let Some(c1) = pstr_s1[n1 ..].chars().next() {
-                                    if let Some(c2) = pstr_s2[n2 ..].chars().next() {
-                                        if c1 == c2 {
-                                            pdl.push(Addr::PStrTail(h1, n1 + c1.len_utf8()));
-                                            pdl.push(Addr::PStrTail(h2, n2 + c2.len_utf8()));
+                                let pstr_s1_len = pstr_s1[n1 ..].len();
+                                let pstr_s2_len = pstr_s2[n2 ..].len();
+                                let m_len = std::cmp::min(pstr_s1_len, pstr_s2_len);
 
-                                            continue;
-                                        }
+                                if pstr_s1[n1 .. n1 + m_len] == pstr_s2[n2 .. n2 + m_len] {
+                                    if pstr_s1_len <= pstr_s2_len {
+                                        pdl.push(Addr::HeapCell(h1 + 1));
+                                        pdl.push(Addr::PStrLocation(h2, n2 + m_len));
+                                    } else {
+                                        pdl.push(Addr::HeapCell(h2 + 1));
+                                        pdl.push(Addr::PStrLocation(h1, n1 + m_len));
                                     }
+
+                                    continue;
                                 }
 
                                 self.fail = true;
@@ -618,12 +612,6 @@ impl MachineState {
                     self.tr += 1;
                 }
             }
-            TrailRef::Ref(Ref::PStrTail(h, n)) => {
-                if h < self.hb {
-                    self.trail.push(TrailRef::Ref(Ref::PStrTail(h, n)));
-                    self.tr += 1;
-                }
-            }
             TrailRef::AttrVarHeapLink(h) => {
                 if h < self.hb {
                     self.trail.push(TrailRef::AttrVarHeapLink(h));
@@ -650,7 +638,7 @@ impl MachineState {
             HeapPtr::HeapCell(ref mut h) => {
                 *h += rhs;
             }
-            HeapPtr::PStrChar(h, n) | HeapPtr::PStrTail(h, n) => {
+            HeapPtr::PStrChar(h, n) | HeapPtr::PStrLocation(h, n) => {
                 match &self.heap[*h] {
                     HeapCellValue::PartialString(ref pstr) => {
                         let s = pstr.block_as_str();
@@ -659,19 +647,19 @@ impl MachineState {
                             *n += c.len_utf8();
                         }
 
-                        self.s = HeapPtr::PStrTail(*h, *n);
+                        self.s = HeapPtr::PStrLocation(*h, *n);
                     }
                     _ => {
                         unreachable!()
                     }
                 }
             }
-            HeapPtr::StringChar(n, s) | HeapPtr::StringTail(n, s) => {
+            HeapPtr::StringChar(n, s) | HeapPtr::StringLocation(n, s) => {
                 for c in s[*n ..].chars().take(rhs) {
                     *n += c.len_utf8();
                 }
 
-                self.s = HeapPtr::StringTail(*n, s.clone());
+                self.s = HeapPtr::StringLocation(*n, s.clone());
             }
         }
     }
@@ -691,14 +679,6 @@ impl MachineState {
                 }
                 TrailRef::Ref(Ref::StackCell(fr, sc)) => {
                     self.stack.index_and_frame_mut(fr)[sc] = Addr::StackCell(fr, sc)
-                }
-                TrailRef::Ref(Ref::PStrTail(h, n)) => {
-                    if let HeapCellValue::PartialString(ref mut pstr) = &mut self.heap[h] {
-                        pstr.truncate(n);
-                        pstr.tail = Addr::PStrTail(h, n);
-
-                        self.tr += 1;
-                    }
                 }
                 TrailRef::AttrVarHeapLink(h) => {
                     self.heap[h] = HeapCellValue::Addr(Addr::HeapCell(h));
@@ -724,7 +704,6 @@ impl MachineState {
             match self.trail[i] {
                 TrailRef::Ref(Ref::AttrVar(tr_i))
               | TrailRef::Ref(Ref::HeapCell(tr_i))
-              | TrailRef::Ref(Ref::PStrTail(tr_i, _))
               | TrailRef::AttrVarHeapLink(tr_i)
               | TrailRef::AttrVarListLink(tr_i, _) => {
                     if tr_i >= hb {
@@ -1623,8 +1602,7 @@ impl MachineState {
                     }
                     addr @ Addr::AttrVar(_)
                   | addr @ Addr::StackCell(..)
-                  | addr @ Addr::HeapCell(_)
-                  | addr @ Addr::PStrTail(..) => {
+                  | addr @ Addr::HeapCell(_) => {
                         let h = self.heap.h();
 
                         self.heap.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
@@ -1768,8 +1746,7 @@ impl MachineState {
 
                 let offset = match addr {
                     Addr::HeapCell(_) | Addr::StackCell(..)
-                  | Addr::AttrVar(..) | Addr::PStrTail(..) 
-                  | Addr::Stream(_) => {
+                  | Addr::AttrVar(..) | Addr::Stream(_) => {
                         v
                     }
                     Addr::Con(Constant::String(n, ref s)) => {
@@ -1791,7 +1768,7 @@ impl MachineState {
                     }
                     Addr::Str(_) => {
                         s
-                    }                    
+                    }
                     Addr::DBRef(_) => {
                         self.fail = true;
                         return;
@@ -1807,7 +1784,7 @@ impl MachineState {
                 let a1 = self.registers[1].clone();
                 let addr = self.store(self.deref(a1));
 
-                let offset = match addr {                    
+                let offset = match addr {
                     Addr::Con(constant) => match hm.get(&constant) {
                         Some(offset) => *offset,
                         _ => 0,
@@ -1901,7 +1878,7 @@ impl MachineState {
 
                 if addr < Ref::HeapCell(h) {
                     self.heap.push(HeapCellValue::Addr(addr));
-                    return;                    
+                    return;
                 }
 
                 self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
@@ -2042,7 +2019,7 @@ impl MachineState {
         let n = self.store(self.deref(self[temp_v!(1)].clone()));
 
         match n {
-            Addr::HeapCell(_) | Addr::StackCell(..) | Addr::PStrTail(..) =>
+            Addr::HeapCell(_) | Addr::StackCell(..) =>
             // 8.5.2.3 a)
             {
                 return Err(self.error_form(MachineError::instantiation_error(), stub))
@@ -2067,7 +2044,7 @@ impl MachineState {
                 let term = self.store(self.deref(self[temp_v!(2)].clone()));
 
                 match term {
-                    Addr::HeapCell(_) | Addr::StackCell(..) | Addr::PStrTail(..) =>
+                    Addr::HeapCell(_) | Addr::StackCell(..) =>
                     // 8.5.2.3 b)
                     {
                         return Err(self.error_form(MachineError::instantiation_error(), stub))
@@ -2102,7 +2079,7 @@ impl MachineState {
                                         if n == 1 {
                                             Addr::Con(Constant::Char(c))
                                         } else {
-                                            Addr::PStrTail(h, offset + c.len_utf8())
+                                            Addr::PStrLocation(h, offset + c.len_utf8())
                                         }
                                     } else {
                                         unreachable!()
@@ -2137,15 +2114,20 @@ impl MachineState {
                     _ =>
                     // 8.5.2.3 d)
                     {
-                        return Err(self
-                            .error_form(MachineError::type_error(ValidType::Compound, term), stub))
+                        return Err(self.error_form(
+                            MachineError::type_error(ValidType::Compound, term),
+                            stub,
+                        ))
                     }
                 }
             }
             _ =>
             // 8.5.2.3 c)
             {
-                return Err(self.error_form(MachineError::type_error(ValidType::Integer, n), stub))
+                return Err(self.error_form(
+                    MachineError::type_error(ValidType::Integer, n),
+                    stub,
+                ))
             }
         }
 
@@ -2247,31 +2229,7 @@ impl MachineState {
                 | (
                     HeapCellValue::Addr(Addr::PStrLocation(..)),
                     HeapCellValue::Addr(Addr::PStrLocation(..)),
-                )
-                | (
-                    HeapCellValue::Addr(Addr::PStrTail(..)),
-                    HeapCellValue::Addr(Addr::PStrTail(..)),
                 ) => {
-                }
-                (
-                    HeapCellValue::Addr(Addr::PStrLocation(h1, _)),
-                    HeapCellValue::Addr(Addr::PStrTail(h2, _)),
-                ) => {
-                    return if h1 == h2 {
-                        Ordering::Less
-                    } else {
-                        h1.cmp(&h2)
-                    };
-                }
-                (
-                    HeapCellValue::Addr(Addr::PStrTail(h2, _)),
-                    HeapCellValue::Addr(Addr::PStrLocation(h1, _)),
-                ) => {
-                    return if h1 == h2 {
-                        Ordering::Greater
-                    } else {
-                        h2.cmp(&h1)
-                    };
                 }
                 (
                     HeapCellValue::Addr(Addr::PStrLocation(..)),
@@ -2359,29 +2317,8 @@ impl MachineState {
                         return hc1.cmp(&hc2);
                     }
                 }
-                (
-                    HeapCellValue::Addr(Addr::PStrTail(hc1, _)),
-                    HeapCellValue::Addr(Addr::HeapCell(hc2)),
-                )
-                | (
-                    HeapCellValue::Addr(Addr::HeapCell(hc1)),
-                    HeapCellValue::Addr(Addr::PStrTail(hc2, _)),
-                )
-                | (
-                    HeapCellValue::Addr(Addr::PStrTail(hc1, _)),
-                    HeapCellValue::Addr(Addr::AttrVar(hc2)),
-                )
-                | (
-                    HeapCellValue::Addr(Addr::AttrVar(hc1)),
-                    HeapCellValue::Addr(Addr::PStrTail(hc2, _)),
-                ) => {
-                    if hc1 != hc2 {
-                        return hc1.cmp(&hc2);
-                    }
-                }
                 (HeapCellValue::Addr(Addr::HeapCell(_)), _)
-              | (HeapCellValue::Addr(Addr::AttrVar(_)), _)
-              | (HeapCellValue::Addr(Addr::PStrTail(..)), _) => {
+              | (HeapCellValue::Addr(Addr::AttrVar(_)), _) => {
                     return Ordering::Less;
                 }
                 (
@@ -2402,10 +2339,6 @@ impl MachineState {
                 )
                 | (
                     HeapCellValue::Addr(Addr::StackCell(..)),
-                    HeapCellValue::Addr(Addr::PStrTail(..)),
-                )
-                | (
-                    HeapCellValue::Addr(Addr::StackCell(..)),
                     HeapCellValue::Addr(Addr::AttrVar(_)),
                 ) => {
                     return Ordering::Greater;
@@ -2420,11 +2353,7 @@ impl MachineState {
                 | (
                     HeapCellValue::Addr(Addr::Con(Constant::Integer(..))),
                     HeapCellValue::Addr(Addr::AttrVar(_)),
-                )
-                | (
-                    HeapCellValue::Addr(Addr::Con(Constant::Integer(..))),
-                    HeapCellValue::Addr(Addr::PStrTail(..)),
-                )=> {
+                ) => {
                     return Ordering::Greater;
                 }
                 (
@@ -2441,7 +2370,9 @@ impl MachineState {
                         return n1.cmp(&n2);
                     }
                 }
-                (HeapCellValue::Addr(Addr::Con(Constant::Integer(_))), _) => return Ordering::Less,
+                (HeapCellValue::Addr(Addr::Con(Constant::Integer(_))), _) => {
+                    return Ordering::Less;
+                }
                 (
                     HeapCellValue::Addr(Addr::Con(Constant::Float(..))),
                     HeapCellValue::Addr(Addr::HeapCell(_)),
@@ -2449,10 +2380,6 @@ impl MachineState {
                 | (
                     HeapCellValue::Addr(Addr::Con(Constant::Float(..))),
                     HeapCellValue::Addr(Addr::AttrVar(_)),
-                )
-                | (
-                    HeapCellValue::Addr(Addr::Con(Constant::Float(..))),
-                    HeapCellValue::Addr(Addr::PStrTail(..)),
                 ) => {
                     return Ordering::Greater;
                 }
@@ -2478,10 +2405,6 @@ impl MachineState {
                 | (
                     HeapCellValue::Addr(Addr::Con(Constant::Rational(..))),
                     HeapCellValue::Addr(Addr::AttrVar(_)),
-                )
-                | (
-                    HeapCellValue::Addr(Addr::Con(Constant::Rational(..))),
-                    HeapCellValue::Addr(Addr::PStrTail(..)),
                 ) => {
                     return Ordering::Greater;
                 }
@@ -2509,10 +2432,6 @@ impl MachineState {
                 | (
                     HeapCellValue::Addr(Addr::Con(Constant::String(..))),
                     HeapCellValue::Addr(Addr::AttrVar(_)),
-                )
-                | (
-                    HeapCellValue::Addr(Addr::Con(Constant::String(..))),
-                    HeapCellValue::Addr(Addr::PStrTail(..)),
                 ) => {
                     return Ordering::Greater;
                 }
@@ -2560,10 +2479,6 @@ impl MachineState {
                 (
                     HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
                     HeapCellValue::Addr(Addr::StackCell(..)),
-                ) => return Ordering::Greater,
-                (
-                    HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
-                    HeapCellValue::Addr(Addr::PStrTail(..)),
                 ) => return Ordering::Greater,
                 (
                     HeapCellValue::Addr(Addr::Con(Constant::Atom(..))),
@@ -2616,8 +2531,12 @@ impl MachineState {
                         return n.as_str().cmp(".");
                     }
                 }
-                (HeapCellValue::NamedStr(..), _) => return Ordering::Greater,
-                (HeapCellValue::Addr(Addr::Lis(_)), _) => return Ordering::Greater,
+                (HeapCellValue::NamedStr(..), _) => {
+                    return Ordering::Greater;
+                }
+                (HeapCellValue::Addr(Addr::Lis(_)), _) => {
+                    return Ordering::Greater;
+                }
                 _ => {}
             }
         }
@@ -2711,7 +2630,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(..) | Addr::PStrTail(..) => {
+                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(..) => {
                         self.fail = true;
                     }
                     _ => {
@@ -2723,7 +2642,7 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1].clone()));
 
                 match d {
-                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) | Addr::PStrTail(..) => {
+                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) => {
                         self.p += 1;
                     }
                     _ => {
@@ -2809,7 +2728,7 @@ impl MachineState {
                 let shared_op_desc = fetch_op_spec(clause_name!("."), 2, None, &indices.op_dir);
                 self.try_functor_compound_case(clause_name!("."), 2, shared_op_desc)
             }
-            Addr::AttrVar(..) | Addr::HeapCell(_) | Addr::StackCell(..) | Addr::PStrTail(..) => {
+            Addr::AttrVar(..) | Addr::HeapCell(_) | Addr::StackCell(..) => {
                 let name = self.store(self.deref(self[temp_v!(2)].clone()));
                 let arity = self.store(self.deref(self[temp_v!(3)].clone()));
 
@@ -2911,17 +2830,20 @@ impl MachineState {
             Addr::Lis(l) => {
                 self.try_from_inner_list(vec![], l, caller, a1)
             }
-            Addr::Con(Constant::String(n, ref s)) if !self.flags.double_quotes.is_atom() => {
-                if s.len() > n {
-                    Ok(Vec::from_iter(s[n ..].chars().map(|c| Addr::Con(Constant::Char(c)))))
-                } else {
-                    Ok(vec![])
+            Addr::Con(Constant::String(n, ref s))
+                if !self.flags.double_quotes.is_atom() => {
+                    if s.len() > n {
+                        Ok(Vec::from_iter(s[n ..].chars().map(|c| {
+                            Addr::Con(Constant::Char(c))
+                        })))
+                    } else {
+                        Ok(vec![])
+                    }
                 }
-            }
             Addr::PStrLocation(h, n) => {
                 self.try_from_partial_string(vec![], h, n, caller, a1)
             }
-            Addr::HeapCell(_) | Addr::StackCell(..) | Addr::PStrTail(..) => {
+            Addr::HeapCell(_) | Addr::StackCell(..) => {
                 Err(self.error_form(MachineError::instantiation_error(), caller))
             }
             Addr::Con(Constant::EmptyList) => {
@@ -3002,7 +2924,9 @@ impl MachineState {
 
                 chars.extend(s[n ..].chars().map(|c| Addr::Con(Constant::Char(c))));
 
-                match self.store(self.deref(pstr.tail.clone())) {
+                let tail = self.heap[h + 1].as_addr(h + 1);
+
+                match self.store(self.deref(tail)) {
                     Addr::Con(Constant::EmptyList) => {
                         return Ok(chars);
                     }

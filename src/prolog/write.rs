@@ -155,7 +155,7 @@ impl fmt::Display for HeapCellValue {
                 write!(f, "{}/{}", name.as_str(), arity)
             }
             &HeapCellValue::PartialString(ref pstr) => {
-                write!(f, "pstr ( buf: {}, tail: {} )", pstr.block_as_str(), pstr.tail_addr())
+                write!(f, "pstr ( buf: {} )", pstr.block_as_str())
             }
         }
     }
@@ -183,7 +183,6 @@ impl fmt::Display for Addr {
             &Addr::StackCell(fr, sc) => write!(f, "Addr::StackCell({}, {})", fr, sc),
             &Addr::Str(s) => write!(f, "Addr::Str({})", s),
             &Addr::PStrLocation(h, n) => write!(f, "Addr::PStrLocation({}, {})", h, n),
-            &Addr::PStrTail(h, n) => write!(f, "Addr::PStrTail({}, {})", h, n),
             &Addr::Stream(ref stream) => write!(f, "Addr::Stream({})", stream.as_ptr() as usize),
         }
     }

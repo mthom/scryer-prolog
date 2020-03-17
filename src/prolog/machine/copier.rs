@@ -65,20 +65,6 @@ impl<T: CopierTarget> CopyTermState<T> {
         false
     }
 
-    fn copied_partial_string(&mut self, addr: usize) -> bool {
-        if let HeapCellValue::PartialString(ref pstr) = &self.target[addr] {
-            if let Addr::PStrLocation(h, n) = pstr.tail_addr() {
-                if *h >= self.old_h {
-                    *self.value_at_scan() = HeapCellValue::Addr(Addr::PStrLocation(*h, *n));
-                    self.scan += 1;
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
-
     fn copy_list(&mut self, addr: usize) {
         if self.copied_list(addr) {
             return;
@@ -98,14 +84,13 @@ impl<T: CopierTarget> CopyTermState<T> {
         self.target.push(hcv);
 
         match rd.clone() {
-            Addr::AttrVar(h) | Addr::HeapCell(h) | Addr::PStrTail(h, _)
+            Addr::AttrVar(h) | Addr::HeapCell(h)
                 if h >= self.old_h => {
                     self.target[threshold] = HeapCellValue::Addr(rd)
                 }
             var @ Addr::AttrVar(_)
           | var @ Addr::HeapCell(..)
-          | var @ Addr::StackCell(..)
-          | var @ Addr::PStrTail(..) => {
+          | var @ Addr::StackCell(..) => {
                 if ra == rd {
                     self.reinstantiate_var(var, threshold);
 
@@ -130,57 +115,44 @@ impl<T: CopierTarget> CopyTermState<T> {
         self.scan += 1;
     }
 
+    fn copied_partial_string(&mut self, addr: usize) -> bool {
+        if let &HeapCellValue::Addr(Addr::PStrLocation(h, n)) = &self.target[addr + 1] {
+            if h >= self.old_h {
+                *self.value_at_scan() = HeapCellValue::Addr(Addr::PStrLocation(h, n));
+                self.scan += 1;
+                return true;
+            }
+        }
+
+        false
+    }
 
     fn copy_partial_string(&mut self, addr: usize, n: usize) {
         let threshold = self.target.threshold();
 
-        let tail_addr =
-            match &self.target[addr] {
-                HeapCellValue::PartialString(ref pstr) => {
-                    self.trail.push((
-                        Ref::PStrTail(addr, 0),
-                        HeapCellValue::Addr(pstr.tail.clone()),
-                    ));
+        self.trail.push((
+            Ref::HeapCell(addr + 1),
+            self.target[addr + 1].clone(),
+        ));
 
-                    self.target.store(self.target.deref(pstr.tail.clone()))
-                }
-                _ => {
-                    unreachable!()
-                }
-            };
+        let tail_addr = self.target[addr + 1].as_addr(addr + 1);
+
+        self.target[addr + 1] = HeapCellValue::Addr(
+            Addr::PStrLocation(threshold, 0)
+        );
 
         let pstr =
-            match &mut self.target[addr] {
-                HeapCellValue::PartialString(ref mut pstr) => {
-                    let mut new_pstr = pstr.clone_from_offset(n);
-
-                    if let Addr::PStrTail(h, n) = &tail_addr {
-                        new_pstr.tail = if *h == addr {
-                            Addr::PStrTail(threshold, *n)
-                        } else {
-                            Addr::HeapCell(threshold + 1)
-                        };
-                    } else {
-                        new_pstr.tail = Addr::HeapCell(threshold + 1);
-                    }
-
-                    pstr.tail = Addr::PStrLocation(threshold, 0);
-                    new_pstr
+            match &self.target[addr] {
+                HeapCellValue::PartialString(ref pstr) => {
+                    pstr.clone_from_offset(n)
                 }
                 _ => {
                     unreachable!()
                 }
             };
 
-        match tail_addr {
-            Addr::PStrTail(h, _) if h == addr => {
-                self.target.push(HeapCellValue::PartialString(pstr));
-            }
-            addr => {
-                self.target.push(HeapCellValue::PartialString(pstr));
-                self.target.push(HeapCellValue::Addr(addr));
-            }
-        }
+        self.target.push(HeapCellValue::PartialString(pstr));
+        self.target.push(HeapCellValue::Addr(tail_addr));
     }
 
     fn copy_partial_string_from(&mut self, addr: usize, n: usize) {
@@ -214,22 +186,6 @@ impl<T: CopierTarget> CopyTermState<T> {
                 self.trail.push((
                     Ref::StackCell(fr, sc),
                     HeapCellValue::Addr(Addr::StackCell(fr, sc)),
-                ));
-            }
-            Addr::PStrTail(h, n) => {
-                match &mut self.target[h] {
-                    HeapCellValue::PartialString(ref mut pstr) => {
-                        pstr.tail = Addr::PStrTail(frontier, n);
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                }
-
-                self.target[frontier] = HeapCellValue::Addr(Addr::PStrTail(frontier, n));
-                self.trail.push((
-                    Ref::PStrTail(h, n),
-                    HeapCellValue::Addr(Addr::PStrTail(h, n))
                 ));
             }
             Addr::AttrVar(h) => {
@@ -320,8 +276,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                         }
                         addr @ Addr::AttrVar(_)
                       | addr @ Addr::HeapCell(_)
-                      | addr @ Addr::StackCell(..)
-                      | addr @ Addr::PStrTail(..) => {
+                      | addr @ Addr::StackCell(..) => {
                             self.copy_var(addr);
                         }
                         Addr::Str(addr) => {
@@ -349,10 +304,6 @@ impl<T: CopierTarget> CopyTermState<T> {
             match r {
                 Ref::AttrVar(h) | Ref::HeapCell(h) =>
                     self.target[h] = value,
-                Ref::PStrTail(h, _) =>
-                    if let HeapCellValue::PartialString(ref mut pstr) = &mut self.target[h] {
-                        pstr.tail = value.as_addr(0);
-                    },
                 Ref::StackCell(fr, sc) =>
                     self.target.stack().index_and_frame_mut(fr)[sc] = value.as_addr(0),
             }

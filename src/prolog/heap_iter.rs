@@ -89,7 +89,7 @@ impl<'a> HCPreOrderIterator<'a> {
                         if pstr.len() > n + c.len_utf8() {                        
                             self.state_stack.push(Addr::PStrLocation(h, n + c.len_utf8()));
                         } else {
-                            self.state_stack.push(Addr::PStrTail(h, n + c.len_utf8()));
+                            self.state_stack.push(Addr::HeapCell(h + 1));
                         }
 
                         self.state_stack.push(Addr::Con(Constant::Char(c)));
@@ -102,7 +102,7 @@ impl<'a> HCPreOrderIterator<'a> {
 
                 Addr::PStrLocation(h, n)
             }
-            Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) | Addr::PStrTail(..) => {
+            Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(_, _) => {
                 da
             }
             Addr::Str(s) => {
@@ -124,20 +124,6 @@ impl<'a> Iterator for HCPreOrderIterator<'a> {
                 match &self.machine_st.heap[s] {
                     val @ HeapCellValue::NamedStr(..) => {
                         val.clone()
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                }
-            }
-            Addr::PStrTail(h, n) => {
-                match &self.machine_st.heap[h] {
-                    HeapCellValue::PartialString(ref pstr) => {
-                        if pstr.len() > n {
-                            HeapCellValue::Addr(Addr::PStrLocation(h, n))
-                        } else {
-                            HeapCellValue::Addr(pstr.tail_addr().clone())
-                        }
                     }
                     _ => {
                         unreachable!()
