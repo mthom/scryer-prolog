@@ -18,17 +18,28 @@
 
      ~w    use the next available argument from Arguments here,
            which must be atomic (a current limitation)
+     ~a    use the next argument here, which must be an atom
+     ~s    use the next argument here, which must be a string
+     ~d    use the next argument here, which must be an integer
      ~f    use the next argument here, a floating point number
      ~Nf   where N is an integer: format the float argument
            using N digits after the decimal point
-     ~s    use the next argument here, which must be a string
+     ~Nd   like ~d, placing the last N digits after a decimal point
+           If N is 0 or omitted, no decimal point is used.
+     ~ND   like ~Nd, separating digits to the left of the decimal point
+           in groups of three, using the character "," (comma)
      ~N|   where N is an integer: place a tab stop at text column N
      ~N+   where N is an integer: place a tab stop N characters
            after the previous tab stop (or start of line)
      ~t    distribute spaces evenly between the two closest tab stops
      ~`Ct  like ~t, use character C instead of spaces to fill the space
      ~n    newline
+     ~Nn   N newlines
+     ~i    ignore the next argument
      ~~    the literal ~
+
+   Instead of ~N, you can write ~* to use the next argument from Arguments
+   as the numeric argument.
 
    The predicate format/2 is like format_//2, except that it outputs
    the text on the terminal instead of describing it declaratively.
@@ -44,8 +55,8 @@
    Example:
 
    ?- phrase(format_("~s~n~`.t~w!~12|", ["hello",there]), Cs).
-   %@ Cs = [h,e,l,l,o,'\n','.','.','.','.','.','.',t,h,e,r,e,!] ;
-   %@ false.
+   %@    Cs = [h,e,l,l,o,'\n','.','.','.','.','.','.',t,h,e,r,e,!]
+   %@ ;  false.
 
    I place this code in the public domain. Use it in any way you want.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -131,30 +142,74 @@ element_gluevar(glue(_,V), N, N) --> [V].
    consume whitespace in the sense of format strings.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-cells([], _, Tab, Es) --> cell(Tab, Tab, Es).
+cells([], Args, Tab, Es) -->
+        (   { Args == [] } -> cell(Tab, Tab, Es)
+        ;   { domain_error(no_remaining_arguments, Args) }
+        ).
 cells([~,~|Fs], Args, Tab, Es) --> !,
         cells(Fs, Args, Tab, [chars("~")|Es]).
 cells([~,w|Fs], [Arg|Args], Tab, Es) --> !,
         { arg_chars(Arg, Chars) },
         cells(Fs, Args, Tab, [chars(Chars)|Es]).
+cells([~,a|Fs], [Arg|Args], Tab, Es) --> !,
+        { atom_chars(Arg, Chars) },
+        cells(Fs, Args, Tab, [chars(Chars)|Es]).
+cells([~|Fs0], Args0, Tab, Es) -->
+        { numeric_argument(Fs0, Num, [d|Fs], Args0, [Arg|Args]) },
+        !,
+        { number_chars(Arg, Cs0) },
+        (   { Num =:= 0 } -> { Cs = Cs0 }
+        ;   { length(Cs0, L),
+              (   L =< Num ->
+                  Delta is Num - L,
+                  length(Zs, Delta),
+                  maplist(=('0'), Zs),
+                  phrase(("0.",list(Zs),list(Cs0)), Cs)
+              ;   BeforeComma is L - Num,
+                  length(Bs, BeforeComma),
+                  append(Bs, Ds, Cs0),
+                  phrase((list(Bs),".",list(Ds)), Cs)
+              ) }
+        ),
+        cells(Fs, Args, Tab, [chars(Cs)|Es]).
+cells([~|Fs0], Args0, Tab, Es) -->
+        { numeric_argument(Fs0, Num, ['D'|Fs], Args0, [Arg|Args]) },
+        !,
+        { number_chars(Num, NCs),
+          phrase(("~",list(NCs),"d"), FStr),
+          phrase(format_(FStr, [Arg]), Cs0),
+          phrase(upto_what(Bs0, .), Cs0, Ds),
+          reverse(Bs0, Bs1),
+          phrase(groups_of_three(Bs1), Bs2),
+          reverse(Bs2, Bs),
+          append(Bs, Ds, Cs) },
+        cells(Fs, Args, Tab, [chars(Cs)|Es]).
+cells([~,i|Fs], [_|Args], Tab, Es) --> !,
+        cells(Fs, Args, Tab, Es).
 cells([~,n|Fs], Args, Tab, Es) --> !,
         cell(Tab, Tab, Es),
-        [newline],
+        n_newlines(1),
+        cells(Fs, Args, 0, []).
+cells([~|Fs0], Args0, Tab, Es) -->
+        { numeric_argument(Fs0, Num, [n|Fs], Args0, Args) },
+        !,
+        cell(Tab, Tab, Es),
+        n_newlines(Num),
         cells(Fs, Args, 0, []).
 cells([~,s|Fs], [Arg|Args], Tab, Es) --> !,
         cells(Fs, Args, Tab, [chars(Arg)|Es]).
 cells([~,f|Fs], [Arg|Args], Tab, Es) --> !,
         { number_chars(Arg, Chars) },
         cells(Fs, Args, Tab, [chars(Chars)|Es]).
-cells([~|Fs0], [Arg|Args], Tab, Es) -->
-        { numeric_argument(Fs0, Num, [f|Fs]) },
+cells([~|Fs0], Args0, Tab, Es) -->
+        { numeric_argument(Fs0, Num, [f|Fs], Args0, [Arg|Args]) },
         !,
         { number_chars(Arg, Cs0),
-          phrase(upto_what(Bs, '.'), Cs0, Cs),
+          phrase(upto_what(Bs, .), Cs0, Cs),
           (   Num =:= 0 -> Chars = Bs
           ;   (   Cs = ['.'|Rest] ->
                   length(Rest, L),
-                  (   Num < L,
+                  (   Num < L ->
                       length(Ds, Num),
                       append(Ds, _, Rest)
                   ;   Num =:= L ->
@@ -165,11 +220,11 @@ cells([~|Fs0], [Arg|Args], Tab, Es) -->
                       % greater accuracy here, and use the
                       % actual digits instead of 0.
                       length(Zs, Delta),
-                      maplist(=(0), Zs),
+                      maplist(=('0'), Zs),
                       append(Rest, Zs, Ds)
                   )
               ;   length(Ds, Num),
-                  maplist(=(0), Ds)
+                  maplist(=('0'), Ds)
               ),
               append(Bs, ['.'|Ds], Chars)
           ) },
@@ -178,13 +233,13 @@ cells([~,'`',Char,t|Fs], Args, Tab, Es) --> !,
         cells(Fs, Args, Tab, [glue(Char,_)|Es]).
 cells([~,t|Fs], Args, Tab, Es) --> !,
         cells(Fs, Args, Tab, [glue(' ',_)|Es]).
-cells([~|Fs0], Args, Tab, Es) -->
-        { numeric_argument(Fs0, Num, ['|'|Fs]) },
+cells([~|Fs0], Args0, Tab, Es) -->
+        { numeric_argument(Fs0, Num, ['|'|Fs], Args0, Args) },
         !,
         cell(Tab, Num, Es),
         cells(Fs, Args, Num, []).
-cells([~|Fs0], Args, Tab0, Es) -->
-        { numeric_argument(Fs0, Num, ['+'|Fs]) },
+cells([~|Fs0], Args0, Tab0, Es) -->
+        { numeric_argument(Fs0, Num, [+|Fs], Args0, Args) },
         !,
         { Tab is Tab0 + Num },
         cell(Tab0, Tab, Es),
@@ -192,13 +247,17 @@ cells([~|Fs0], Args, Tab0, Es) -->
 cells([~,C|_], _, _, _) -->
         { atom_chars(A, [~,C]),
           domain_error(format_string, A) }.
-cells([F|Fs0], Args, Tab, Es) -->
-        { phrase(upto_what(Fs1, ~), [F|Fs0], Fs),
+cells(Fs0, Args, Tab, Es) -->
+        { phrase(upto_what(Fs1, ~), Fs0, Fs),
           Fs1 = [_|_] },
         cells(Fs, Args, Tab, [chars(Fs1)|Es]).
 
 domain_error(Type, Term) :-
         throw(error(domain_error(Type, Term), _)).
+
+n_newlines(0) --> !.
+n_newlines(1) --> !, [newline].
+n_newlines(N0) --> { N0 > 1, N is N0 - 1 }, [newline], n_newlines(N).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- phrase(upto_what(Cs, ~), "abc~test", Rest).
@@ -211,6 +270,8 @@ upto_what([], W), [W] --> [W], !.
 upto_what([C|Cs], W) --> [C], !, upto_what(Cs, W).
 upto_what([], _) --> [].
 
+groups_of_three([A,B,C,D|Rs]) --> !, [A,B,C], ",", groups_of_three([D|Rs]).
+groups_of_three(Ls) --> list(Ls).
 
 cell(From, To, Es0) -->
         (   { Es0 == [] } -> []
@@ -218,13 +279,17 @@ cell(From, To, Es0) -->
             [cell(From,To,Es)]
         ).
 
-%?- numeric_argument("2f", Num, ['f'|Fs]).
+%?- numeric_argument("2f", Num, ['f'|Fs], Args0, Args).
 
-%?- numeric_argument("100b", Num, Rs).
+%?- numeric_argument("100b", Num, Rs, Args0, Args).
 
-numeric_argument(Ds, Num, Rest) :-
-        numeric_argument_(Ds, [], Ns, Rest),
-        foldl(pow10, Ns, 0-0, Num-_).
+numeric_argument(Ds, Num, Rest, Args0, Args) :-
+        (   Ds = [*|Rest] ->
+            Args0 = [Num|Args]
+        ;   numeric_argument_(Ds, [], Ns, Rest),
+            foldl(pow10, Ns, 0-0, Num-_),
+            Args0 = Args
+        ).
 
 numeric_argument_([D|Ds], Ns0, Ns, Rest) :-
         (   member(D, "0123456789") ->
