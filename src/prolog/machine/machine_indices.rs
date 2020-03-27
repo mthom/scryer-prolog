@@ -7,11 +7,13 @@ use crate::prolog::forms::*;
 use crate::prolog::machine::code_repo::CodeRepo;
 use crate::prolog::machine::Ball;
 use crate::prolog::machine::heap::*;
+use crate::prolog::machine::machine_state::*;
 use crate::prolog::machine::partial_string::*;
 use crate::prolog::machine::raw_block::RawBlockTraits;
 use crate::prolog::machine::streams::Stream;
 use crate::prolog::instructions::*;
-use crate::prolog::rug::Integer;
+use crate::prolog::ordered_float::OrderedFloat;
+use crate::prolog::rug::{Integer, Rational};
 
 use indexmap::IndexMap;
 
@@ -39,20 +41,35 @@ pub enum DBRef {
     ),
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub enum Addr {
-    AttrVar(usize),
-    Con(Constant),
-    DBRef(DBRef),
-    Lis(usize),
-    HeapCell(usize),
-    StackCell(usize, usize),
-    Str(usize),
-    PStrLocation(usize, usize), // location of pstr in heap, offset into string in bytes.
-    Stream(Stream),
+// 7.2
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TermOrderCategory {
+    Variable,
+    FloatingPoint,
+    Integer,
+    Atom,
+    Compound,
 }
 
-#[derive(Clone, Copy, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Addr {
+    AttrVar(usize),
+    Char(char),
+    CharCode(u32),
+    Con(usize),
+    CutPoint(usize),
+    EmptyList,
+    Float(OrderedFloat<f64>),
+    Lis(usize),
+    HeapCell(usize),
+    PStrLocation(usize, usize), // location of pstr in heap, offset into string in bytes.
+    StackCell(usize, usize),
+    Str(usize),
+    Stream(usize),
+    Usize(usize),
+}
+
+#[derive(Clone, Copy, Hash, Eq, PartialEq, PartialOrd)]
 pub enum Ref {
     AttrVar(usize),
     HeapCell(usize),
@@ -65,6 +82,28 @@ impl Ref {
             Ref::AttrVar(h) => Addr::AttrVar(h),
             Ref::HeapCell(h) => Addr::HeapCell(h),
             Ref::StackCell(fr, sc) => Addr::StackCell(fr, sc),
+        }
+    }
+}
+
+impl Ord for Ref {
+    fn cmp(&self, other: &Ref) -> Ordering {
+        match (self, other) {
+            (Ref::AttrVar(h1), Ref::AttrVar(h2))
+          | (Ref::HeapCell(h1), Ref::HeapCell(h2))
+          | (Ref::HeapCell(h1), Ref::AttrVar(h2))
+          | (Ref::AttrVar(h1), Ref::HeapCell(h2)) => {
+                h1.cmp(&h2)
+            }
+            (Ref::StackCell(fr1, sc1), Ref::StackCell(fr2, sc2)) => {
+                fr1.cmp(&fr2).then_with(|| sc1.cmp(&sc2))
+            }
+            (Ref::StackCell(..), _) => {
+                Ordering::Greater
+            }
+            (_, Ref::StackCell(..)) => {
+                Ordering::Less
+            }
         }
     }
 }
@@ -130,6 +169,83 @@ impl Addr {
             &Addr::HeapCell(h) => Some(Ref::HeapCell(h)),
             &Addr::StackCell(fr, sc) => Some(Ref::StackCell(fr, sc)),
             _ => None,
+        }
+    }
+
+    pub(super)
+    fn order_category(&self, heap: &Heap) -> Option<TermOrderCategory> {                
+        match self {
+            Addr::HeapCell(_) | Addr::AttrVar(_) | Addr::StackCell(..) => {
+                Some(TermOrderCategory::Variable)
+            }
+            Addr::Float(_) => {
+                Some(TermOrderCategory::FloatingPoint)
+            }
+            &Addr::Con(h) => {
+                match &heap[h] {
+                    HeapCellValue::Atom(..) => {
+                        Some(TermOrderCategory::Atom)
+                    }
+                    HeapCellValue::Integer(_) => {
+                        Some(TermOrderCategory::Integer)
+                    }
+                    HeapCellValue::Rational(_) => {
+                        Some(TermOrderCategory::Integer)
+                    }
+                    HeapCellValue::DBRef(_) => {
+                        None
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                }
+            }
+            Addr::Char(_) | Addr::CharCode(_) | Addr::EmptyList => {
+                Some(TermOrderCategory::Atom)
+            }
+            Addr::Lis(_) | Addr::PStrLocation(..) | Addr::Str(_) => {
+                Some(TermOrderCategory::Compound)
+            }
+            Addr::CutPoint(_) | Addr::Usize(_) | Addr::Stream(_) => {
+                None
+            }
+        }
+    }
+    
+    pub fn as_constant(&self, machine_st: &MachineState) -> Option<Constant> {
+        match self {
+            &Addr::Char(c) => {
+                Some(Constant::Char(c))
+            }
+            &Addr::CharCode(c) => {
+                Some(Constant::CharCode(c))
+            }
+            &Addr::Con(h) => {
+                match &machine_st.heap[h] {
+                    &HeapCellValue::Atom(ref name, ref op) => {
+                        Some(Constant::Atom(name.clone(), op.clone()))
+                    }
+                    &HeapCellValue::Integer(ref n) => {
+                        Some(Constant::Integer(n.clone()))
+                    }
+                    &HeapCellValue::Rational(ref n) => {
+                        Some(Constant::Rational(n.clone()))
+                    }
+                    _ => {
+                        None
+                    }
+                }
+            }
+            &Addr::Float(f) => {
+                Some(Constant::Float(f))
+            }
+            &Addr::PStrLocation(h, n) => {
+                machine_st.to_complete_string(h, n)
+                          .map(|s| Constant::String(Rc::new(s)))
+            }
+            _ => {
+                None
+            }
         }
     }
 
@@ -209,18 +325,27 @@ impl From<Ref> for TrailRef {
     }
 }
 
-#[derive(Clone, PartialEq)]
 pub enum HeapCellValue {
     Addr(Addr),
+    Atom(ClauseName, Option<SharedOpDesc>),
+    DBRef(DBRef),
+    Integer(Rc<Integer>),
     NamedStr(usize, ClauseName, Option<SharedOpDesc>), // arity, name, precedence/Specifier if it has one.
+    Rational(Rc<Rational>),    
     PartialString(PartialString),
+    Stream(Stream),
 }
 
 impl HeapCellValue {
+    #[inline]
     pub fn as_addr(&self, focus: usize) -> Addr {
         match self {
             HeapCellValue::Addr(ref a) => {
                 a.clone()
+            }
+            HeapCellValue::Atom(..) | HeapCellValue::DBRef(..) | HeapCellValue::Integer(..) |
+            HeapCellValue::Rational(..) => {
+                Addr::Con(focus)
             }
             HeapCellValue::NamedStr(_, _, _) => {
                 Addr::Str(focus)
@@ -228,7 +353,47 @@ impl HeapCellValue {
             HeapCellValue::PartialString(_) => {
                 Addr::PStrLocation(focus, 0)
             }
+            HeapCellValue::Stream(_) => {
+                Addr::Stream(focus)
+            }
         }
+    }
+
+    #[inline]
+    pub fn context_free_clone(&self) -> HeapCellValue {
+        match self {
+            &HeapCellValue::Addr(addr) => {
+                HeapCellValue::Addr(addr)
+            }
+            &HeapCellValue::Atom(ref name, ref op) => {
+                HeapCellValue::Atom(name.clone(), op.clone())
+            }
+            &HeapCellValue::DBRef(ref db_ref) => {
+                HeapCellValue::DBRef(db_ref.clone())
+            }
+            &HeapCellValue::Integer(ref n) => {
+                HeapCellValue::Integer(n.clone())
+            }
+            &HeapCellValue::NamedStr(arity, ref name, ref op) => {
+                HeapCellValue::NamedStr(arity, name.clone(), op.clone())
+            }
+            &HeapCellValue::Rational(ref r) => {
+                HeapCellValue::Rational(r.clone())
+            }
+            &HeapCellValue::PartialString(ref pstr) => {
+                HeapCellValue::PartialString(pstr.clone())
+            }
+            &HeapCellValue::Stream(_) => {
+                HeapCellValue::Stream(Stream::null_stream())
+            }
+        }
+    }
+}
+
+impl From<Addr> for HeapCellValue {
+    #[inline]
+    fn from(value: Addr) -> HeapCellValue {
+        HeapCellValue::Addr(value)
     }
 }
 
@@ -407,37 +572,31 @@ impl LocalCodePtr {
             LocalCodePtr::DirEntry(p) => {
                 heap.append(functor!(
                     "dir_entry",
-                    1,
-                    [heap_integer!(Integer::from(*p))]
+                    [integer(*p)]
                 ));
             }
             LocalCodePtr::InSituDirEntry(p) => {
                 heap.append(functor!(
                     "in_situ_dir_entry",
-                    1,
-                    [heap_integer!(Integer::from(*p))]
+                    [integer(*p)]
                 ));
             }
             LocalCodePtr::TopLevel(chunk_num, offset) => {
                 heap.append(functor!(
                     "top_level",
-                    2,
-                    [heap_integer!(Integer::from(*chunk_num)),
-                     heap_integer!(Integer::from(*offset))]
+                    [integer(*chunk_num), integer(*offset)]
                 ));
             }
             LocalCodePtr::UserGoalExpansion(p) => {
                 heap.append(functor!(
                     "user_goal_expansion",
-                    1,
-                    [heap_integer!(Integer::from(*p))]
+                    [integer(*p)]
                 ));
             }
             LocalCodePtr::UserTermExpansion(p) => {
                 heap.append(functor!(
                     "user_term_expansion",
-                    1,
-                    [heap_integer!(Integer::from(*p))]
+                    [integer(*p)]
                 ));
             }
         }
@@ -449,8 +608,12 @@ impl LocalCodePtr {
 impl PartialOrd<CodePtr> for CodePtr {
     fn partial_cmp(&self, other: &CodePtr) -> Option<Ordering> {
         match (self, other) {
-            (&CodePtr::Local(ref l1), &CodePtr::Local(ref l2)) => l1.partial_cmp(l2),
-            _ => Some(Ordering::Greater),
+            (&CodePtr::Local(ref l1), &CodePtr::Local(ref l2)) => {
+                l1.partial_cmp(l2)
+            }
+            _ => {
+                Some(Ordering::Greater)
+            }
         }
     }
 }
@@ -465,8 +628,12 @@ impl PartialOrd<LocalCodePtr> for LocalCodePtr {
           | (&LocalCodePtr::TopLevel(_, p1), &LocalCodePtr::TopLevel(_, ref p2)) => {
                 p1.partial_cmp(p2)
             }
-            (_, &LocalCodePtr::TopLevel(_, _)) => Some(Ordering::Less),
-            _ => Some(Ordering::Greater),
+            (_, &LocalCodePtr::TopLevel(_, _)) => {
+                Some(Ordering::Less)
+            }
+            _ => {
+                Some(Ordering::Greater)
+            }
         }
     }
 }

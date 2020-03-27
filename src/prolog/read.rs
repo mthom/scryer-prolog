@@ -4,6 +4,7 @@ use prolog_parser::tabled_rc::TabledData;
 
 use crate::prolog::forms::*;
 use crate::prolog::iterators::*;
+use crate::prolog::machine::heap::Heap;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::MachineState;
 use crate::prolog::machine::streams::Stream;
@@ -13,12 +14,20 @@ use std::collections::VecDeque;
 type SubtermDeque = VecDeque<(usize, usize)>;
 
 impl<'a> TermRef<'a> {
-    fn as_addr(&self, h: usize) -> Addr {
+    fn as_addr(&self, heap: &mut Heap, h: usize) -> Addr {
         match self {
-            &TermRef::AnonVar(_) | &TermRef::Var(..) => Addr::HeapCell(h),
-            &TermRef::Cons(..) => Addr::HeapCell(h),
-            &TermRef::Constant(_, _, c) => Addr::Con(c.clone()),
-            &TermRef::Clause(..) => Addr::Str(h),
+            &TermRef::AnonVar(_) | &TermRef::Var(..) => {
+                Addr::HeapCell(h)
+            }
+            &TermRef::Cons(..) => {
+                Addr::HeapCell(h)
+            }
+            &TermRef::Constant(_, _, c) => {
+                heap.put_constant(c.clone())
+            }
+            &TermRef::Clause(..) => {
+                Addr::Str(h)
+            }
         }
     }
 }
@@ -131,7 +140,7 @@ fn modify_head_of_queue(
     h: usize,
 ) {
     if let Some((arity, site_h)) = queue.pop_front() {
-        machine_st.heap[site_h] = HeapCellValue::Addr(term.as_addr(h));
+        machine_st.heap[site_h] = HeapCellValue::Addr(term.as_addr(&mut machine_st.heap, h));
 
         if arity > 1 {
             queue.push_front((arity - 1, site_h + 1));
@@ -180,10 +189,12 @@ pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> 
                 }
             }
             &TermRef::AnonVar(Level::Root) | &TermRef::Constant(Level::Root, ..) => {
-                machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h)))
+                let value = HeapCellValue::Addr(term.as_addr(&mut machine_st.heap, h));
+                machine_st.heap.push(value);
             }
             &TermRef::Var(Level::Root, ..) => {
-                machine_st.heap.push(HeapCellValue::Addr(term.as_addr(h)))
+                let value = HeapCellValue::Addr(term.as_addr(&mut machine_st.heap, h));
+                machine_st.heap.push(value);
             }
             &TermRef::AnonVar(_) => {
                 if let Some((arity, site_h)) = queue.pop_front() {

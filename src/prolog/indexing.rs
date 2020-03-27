@@ -63,11 +63,11 @@ impl CodeOffsets {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
             }
-            &Term::Constant(_, Constant::String(n, ref s)) => {
+            &Term::Constant(_, Constant::String(ref s)) => {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
 
-                let constant = Constant::String(n, s.clone());
+                let constant = Constant::String(s.clone());
                 let code = self.constants.entry(constant).or_insert(Vec::new());
 
                 let is_initial_index = code.is_empty();
@@ -75,9 +75,11 @@ impl CodeOffsets {
             }
             &Term::Constant(_, ref constant) => {
                 if let Constant::Atom(ref name, _) = constant {
-                    if !name.as_str().is_empty() && name.as_str().chars().skip(1).next().is_none() {
+                    if name.is_char() {
                         let c = name.as_str().chars().next().unwrap();
-                        let code = self.constants.entry(Constant::Char(c)).or_insert(vec![]);
+                        let code = self.constants
+                            .entry(Constant::Char(c))
+                            .or_insert(vec![]);
                         
                         code.push(Self::add_index(code.is_empty(), index));
                     }

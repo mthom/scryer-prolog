@@ -399,23 +399,27 @@ impl Add<Number> for Number {
 
     fn add(self, rhs: Number) -> Self::Output {
         match (self, rhs) {
-            (Number::Integer(n1), Number::Integer(n2)) => Ok(Number::Integer(n1 + n2)), // add_i
+            (Number::Integer(n1), Number::Integer(n2)) => {
+                Ok(Number::Integer(Rc::new(Integer::from(&*n1) + &*n2))) // add_i
+            }
             (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
-            | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) => {
+          | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) => {
                 Ok(Number::Float(add_f(float_i_to_f(&n1)?, n2)?))
             }
             (Number::Integer(n1), Number::Rational(n2))
-            | (Number::Rational(n2), Number::Integer(n1)) => {
-                Ok(Number::Rational(Rational::from(n1) + n2))
+          | (Number::Rational(n2), Number::Integer(n1)) => {
+                Ok(Number::Rational(Rc::new(Rational::from(&*n1) + &*n2)))
             }
             (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
-            | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) => {
+          | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) => {
                 Ok(Number::Float(add_f(float_r_to_f(&n1)?, n2)?))
             }
             (Number::Float(OrderedFloat(f1)), Number::Float(OrderedFloat(f2))) => {
                 Ok(Number::Float(add_f(f1, f2)?))
             }
-            (Number::Rational(r1), Number::Rational(r2)) => Ok(Number::Rational(r1 + r2)),
+            (Number::Rational(r1), Number::Rational(r2)) => {
+                Ok(Number::Rational(Rc::new(Rational::from(&*r1) + &*r2)))
+            }
         }
     }
 }
@@ -425,9 +429,9 @@ impl Neg for Number {
 
     fn neg(self) -> Self::Output {
         match self {
-            Number::Integer(n) => Number::Integer(-n),
+            Number::Integer(n) => Number::Integer(Rc::new(-Integer::from(&*n))),
             Number::Float(OrderedFloat(f)) => Number::Float(OrderedFloat(-f)),
-            Number::Rational(r) => Number::Rational(-r),
+            Number::Rational(r) => Number::Rational(Rc::new(-Rational::from(&*r))),
         }
     }
 }
@@ -445,14 +449,16 @@ impl Mul<Number> for Number {
 
     fn mul(self, rhs: Number) -> Self::Output {
         match (self, rhs) {
-            (Number::Integer(n1), Number::Integer(n2)) => Ok(Number::Integer(n1 * n2)), // mul_i
+            (Number::Integer(n1), Number::Integer(n2)) => {
+                Ok(Number::Integer(Rc::new(Integer::from(&*n1) * &*n2))) // mul_i
+            }
             (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
             | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) => {
                 Ok(Number::Float(mul_f(float_i_to_f(&n1)?, n2)?))
             }
             (Number::Integer(n1), Number::Rational(n2))
             | (Number::Rational(n2), Number::Integer(n1)) => {
-                Ok(Number::Rational(Rational::from(n1) * n2))
+                Ok(Number::Rational(Rc::new(Rational::from(&*n1) * &*n2)))
             }
             (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
             | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) => {
@@ -461,7 +467,9 @@ impl Mul<Number> for Number {
             (Number::Float(OrderedFloat(f1)), Number::Float(OrderedFloat(f2))) => {
                 Ok(Number::Float(mul_f(f1, f2)?))
             }
-            (Number::Rational(r1), Number::Rational(r2)) => Ok(Number::Rational(r1 * r2)),
+            (Number::Rational(r1), Number::Rational(r2)) => {
+                Ok(Number::Rational(Rc::new(Rational::from(&*r1) * &*r2)))
+            }
         }
     }
 }
@@ -539,8 +547,8 @@ impl Ord for Number {
 }
 
 // Computes n ^ power. Ignores the sign of power.
-pub fn binary_pow(mut n: Integer, power: Integer) -> Integer {
-    let mut power = power.abs();
+pub fn binary_pow(mut n: Integer, power: &Integer) -> Integer {
+    let mut power = Integer::from(power.abs_ref());
 
     if power == 0 {
         return Integer::from(1);

@@ -143,6 +143,10 @@ impl fmt::Display for HeapCellValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &HeapCellValue::Addr(ref addr) => write!(f, "{}", addr),
+            &HeapCellValue::Atom(ref atom, _) => write!(f, "{}", atom.as_str()),
+            &HeapCellValue::DBRef(ref db_ref) => write!(f, "{}", db_ref),
+            &HeapCellValue::Integer(ref n) => write!(f, "{}", n),
+            &HeapCellValue::Rational(ref n) => write!(f, "{}", n),
             &HeapCellValue::NamedStr(arity, ref name, Some(ref cell)) => write!(
                 f,
                 "{}/{} (op, priority: {}, spec: {})",
@@ -155,7 +159,10 @@ impl fmt::Display for HeapCellValue {
                 write!(f, "{}/{}", name.as_str(), arity)
             }
             &HeapCellValue::PartialString(ref pstr) => {
-                write!(f, "pstr ( buf: {} )", pstr.block_as_str())
+                write!(f, "pstr ( buf: 0x{:x} )", (pstr as *const _) as usize)
+            }
+            &HeapCellValue::Stream(ref stream) => {
+                write!(f, "$stream({})", stream.as_ptr() as usize)
             }
         }
     }
@@ -175,15 +182,20 @@ impl fmt::Display for DBRef {
 impl fmt::Display for Addr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &Addr::Char(c) => write!(f, "Addr::Char({})", c),
+            &Addr::CharCode(c) => write!(f, "Addr::CharCode({})", c),
+            &Addr::EmptyList => write!(f, "Addr::EmptyList"),
+            &Addr::Float(fl) => write!(f, "Addr::Float({})", fl),
+            &Addr::CutPoint(cp) => write!(f, "Addr::CutPoint({})", cp),
             &Addr::Con(ref c) => write!(f, "Addr::Con({})", c),
-            &Addr::DBRef(ref db_ref) => write!(f, "Addr::DBRef({})", db_ref),
             &Addr::Lis(l) => write!(f, "Addr::Lis({})", l),
             &Addr::AttrVar(h) => write!(f, "Addr::AttrVar({})", h),
             &Addr::HeapCell(h) => write!(f, "Addr::HeapCell({})", h),
             &Addr::StackCell(fr, sc) => write!(f, "Addr::StackCell({}, {})", fr, sc),
             &Addr::Str(s) => write!(f, "Addr::Str({})", s),
             &Addr::PStrLocation(h, n) => write!(f, "Addr::PStrLocation({}, {})", h, n),
-            &Addr::Stream(ref stream) => write!(f, "Addr::Stream({})", stream.as_ptr() as usize),
+            &Addr::Stream(stream) => write!(f, "Addr::Stream({})", stream),
+            &Addr::Usize(cp) => write!(f, "Addr::Usize({})", cp),
         }
     }
 }

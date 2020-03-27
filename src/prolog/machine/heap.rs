@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use crate::prolog_parser::ast::*;
+use crate::prolog_parser::ast::Constant;
 
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::partial_string::*;
@@ -140,17 +140,175 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
 
     #[inline]
     pub(crate)
-    fn push(&mut self, val: HeapCellValue) {
-        unsafe {
-            let new_top = self.buf.new_block(mem::size_of::<HeapCellValue>());
-            ptr::write(self.buf.top as *mut _, val);
-            self.buf.top = new_top;
+    fn clone(&self, h: usize) -> HeapCellValue {
+        match &self[h] {
+            &HeapCellValue::Addr(addr) => {
+                HeapCellValue::Addr(addr)
+            }
+            &HeapCellValue::Atom(ref name, ref op) => {
+                HeapCellValue::Atom(name.clone(), op.clone())
+            }
+            &HeapCellValue::DBRef(ref db_ref) => {
+                HeapCellValue::DBRef(db_ref.clone())
+            }
+            &HeapCellValue::Integer(ref n) => {
+                HeapCellValue::Integer(n.clone())
+            }
+            &HeapCellValue::NamedStr(arity, ref name, ref op) => {
+                HeapCellValue::NamedStr(arity, name.clone(), op.clone())
+            }
+            &HeapCellValue::Rational(ref r) => {
+                HeapCellValue::Rational(r.clone())
+            }
+            &HeapCellValue::PartialString(_) => {
+                HeapCellValue::Addr(Addr::PStrLocation(h, 0))
+            }
+            &HeapCellValue::Stream(_) => {
+                HeapCellValue::Addr(Addr::Stream(h))
+            }
         }
     }
 
     #[inline]
     pub(crate)
-    fn allocate_pstr(&mut self, mut src: &str) -> Option<Addr> {
+    fn put_constant(&mut self, c: Constant) -> Addr {
+        match c {
+            Constant::Atom(name, op) => {
+                Addr::Con(self.push(HeapCellValue::Atom(name, op)))
+            }
+            Constant::Char(c) => {
+                self.push(HeapCellValue::Addr(Addr::Char(c)));
+                Addr::Char(c)
+            }
+            Constant::CharCode(c) => {
+                self.push(HeapCellValue::Addr(Addr::CharCode(c)));
+                Addr::CharCode(c)
+            }
+            Constant::CutPoint(cp) => {
+                self.push(HeapCellValue::Addr(Addr::CutPoint(cp)));
+                Addr::CutPoint(cp)
+            }
+            Constant::EmptyList => {
+                self.push(HeapCellValue::Addr(Addr::EmptyList));
+                Addr::EmptyList
+            }
+            Constant::Integer(n) => {
+                Addr::Con(self.push(HeapCellValue::Integer(n)))                
+            }
+            Constant::Rational(r) => {
+                Addr::Con(self.push(HeapCellValue::Rational(r)))
+            }
+            Constant::Float(f) => {
+                self.push(HeapCellValue::Addr(Addr::Float(f)));
+                Addr::Float(f)
+            }
+            Constant::String(s) => {
+                let addr = self.allocate_pstr(&s);
+                let h = self.h();
+                
+                self[h - 1] = HeapCellValue::Addr(Addr::EmptyList);
+                addr
+            }
+            Constant::Usize(n) => {
+                self.push(HeapCellValue::Addr(Addr::Usize(n)));
+                Addr::Usize(n)
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn push(&mut self, val: HeapCellValue) -> usize {
+        let h = self.h();
+
+        unsafe {
+            let new_top = self.buf.new_block(mem::size_of::<HeapCellValue>());
+            ptr::write(self.buf.top as *mut _, val);
+            self.buf.top = new_top;
+        }
+
+        h
+    }
+
+    #[inline]
+    pub(crate)
+    fn rational_at(&self, h: usize) -> bool {
+        if let HeapCellValue::Rational(_) = &self[h] {
+            true
+        } else {
+            false
+        }
+    }
+    
+    #[inline]
+    pub(crate)
+    fn integer_at(&self, h: usize) -> bool {
+        if let HeapCellValue::Integer(_) = &self[h] {
+            true
+        } else {
+            false
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn atom_at(&self, h: usize) -> bool {
+        if let HeapCellValue::Atom(..) = &self[h] {
+            true
+        } else {
+            false
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn to_unifiable(&mut self, non_heap_value: HeapCellValue) -> Addr {
+        match non_heap_value {
+            HeapCellValue::Addr(addr) => {
+                addr
+            }
+            val @ HeapCellValue::Atom(..)
+          | val @ HeapCellValue::Integer(_)
+          | val @ HeapCellValue::DBRef(_)
+          | val @ HeapCellValue::Rational(_) => {
+                Addr::Con(self.push(val))
+            }
+            val @ HeapCellValue::NamedStr(..) => {
+                Addr::Str(self.push(val))
+            }
+            val @ HeapCellValue::Stream(..) => {
+                Addr::Stream(self.push(val))
+            }
+            val @ HeapCellValue::PartialString(_) => {
+                let h = self.push(val);
+                self.push(HeapCellValue::Addr(Addr::EmptyList));
+
+                Addr::Con(h)
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn allocate_pstr(&mut self, src: &str) -> Addr {
+        self.write_pstr(src)
+            .unwrap_or_else(|| {
+                let h = self.h();
+
+                self.push(HeapCellValue::PartialString(
+                    PartialString::empty()
+                ));
+
+                self.push(HeapCellValue::Addr(
+                    Addr::HeapCell(h + 1)
+                ));
+
+                Addr::PStrLocation(h, 0)
+            })
+    }
+
+    #[inline]
+    fn write_pstr(&mut self, mut src: &str) -> Option<Addr> {
         let orig_h = self.h();
 
         loop {
@@ -245,17 +403,21 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     }
 
     pub(crate)
-    fn to_list<Iter: Iterator<Item = Addr>>(&mut self, values: Iter) -> usize {
+    fn to_list<Iter, SrcT>(&mut self, values: Iter) -> usize
+        where Iter: Iterator<Item = SrcT>,
+              SrcT: Into<HeapCellValue>
+    {
         let head_addr = self.h();
+        let mut h = head_addr;
 
-        for value in values {
-            let h = self.h();
-
+        for value in values.map(|v| v.into()) {
             self.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
-            self.push(HeapCellValue::Addr(value));
+            self.push(value);
+
+            h += mem::size_of::<HeapCellValue>() * 2;
         }
 
-        self.push(HeapCellValue::Addr(Addr::Con(Constant::EmptyList)));
+        self.push(HeapCellValue::Addr(Addr::EmptyList));
 
         head_addr
     }
@@ -286,8 +448,8 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     pub(crate)
     fn to_local_code_ptr(&self, addr: &Addr) -> Option<LocalCodePtr> {
         let extract_integer = |s: usize| -> Option<usize> {
-            match self[s].as_addr(s) {
-                Addr::Con(Constant::Integer(n)) => n.to_usize(),
+            match &self[s] {
+                &HeapCellValue::Integer(ref n) => n.to_usize(),
                 _ => None
             }
         };
@@ -325,6 +487,19 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
                 }
             }
             _ => None
+        }
+    }
+
+    #[inline]
+    pub
+    fn index_addr<'a>(&'a self, addr: &Addr) -> RefOrOwned<'a, HeapCellValue> {
+        match addr {
+            &Addr::Con(h) | &Addr::Str(h) | &Addr::Stream(h) => {
+                RefOrOwned::Borrowed(&self[h])
+            }
+            addr => {
+                RefOrOwned::Owned(HeapCellValue::Addr(*addr))
+            }
         }
     }
 }

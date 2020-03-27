@@ -19,13 +19,15 @@ pub mod machine_errors;
 pub mod machine_indices;
 pub(super) mod machine_state;
 pub mod modules;
-mod partial_string;
+pub mod partial_string;
 mod raw_block;
 mod stack;
 pub(crate) mod streams;
 pub(super) mod term_expansion;
 pub mod toplevel;
 
+#[macro_use]
+mod arithmetic_ops;
 #[macro_use]
 mod machine_state_impl;
 mod system_calls;
@@ -340,8 +342,8 @@ impl Machine {
 	// the first of these is the path to the scryer-prolog executable, so skip
 	// it.
 	for filename in env::args().skip(1) {
-	    let atom = atom!(filename, self.indices.atom_tbl);
-	    filename_atoms.push(Addr::Con(atom));
+	    let atom = clause_name!(filename, self.indices.atom_tbl);
+	    filename_atoms.push(HeapCellValue::Atom(atom, None));
 	}
 
 	let list_addr =
@@ -547,14 +549,14 @@ impl Machine {
                         HeapCellValue::NamedStr(arity, ref name, _)
                             if *arity == 2 && name.as_str() == "/" => {
 		                let name = match &self.machine_st.heap[s+1] {
-			            &HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
+			            &HeapCellValue::Atom(ref name, _) =>
 			                name.clone(),
 			            _ =>
 			                unreachable!()
 		                };
 
 		                let arity = match &self.machine_st.heap[s+2] {
-			            &HeapCellValue::Addr(Addr::Con(Constant::Integer(ref arity))) =>
+			            &HeapCellValue::Integer(ref arity) =>
 			                arity.to_usize().unwrap(),
 			            _ =>
 			                unreachable!()
@@ -565,21 +567,21 @@ impl Machine {
                         HeapCellValue::NamedStr(arity, ref name, _)
                             if *arity == 3 && name.as_str() == "op" => {
                                 let name = match &self.machine_st.heap[s+3] {
-			            &HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
+			            &HeapCellValue::Atom(ref name, _) =>
 			                name.clone(),
 			            _ =>
 			                unreachable!()
 		                };
 
                                 let spec = match &self.machine_st.heap[s+2] {
-			            &HeapCellValue::Addr(Addr::Con(Constant::Atom(ref name, _))) =>
+			            &HeapCellValue::Atom(ref name, _) =>
 			                name.clone(),
 			            _ =>
 			                unreachable!()
 		                };
 
 		                let prec = match &self.machine_st.heap[s+1] {
-			            &HeapCellValue::Addr(Addr::Con(Constant::Integer(ref arity))) =>
+			            &HeapCellValue::Integer(ref arity) =>
 			                arity.to_usize().unwrap(),
 			            _ =>
 			                unreachable!()
@@ -610,9 +612,13 @@ impl Machine {
 	let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
 
 	let module_spec = self.machine_st[temp_v!(1)].clone();
-	let name = match self.machine_st.store(self.machine_st.deref(module_spec)) {
-	    Addr::Con(Constant::Atom(name, _)) => name,
-	    _ => unreachable!()
+	let name = {
+            let addr = self.machine_st.store(self.machine_st.deref(module_spec));
+
+            match self.machine_st.heap.index_addr(&addr).as_ref() {
+                HeapCellValue::Atom(name, _) => name.clone(),
+	        _ => unreachable!(),
+            }
 	};
 
 	let load_result = match to_src(name) {
@@ -653,9 +659,13 @@ impl Machine {
 	let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
 
 	let module_spec = self.machine_st[temp_v!(1)].clone();
-	let name = match self.machine_st.store(self.machine_st.deref(module_spec)) {
-	    Addr::Con(Constant::Atom(name, _)) => name,
-	    _ => unreachable!()
+	let name = {
+            let addr = self.machine_st.store(self.machine_st.deref(module_spec));
+
+            match self.machine_st.heap.index_addr(&addr).as_ref() {
+                HeapCellValue::Atom(name, _) => name.clone(),
+	        _ => unreachable!(),
+            }
 	};
 
 	let exports = match self.extract_module_export_list() {

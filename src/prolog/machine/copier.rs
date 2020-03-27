@@ -1,6 +1,8 @@
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::stack::*;
+use crate::prolog::machine::streams::*;
 
+use std::mem;
 use std::ops::IndexMut;
 
 type Trail = Vec<(Ref, HeapCellValue)>;
@@ -11,12 +13,13 @@ pub enum AttrVarPolicy {
     StripAttributes
 }
 
-pub(crate) trait CopierTarget: IndexMut<usize, Output = HeapCellValue> {
-    fn threshold(&self) -> usize;
-    fn push(&mut self, val: HeapCellValue);
-    fn store(&self, val: Addr) -> Addr;
+pub(crate)
+trait CopierTarget: IndexMut<usize, Output = HeapCellValue> {
     fn deref(&self, val: Addr) -> Addr;
+    fn push(&mut self, val: HeapCellValue);
     fn stack(&mut self) -> &mut Stack;
+    fn store(&self, val: Addr) -> Addr;
+    fn threshold(&self) -> usize;
 }
 
 pub(crate)
@@ -75,15 +78,15 @@ impl<T: CopierTarget> CopyTermState<T> {
         *self.value_at_scan() = HeapCellValue::Addr(Addr::Lis(threshold));
 
         let ra = self.target[addr].as_addr(threshold);
-        let rd = self.target.store(self.target.deref(ra.clone()));
+        let rd = self.target.store(self.target.deref(ra));
 
-        self.target.push(HeapCellValue::Addr(ra.clone()));
+        self.target.push(HeapCellValue::Addr(ra));
 
         let hcv = HeapCellValue::Addr(self.target[addr + 1].as_addr(addr + 1));
 
         self.target.push(hcv);
 
-        match rd.clone() {
+        match rd {
             Addr::AttrVar(h) | Addr::HeapCell(h)
                 if h >= self.old_h => {
                     self.target[threshold] = HeapCellValue::Addr(rd)
@@ -129,17 +132,17 @@ impl<T: CopierTarget> CopyTermState<T> {
 
     fn copy_partial_string(&mut self, addr: usize, n: usize) {
         let threshold = self.target.threshold();
+        let tail_addr = self.target[addr + 1].as_addr(addr + 1);
+
+        let trail_item = mem::replace(
+            &mut self.target[addr + 1],
+            HeapCellValue::Addr(Addr::PStrLocation(threshold, 0)),
+        );
 
         self.trail.push((
             Ref::HeapCell(addr + 1),
-            self.target[addr + 1].clone(),
+            trail_item,
         ));
-
-        let tail_addr = self.target[addr + 1].as_addr(addr + 1);
-
-        self.target[addr + 1] = HeapCellValue::Addr(
-            Addr::PStrLocation(threshold, 0)
-        );
 
         let pstr =
             match &self.target[addr] {
@@ -205,7 +208,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                 if let AttrVarPolicy::DeepCopy = self.attr_var_policy {
                     self.target.push(HeapCellValue::Addr(Addr::AttrVar(threshold)));
 
-                    let list_val = self.target[h + 1].clone();
+                    let list_val = self.target[h + 1].context_free_clone();
                     self.target.push(list_val);
                 }
             }
@@ -214,9 +217,9 @@ impl<T: CopierTarget> CopyTermState<T> {
     }
 
     fn copy_var(&mut self, addr: Addr) {
-        let rd = self.target.store(self.target.deref(addr.clone()));
+        let rd = self.target.store(self.target.deref(addr));
 
-        match rd.clone() {
+        match rd {
             Addr::AttrVar(h) | Addr::HeapCell(h) if h >= self.old_h => {
                 *self.value_at_scan() = HeapCellValue::Addr(rd);
                 self.scan += 1;
@@ -232,7 +235,7 @@ impl<T: CopierTarget> CopyTermState<T> {
     }
 
     fn copy_structure(&mut self, addr: usize) {
-        match self.target[addr].clone() {
+        match self.target[addr].context_free_clone() {
             HeapCellValue::NamedStr(arity, name, fixity) => {
                 let threshold = self.target.threshold();
 
@@ -247,7 +250,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                 self.target.push(HeapCellValue::NamedStr(arity, name, fixity));
 
                 for i in 0..arity {
-                    let hcv = self.target[addr + 1 + i].clone();
+                    let hcv = self.target[addr + 1 + i].context_free_clone();
                     self.target.push(hcv);
                 }
             }
@@ -266,13 +269,18 @@ impl<T: CopierTarget> CopyTermState<T> {
 
         while self.scan < self.target.threshold() {
             match self.value_at_scan() {
-                HeapCellValue::NamedStr(..) => {
-                    self.scan += 1;
-                }
-                HeapCellValue::Addr(ref addr) => {
-                    match addr.clone() {
-                        Addr::Lis(addr) => {
-                            self.copy_list(addr);
+                &mut HeapCellValue::Addr(addr) => {
+                    match addr {
+                        Addr::Con(h) => {
+                            self.target.push(self.target[h].context_free_clone());
+                            self.scan += 1;
+                        }
+                        Addr::Stream(_) => {
+                            self.target.push(HeapCellValue::Stream(Stream::null_stream()));
+                            self.scan += 1;
+                        }
+                        Addr::Lis(h) => {
+                            self.copy_list(h);
                         }
                         addr @ Addr::AttrVar(_)
                       | addr @ Addr::HeapCell(_)
@@ -285,12 +293,12 @@ impl<T: CopierTarget> CopyTermState<T> {
                         Addr::PStrLocation(addr, n) => {
                             self.copy_partial_string_from(addr, n);
                         }
-                        Addr::Con(_) | Addr::DBRef(_) | Addr::Stream(_) => {
+                        _ => {
                             self.scan += 1;
                         }
                     }
                 }
-                HeapCellValue::PartialString(_) => {
+                _ => {
                     self.scan += 1;
                 }
             }

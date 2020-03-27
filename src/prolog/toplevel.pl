@@ -43,6 +43,7 @@
     ).
 
 '$submit_query_and_print_results'(Term0, VarList) :-
+    write('oh brother'), nl,
     (  expand_goals(Term0, Term) -> true
     ;  Term0 = Term
     ),

@@ -41,12 +41,22 @@ impl Machine {
         let arity = self.machine_st[arity].clone();
 
         let name = match self.machine_st.store(self.machine_st.deref(name)) {
-            Addr::Con(Constant::Atom(name, _)) => name,
+            Addr::Con(h) =>
+                if let HeapCellValue::Atom(ref name, _) = &self.machine_st.heap[h] {
+                    name.clone()
+                } else {
+                    unreachable!()
+                },
             _ => unreachable!(),
         };
 
         let arity = match self.machine_st.store(self.machine_st.deref(arity)) {
-            Addr::Con(Constant::Integer(arity)) => arity.to_usize().unwrap(),
+            Addr::Con(h) =>
+                if let HeapCellValue::Integer(ref arity) = &self.machine_st.heap[h] {
+                    arity.to_usize().unwrap()
+                } else {
+                    unreachable!()
+                },
             _ => unreachable!(),
         };
 
@@ -91,7 +101,7 @@ impl Machine {
         let (name, arity) = self.get_predicate_key(name, arity);
 
         self.make_undefined(name.clone(), arity);
-
+        
         self.indices.remove_code_index((name.clone(), arity));
         self.indices.remove_clause_subsection(name.owning_module(), name, arity);
     }
@@ -101,16 +111,21 @@ impl Machine {
         let module_addr = self.machine_st[module].clone();
 
         let module_name = match self.machine_st.store(self.machine_st.deref(module_addr)) {
-            Addr::Con(Constant::Atom(module, _)) => match self.indices.modules.get_mut(&module) {
-                Some(ref mut module) => {
-                    module.code_dir.remove(&(name.clone(), arity));
-                    module.module_decl.name.clone()
-                }
-                _ => {
-                    self.machine_st.fail = true;
-                    return;
-                }
-            },
+            Addr::Con(h) =>
+                if let HeapCellValue::Atom(ref module, _) = &self.machine_st.heap[h] {
+                    match self.indices.modules.get_mut(module) {
+                        Some(ref mut module) => {
+                            module.code_dir.remove(&(name.clone(), arity));
+                            module.module_decl.name.clone()
+                        }
+                        _ => {
+                            self.machine_st.fail = true;
+                            return;
+                        }
+                    }
+                } else {
+                    unreachable!()
+                },
             _ => unreachable!(),
         };
 
@@ -162,21 +177,34 @@ impl Machine {
                 place.push_to_queue(&mut addrs, added_clause);
                 self.print_new_dynamic_clause(addrs, name.clone(), arity)
             }
-            Err(err) => return self.machine_st.throw_exception(err),
+            Err(err) => {
+                return self.machine_st.throw_exception(err);
+            }
         };
 
-        self.handle_eval_result_from_dynamic_compile(pred_str, name, arity, place.predicate_name());
+        self.handle_eval_result_from_dynamic_compile(
+            pred_str,
+            name,
+            arity,
+            place.predicate_name(),
+        );
     }
 
     fn set_module_atom_tbl(&mut self, module_addr: Addr, name: &mut ClauseName) -> bool {
         let atom_tbl = match self.machine_st.store(self.machine_st.deref(module_addr)) {
-            Addr::Con(Constant::Atom(module, _)) => match self.indices.modules.get(&module) {
-                Some(ref module) => module.atom_tbl.clone(),
-                None => {
+            Addr::Con(h) =>
+                if let HeapCellValue::Atom(ref module, _) = &self.machine_st.heap[h] {
+                    match self.indices.modules.get(module) {
+                        Some(ref module) => module.atom_tbl.clone(),
+                        None => {
+                            self.machine_st.fail = true;
+                            return false;
+                        }
+                    }
+                } else {
                     self.machine_st.fail = true;
                     return false;
-                }
-            },
+                },
             _ => unreachable!(),
         };
 
@@ -204,7 +232,12 @@ impl Machine {
     fn retract_from_dynamic_predicate_in_module(&mut self) {
         let index = self.machine_st[temp_v!(3)].clone();
         let index = match self.machine_st.store(self.machine_st.deref(index)) {
-            Addr::Con(Constant::Integer(n)) => n.to_usize().unwrap(),
+            Addr::Con(h) =>
+                if let HeapCellValue::Integer(ref n) = &self.machine_st.heap[h] {
+                    n.to_usize().unwrap()
+                } else {
+                    unreachable!()
+                },
             _ => unreachable!(),
         };
 
@@ -224,7 +257,9 @@ impl Machine {
                     
                     self.print_new_dynamic_clause(addrs, name.clone(), arity)
                 }
-                Err(err) => return self.machine_st.throw_exception(err),
+                Err(err) => {
+                    return self.machine_st.throw_exception(err);
+                }
             };
 
             self.handle_eval_result_from_dynamic_compile(
@@ -239,8 +274,15 @@ impl Machine {
     fn retract_from_dynamic_predicate(&mut self) {
         let index = self.machine_st[temp_v!(3)].clone();
         let index = match self.machine_st.store(self.machine_st.deref(index)) {
-            Addr::Con(Constant::Integer(n)) => n.to_usize().unwrap(),
-            _ => unreachable!(),
+            Addr::Con(h) =>
+                if let HeapCellValue::Integer(n) = &self.machine_st.heap[h] {
+                    n.to_usize().unwrap()
+                } else {
+                    unreachable!()
+                },
+            _ => {
+                unreachable!()
+            }
         };
 
         let (name, arity) = self.get_predicate_key(temp_v!(1), temp_v!(2));
@@ -257,7 +299,9 @@ impl Machine {
                  
                 self.print_new_dynamic_clause(addrs, name.clone(), arity)
             }
-            Err(err) => return self.machine_st.throw_exception(err),
+            Err(err) => {
+                return self.machine_st.throw_exception(err);
+            }
         };
 
         self.handle_eval_result_from_dynamic_compile(

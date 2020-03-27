@@ -576,8 +576,8 @@ pub struct Module {
 #[derive(Clone, PartialEq, Eq)]
 pub enum Number {
     Float(OrderedFloat<f64>),
-    Integer(Integer),
-    Rational(Rational),
+    Integer(Rc<Integer>),
+    Rational(Rc<Rational>),
 }
 
 impl Default for Number {
@@ -586,48 +586,51 @@ impl Default for Number {
     }
 }
 
-impl Number {
-    pub fn to_constant(self) -> Constant {
+impl Into<HeapCellValue> for Number {
+    #[inline]
+    fn into(self) -> HeapCellValue {
         match self {
-            Number::Integer(n) => Constant::Integer(n),
-            Number::Float(f) => Constant::Float(f),
-            Number::Rational(r) => Constant::Rational(r),
+            Number::Integer(n) => HeapCellValue::Integer(n),
+            Number::Float(f) => HeapCellValue::Addr(Addr::Float(f)),
+            Number::Rational(r) => HeapCellValue::Rational(r),
         }
     }
+}
 
+impl Number {    
     #[inline]
     pub fn is_positive(&self) -> bool {
         match self {
-            &Number::Integer(ref n) => n > &0,
+            &Number::Integer(ref n) => &**n > &0,
             &Number::Float(OrderedFloat(f)) => f.is_sign_positive(),
-            &Number::Rational(ref r) => r > &0,
+            &Number::Rational(ref r) => &**r > &0,
         }
     }
 
     #[inline]
     pub fn is_negative(&self) -> bool {
         match self {
-            &Number::Integer(ref n) => n < &0,
+            &Number::Integer(ref n) => &**n < &0,
             &Number::Float(OrderedFloat(f)) => f.is_sign_negative(),
-            &Number::Rational(ref r) => r < &0,
+            &Number::Rational(ref r) => &**r < &0,
         }
     }
 
     #[inline]
     pub fn is_zero(&self) -> bool {
         match self {
-            &Number::Integer(ref n) => n == &0,
+            &Number::Integer(ref n) => &**n == &0,
             &Number::Float(f) => f == OrderedFloat(0f64),
-            &Number::Rational(ref r) => r == &0,
+            &Number::Rational(ref r) => &**r == &0,
         }
     }
 
     #[inline]
     pub fn abs(self) -> Self {
         match self {
-            Number::Integer(n) => Number::Integer(n.abs()),
+            Number::Integer(n) => Number::Integer(Rc::new(Integer::from(n.abs_ref()))),
             Number::Float(f) => Number::Float(OrderedFloat(f.abs())),
-            Number::Rational(r) => Number::Rational(r.abs()),
+            Number::Rational(r) => Number::Rational(Rc::new(Rational::from(r.abs_ref()))),
         }
     }
 }

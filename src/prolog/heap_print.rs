@@ -3,6 +3,7 @@ use prolog_parser::ast::*;
 use crate::prolog::clause_types::*;
 use crate::prolog::forms::*;
 use crate::prolog::heap_iter::*;
+use crate::prolog::machine::heap::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 use crate::prolog::ordered_float::OrderedFloat;
@@ -88,14 +89,17 @@ impl<'a> HCPreOrderIterator<'a> {
      */
     fn leftmost_leaf_has_property<P>(&self, property_check: P) -> bool
     where
-        P: Fn(Constant) -> bool,
+        P: Fn(Addr, &Heap) -> bool,
     {
         let mut addr = match self.state_stack.last().cloned() {
             Some(addr) => addr,
             None => return false,
         };
 
-        let mut parent_spec = DirectedOp::Left(clause_name!("-"), SharedOpDesc::new(200, FY));
+        let mut parent_spec = DirectedOp::Left(
+            clause_name!("-"),
+            SharedOpDesc::new(200, FY),
+        );
 
         loop {
             match self.machine_st.store(self.machine_st.deref(addr)) {
@@ -110,29 +114,28 @@ impl<'a> HCPreOrderIterator<'a> {
                             parent_spec = DirectedOp::Right(name.clone(), spec.clone());
                         }
                     }
-                    _ => return false,
+                    _ => {
+                        return false;
+                    }
                 },
-                Addr::Con(Constant::Integer(n)) => return property_check(Constant::Integer(n)),
-                Addr::Con(Constant::Float(n)) => return property_check(Constant::Float(n)),
-                Addr::Con(Constant::Rational(n)) => return property_check(Constant::Rational(n)),
-                _ => return false,
+                addr => {
+                    return property_check(addr, &self.machine_st.heap);
+                }
             }
         }
     }
 
     fn immediate_leaf_has_property<P>(&self, property_check: P) -> bool
     where
-        P: Fn(Constant) -> bool,
+        P: Fn(Addr, &Heap) -> bool,
     {
         let addr = match self.state_stack.last().cloned() {
             Some(addr) => addr,
             None => return false,
         };
 
-        match self.machine_st.store(self.machine_st.deref(addr)) {
-            Addr::Con(c) => property_check(c),
-            _ => false,
-        }
+        let addr = self.machine_st.store(self.machine_st.deref(addr));
+        property_check(addr, &self.machine_st.heap)
     }
 }
 
@@ -261,13 +264,29 @@ fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
 #[inline]
 fn negated_op_needs_bracketing(iter: &HCPreOrderIterator, op: &Option<DirectedOp>) -> bool {
     if let &Some(ref op) = op {
-        op.is_negative_sign()
-            && iter.leftmost_leaf_has_property(|c| match c {
-                Constant::Integer(n) => n > 0,
-                Constant::Float(f) => f > OrderedFloat(0f64),
-                Constant::Rational(r) => r > 0,
-                _ => false,
-            })
+        op.is_negative_sign() && iter.leftmost_leaf_has_property(|addr, heap| {
+            match addr {
+                Addr::Con(h) => {
+                    match &heap[h] {
+                        HeapCellValue::Integer(ref n) => {
+                            &**n > &0
+                        }
+                        &HeapCellValue::Rational(ref r) => {
+                            &**r > &0
+                        }
+                        _ => {
+                            false
+                        }
+                    }
+                }
+                Addr::Float(f) => {
+                    f > OrderedFloat(0f64)
+                }
+                _ => {
+                    false
+                }
+            }
+        })
     } else {
         false
     }
@@ -293,8 +312,16 @@ fn numbervar(n: Integer) -> Var {
 impl MachineState {
     pub fn numbervar(&self, offset: &Integer, addr: Addr) -> Option<Var> {
         match self.store(self.deref(addr)) {
-            Addr::Con(Constant::Integer(ref n)) if n >= &0 => {
-                Some(numbervar(Integer::from(offset + n)))
+            Addr::Con(h) => {
+                if let &HeapCellValue::Integer(ref n) = &self.heap[h] {
+                    if &**n >= &0 {
+                        Some(numbervar(Integer::from(offset + &**n)))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             }
             _ => {
                 None
@@ -823,7 +850,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     fn check_for_seen(
         &mut self,
         iter: &mut HCPreOrderIterator,
-    ) -> Option<HeapCellValue> {
+    ) -> Option<Addr> {
         iter.stack().last().cloned().and_then(|addr| {
             let addr = self.machine_st.store(self.machine_st.deref(addr));
 
@@ -848,7 +875,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
                 None => {
                     let offset = match functor_location(&addr) {
-                        Some(offset) => offset,
+                        Some(offset) => {
+                            offset
+                        }
                         None => {
                             return iter.next();
                         }
@@ -969,7 +998,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn print_char(&mut self, is_quoted: bool, c: char)
-    {        
+    {
         if non_quoted_token(once(c)) {
             let c = char_to_string(false, c);
 
@@ -993,178 +1022,130 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_constant(
-        &mut self,
-        iter: &mut HCPreOrderIterator,
-        max_depth: usize,
-        c: Constant,
-        op: &Option<DirectedOp>,
-    ) {
-        match c {
-            Constant::Atom(atom, spec) => {
-                if let Some(_) = fetch_atom_op_spec(atom.clone(), spec, self.op_dir) {
-                    let mut result = String::new();
-
-                    if let Some(ref op) = op {
-                        if self.outputter.ends_with(&format!(" {}", op.as_str())) {
-                            result.push(' ');
-                        }
-
-                        result.push('(');
-                    }
-
-                    result += &self.print_op_addendum(atom.as_str());
-
-                    if op.is_some() {
-                        result.push(')');
-                    }
-
-                    push_space_if_amb!(self, &result, {
-                        self.append_str(&result);
-                    });
-                } else {
-                    push_space_if_amb!(self, atom.as_str(), {
-                        self.print_atom(&atom);
-                    });
-                }
-            }
-            Constant::CharCode(c) => {
-                self.append_str(&format!("{}", c as u32));
-            }
-            Constant::Char(c) => {
-                self.print_char(self.quoted, c);
-            }
-            Constant::CutPoint(b) => {
-                self.append_str(&format!("{}", b));
-            }
-            Constant::EmptyList => {
-                self.append_str("[]");
-            }
-            Constant::Integer(n) => {
-                self.print_number(Number::Integer(n), op);
-            }
-            Constant::Float(n) => {
-                self.print_number(Number::Float(n), op);
-            }
-            Constant::Rational(n) => {
-                self.print_number(Number::Rational(n), op);
-            }
-            Constant::String(n, s) if self.print_strings_as_strs => {
-                self.print_string_as_str(iter, n, s);
-            }
-            Constant::String(n, s) => {
-                self.print_string(iter, max_depth, n, s);
-            }
-            Constant::Usize(i) => {
-                self.append_str(&format!("u{}", i));
-            }
-        }
-    }
-
     fn print_string_as_str(
         &mut self,
-        iter: &mut HCPreOrderIterator,
-        offset: usize,
-        s: Rc<String>,
+        mut h: usize,
+        mut offset: usize,
+        quoted: bool,
     ) {
-         let atom = String::from_iter(s[offset ..].chars().map(|c| {
-            char_to_string(true, c)
-        }));
-
-        self.push_char('"');
-        self.append_str(&atom);
         self.push_char('"');
 
-        // eliminate lingering elements on the iterator stack (the
-        // head and tail) which are there to treat the string as a
-        // list.
-        iter.stack().pop();
-        iter.stack().pop();
+        while let HeapCellValue::PartialString(ref pstr) = &self.machine_st.heap[h] {
+            let atom = String::from_iter(pstr.range_from(offset ..).map(|c| {
+                char_to_string(quoted, c)
+            }));
+                                         
+            self.append_str(&atom);
+            
+            h += 2;
+            offset = 0;
+        }
+
+        self.push_char('"');
     }
 
     fn print_string(
         &mut self,
-        iter: &mut HCPreOrderIterator,
         mut max_depth: usize,
-        offset: usize,
-        s: Rc<String>)
+        mut h: usize,
+        mut offset: usize,
+    )
     {
         if !self.machine_st.machine_flags().double_quotes.is_atom() {
             if self.check_max_depth(&mut max_depth) {
                 self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
                 return;
             }
-
-            if s.len() <= offset && !self.at_cdr("") {
-                self.append_str("[]");
-            } else if self.ignore_ops {
-                let mut char_count = 0;
-                let mut byte_len = 0;
-
-                let iter: Box<dyn Iterator<Item=char>> =
-                    if self.max_depth == 0 {
-                        Box::new(s[offset ..].chars())
+            
+            while let HeapCellValue::PartialString(ref pstr) = &self.machine_st.heap[h] {                
+                if pstr.at_end(offset) && !self.at_cdr("") {
+                    if let HeapCellValue::Addr(Addr::EmptyList) = &self.machine_st.heap[h+1] {
+                        self.append_str("[]");
+                        break;
                     } else {
-                        Box::new(s[offset ..].chars().take(max_depth))
-                    };
+                        h += 2;
+                        offset = 0;
+                    }
+                } else if self.ignore_ops {
+                    let iter: Box<dyn Iterator<Item=char>> =
+                        if self.max_depth == 0 {
+                            Box::new(pstr.range_from(offset ..))
+                        } else {
+                            Box::new(pstr.range_from(offset ..).take(max_depth))
+                        };
 
-                for c in iter {
-                    self.print_char(self.quoted, '.');
-                    self.push_char('(');
+                    let mut char_count = 0;
+                    let mut byte_len = 0;
 
-                    self.print_char(self.quoted, c);
-                    self.push_char(',');
+                    for c in iter {
+                        self.print_char(self.quoted, '.');
+                        self.push_char('(');
 
-                    char_count += 1;
-                    byte_len += c.len_utf8();
+                        self.print_char(self.quoted, c);
+                        self.push_char(',');
+
+                        char_count += 1;
+                        byte_len += c.len_utf8();
+                    }
+
+                    let mut at_end = false;
+                    
+                    if self.max_depth > 0 && !pstr.at_end(offset + byte_len) {
+                        self.append_str("...");
+                        at_end = true;
+                    }  else {
+                        if let HeapCellValue::Addr(Addr::EmptyList) = &self.machine_st.heap[h+1] {
+                            self.append_str("[]");
+                            at_end = true;
+                        }
+                    }
+
+                    for _ in 0 .. char_count {
+                        self.push_char(')');
+                    }
+
+                    if at_end {
+                        break;
+                    }
+
+                    max_depth -= char_count;
+                } else {
+                    self.push_char('[');
+
+                    let iter: Box<dyn Iterator<Item=char>> =
+                        if self.max_depth == 0 {
+                            Box::new(pstr.range_from(offset ..))
+                        } else {
+                            Box::new(pstr.range_from(offset ..).take(max_depth))
+                        };
+
+                    let mut byte_len = 0;
+                    let mut char_count = 0;
+
+                    for c in iter {
+                        self.print_char(false, c);
+                        self.push_char(',');
+
+                        byte_len += c.len_utf8();
+                        char_count += 1;
+                    }
+
+                    if self.max_depth > 0 && !pstr.at_end(offset + byte_len) {
+                        self.append_str("...|...]");
+                        break;
+                    }  else {
+                        self.outputter.truncate(self.outputter.len() - ','.len_utf8());
+                        self.push_char(']');
+                    }
+
+                    max_depth -= char_count;
                 }
 
-                if self.max_depth > 0 && byte_len < s[offset ..].len() {
-                    self.append_str("...");
-                }  else {
-                    self.append_str("[]");
-                }
-
-                for _ in 0 .. char_count {
-                    self.push_char(')');
-                }
-            } else {
-                self.push_char('[');
-
-                let iter: Box<dyn Iterator<Item=char>> =
-                    if self.max_depth == 0 {
-                        Box::new(s[offset ..].chars())
-                    } else {
-                        Box::new(s[offset ..].chars().take(max_depth))
-                    };
-
-                let mut byte_len = 0;
-
-                for c in iter {
-                    self.print_char(false, c);
-                    self.push_char(',');
-
-                    byte_len += c.len_utf8();
-                }
-
-                if self.max_depth > 0 && byte_len < s[offset ..].len() {
-                    self.append_str("...|...]");
-                }  else {
-                    self.outputter.truncate(self.outputter.len() - ','.len_utf8());
-                    self.push_char(']');
-                }
+                h += 2;
+                offset = 0;                
             }
-
-            iter.stack().pop();
-            iter.stack().pop();
         } else {
-            let atom = String::from_iter(s[offset ..].chars().map(|c| {
-                char_to_string(self.quoted, c)
-            }));
-
-            self.push_char('"');
-            self.append_str(&atom);
-            self.push_char('"');
+            self.print_string_as_str(h, 0, self.quoted);
         }
     }
 
@@ -1217,21 +1198,22 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         max_depth: usize,
     ) {
         let add_brackets = if !self.ignore_ops {
-            negated_operand
-                || if let Some(ref op) = op {
-                    if self.numbervars && arity == 1 && name.as_str() == "$VAR" {
-                        !iter.immediate_leaf_has_property(|c| match c {
-                            Constant::Integer(n) => n >= 0,
-                            Constant::Float(f) => f >= OrderedFloat(0f64),
-                            Constant::Rational(r) => r >= 0,
-                            _ => false,
-                        }) && needs_bracketing(&spec, op)
-                    } else {
-                        needs_bracketing(&spec, op)
-                    }
+            negated_operand || if let Some(ref op) = op {
+                if self.numbervars && arity == 1 && name.as_str() == "$VAR" {
+                    !iter.immediate_leaf_has_property(|addr, heap| {
+                        match heap.index_addr(&addr).as_ref() {
+                            &HeapCellValue::Integer(ref n) => &**n >= &0,
+                            &HeapCellValue::Addr(Addr::Float(f)) => f >= OrderedFloat(0f64),
+                            &HeapCellValue::Rational(ref r) => &**r >= &0,
+                            _ => false
+                        }
+                    }) && needs_bracketing(&spec, op)
                 } else {
-                    is_functor_redirect && spec.prec() >= 1000
+                    needs_bracketing(&spec, op)
                 }
+            } else {
+                is_functor_redirect && spec.prec() >= 1000
+            }
         } else {
             false
         };
@@ -1264,49 +1246,134 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     ) {
         let negated_operand = negated_op_needs_bracketing(iter, &op);
 
-        let heap_val = match self.check_for_seen(iter) {
-            Some(heap_val) => heap_val,
+        let addr = match self.check_for_seen(iter) {
+            Some(addr) => addr,
             None => return,
         };
-
-        match heap_val {
-            HeapCellValue::NamedStr(arity, name, spec) => {
+        
+        match self.machine_st.heap.index_addr(&addr).as_ref() {
+            &HeapCellValue::NamedStr(arity, ref name, ref spec) => {
                 let spec = fetch_op_spec(name.clone(), arity, spec.clone(), self.op_dir);
 
                 if let Some(spec) = spec {
                     self.handle_op_as_struct(
-                        name,
+                        name.clone(),
                         arity,
                         iter,
                         &op,
                         is_functor_redirect,
-                        spec,
+                        spec.clone(),
                         negated_operand,
                         max_depth,
                     );
                 } else {
                     push_space_if_amb!(self, name.as_str(), {
-                        let ct = ClauseType::from(name, arity, spec);
+                        let ct = ClauseType::from(name.clone(), arity, spec);
                         self.format_clause(iter, max_depth, arity, ct);
                     });
                 }
             }
-            HeapCellValue::Addr(Addr::Con(Constant::EmptyList)) => {
+            &HeapCellValue::Atom(ref atom, ref spec) => {
+                if let Some(_) = fetch_atom_op_spec(atom.clone(), spec.clone(), self.op_dir) {
+                    let mut result = String::new();
+
+                    if let Some(ref op) = op {
+                        if self.outputter.ends_with(&format!(" {}", op.as_str())) {
+                            result.push(' ');
+                        }
+
+                        result.push('(');
+                    }
+
+                    result += &self.print_op_addendum(atom.as_str());
+
+                    if op.is_some() {
+                        result.push(')');
+                    }
+
+                    push_space_if_amb!(self, &result, {
+                        self.append_str(&result);
+                    });
+                } else {
+                    push_space_if_amb!(self, atom.as_str(), {
+                        self.print_atom(&atom);
+                    });
+                }
+            }
+            &HeapCellValue::Addr(Addr::CharCode(c)) => {
+                self.append_str(&format!("{}", c as u32));
+            }
+            &HeapCellValue::Addr(Addr::Char(c)) => {
+                self.print_char(self.quoted, c);
+            }
+            &HeapCellValue::Addr(Addr::CutPoint(b)) => {
+                self.append_str(&format!("{}", b));
+            }
+            &HeapCellValue::Addr(Addr::EmptyList) => {
                 if !self.at_cdr("") {
                     self.append_str("[]");
                 }
             }
-            HeapCellValue::Addr(Addr::Con(c)) => {
-                self.print_constant(iter, max_depth, c, &op);
+            &HeapCellValue::Addr(Addr::Float(n)) => {
+                self.print_number(Number::Float(n), &op);
             }
-            HeapCellValue::Addr(Addr::Lis(_)) | HeapCellValue::Addr(Addr::PStrLocation(..)) => {
+            &HeapCellValue::Addr(Addr::Usize(u)) => {
+                self.append_str(&format!("{}", u));
+            }
+            &HeapCellValue::Addr(Addr::PStrLocation(..))
+                if !self.machine_st.flags.double_quotes.is_atom() => {
+                    if self.ignore_ops {
+                        self.format_struct(iter, max_depth, 2, clause_name!("."));
+                    } else {
+                        self.push_list(iter, max_depth);
+                    }
+                }
+            &HeapCellValue::Addr(Addr::PStrLocation(h, n)) => {
+                if let HeapCellValue::PartialString(_) = &self.machine_st.heap[h] {
+                    self.print_string(max_depth, h, n);
+
+                    iter.stack().pop();
+                    iter.stack().pop();
+                } else {
+                    unreachable!()
+                }
+            }
+            &HeapCellValue::Addr(Addr::Lis(_)) => {
                 if self.ignore_ops {
                     self.format_struct(iter, max_depth, 2, clause_name!("."));
                 } else {
                     self.push_list(iter, max_depth);
                 }
             }
-            HeapCellValue::Addr(Addr::Stream(stream)) => {
+            &HeapCellValue::Addr(addr) => {
+                if let Some(offset_str) = self.offset_as_string(iter, addr) {
+                    push_space_if_amb!(self, &offset_str, {
+                        self.append_str(offset_str.as_str());
+                    })
+                }
+            }
+            &HeapCellValue::Integer(ref n) => {
+                self.print_number(Number::Integer(n.clone()), &op);
+            }
+            &HeapCellValue::Rational(ref n) => {
+                self.print_number(Number::Rational(n.clone()), &op);
+            }
+            &HeapCellValue::PartialString(_)
+                if self.print_strings_as_strs => {
+                    if let Addr::Con(h) = addr {
+                        self.print_string_as_str(h, 0, true);
+                    } else {
+                        unreachable!()
+                    }
+                }
+            &HeapCellValue::PartialString(_) => {
+                if let Addr::Con(h) = addr {
+                    self.print_string(max_depth, h, 0);
+                } else {
+                    unreachable!()
+                }
+            }
+            &HeapCellValue::Stream(ref stream) => {
                 if let Some(alias) = &stream.options.alias {
                     self.print_atom(alias);
                 } else {
@@ -1317,17 +1384,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     }
                 }
             }
-            HeapCellValue::Addr(addr) => {
-                if let Some(offset_str) = self.offset_as_string(iter, addr) {
-                    push_space_if_amb!(self, &offset_str, {
-                        self.append_str(offset_str.as_str());
-                    })
-                }
-            }
             _ => {
-                // This is the partial string case. We never clone a partial string
-                // for printing purposes, so.. this.
-                unreachable!()
             }
         }
     }

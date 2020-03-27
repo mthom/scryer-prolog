@@ -29,7 +29,8 @@ pub enum EOFAction {
 pub enum StreamInstance {
     Bytes(Cursor<Vec<u8>>),
     DynReadSource(Box<dyn Read>),
-    File(File),    
+    File(File),
+    Null,
     ReadlineStream(ReadlineStream),
     Stdin,
     Stdout,
@@ -203,6 +204,17 @@ impl Stream {
 
     #[inline]
     pub(crate)
+    fn null_stream() -> Self {
+        Stream {
+            options: StreamOptions::default(), // TODO: null_options?
+            stream_inst: WrappedStreamInstance::new(
+                StreamInstance::Null
+            ),
+        }
+    }
+
+    #[inline]
+    pub(crate)
     fn is_stdout(&self) -> bool {
         match *self.stream_inst.0.borrow() {
             StreamInstance::Stdout => {
@@ -233,7 +245,7 @@ impl Stream {
         match *self.stream_inst.0.borrow() {
             StreamInstance::Stdin
           | StreamInstance::TcpStream(_)
-          | StreamInstance::Bytes(_) 
+          | StreamInstance::Bytes(_)
           | StreamInstance::ReadlineStream(_)
           | StreamInstance::DynReadSource(_)
           | StreamInstance::File(_) => {
@@ -251,7 +263,7 @@ impl Stream {
         match *self.stream_inst.0.borrow() {
             StreamInstance::Stdout
           | StreamInstance::TcpStream(_)
-          | StreamInstance::Bytes(_) 
+          | StreamInstance::Bytes(_)
           | StreamInstance::File(_) => {
                 true
            }
@@ -283,7 +295,7 @@ impl Read for Stream {
             StreamInstance::Stdin => {
                 stdin().read(buf)
             }
-            StreamInstance::Stdout => {
+            StreamInstance::Stdout | StreamInstance::Null => {
                 Err(std::io::Error::new(
                     ErrorKind::PermissionDenied,
                     StreamError::ReadFromOutputStream,

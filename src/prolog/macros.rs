@@ -4,52 +4,178 @@ macro_rules! interm {
     };
 }
 
-macro_rules! heap_str {
-    ($s:expr) => {
-        HeapCellValue::Addr(Addr::Str($s))
-    };
-}
-
-macro_rules! heap_integer {
-    ($i:expr) => {
-        HeapCellValue::Addr(Addr::Con(Constant::Integer($i)))
-    };
-}
-
-macro_rules! heap_cell {
-    ($i:expr) => {
-        HeapCellValue::Addr(Addr::HeapCell($i))
-    };
-}
-
-macro_rules! heap_con {
-    ($i:expr) => {
-        HeapCellValue::Addr(Addr::Con($i))
-    };
-}
-
-macro_rules! heap_atom {
-    ($name:expr) => {
-        HeapCellValue::Addr(Addr::Con(atom!($name)))
-    };
-    ($name:expr, $tbl:expr) => {
-        HeapCellValue::Addr(Addr::Con(atom!($name, $tbl)))
-    };
+/* A simple macro to count the arguments in a variadic list
+ * of token trees.
+ */
+macro_rules! count_tt {
+    () => { 0 };
+    ($odd:tt $($a:tt $b:tt)*) => { (count_tt!($($a)*) << 1) | 1 };
+    ($($a:tt $even:tt)*) => { count_tt!($($a)*) << 1 };
 }
 
 macro_rules! functor {
+    ($name:expr, $fixity:expr, [$($dt:ident($($value:expr),*)),+], [$($aux:ident),*]) => ({
+        {
+            #[allow(unused_variables, unused_mut)]
+            let mut addendum = Heap::new();
+            let arity = count_tt!($($dt) +);
+            let aux_lens = [$($aux.len()),*];
+
+            let mut result =
+                vec![ HeapCellValue::NamedStr(arity, clause_name!($name), Some($fixity)),
+                      $(functor_term!( $dt($($value),*), arity, aux_lens, addendum ),)+ ];
+
+            $(
+                result.extend($aux.into_iter());
+            )*
+
+            result.extend(addendum.into_iter());
+            result
+        }
+    });
+    ($name:expr, $fixity:expr, [$($dt:ident($($value:expr),*)),+]) => ({
+        {
+            #[allow(unused_variables, unused_mut)]
+            let mut addendum = Heap::new();
+            let arity = count_tt!($($dt) +);
+
+            let mut result =
+                vec![ HeapCellValue::NamedStr(arity, clause_name!($name), Some($fixity)),
+                      $(functor_term!( $dt($($value),*), arity, [], addendum ),)+ ];
+
+            result.extend(addendum.into_iter());
+            result
+        }
+    });
+    ($name:expr, [$($dt:ident($($value:expr),*)),+], [$($aux:ident),*]) => ({
+        {
+            #[allow(unused_variables, unused_mut)]
+            let mut addendum = Heap::new();
+            let arity = count_tt!($($dt) +);
+            let aux_lens = [$($aux.len()),*];
+
+            let mut result =
+                vec![ HeapCellValue::NamedStr(arity, clause_name!($name), None),
+                      $(functor_term!( $dt($($value),*), arity, aux_lens, addendum ),)+ ];
+
+            $(
+                result.extend($aux.into_iter());
+            )*
+
+            result.extend(addendum.into_iter());
+            result
+        }
+    });
+    ($name:expr, [$($dt:ident($($value:expr),*)),+]) => ({
+        {
+            let arity = count_tt!($($dt) +);
+
+            vec![ HeapCellValue::NamedStr(arity, clause_name!($name), None),
+                  $(functor_term!( $dt($($value),*), arity, [], addendum ),)+ ]
+        }
+    });
+    ($name:expr, $fixity:expr) => (
+        vec![ HeapCellValue::Atom(clause_name!($name), Some($fixity)) ]
+    );
+    (clause_name($name:expr)) => (
+        vec![ HeapCellValue::Atom($name, None) ]
+    );
     ($name:expr) => (
-        vec![ heap_atom!($name) ]
+        vec![ HeapCellValue::Atom(clause_name!($name), None) ]
     );
-    ($name:expr, $len:expr) => (
-        vec![ HeapCellValue::NamedStr($len, clause_name!($name), None) ]
+}
+
+macro_rules! functor_term {
+    (aux(0), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
+        HeapCellValue::Addr(Addr::HeapCell($arity + 1))
+    });
+    (aux($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
+        let len: usize = $aux_lens[0 .. $e].iter().sum();
+        HeapCellValue::Addr(Addr::HeapCell($arity + 1 + len))
+    });
+    (aux($h:expr, 0), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
+        HeapCellValue::Addr(Addr::HeapCell($arity + $h + 1))
+    });
+    (aux($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
+        let len: usize = $aux_lens[0 .. $e].iter().sum();
+        HeapCellValue::Addr(Addr::HeapCell($arity + $h + 1 + len))
+    });
+    (addr($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
+        HeapCellValue::Addr($e)
     );
-    ($name:expr, $len:expr, [$($args:expr),*]) => (
-        vec![ HeapCellValue::NamedStr($len, clause_name!($name), None), $($args),* ]
+    (constant($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
+        from_constant!($e, $h, $arity, $aux_lens, $addendum)
+    );    
+    (constant($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
+        from_constant!($e, 0, $arity, $aux_lens, $addendum)
     );
-    ($name:expr, $len:expr, [$($args:expr),*], $fix: expr) => (
-        vec![ HeapCellValue::NamedStr($len, clause_name!($name), Some($fix)), $($args),* ]
+    (number($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
+        $e.into()
     );
+    /*
+    (string($s:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => ({
+        let len: usize = $aux_lens.iter().sum();
+        let h = len + $arity + 1 + $addendum.h();
+
+        $addendum.allocate_pstr(&$s);
+
+        HeapCell::PStrLocation(h, 0)
+    });
+    */
+    (integer($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
+        HeapCellValue::Integer(Rc::new(Integer::from($e)))
+    );
+    (clause_name($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
+        HeapCellValue::Atom($e, None)
+    );
+    (atom($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
+        HeapCellValue::Atom(clause_name!($e), None)
+    );
+    ($e:expr, $arity:expr, $aux_lens:expr, $addendum:ident) => (
+        $e
+    );
+}
+
+macro_rules! from_constant {
+    ($e:expr, $over_h:expr, $arity:expr, $aux_lens:expr, $addendum:ident) => ({
+        match $e {
+            &Constant::Atom(ref name, ref op) => {
+                HeapCellValue::Atom(name.clone(), op.clone())
+            }
+            &Constant::Char(c) => {
+                HeapCellValue::Addr(Addr::Char(c))
+            }
+            &Constant::CharCode(c) => {
+                HeapCellValue::Addr(Addr::CharCode(c))
+            }
+            &Constant::CutPoint(cp) => {
+                HeapCellValue::Addr(Addr::CutPoint(cp))
+            }
+            &Constant::Integer(ref n) => {
+                HeapCellValue::Integer(n.clone())
+            }
+            &Constant::Rational(ref r) => {
+                HeapCellValue::Rational(r.clone())
+            }
+            &Constant::Float(f) => {
+                HeapCellValue::Addr(Addr::Float(f))
+            }
+            &Constant::String(ref s) => {
+                let len: usize = $aux_lens.iter().sum();
+                let h = len + $arity + 1 + $addendum.h() + $over_h;
+
+                $addendum.put_constant(Constant::String(s.clone()));
+                
+                HeapCellValue::Addr(Addr::PStrLocation(h, 0))
+            }
+            &Constant::Usize(u) => {
+                HeapCellValue::Addr(Addr::Usize(u))
+            }
+            &Constant::EmptyList => {
+                HeapCellValue::Addr(Addr::EmptyList)
+            }
+        }
+    })
 }
 
 macro_rules! is_atom {

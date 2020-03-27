@@ -1,5 +1,6 @@
 use crate::prolog::machine::*;
 
+use std::cmp::Ordering;
 use std::vec::IntoIter;
 
 pub static VERIFY_ATTRS: &str = include_str!("attributed_variables.pl");
@@ -66,7 +67,7 @@ impl MachineState {
             .attr_var_init
             .bindings
             .iter()
-            .map(|(ref h, _)| Addr::AttrVar(*h));
+            .map(|(ref h, _)| HeapCellValue::Addr(Addr::AttrVar(*h)));
 
         let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
 
@@ -74,7 +75,7 @@ impl MachineState {
             .attr_var_init
             .bindings
             .drain(0 ..)
-            .map(|(_, addr)| addr);
+            .map(|(_, addr)| HeapCellValue::Addr(addr));
 
         let value_list_addr = Addr::HeapCell(self.heap.to_list(iter));
         (var_list_addr, value_list_addr)
@@ -100,7 +101,9 @@ impl MachineState {
             })
             .collect();
 
-        attr_vars.sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2));
+        attr_vars.sort_unstable_by(|a1, a2| {
+            self.compare_term_test(a1, a2).unwrap_or(Ordering::Less)
+        });
 
         self.term_dedup(&mut attr_vars);
         attr_vars.into_iter()
@@ -117,9 +120,9 @@ impl MachineState {
         }
 
         self.stack.index_and_frame_mut(e)[self.num_of_args + 1] =
-            Addr::Con(Constant::CutPoint(self.b0));
+            Addr::CutPoint(self.b0);
         self.stack.index_and_frame_mut(e)[self.num_of_args + 2] =
-            Addr::Con(Constant::Usize(self.num_of_args));
+            Addr::Usize(self.num_of_args);
 
         self.verify_attributes();
 
