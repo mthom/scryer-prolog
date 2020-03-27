@@ -429,15 +429,15 @@ impl MachineState {
     }
 }
 
-fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore) -> Option<usize>
+fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore) -> Option<LocalCodePtr>
 {
     match indices.in_situ_code_dir.get(&(name.clone(), arity)) {
-        Some(p) => Some(*p),
+        Some(p) => Some(LocalCodePtr::InSituDirEntry(*p)),
         None =>
             match indices.code_dir.get(&(name, arity)) {
                 Some(ref idx) => {
                     if let IndexPtr::Index(p) = idx.0.borrow().0 {
-                        Some(p)
+                        Some(LocalCodePtr::DirEntry(p))
                     } else {
                         None
                     }
@@ -456,12 +456,12 @@ fn try_in_situ(
 ) -> CallResult {
     if let Some(p) = try_in_situ_lookup(name.clone(), arity, indices) {
         if last_call {
-            machine_st.execute_at_index(arity, LocalCodePtr::DirEntry(p));
+            machine_st.execute_at_index(arity, p);
         } else {
-            machine_st.call_at_index(arity, LocalCodePtr::DirEntry(p));
+            machine_st.call_at_index(arity, p);
         }
 
-        machine_st.p = in_situ_dir_entry!(p);
+        machine_st.p = CodePtr::Local(p);
         Ok(())
     } else {
         let stub = MachineError::functor_stub(name.clone(), arity);

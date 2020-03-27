@@ -337,12 +337,6 @@ macro_rules! dir_entry {
     };
 }
 
-macro_rules! in_situ_dir_entry {
-    ($idx:expr) => {
-        CodePtr::Local(LocalCodePtr::InSituDirEntry($idx))
-    };
-}
-
 macro_rules! set_code_index {
     ($idx:expr, $ip:expr, $mod_name:expr) => {{
         let mut idx = $idx.0.borrow_mut();

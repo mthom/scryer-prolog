@@ -201,7 +201,7 @@
        '$help_message',
        '$read_input'(ThreadedGoals, NewVarList)
     ;  C == '.',
-       nl, write('   ...'), nl
+       nl, write(';  ...'), nl
     ).
 
 '$help_message' :-
