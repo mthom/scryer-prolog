@@ -35,7 +35,7 @@ fn main() {
     let handler = signal::SigHandler::Handler(handle_sigint);
     unsafe { signal::signal(signal::Signal::SIGINT, handler) }.unwrap();
 
-    if env::args().any(|a| a == "-v" || a == "--version") {
+    if env::args().skip(1).any(|a| a == "-v" || a == "--version") {
         println!("{:}", git_version!());
         return;
     }
