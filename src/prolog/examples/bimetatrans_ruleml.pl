@@ -283,9 +283,12 @@ sign('+') --> "+".
 
 double_quote('"') --> "\"".
 
-list_ws(String) -->
-    partial_string(String),
+list_ws(Ls) -->
+    list(Ls),
     ws.
+
+list([]) --> [].
+list([L|Ls]) --> [L], list(Ls).
 
 /*
  * ruleml_assert_item//1 specifies the elements of RuleML that may
