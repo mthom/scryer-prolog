@@ -49,7 +49,6 @@ impl Drop for Stack {
 
 #[derive(Clone, Copy)]
 pub struct FramePrelude {
-    is_or_frame: u8,
     pub num_cells: usize,
 }
 
@@ -62,7 +61,6 @@ pub struct AndFramePrelude {
 
 pub struct AndFrame {
     pub prelude: AndFramePrelude,
-    _marker: PhantomData<Addr>,
 }
 
 impl AndFrame {
@@ -89,8 +87,6 @@ impl Index<usize> for AndFrame {
 
 impl IndexMut<usize> for AndFrame {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        debug_assert!(self.prelude.univ_prelude.is_or_frame == 0);
-
         let prelude_offset = prelude_size::<AndFramePrelude>();
         let index_offset = (index - 1) * mem::size_of::<Addr>();
 
@@ -99,24 +95,6 @@ impl IndexMut<usize> for AndFrame {
             let ptr = ptr as usize + prelude_offset + index_offset;
 
             &mut *(ptr as *mut Addr)
-        }
-    }
-}
-
-impl Drop for AndFrame {
-    fn drop(&mut self) {
-        let prelude_offset = prelude_size::<AndFramePrelude>();
-
-        unsafe {
-            let ptr = mem::transmute::<&mut AndFrame, *const u8>(self);
-            let ptr = ptr as usize + prelude_offset;
-
-            for idx in 0 .. self.prelude.univ_prelude.num_cells {
-                let index_offset = idx * mem::size_of::<Addr>();
-                let ptr = (ptr + index_offset) as *mut Addr;
-
-                ptr::drop_in_place(ptr);
-            }
         }
     }
 }
@@ -137,7 +115,6 @@ pub struct OrFramePrelude {
 
 pub struct OrFrame {
     pub prelude: OrFramePrelude,
-    _marker: PhantomData<Addr>
 }
 
 impl Index<usize> for OrFrame {
@@ -145,8 +122,6 @@ impl Index<usize> for OrFrame {
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
-        debug_assert!(self.prelude.univ_prelude.is_or_frame == 1);
-
         let prelude_offset = prelude_size::<OrFramePrelude>();
         let index_offset = index * mem::size_of::<Addr>();
 
@@ -162,8 +137,6 @@ impl Index<usize> for OrFrame {
 impl IndexMut<usize> for OrFrame {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        debug_assert!(self.prelude.univ_prelude.is_or_frame == 1);
-
         let prelude_offset = prelude_size::<OrFramePrelude>();
         let index_offset = index * mem::size_of::<Addr>();
 
@@ -172,24 +145,6 @@ impl IndexMut<usize> for OrFrame {
             let ptr = ptr as usize + prelude_offset + index_offset;
 
             &mut *(ptr as *mut Addr)
-        }
-    }
-}
-
-impl Drop for OrFrame {
-    fn drop(&mut self) {
-        let prelude_offset = prelude_size::<OrFramePrelude>();
-
-        unsafe {
-            let ptr = mem::transmute::<&mut OrFrame, *const u8>(self);
-            let ptr = ptr as usize + prelude_offset;
-
-            for idx in 0 .. self.prelude.univ_prelude.num_cells {
-                let index_offset = idx * mem::size_of::<Addr>();
-                let ptr = (ptr + index_offset) as *mut Addr;
-
-                ptr::drop_in_place(ptr);
-            }
         }
     }
 }
@@ -217,8 +172,6 @@ impl Stack {
             }
 
             let and_frame = &mut *(self.buf.top as *mut AndFrame);
-
-            and_frame.prelude.univ_prelude.is_or_frame = 0;
             and_frame.prelude.univ_prelude.num_cells = num_cells;
 
             let e = self.buf.top as usize - self.buf.base as usize;
@@ -240,8 +193,6 @@ impl Stack {
             }
 
             let or_frame = &mut *(self.buf.top as *mut OrFrame);
-
-            or_frame.prelude.univ_prelude.is_or_frame = 1;
             or_frame.prelude.univ_prelude.num_cells = num_cells;
 
             let b = self.buf.top as usize - self.buf.base as usize;
@@ -287,6 +238,7 @@ impl Stack {
         Stack { buf: self.buf.take(), _marker: PhantomData }
     }
 
+    #[inline]
     pub fn truncate(&mut self, b: usize) {
         if b == 0 {
             self.inner_truncate(mem::align_of::<Addr>());
@@ -295,40 +247,12 @@ impl Stack {
         }
     }
 
+    #[inline]
     fn inner_truncate(&mut self, b: usize) {
-        let mut b = b + self.buf.base as usize;
-        let base  = b;
+        let base = b + self.buf.base as usize;
 
-        unsafe {
-            while b as *const _ < self.buf.top {
-                let univ_prelude = ptr::read(b as *const FramePrelude);
-
-                let offset = if univ_prelude.is_or_frame == 0 {
-                    let frame_ptr = b as *mut AndFrame;
-                    let frame = &mut *frame_ptr;
-                    let size_of_frame = AndFrame::size_of(frame.prelude.univ_prelude.num_cells);
-
-                    ptr::drop_in_place(frame_ptr);
-
-                    b + size_of_frame
-                } else {
-                    debug_assert!(univ_prelude.is_or_frame == 1);
-
-                    let frame_ptr = b as *mut OrFrame;
-                    let frame = &mut *frame_ptr;
-                    let size_of_frame = OrFrame::size_of(frame.prelude.univ_prelude.num_cells);
-
-                    ptr::drop_in_place(frame_ptr);
-
-                    b + size_of_frame
-                };
-
-                b = offset;
-            }
-
-            if base < self.buf.top as usize {
-                self.buf.top = base as *const _;
-            }
+        if base < self.buf.top as usize {
+            self.buf.top = base as *const _;
         }
     }
 

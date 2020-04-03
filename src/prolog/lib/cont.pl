@@ -1,4 +1,3 @@
-
 :- module(cont, [reset/3, shift/1]).
 
 reset(Goal, Ball, Cont) :-
@@ -7,14 +6,14 @@ reset(Goal, Ball, Cont) :-
     '$bind_from_register'(Cont, 3),
     '$bind_from_register'(Ball, 4).
 
-shift(Term) :-
+shift(Ball) :-
     '$nextEP'(first, E, P),
     get_chunks(E, P, L),
     (  L == [] ->
        Cont = none
     ;  Cont = cont(call_continuation(L))
     ),
-    '$write_cont_and_term'(_, _, Cont, Term),
+    '$write_cont_and_term'(_, _, Cont, Ball),
     '$unwind_environments'.
 
 get_chunks(E, P, L) :-

@@ -175,6 +175,12 @@ impl MachineState {
                 &HeapCellValue::Addr(Addr::Float(n)) => {
                     interms.push(Number::Float(n))
                 }
+                &HeapCellValue::Addr(Addr::Usize(n)) => {
+                    interms.push(Number::Integer(Rc::new(Integer::from(n))));
+                }
+                &HeapCellValue::Addr(Addr::CharCode(n)) => {
+                    interms.push(Number::Integer(Rc::new(Integer::from(n))));
+                }
                 &HeapCellValue::Rational(ref n) => {
                     interms.push(Number::Rational(n.clone()))
                 }

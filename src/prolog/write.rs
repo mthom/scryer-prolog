@@ -158,8 +158,10 @@ impl fmt::Display for HeapCellValue {
             &HeapCellValue::NamedStr(arity, ref name, None) => {
                 write!(f, "{}/{}", name.as_str(), arity)
             }
-            &HeapCellValue::PartialString(ref pstr) => {
-                write!(f, "pstr ( buf: 0x{:x} )", (pstr as *const _) as usize)
+            &HeapCellValue::PartialString(ref pstr, has_tail) => {
+                write!(f, "pstr ( buf: 0x{:x}, has_tail({}) )",
+                       (pstr as *const _) as usize,
+                       has_tail)
             }
             &HeapCellValue::Stream(ref stream) => {
                 write!(f, "$stream({})", stream.as_ptr() as usize)

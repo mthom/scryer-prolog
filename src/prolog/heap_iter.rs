@@ -37,7 +37,7 @@ impl<'a> HCPreOrderIterator<'a> {
             &HeapCellValue::Addr(a) => {
                 self.follow(a)
             }
-            HeapCellValue::PartialString(_) => {
+            HeapCellValue::PartialString(..) => {
                 self.follow(Addr::PStrLocation(h, 0))
             }
             HeapCellValue::Atom(..) | HeapCellValue::DBRef(_)
@@ -64,17 +64,19 @@ impl<'a> HCPreOrderIterator<'a> {
                 da
             }
             Addr::PStrLocation(h, n) => {
-                if let HeapCellValue::PartialString(ref pstr) = &self.machine_st.heap[h] {
+                if let &HeapCellValue::PartialString(ref pstr, has_tail) = &self.machine_st.heap[h] {
                     if let Some(c) = pstr.range_from(n ..).next() {
                         if !pstr.at_end(n + c.len_utf8()) {
                             self.state_stack.push(Addr::PStrLocation(h, n + c.len_utf8()));
-                        } else {
+                        } else if has_tail {
                             self.state_stack.push(Addr::HeapCell(h + 1));
+                        } else {
+                            self.state_stack.push(Addr::EmptyList);
                         }
 
                         self.state_stack.push(Addr::Char(c));
-                    } else {
-                        unreachable!()
+                    } else if has_tail {
+                        return self.follow(Addr::HeapCell(h + 1));
                     }
                 } else {
                     unreachable!()
@@ -86,8 +88,19 @@ impl<'a> HCPreOrderIterator<'a> {
                 self.follow_heap(s) // record terms of structure.
             }
             Addr::Con(h) => {
-                if let HeapCellValue::PartialString(_) = &self.machine_st.heap[h] {
-                    self.state_stack.push(Addr::HeapCell(h + 1));
+                if let &HeapCellValue::PartialString(ref pstr, has_tail) = &self.machine_st.heap[h] {
+                    if !self.machine_st.flags.double_quotes.is_atom() {
+                        return if let Some(c) = pstr.range_from(0 ..).next() {
+                            self.state_stack.push(Addr::PStrLocation(h, c.len_utf8()));
+                            self.state_stack.push(Addr::Char(c));
+
+                            Addr::PStrLocation(h, 0)
+                        } else if has_tail {
+                            self.follow(Addr::HeapCell(h + 1))
+                        } else {
+                            Addr::EmptyList
+                        };
+                    }
                 }
 
                 Addr::Con(h)
@@ -157,11 +170,18 @@ impl<'a> Iterator for HCPostOrderIterator<'a> {
                         self.parent_stack.push((2, Addr::Lis(a)));
                     }
                     &HeapCellValue::Addr(Addr::PStrLocation(h, n)) => {
-                        if let HeapCellValue::PartialString(ref pstr) = &self.machine_st.heap[h] {
-                            let c = pstr.range_from(n ..).next().unwrap();
-                            self.parent_stack.push((2, Addr::PStrLocation(h, n + c.len_utf8())));
-                        } else {
-                            unreachable!()
+                        match &self.machine_st.heap[h] {
+                            &HeapCellValue::PartialString(ref pstr, _) => {
+                                let c = pstr.range_from(n ..).next().unwrap();
+                                let next_n = n + c.len_utf8();
+
+                                if !pstr.at_end(next_n) {
+                                    self.parent_stack.push((2, Addr::PStrLocation(h, next_n)));
+                                }
+                            }
+                            _ => {
+                                unreachable!()
+                            }
                         }
                     }
                     _ => {

@@ -184,16 +184,16 @@ pub trait HCValueOutputter {
     type Output;
 
     fn new() -> Self;
-    fn push_char(&mut self, _: char);
-    fn append(&mut self, _: &str);
+    fn push_char(&mut self, c: char);
+    fn append(&mut self, s: &str);
     fn begin_new_var(&mut self);
-    fn insert(&mut self, _: usize, _: char);
+    fn insert(&mut self, index: usize, c: char);
     fn result(self) -> Self::Output;
-    fn ends_with(&self, _: &str) -> bool;
+    fn ends_with(&self, s: &str) -> bool;
     fn len(&self) -> usize;
-    fn truncate(&mut self, _: usize);
-    fn range(&self, _: Range<usize>) -> &str;
-    fn range_from(&self, _: RangeFrom<usize>) -> &str;
+    fn truncate(&mut self, len: usize);
+    fn range(&self, range: Range<usize>) -> &str;
+    fn range_from(&self, range: RangeFrom<usize>) -> &str;
 }
 
 pub struct PrinterOutputter {
@@ -1022,130 +1022,149 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_string_as_str(
-        &mut self,
-        mut h: usize,
-        mut offset: usize,
-        quoted: bool,
-    ) {
-        self.push_char('"');
-
-        while let HeapCellValue::PartialString(ref pstr) = &self.machine_st.heap[h] {
-            let atom = String::from_iter(pstr.range_from(offset ..).map(|c| {
-                char_to_string(quoted, c)
-            }));
-                                         
-            self.append_str(&atom);
-            
-            h += 2;
-            offset = 0;
-        }
-
-        self.push_char('"');
-    }
-
     fn print_string(
         &mut self,
+        iter: &mut HCPreOrderIterator,
         mut max_depth: usize,
-        mut h: usize,
-        mut offset: usize,
+        h: usize,
+        n: usize,
     )
     {
-        if !self.machine_st.machine_flags().double_quotes.is_atom() {
-            if self.check_max_depth(&mut max_depth) {
-                self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+        iter.stack().pop();
+        iter.stack().pop();
+
+        if self.check_max_depth(&mut max_depth) {
+            self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+            return;
+        }
+
+        let mut heap_pstr_iter =
+            self.machine_st.heap_pstr_iter(Addr::PStrLocation(h, n));
+
+        let mut buf = String::new();
+
+        while let Some(Some(c)) = heap_pstr_iter.next() {
+            buf.push(c);
+        }
+
+        let end_addr =
+            if let &HeapCellValue::PartialString(_, has_tail) = &self.machine_st.heap[h] {
+                if has_tail {
+                    self.machine_st.store(self.machine_st.deref(heap_pstr_iter.focus()))
+                } else {
+                    Addr::EmptyList
+                }
+            } else {
+                unreachable!()
+            };
+
+        if let Addr::EmptyList = end_addr {
+            if !self.machine_st.flags.double_quotes.is_codes() {
+                self.push_char('"');
+
+                let buf =
+                    if max_depth == 0 {
+                        String::from_iter(buf.chars().map(|c| {
+                            char_to_string(self.quoted, c)
+                        }))
+                    } else {
+                        let mut char_count = 0;
+                        let mut buf =
+                            String::from_iter(buf.chars().take(max_depth).map(|c| {
+                                char_count += 1;
+                                char_to_string(self.quoted, c)
+                            }));
+
+                        if char_count == max_depth {
+                            buf += " ...";
+                        }
+
+                        buf
+                    };
+
+                self.append_str(&buf);
+                self.push_char('"');
+
                 return;
             }
-            
-            while let HeapCellValue::PartialString(ref pstr) = &self.machine_st.heap[h] {                
-                if pstr.at_end(offset) && !self.at_cdr("") {
-                    if let HeapCellValue::Addr(Addr::EmptyList) = &self.machine_st.heap[h+1] {
-                        self.append_str("[]");
-                        break;
-                    } else {
-                        h += 2;
-                        offset = 0;
-                    }
-                } else if self.ignore_ops {
-                    let iter: Box<dyn Iterator<Item=char>> =
-                        if self.max_depth == 0 {
-                            Box::new(pstr.range_from(offset ..))
-                        } else {
-                            Box::new(pstr.range_from(offset ..).take(max_depth))
-                        };
+        }
 
-                    let mut char_count = 0;
-                    let mut byte_len = 0;
+        let buf_len = buf.len();
 
-                    for c in iter {
-                        self.print_char(self.quoted, '.');
-                        self.push_char('(');
+        let buf_iter: Box<dyn Iterator<Item=char>> =
+            if self.max_depth == 0 {
+                Box::new(buf.chars())
+            } else {
+                Box::new(buf.chars().take(max_depth))
+            };
 
-                        self.print_char(self.quoted, c);
-                        self.push_char(',');
+        let mut byte_len = 0;
 
-                        char_count += 1;
-                        byte_len += c.len_utf8();
-                    }
+        let char_printer = |printer: &mut Self, c| {
+            if printer.machine_st.flags.double_quotes.is_codes() {
+                let s = (c as u32).to_string();
 
-                    let mut at_end = false;
-                    
-                    if self.max_depth > 0 && !pstr.at_end(offset + byte_len) {
-                        self.append_str("...");
-                        at_end = true;
-                    }  else {
-                        if let HeapCellValue::Addr(Addr::EmptyList) = &self.machine_st.heap[h+1] {
-                            self.append_str("[]");
-                            at_end = true;
-                        }
-                    }
+                push_space_if_amb!(printer, &s, {
+                    printer.append_str(&s);
+                });
+            } else {
+                printer.print_char(printer.quoted, c);
+            }
+        };
 
-                    for _ in 0 .. char_count {
-                        self.push_char(')');
-                    }
+        if self.ignore_ops {
+            let mut char_count = 0;
 
-                    if at_end {
-                        break;
-                    }
+            for c in buf_iter {
+                self.push_char('.');
+                self.push_char('(');
 
-                    max_depth -= char_count;
-                } else {
-                    self.push_char('[');
+                char_printer(self, c);
+                self.push_char(',');
 
-                    let iter: Box<dyn Iterator<Item=char>> =
-                        if self.max_depth == 0 {
-                            Box::new(pstr.range_from(offset ..))
-                        } else {
-                            Box::new(pstr.range_from(offset ..).take(max_depth))
-                        };
+                char_count += 1;
+                byte_len += c.len_utf8();
+            }
 
-                    let mut byte_len = 0;
-                    let mut char_count = 0;
+            for _ in 0 .. char_count {
+                self.state_stack.push(TokenOrRedirect::Close);
+            }
 
-                    for c in iter {
-                        self.print_char(false, c);
-                        self.push_char(',');
-
-                        byte_len += c.len_utf8();
-                        char_count += 1;
-                    }
-
-                    if self.max_depth > 0 && !pstr.at_end(offset + byte_len) {
-                        self.append_str("...|...]");
-                        break;
-                    }  else {
-                        self.outputter.truncate(self.outputter.len() - ','.len_utf8());
-                        self.push_char(']');
-                    }
-
-                    max_depth -= char_count;
-                }
-
-                h += 2;
-                offset = 0;                
+            if self.max_depth > 0 && buf_len > byte_len {
+                self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+            } else {
+                self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
+                iter.stack().push(end_addr);
             }
         } else {
-            self.print_string_as_str(h, 0, self.quoted);
+            let switch = if !self.at_cdr(",") {
+                self.push_char('[');
+                true
+            } else {
+                false
+            };
+
+            for c in buf_iter {
+                char_printer(self, c);
+                self.push_char(',');
+
+                byte_len += c.len_utf8();
+            }
+
+            self.state_stack.push(TokenOrRedirect::CloseList(Rc::new(
+                Cell::new((switch, 0))
+            )));
+
+            if self.max_depth > 0 && buf_len > byte_len {
+                self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
+            }  else {
+                self.outputter.truncate(self.outputter.len() - ','.len_utf8());
+                self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
+
+                iter.stack().push(end_addr);
+            }
+
+            self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
         }
     }
 
@@ -1250,7 +1269,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             Some(addr) => addr,
             None => return,
         };
-        
+
         match self.machine_st.heap.index_addr(&addr).as_ref() {
             &HeapCellValue::NamedStr(arity, ref name, ref spec) => {
                 let spec = fetch_op_spec(name.clone(), arity, spec.clone(), self.op_dir);
@@ -1320,23 +1339,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             &HeapCellValue::Addr(Addr::Usize(u)) => {
                 self.append_str(&format!("{}", u));
             }
-            &HeapCellValue::Addr(Addr::PStrLocation(..))
-                if !self.machine_st.flags.double_quotes.is_atom() => {
-                    if self.ignore_ops {
-                        self.format_struct(iter, max_depth, 2, clause_name!("."));
-                    } else {
-                        self.push_list(iter, max_depth);
-                    }
-                }
             &HeapCellValue::Addr(Addr::PStrLocation(h, n)) => {
-                if let HeapCellValue::PartialString(_) = &self.machine_st.heap[h] {
-                    self.print_string(max_depth, h, n);
-
-                    iter.stack().pop();
-                    iter.stack().pop();
-                } else {
-                    unreachable!()
-                }
+                self.print_string(iter, max_depth, h, n);
             }
             &HeapCellValue::Addr(Addr::Lis(_)) => {
                 if self.ignore_ops {
@@ -1358,21 +1362,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             &HeapCellValue::Rational(ref n) => {
                 self.print_number(Number::Rational(n.clone()), &op);
             }
-            &HeapCellValue::PartialString(_)
-                if self.print_strings_as_strs => {
-                    if let Addr::Con(h) = addr {
-                        self.print_string_as_str(h, 0, true);
-                    } else {
-                        unreachable!()
-                    }
-                }
-            &HeapCellValue::PartialString(_) => {
-                if let Addr::Con(h) = addr {
-                    self.print_string(max_depth, h, 0);
-                } else {
-                    unreachable!()
-                }
-            }
             &HeapCellValue::Stream(ref stream) => {
                 if let Some(alias) = &stream.options.alias {
                     self.print_atom(alias);
@@ -1385,6 +1374,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
             }
             _ => {
+                unreachable!()
             }
         }
     }

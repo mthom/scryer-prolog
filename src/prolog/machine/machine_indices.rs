@@ -152,6 +152,20 @@ impl PartialOrd<Ref> for Addr {
 }
 
 impl Addr {
+    #[inline]
+    pub fn is_heap_bound(&self) -> bool {
+        match self {
+            Addr::Char(_) | Addr::CharCode(_) | Addr::EmptyList
+          | Addr::CutPoint(_) | Addr::Usize(_) | Addr::Float(_) => {
+                false
+            }
+            _ => {
+                true
+            }
+        }
+    }
+
+    #[inline]
     pub fn is_ref(&self) -> bool {
         match self {
             Addr::HeapCell(_) | Addr::StackCell(_, _) | Addr::AttrVar(_) => {
@@ -163,6 +177,7 @@ impl Addr {
         }
     }
 
+    #[inline]
     pub fn as_var(&self) -> Option<Ref> {
         match self {
             &Addr::AttrVar(h) => Some(Ref::AttrVar(h)),
@@ -173,7 +188,7 @@ impl Addr {
     }
 
     pub(super)
-    fn order_category(&self, heap: &Heap) -> Option<TermOrderCategory> {                
+    fn order_category(&self, heap: &Heap) -> Option<TermOrderCategory> {
         match self {
             Addr::HeapCell(_) | Addr::AttrVar(_) | Addr::StackCell(..) => {
                 Some(TermOrderCategory::Variable)
@@ -200,18 +215,21 @@ impl Addr {
                     }
                 }
             }
-            Addr::Char(_) | Addr::CharCode(_) | Addr::EmptyList => {
+            Addr::Char(_) | Addr::EmptyList => {
                 Some(TermOrderCategory::Atom)
+            }
+            Addr::Usize(_) | Addr::CharCode(_) => {
+                Some(TermOrderCategory::Integer)
             }
             Addr::Lis(_) | Addr::PStrLocation(..) | Addr::Str(_) => {
                 Some(TermOrderCategory::Compound)
             }
-            Addr::CutPoint(_) | Addr::Usize(_) | Addr::Stream(_) => {
+            Addr::CutPoint(_) | Addr::Stream(_) => {
                 None
             }
         }
     }
-    
+
     pub fn as_constant(&self, machine_st: &MachineState) -> Option<Constant> {
         match self {
             &Addr::Char(c) => {
@@ -236,12 +254,30 @@ impl Addr {
                     }
                 }
             }
+            &Addr::EmptyList => {
+                Some(Constant::EmptyList)
+            }
             &Addr::Float(f) => {
                 Some(Constant::Float(f))
             }
             &Addr::PStrLocation(h, n) => {
-                machine_st.to_complete_string(h, n)
-                          .map(|s| Constant::String(Rc::new(s)))
+                let mut heap_pstr_iter =
+                    machine_st.heap_pstr_iter(Addr::PStrLocation(h, n));
+                
+                let mut buf = String::new();
+
+                while let Some(Some(c)) = heap_pstr_iter.next() {
+                    buf.push(c);
+                }
+
+                let end_addr =
+                    machine_st.store(machine_st.deref(heap_pstr_iter.focus()));
+
+                if let Addr::EmptyList = end_addr {
+                    Some(Constant::String(Rc::new(buf)))
+                } else {
+                    None
+                }
             }
             _ => {
                 None
@@ -262,6 +298,8 @@ impl Add<usize> for Addr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
+            Addr::Stream(h) => Addr::Stream(h + rhs),
+            Addr::Con(h) => Addr::Con(h + rhs),
             Addr::Lis(a) => Addr::Lis(a + rhs),
             Addr::AttrVar(h) => Addr::AttrVar(h + rhs),
             Addr::HeapCell(h) => Addr::HeapCell(h + rhs),
@@ -278,6 +316,8 @@ impl Sub<i64> for Addr {
     fn sub(self, rhs: i64) -> Self::Output {
         if rhs < 0 {
             match self {
+                Addr::Stream(h) => Addr::Stream(h + rhs.abs() as usize),
+                Addr::Con(h) => Addr::Con(h + rhs.abs() as usize),
                 Addr::Lis(a) => Addr::Lis(a + rhs.abs() as usize),
                 Addr::AttrVar(h) => Addr::AttrVar(h + rhs.abs() as usize),
                 Addr::HeapCell(h) => Addr::HeapCell(h + rhs.abs() as usize),
@@ -296,6 +336,8 @@ impl Sub<usize> for Addr {
 
     fn sub(self, rhs: usize) -> Self::Output {
         match self {
+            Addr::Stream(h) => Addr::Stream(h - rhs),
+            Addr::Con(h) => Addr::Con(h - rhs),
             Addr::Lis(a) => Addr::Lis(a - rhs),
             Addr::AttrVar(h) => Addr::AttrVar(h - rhs),
             Addr::HeapCell(h) => Addr::HeapCell(h - rhs),
@@ -331,8 +373,8 @@ pub enum HeapCellValue {
     DBRef(DBRef),
     Integer(Rc<Integer>),
     NamedStr(usize, ClauseName, Option<SharedOpDesc>), // arity, name, precedence/Specifier if it has one.
-    Rational(Rc<Rational>),    
-    PartialString(PartialString),
+    Rational(Rc<Rational>),
+    PartialString(PartialString, bool), // the partial string, a bool indicating whether it came from a Constant.
     Stream(Stream),
 }
 
@@ -341,7 +383,7 @@ impl HeapCellValue {
     pub fn as_addr(&self, focus: usize) -> Addr {
         match self {
             HeapCellValue::Addr(ref a) => {
-                a.clone()
+                *a
             }
             HeapCellValue::Atom(..) | HeapCellValue::DBRef(..) | HeapCellValue::Integer(..) |
             HeapCellValue::Rational(..) => {
@@ -350,7 +392,7 @@ impl HeapCellValue {
             HeapCellValue::NamedStr(_, _, _) => {
                 Addr::Str(focus)
             }
-            HeapCellValue::PartialString(_) => {
+            HeapCellValue::PartialString(..) => {
                 Addr::PStrLocation(focus, 0)
             }
             HeapCellValue::Stream(_) => {
@@ -380,8 +422,8 @@ impl HeapCellValue {
             &HeapCellValue::Rational(ref r) => {
                 HeapCellValue::Rational(r.clone())
             }
-            &HeapCellValue::PartialString(ref pstr) => {
-                HeapCellValue::PartialString(pstr.clone())
+            &HeapCellValue::PartialString(ref pstr, has_tail) => {
+                HeapCellValue::PartialString(pstr.clone(), has_tail)
             }
             &HeapCellValue::Stream(_) => {
                 HeapCellValue::Stream(Stream::null_stream())

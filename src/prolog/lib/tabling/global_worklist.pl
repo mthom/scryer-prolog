@@ -1,4 +1,4 @@
-/*    Ported to Scryer Prolog by Mark Thom (2019/2020). 
+/*    Ported to Scryer Prolog by Mark Thom (2019/2020).
  */
 
 :- module(global_worklist,
@@ -21,7 +21,7 @@ put_new_global_worklist :-
      bb_b_put(table_global_worklist_initialized, [])
   ).
 
-add_to_global_worklist(TableIdentifier) :-  
+add_to_global_worklist(TableIdentifier) :-
   bb_get(table_global_worklist, TableGlobalWorklistFlag),
   get_atts(TableGlobalWorklistFlag, table_global_worklist(L1)),
   put_atts(TableGlobalWorklistFlag, table_global_worklist([TableIdentifier|L1])),
@@ -34,7 +34,7 @@ worklist_empty :-
 
 pop_worklist(TableIdentifier) :-
   bb_get(table_global_worklist,TableGlobalWorklistFlag),
-  get_atts(TableGlobalWorklistFlag, table_global_worklist(L1)),  
+  get_atts(TableGlobalWorklistFlag, table_global_worklist(L1)),
   L1 = [TableIdentifier|L2],
   put_atts(TableGlobalWorklistFlag, table_global_worklist(L2)),
   bb_put(table_global_worklist, TableGlobalWorklistFlag).

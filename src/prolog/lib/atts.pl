@@ -132,11 +132,11 @@ put_attr(Name, Arity) -->
 			    '$put_attr'(V, Attr)),
      (put_atts(V,  Attr) :- !, functor(Attr, Head, Arity),
 			    functor(AttrForm, Head, Arity),
-			    '$get_attr_list'(V, Ls), 
-			    '$del_attr'(Ls, V, AttrForm), 
+			    '$get_attr_list'(V, Ls),
+			    '$del_attr'(Ls, V, AttrForm),
 			    '$put_attr'(V, Attr)),
      (put_atts(V, -Attr) :- !, functor(Attr, _, _),
-			    '$get_attr_list'(V, Ls), 
+			    '$get_attr_list'(V, Ls),
 			    '$del_attr'(Ls, V, Attr))].
 
 get_attr(Name, Arity) -->
@@ -158,4 +158,3 @@ call_residue_vars(Goal, Vars) :-
     '$get_attr_var_queue_delim'(B),
     call(Goal),
     '$get_attr_var_queue_beyond'(B, Vars).
-    

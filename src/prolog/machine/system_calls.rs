@@ -77,7 +77,7 @@ struct BrentAlgState {
 impl BrentAlgState {
     fn new(hare: Addr) -> Self {
         BrentAlgState {
-            hare: hare.clone(),
+            hare: hare,
             tortoise: hare,
             power: 2,
             steps: 0,
@@ -89,7 +89,7 @@ impl BrentAlgState {
         if self.tortoise == self.hare {
             return Some(CycleSearchResult::NotList);
         } else if self.steps == self.power {
-            self.tortoise = self.hare.clone();
+            self.tortoise = self.hare;
             self.power <<= 1;
         }
 
@@ -144,7 +144,7 @@ impl MachineState {
             }
             Addr::PStrLocation(h, n) => {
                 match &self.heap[h] {
-                    HeapCellValue::PartialString(ref pstr) => {
+                    HeapCellValue::PartialString(ref pstr, _) => {
                         if let Some(c) = pstr.range_from(n ..).next() {
                             brent_st.step(Addr::PStrLocation(h, n + c.len_utf8()))
                         } else {
@@ -184,7 +184,7 @@ impl MachineState {
                 return CycleSearchResult::EmptyList;
             }
             Addr::Con(h) if max_steps > 0 => {
-                if let HeapCellValue::PartialString(_) = &self.heap[h] {
+                if let HeapCellValue::PartialString(..) = &self.heap[h] {
                     if !self.flags.double_quotes.is_atom() {
                         Addr::PStrLocation(h, 0)
                     } else {
@@ -195,7 +195,7 @@ impl MachineState {
                 }
             }
             Addr::Con(h) => {
-                if let HeapCellValue::PartialString(_) = &self.heap[h] {
+                if let HeapCellValue::PartialString(..) = &self.heap[h] {
                     if !self.flags.double_quotes.is_atom() {
                         return CycleSearchResult::UntouchedList(h);
                     }
@@ -235,7 +235,7 @@ impl MachineState {
                 Addr::PStrLocation(h, n)
             }
             Addr::Con(h) => {
-                if let HeapCellValue::PartialString(_) = &self.heap[h] {
+                if let HeapCellValue::PartialString(..) = &self.heap[h] {
                     if !self.flags.double_quotes.is_atom() {
                         Addr::PStrLocation(h, 0)
                     } else {
@@ -425,7 +425,7 @@ impl MachineState {
             &indices.op_dir,
         ) {
             Ok(term_write_result) => {
-                let a1 = self[temp_v!(1)].clone();
+                let a1 = self[temp_v!(1)];
                 self.unify(Addr::HeapCell(term_write_result.heap_loc), a1);
 
                 if self.fail {
@@ -447,7 +447,7 @@ impl MachineState {
                     list_of_var_eqs.push(Addr::Str(h));
                 }
 
-                let a2 = self[temp_v!(2)].clone();
+                let a2 = self[temp_v!(2)];
                 let list_offset =
                     Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
 
@@ -475,7 +475,7 @@ impl MachineState {
         self.block = self.b;
 
         let c = Constant::Usize(self.block);
-        let addr = self[r].clone();
+        let addr = self[r];
 
         self.write_constant_to_var(addr, &c);
         self.block
@@ -513,7 +513,7 @@ impl MachineState {
     where
         AddrConstr: Fn(usize) -> Addr,
     {
-        match self.store(self.deref(self[temp_v!(1)].clone())) {
+        match self.store(self.deref(self[temp_v!(1)])) {
             Addr::Usize(lh_offset) => {
                 if lh_offset >= self.lifted_heap.h() {
                     self.lifted_heap.truncate(lh_offset);
@@ -542,7 +542,7 @@ impl MachineState {
                         continue;
                     }
 
-                    let a2 = self[temp_v!(2)].clone();
+                    let a2 = self[temp_v!(2)];
 
                     if let Some(r) = a2.as_var() {
                         let spec = get_clause_spec(
@@ -578,7 +578,7 @@ impl MachineState {
 
                 match op_dir.range(key..).skip(1).next() {
                     Some((OrderedOpDirKey(name, _), (priority, spec))) => {
-                        let a2 = self[temp_v!(2)].clone();
+                        let a2 = self[temp_v!(2)];
 
                         if let Some(r) = a2.as_var() {
                             let addr = self.heap.to_unifiable(
@@ -627,7 +627,7 @@ impl MachineState {
         indices: &IndexStore,
         stub: MachineStub,
     ) -> CallResult {
-        let nx = self[temp_v!(2)].clone();
+        let nx = self[temp_v!(2)];
 
         if let Some(c) = string.chars().last() {
             if layout_char!(c) {
@@ -696,7 +696,7 @@ impl MachineState {
         self.term_dedup(&mut attr_goals);
 
         let attr_goals = Addr::HeapCell(self.heap.to_list(attr_goals.into_iter()));
-        let target = self[temp_v!(1)].clone();
+        let target = self[temp_v!(1)];
 
         self.unify(attr_goals, target);
     }
@@ -773,7 +773,7 @@ impl MachineState {
                 return Ok(());
             }
             &SystemClauseType::BindFromRegister => {
-                let reg = self.store(self.deref(self[temp_v!(2)].clone()));
+                let reg = self.store(self.deref(self[temp_v!(2)]));
                 let n = match reg {
                     Addr::Con(h) =>
                         if let HeapCellValue::Integer(ref n) = &self.heap[h] {
@@ -781,13 +781,15 @@ impl MachineState {
                         } else {
                             unreachable!()
                         }
-                    _ => unreachable!()
+                    _ => {
+                        unreachable!()
+                    }
                 };
 
                 if let Some(n) = n {
                     if n <= MAX_ARITY {
-                        let target = self[temp_v!(n)].clone();
-                        let addr   = self[temp_v!(1)].clone();
+                        let target = self[temp_v!(n)];
+                        let addr   = self[temp_v!(1)];
 
                         self.unify(addr, target);
                         return return_from_clause!(self.last_call, self);
@@ -843,7 +845,7 @@ impl MachineState {
                 }
             }
             &SystemClauseType::CurrentOutput => {
-                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+                let addr = self.store(self.deref(self[temp_v!(1)]));
                 let stream = current_output_stream.clone();
 
                 match addr {
@@ -879,7 +881,7 @@ impl MachineState {
                 }
             }
             &SystemClauseType::AtomChars => {
-                let a1 = self[temp_v!(1)].clone();
+                let a1 = self[temp_v!(1)];
 
                 match self.store(self.deref(a1)) {
                     Addr::Char(c) => {
@@ -890,7 +892,7 @@ impl MachineState {
                         self.unify(a2, list_of_chars);
                     }
                     Addr::Con(h) if self.heap.atom_at(h) => {
-	                if let HeapCellValue::Atom(name, _) = self.heap.clone(h) {
+	                    if let HeapCellValue::Atom(name, _) = self.heap.clone(h) {
                             let iter = name.as_str().chars().map(|c| Addr::Char(c));
                             let list_of_chars = Addr::HeapCell(self.heap.to_list(iter));
 
@@ -910,7 +912,7 @@ impl MachineState {
                         }
                     }
                     Addr::EmptyList => {
-                        let a2 = self[temp_v!(2)].clone();
+                        let a2 = self[temp_v!(2)];
                         let chars = vec![
                             Addr::Char('['),
                             Addr::Char(']'),
@@ -954,14 +956,14 @@ impl MachineState {
                 };
             }
             &SystemClauseType::AtomCodes => {
-                let a1 = self[temp_v!(1)].clone();
+                let a1 = self[temp_v!(1)];
 
                 match self.store(self.deref(a1)) {
                     Addr::Char(c) => {
                         let iter = once(Addr::CharCode(c as u32));
                         let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
 
-                        let a2 = self[temp_v!(2)].clone();
+                        let a2 = self[temp_v!(2)];
                         self.unify(a2, list_of_codes);
                     }
                     Addr::Con(h) if self.heap.atom_at(h) => {
@@ -1005,7 +1007,7 @@ impl MachineState {
                         ];
 
                         let list_of_codes = Addr::HeapCell(self.heap.to_list(chars.into_iter()));
-                        let a2 = self[temp_v!(2)].clone();
+                        let a2 = self[temp_v!(2)];
 
                         self.unify(a2, list_of_codes);
                     }
@@ -1170,7 +1172,7 @@ impl MachineState {
                 }
             }
             &SystemClauseType::IsPartialString => {
-                let pstr = self.store(self.deref(self[temp_v!(1)].clone()));
+                let pstr = self.store(self.deref(self[temp_v!(1)]));
 
                 match pstr {
                     Addr::PStrLocation(..) => {
@@ -1289,7 +1291,7 @@ impl MachineState {
                 return Ok(());
             }
             &SystemClauseType::LiftedHeapLength => {
-                let a1 = self[temp_v!(1)].clone();
+                let a1 = self[temp_v!(1)];
                 let lh_len = Addr::Usize(self.lifted_heap.h());
 
                 self.unify(a1, lh_len);
@@ -1350,7 +1352,7 @@ impl MachineState {
                 };
             }
             &SystemClauseType::CheckCutPoint => {
-                let addr = self.store(self.deref(self[temp_v!(1)].clone()));
+                let addr = self.store(self.deref(self[temp_v!(1)]));
 
                 match addr {
                     Addr::Usize(old_b) | Addr::CutPoint(old_b) => {
@@ -1400,7 +1402,7 @@ impl MachineState {
                 };
             }
             &SystemClauseType::FetchGlobalVarWithOffset => {
-                let key = self[temp_v!(1)].clone();
+                let key = self[temp_v!(1)];
 
                 let key = match self.store(self.deref(key)) {
                     Addr::Con(h) if self.heap.atom_at(h) => {
@@ -1428,7 +1430,7 @@ impl MachineState {
                         *offset = Some(h);
                     }
                     Some((_, Some(h))) => {
-                        let offset = self[temp_v!(3)].clone();
+                        let offset = self[temp_v!(3)];
 
                         self.unify(offset, Addr::Usize(*h));
 
@@ -1445,7 +1447,7 @@ impl MachineState {
                 let mut iter = parsing_stream(current_input_stream.clone());
                 let result = iter.next();
 
-                let a1 = self[temp_v!(1)].clone();
+                let a1 = self[temp_v!(1)];
 
                 match result {
                     Some(Ok(b)) => {
@@ -1559,7 +1561,7 @@ impl MachineState {
                 };
             }
             &SystemClauseType::HeadIsDynamic => {
-                let head = self[temp_v!(1)].clone();
+                let head = self[temp_v!(1)];
 
                 self.fail = !match self.store(self.deref(head)) {
                     Addr::Str(s) => match &self.heap[s] {
@@ -1595,7 +1597,7 @@ impl MachineState {
                         for addr in self.lifted_heap.iter_mut_from(old_threshold + 1) {
                             match addr {
                                 HeapCellValue::Addr(ref mut addr) => {
-                                    *addr -= self.heap.h() + lh_offset
+                                    *addr -= self.heap.h() + lh_offset;
                                 }
                                 _ => {}
                             }
@@ -2094,7 +2096,7 @@ impl MachineState {
                                 let iter = self.gather_attr_vars_created_since(b);
 
                                 let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
-                                let list_addr = self[temp_v!(2)].clone();
+                                let list_addr = self[temp_v!(2)];
 
                                 self.unify(var_list_addr, list_addr);
                             } else {
@@ -2416,7 +2418,7 @@ impl MachineState {
                                 ),
                             );
 
-                            let target = self[temp_v!(1)].clone();
+                            let target = self[temp_v!(1)];
 
                             self.unify(target, module);
                         }
@@ -2885,7 +2887,7 @@ impl MachineState {
                     ContinueResult::PrintWithMaxDepth => 'p',
                 };
 
-                let target = self[temp_v!(1)];                
+                let target = self[temp_v!(1)];
                 self.unify(Addr::Char(c), target);
             }
             &SystemClauseType::NextEP => {
@@ -3008,11 +3010,11 @@ impl MachineState {
                 self.reset_block(addr);
             }
             &SystemClauseType::ResetContinuationMarker => {
-                let h = self.heap.h();
-
                 self[temp_v!(3)] = self.heap.to_unifiable(
                     HeapCellValue::Atom(clause_name!("none"), None)
                 );
+
+                let h = self.heap.h();
 
                 self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
                 self[temp_v!(4)] = Addr::HeapCell(h);
@@ -3079,7 +3081,7 @@ impl MachineState {
                 let mut ball = Ball::new();
 
                 ball.boundary = self.heap.h();
-                
+
                 copy_term(
                     CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut ball.stub),
                     value,
@@ -3238,7 +3240,7 @@ impl MachineState {
                             h,
                             ExistenceError::Procedure(name, arity),
                         );
-                        
+
                         let err = self.error_form(err, stub);
 
                         self.throw_exception(err);
@@ -3262,7 +3264,7 @@ impl MachineState {
                 );
 
                 let listing = Addr::HeapCell(self.heap.to_list(functors.into_iter()));
-                let listing_var = self[temp_v!(3)].clone();
+                let listing_var = self[temp_v!(3)];
 
                 self.unify(listing, listing_var);
             }

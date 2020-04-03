@@ -1,11 +1,28 @@
+use core::marker::PhantomData;
+
 use std::alloc;
 use std::mem;
 use std::ptr;
-use std::ops::{Range, RangeFrom};
+use std::ops::RangeFrom;
+use std::slice;
 use std::str;
 
 pub struct PartialString {
     buf: *const u8,
+    len: usize,
+    _marker: PhantomData<[u8]>,
+}
+
+impl Drop for PartialString {
+    fn drop(&mut self) {
+        unsafe {
+            let layout = alloc::Layout::from_size_align_unchecked(self.len, mem::align_of::<u8>());
+            alloc::dealloc(self.buf as *mut u8, layout);
+
+            self.buf = ptr::null();
+            self.len = 0;
+        }
+    }
 }
 
 impl Clone for PartialString {
@@ -47,54 +64,31 @@ impl Iterator for PStrIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            let b = ptr::read(self.buf);
+            let mut byte_count = 0;
 
-            if b == 0u8 {
+            for n in 0 .. mem::size_of::<char>() {
+                let b = ptr::read((self.buf as usize + n) as *const u8);
+
+                if b == 0u8 {
+                    break;
+                } else {
+                    byte_count += 1;
+                }
+            }
+
+            if byte_count == 0 {
                 return None;
             }
 
-            let c = ptr::read(self.buf as *const char);
-            self.buf = self.buf.offset(c.len_utf8() as isize);
+            let slice = slice::from_raw_parts(self.buf, byte_count);
+            let s = str::from_utf8(slice).unwrap();
 
-            Some(c)
-        }
-    }
-}
-
-pub struct PStrIterBounded {
-    buf: *const u8,
-    end: *const u8,
-}
-
-impl PStrIterBounded {
-    #[inline]
-    fn from(buf: *const u8, start: usize, end: usize) -> Self {
-        PStrIterBounded {
-            buf: (buf as usize + start) as *const _,
-            end: (buf as usize + end) as *const _,
-        }
-    }
-}
-
-impl Iterator for PStrIterBounded {
-    type Item = char;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
-            if self.buf >= self.end {
-                return None;
+            if let Some(c) = s.chars().next() {
+                self.buf = self.buf.offset(c.len_utf8() as isize);
+                Some(c)
+            } else {
+                None
             }
-
-            let b = ptr::read(self.buf);
-
-            if b == 0u8 {
-                return None;
-            }
-
-            let c = ptr::read(self.buf as *const char);
-            self.buf = self.buf.offset(c.len_utf8() as isize);
-
-            Some(c)
         }
     }
 }
@@ -105,6 +99,8 @@ impl PartialString {
     fn new(src: &str) -> Option<(Self, &str)> {
         let pstr = PartialString {
             buf: ptr::null_mut(),
+            len: 0,
+            _marker: PhantomData,
         };
 
         unsafe {
@@ -116,7 +112,9 @@ impl PartialString {
     pub(super)
     fn empty() -> Self {
         PartialString {
-            buf: "\u{0}".as_bytes()[0] as *const _,
+            buf: &"\u{0}".as_bytes()[0] as *const _,
+            len: '\u{0}'.len_utf8(),
+            _marker: PhantomData,
         }
     }
 
@@ -128,11 +126,12 @@ impl PartialString {
         }
 
         let layout = alloc::Layout::from_size_align_unchecked(
-            src.len() + '\u{0}'.len_utf8(),
+            terminator_idx + '\u{0}'.len_utf8(),
             mem::align_of::<u8>(),
         );
 
         self.buf = alloc::alloc(layout) as *const _;
+        self.len = terminator_idx + '\u{0}'.len_utf8();
 
         ptr::copy(
             src.as_ptr(),
@@ -149,24 +148,17 @@ impl PartialString {
         })
     }
 
-    #[inline]
-    pub(crate)
-    fn iter(&self) -> PStrIter {
-        PStrIter {
-            buf: self.buf,
-        }
-    }
-
     pub(super)
     fn clone_from_offset(&self, n: usize) -> Self {
+        let len = if self.len > n { self.len - n } else { 0 };
+
         let mut pstr = PartialString {
             buf: ptr::null_mut(),
+            len: len + '\u{0}'.len_utf8(),
+            _marker: PhantomData,
         };
 
         unsafe {
-            let len = scan_for_terminator(self.range_from(0 ..));
-            let len = if len > n { len - n } else { 0 };
-
             let layout = alloc::Layout::from_size_align_unchecked(
                 len + '\u{0}'.len_utf8(),
                 mem::align_of::<u8>(),
@@ -197,11 +189,6 @@ impl PartialString {
                 0u8,
             );
         }
-    }
-
-    #[inline]
-    pub fn range(&self, index: Range<usize>) -> PStrIterBounded {
-        PStrIterBounded::from(self.buf, index.start, index.end)
     }
 
     #[inline]

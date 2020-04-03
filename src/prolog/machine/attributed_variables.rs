@@ -19,7 +19,8 @@ pub(super) struct AttrVarInitializer {
 }
 
 impl AttrVarInitializer {
-    pub(super) fn new(verify_attrs_loc: usize, project_attrs_loc: usize) -> Self {
+    pub(super)
+    fn new(verify_attrs_loc: usize, project_attrs_loc: usize) -> Self {
         AttrVarInitializer {
             attribute_goals: vec![],
             attr_var_queue: vec![],
@@ -32,21 +33,24 @@ impl AttrVarInitializer {
     }
 
     #[inline]
-    pub(super) fn reset(&mut self) {
-	self.attribute_goals.clear();
+    pub(super)
+    fn reset(&mut self) {
+	    self.attribute_goals.clear();
         self.attr_var_queue.clear();
         self.bindings.clear();
     }
 
     #[inline]
-    pub(super) fn backtrack(&mut self, queue_b: usize, bindings_b: usize) {
+    pub(super)
+    fn backtrack(&mut self, queue_b: usize, bindings_b: usize) {
         self.attr_var_queue.truncate(queue_b);
         self.bindings.truncate(bindings_b);
     }
 }
 
 impl MachineState {
-    pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: Addr) {
+    pub(super)
+    fn push_attr_var_binding(&mut self, h: usize, addr: Addr) {
         if self.attr_var_init.bindings.is_empty() {
             self.attr_var_init.instigating_p = self.p.local();
 
@@ -92,7 +96,8 @@ impl MachineState {
         self[temp_v!(2)] = value_list_addr;
     }
 
-    pub(super) fn gather_attr_vars_created_since(&self, b: usize) -> IntoIter<Addr> {
+    pub(super)
+    fn gather_attr_vars_created_since(&self, b: usize) -> IntoIter<Addr> {
         let mut attr_vars: Vec<_> = self.attr_var_init.attr_var_queue[b..]
             .iter()
             .filter_map(|h| match self.store(self.deref(Addr::HeapCell(*h))) {
@@ -109,7 +114,8 @@ impl MachineState {
         attr_vars.into_iter()
     }
 
-    pub(super) fn verify_attr_interrupt(&mut self, p: usize) {
+    pub(super)
+    fn verify_attr_interrupt(&mut self, p: usize) {
         self.allocate(self.num_of_args + 2);
 
         let e = self.e;

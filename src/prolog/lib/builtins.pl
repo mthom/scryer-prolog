@@ -262,8 +262,11 @@ univ_errors(Term, List, N) :-
 Term =.. List :- '$call_with_default_policy'(univ_errors(Term, List, N)),
 		 '$call_with_default_policy'(univ_worker(Term, List, N)).
 
+
 :- non_counted_backtracking univ_worker/3.
-univ_worker(Term, List, _) :- atomic(Term), !, '$call_with_default_policy'(List = [Term]).
+
+univ_worker(Term, List, _) :-
+    atomic(Term), !, '$call_with_default_policy'(List = [Term]).
 univ_worker(Term, [Name|Args], N) :-
     var(Term), !,
     '$call_with_default_policy'(Arity is N-1),
@@ -274,7 +277,9 @@ univ_worker(Term, List, _) :-
     '$call_with_default_policy'(get_args(Args, Term, 1, Arity)),
     '$call_with_default_policy'(List = [Name|Args]).
 
+
 :- non_counted_backtracking get_args/4.
+
 get_args(Args, _, _, 0) :-
     !, '$call_with_default_policy'(Args = []).
 get_args([Arg], Func, N, N) :-
@@ -287,19 +292,19 @@ get_args([Arg|Args], Func, I0, N) :-
 % write, write_canonical, writeq, write_term.
 is_write_option(Functor) :-
     Functor =.. [Name, Arg],
-    ( Arg == true -> true
-    ; Arg == false -> true
-    ; Name == variable_names -> must_be_var_names_list(Arg)
-    ; Name == max_depth -> integer(Arg), Arg >= 0
-    ; var(Arg) -> throw(error(instantiation_error, write_term/2))
-    ; throw(error(domain_error(write_option, Functor), write_term/2))
+    (  Arg == true -> true
+    ;  Arg == false -> true
+    ;  Name == variable_names -> must_be_var_names_list(Arg)
+    ;  Name == max_depth -> integer(Arg), Arg >= 0
+    ;  var(Arg) -> throw(error(instantiation_error, write_term/2))
+    ;  throw(error(domain_error(write_option, Functor), write_term/2))
     ), % 8.14.2.3 e)
-    ( Name == ignore_ops -> true
-    ; Name == quoted -> true
-    ; Name == numbervars -> true
-    ; Name == variable_names -> true
-    ; Name == max_depth -> true
-    ; throw(error(domain_error(write_option, Functor), write_term/2))
+    (  Name == ignore_ops -> true
+    ;  Name == quoted -> true
+    ;  Name == numbervars -> true
+    ;  Name == variable_names -> true
+    ;  Name == max_depth -> true
+    ;  throw(error(domain_error(write_option, Functor), write_term/2))
     ). % 8.14.2.3 e)
 
 inst_member_or([X|Xs], Y, Z) :-

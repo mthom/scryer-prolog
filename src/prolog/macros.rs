@@ -112,16 +112,6 @@ macro_rules! functor_term {
     (number($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
         $e.into()
     );
-    /*
-    (string($s:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => ({
-        let len: usize = $aux_lens.iter().sum();
-        let h = len + $arity + 1 + $addendum.h();
-
-        $addendum.allocate_pstr(&$s);
-
-        HeapCell::PStrLocation(h, 0)
-    });
-    */
     (integer($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
         HeapCellValue::Integer(Rc::new(Integer::from($e)))
     );
@@ -147,9 +137,6 @@ macro_rules! from_constant {
             }
             &Constant::CharCode(c) => {
                 HeapCellValue::Addr(Addr::CharCode(c))
-            }
-            &Constant::CutPoint(cp) => {
-                HeapCellValue::Addr(Addr::CutPoint(cp))
             }
             &Constant::Integer(ref n) => {
                 HeapCellValue::Integer(n.clone())

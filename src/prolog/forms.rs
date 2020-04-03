@@ -282,9 +282,9 @@ impl ClauseConsistency for Rule {
     fn name_and_module(&self) -> Option<(ClauseName, ClauseName)> {
         Some((self.head.0.owning_module(), self.head.0.clone()))
     }
-    
+
     fn arity(&self) -> usize {
-        self.head.1.len()    
+        self.head.1.len()
     }
 }
 
@@ -597,7 +597,7 @@ impl Into<HeapCellValue> for Number {
     }
 }
 
-impl Number {    
+impl Number {
     #[inline]
     pub fn is_positive(&self) -> bool {
         match self {

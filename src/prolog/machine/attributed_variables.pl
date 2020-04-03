@@ -21,13 +21,13 @@ call_verify_attributes(Attrs, _, _, []) :-
 call_verify_attributes([], _, _, []).
 call_verify_attributes([Attr|Attrs], Var, Value, ListOfGoalLists) :-
     gather_modules([Attr|Attrs], Modules0),
-    sort(Modules0, Modules),    
+    sort(Modules0, Modules),
     verify_attrs(Modules, Var, Value, ListOfGoalLists).
 
 verify_attrs([Module|Modules], Var, Value, [Goals|ListOfGoalLists]) :-
     catch(Module:verify_attributes(Var, Value, Goals),
           error(evaluation_error((Module:verify_attributes)/3), verify_attributes/3),
-          Goals = []),    
+          Goals = []),
     verify_attrs(Modules, Var, Value, ListOfGoalLists).
 verify_attrs([], _, _, []).
 

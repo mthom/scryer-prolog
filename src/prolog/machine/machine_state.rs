@@ -14,10 +14,104 @@ use crate::prolog::rug::Integer;
 
 use downcast::Any;
 
+use indexmap::IndexSet;
+
 use std::cmp::Ordering;
 use std::io::Write;
 use std::mem;
 use std::ops::{Index, IndexMut};
+
+pub(crate)
+struct HeapPStrIter<'a> {
+    focus: Addr,
+    machine_st: &'a MachineState,
+    seen: IndexSet<Addr>,
+}
+
+impl<'a> HeapPStrIter<'a> {
+    #[inline]
+    fn new(machine_st: &'a MachineState, focus: Addr) -> Self {
+        HeapPStrIter {
+            focus,
+            machine_st,
+            seen: IndexSet::new(),
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn focus(&'a self) -> Addr {
+        self.focus
+    }
+}
+
+impl<'a> Iterator for HeapPStrIter<'a> {
+    type Item = Option<char>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let addr = self.machine_st.store(self.machine_st.deref(self.focus));
+
+        if !self.seen.contains(&addr) {
+            self.seen.insert(addr);
+        } else {
+            return None;
+        }
+        
+        match addr {
+            Addr::PStrLocation(h, n) => {
+                if let &HeapCellValue::PartialString(ref pstr, _) = &self.machine_st.heap[h] {
+                    if let Some(c) = pstr.range_from(n ..).next() {
+                        self.focus = Addr::PStrLocation(h, n + c.len_utf8());
+                        return Some(Some(c));
+                    } else {
+                        unreachable!()
+                    }
+                } else {
+                    unreachable!()
+                }
+            }
+            Addr::Lis(l) => {
+                let addr = self.machine_st.store(self.machine_st.deref(Addr::HeapCell(l)));
+                
+                if let Addr::Char(c) = addr {
+                    self.focus = Addr::HeapCell(l + 1);
+                    return Some(Some(c));
+                } else {
+                    return None;
+                }
+            }
+            Addr::EmptyList => {
+                self.focus = Addr::EmptyList;
+                return Some(None);
+            }
+            _ => {
+                return None;
+            }
+        }
+    }
+}
+
+#[inline]
+pub(super)
+fn compare_pstr<'a>(
+    pstr_iter: HeapPStrIter<'a>,
+    mut c_iter: impl Iterator<Item = char>,
+) -> bool {    
+    for opt_c in pstr_iter {
+        match opt_c {
+            Some(_) => {
+                if opt_c != c_iter.next() {
+                    return false;
+                }
+            }
+            None => {
+                return c_iter.next().is_none();
+            }
+        }
+    }
+
+    false
+}
 
 pub struct Ball {
     pub(super) boundary: usize,
@@ -185,7 +279,7 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
                 self.stub[index].as_addr(h)
             }
             Addr::StackCell(fr, sc) => {
-                self.stack.index_and_frame(fr)[sc].clone()
+                self.stack.index_and_frame(fr)[sc]
             }
             addr => {
                 addr
@@ -195,7 +289,7 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
 
     fn deref(&self, mut addr: Addr) -> Addr {
         loop {
-            let value = self.store(addr.clone());
+            let value = self.store(addr);
 
             if value.is_ref() && value != addr {
                 addr = value;
@@ -264,11 +358,13 @@ impl HeapPtr {
                 Addr::HeapCell(h)
             }
             &HeapPtr::PStrChar(h, n) => {
-                if let HeapCellValue::PartialString(ref pstr) = &heap[h] {
+                if let &HeapCellValue::PartialString(ref pstr, has_tail) = &heap[h] {
                     if let Some(c) = pstr.range_from(n ..).next() {
                         Addr::Char(c)
-                    } else {
+                    } else if has_tail {
                         Addr::HeapCell(h + 1)
+                    } else {
+                        Addr::EmptyList
                     }
                 } else {
                     unreachable!()
@@ -315,13 +411,19 @@ pub struct MachineState {
 }
 
 impl MachineState {
+    #[inline]
+    pub(crate)
+    fn heap_pstr_iter<'a>(&'a self, focus: Addr) -> HeapPStrIter<'a> {
+        HeapPStrIter::new(self, focus)
+    }
+
     pub(super)
     fn try_char_list(&self, addrs: Vec<Addr>) -> Result<String, MachineError> {
         let mut chars = String::new();
         let mut iter = addrs.iter();
 
         while let Some(addr) = iter.next() {
-            let addr = self.store(self.deref(addr.clone()));
+            let addr = self.store(self.deref(*addr));
 
             match addr {
                 Addr::Char(c) => {
@@ -480,7 +582,7 @@ pub(crate) trait CallPolicy: Any {
         let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
 
         for i in 1 .. n + 1 {
-            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1].clone();
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1];
         }
 
         machine_st.num_of_args = n;
@@ -519,7 +621,7 @@ pub(crate) trait CallPolicy: Any {
         let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
 
         for i in 1 .. n + 1 {
-            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1].clone();
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1];
         }
 
         machine_st.num_of_args = n;
@@ -555,7 +657,7 @@ pub(crate) trait CallPolicy: Any {
         let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
 
         for i in 1 .. n + 1 {
-            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1].clone();
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1];
         }
 
         machine_st.num_of_args = n;
@@ -595,7 +697,7 @@ pub(crate) trait CallPolicy: Any {
         let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
 
         for i in 1 .. n + 1 {
-            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1].clone();
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1];
         }
 
         machine_st.num_of_args = n;
@@ -717,7 +819,7 @@ pub(crate) trait CallPolicy: Any {
     ) -> CallResult {
         match ct {
             &BuiltInClauseType::AcyclicTerm => {
-                let addr = machine_st[temp_v!(1)].clone();
+                let addr = machine_st[temp_v!(1)];
                 machine_st.fail = machine_st.is_cyclic_term(addr);
                 return_from_clause!(machine_st.last_call, machine_st)
             }
@@ -726,9 +828,9 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Compare => {
-                let a1 = machine_st[temp_v!(1)].clone();
-                let a2 = machine_st[temp_v!(2)].clone();
-                let a3 = machine_st[temp_v!(3)].clone();
+                let a1 = machine_st[temp_v!(1)];
+                let a2 = machine_st[temp_v!(2)];
+                let a3 = machine_st[temp_v!(3)];
 
                 let atom = match machine_st.compare_term_test(&a2, &a3) {
                     Some(Ordering::Greater) => {
@@ -769,7 +871,7 @@ pub(crate) trait CallPolicy: Any {
                     &indices.op_dir,
                 ) {
                     Ok(offset) => {
-                        let addr = machine_st[temp_v!(1)].clone();
+                        let addr = machine_st[temp_v!(1)];
                         machine_st.unify(addr, Addr::HeapCell(offset.heap_loc));
                     }
                     Err(e) => {
@@ -789,8 +891,8 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Eq => {
-                let a1 = machine_st[temp_v!(1)].clone();
-                let a2 = machine_st[temp_v!(2)].clone();
+                let a1 = machine_st[temp_v!(1)];
+                let a2 = machine_st[temp_v!(2)];
 
                 machine_st.fail = machine_st.eq_test(a1, a2);
                 return_from_clause!(machine_st.last_call, machine_st)
@@ -804,8 +906,8 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::NotEq => {
-                let a1 = machine_st[temp_v!(1)].clone();
-                let a2 = machine_st[temp_v!(2)].clone();
+                let a1 = machine_st[temp_v!(1)];
+                let a2 = machine_st[temp_v!(2)];
 
                 machine_st.fail =
                     if let Some(Ordering::Equal) = machine_st.compare_term_test(&a1, &a2) {
@@ -830,7 +932,7 @@ pub(crate) trait CallPolicy: Any {
 
                 let heap_addr = Addr::HeapCell(machine_st.heap.to_list(list.into_iter()));
 
-                let r2 = machine_st[temp_v!(2)].clone();
+                let r2 = machine_st[temp_v!(2)];
                 machine_st.unify(r2, heap_addr);
 
                 return_from_clause!(machine_st.last_call, machine_st)
@@ -854,13 +956,13 @@ pub(crate) trait CallPolicy: Any {
                 let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
                 let heap_addr = Addr::HeapCell(machine_st.heap.to_list(key_pairs));
 
-                let r2 = machine_st[temp_v!(2)].clone();
+                let r2 = machine_st[temp_v!(2)];
                 machine_st.unify(r2, heap_addr);
 
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Is(r, ref at) => {
-                let a1 = machine_st[r].clone();
+                let a1 = machine_st[r];
                 let n2 = machine_st.get_number(at)?;
 
                 let n2 = Addr::Con(machine_st.heap.push(n2.into()));
@@ -1142,13 +1244,13 @@ fn cut_body(machine_st: &mut MachineState, addr: &Addr) -> bool {
 pub(crate) struct DefaultCutPolicy {}
 
 pub(super) fn deref_cut(machine_st: &mut MachineState, r: RegType) {
-    let addr = machine_st.store(machine_st.deref(machine_st[r].clone()));
+    let addr = machine_st.store(machine_st.deref(machine_st[r]));
     cut_body(machine_st, &addr);
 }
 
 impl CutPolicy for DefaultCutPolicy {
     fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool {
-        let addr = machine_st[r].clone();
+        let addr = machine_st[r];
         cut_body(machine_st, &addr)
     }
 }
@@ -1209,7 +1311,7 @@ impl CutPolicy for SCCCutPolicy {
     fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool {
         let b = machine_st.b;
 
-        match machine_st[r].clone() {
+        match machine_st[r] {
             Addr::Usize(b0) | Addr::CutPoint(b0) => {
                 if b > b0 {
                     machine_st.b = b0;

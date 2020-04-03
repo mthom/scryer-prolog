@@ -187,7 +187,7 @@ trie_insert_1_1_1(>,_V,_L,R,Assoc,FunctorData,Trie,First,Rest,Value) :-
   % Look in the right part of the assoc tree.
   trie_insert_1_1(R,Assoc,FunctorData,Trie,First,Rest,Value).
 
-trie_insert_2(RegularTerm,Rest,Trie,Value) :-  
+trie_insert_2(RegularTerm,Rest,Trie,Value) :-
   p_trie_arity_univ(RegularTerm,FunctorData,KList),
   append(KList,Rest,KList2),
   trie_insert_1(KList2,FunctorData,Trie,Value).

@@ -482,7 +482,7 @@ impl FactInstruction {
                 
                 functor!(
                     "get_constant",
-                    [aux(h, 0), constant(c), aux(h, 1)],
+                    [aux(h, 0), constant(h, c), aux(h, 1)],
                     [lvl_stub, rt_stub]
                 )
             }
@@ -524,7 +524,7 @@ impl FactInstruction {
                 )
             }
             &FactInstruction::UnifyConstant(ref c) => {
-                functor!("unify_constant", [constant(c)], [])
+                functor!("unify_constant", [constant(h, c)], [])
             }
             &FactInstruction::UnifyLocalValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
@@ -589,7 +589,7 @@ impl QueryInstruction {
 
                 functor!(
                     "put_constant",
-                    [aux(h, 0), constant(c), aux(h, 1)],
+                    [aux(h, 0), constant(h, c), aux(h, 1)],
                     [lvl_stub, rt_stub]
                 )
             }
@@ -640,7 +640,7 @@ impl QueryInstruction {
                 )
             }
             &QueryInstruction::SetConstant(ref c) => {
-                functor!("set_constant", [constant(c)], [])
+                functor!("set_constant", [constant(h, c)], [])
             }
             &QueryInstruction::SetLocalValue(r) => {
                 let rt_stub = reg_type_into_functor(r);

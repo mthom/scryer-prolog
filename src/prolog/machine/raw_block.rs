@@ -5,7 +5,7 @@ use std::mem;
 use std::ptr;
 
 pub(crate) trait RawBlockTraits {
-    fn init_size() -> usize;    
+    fn init_size() -> usize;
     fn align() -> usize;
 
     #[inline]
@@ -31,20 +31,6 @@ impl<T: RawBlockTraits> RawBlock<T> {
 
         unsafe {
             block.grow();
-        }
-
-        block
-    }
-
-    pub(crate)
-    fn with_capacity(cap: usize) -> Self {
-        let mut block = RawBlock { size: 0,
-                                   base: ptr::null(),
-                                   top: ptr::null(),
-                                   _marker: PhantomData };
-
-        unsafe {
-            block.init_at_size(cap);
         }
 
         block
@@ -85,7 +71,6 @@ impl<T: RawBlockTraits> RawBlock<T> {
     fn take(&mut self) -> Self {
         mem::replace(self, Self::empty_block())
     }
-
 
     #[inline]
     fn free_space(&self) -> usize {

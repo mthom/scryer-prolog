@@ -153,7 +153,8 @@ pub struct TermWriteResult {
     pub(crate) var_dict: HeapVarDict,
 }
 
-pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteResult {
+pub(crate)
+fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteResult {
     let heap_loc = machine_st.heap.h();
 
     let mut queue = SubtermDeque::new();
@@ -188,13 +189,13 @@ pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> 
                     continue;
                 }
             }
-            &TermRef::AnonVar(Level::Root) | &TermRef::Constant(Level::Root, ..) => {
-                let value = HeapCellValue::Addr(term.as_addr(&mut machine_st.heap, h));
-                machine_st.heap.push(value);
-            }
-            &TermRef::Var(Level::Root, ..) => {
-                let value = HeapCellValue::Addr(term.as_addr(&mut machine_st.heap, h));
-                machine_st.heap.push(value);
+            &TermRef::AnonVar(Level::Root) | &TermRef::Constant(Level::Root, ..)
+          | &TermRef::Var(Level::Root, ..) => {
+                let addr = term.as_addr(&mut machine_st.heap, h);
+
+                if !addr.is_heap_bound() {
+                    machine_st.heap.push(HeapCellValue::Addr(addr));
+                }
             }
             &TermRef::AnonVar(_) => {
                 if let Some((arity, site_h)) = queue.pop_front() {

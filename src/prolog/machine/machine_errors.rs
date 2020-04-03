@@ -222,7 +222,7 @@ impl MachineError {
                     SharedOpDesc::new(400, YFX),
                     [clause_name(name), integer(arity)]
                 );
-                
+
                 let stub = functor!(
                     "existence_error",
                     [atom("procedure"), aux(h, 0)],
@@ -286,7 +286,7 @@ impl MachineError {
     fn domain_error<T: DomainError>(error: DomainErrorType, culprit: T) -> Self {
         culprit.domain_error(error)
     }
-    
+
     pub(super)
     fn instantiation_error() -> Self {
         let stub = functor!("instantiation_error");
@@ -352,7 +352,7 @@ impl MachineError {
 
         let location = err.line_and_col_num();
         let stub = functor!(err.as_str());
-        
+
         let stub = functor!(
             "syntax_error",
             [aux(h, 0)],
@@ -608,7 +608,7 @@ impl MachineState {
     pub(super)
     fn check_keysort_errors(&self) -> CallResult {
         let stub = MachineError::functor_stub(clause_name!("keysort"), 2);
-        
+
         let pairs  = self.store(self.deref(self[temp_v!(1)].clone()));
         let sorted = self.store(self.deref(self[temp_v!(2)].clone()));
 

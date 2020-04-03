@@ -235,7 +235,7 @@ impl<'a> TermStream<'a> {
 
         while let Some(term) = self.stack.pop() {
             match machine_st.try_expand_term(self.wam, &term, CompileTimeHook::TermExpansion) {
-                Some(term_string) => {                        
+                Some(term_string) => {
                     let term = self.parse_expansion_output(term_string.as_str(), op_dir)?;
                     self.enqueue_term(term)?;
                 }
@@ -247,7 +247,7 @@ impl<'a> TermStream<'a> {
 
         unreachable!()
     }
-    
+
     pub fn read_term(&mut self, op_dir: &OpDir) -> Result<Term, ParserError> {
         loop {
             if let Some(term) = self.stack.pop() {
@@ -304,7 +304,8 @@ impl<'a> TermStream<'a> {
 }
 
 impl MachineState {
-    pub(super) fn print_with_locs(&self, addr: Addr, op_dir: &OpDir) -> PrinterOutputter {
+    pub(super)
+    fn print_with_locs(&self, addr: Addr, op_dir: &OpDir) -> PrinterOutputter {
         let output = PrinterOutputter::new();
         let mut printer = HCPrinter::from_heap_locs(&self, op_dir, output);
         let mut max_var_length = 0;
@@ -315,12 +316,14 @@ impl MachineState {
 
         printer.quoted = true;
         printer.numbervars = true;
-        
-        // the purpose of the offset is to avoid clashes with variable names that might
-        // occur after the addresses in the expanded term are substituted with the variable
-        // names in the pre-expansion term. This formula ensures that all generated "numbervars"-
-        // style variable names will be longer than the keys of the var_dict, and therefore
-        // not equal to any of them.
+
+        // the purpose of the offset is to avoid clashes with variable
+        // names that might occur after the addresses in the expanded
+        // term are substituted with the variable names in the
+        // pre-expansion term. This formula ensures that all generated
+        // "numbervars"- style variable names will be longer than the
+        // keys of the var_dict, and therefore not equal to any of
+        // them.
         printer.numbervars_offset = Integer::from(10).pow(max_var_length as u32) * 26;
         printer.print_strings_as_strs = true;
         printer.drop_toplevel_spec();
@@ -334,8 +337,8 @@ impl MachineState {
     }
 
     // reset the machine, but keep the heap contents as they were.
-    // this prevents clashes between underscored variable names
-    // in the same query.
+    // this prevents clashes between underscored variable names in the
+    // same query.
     fn reset_with_heap_preservation(&mut self) {
         let heap = self.heap.take();
         self.reset();
@@ -359,7 +362,9 @@ impl MachineState {
         wam.code_repo.cached_query = code;
 
         self.cp = LocalCodePtr::TopLevel(0, 0);
+        
         self.at_end_of_expansion = false;
+        self.flags.double_quotes = DoubleQuotes::Chars;
 
         self.query_stepper(
             &mut wam.indices,

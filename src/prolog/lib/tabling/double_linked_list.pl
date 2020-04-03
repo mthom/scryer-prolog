@@ -208,4 +208,3 @@ dll_get_reverse_contents_(List, Contents) :-
        dll_get_pointer_to_previous(List, Prev),
        dll_get_reverse_contents_(Prev, Rest)
     ).
-

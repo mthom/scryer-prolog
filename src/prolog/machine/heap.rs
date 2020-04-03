@@ -39,12 +39,12 @@ impl<T: RawBlockTraits> Drop for HeapTemplate<T> {
 }
 
 pub(crate)
-struct HeapIntoIterator<T: RawBlockTraits> {
+struct HeapIntoIter<T: RawBlockTraits> {
     offset: usize,
     buf: RawBlock<T>,
 }
 
-impl<T: RawBlockTraits> Drop for HeapIntoIterator<T> {
+impl<T: RawBlockTraits> Drop for HeapIntoIter<T> {
     fn drop(&mut self) {
         let mut heap =
             HeapTemplate { buf: self.buf.take(), _marker: PhantomData };
@@ -54,7 +54,7 @@ impl<T: RawBlockTraits> Drop for HeapIntoIterator<T> {
     }
 }
 
-impl<T: RawBlockTraits> Iterator for HeapIntoIterator<T> {
+impl<T: RawBlockTraits> Iterator for HeapIntoIter<T> {
     type Item = HeapCellValue;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -72,19 +72,19 @@ impl<T: RawBlockTraits> Iterator for HeapIntoIterator<T> {
 }
 
 pub(crate)
-struct HeapIterator<'a, T: RawBlockTraits> {
+struct HeapIter<'a, T: RawBlockTraits> {
     offset: usize,
     buf: &'a RawBlock<T>,
 }
 
-impl<'a, T: RawBlockTraits> HeapIterator<'a, T> {
+impl<'a, T: RawBlockTraits> HeapIter<'a, T> {
     pub(crate)
     fn new(buf: &'a RawBlock<T>, offset: usize) -> Self {
-        HeapIterator { buf, offset }
+        HeapIter { buf, offset }
     }
 }
 
-impl<'a, T: RawBlockTraits> Iterator for HeapIterator<'a, T> {
+impl<'a, T: RawBlockTraits> Iterator for HeapIter<'a, T> {
     type Item = &'a HeapCellValue;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -101,20 +101,28 @@ impl<'a, T: RawBlockTraits> Iterator for HeapIterator<'a, T> {
     }
 }
 
+#[allow(dead_code)]
 pub(crate)
-struct HeapIteratorMut<'a, T: RawBlockTraits> {
+fn print_heap_terms<'a, I: Iterator<Item = &'a HeapCellValue>>(heap: I, h: usize) {
+    for (index, term) in heap.enumerate() {
+        println!("{} : {}", h + index, term);
+    }
+}
+
+pub(crate)
+struct HeapIterMut<'a, T: RawBlockTraits> {
     offset: usize,
     buf: &'a mut RawBlock<T>,
 }
 
-impl<'a, T: RawBlockTraits> HeapIteratorMut<'a, T> {
+impl<'a, T: RawBlockTraits> HeapIterMut<'a, T> {
     pub(crate)
     fn new(buf: &'a mut RawBlock<T>, offset: usize) -> Self {
-        HeapIteratorMut { buf, offset }
+        HeapIterMut { buf, offset }
     }
 }
 
-impl<'a, T: RawBlockTraits> Iterator for HeapIteratorMut<'a, T> {
+impl<'a, T: RawBlockTraits> Iterator for HeapIterMut<'a, T> {
     type Item = &'a mut HeapCellValue;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -160,12 +168,21 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             &HeapCellValue::Rational(ref r) => {
                 HeapCellValue::Rational(r.clone())
             }
-            &HeapCellValue::PartialString(_) => {
+            &HeapCellValue::PartialString(..) => {
                 HeapCellValue::Addr(Addr::PStrLocation(h, 0))
             }
             &HeapCellValue::Stream(_) => {
                 HeapCellValue::Addr(Addr::Stream(h))
             }
+        }
+    }
+
+    #[inline]
+    fn pop(&mut self) {
+        let h = self.h();
+
+        if h > 0 {
+            self.truncate(h - 1);
         }
     }
 
@@ -177,40 +194,45 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
                 Addr::Con(self.push(HeapCellValue::Atom(name, op)))
             }
             Constant::Char(c) => {
-                self.push(HeapCellValue::Addr(Addr::Char(c)));
                 Addr::Char(c)
             }
             Constant::CharCode(c) => {
-                self.push(HeapCellValue::Addr(Addr::CharCode(c)));
                 Addr::CharCode(c)
             }
-            Constant::CutPoint(cp) => {
-                self.push(HeapCellValue::Addr(Addr::CutPoint(cp)));
-                Addr::CutPoint(cp)
-            }
             Constant::EmptyList => {
-                self.push(HeapCellValue::Addr(Addr::EmptyList));
                 Addr::EmptyList
             }
             Constant::Integer(n) => {
-                Addr::Con(self.push(HeapCellValue::Integer(n)))                
+                Addr::Con(self.push(HeapCellValue::Integer(n)))
             }
             Constant::Rational(r) => {
                 Addr::Con(self.push(HeapCellValue::Rational(r)))
             }
             Constant::Float(f) => {
-                self.push(HeapCellValue::Addr(Addr::Float(f)));
                 Addr::Float(f)
             }
             Constant::String(s) => {
-                let addr = self.allocate_pstr(&s);
-                let h = self.h();
-                
-                self[h - 1] = HeapCellValue::Addr(Addr::EmptyList);
-                addr
+                if s.is_empty() {
+                    Addr::EmptyList
+                } else {
+                    let addr = self.allocate_pstr(&s);
+                    self.pop();
+
+                    let h = self.h();
+
+                    match &mut self[h - 1] {
+                        &mut HeapCellValue::PartialString(_, ref mut has_tail) => {
+                            *has_tail = false;
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    }
+
+                    addr
+                }
             }
             Constant::Usize(n) => {
-                self.push(HeapCellValue::Addr(Addr::Usize(n)));
                 Addr::Usize(n)
             }
         }
@@ -239,7 +261,7 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             false
         }
     }
-    
+
     #[inline]
     pub(crate)
     fn integer_at(&self, h: usize) -> bool {
@@ -279,9 +301,12 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             val @ HeapCellValue::Stream(..) => {
                 Addr::Stream(self.push(val))
             }
-            val @ HeapCellValue::PartialString(_) => {
-                let h = self.push(val);
-                self.push(HeapCellValue::Addr(Addr::EmptyList));
+            HeapCellValue::PartialString(pstr, has_tail) => {
+                let h = self.push(HeapCellValue::PartialString(pstr, has_tail));
+
+                if has_tail {
+                    self.push(HeapCellValue::Addr(Addr::EmptyList));
+                }
 
                 Addr::Con(h)
             }
@@ -296,7 +321,8 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
                 let h = self.h();
 
                 self.push(HeapCellValue::PartialString(
-                    PartialString::empty()
+                    PartialString::empty(),
+                    true,
                 ));
 
                 self.push(HeapCellValue::Addr(
@@ -343,7 +369,7 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
                     }
                 };
 
-            self.push(HeapCellValue::PartialString(pstr));
+            self.push(HeapCellValue::PartialString(pstr, true));
 
             if rest_src != "" {
                 self.push(HeapCellValue::Addr(Addr::PStrLocation(h + 2, 0)));
@@ -414,7 +440,7 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             self.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
             self.push(value);
 
-            h += mem::size_of::<HeapCellValue>() * 2;
+            h += 2;
         }
 
         self.push(HeapCellValue::Addr(Addr::EmptyList));
@@ -424,18 +450,18 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
 
     /* Create an iterator starting from the passed offset. */
     pub(crate)
-    fn iter_from<'a>(&'a self, offset: usize) -> HeapIterator<'a, T> {
-        HeapIterator::new(&self.buf, offset * mem::size_of::<HeapCellValue>())
+    fn iter_from<'a>(&'a self, offset: usize) -> HeapIter<'a, T> {
+        HeapIter::new(&self.buf, offset * mem::size_of::<HeapCellValue>())
     }
 
     pub(crate)
-    fn iter_mut_from<'a>(&'a mut self, offset: usize) -> HeapIteratorMut<'a, T> {
-        HeapIteratorMut::new(&mut self.buf, offset * mem::size_of::<HeapCellValue>())
+    fn iter_mut_from<'a>(&'a mut self, offset: usize) -> HeapIterMut<'a, T> {
+        HeapIterMut::new(&mut self.buf, offset * mem::size_of::<HeapCellValue>())
     }
 
     pub(crate)
-    fn into_iter(mut self) -> HeapIntoIterator<T> {
-        HeapIntoIterator { buf: self.buf.take(), offset: 0 }
+    fn into_iter(mut self) -> HeapIntoIter<T> {
+        HeapIntoIter { buf: self.buf.take(), offset: 0 }
     }
 
     pub(crate)

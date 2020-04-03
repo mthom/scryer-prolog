@@ -135,7 +135,7 @@ activate(Wrapper,Worker,T) :-
 
 delim(Wrapper,Worker,Table) :-
 %   debug(tabling, 'ACT: ~p on ~p', [Wrapper, Table]),
-   reset(Worker,SourceCall,Continuation),
+    reset(Worker,SourceCall,Continuation),
    ( Continuation == none, var(SourceCall) ->
      (	 add_answer(Table,Wrapper)
      ->	 true %debug(tabling, 'ADD: ~p', [Wrapper])
@@ -144,9 +144,9 @@ delim(Wrapper,Worker,Table) :-
      )
    ;
      (   Continuation = cont(Cont) ->
-	 true
+	     true
      ;   Continuation = none ->
-	 Cont = true
+	     Cont = true
      ),
      SourceCall = call_info(_,SourceTable),
      TargetCall = call_info(Wrapper,Table),
@@ -178,7 +178,7 @@ completion_step(SourceTableID) :-
     fail
   ;
     true
-  ).  
+  ).
 
 table_get_work(NBWorklistID,Answer,Dependency) :-
   % get_worklist(Table, Worklist),
@@ -192,7 +192,7 @@ table_get_work(NBWorklistID,Answer,Dependency) :-
 table_get_work_(NBWorklistID,Answer,Dependency) :-
   worklist_do_all_work(NBWorklistID,Answer,Dependency0), % This will eventually fail
   copy_term(Dependency0,Dependency).
-  
+
 table_get_work_(NBWorklistID,_Answer,_Dependency) :-
   bb_get(NBWorklistID, table_nb_worklist(Worklist)),
   unset_flag_executing_all_work(Worklist),

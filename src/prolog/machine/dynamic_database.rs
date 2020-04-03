@@ -51,13 +51,19 @@ impl Machine {
         };
 
         let arity = match self.machine_st.store(self.machine_st.deref(arity)) {
-            Addr::Con(h) =>
+            Addr::Con(h) => {
                 if let HeapCellValue::Integer(ref arity) = &self.machine_st.heap[h] {
                     arity.to_usize().unwrap()
                 } else {
                     unreachable!()
-                },
-            _ => unreachable!(),
+                }
+            }
+            Addr::Usize(n) => {
+                n
+            }
+            _ => {
+                unreachable!()
+            }
         };
 
         (name, arity)
