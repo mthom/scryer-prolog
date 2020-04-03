@@ -1,7 +1,6 @@
 extern crate crossterm;
 #[macro_use]
 extern crate downcast;
-extern crate git_version;
 extern crate indexmap;
 #[macro_use]
 extern crate lazy_static;
@@ -12,7 +11,6 @@ extern crate prolog_parser;
 #[macro_use]
 extern crate ref_thread_local;
 
-use git_version::git_version;
 use nix::sys::signal;
 
 mod prolog;
@@ -36,7 +34,7 @@ fn main() {
     unsafe { signal::signal(signal::Signal::SIGINT, handler) }.unwrap();
 
     if env::args().skip(1).any(|a| a == "-v" || a == "--version") {
-        println!("{:}", git_version!());
+        println!("{:}", env!("CARGO_PKG_VERSION"));
         return;
     }
 
