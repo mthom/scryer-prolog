@@ -111,11 +111,25 @@ impl PartialString {
     #[inline]
     pub(super)
     fn empty() -> Self {
-        PartialString {
-            buf: &"\u{0}".as_bytes()[0] as *const _,
-            len: '\u{0}'.len_utf8(),
+        let mut pstr = PartialString {
+            buf: ptr::null(),
+            len: 0,
             _marker: PhantomData,
+        };
+
+        unsafe {
+            let layout = alloc::Layout::from_size_align_unchecked(
+                '\u{0}'.len_utf8(),
+                mem::align_of::<u8>(),
+            );
+
+            pstr.buf = alloc::alloc(layout) as *const _;
+            pstr.len = '\u{0}'.len_utf8();
+
+            pstr.write_terminator_at(0);
         }
+
+        pstr
     }
 
     unsafe fn append_chars(mut self, src: &str) -> Option<(Self, &str)> {
