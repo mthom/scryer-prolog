@@ -53,13 +53,27 @@ impl<T: CopierTarget> CopyTermState<T> {
         &mut self.target[scan]
     }
 
-    fn copy_list(&mut self, addr: usize) {
-        if let Addr::Lis(h) = self.target[addr + 1].as_addr(addr + 1) {
-            if h >= self.old_h {
-                *self.value_at_scan() = HeapCellValue::Addr(Addr::Lis(h));
-                self.scan += 1;
+    fn trail_list_cell(&mut self, addr: usize, threshold: usize) {
+        let trail_item = mem::replace(
+            &mut self.target[addr],
+            HeapCellValue::Addr(Addr::Lis(threshold)),
+        );
 
-                return;
+        self.trail.push((
+            Ref::HeapCell(addr),
+            trail_item,
+        ));
+    }
+
+    fn copy_list(&mut self, addr: usize) {
+        for offset in 0 .. 2 {
+            if let Addr::Lis(h) = self.target[addr + offset].as_addr(addr + offset) {
+                if h >= self.old_h {
+                    *self.value_at_scan() = HeapCellValue::Addr(Addr::Lis(h));
+                    self.scan += 1;
+
+                    return;
+                }
             }
         }
 
@@ -74,15 +88,14 @@ impl<T: CopierTarget> CopyTermState<T> {
 
         let cdr = self.target.store(self.target.deref(Addr::HeapCell(addr + 1)));
 
-        if let Addr::Lis(_) = cdr {
-            let tail_addr = self.target[addr + 1].as_addr(addr + 1);
+        if !cdr.is_ref() {
+            self.trail_list_cell(addr + 1, threshold);
+        } else {
+            let car = self.target.store(self.target.deref(Addr::HeapCell(addr)));
 
-            self.trail.push((
-                Ref::HeapCell(addr + 1),
-                HeapCellValue::Addr(tail_addr),
-            ));
-
-            self.target[addr + 1] = HeapCellValue::Addr(Addr::Lis(threshold));
+            if !car.is_ref() {
+                self.trail_list_cell(addr, threshold);
+            }
         }
 
         self.scan += 1;
@@ -163,7 +176,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                 };
 
                 self.target[frontier] = HeapCellValue::Addr(Addr::HeapCell(threshold));
-                self.target[h] = HeapCellValue::Addr(Addr::HeapCell(frontier));
+                self.target[h] = HeapCellValue::Addr(Addr::HeapCell(threshold));
 
                 self.trail.push((
                     Ref::AttrVar(h),
@@ -270,6 +283,9 @@ impl<T: CopierTarget> CopyTermState<T> {
                             } else {
                                 *self.value_at_scan() = HeapCellValue::Addr(addr);
                             }
+                        }
+                        Addr::Lis(h) if h >= self.old_h => {
+                            self.scan += 1;
                         }
                         Addr::Lis(h) => {
                             self.copy_list(h);
