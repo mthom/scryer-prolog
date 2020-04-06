@@ -246,6 +246,11 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`reif`](src/prolog/lib/reif.pl)
   providing `if_/3`, `tfilter/3` and related predicates
   as described in *Indexing&nbsp;dif/2*.
+* [`clpz`](src/prolog/lib/clpz.pl)
+  CLP(ℤ): Constraint Logic Programming over Integers,
+  providing declarative integer arithmetic via `(#=)/2`, `(#\=)/2`,
+  `(#>=)/2` etc., and various global constraints and
+  enumeration predicates for solving combinatorial tasks.
 * [`pairs`](src/prolog/lib/pairs.pl)
   By convention, *pairs* are Prolog terms with
   principal&nbsp;functor `(-)/2`, written as `Key-Value`.
