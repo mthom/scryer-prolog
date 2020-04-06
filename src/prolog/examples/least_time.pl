@@ -4,7 +4,7 @@
  *
  *  find_min_time/2 solves a problem sometimes posed in the first round
  *  of Google interviews: given a time of day in 24 H format, what is the
- *  lexographically least permutation of the time that is itself a
+ *  lexicographically least permutation of the time that is itself a
  *  valid time in 24 H format?
  *
  *  Full generality is achieved using the reif library.
