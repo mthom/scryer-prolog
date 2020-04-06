@@ -1,12 +1,36 @@
 :- use_module(library(lists)).
 :- use_module(library(si)).
 
-:- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2]).
+:- module('$toplevel', ['$entrypoint'/1, consult/1, use_module/1, use_module/2]).
 
-'$repl'(ListOfModules) :-
-    maplist('$use_list_of_modules', ListOfModules),
-    false.
-'$repl'(_) :- '$repl'.
+%% Note: due to the way we run this, the entrypoint rule cannot have multiple
+%%       rule heads (we're setting up the heap, and it's consumed once?).
+%% TODO - Is this true?
+%%      - Handing over to the REPL doesn't work.
+'$entrypoint'(Args) :-
+  '$run'(Args).
+
+%% first arg is executable name
+'$run'([_ | Args]) :-
+    member(V, ['-v', '--version']),
+    member(V, Args),
+    write('version: todo\n'). %% todo: print actual version
+'$run'([_ | Args]) :-
+    '$run'(Args, [], []).
+
+'$run'([G, Goal | Args], Mods, Goals) :-
+    member(G, ['-g', '--goal']),
+    '$run'(Args, Mods, [Goal | Goals]).
+'$run'([Mod | Args], Mods, Goals) :-
+    '$run'(Args, [Mod | Mods], Goals).
+'$run'([], Mods0, []) :- %% no goals, run repl
+    reverse(Mods0, Mods),
+    maplist('$use_list_of_modules', Mods),
+    '$repl'.
+'$run'([], Mods0, Goals0) :-
+    reverse(Mods0, Mods),
+    reverse(Goals0, Goals),
+    write('run with goals: todo\n').
 
 '$use_list_of_modules'(Module) :-
     catch(use_module(Module), E, '$print_exception'(E)).

@@ -35,10 +35,10 @@ fn main() {
     let handler = signal::SigHandler::Handler(handle_sigint);
     unsafe { signal::signal(signal::Signal::SIGINT, handler) }.unwrap();
 
-    if env::args().skip(1).any(|a| a == "-v" || a == "--version") {
-        println!("{:}", git_version!());
-        return;
-    }
+    // if env::args().skip(1).any(|a| a == "-v" || a == "--version") {
+    //     println!("{:}", git_version!());
+    //     return;
+    // }
 
     let mut wam = Machine::new(readline::input_stream(), Stream::stdout());
     wam.run_top_level();
