@@ -1308,7 +1308,7 @@ impl MachineState {
                     Addr::HeapCell(_) | Addr::StackCell(..) |
                     Addr::AttrVar(..) | Addr::Stream(_) => {
                       v
-                  }
+                    }
                     Addr::PStrLocation(..) => {
                         if !self.flags.double_quotes.is_atom() {
                             l

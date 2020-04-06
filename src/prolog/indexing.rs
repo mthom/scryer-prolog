@@ -258,12 +258,11 @@ impl CodeOffsets {
     fn switch_on_lst_offset_from(
         lst_loc: IntIndex,
         prelude_len: usize,
-        lst_offset: usize,
     ) -> usize {
         match lst_loc {
             IntIndex::External(o) => o + prelude_len + 1,
             IntIndex::Fail => 0,
-            IntIndex::Internal(_) => prelude_len - lst_offset + 1,
+            IntIndex::Internal(_) => 1, // this internal is always 0.
         }
     }
 
@@ -276,8 +275,6 @@ impl CodeOffsets {
         let mut prelude = VecDeque::new();
 
         let lst_loc = Self::switch_on_list(self.lists, &mut prelude);
-        let lst_offset = prelude.len();
-
         let str_loc = Self::switch_on_structure(self.structures, &mut prelude);
         let con_loc = Self::switch_on_constant(self.constants, &mut prelude);
 
@@ -285,18 +282,19 @@ impl CodeOffsets {
 
         for (index, line) in prelude.iter_mut().enumerate() {
             match line {
-                &mut Line::IndexedChoice(IndexedChoiceInstruction::Try(ref mut i))
-              | &mut Line::IndexedChoice(IndexedChoiceInstruction::Retry(ref mut i))
-              | &mut Line::IndexedChoice(IndexedChoiceInstruction::Trust(ref mut i)) => {
-                    *i += prelude_length - index
+                &mut Line::IndexedChoice(IndexedChoiceInstruction::Try(ref mut i)) |
+                &mut Line::IndexedChoice(IndexedChoiceInstruction::Retry(ref mut i)) |
+                &mut Line::IndexedChoice(IndexedChoiceInstruction::Trust(ref mut i)) => {
+                    *i += prelude_length - index;
                 }
-                _ => {}
+                _ => {
+                }
             }
         }
 
         let str_loc = Self::switch_on_str_offset_from(str_loc, prelude.len(), con_loc);
         let con_loc = Self::switch_on_con_offset_from(con_loc, prelude.len());
-        let lst_loc = Self::switch_on_lst_offset_from(lst_loc, prelude.len(), lst_offset);
+        let lst_loc = Self::switch_on_lst_offset_from(lst_loc, prelude.len());
 
         let switch_instr =
             IndexingInstruction::SwitchOnTerm(prelude.len() + 1, con_loc, lst_loc, str_loc);

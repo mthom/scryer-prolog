@@ -438,9 +438,9 @@ impl IndexingInstruction {
                 functor!(
                     "switch_on_term",
                     [integer(vars),
-                      integer(constants),
-                      integer(lists),
-                      integer(structures)]
+                     integer(constants),
+                     integer(lists),
+                     integer(structures)]
                 )
             }
             &IndexingInstruction::SwitchOnConstant(constants, _) => {
