@@ -54,7 +54,7 @@ Extend Scryer Prolog to include the following, among other features:
       (documented in "Tabling as a Library with Delimited Control").
 - [x] A _redone_ representation of strings as difference lists of
       characters, using a packed internal representation.
-- [ ] clp(B) and clp(ℤ) as builtin libraries (_in progress_).
+- [x] clp(B) and clp(ℤ) as builtin libraries.
 - [ ] Streams and predicates for stream control (_in progress_).
 - [ ] A compacting garbage collector satisfying the five
       properties of "Precise Garbage Collection in Prolog."
