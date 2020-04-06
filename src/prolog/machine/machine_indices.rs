@@ -20,6 +20,7 @@ use indexmap::IndexMap;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, VecDeque};
+use std::convert::TryFrom;
 use std::mem;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::rc::Rc;
@@ -59,6 +60,7 @@ pub enum Addr {
     Con(usize),
     CutPoint(usize),
     EmptyList,
+    Fixnum(isize),
     Float(OrderedFloat<f64>),
     Lis(usize),
     HeapCell(usize),
@@ -155,8 +157,9 @@ impl Addr {
     #[inline]
     pub fn is_heap_bound(&self) -> bool {
         match self {
-            Addr::Char(_) | Addr::CharCode(_) | Addr::EmptyList
-          | Addr::CutPoint(_) | Addr::Usize(_) | Addr::Float(_) => {
+            Addr::Char(_) | Addr::CharCode(_) | Addr::EmptyList |
+            Addr::CutPoint(_) | Addr::Usize(_) | Addr::Fixnum(_) |
+            Addr::Float(_) => {
                 false
             }
             _ => {
@@ -189,43 +192,47 @@ impl Addr {
 
     pub(super)
     fn order_category(&self, heap: &Heap) -> Option<TermOrderCategory> {
-        match self {
-            Addr::HeapCell(_) | Addr::AttrVar(_) | Addr::StackCell(..) => {
-                Some(TermOrderCategory::Variable)
-            }
-            Addr::Float(_) => {
-                Some(TermOrderCategory::FloatingPoint)
-            }
-            &Addr::Con(h) => {
-                match &heap[h] {
-                    HeapCellValue::Atom(..) => {
-                        Some(TermOrderCategory::Atom)
-                    }
-                    HeapCellValue::Integer(_) => {
-                        Some(TermOrderCategory::Integer)
-                    }
-                    HeapCellValue::Rational(_) => {
-                        Some(TermOrderCategory::Integer)
-                    }
-                    HeapCellValue::DBRef(_) => {
-                        None
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                }
-            }
-            Addr::Char(_) | Addr::EmptyList => {
-                Some(TermOrderCategory::Atom)
-            }
-            Addr::Usize(_) | Addr::CharCode(_) => {
+        match Number::try_from((*self, heap)) {
+            Ok(Number::Integer(_)) | Ok(Number::Fixnum(_)) | Ok(Number::Rational(_)) => {
                 Some(TermOrderCategory::Integer)
             }
-            Addr::Lis(_) | Addr::PStrLocation(..) | Addr::Str(_) => {
-                Some(TermOrderCategory::Compound)
+            Ok(Number::Float(_)) => {
+                Some(TermOrderCategory::FloatingPoint)
             }
-            Addr::CutPoint(_) | Addr::Stream(_) => {
-                None
+            _ => {
+                match self {
+                    Addr::HeapCell(_) | Addr::AttrVar(_) | Addr::StackCell(..) => {
+                        Some(TermOrderCategory::Variable)
+                    }
+                    Addr::Float(_) => {
+                        Some(TermOrderCategory::FloatingPoint)
+                    }
+                    &Addr::Con(h) => {
+                        match &heap[h] {
+                            HeapCellValue::Atom(..) => {
+                                Some(TermOrderCategory::Atom)
+                            }
+                            HeapCellValue::DBRef(_) => {
+                                None
+                            }
+                            _ => {
+                                unreachable!()
+                            }
+                        }
+                    }
+                    Addr::Char(_) | Addr::EmptyList => {
+                        Some(TermOrderCategory::Atom)
+                    }
+                    Addr::CharCode(_) | Addr::Fixnum(_) | Addr::Usize(_) => {
+                        Some(TermOrderCategory::Integer)
+                    }
+                    Addr::Lis(_) | Addr::PStrLocation(..) | Addr::Str(_) => {
+                        Some(TermOrderCategory::Compound)
+                    }
+                    Addr::CutPoint(_) | Addr::Stream(_) => {
+                        None
+                    }
+                }
             }
         }
     }
@@ -257,13 +264,16 @@ impl Addr {
             &Addr::EmptyList => {
                 Some(Constant::EmptyList)
             }
+            &Addr::Fixnum(n) => {
+                Some(Constant::Fixnum(n))
+            }
             &Addr::Float(f) => {
                 Some(Constant::Float(f))
             }
             &Addr::PStrLocation(h, n) => {
                 let mut heap_pstr_iter =
                     machine_st.heap_pstr_iter(Addr::PStrLocation(h, n));
-                
+
                 let mut buf = String::new();
 
                 while let Some(Some(c)) = heap_pstr_iter.next() {

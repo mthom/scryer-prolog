@@ -6,6 +6,7 @@ use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::partial_string::*;
 use crate::prolog::machine::raw_block::*;
 
+use std::convert::TryFrom;
 use std::mem;
 use std::ops::{Index, IndexMut};
 use std::ptr;
@@ -202,6 +203,9 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             Constant::EmptyList => {
                 Addr::EmptyList
             }
+            Constant::Fixnum(n) => {
+                Addr::Fixnum(n)
+            }
             Constant::Integer(n) => {
                 Addr::Con(self.push(HeapCellValue::Integer(n)))
             }
@@ -250,26 +254,6 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
         }
 
         h
-    }
-
-    #[inline]
-    pub(crate)
-    fn rational_at(&self, h: usize) -> bool {
-        if let HeapCellValue::Rational(_) = &self[h] {
-            true
-        } else {
-            false
-        }
-    }
-
-    #[inline]
-    pub(crate)
-    fn integer_at(&self, h: usize) -> bool {
-        if let HeapCellValue::Integer(_) = &self[h] {
-            true
-        } else {
-            false
-        }
     }
 
     #[inline]
@@ -475,6 +459,7 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     fn to_local_code_ptr(&self, addr: &Addr) -> Option<LocalCodePtr> {
         let extract_integer = |s: usize| -> Option<usize> {
             match &self[s] {
+                &HeapCellValue::Addr(Addr::Fixnum(n)) => usize::try_from(n).ok(),
                 &HeapCellValue::Integer(ref n) => n.to_usize(),
                 _ => None
             }

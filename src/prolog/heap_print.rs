@@ -12,6 +12,7 @@ use crate::prolog::rug::Integer;
 use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
+use std::convert::TryFrom;
 use std::iter::{FromIterator, once};
 use std::ops::{Range, RangeFrom};
 use std::rc::Rc;
@@ -263,30 +264,27 @@ fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
 
 #[inline]
 fn negated_op_needs_bracketing(iter: &HCPreOrderIterator, op: &Option<DirectedOp>) -> bool {
-    if let &Some(ref op) = op {
-        op.is_negative_sign() && iter.leftmost_leaf_has_property(|addr, heap| {
-            match addr {
-                Addr::Con(h) => {
-                    match &heap[h] {
-                        HeapCellValue::Integer(ref n) => {
-                            &**n > &0
-                        }
-                        &HeapCellValue::Rational(ref r) => {
-                            &**r > &0
-                        }
-                        _ => {
-                            false
-                        }
+    if let Some(ref op) = op {
+        op.is_negative_sign() &&
+            iter.leftmost_leaf_has_property(|addr, heap| {
+                match Number::try_from((addr, heap)) {
+                    Ok(Number::Fixnum(n)) => {
+                        n > 0
+                    }
+                    Ok(Number::Float(f)) => {
+                        f > OrderedFloat(0f64)
+                    }
+                    Ok(Number::Integer(n)) => {
+                        &*n > &0
+                    }
+                    Ok(Number::Rational(n)) => {
+                        &*n > &0
+                    }
+                    _ => {
+                        false
                     }
                 }
-                Addr::Float(f) => {
-                    f > OrderedFloat(0f64)
-                }
-                _ => {
-                    false
-                }
-            }
-        })
+            })
     } else {
         false
     }
@@ -311,14 +309,19 @@ fn numbervar(n: Integer) -> Var {
 
 impl MachineState {
     pub fn numbervar(&self, offset: &Integer, addr: Addr) -> Option<Var> {
-        match self.store(self.deref(addr)) {
-            Addr::Con(h) => {
-                if let &HeapCellValue::Integer(ref n) = &self.heap[h] {
-                    if &**n >= &0 {
-                        Some(numbervar(Integer::from(offset + &**n)))
-                    } else {
-                        None
-                    }
+        let addr = self.store(self.deref(addr));
+
+        match Number::try_from((addr, &self.heap)) {
+            Ok(Number::Fixnum(n)) => {
+                if n >= 0 {
+                    Some(numbervar(Integer::from(offset + Integer::from(n))))
+                } else {
+                    None
+                }
+            }
+            Ok(Number::Integer(n)) => {
+                if &*n >= &0 {
+                    Some(numbervar(Integer::from(offset + &*n)))
                 } else {
                     None
                 }
@@ -1335,6 +1338,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
             &HeapCellValue::Addr(Addr::Float(n)) => {
                 self.print_number(Number::Float(n), &op);
+            }
+            &HeapCellValue::Addr(Addr::Fixnum(n)) => {
+                self.print_number(Number::Fixnum(n), &op);
             }
             &HeapCellValue::Addr(Addr::Usize(u)) => {
                 self.append_str(&format!("{}", u));

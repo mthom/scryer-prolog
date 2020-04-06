@@ -6,6 +6,7 @@ use crate::prolog::forms::*;
 use crate::prolog::instructions::*;
 use crate::prolog::iterators::*;
 
+use crate::prolog::machine::heap::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 
@@ -15,6 +16,7 @@ use crate::prolog::rug::{Assign, Integer, Rational};
 
 use std::cell::Cell;
 use std::cmp::{max, min, Ordering};
+use std::convert::TryFrom;
 use std::f64;
 use std::num::FpCategory;
 use std::ops::{Add, Div, Mul, Neg, Sub};
@@ -262,6 +264,9 @@ impl<'a> ArithmeticEvaluator<'a> {
 
     fn push_constant(&mut self, c: &Constant) -> Result<(), ArithmeticError> {
         match c {
+            &Constant::Fixnum(n) => self
+                .interm
+                .push(ArithmeticTerm::Number(Number::Fixnum(n))),
             &Constant::Integer(ref n) => self
                 .interm
                 .push(ArithmeticTerm::Number(Number::Integer(n.clone()))),
@@ -316,18 +321,25 @@ impl<'a> ArithmeticEvaluator<'a> {
 }
 
 // integer division rounding function -- 9.1.3.1.
-pub fn rnd_i<'a>(n: &'a Number) -> RefOrOwned<'a, Integer> {
+pub fn rnd_i<'a>(n: &'a Number) -> RefOrOwned<'a, Number> {
     match n {
-        &Number::Integer(ref n) => RefOrOwned::Borrowed(n),
+        &Number::Integer(_) => {
+            RefOrOwned::Borrowed(n)
+        }
         &Number::Float(OrderedFloat(f)) => {
-            RefOrOwned::Owned(Integer::from_f64(f.floor()).unwrap_or_else(|| Integer::from(0)))
+            RefOrOwned::Owned(Number::from(
+                Integer::from_f64(f.floor()).unwrap_or_else(|| Integer::from(0))
+            ))
+        }
+        &Number::Fixnum(n) => {
+            RefOrOwned::Owned(Number::from(n))
         }
         &Number::Rational(ref r) => {
             let r_ref = r.fract_floor_ref();
             let (mut fract, mut floor) = (Rational::new(), Integer::new());
-
             (&mut fract, &mut floor).assign(r_ref);
-            RefOrOwned::Owned(floor)
+
+            RefOrOwned::Owned(Number::from(floor))
         }
     }
 }
@@ -335,6 +347,7 @@ pub fn rnd_i<'a>(n: &'a Number) -> RefOrOwned<'a, Integer> {
 // floating point rounding function -- 9.1.4.1.
 pub fn rnd_f(n: &Number) -> f64 {
     match n {
+        &Number::Fixnum(n) => n as f64,
         &Number::Integer(ref n) => n.to_f64(),
         &Number::Float(OrderedFloat(f)) => f,
         &Number::Rational(ref r) => r.to_f64(),
@@ -370,22 +383,32 @@ where
     }
 }
 
+#[inline]
+fn float_fn_to_f(n: isize) -> Result<f64, EvalError> {
+    classify_float(n as f64, rnd_f)
+}
+
+#[inline]
 fn float_i_to_f(n: &Integer) -> Result<f64, EvalError> {
     classify_float(n.to_f64(), rnd_f)
 }
 
+#[inline]
 fn float_r_to_f(r: &Rational) -> Result<f64, EvalError> {
     classify_float(r.to_f64(), rnd_f)
 }
 
+#[inline]
 fn add_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
     Ok(OrderedFloat(classify_float(f1 + f2, rnd_f)?))
 }
 
+#[inline]
 fn mul_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
     Ok(OrderedFloat(classify_float(f1 * f2, rnd_f)?))
 }
 
+#[inline]
 fn div_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
     if FpCategory::Zero == f2.classify() {
         Err(EvalError::ZeroDivisor)
@@ -399,8 +422,27 @@ impl Add<Number> for Number {
 
     fn add(self, rhs: Number) -> Self::Output {
         match (self, rhs) {
+            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+                Ok(if let Some(result) = n1.checked_add(n2) {
+                    Number::Fixnum(result)
+                } else {
+                    Number::from(Integer::from(n1) + Integer::from(n2))
+                })
+            }
+            (Number::Fixnum(n1), Number::Integer(n2)) |
+            (Number::Integer(n2), Number::Fixnum(n1)) => {
+                Ok(Number::from(Integer::from(n1) + &*n2))
+            }
+            (Number::Fixnum(n1), Number::Rational(n2)) |
+            (Number::Rational(n2), Number::Fixnum(n1)) => {
+                Ok(Number::from(Rational::from(n1) + &*n2))
+            }
+            (Number::Fixnum(n1), Number::Float(OrderedFloat(n2))) |
+            (Number::Float(OrderedFloat(n2)), Number::Fixnum(n1)) => {
+                Ok(Number::Float(add_f(float_fn_to_f(n1)?, n2)?))
+            }
             (Number::Integer(n1), Number::Integer(n2)) => {
-                Ok(Number::Integer(Rc::new(Integer::from(&*n1) + &*n2))) // add_i
+                Ok(Number::from(Integer::from(&*n1) + &*n2)) // add_i
             }
             (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
           | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) => {
@@ -408,7 +450,7 @@ impl Add<Number> for Number {
             }
             (Number::Integer(n1), Number::Rational(n2))
           | (Number::Rational(n2), Number::Integer(n1)) => {
-                Ok(Number::Rational(Rc::new(Rational::from(&*n1) + &*n2)))
+                Ok(Number::from(Rational::from(&*n1) + &*n2))
             }
             (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
           | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) => {
@@ -418,7 +460,7 @@ impl Add<Number> for Number {
                 Ok(Number::Float(add_f(f1, f2)?))
             }
             (Number::Rational(r1), Number::Rational(r2)) => {
-                Ok(Number::Rational(Rc::new(Rational::from(&*r1) + &*r2)))
+                Ok(Number::from(Rational::from(&*r1) + &*r2))
             }
         }
     }
@@ -429,6 +471,7 @@ impl Neg for Number {
 
     fn neg(self) -> Self::Output {
         match self {
+            Number::Fixnum(n) => Number::Fixnum(-n),
             Number::Integer(n) => Number::Integer(Rc::new(-Integer::from(&*n))),
             Number::Float(OrderedFloat(f)) => Number::Float(OrderedFloat(-f)),
             Number::Rational(r) => Number::Rational(Rc::new(-Rational::from(&*r))),
@@ -449,6 +492,25 @@ impl Mul<Number> for Number {
 
     fn mul(self, rhs: Number) -> Self::Output {
         match (self, rhs) {
+            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+                Ok(if let Some(result) = n1.checked_mul(n2) {
+                    Number::Fixnum(result)
+                } else {
+                    Number::from(Integer::from(n1) * Integer::from(n2))
+                })
+            }
+            (Number::Fixnum(n1), Number::Integer(n2)) |
+            (Number::Integer(n2), Number::Fixnum(n1)) => {
+                Ok(Number::from(Integer::from(n1) * &*n2))
+            }
+            (Number::Fixnum(n1), Number::Rational(n2)) |
+            (Number::Rational(n2), Number::Fixnum(n1)) => {
+                Ok(Number::from(Rational::from(n1) * &*n2))
+            }
+            (Number::Fixnum(n1), Number::Float(OrderedFloat(n2))) |
+            (Number::Float(OrderedFloat(n2)), Number::Fixnum(n1)) => {
+                Ok(Number::Float(mul_f(float_fn_to_f(n1)?, n2)?))
+            }
             (Number::Integer(n1), Number::Integer(n2)) => {
                 Ok(Number::Integer(Rc::new(Integer::from(&*n1) * &*n2))) // mul_i
             }
@@ -479,24 +541,72 @@ impl Div<Number> for Number {
 
     fn div(self, rhs: Number) -> Self::Output {
         match (self, rhs) {
-            (Number::Integer(n1), Number::Integer(n2)) => Ok(Number::Float(div_f(
-                float_i_to_f(&n1)?,
-                float_i_to_f(&n2)?,
-            )?)),
+            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+                Ok(Number::Float(div_f(
+                    float_fn_to_f(n1)?,
+                    float_fn_to_f(n2)?,
+                )?))
+            }
+            (Number::Fixnum(n1), Number::Integer(n2)) => {
+                Ok(Number::Float(div_f(
+                    float_fn_to_f(n1)?,
+                    float_i_to_f(&n2)?,
+                )?))
+            }
+            (Number::Integer(n1), Number::Fixnum(n2)) => {
+                Ok(Number::Float(div_f(
+                    float_i_to_f(&n1)?,
+                    float_fn_to_f(n2)?,
+                )?))
+            }
+            (Number::Fixnum(n1), Number::Rational(n2)) => {
+                Ok(Number::Float(div_f(
+                    float_fn_to_f(n1)?,
+                    float_r_to_f(&n2)?,
+                )?))
+            }
+            (Number::Rational(n1), Number::Fixnum(n2)) => {
+                Ok(Number::Float(div_f(
+                    float_r_to_f(&n1)?,
+                    float_fn_to_f(n2)?,
+                )?))
+            }
+            (Number::Fixnum(n1), Number::Float(OrderedFloat(n2))) => {
+                Ok(Number::Float(div_f(
+                    float_fn_to_f(n1)?,
+                    n2,
+                )?))
+            }
+            (Number::Float(OrderedFloat(n1)), Number::Fixnum(n2)) => {
+                Ok(Number::Float(div_f(
+                    n1,
+                    float_fn_to_f(n2)?,
+                )?))
+            }
+            (Number::Integer(n1), Number::Integer(n2)) => {
+                Ok(Number::Float(div_f(
+                    float_i_to_f(&n1)?,
+                    float_i_to_f(&n2)?,
+                )?))
+            }
             (Number::Integer(n1), Number::Float(OrderedFloat(n2))) => {
                 Ok(Number::Float(div_f(float_i_to_f(&n1)?, n2)?))
             }
             (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) => {
                 Ok(Number::Float(div_f(n2, float_i_to_f(&n1)?)?))
             }
-            (Number::Integer(n1), Number::Rational(n2)) => Ok(Number::Float(div_f(
-                float_i_to_f(&n1)?,
-                float_r_to_f(&n2)?,
-            )?)),
-            (Number::Rational(n2), Number::Integer(n1)) => Ok(Number::Float(div_f(
-                float_r_to_f(&n2)?,
-                float_i_to_f(&n1)?,
-            )?)),
+            (Number::Integer(n1), Number::Rational(n2)) => {
+                Ok(Number::Float(div_f(
+                    float_i_to_f(&n1)?,
+                    float_r_to_f(&n2)?,
+                )?))
+            }
+            (Number::Rational(n2), Number::Integer(n1)) => {
+                Ok(Number::Float(div_f(
+                    float_r_to_f(&n2)?,
+                    float_i_to_f(&n1)?,
+                )?))
+            }
             (Number::Rational(n1), Number::Float(OrderedFloat(n2))) => {
                 Ok(Number::Float(div_f(float_r_to_f(&n1)?, n2)?))
             }
@@ -514,25 +624,47 @@ impl Div<Number> for Number {
     }
 }
 
+impl PartialEq for Number {
+    fn eq(&self, rhs: &Self) -> bool {
+        match (self, rhs) {
+            (&Number::Fixnum(n1), &Number::Fixnum(n2)) => n1.eq(&n2),
+            (&Number::Fixnum(n1), &Number::Integer(ref n2)) => n1.eq(&**n2),
+            (&Number::Integer(ref n1), &Number::Fixnum(n2)) => (&**n1).eq(&n2),
+            (&Number::Fixnum(n1), &Number::Rational(ref n2)) => n1.eq(&**n2),
+            (&Number::Rational(ref n1), &Number::Fixnum(n2)) => (&**n1).eq(&n2),
+            (&Number::Fixnum(_), &Number::Float(OrderedFloat(_))) => false,
+            (&Number::Float(OrderedFloat(_)), &Number::Fixnum(_)) => false,
+            (&Number::Integer(ref n1), &Number::Integer(ref n2)) => n1.eq(n2),
+            (&Number::Integer(_), Number::Float(_)) => false,
+            (&Number::Float(_), &Number::Integer(_)) => false,
+            (&Number::Integer(_), &Number::Rational(_)) => false,
+            (&Number::Rational(_), &Number::Integer(_)) => false,
+            (&Number::Rational(_), Number::Float(_)) => false,
+            (&Number::Float(_), &Number::Rational(_)) => false,
+            (&Number::Float(f1), &Number::Float(f2)) => f1.eq(&f2),
+            (&Number::Rational(ref r1), &Number::Rational(ref r2)) => r1.eq(&r2),
+        }
+    }
+}
+
+impl Eq for Number {}
+
 impl PartialOrd for Number {
     fn partial_cmp(&self, rhs: &Number) -> Option<Ordering> {
-        match (self, rhs) {
-            (&Number::Integer(ref n1), &Number::Integer(ref n2)) => Some(n1.cmp(n2)),
-            (&Number::Integer(_), Number::Float(_)) => Some(Ordering::Greater),
-            (&Number::Float(_), &Number::Integer(_)) => Some(Ordering::Less),
-            (&Number::Integer(_), &Number::Rational(_)) => Some(Ordering::Greater),
-            (&Number::Rational(_), &Number::Integer(_)) => Some(Ordering::Less),
-            (&Number::Rational(_), Number::Float(_)) => Some(Ordering::Greater),
-            (&Number::Float(_), &Number::Rational(_)) => Some(Ordering::Less),
-            (&Number::Float(f1), &Number::Float(f2)) => Some(f1.cmp(&f2)),
-            (&Number::Rational(ref r1), &Number::Rational(ref r2)) => Some(r1.cmp(&r2)),
-        }
+        Some(self.cmp(rhs))
     }
 }
 
 impl Ord for Number {
     fn cmp(&self, rhs: &Number) -> Ordering {
         match (self, rhs) {
+            (&Number::Fixnum(n1), &Number::Fixnum(n2)) => n1.cmp(&n2),
+            (&Number::Fixnum(n1), Number::Integer(n2)) => Integer::from(n1).cmp(&*n2),
+            (Number::Integer(n1), &Number::Fixnum(n2)) => (&**n1).cmp(&Integer::from(n2)),
+            (&Number::Fixnum(n1), Number::Rational(n2)) => Rational::from(n1).cmp(&*n2),
+            (Number::Rational(n1), &Number::Fixnum(n2)) => (&**n1).cmp(&Rational::from(n2)),
+            (&Number::Fixnum(_), &Number::Float(OrderedFloat(_))) => Ordering::Greater,
+            (&Number::Float(OrderedFloat(_)), &Number::Fixnum(_)) => Ordering::Less,
             (&Number::Integer(ref n1), &Number::Integer(ref n2)) => n1.cmp(n2),
             (&Number::Integer(_), Number::Float(_)) => Ordering::Greater,
             (&Number::Float(_), &Number::Integer(_)) => Ordering::Less,
@@ -542,6 +674,78 @@ impl Ord for Number {
             (&Number::Float(_), &Number::Rational(_)) => Ordering::Less,
             (&Number::Float(f1), &Number::Float(f2)) => f1.cmp(&f2),
             (&Number::Rational(ref r1), &Number::Rational(ref r2)) => r1.cmp(&r2),
+        }
+    }
+}
+
+impl<'a> TryFrom<(Addr, &'a Heap)> for Number {
+    type Error = ();
+
+    fn try_from((addr, heap): (Addr, &'a Heap)) -> Result<Number, Self::Error> {
+        match addr {
+            Addr::CharCode(c) => {
+                Ok(Number::from(c as isize))
+            }
+            Addr::Fixnum(n) => {
+                Ok(Number::from(n))
+            }
+            Addr::Float(n) => {
+                Ok(Number::Float(n))
+            }
+            Addr::Usize(n) => {
+                if let Ok(n) = isize::try_from(n) {
+                    Ok(Number::from(n))
+                } else {
+                    Ok(Number::from(Integer::from(n)))
+                }
+            }
+            Addr::Con(h) => {
+                Number::try_from(&heap[h])
+            }
+            _ => {
+                Err(())
+            }
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a HeapCellValue> for Number {
+    type Error = ();
+
+    fn try_from(value: &'a HeapCellValue) -> Result<Number, Self::Error> {
+        match value {
+            HeapCellValue::Addr(addr) => {
+                match addr {
+                    &Addr::CharCode(c) => {
+                        Ok(Number::from(c as isize))
+                    }
+                    &Addr::Fixnum(n) => {
+                        Ok(Number::from(n))
+                    }
+                    &Addr::Float(n) => {
+                        Ok(Number::Float(n))
+                    }
+                    &Addr::Usize(n) => {
+                        if let Ok(n) = isize::try_from(n) {
+                            Ok(Number::from(n))
+                        } else {
+                            Ok(Number::from(Integer::from(n)))
+                        }
+                    }
+                    _ => {
+                        Err(())
+                    }
+                }
+            }
+            HeapCellValue::Integer(n) => {
+                Ok(Number::Integer(n.clone()))
+            }
+            HeapCellValue::Rational(n) => {
+                Ok(Number::Rational(n.clone()))
+            }
+            _ => {
+                Err(())
+            }
         }
     }
 }

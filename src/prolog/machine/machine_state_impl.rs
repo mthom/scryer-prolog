@@ -21,6 +21,7 @@ use crate::prolog::rug::Integer;
 use indexmap::{IndexMap, IndexSet};
 
 use std::cmp::Ordering;
+use std::convert::TryFrom;
 use std::rc::Rc;
 
 macro_rules! try_or_fail {
@@ -261,8 +262,8 @@ impl MachineState {
 
                         self.fail = true;
                     }
-                    (Addr::PStrLocation(h, n), Addr::Lis(l))
-                  | (Addr::Lis(l), Addr::PStrLocation(h, n)) => {
+                    (Addr::PStrLocation(h, n), Addr::Lis(l)) |
+                    (Addr::Lis(l), Addr::PStrLocation(h, n)) => {
                         if let HeapCellValue::PartialString(ref pstr, _) = &self.heap[h] {
                             if let Some(c) = pstr.range_from(n ..).next() {
                                 pdl.push(Addr::PStrLocation(h, n + c.len_utf8()));
@@ -369,16 +370,17 @@ impl MachineState {
                             ) if db_ref_1 == db_ref_2 => {
                             }
                             (
-                                &HeapCellValue::Integer(ref n1),
-                                &HeapCellValue::Integer(ref n2),
-                            ) if &**n1 == &**n2 => {
-                            }
-                            (
-                                &HeapCellValue::Rational(ref n1),
-                                &HeapCellValue::Rational(ref n2),
-                            ) if &**n1 == &**n2 => {
-                            }
-                            _ => {
+                                v1,
+                                v2,
+                            ) => {
+                                if let Ok(n1) = Number::try_from(v1) {
+                                    if let Ok(n2) = Number::try_from(v2) {
+                                        if n1 == n2 {
+                                            continue;
+                                        }
+                                    }
+                                }
+
                                 self.fail = true;
                             }
                         }
@@ -397,34 +399,31 @@ impl MachineState {
                             }
                         }
                     }
-                    (Addr::Usize(n1), Addr::Con(n2)) | (Addr::Con(n2), Addr::Usize(n1)) => {
-                        if let HeapCellValue::Integer(ref n2) = &self.heap[n2] {
-                            if let Some(n2) = n2.to_usize() {
-                                if n1 == n2 {
-                                    continue;
-                                }
-                            }
-                        }
-
-                        self.fail = true;
-                    }
-                    (Addr::CharCode(n1), Addr::Con(n2)) | (Addr::Con(n2), Addr::CharCode(n1)) => {
-                        if let HeapCellValue::Integer(ref n2) = &self.heap[n2] {
-                            if let Some(n2) = n2.to_u32() {
-                                if n1 == n2 {
-                                    continue;
-                                }
-                            }
-                        }
-
-                        self.fail = true;
-                    }
                     (Addr::Stream(s1), Addr::Stream(s2)) => {
                         if s1 != s2 {
                             self.fail = true;
                         }
                     }
+                    (v, Addr::Con(h)) | (Addr::Con(h), v) => {
+                        if let Ok(n1) = Number::try_from(&self.heap[h]) {
+                            if let Ok(v) = Number::try_from(&HeapCellValue::Addr(v)) {
+                                if n1 == v {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        self.fail = true;
+                    }
                     (a1, a2) => {
+                        if let Ok(n1) = Number::try_from(&HeapCellValue::Addr(a1)) {
+                            if let Ok(n2) = Number::try_from(&HeapCellValue::Addr(a2)) {
+                                if n1 == n2 {
+                                    continue;
+                                }
+                            }
+                        }
+
                         if a1 != a2 {
                             self.fail = true;
                         }
@@ -481,8 +480,8 @@ impl MachineState {
 
                         self.fail = true;
                     }
-                    (Addr::PStrLocation(h, n), Addr::Lis(l))
-                  | (Addr::Lis(l), Addr::PStrLocation(h, n)) => {
+                    (Addr::PStrLocation(h, n), Addr::Lis(l)) |
+                    (Addr::Lis(l), Addr::PStrLocation(h, n)) => {
                       if let HeapCellValue::PartialString(ref pstr, _) = &self.heap[h] {
                           if let Some(c) = pstr.range_from(n ..).next() {
                               pdl.push(Addr::PStrLocation(h, n + c.len_utf8()));
@@ -585,16 +584,17 @@ impl MachineState {
                             ) if db_ref_1 == db_ref_2 => {
                             }
                             (
-                                &HeapCellValue::Integer(ref n1),
-                                &HeapCellValue::Integer(ref n2),
-                            ) if &**n1 == &**n2 => {
-                            }
-                            (
-                                &HeapCellValue::Rational(ref n1),
-                                &HeapCellValue::Rational(ref n2),
-                            ) if &**n1 == &**n2 => {
-                            }
-                            _ => {
+                                v1,
+                                v2,
+                            ) => {
+                                if let Ok(n1) = Number::try_from(v1) {
+                                    if let Ok(n2) = Number::try_from(v2) {
+                                        if n1 == n2 {
+                                            continue;
+                                        }
+                                    }
+                                }
+
                                 self.fail = true;
                             }
                         }
@@ -613,34 +613,31 @@ impl MachineState {
                             }
                         }
                     }
-                    (Addr::Usize(n1), Addr::Con(n2)) | (Addr::Con(n2), Addr::Usize(n1)) => {
-                        if let HeapCellValue::Integer(ref n2) = &self.heap[n2] {
-                            if let Some(n2) = n2.to_usize() {
-                                if n1 == n2 {
-                                    continue;
-                                }
-                            }
-                        }
-
-                        self.fail = true;
-                    }
-                    (Addr::CharCode(n1), Addr::Con(n2)) | (Addr::Con(n2), Addr::CharCode(n1)) => {
-                        if let HeapCellValue::Integer(ref n2) = &self.heap[n2] {
-                            if let Some(n2) = n2.to_u32() {
-                                if n1 == n2 {
-                                    continue;
-                                }
-                            }
-                        }
-
-                        self.fail = true;
-                    }
                     (Addr::Stream(s1), Addr::Stream(s2)) => {
                         if s1 != s2 {
                             self.fail = true;
                         }
                     }
+                    (v, Addr::Con(h)) | (Addr::Con(h), v) => {
+                        if let Ok(n1) = Number::try_from(&self.heap[h]) {
+                            if let Ok(v) = Number::try_from(&HeapCellValue::Addr(v)) {
+                                if n1 == v {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        self.fail = true;
+                    }
                     (a1, a2) => {
+                        if let Ok(n1) = Number::try_from(&HeapCellValue::Addr(a1)) {
+                            if let Ok(n2) = Number::try_from(&HeapCellValue::Addr(a2)) {
+                                if n1 == n2 {
+                                    continue;
+                                }
+                            }
+                        }
+
                         if a1 != a2 {
                             self.fail = true;
                         }
@@ -791,6 +788,9 @@ impl MachineState {
                     }
                     HeapCellValue::Integer(ref n1) => {
                         match c {
+                            Constant::Fixnum(n2) => {
+                                n1.to_isize() != Some(*n2)
+                            }
                             Constant::Integer(ref n2) => {
                                 n1 != n2
                             }
@@ -919,8 +919,7 @@ impl MachineState {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] =
-                    Number::Integer(Rc::new(try_or_fail!(self, self.gcd(n1, n2))));
+                self.interms[t - 1] = try_or_fail!(self, self.gcd(n1, n2));
                 self.p += 1;
             }
             &ArithmeticInstruction::Pow(ref a1, ref a2, t) => {
@@ -944,16 +943,14 @@ impl MachineState {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] =
-                    Number::Integer(Rc::new(try_or_fail!(self, self.int_floor_div(n1, n2))));
+                self.interms[t - 1] = try_or_fail!(self, self.int_floor_div(n1, n2));
                 self.p += 1;
             }
             &ArithmeticInstruction::IDiv(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] =
-                    Number::Integer(Rc::new(try_or_fail!(self, self.idiv(n1, n2))));
+                self.interms[t - 1] = try_or_fail!(self, self.idiv(n1, n2));
                 self.p += 1;
             }
             &ArithmeticInstruction::Abs(ref a1, t) => {
@@ -965,7 +962,7 @@ impl MachineState {
             &ArithmeticInstruction::Sign(ref a1, t) => {
                 let n = try_or_fail!(self, self.get_number(a1));
 
-                self.interms[t - 1] = Number::Integer(Rc::new(self.sign(n)));
+                self.interms[t - 1] = self.sign(n);
                 self.p += 1;
             }
             &ArithmeticInstruction::Neg(ref a1, t) => {
@@ -977,8 +974,7 @@ impl MachineState {
             &ArithmeticInstruction::BitwiseComplement(ref a1, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
 
-                self.interms[t - 1] =
-	            Number::Integer(Rc::new(try_or_fail!(self, self.bitwise_complement(n1))));
+                self.interms[t - 1] = try_or_fail!(self, self.bitwise_complement(n1));
                 self.p += 1;
             }
             &ArithmeticInstruction::Div(ref a1, ref a2, t) => {
@@ -992,56 +988,49 @@ impl MachineState {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] =
-	            Number::Integer(Rc::new(try_or_fail!(self, self.shr(n1, n2))));
+                self.interms[t - 1] = try_or_fail!(self, self.shr(n1, n2));
                 self.p += 1;
             }
             &ArithmeticInstruction::Shl(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] =
-	            Number::Integer(Rc::new(try_or_fail!(self, self.shl(n1, n2))));
+                self.interms[t - 1] = try_or_fail!(self, self.shl(n1, n2));
                 self.p += 1;
             }
             &ArithmeticInstruction::Xor(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] =
-	Number::Integer(Rc::new(try_or_fail!(self, self.xor(n1, n2))));
+                self.interms[t - 1] = try_or_fail!(self, self.xor(n1, n2));
                 self.p += 1;
             }
             &ArithmeticInstruction::And(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] =
-	            Number::Integer(Rc::new(try_or_fail!(self, self.and(n1, n2))));
+                self.interms[t - 1] = try_or_fail!(self, self.and(n1, n2));
                 self.p += 1;
             }
             &ArithmeticInstruction::Or(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] =
-	Number::Integer(Rc::new(try_or_fail!(self, self.or(n1, n2))));
+                self.interms[t - 1] = try_or_fail!(self, self.or(n1, n2));
                 self.p += 1;
             }
             &ArithmeticInstruction::Mod(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] =
-	Number::Integer(Rc::new(try_or_fail!(self, self.modulus(n1, n2))));
+                self.interms[t - 1] = try_or_fail!(self, self.modulus(n1, n2));
                 self.p += 1;
             }
             &ArithmeticInstruction::Rem(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));
 
-                self.interms[t - 1] =
-	Number::Integer(Rc::new(try_or_fail!(self, self.remainder(n1, n2))));
+                self.interms[t - 1] = try_or_fail!(self, self.remainder(n1, n2));
                 self.p += 1;
             }
             &ArithmeticInstruction::Cos(ref a1, t) => {
@@ -1120,29 +1109,25 @@ impl MachineState {
             &ArithmeticInstruction::Truncate(ref a1, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
 
-                self.interms[t - 1] =
-	            Number::Integer(Rc::new(self.truncate(n1)));
+                self.interms[t - 1] = self.truncate(n1);
                 self.p += 1;
             }
             &ArithmeticInstruction::Round(ref a1, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
 
-                self.interms[t - 1] =
-	            Number::Integer(Rc::new(try_or_fail!(self, self.round(n1))));
+                self.interms[t - 1] = try_or_fail!(self, self.round(n1));
                 self.p += 1;
             }
             &ArithmeticInstruction::Ceiling(ref a1, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
 
-                self.interms[t - 1] =
-	            Number::Integer(Rc::new(self.ceiling(n1)));
+                self.interms[t - 1] = self.ceiling(n1);
                 self.p += 1;
             }
             &ArithmeticInstruction::Floor(ref a1, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
 
-                self.interms[t - 1] =
-	            Number::Integer(Rc::new(self.floor(n1)));
+                self.interms[t - 1] = self.floor(n1);
                 self.p += 1;
             }
             &ArithmeticInstruction::Plus(ref a1, t) => {
@@ -1332,7 +1317,7 @@ impl MachineState {
                         }
                     }
                     Addr::Char(_) | Addr::CharCode(_) | Addr::Con(_) | Addr::CutPoint(_) |
-                    Addr::EmptyList | Addr::Float(_) | Addr::Usize(_) => {
+                    Addr::EmptyList | Addr::Fixnum(_) | Addr::Float(_) | Addr::Usize(_) => {
                         c
                     }
                     Addr::Lis(_) => {
@@ -1624,19 +1609,35 @@ impl MachineState {
             Addr::HeapCell(_) | Addr::StackCell(..) => { // 8.5.2.3 a)
                 return Err(self.error_form(MachineError::instantiation_error(), stub))
             }
-            Addr::Con(h) => {
-                if let HeapCellValue::Integer(n) = self.heap.clone(h) {
-                    if &*n < &0 { // 8.5.2.3 e)
-                        let n = Number::Integer(n);
-                        let dom_err = MachineError::domain_error(
-                            DomainErrorType::NotLessThanZero,
-                            n,
-                        );
+            addr => {
+                let n =
+                    match Number::try_from((addr, &self.heap)) {
+                        Ok(Number::Fixnum(n))  => Integer::from(n),
+                        Ok(Number::Integer(n)) => Integer::from(n.as_ref()),
+                        _ => {
+                            return Err(self.error_form(
+                                MachineError::type_error(
+                                    self.heap.h(),
+                                    ValidType::Integer,
+                                    addr,
+                                ),
+                                stub,
+                            ));
+                        }
+                    };
 
-                        return Err(self.error_form(dom_err, stub));
-                    }
+                if n < 0 { // 8.5.2.3 e)
+                    let n = Number::from(n);
+                    let dom_err = MachineError::domain_error(
+                        DomainErrorType::NotLessThanZero,
+                        n,
+                    );
 
-                    let n = match n.to_usize() {
+                    return Err(self.error_form(dom_err, stub));
+                }
+
+                let n =
+                    match n.to_usize() {
                         Some(n) => n,
                         None => {
                             self.fail = true;
@@ -1644,87 +1645,67 @@ impl MachineState {
                         }
                     };
 
-                    let term = self.store(self.deref(self[temp_v!(2)]));
+                let term = self.store(self.deref(self[temp_v!(2)]));
 
-                    match term {
-                        Addr::HeapCell(_) | Addr::StackCell(..) => { // 8.5.2.3 b)
-                            return Err(self.error_form(MachineError::instantiation_error(), stub))
+                match term {
+                    Addr::HeapCell(_) | Addr::StackCell(..) | Addr::AttrVar(_) => { // 8.5.2.3 b)
+                        return Err(self.error_form(MachineError::instantiation_error(), stub))
+                    }
+                    Addr::Str(o) => match self.heap.clone(o) {
+                        HeapCellValue::NamedStr(arity, _, _) if 1 <= n && n <= arity => {
+                            let a3 = self[temp_v!(3)];
+                            let h_a = Addr::HeapCell(o + n);
+
+                            self.unify(a3, h_a);
                         }
-                        Addr::Str(o) => match self.heap.clone(o) {
-                            HeapCellValue::NamedStr(arity, _, _) if 1 <= n && n <= arity => {
-                                let a3 = self[temp_v!(3)];
-                                let h_a = Addr::HeapCell(o + n);
-
-                                self.unify(a3, h_a);
-                            }
-                            _ => {
-                                self.fail = true;
-                            }
-                        },
-                        Addr::Lis(l) => {
-                            if n == 1 || n == 2 {
-                                let a3 = self[temp_v!(3)];
-                                let h_a = Addr::HeapCell(l + n - 1);
-
-                                self.unify(a3, h_a);
-                            } else {
-                                self.fail = true;
-                            }
+                        _ => {
+                            self.fail = true;
                         }
-                        Addr::PStrLocation(h, offset) => {
-                            if n == 1 || n == 2 {
-                                let a3 = self[temp_v!(3)];
-                                let h_a =
-                                    if let HeapCellValue::PartialString(ref pstr, _) = &self.heap[h] {
-                                        if let Some(c) = pstr.range_from(offset ..).next() {
-                                            if n == 1 {
-                                                Addr::Char(c)
-                                            } else {
-                                                Addr::PStrLocation(h, offset + c.len_utf8())
-                                            }
+                    },
+                    Addr::Lis(l) => {
+                        if n == 1 || n == 2 {
+                            let a3 = self[temp_v!(3)];
+                            let h_a = Addr::HeapCell(l + n - 1);
+
+                            self.unify(a3, h_a);
+                        } else {
+                            self.fail = true;
+                        }
+                    }
+                    Addr::PStrLocation(h, offset) => {
+                        if n == 1 || n == 2 {
+                            let a3 = self[temp_v!(3)];
+                            let h_a =
+                                if let HeapCellValue::PartialString(ref pstr, _) = &self.heap[h] {
+                                    if let Some(c) = pstr.range_from(offset ..).next() {
+                                        if n == 1 {
+                                            Addr::Char(c)
                                         } else {
-                                            unreachable!()
+                                            Addr::PStrLocation(h, offset + c.len_utf8())
                                         }
                                     } else {
                                         unreachable!()
-                                    };
+                                    }
+                                } else {
+                                    unreachable!()
+                                };
 
-                                self.unify(a3, h_a);
-                            } else {
-                                self.fail = true;
-                            }
-                        }
-                        _ => { // 8.5.2.3 d)
-                            return Err(self.error_form(
-                                MachineError::type_error(
-                                    self.heap.h(),
-                                    ValidType::Compound,
-                                    term,
-                                ),
-                                stub,
-                            ))
+                            self.unify(a3, h_a);
+                        } else {
+                            self.fail = true;
                         }
                     }
-                } else {
-                    return Err(self.error_form(
-                        MachineError::type_error(
-                            self.heap.h(),
-                            ValidType::Integer,
-                            Addr::HeapCell(h),
-                        ),
-                        stub,
-                    ))
+                    _ => { // 8.5.2.3 d)
+                        return Err(self.error_form(
+                            MachineError::type_error(
+                                self.heap.h(),
+                                ValidType::Compound,
+                                term,
+                            ),
+                            stub,
+                        ))
+                    }
                 }
-            }
-            _ => { // 8.5.2.3 c)
-                return Err(self.error_form(
-                    MachineError::type_error(
-                        self.heap.h(),
-                        ValidType::Integer,
-                        n,
-                    ),
-                    stub,
-                ))
             }
         }
 
@@ -1747,7 +1728,8 @@ impl MachineState {
         self.p += 1;
     }
 
-    pub(super) fn compare_term(&mut self, qt: CompareTermQT) {
+    pub(super)
+    fn compare_term(&mut self, qt: CompareTermQT) {
         let a1 = self[temp_v!(1)];
         let a2 = self[temp_v!(2)];
 
@@ -1804,18 +1786,10 @@ impl MachineState {
                 (Addr::Con(h1), Addr::Con(h2)) => {
                     match (&self.heap[h1], &self.heap[h2]) {
                         (
-                            &HeapCellValue::Integer(ref n1),
-                            &HeapCellValue::Integer(ref n2),
+                            &HeapCellValue::Atom(ref n1, ref spec_1),
+                            &HeapCellValue::Atom(ref n2, ref spec_2),
                         ) => {
-                            if n1 != n2 {
-                                return true;
-                            }
-                        }
-                        (
-                            &HeapCellValue::Rational(ref n1),
-                            &HeapCellValue::Rational(ref n2),
-                        ) => {
-                            if n1 != n2 {
+                            if n1 != n2 || spec_1 != spec_2 {
                                 return true;
                             }
                         }
@@ -1828,14 +1802,17 @@ impl MachineState {
                             }
                         }
                         (
-                            &HeapCellValue::Atom(ref n1, ref spec_1),
-                            &HeapCellValue::Atom(ref n2, ref spec_2),
+                            v1,
+                            v2,
                         ) => {
-                            if n1 != n2 || spec_1 != spec_2 {
-                                return true;
+                            if let Ok(n1) = Number::try_from(v1) {
+                                if let Ok(n2) = Number::try_from(v2) {
+                                    if n1 == n2 {
+                                        continue;
+                                    }
+                                }
                             }
-                        }
-                        _ => {
+
                             return true;
                         }
                     }
@@ -1852,25 +1829,26 @@ impl MachineState {
                         }
                     }
                 }
-                (Addr::Usize(n1), Addr::Con(n2)) | (Addr::Con(n2), Addr::Usize(n1)) => {
-                    if let HeapCellValue::Integer(ref n2) = &self.heap[n2] {
-                        if let Some(n2) = n2.to_usize() {
+                (Addr::CharCode(n1), v2) | (v2, Addr::CharCode(n1)) => {
+                    if let Ok(n2) = Number::try_from((v2, &self.heap)) {
+                        if let Some(n2) = n2.to_u32() {
                             if n1 != n2 {
                                 return true;
                             }
                         }
                     }
                 }
-                (Addr::CharCode(n1), Addr::Con(n2)) | (Addr::Con(n2), Addr::CharCode(n1)) => {
-                    if let HeapCellValue::Integer(ref n2) = &self.heap[n2] {
-                        if let Some(n2) = n2.to_u32() {
-                            if n1 == n2 {
+                (a1, a2) => {
+                    if let Ok(n1) = Number::try_from((a1, &self.heap)) {
+                        if let Ok(n2) = Number::try_from((a2, &self.heap)) {
+                            if n1 != n2 {
                                 return true;
+                            } else {
+                                continue;
                             }
                         }
                     }
-                }
-                (a1, a2) => {
+
                     if a1 != a2 {
                         return true;
                     }
@@ -1919,74 +1897,62 @@ impl MachineState {
                             Addr::Con(h1),
                             Addr::Con(h2),
                         ) => {
-                            match (&self.heap[h1], &self.heap[h2]) {
-                                (
-                                    HeapCellValue::Integer(ref n1),
-                                    HeapCellValue::Integer(ref n2),
-                                ) => {
-                                    if &*n1 != &*n2 {
-                                        return Some(n1.cmp(&*n2));
+                            if let Ok(n1) = Number::try_from(&self.heap[h1]) {
+                                if let Ok(n2) = Number::try_from(&self.heap[h2]) {
+                                    if n1 != n2 {
+                                        return Some(n1.cmp(&n2));
                                     }
-                                }
-                                (
-                                    HeapCellValue::Rational(ref n1),
-                                    HeapCellValue::Integer(ref n2),
-                                ) => {
-                                    if &**n1 != &**n2 {
-                                        return n1.as_ref().partial_cmp(n2.as_ref());
-                                    }
-                                }
-                                (
-                                    HeapCellValue::Integer(ref n1),
-                                    HeapCellValue::Rational(ref n2),
-                                ) => {
-                                    if &**n1 != &**n2 {
-                                        return n1.as_ref().partial_cmp(n2.as_ref());
-                                    }
-                                }
-                                (
-                                    HeapCellValue::Rational(ref r1),
-                                    HeapCellValue::Rational(ref r2),
-                                ) => {
-                                    if &*r1 != &*r2 {
-                                        return Some(r1.cmp(r2));
-                                    }
-                                }
-                                _ => {
+                                } else {
                                     unreachable!()
                                 }
+                            } else {
+                                unreachable!()
                             }
                         }
-                        (Addr::Usize(n1), Addr::Usize(n2)) => {
-                            if n1 != n2 {
-                                return Some(n1.cmp(&n2));
-                            }
-                        }
-                        (Addr::CharCode(n1), Addr::CharCode(n2)) => {
-                            if n1 != n2 {
-                                return Some(n1.cmp(&n2));
-                            }
-                        }
-                        (Addr::Usize(n1), Addr::Con(n2)) | (Addr::Con(n2), Addr::Usize(n1)) => {
-                            if let HeapCellValue::Integer(ref n2) = &self.heap[n2] {
-                                if let Some(n2) = n2.to_usize() {
+                        (
+                            Addr::Con(h1),
+                            v2,
+                        ) => {
+                            if let Ok(n1) = Number::try_from(&self.heap[h1]) {
+                                if let Ok(n2) = Number::try_from(&HeapCellValue::Addr(v2)) {
                                     if n1 != n2 {
                                         return Some(n1.cmp(&n2));
                                     }
+                                } else {
+                                    unreachable!()
                                 }
+                            } else {
+                                unreachable!()
                             }
                         }
-                        (Addr::CharCode(n1), Addr::Con(n2)) | (Addr::Con(n2), Addr::CharCode(n1)) => {
-                            if let HeapCellValue::Integer(ref n2) = &self.heap[n2] {
-                                if let Some(n2) = n2.to_u32() {
+                        (
+                            v1,
+                            Addr::Con(h2),
+                        ) => {
+                            if let Ok(n1) = Number::try_from(&HeapCellValue::Addr(v1)) {
+                                if let Ok(n2) = Number::try_from(&self.heap[h2]) {
                                     if n1 != n2 {
                                         return Some(n1.cmp(&n2));
                                     }
+                                } else {
+                                    unreachable!()
                                 }
+                            } else {
+                                unreachable!()
                             }
                         }
-                        _ => {
-                            unreachable!()
+                        (v1, v2) => {
+                            if let Ok(n1) = Number::try_from(&HeapCellValue::Addr(v1)) {
+                                if let Ok(n2) = Number::try_from(&HeapCellValue::Addr(v2)) {
+                                    if n1 != n2 {
+                                        return Some(n1.cmp(&n2));
+                                    }
+                                } else {
+                                    unreachable!()
+                                }
+                            } else {
+                                unreachable!()
+                            }
                         }
                     }
                 }
@@ -2330,34 +2296,34 @@ impl MachineState {
             &InlinedClauseType::IsInteger(r1) => {
                 let d = self.store(self.deref(self[r1]));
 
-                match d {
-                    Addr::Con(h) => {
-                        match &self.heap[h] {
-                            HeapCellValue::Integer(_) => {
+                match Number::try_from((d, &self.heap)) {
+                    Ok(Number::Fixnum(_)) => {
+                        self.p += 1;
+                    }
+                    Ok(Number::Integer(_)) => {
+                        self.p += 1;
+                    }
+                    Ok(Number::Rational(n)) => {
+                        if n.denom() == &1 {
+                            self.p += 1;
+                        } else {
+                            self.fail = true;
+                        }
+                    }
+                    _ => {
+                        match d {
+                            Addr::CharCode(_) => {
                                 self.p += 1;
                             }
-                            HeapCellValue::Rational(ref r) => {
-                                if r.denom() == &1 {
-                                    self.p += 1;
-                                } else {
-                                    self.fail = true;
-                                }
+                            Addr::Char(_) if self.flags.double_quotes.is_codes() => {
+                                self.p += 1;
                             }
                             _ => {
                                 self.fail = true;
                             }
                         }
                     }
-                    Addr::CharCode(_) | Addr::Usize(_) => {
-                        self.p += 1;
-                    }
-                    Addr::Char(_) if self.flags.double_quotes.is_codes() => {
-                        self.p += 1;
-                    }
-                    _ => {
-                        self.fail = true;
-                    }
-                };
+                }
             }
             &InlinedClauseType::IsCompound(r1) => {
                 let d = self.store(self.deref(self[r1]));
@@ -2484,8 +2450,8 @@ impl MachineState {
             Addr::Stream(_) => {
                 self.fail = true;
             }
-            Addr::Char(_) | Addr::CharCode(_) | Addr::Con(_) | Addr::Float(_) |
-            Addr::EmptyList | Addr::Usize(_) => {
+            Addr::Char(_) | Addr::CharCode(_) | Addr::Con(_) | Addr::Fixnum(_) |
+            Addr::Float(_) | Addr::EmptyList | Addr::Usize(_) => {
                 self.try_functor_unify_components(a1, 0);
             }
             Addr::Str(o) => match self.heap.clone(o) {
@@ -2510,48 +2476,33 @@ impl MachineState {
                     return Err(self.error_form(MachineError::instantiation_error(), stub));
                 }
 
-                let arity = match arity {
-                    Addr::Con(h) => {
-                        match &self.heap[h] {
-                            &HeapCellValue::Integer(ref n) => {
-                                n.to_isize()
+                let arity =
+                    match Number::try_from((arity, &self.heap)) {
+                        Ok(Number::Fixnum(n))  => Some(n),
+                        Ok(Number::Integer(n)) => n.to_isize(),
+                        Ok(Number::Rational(n))
+                            if n.denom() == &1 => {
+                                n.numer().to_isize()
+                            },
+                        _ =>
+                            match arity {
+                                Addr::CharCode(c) => {
+                                    Some(c as isize)
+                                }
+                                arity => {
+                                    return Err(
+                                        self.error_form(
+                                            MachineError::type_error(
+                                                self.heap.h(),
+                                                ValidType::Integer,
+                                                arity,
+                                            ),
+                                            stub,
+                                        )
+                                    );
+                                }
                             }
-                            &HeapCellValue::Addr(Addr::Usize(n)) => {
-                                Some(n as isize)
-                            }
-                            _ => {
-                                return Err(
-                                    self.error_form(
-                                        MachineError::type_error(
-                                            self.heap.h(),
-                                            ValidType::Integer,
-                                            arity,
-                                        ),
-                                        stub,
-                                    )
-                                );
-                            }
-                        }
-                    },
-                    Addr::Usize(n) => {
-                        Some(n as isize)
-                    }
-                    Addr::CharCode(c) => {
-                        Some(c as isize)
-                    }
-                    arity => {
-                        return Err(
-                            self.error_form(
-                                MachineError::type_error(
-                                    self.heap.h(),
-                                    ValidType::Integer,
-                                    arity,
-                                ),
-                                stub,
-                            )
-                        );
-                    }
-                };
+                    };
 
                 let arity = match arity {
                     Some(arity) => {
@@ -2579,7 +2530,7 @@ impl MachineState {
                 }
 
                 match name {
-                    Addr::Char(_) | Addr::CharCode(_) | Addr::Con(_) | Addr::Float(_) |
+                    Addr::Char(_) | Addr::CharCode(_) | Addr::Con(_) | Addr::Fixnum(_) | Addr::Float(_) |
                     Addr::EmptyList | Addr::PStrLocation(..) | Addr::Usize(_) if arity == 0 => {
                         self.unify(a1, name);
                     }
@@ -2926,34 +2877,6 @@ impl MachineState {
                 ) => {
                 }
                 (
-                    HeapCellValue::Integer(n1),
-                    HeapCellValue::Integer(n2),
-                ) => {
-                    if &*n1 != &*n2 {
-                        return true;
-                    }
-                }
-                (
-                    HeapCellValue::Rational(n1),
-                    HeapCellValue::Rational(n2),
-                ) => {
-                    if &*n1 != &*n2 {
-                        return true;
-                    }
-                }
-                (
-                    HeapCellValue::Integer(ref n1),
-                    HeapCellValue::Rational(ref n2),
-                ) |
-                (
-                    HeapCellValue::Rational(ref n2),
-                    HeapCellValue::Integer(ref n1),
-                ) => {
-                    if n1.as_ref().partial_cmp(&**n2) == Some(Ordering::Equal) {
-                        return true;
-                    }
-                }
-                (
                     HeapCellValue::Atom(ref n1, ref spec_1),
                     HeapCellValue::Atom(ref n2, ref spec_2),
                 ) => {
@@ -2970,15 +2893,34 @@ impl MachineState {
                     }
                 }
                 (
-                    HeapCellValue::Addr(a1),
-                    HeapCellValue::Addr(a2),
+                    v1,
+                    v2,
                 ) => {
-                    if a1 != a2 {
-                        return true;
+                    if let Ok(n1) = Number::try_from(v1) {
+                        if let Ok(n2) = Number::try_from(v2) {
+                            if n1 != n2 {
+                                return true;
+                            } else {
+                                continue;
+                            }
+                        } else {
+                            return true;
+                        }
                     }
-                }
-                _ => {
-                    return true;
+
+                    match (v1, v2) {
+                        (
+                            HeapCellValue::Addr(a1),
+                            HeapCellValue::Addr(a2),
+                        ) => {
+                            if a1 != a2 {
+                                return true;
+                            }
+                        }
+                        _ => {
+                            return true;
+                        }
+                    }
                 }
             }
         }
@@ -3051,13 +2993,13 @@ impl MachineState {
         lco: bool,
         use_default_cp: bool,
     ) {
-	let interrupted = INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
+	    let interrupted = INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
 
-	if INTERRUPT.compare_and_swap(interrupted, false, std::sync::atomic::Ordering::Relaxed) {
-	    self.reset();
-	    self.fail = true;
-	    return;
-	}
+	    if INTERRUPT.compare_and_swap(interrupted, false, std::sync::atomic::Ordering::Relaxed) {
+	        self.reset();
+	        self.fail = true;
+	        return;
+	    }
 
         let mut default_call_policy: Box<dyn CallPolicy> = Box::new(DefaultCallPolicy {});
 
@@ -3192,8 +3134,12 @@ impl MachineState {
                 self.hb = self.heap.h();
                 self.p += offset;
             }
-            &IndexedChoiceInstruction::Retry(l) => try_or_fail!(self, call_policy.retry(self, l)),
-            &IndexedChoiceInstruction::Trust(l) => try_or_fail!(self, call_policy.trust(self, l)),
+            &IndexedChoiceInstruction::Retry(l) => {
+                try_or_fail!(self, call_policy.retry(self, l));
+            }
+            &IndexedChoiceInstruction::Trust(l) => {
+                try_or_fail!(self, call_policy.trust(self, l));
+            }
         };
     }
 
@@ -3241,7 +3187,9 @@ impl MachineState {
             &ChoiceInstruction::RetryMeElse(offset) => {
                 try_or_fail!(self, call_policy.retry_me_else(self, offset))
             }
-            &ChoiceInstruction::TrustMe => try_or_fail!(self, call_policy.trust_me(self)),
+            &ChoiceInstruction::TrustMe => {
+                try_or_fail!(self, call_policy.trust_me(self))
+            }
         }
     }
 

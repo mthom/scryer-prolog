@@ -13,6 +13,7 @@ use indexmap::{IndexMap, IndexSet};
 use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::collections::VecDeque;
+use std::convert::TryFrom;
 use std::mem;
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -211,8 +212,8 @@ fn setup_op_decl(
     };
 
     let prec = match *terms.pop().unwrap() {
-        Term::Constant(_, Constant::Integer(bi)) => match bi.to_usize() {
-            Some(n) if n <= 1200 => n,
+        Term::Constant(_, Constant::Fixnum(bi)) => match usize::try_from(bi) {
+            Ok(n) if n <= 1200 => n,
             _ => return Err(ParserError::InconsistentEntry),
         },
         _ => return Err(ParserError::InconsistentEntry),
@@ -232,8 +233,13 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, ParserErro
 
             let arity = arity
                 .to_constant()
-                .and_then(|c| c.to_integer())
-                .and_then(|n| n.to_usize())
+                .and_then(|c| {
+                    match c {
+                        Constant::Integer(n) => n.to_usize(),
+                        Constant::Fixnum(n) => usize::try_from(n).ok(),
+                        _ => None
+                    }
+                })
                 .ok_or(ParserError::InvalidModuleExport)?;
 
             let name  = name
@@ -246,7 +252,7 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, ParserErro
             } else {
                 Ok((name, arity + 2))
             }
-        }        
+        }
         _ => Err(ParserError::InvalidModuleExport),
     }
 }
@@ -344,7 +350,7 @@ fn setup_use_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleSource, Pars
 
 fn setup_double_quotes(mut terms: Vec<Box<Term>>) -> Result<DoubleQuotes, ParserError> {
     let dbl_quotes = *terms.pop().unwrap();
-    
+
     match terms[0].as_ref() {
         Term::Constant(_, Constant::Atom(ref name, _))
             if name.as_str() == "double_quotes" => {
@@ -629,26 +635,26 @@ fn setup_declaration<'a, 'b, 'c>(
 
     match term {
         Term::Clause(_, name, mut terms, _) =>
-	    match (name.as_str(), terms.len()) {
-		("dynamic", 1) => {
-		    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
-		    Ok(Declaration::Dynamic(name, arity))
-		}
-		("initialization", 1) => {
-		    let mut rel_worker = RelationWorker::new(flags, line_num, col_num);
-		    let query_terms = rel_worker.setup_query(indices, terms, false)?;
-		    let queue = rel_worker.parse_queue(indices)?;
+	        match (name.as_str(), terms.len()) {
+		        ("dynamic", 1) => {
+		            let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
+		            Ok(Declaration::Dynamic(name, arity))
+		        }
+		        ("initialization", 1) => {
+		            let mut rel_worker = RelationWorker::new(flags, line_num, col_num);
+		            let query_terms = rel_worker.setup_query(indices, terms, false)?;
+		            let queue = rel_worker.parse_queue(indices)?;
 
-		    Ok(Declaration::ModuleInitialization(query_terms, queue))
-		}
-		("module", 2) =>
-		    Ok(Declaration::Module(setup_module_decl(terms, indices.atom_tbl())?)),
-		("op", 3) =>
-		    Ok(Declaration::Op(setup_op_decl(terms, indices.atom_tbl())?)),
-		("non_counted_backtracking", 1) => {
-		    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
-		    Ok(Declaration::NonCountedBacktracking(name, arity))
-		}
+		            Ok(Declaration::ModuleInitialization(query_terms, queue))
+		        }
+		        ("module", 2) =>
+		            Ok(Declaration::Module(setup_module_decl(terms, indices.atom_tbl())?)),
+		        ("op", 3) =>
+		            Ok(Declaration::Op(setup_op_decl(terms, indices.atom_tbl())?)),
+		        ("non_counted_backtracking", 1) => {
+		            let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
+		            Ok(Declaration::NonCountedBacktracking(name, arity))
+		        }
                 ("set_prolog_flag", 2) => {
                     Ok(Declaration::SetPrologFlag(setup_double_quotes(terms)?))
                 }
@@ -656,27 +662,31 @@ fn setup_declaration<'a, 'b, 'c>(
                     let mut term = *terms.pop().unwrap();
 
                     match setup_predicate_indicator(&mut term) {
-                        Ok((name, arity)) =>
-                            Ok(Declaration::MultiFile(MultiFileIndicator::LocalScoped(name, arity))),
-                        _ =>
+                        Ok((name, arity)) => {
+                            Ok(Declaration::MultiFile(MultiFileIndicator::LocalScoped(name, arity)))
+                        }
+                        _ => {
                             setup_scoped_predicate_indicator(&mut term)
                                 .map(|key| {
                                     Declaration::MultiFile(MultiFileIndicator::ModuleScoped(key))
                                 })
+                        }
                     }
                 }
-		("use_module", 1) => {
-		    Ok(Declaration::UseModule(setup_use_module_decl(terms)?))
+		        ("use_module", 1) => {
+		            Ok(Declaration::UseModule(setup_use_module_decl(terms)?))
                 }
-		("use_module", 2) => {
-		    let (name, exports) = setup_qualified_import(terms, indices.atom_tbl())?;
-		    Ok(Declaration::UseQualifiedModule(name, exports))
-		}
-		_ => {
-		    Err(ParserError::InconsistentEntry)
+		        ("use_module", 2) => {
+		            let (name, exports) = setup_qualified_import(terms, indices.atom_tbl())?;
+		            Ok(Declaration::UseQualifiedModule(name, exports))
+		        }
+		        _ => {
+		            Err(ParserError::InconsistentEntry)
                 }
-	    },
-        _ => Err(ParserError::InconsistentEntry),
+	        },
+        _ => {
+            Err(ParserError::InconsistentEntry)
+        }
     }
 }
 
@@ -1249,7 +1259,7 @@ impl<'a> TopLevelBatchWorker<'a> {
 
         while !self.term_stream.eof()? {
             let term = self.term_stream.read_term(&indices.op_dir)?;
-            
+
             // if is_consistent is false, preds is non-empty.
             let term = if !term.is_consistent(&preds) {
                 self.process_result(indices, &mut preds)?;

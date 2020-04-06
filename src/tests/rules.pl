@@ -62,4 +62,3 @@ cleanup :- abolish(p/3),
 	   abolish(h/1).
 
 :- initialization(test_queries_on_rules).
-    

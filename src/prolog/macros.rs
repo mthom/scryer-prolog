@@ -105,7 +105,7 @@ macro_rules! functor_term {
     );
     (constant($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
         from_constant!($e, $h, $arity, $aux_lens, $addendum)
-    );    
+    );
     (constant($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
         from_constant!($e, 0, $arity, $aux_lens, $addendum)
     );
@@ -138,6 +138,9 @@ macro_rules! from_constant {
             &Constant::CharCode(c) => {
                 HeapCellValue::Addr(Addr::CharCode(c))
             }
+            &Constant::Fixnum(n) => {
+                HeapCellValue::Addr(Addr::Fixnum(n))
+            }
             &Constant::Integer(ref n) => {
                 HeapCellValue::Integer(n.clone())
             }
@@ -152,7 +155,7 @@ macro_rules! from_constant {
                 let h = len + $arity + 1 + $addendum.h() + $over_h;
 
                 $addendum.put_constant(Constant::String(s.clone()));
-                
+
                 HeapCellValue::Addr(Addr::PStrLocation(h, 0))
             }
             &Constant::Usize(u) => {

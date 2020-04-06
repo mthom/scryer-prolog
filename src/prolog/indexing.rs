@@ -1,11 +1,13 @@
 use prolog_parser::ast::*;
 
 use crate::prolog::instructions::*;
+use crate::prolog::rug::Integer;
 
 use indexmap::IndexMap;
 
 use std::collections::VecDeque;
 use std::hash::Hash;
+use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 enum IntIndex {
@@ -48,6 +50,41 @@ impl CodeOffsets {
         }
     }
 
+    fn intercept_constant(&mut self, constant: &Constant, index: usize) {
+        match constant {
+            &Constant::Atom(ref name, _) if name.is_char() => {
+                let c = name.as_str().chars().next().unwrap();
+                let code = self.constants
+                    .entry(Constant::Char(c))
+                    .or_insert(vec![]);
+
+                code.push(Self::add_index(code.is_empty(), index));
+            }
+            &Constant::Fixnum(n) => {
+                let code = self.constants
+                    .entry(Constant::Integer(Rc::new(Integer::from(n))))
+                    .or_insert(vec![]);
+
+                code.push(Self::add_index(code.is_empty(), index));
+            }
+            &Constant::Integer(ref n) => {
+                if let Some(n) = n.to_isize() {
+                    let code = self.constants
+                        .entry(Constant::Fixnum(n))
+                        .or_insert(vec![]);
+
+                    code.push(Self::add_index(code.is_empty(), index));
+                }
+            }
+            &Constant::String(_) => {
+                let is_initial_index = self.lists.is_empty();
+                self.lists.push(Self::add_index(is_initial_index, index));
+            }
+            _ => {
+            }
+        }
+    }
+
     pub fn index_term(&mut self, first_arg: &Term, index: usize) {
         match first_arg {
             &Term::Clause(_, ref name, ref terms, _) => {
@@ -63,29 +100,12 @@ impl CodeOffsets {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
             }
-            &Term::Constant(_, Constant::String(ref s)) => {
-                let is_initial_index = self.lists.is_empty();
-                self.lists.push(Self::add_index(is_initial_index, index));
-
-                let constant = Constant::String(s.clone());
-                let code = self.constants.entry(constant).or_insert(Vec::new());
-
-                let is_initial_index = code.is_empty();
-                code.push(Self::add_index(is_initial_index, index));
-            }
             &Term::Constant(_, ref constant) => {
-                if let Constant::Atom(ref name, _) = constant {
-                    if name.is_char() {
-                        let c = name.as_str().chars().next().unwrap();
-                        let code = self.constants
-                            .entry(Constant::Char(c))
-                            .or_insert(vec![]);
-                        
-                        code.push(Self::add_index(code.is_empty(), index));
-                    }
-                }
-                
-                let code = self.constants.entry(constant.clone()).or_insert(Vec::new());
+                self.intercept_constant(constant, index);
+
+                let code = self.constants
+                    .entry(constant.clone())
+                    .or_insert(vec![]);
 
                 let is_initial_index = code.is_empty();
                 code.push(Self::add_index(is_initial_index, index));

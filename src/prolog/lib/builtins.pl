@@ -1024,7 +1024,7 @@ subsumes_term(General, Specific) :-
 
 unify_with_occurs_check(X, Y) :- '$unify_with_occurs_check'(X, Y).
 
-current_input(S) :- '$current_input'(S).    
+current_input(S) :- '$current_input'(S).
 
 current_output(S) :- '$current_output'(S).
 

@@ -12,6 +12,7 @@ use indexmap::IndexMap;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
+use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -573,11 +574,33 @@ pub struct Module {
     pub listing_src: ListingSource,
  }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub enum Number {
     Float(OrderedFloat<f64>),
     Integer(Rc<Integer>),
     Rational(Rc<Rational>),
+    Fixnum(isize),
+}
+
+impl From<Integer> for Number {
+    #[inline]
+    fn from(n: Integer) -> Self {
+        Number::Integer(Rc::new(n))
+    }
+}
+
+impl From<Rational> for Number {
+    #[inline]
+    fn from(n: Rational) -> Self {
+        Number::Rational(Rc::new(n))
+    }
+}
+
+impl From<isize> for Number {
+    #[inline]
+    fn from(n: isize) -> Self {
+        Number::Fixnum(n)
+    }
 }
 
 impl Default for Number {
@@ -586,10 +609,23 @@ impl Default for Number {
     }
 }
 
+impl Into<Constant> for Number {
+    #[inline]
+    fn into(self) -> Constant {
+        match self {
+            Number::Fixnum(n) => Constant::Fixnum(n),
+            Number::Integer(n) => Constant::Integer(n),
+            Number::Float(f) => Constant::Float(f),
+            Number::Rational(r) => Constant::Rational(r),
+        }
+    }
+}
+
 impl Into<HeapCellValue> for Number {
     #[inline]
     fn into(self) -> HeapCellValue {
         match self {
+            Number::Fixnum(n) => HeapCellValue::Addr(Addr::Fixnum(n)),
             Number::Integer(n) => HeapCellValue::Integer(n),
             Number::Float(f) => HeapCellValue::Addr(Addr::Float(f)),
             Number::Rational(r) => HeapCellValue::Rational(r),
@@ -597,10 +633,27 @@ impl Into<HeapCellValue> for Number {
     }
 }
 
+
 impl Number {
+    #[inline]
+    pub fn to_u32(&self) -> Option<u32> {
+        match self {
+            &Number::Fixnum(n) => u32::try_from(n).ok(),
+            &Number::Integer(ref n) => n.to_u32(),
+            &Number::Float(_) => None,
+            &Number::Rational(ref r) =>
+                if r.denom() == &1 {
+                    r.numer().to_u32()
+                } else {
+                    None
+                }
+        }
+    }
+
     #[inline]
     pub fn is_positive(&self) -> bool {
         match self {
+            &Number::Fixnum(n) => n > 0,
             &Number::Integer(ref n) => &**n > &0,
             &Number::Float(OrderedFloat(f)) => f.is_sign_positive(),
             &Number::Rational(ref r) => &**r > &0,
@@ -610,6 +663,7 @@ impl Number {
     #[inline]
     pub fn is_negative(&self) -> bool {
         match self {
+            &Number::Fixnum(n) => n < 0,
             &Number::Integer(ref n) => &**n < &0,
             &Number::Float(OrderedFloat(f)) => f.is_sign_negative(),
             &Number::Rational(ref r) => &**r < &0,
@@ -619,6 +673,7 @@ impl Number {
     #[inline]
     pub fn is_zero(&self) -> bool {
         match self {
+            &Number::Fixnum(n) => n == 0,
             &Number::Integer(ref n) => &**n == &0,
             &Number::Float(f) => f == OrderedFloat(0f64),
             &Number::Rational(ref r) => &**r == &0,
@@ -628,9 +683,15 @@ impl Number {
     #[inline]
     pub fn abs(self) -> Self {
         match self {
-            Number::Integer(n) => Number::Integer(Rc::new(Integer::from(n.abs_ref()))),
+            Number::Fixnum(n) =>
+                if let Some(n) = n.checked_abs() {
+                    Number::from(n)
+                } else {
+                    Number::from(Integer::from(n).abs())
+                }
+            Number::Integer(n) => Number::from(Integer::from(n.abs_ref())),
             Number::Float(f) => Number::Float(OrderedFloat(f.abs())),
-            Number::Rational(r) => Number::Rational(Rc::new(Rational::from(r.abs_ref()))),
+            Number::Rational(r) => Number::from(Rational::from(r.abs_ref())),
         }
     }
 }

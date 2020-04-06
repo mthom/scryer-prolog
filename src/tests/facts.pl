@@ -23,6 +23,6 @@ test_queries_on_facts :-
     retract(p(_,_,_)),
     assertz(p(Z, h(Z, W), f(W))),
     p(f(f(a)), h(f(f(a)), f(a)), f(f(a))),
-    retract(p(Z, h(Z, W), f(W))).[
+    retract(p(Z, h(Z, W), f(W))).
 
-:- initialization(test_queries_on_facts).    
+:- initialization(test_queries_on_facts).

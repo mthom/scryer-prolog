@@ -30,16 +30,17 @@
     ;
        Term = [Item] -> !,
        (  atom(Item) ->
-	  (  Item == user ->
-	     catch('$$compile_batch', E, '$print_exception_with_check'(E))
-	  ;  consult(Item)
-	  )
+	      (  Item == user ->
+	         catch('$$compile_batch', E, '$print_exception_with_check'(E))
+	      ;  consult(Item)
+	      )
        ;
-	  catch(throw(error(type_error(atom, Item), repl/0)),
-		E,
-		'$print_exception_with_check'(E))
+	   catch(throw(error(type_error(atom, Item), repl/0)),
+		     E,
+		     '$print_exception_with_check'(E))
        )
-    ;  '$submit_query_and_print_results'(Term, VarList)
+    ;
+       '$submit_query_and_print_results'(Term, VarList)
     ).
 
 '$submit_query_and_print_results'(Term0, VarList) :-
@@ -55,10 +56,10 @@
 
 '$needs_bracketing'(Value, Op) :-
     catch((functor(Value, F, _),
-	   current_op(EqPrec, EqSpec, Op),
-	   current_op(FPrec, _, F)),
-	  _,
-	  false),
+	       current_op(EqPrec, EqSpec, Op),
+	       current_op(FPrec, _, F)),
+	      _,
+	      false),
     (  EqPrec < FPrec -> true
     ;  '$quoted_token'(F) -> true
     ;  EqPrec == FPrec,
@@ -225,10 +226,8 @@
     ).
 
 '$gather_goals'([], VarList, Goals) :-
-    '$get_attr_var_queue_beyond'(0, AttrVars),
     '$gather_query_vars'(VarList, QueryVars),
-    '$call_attribute_goals'(QueryVars, AttrVars),
-    '$fetch_attribute_goals'(Goals).
+    copy_term(QueryVars, QueryVars, Goals).
 '$gather_goals'([Var = Value | Pairs], VarList, Goals) :-
     (  (  nonvar(Value)
        ;  '$is_a_different_variable'(Pairs, Value)
@@ -253,27 +252,27 @@
 '$module_export'(Source, PI) :-
     (  nonvar(PI) ->
        (  PI = Name / Arity ->
-	  (  var(Name) -> throw(error(instantiation_error, Source))
-	  ;  integer(Arity) ->
-	     (  \+ atom(Name) -> throw(error(type_error(atom, Name), Source))
-	     ;  Arity < 0 -> throw(error(domain_error(not_less_than_zero, Arity), Source))
-	     ;  true
-	     )
-	  ;  throw(error(type_error(integer, Arity), Source))
-	  )
+	      (  var(Name) -> throw(error(instantiation_error, Source))
+	      ;  integer(Arity) ->
+	         (  \+ atom(Name) -> throw(error(type_error(atom, Name), Source))
+	         ;  Arity < 0 -> throw(error(domain_error(not_less_than_zero, Arity), Source))
+	         ;  true
+	         )
+	      ;  throw(error(type_error(integer, Arity), Source))
+	      )
        ;  PI = op(Prec, Spec, Name) ->
-	  (  integer(Prec) ->
-	     (  \+ atom(Name) ->
-		throw(error(type_error(atom, Name), Source))
-	     ;  Prec < 0 ->
-		throw(error(domain_error(not_less_than_zero, Prec), Source))
-	     ;  Prec > 1200 ->
-		throw(error(domain_error(operator_precision, Prec), Source))
-	     ;  memberchk(Spec, [xfy, yfx, xfx, fx, fy, yf, xf])
-	     ;  throw(error(domain_error(operator_specification, Spec), Source))
-	     )
-	  ;  throw(error(type_error(integer, Prec), Source))
-	  )
+	      (  integer(Prec) ->
+	         (  \+ atom(Name) ->
+		        throw(error(type_error(atom, Name), Source))
+	         ;  Prec < 0 ->
+		        throw(error(domain_error(not_less_than_zero, Prec), Source))
+	         ;  Prec > 1200 ->
+		        throw(error(domain_error(operator_precision, Prec), Source))
+	         ;  memberchk(Spec, [xfy, yfx, xfx, fx, fy, yf, xf])
+	         ;  throw(error(domain_error(operator_specification, Spec), Source))
+	         )
+	      ;  throw(error(type_error(integer, Prec), Source))
+	      )
        ;  throw(error(type_error(module_export, PI), Source))
        )
     ;  throw(error(instantiation_error, Source))
@@ -334,10 +333,10 @@ expand_goals(UnexpandedGoals, ExpandedGoals) :-
     ),
     (  Goals = (Goal0, Goals0) ->
        (  expand_goals(Goal0, Goal1) ->
-	  expand_goals(Goals0, Goals1),
-	  thread_goals(Goal1, ExpandedGoals, Goals1, (','))
+	      expand_goals(Goals0, Goals1),
+	      thread_goals(Goal1, ExpandedGoals, Goals1, (','))
        ;  expand_goals(Goals0, Goals1),
-	  ExpandedGoals = (Goal0, Goals1)
+	      ExpandedGoals = (Goal0, Goals1)
        )
     ;  Goals = (Goals0 -> Goals1) ->
        expand_goals(Goals0, ExpandedGoals0),
@@ -358,9 +357,9 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
     nonvar(Goals0),
     (  Goals0 = [G | Gs] ->
        (  Gs == [] ->
-	  Goals1 =.. [Functor, G, Hole]
+	      Goals1 =.. [Functor, G, Hole]
        ;  Goals1 =.. [Functor, G, Goals2],
-	  thread_goals(Gs, Goals2, Hole, Functor)
+	      thread_goals(Gs, Goals2, Hole, Functor)
        )
     ;  Goals1 =.. [Functor, Goals0, Hole]
     ).
@@ -369,9 +368,9 @@ thread_goals(Goals0, Goals1, Functor) :-
     nonvar(Goals0),
     (  Goals0 = [G | Gs] ->
        (  Gs = [] ->
-	  Goals1 = G
+	      Goals1 = G
        ;  Goals1 =.. [Functor, G, Goals2],
-	  thread_goals(Gs, Goals2, Functor)
+	      thread_goals(Gs, Goals2, Functor)
        )
     ;  Goals1 = Goals0
     ).

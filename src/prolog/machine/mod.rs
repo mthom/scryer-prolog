@@ -45,6 +45,7 @@ use crate::prolog::machine::toplevel::*;
 use indexmap::IndexMap;
 
 use std::collections::VecDeque;
+use std::convert::TryFrom;
 use std::fs::File;
 use std::mem;
 use std::ops::Index;
@@ -205,11 +206,11 @@ impl SubModuleUser for IndexStore {
 #[inline]
 fn current_dir() -> std::path::PathBuf {
     let mut path_buf = std::path::PathBuf::from(PROJECT_DIR);
-    
+
     // file!() always produces a path relative to PROJECT_DIR.
     path_buf = path_buf.join(std::path::PathBuf::from(file!()));
 
-    path_buf.pop();    
+    path_buf.pop();
     path_buf
 }
 
@@ -322,34 +323,34 @@ impl Machine {
     }
 
     pub fn run_init_code(&mut self, code: Code) -> bool {
-	let old_machine_st = self.sink_to_snapshot();
-	self.machine_st.reset();
+	    let old_machine_st = self.sink_to_snapshot();
+	    self.machine_st.reset();
 
-	self.code_repo.cached_query = code;
-	self.run_query();
+	    self.code_repo.cached_query = code;
+	    self.run_query();
 
         let result = self.machine_st.fail;
-	self.absorb_snapshot(old_machine_st);
+	    self.absorb_snapshot(old_machine_st);
 
         !result
     }
 
     pub fn run_top_level(&mut self) {
-	use std::env;
+	    use std::env;
 
-	let mut filename_atoms = vec![];
+	    let mut filename_atoms = vec![];
 
-	// the first of these is the path to the scryer-prolog executable, so skip
-	// it.
-	for filename in env::args().skip(1) {
-	    let atom = clause_name!(filename, self.indices.atom_tbl);
-	    filename_atoms.push(HeapCellValue::Atom(atom, None));
-	}
+	    // the first of these is the path to the scryer-prolog executable, so skip
+	    // it.
+	    for filename in env::args().skip(1) {
+	        let atom = clause_name!(filename, self.indices.atom_tbl);
+	        filename_atoms.push(HeapCellValue::Atom(atom, None));
+	    }
 
-	let list_addr =
-	    Addr::HeapCell(self.machine_st.heap.to_list(filename_atoms.into_iter()));
+	    let list_addr =
+	        Addr::HeapCell(self.machine_st.heap.to_list(filename_atoms.into_iter()));
 
-	self.machine_st[temp_v!(1)] = list_addr;
+	    self.machine_st[temp_v!(1)] = list_addr;
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
 
         self.run_query();
@@ -397,7 +398,7 @@ impl Machine {
                                 lib_path.clone(),
                             )
         );
-        
+
         compile_user_module(&mut wam,
                             Stream::from(LISTS),
                             true,
@@ -406,7 +407,7 @@ impl Machine {
                                 lib_path.clone(),
                             ),
         );
-        
+
         compile_user_module(&mut wam,
                             Stream::from(ISO_EXT),
                             true,
@@ -415,7 +416,7 @@ impl Machine {
                                 lib_path.clone(),
                             )
         );
-        
+
         compile_user_module(&mut wam,
                             Stream::from(SI),
                             true,
@@ -539,53 +540,57 @@ impl Machine {
 
     fn extract_module_export_list(&mut self) -> Result<Vec<ModuleExport>, ParserError>
     {
-	let mut export_list = self.machine_st[temp_v!(2)].clone();
-	let mut exports = vec![];
+	    let mut export_list = self.machine_st[temp_v!(2)].clone();
+	    let mut exports = vec![];
 
-	while let Addr::Lis(l) = self.machine_st.store(self.machine_st.deref(export_list)) {
-	    match &self.machine_st.heap[l] {
-		&HeapCellValue::Addr(Addr::Str(s)) => {
+	    while let Addr::Lis(l) = self.machine_st.store(self.machine_st.deref(export_list)) {
+	        match &self.machine_st.heap[l] {
+		        &HeapCellValue::Addr(Addr::Str(s)) => {
                     match &self.machine_st.heap[s] {
                         HeapCellValue::NamedStr(arity, ref name, _)
                             if *arity == 2 && name.as_str() == "/" => {
-		                let name = match &self.machine_st.heap[s+1] {
-			            &HeapCellValue::Atom(ref name, _) =>
-			                name.clone(),
-			            _ =>
-			                unreachable!()
-		                };
+		                        let name = match &self.machine_st.heap[s+1] {
+			                        &HeapCellValue::Atom(ref name, _) =>
+			                            name.clone(),
+			                        _ =>
+			                            unreachable!()
+		                        };
 
-		                let arity = match &self.machine_st.heap[s+2] {
-			            &HeapCellValue::Integer(ref arity) =>
-			                arity.to_usize().unwrap(),
-			            _ =>
-			                unreachable!()
-		                };
+		                        let arity = match &self.machine_st.heap[s+2] {
+			                        &HeapCellValue::Integer(ref arity) =>
+			                            arity.to_usize().unwrap(),
+                                    &HeapCellValue::Addr(Addr::Fixnum(n)) =>
+                                        usize::try_from(n).unwrap(),
+			                        _ =>
+			                            unreachable!()
+		                        };
 
-		                exports.push(ModuleExport::PredicateKey((name, arity)));
+		                        exports.push(ModuleExport::PredicateKey((name, arity)));
                             }
                         HeapCellValue::NamedStr(arity, ref name, _)
                             if *arity == 3 && name.as_str() == "op" => {
                                 let name = match &self.machine_st.heap[s+3] {
-			            &HeapCellValue::Atom(ref name, _) =>
-			                name.clone(),
-			            _ =>
-			                unreachable!()
-		                };
+			                        &HeapCellValue::Atom(ref name, _) =>
+			                            name.clone(),
+			                        _ =>
+			                            unreachable!()
+		                        };
 
                                 let spec = match &self.machine_st.heap[s+2] {
-			            &HeapCellValue::Atom(ref name, _) =>
-			                name.clone(),
-			            _ =>
-			                unreachable!()
-		                };
+			                        &HeapCellValue::Atom(ref name, _) =>
+			                            name.clone(),
+			                        _ =>
+			                            unreachable!()
+		                        };
 
-		                let prec = match &self.machine_st.heap[s+1] {
-			            &HeapCellValue::Integer(ref arity) =>
-			                arity.to_usize().unwrap(),
-			            _ =>
-			                unreachable!()
-		                };
+		                        let prec = match &self.machine_st.heap[s+1] {
+			                        &HeapCellValue::Integer(ref arity) =>
+			                            arity.to_usize().unwrap(),
+                                    &HeapCellValue::Addr(Addr::Fixnum(n)) =>
+                                        usize::try_from(n).unwrap(),
+			                        _ =>
+			                            unreachable!()
+		                        };
 
                                 exports.push(ModuleExport::OpDecl(to_op_decl(
                                     prec,
@@ -595,47 +600,47 @@ impl Machine {
                             }
                         _ => unreachable!()
                     }
-		}
-		_ => unreachable!()
+		        }
+		        _ => unreachable!()
+	        }
+
+	        export_list = self.machine_st.heap[l+1].as_addr(l+1);
 	    }
 
-	    export_list = self.machine_st.heap[l+1].as_addr(l+1);
-	}
-
-	Ok(exports)
+	    Ok(exports)
     }
 
     fn use_module<ToSource>(&mut self, to_src: ToSource)
 	where ToSource: Fn(ClauseName) -> ModuleSource
     {
-	// the term expander will overwrite the cached query, so save it here.
-	let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
+	    // the term expander will overwrite the cached query, so save it here.
+	    let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
 
-	let module_spec = self.machine_st[temp_v!(1)].clone();
-	let name = {
+	    let module_spec = self.machine_st[temp_v!(1)].clone();
+	    let name = {
             let addr = self.machine_st.store(self.machine_st.deref(module_spec));
 
             match self.machine_st.heap.index_addr(&addr).as_ref() {
                 HeapCellValue::Atom(name, _) => name.clone(),
-	        _ => unreachable!(),
+	            _ => unreachable!(),
             }
-	};
+	    };
 
-	let load_result = match to_src(name) {
-	    ModuleSource::Library(name) =>
+	    let load_result = match to_src(name) {
+	        ModuleSource::Library(name) =>
                 if let Some(module) = self.indices.take_module(name.clone()) {
                     self.indices.remove_module(clause_name!("user"), &module);
                     self.indices.modules.insert(name.clone(), module);
 
-		    Ok(name)
-		} else {
-		    load_library(self, name, false)
-		},
-	    ModuleSource::File(name) =>
+		            Ok(name)
+		        } else {
+		            load_library(self, name, false)
+		        },
+	        ModuleSource::File(name) =>
                 load_module_from_file(self, PathBuf::from(name.as_str()), false)
-	};
+	    };
 
-	let result = load_result.and_then(|name| {
+	    let result = load_result.and_then(|name| {
             let module = self.indices.take_module(name.clone()).unwrap();
 
             if !module.is_impromptu_module {
@@ -645,30 +650,30 @@ impl Machine {
             Ok(self.indices.insert_module(module))
         });
 
-	self.code_repo.cached_query = cached_query;
+	    self.code_repo.cached_query = cached_query;
 
-	if let Err(e) = result {
-	    self.throw_session_error(e, (clause_name!("use_module"), 1));
-	}
+	    if let Err(e) = result {
+	        self.throw_session_error(e, (clause_name!("use_module"), 1));
+	    }
     }
 
     fn use_qualified_module<ToSource>(&mut self, to_src: ToSource)
 	where ToSource: Fn(ClauseName) -> ModuleSource
     {
-	// the term expander will overwrite the cached query, so save it here.
-	let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
+	    // the term expander will overwrite the cached query, so save it here.
+	    let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
 
-	let module_spec = self.machine_st[temp_v!(1)].clone();
-	let name = {
+	    let module_spec = self.machine_st[temp_v!(1)].clone();
+	    let name = {
             let addr = self.machine_st.store(self.machine_st.deref(module_spec));
 
             match self.machine_st.heap.index_addr(&addr).as_ref() {
                 HeapCellValue::Atom(name, _) => name.clone(),
-	        _ => unreachable!(),
+	            _ => unreachable!(),
             }
-	};
+	    };
 
-	let exports = match self.extract_module_export_list() {
+	    let exports = match self.extract_module_export_list() {
             Ok(exports) => exports,
             Err(e) => {
                 self.throw_session_error(SessionError::from(e), (clause_name!("use_module"), 2));
@@ -676,38 +681,38 @@ impl Machine {
             }
         };
 
-	let load_result = match to_src(name) {
-	    ModuleSource::Library(name) =>
+	    let load_result = match to_src(name) {
+	        ModuleSource::Library(name) =>
                 if let Some(module) = self.indices.take_module(name.clone()) {
                     self.indices.remove_module(clause_name!("user"), &module);
                     self.indices.modules.insert(name.clone(), module);
 
-		    Ok(name)
-		} else {
-		    load_library(self, name, false)
-		},
-	    ModuleSource::File(name) =>
+		            Ok(name)
+		        } else {
+		            load_library(self, name, false)
+		        },
+	        ModuleSource::File(name) =>
                 load_module_from_file(self, PathBuf::from(name.as_str()), false)
-	};
+	    };
 
-	let result = load_result.and_then(|name| {
-	    let module = self.indices.take_module(name.clone()).unwrap();
+	    let result = load_result.and_then(|name| {
+	        let module = self.indices.take_module(name.clone()).unwrap();
 
             if !module.is_impromptu_module {
-	        self.indices.use_qualified_module(&mut self.code_repo,
-					          self.machine_st.flags,
-					          &module,
-					          &exports)?;
+	            self.indices.use_qualified_module(&mut self.code_repo,
+					                              self.machine_st.flags,
+					                              &module,
+					                              &exports)?;
             }
 
-	    Ok(self.indices.insert_module(module))
+	        Ok(self.indices.insert_module(module))
         });
 
-	self.code_repo.cached_query = cached_query;
+	    self.code_repo.cached_query = cached_query;
 
-	if let Err(e) = result {
-	    self.throw_session_error(e, (clause_name!("use_module"), 2));
-	}
+	    if let Err(e) = result {
+	        self.throw_session_error(e, (clause_name!("use_module"), 2));
+	    }
     }
 
     fn handle_toplevel_command(&mut self, code_ptr: REPLCodePtr, p: LocalCodePtr) {
@@ -722,14 +727,14 @@ impl Machine {
                     self.throw_session_error(e, (clause_name!("repl"), 0));
                 }
             }
-	    REPLCodePtr::UseModule =>
-		self.use_module(ModuleSource::Library),
-	    REPLCodePtr::UseModuleFromFile =>
-		self.use_module(ModuleSource::File),
-	    REPLCodePtr::UseQualifiedModule =>
-		self.use_qualified_module(ModuleSource::Library),
-	    REPLCodePtr::UseQualifiedModuleFromFile =>
-		self.use_qualified_module(ModuleSource::File)
+	        REPLCodePtr::UseModule =>
+		        self.use_module(ModuleSource::Library),
+	        REPLCodePtr::UseModuleFromFile =>
+		        self.use_module(ModuleSource::File),
+	        REPLCodePtr::UseQualifiedModule =>
+		        self.use_qualified_module(ModuleSource::Library),
+	        REPLCodePtr::UseQualifiedModuleFromFile =>
+		        self.use_qualified_module(ModuleSource::File)
         }
 
         self.machine_st.p = CodePtr::Local(p);
@@ -786,7 +791,7 @@ impl Machine {
     }
 
     pub(super) fn run_query(&mut self) {
-	self.machine_st.cp = LocalCodePtr::TopLevel(0, self.code_repo.size_of_cached_query());
+	    self.machine_st.cp = LocalCodePtr::TopLevel(0, self.code_repo.size_of_cached_query());
         let end_ptr = CodePtr::Local(self.machine_st.cp);
 
         while self.machine_st.p < end_ptr {

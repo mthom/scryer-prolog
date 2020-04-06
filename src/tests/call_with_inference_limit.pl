@@ -35,7 +35,7 @@ test_queries_on_call_with_inference_limit :-
 	     [true, 2],
 	     [inference_limit_exceeded, _]]),
     findall([X,R1,R2],
-	    (call_with_inference_limit(g(X), 4, R1), 
+	    (call_with_inference_limit(g(X), 4, R1),
 	     call_with_inference_limit(g(X), 5, R2)),
 	    [[1,true,!],
 	     [2,true,!],

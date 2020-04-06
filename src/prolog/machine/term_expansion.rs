@@ -362,7 +362,7 @@ impl MachineState {
         wam.code_repo.cached_query = code;
 
         self.cp = LocalCodePtr::TopLevel(0, 0);
-        
+
         self.at_end_of_expansion = false;
         self.flags.double_quotes = DoubleQuotes::Chars;
 

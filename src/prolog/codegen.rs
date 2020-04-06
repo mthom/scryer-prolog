@@ -446,7 +446,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 }
             },
             &InlinedClauseType::IsInteger(..) => match terms[0].as_ref() {
-                &Term::Constant(_, Constant::Integer(_)) => {
+                &Term::Constant(_, Constant::Integer(_)) |
+                &Term::Constant(_, Constant::Fixnum(_)) => {
                     code.push(succeed!());
                 }
                 &Term::Var(ref vr, ref name) => {
@@ -511,7 +512,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                     code.push(is_call!(temp_v!(1), at.unwrap_or(interm!(1))))
                 }
             }
-            &Term::Constant(_, ref c @ Constant::Integer(_)) => {
+            &Term::Constant(_, ref c @ Constant::Integer(_)) |
+            &Term::Constant(_, ref c @ Constant::Fixnum(_)) => {
                 code.push(Line::Query(put_constant!(
                     Level::Shallow,
                     c.clone(),
@@ -708,7 +710,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             match fact_instr {
                 &mut FactInstruction::UnifyValue(r) => {
                     if !safe_vars.contains(&r) {
-                        *fact_instr = FactInstruction::UnifyLocalValue(r);                        
+                        *fact_instr = FactInstruction::UnifyLocalValue(r);
                         safe_vars.insert(r);
                     }
                 }

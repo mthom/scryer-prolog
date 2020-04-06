@@ -6,6 +6,8 @@ use crate::prolog::machine::compile::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::streams::*;
 
+use std::convert::TryFrom;
+
 impl Machine {
     pub(super) fn atom_tbl_of(&self, name: &ClauseName) -> TabledData<Atom> {
         match name {
@@ -52,10 +54,16 @@ impl Machine {
 
         let arity = match self.machine_st.store(self.machine_st.deref(arity)) {
             Addr::Con(h) => {
-                if let HeapCellValue::Integer(ref arity) = &self.machine_st.heap[h] {
-                    arity.to_usize().unwrap()
-                } else {
-                    unreachable!()
+                match &self.machine_st.heap[h] {
+                    HeapCellValue::Integer(ref arity) => {
+                        arity.to_usize().unwrap()
+                    }
+                    HeapCellValue::Addr(Addr::Fixnum(arity)) => {
+                        usize::try_from(*arity).unwrap()
+                    }
+                    _ => {
+                        unreachable!()
+                    }
                 }
             }
             Addr::Usize(n) => {
@@ -102,12 +110,12 @@ impl Machine {
             }
         }
     }
-    
+
     fn abolish_dynamic_clause(&mut self, name: RegType, arity: RegType) {
         let (name, arity) = self.get_predicate_key(name, arity);
 
         self.make_undefined(name.clone(), arity);
-        
+
         self.indices.remove_code_index((name.clone(), arity));
         self.indices.remove_clause_subsection(name.owning_module(), name, arity);
     }
@@ -155,7 +163,7 @@ impl Machine {
             name,
             arity,
         );
-        
+
         self.machine_st = machine_st;
 
         if let EvalSession::Error(err) = result {
@@ -239,11 +247,17 @@ impl Machine {
         let index = self.machine_st[temp_v!(3)].clone();
         let index = match self.machine_st.store(self.machine_st.deref(index)) {
             Addr::Con(h) =>
-                if let HeapCellValue::Integer(ref n) = &self.machine_st.heap[h] {
-                    n.to_usize().unwrap()
-                } else {
-                    unreachable!()
-                },
+                match &self.machine_st.heap[h] {
+                    HeapCellValue::Integer(ref arity) => {
+                        arity.to_usize().unwrap()
+                    }
+                    HeapCellValue::Addr(Addr::Fixnum(arity)) => {
+                        usize::try_from(*arity).unwrap()
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                }
             _ => unreachable!(),
         };
 
@@ -260,7 +274,7 @@ impl Machine {
                     if addrs.is_empty() {
                         self.make_undefined(name.clone(), arity);
                     }
-                    
+
                     self.print_new_dynamic_clause(addrs, name.clone(), arity)
                 }
                 Err(err) => {
@@ -280,12 +294,19 @@ impl Machine {
     fn retract_from_dynamic_predicate(&mut self) {
         let index = self.machine_st[temp_v!(3)].clone();
         let index = match self.machine_st.store(self.machine_st.deref(index)) {
-            Addr::Con(h) =>
-                if let HeapCellValue::Integer(n) = &self.machine_st.heap[h] {
-                    n.to_usize().unwrap()
-                } else {
-                    unreachable!()
-                },
+            Addr::Con(h) => {
+                match &self.machine_st.heap[h] {
+                    HeapCellValue::Integer(ref arity) => {
+                        arity.to_usize().unwrap()
+                    }
+                    HeapCellValue::Addr(Addr::Fixnum(arity)) => {
+                        usize::try_from(*arity).unwrap()
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                }
+            }
             _ => {
                 unreachable!()
             }
@@ -302,7 +323,7 @@ impl Machine {
                 if addrs.is_empty() {
                     self.make_undefined(name.clone(), arity);
                 }
-                 
+
                 self.print_new_dynamic_clause(addrs, name.clone(), arity)
             }
             Err(err) => {

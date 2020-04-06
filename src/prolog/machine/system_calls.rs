@@ -23,9 +23,9 @@ use crate::ref_thread_local::RefThreadLocal;
 use indexmap::{IndexMap, IndexSet};
 
 use std::cmp;
+use std::convert::TryFrom;
 use std::io::{stdout, Write};
 use std::iter::once;
-use std::mem;
 use std::rc::Rc;
 
 use crate::crossterm::event::{read, Event, KeyCode, KeyEvent};
@@ -269,9 +269,9 @@ impl MachineState {
         }
     }
 
-    fn skip_max_list_result(&mut self, max_steps: &Integer) {
+    fn skip_max_list_result(&mut self, max_steps: Option<isize>) {
         let search_result =
-            if let Some(max_steps) = max_steps.to_isize() {
+            if let Some(max_steps) = max_steps {
                 if max_steps == -1 {
                     self.detect_cycles(self[temp_v!(3)])
                 } else {
@@ -307,59 +307,66 @@ impl MachineState {
         };
     }
 
-    pub(super) fn skip_max_list(&mut self) -> CallResult {
+    pub(super)
+    fn skip_max_list(&mut self) -> CallResult {
         let max_steps = self.store(self.deref(self[temp_v!(2)]));
 
         match max_steps {
-            Addr::Con(h) if self.heap.integer_at(h) => {
-                if let HeapCellValue::Integer(ref max_steps) = self.heap.clone(h) {
-                    if max_steps.to_isize().map(|i| i >= -1).unwrap_or(false) {
-                        let n = self.store(self.deref(self[temp_v!(1)]));
-
-                        match n {
-                            Addr::Con(h) if self.heap.integer_at(h) => {
-                                if let HeapCellValue::Integer(ref n) = &self.heap[h] {
-                                    if n.as_ref() == &0 {
-                                        let xs0 = self[temp_v!(3)];
-                                        let xs  = self[temp_v!(4)];
-
-                                        self.unify(xs0, xs);
-                                    } else {
-                                        self.skip_max_list_result(max_steps.as_ref());
-                                    }
-                                } else {
-                                    unreachable!()
-                                }
-                            }
-                            _ => {
-                                self.skip_max_list_result(max_steps.as_ref());
-                            }
-                        }
-                    } else {
-                        self.fail = true;
-                    }
-                } else {
-                    unreachable!()
-                }
-            }
-            Addr::HeapCell(_) | Addr::StackCell(..) => {
+            Addr::HeapCell(_) | Addr::StackCell(..) | Addr::AttrVar(_) => {
                 let stub = MachineError::functor_stub(clause_name!("$skip_max_list"), 4);
                 return Err(self.error_form(MachineError::instantiation_error(), stub));
             }
             addr => {
-                let stub = MachineError::functor_stub(clause_name!("$skip_max_list"), 4);
-                return Err(
-                    self.error_form(
-                        MachineError::type_error(
-                            self.heap.h(),
-                            ValidType::Integer,
-                            addr
-                        ),
-                        stub,
-                    )
-                );
+                let max_steps_n =
+                    match Number::try_from((max_steps, &self.heap)) {
+                        Ok(Number::Integer(n)) => n.to_isize(),
+                        Ok(Number::Fixnum(n))  => Some(n),
+                        _ => None,
+                    };
+
+                if max_steps_n.map(|i| i >= -1).unwrap_or(false) {
+                    let n = self.store(self.deref(self[temp_v!(1)]));
+
+                    match Number::try_from((n, &self.heap)) {
+                        Ok(Number::Integer(n)) => {
+                            if n.as_ref() == &0 {
+                                let xs0 = self[temp_v!(3)];
+                                let xs  = self[temp_v!(4)];
+
+                                self.unify(xs0, xs);
+                            } else {
+                                self.skip_max_list_result(max_steps_n);
+                            }
+                        }
+                        Ok(Number::Fixnum(n)) => {
+                            if n == 0 {
+                                let xs0 = self[temp_v!(3)];
+                                let xs  = self[temp_v!(4)];
+
+                                self.unify(xs0, xs);
+                            } else {
+                                self.skip_max_list_result(max_steps_n);
+                            }
+                        }
+                        _ => {
+                            self.skip_max_list_result(max_steps_n);
+                        }
+                    }
+                } else {
+                    let stub = MachineError::functor_stub(clause_name!("$skip_max_list"), 4);
+                    return Err(
+                        self.error_form(
+                            MachineError::type_error(
+                                self.heap.h(),
+                                ValidType::Integer,
+                                addr
+                            ),
+                            stub,
+                        )
+                    );
+                }
             }
-        };
+        }
 
         Ok(())
     }
@@ -671,6 +678,10 @@ impl MachineState {
                 let addr = self.heap.put_constant(Constant::Integer(n));
                 self.unify(nx, addr);
             }
+            Ok(Term::Constant(_, Constant::Fixnum(n))) => {
+                let addr = self.heap.put_constant(Constant::Fixnum(n));
+                self.unify(nx, addr);
+            }
             Ok(Term::Constant(_, Constant::CharCode(c))) => {
                 self.unify(nx, Addr::CharCode(c))
             }
@@ -774,17 +785,18 @@ impl MachineState {
             }
             &SystemClauseType::BindFromRegister => {
                 let reg = self.store(self.deref(self[temp_v!(2)]));
-                let n = match reg {
-                    Addr::Con(h) =>
-                        if let HeapCellValue::Integer(ref n) = &self.heap[h] {
+                let n =
+                    match Number::try_from((reg, &self.heap)) {
+                        Ok(Number::Integer(n)) => {
                             n.to_usize()
-                        } else {
+                        }
+                        Ok(Number::Fixnum(n)) => {
+                            usize::try_from(n).ok()
+                        }
+                        _ => {
                             unreachable!()
                         }
-                    _ => {
-                        unreachable!()
-                    }
-                };
+                    };
 
                 if let Some(n) = n {
                     if n <= MAX_ARITY {
@@ -1020,15 +1032,36 @@ impl MachineState {
                                 let mut chars = String::new();
 
                                 for addr in addrs {
-                                    match addr {
-                                        Addr::Con(h) if self.heap.integer_at(h) => {
-                                            if let HeapCellValue::Integer(ref n) = &self.heap[h] {
-                                                let c = self.int_to_char_code(&n, "atom_codes", 2)?;
-                                                chars.push(std::char::from_u32(c).unwrap());
-                                            } else {
-                                                unreachable!()
+                                    match Number::try_from((addr, &self.heap)) {
+                                        Ok(Number::Fixnum(n)) => {
+                                            match u32::try_from(n) {
+                                                Ok(c) => {
+                                                    chars.push(std::char::from_u32(c).unwrap());
+                                                }
+                                                _ => {
+                                                    let c = self.int_to_char_code(
+                                                        &Integer::from(n),
+                                                        "atom_codes",
+                                                        2,
+                                                    )?;
+
+                                                    chars.push(std::char::from_u32(c).unwrap());
+                                                }
                                             }
+
+                                            continue;
                                         }
+                                        Ok(Number::Integer(n)) => {
+                                            let c = self.int_to_char_code(&n, "atom_codes", 2)?;
+                                            chars.push(std::char::from_u32(c).unwrap());
+
+                                            continue;
+                                        }
+                                        _ => {
+                                        }
+                                    }
+
+                                    match addr {
                                         Addr::CharCode(c) => {
                                             chars.push(std::char::from_u32(c).unwrap());
                                         }
@@ -1056,7 +1089,9 @@ impl MachineState {
                             }
                         }
                     }
-                    _ => unreachable!(),
+                    _ => {
+                        unreachable!()
+                    }
                 };
             }
             &SystemClauseType::AtomLength => {
@@ -1087,17 +1122,6 @@ impl MachineState {
                 let a2 = self[temp_v!(2)];
 
                 self.unify(a2, len);
-            }
-            &SystemClauseType::CallAttributeGoals => {
-                let p = self.attr_var_init.project_attrs_loc;
-
-                if self.last_call {
-                    self.execute_at_index(2, dir_entry!(p));
-                } else {
-                    self.call_at_index(2, dir_entry!(p));
-                }
-
-                return Ok(());
             }
             &SystemClauseType::CallContinuation => {
                 let stub = MachineError::functor_stub(clause_name!("call_continuation"), 1);
@@ -1201,21 +1225,23 @@ impl MachineState {
                 let n = self[temp_v!(1)];
                 let chs = self[temp_v!(2)];
 
-                let string = match self.store(self.deref(n)) {
-                    Addr::Float(OrderedFloat(n)) => {
-                        format!("{0:<20?}", n)
-                    }
-                    Addr::Con(h) if self.heap.integer_at(h) => {
-                        if let HeapCellValue::Integer(ref n) = &self.heap[h] {
+                let n = self.store(self.deref(n));
+
+                let string =
+                    match Number::try_from((n, &self.heap)) {
+                        Ok(Number::Float(OrderedFloat(n))) => {
+                            format!("{0:<20?}", n)
+                        }
+                        Ok(Number::Fixnum(n)) => {
                             n.to_string()
-                        } else {
+                        }
+                        Ok(Number::Integer(n)) => {
+                            n.to_string()
+                        }
+                        _ => {
                             unreachable!()
                         }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
+                    };
 
                 let chars = string.trim().chars().map(|c| Addr::Char(c));
                 let char_list = Addr::HeapCell(self.heap.to_list(chars));
@@ -1226,21 +1252,21 @@ impl MachineState {
                 let n = self[temp_v!(1)];
                 let chs = self[temp_v!(2)];
 
-                let string = match self.store(self.deref(n)) {
-                    Addr::Float(OrderedFloat(n)) => {
-                        format!("{0:<20?}", n)
-                    }
-                    Addr::Con(h) if self.heap.integer_at(h) => {
-                        if let HeapCellValue::Integer(ref n) = &self.heap[h] {
+                let string =
+                    match Number::try_from((n, &self.heap)) {
+                        Ok(Number::Float(OrderedFloat(n))) => {
+                            format!("{0:<20?}", n)
+                        }
+                        Ok(Number::Fixnum(n)) => {
                             n.to_string()
-                        } else {
+                        }
+                        Ok(Number::Integer(n)) => {
+                            n.to_string()
+                        }
+                        _ => {
                             unreachable!()
                         }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
+                    };
 
                 let codes = string
                     .trim()
@@ -1322,33 +1348,37 @@ impl MachineState {
                     }
                     addr if addr.is_ref() => {
                         let a2 = self[temp_v!(2)];
+                        let a2 = self.store(self.deref(a2));
 
-                        match self.store(self.deref(a2)) {
-                            Addr::CharCode(code) => {
-                                if let Some(c) = std::char::from_u32(code) {
-                                    self.unify(Addr::Char(c), addr);
-                                } else {
-                                    self.fail = true;
+                        let c = match Number::try_from((a2, &self.heap)) {
+                            Ok(Number::Integer(n)) => {
+                                self.int_to_char_code(&n, "char_code", 2)?
+                            }
+                            Ok(Number::Fixnum(n)) => {
+                                self.int_to_char_code(&Integer::from(n), "char_code", 2)?
+                            }
+                            _ => {
+                                match addr {
+                                    Addr::CharCode(c) => {
+                                        c
+                                    }
+                                    _ => {
+                                        self.fail = true;
+                                        return Ok(());
+                                    }
                                 }
                             }
-                            Addr::Con(h) if self.heap.integer_at(h) => {
-                                let c =
-                                    if let HeapCellValue::Integer(n) = &self.heap[h] {
-                                        self.int_to_char_code(&n, "char_code", 2)?
-                                    } else {
-                                        unreachable!()
-                                    };
-
-                                if let Some(c) = std::char::from_u32(c) {
-                                    self.unify(Addr::Char(c), addr);
-                                } else {
-                                    self.fail = true;
-                                }
-                            }
-                            _ => self.fail = true,
                         };
+
+                        if let Some(c) = std::char::from_u32(c) {
+                            self.unify(Addr::Char(c), addr);
+                        } else {
+                            self.fail = true;
+                        }
                     }
-                    _ => unreachable!(),
+                    _ => {
+                        unreachable!();
+                    }
                 };
             }
             &SystemClauseType::CheckCutPoint => {
@@ -1967,16 +1997,20 @@ impl MachineState {
                 let specifier = self[temp_v!(2)];
                 let op = self[temp_v!(3)];
 
-                let priority = match self.store(self.deref(priority)) {
-                    Addr::Con(h) if self.heap.integer_at(h) =>
-                        if let HeapCellValue::Integer(ref n) = &self.heap[h] {
+                let priority = self.store(self.deref(priority));
+
+                let priority =
+                    match Number::try_from((priority, &self.heap)) {
+                        Ok(Number::Integer(n)) => {
                             n.to_usize().unwrap()
-                        } else {
-                            unreachable!()
-                        },
-                    _ =>
-                        unreachable!(),
-                };
+                        }
+                        Ok(Number::Fixnum(n)) => {
+                            usize::try_from(n).unwrap()
+                        }
+                        _ => {
+                            unreachable!();
+                        }
+                    };
 
                 let specifier = match self.store(self.deref(specifier)) {
                     Addr::Con(h) if self.heap.atom_at(h) =>
@@ -2041,10 +2075,6 @@ impl MachineState {
                 let attr_goals = self.attr_var_init.attribute_goals.clone();
                 self.fetch_attribute_goals(attr_goals);
             }
-            &SystemClauseType::FetchAttributeGoals => {
-                let attr_goals = mem::replace(&mut self.attr_var_init.attribute_goals, vec![]);
-                self.fetch_attribute_goals(attr_goals);
-            }
             &SystemClauseType::GetAttributedVariableList => {
                 let attr_var = self.store(self.deref(self[temp_v!(1)]));
                 let attr_var_list =
@@ -2080,35 +2110,36 @@ impl MachineState {
             }
             &SystemClauseType::GetAttrVarQueueBeyond => {
                 let addr = self[temp_v!(1)];
+                let addr = self.store(self.deref(addr));
 
-                match self.store(self.deref(addr)) {
-                    Addr::Usize(b) => {
-                        let iter = self.gather_attr_vars_created_since(b);
-
-                        let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
-                        let list_addr = self[temp_v!(2)];
-
-                        self.unify(var_list_addr, list_addr);
-                    }
-                    Addr::Con(h) if self.heap.integer_at(h) => {
-                        if let HeapCellValue::Integer(n) = self.heap.clone(h) {
-                            if let Some(b) = n.to_usize() {
-                                let iter = self.gather_attr_vars_created_since(b);
-
-                                let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
-                                let list_addr = self[temp_v!(2)];
-
-                                self.unify(var_list_addr, list_addr);
-                            } else {
-                                self.fail = true;
-                            }
-                        } else {
-                            unreachable!()
+                let b =
+                    match addr {
+                        Addr::Usize(b) => {
+                            Some(b)
                         }
-                    }
-                    _ => {
-                        self.fail = true;
-                    }
+                        _ => {
+                            match Number::try_from((addr, &self.heap)) {
+                                Ok(Number::Integer(n)) => {
+                                    n.to_usize()
+                                }
+                                Ok(Number::Fixnum(n)) => {
+                                    usize::try_from(n).ok()
+                                }
+                                _ => {
+                                    self.fail = true;
+                                    return Ok(());
+                                }
+                            }
+                        }
+                    };
+
+                if let Some(b) = b {
+                    let iter = self.gather_attr_vars_created_since(b);
+
+                    let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
+                    let list_addr = self[temp_v!(2)];
+
+                    self.unify(var_list_addr, list_addr);
                 }
             }
             &SystemClauseType::GetContinuationChunk => {
@@ -2327,51 +2358,58 @@ impl MachineState {
                     CWILCallPolicy::new_in_place(call_policy);
                 }
 
-                match (a1, a2) {
-                    (Addr::Usize(bp), Addr::Con(h))
-                        | (Addr::CutPoint(bp), Addr::Con(h))
-                        if self.heap.integer_at(h) => {
-                            if let HeapCellValue::Integer(n) = self.heap.clone(h) {
-                                match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
-                                    Some(call_policy) => {
-                                        let count = call_policy.add_limit(Integer::from(&*n), bp);
-                                        let count = self.heap.to_unifiable(
-                                            HeapCellValue::Integer(Rc::new(count.clone()))
-                                        );
+                let n =
+                    match Number::try_from((a2, &self.heap)) {
+                        Ok(Number::Integer(n)) => {
+                            Integer::from(&*n.clone())
+                        }
+                        Ok(Number::Fixnum(n)) => {
+                            Integer::from(n)
+                        }
+                        _ => {
+                            let stub = MachineError::functor_stub(
+                                clause_name!("call_with_inference_limit"),
+                                3,
+                            );
 
-                                        let a3 = self[temp_v!(3)];
+                            let type_error = self.error_form(
+                                MachineError::type_error(
+                                    self.heap.h(),
+                                    ValidType::Integer,
+                                    a2,
+                                ),
+                                stub,
+                            );
 
-                                        self.unify(a3, count);
-                                    }
-                                    None => {
-                                        panic!(
-                                            "install_inference_counter: should have installed \\
-                                             CWILCallPolicy."
-                                        )
-                                    }
-                                }
-                            } else {
-                                unreachable!()
+                            self.throw_exception(type_error);
+                            return Ok(());
+                        }
+                    };
+
+                match a1 {
+                    Addr::Usize(bp) | Addr::CutPoint(bp) => {
+                        match call_policy.downcast_mut::<CWILCallPolicy>().ok() {
+                            Some(call_policy) => {
+                                let count = call_policy.add_limit(n, bp).clone();
+                                let count = self.heap.to_unifiable(
+                                    HeapCellValue::Integer(Rc::new(count))
+                                );
+
+                                let a3 = self[temp_v!(3)];
+                                self.unify(a3, count);
+                            }
+                            None => {
+                                panic!(
+                                    "install_inference_counter: should have installed \\
+                                     CWILCallPolicy."
+                                )
                             }
                         }
-                    _ => {
-                        let stub = MachineError::functor_stub(
-                            clause_name!("call_with_inference_limit"),
-                            3,
-                        );
-
-                        let type_error = self.error_form(
-                            MachineError::type_error(
-                                self.heap.h(),
-                                ValidType::Integer,
-                                a2,
-                            ),
-                            stub,
-                        );
-
-                        self.throw_exception(type_error)
                     }
-                };
+                    _ => {
+                        unreachable!();
+                    }
+                }
             }
             &SystemClauseType::ModuleExists => {
                 let module = self.store(self.deref(self[temp_v!(1)]));
@@ -2582,9 +2620,9 @@ impl MachineState {
 
                         match a1 {
                             Addr::Usize(bp) | Addr::CutPoint(bp) => {
-                                let count = call_policy.remove_limit(bp);
+                                let count = call_policy.remove_limit(bp).clone();
                                 let count = self.heap.to_unifiable(
-                                    HeapCellValue::Integer(Rc::new(count.clone())),
+                                    HeapCellValue::Integer(Rc::new(count)),
                                 );
 
                                 let a2 = self[temp_v!(2)];
@@ -3029,28 +3067,23 @@ impl MachineState {
                     Addr::CharCode(c) => {
                         Integer::from(c)
                     }
-                    Addr::Con(h) if self.heap.integer_at(h) => {
-                        if let HeapCellValue::Integer(ref n) = &self.heap[h] {
-                            Integer::from(&**n)
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    Addr::Con(h) if self.heap.rational_at(h) => {
-                        if let HeapCellValue::Rational(r) = &self.heap[h] {
-                            if r.denom() == &1 {
-                                r.numer().clone()
-                            } else {
+                    _ => {
+                        match Number::try_from((seed, &self.heap)) {
+                            Ok(Number::Fixnum(n)) => {
+                                Integer::from(n)
+                            }
+                            Ok(Number::Integer(n)) => {
+                                Integer::from(n.as_ref())
+                            }
+                            Ok(Number::Rational(n))
+                                if n.denom() == &1 => {
+                                    n.numer().clone()
+                                }
+                            _ => {
                                 self.fail = true;
                                 return Ok(());
                             }
-                        } else {
-                            unreachable!()
                         }
-                    }
-                    _ => {
-                        self.fail = true;
-                        return Ok(());
                     }
                 };
 
@@ -3195,43 +3228,33 @@ impl MachineState {
                     }
                 };
 
-                let arity = match self.store(self.deref(arity)) {
-                    Addr::Con(h) if self.heap.integer_at(h) => {
-                        if let HeapCellValue::Integer(ref n) = &self.heap[h] {
-                            n.clone()
-                        } else {
+                let arity = self.store(self.deref(arity));
+
+                let arity =
+                    match Number::try_from((arity, &self.heap)) {
+                        Ok(Number::Fixnum(n)) => {
+                            Integer::from(n)
+                        }
+                        Ok(Number::Integer(n)) => {
+                            Integer::from(n.as_ref())
+                        }
+                        _ => {
                             unreachable!()
                         }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
+                    };
 
                 let first_idx = match indices
                     .code_dir
                     .get(&(name.clone(), arity.to_usize().unwrap()))
                 {
-                    Some(ref idx) => {
+                    Some(ref idx) if idx.local().is_some() => {
                         if let Some(idx) = idx.local() {
                             idx
                         } else {
-                            let arity = arity.to_usize().unwrap();
-                            let stub = MachineError::functor_stub(name.clone(), arity);
-                            let h = self.heap.h();
-
-                            let err = MachineError::existence_error(
-                                h,
-                                ExistenceError::Procedure(name, arity),
-                            );
-
-                            let err = self.error_form(err, stub);
-
-                            self.throw_exception(err);
-                            return Ok(());
+                            unreachable!()
                         }
                     }
-                    None => {
+                    _ => {
                         let arity = arity.to_usize().unwrap();
                         let stub = MachineError::functor_stub(name.clone(), arity);
                         let h = self.heap.h();
@@ -3279,7 +3302,7 @@ impl MachineState {
                 let mut printer = HCPrinter::new(&self, &indices.op_dir, PrinterOutputter::new());
 
                 if let &Addr::Con(h) = &ignore_ops {
-	            if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+	                if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
                         printer.ignore_ops = name.as_str() == "true";
                     } else {
                         unreachable!()
@@ -3287,7 +3310,7 @@ impl MachineState {
                 }
 
                 if let &Addr::Con(h) = &numbervars {
-	            if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+	                if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
                         printer.numbervars = name.as_str() == "true";
                     } else {
                         unreachable!()
@@ -3295,23 +3318,32 @@ impl MachineState {
                 }
 
                 if let &Addr::Con(h) = &quoted {
-	            if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+	                if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
                         printer.quoted = name.as_str() == "true";
                     } else {
                         unreachable!()
                     }
                 }
 
-                if let &Addr::Con(h) = &max_depth {
-                    if let HeapCellValue::Integer(ref n) = &self.heap[h] {
+                match Number::try_from((max_depth, &self.heap)) {
+                    Ok(Number::Fixnum(n)) => {
+                        if let Ok(n) = usize::try_from(n) {
+                            printer.max_depth = n;
+                        } else {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    }
+                    Ok(Number::Integer(n)) => {
                         if let Some(n) = n.to_usize() {
                             printer.max_depth = n;
                         } else {
                             self.fail = true;
                             return Ok(());
                         }
-                    } else {
-                        unreachable!()
+                    }
+                    _ => {
+                        unreachable!();
                     }
                 }
 

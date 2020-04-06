@@ -187,6 +187,7 @@ impl fmt::Display for Addr {
             &Addr::Char(c) => write!(f, "Addr::Char({})", c),
             &Addr::CharCode(c) => write!(f, "Addr::CharCode({})", c),
             &Addr::EmptyList => write!(f, "Addr::EmptyList"),
+            &Addr::Fixnum(n) => write!(f, "Addr::Fixnum({})", n),
             &Addr::Float(fl) => write!(f, "Addr::Float({})", fl),
             &Addr::CutPoint(cp) => write!(f, "Addr::CutPoint({})", cp),
             &Addr::Con(ref c) => write!(f, "Addr::Con({})", c),
@@ -305,13 +306,13 @@ impl fmt::Display for Line {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Line::Arithmetic(ref arith_instr) => write!(f, "{}", arith_instr),
-            &Line::Choice(ref choice_instr) => write!(f, "{}", choice_instr), 
+            &Line::Choice(ref choice_instr) => write!(f, "{}", choice_instr),
             &Line::Control(ref control_instr) => write!(f, "{}", control_instr),
-            &Line::Cut(ref cut_instr) => write!(f, "{}", cut_instr), 
+            &Line::Cut(ref cut_instr) => write!(f, "{}", cut_instr),
             &Line::Fact(ref fact_instr) => write!(f, "{}", fact_instr),
-            &Line::Indexing(ref indexing_instr) => write!(f, "{}", indexing_instr), 
-            &Line::IndexedChoice(ref indexed_choice_instr) => write!(f, "{}", indexed_choice_instr), 
-            &Line::Query(ref query_instr) => write!(f, "{}", query_instr), 
+            &Line::Indexing(ref indexing_instr) => write!(f, "{}", indexing_instr),
+            &Line::IndexedChoice(ref indexed_choice_instr) => write!(f, "{}", indexed_choice_instr),
+            &Line::Query(ref query_instr) => write!(f, "{}", query_instr),
         }
     }
 }
@@ -319,6 +320,7 @@ impl fmt::Display for Line {
 impl fmt::Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &Number::Fixnum(n) => write!(f, "{}", n),
             &Number::Float(fl) => write!(f, "{}", fl),
             &Number::Integer(ref bi) => write!(f, "{}", bi),
             &Number::Rational(ref r) => write!(f, "{}", r),

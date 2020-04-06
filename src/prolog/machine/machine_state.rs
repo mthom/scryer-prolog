@@ -56,7 +56,7 @@ impl<'a> Iterator for HeapPStrIter<'a> {
         } else {
             return None;
         }
-        
+
         match addr {
             Addr::PStrLocation(h, n) => {
                 if let &HeapCellValue::PartialString(ref pstr, _) = &self.machine_st.heap[h] {
@@ -72,7 +72,7 @@ impl<'a> Iterator for HeapPStrIter<'a> {
             }
             Addr::Lis(l) => {
                 let addr = self.machine_st.store(self.machine_st.deref(Addr::HeapCell(l)));
-                
+
                 if let Addr::Char(c) = addr {
                     self.focus = Addr::HeapCell(l + 1);
                     return Some(Some(c));
@@ -96,7 +96,7 @@ pub(super)
 fn compare_pstr<'a>(
     pstr_iter: HeapPStrIter<'a>,
     mut c_iter: impl Iterator<Item = char>,
-) -> bool {    
+) -> bool {
     for opt_c in pstr_iter {
         match opt_c {
             Some(_) => {
@@ -965,7 +965,7 @@ pub(crate) trait CallPolicy: Any {
                 let a1 = machine_st[r];
                 let n2 = machine_st.get_number(at)?;
 
-                let n2 = Addr::Con(machine_st.heap.push(n2.into()));
+                let n2 = machine_st.heap.put_constant(n2.into());
                 machine_st.unify(a1, n2);
 
                 return_from_clause!(machine_st.last_call, machine_st)
