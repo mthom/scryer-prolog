@@ -196,28 +196,50 @@ true.
 
 New operators can be defined using the `op` declaration.
 
-### Partial strings
+### Strings and partial strings
 
-Scryer has three specialized non-ISO predicates for handling so-called
-"partial strings." Partial strings imitate difference lists of
-characters, but their characters are packed in UTF-8 format, a much
-more efficient alternative to how lists of characters are represented
-in many other Prologs.
+In Scryer Prolog, the default value of the Prolog flag `double_quotes`
+is `chars`, which is also the recommended setting. This means that
+double-quoted strings are interpreted as lists of *characters*, in the
+tradition of Marseille&nbsp;Prolog.
 
-To use partial strings, the `iso_ext` library must be loaded:
+For example, the following query succeeds:
 
-`?- use_module(library(iso_ext)).`
+```
+?- "abc" = [a,b,c].
+   true.
+```
 
-If `X` is a free variable, the query
+Internally, strings are represented very compactly in packed
+UTF-8&nbsp;encoding. A naive representation of strings as lists of
+characters would use one memory&nbsp;cell per character, one
+memory&nbsp;cell per list constructor, and one memory&nbsp;cell for
+each tail that occurs in the list. Since one memory&nbsp;cell takes
+8&nbsp;bytes on 64-bit machines, the packed representation used by
+Scryer&nbsp;Prolog yields an up&nbsp;to **24-fold&nbsp;reduction** of
+memory usage, and corresponding reduction of memory&nbsp;accesses when
+creating and processing strings.
 
-`?- partial_string("abc", X, _), X = [a, b, c | Y], partial_string(X),
-partial_string_tail(X, Tail), Tail == Y.`
+Scryer Prolog uses the same efficient encoding for *partial* strings,
+which appear to Prolog code as partial lists of characters. The
+predicate `partial_string/3` from `library(iso_ext)` lets you
+construct partial&nbsp;strings explicitly. For example:
 
-will succeed, posting:
+```
+?- partial_string("abc", Ls0, Ls).
+   Ls0 = [a,b,c|Ls].
+```
 
-`Tail = Y, X = [a,b,c|Y].`
+In this case, and as the answer illustrates, `Ls0` is
+indistinguishable from a partial&nbsp;list with tail&nbsp;`Ls`, while
+the efficient packed representation is used internally.
 
-By all appearances, partial strings are plain Prolog lists.
+An important design goal of Scryer Prolog is to *automatically* use
+the efficient string representation whenever possible. Therefore, it
+is only very rarely necessary to use `partial_string/3` explicitly.
+
+Definite clause grammars as provided by `library(dcgs)` are ideally
+suited for reasoning about strings.
 
 ### Modules
 
