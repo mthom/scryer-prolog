@@ -4295,11 +4295,13 @@ tuples_in(Tuples, Relation) :-
 relation_tuple(Relation, Tuple) :-
         relation_unifiable(Relation, Tuple, Us, _, _),
         (   ground(Tuple) -> memberchk(Tuple, Relation)
-        ;   tuple_domain(Tuple, Us),
+        ;   phrase(tuple_domain(Tuple, Us), _),
             (   Tuple = [_,_|_] -> tuple_freeze(Tuple, Us)
             ;   true
             )
         ).
+
+list_first_rest([L|Ls], L, Ls).
 
 tuple_domain([], _) --> [].
 tuple_domain([T|Ts], Relation0) -->
