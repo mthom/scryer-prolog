@@ -393,7 +393,7 @@ portray_clause(Term) :-
         maplist(write, Ls).
 
 portray_clause_(Term) -->
-        portray_(Term), ".".
+        portray_(Term), ".\n".
 
 literal(Lit) --> format_("~q", [Lit]).
 
@@ -461,18 +461,18 @@ a :-
 ?- nl, portray_clause([a,b,c,d]), nl.
 "abcd".
 
-?- nl, portray_clause(X), nl.
-?- nl, portray_clause((f(X) :- X)), nl.
+?- nl, portray_clause(X).
+?- nl, portray_clause((f(X) :- X)).
 
-?- nl, portray_clause((h :- ( a -> b; c))), nl.
+?- nl, portray_clause((h :- ( a -> b; c))).
 
-?- nl, portray_clause((h :- ( (a -> x ; y) -> b; c))), nl.
+?- nl, portray_clause((h :- ( (a -> x ; y) -> b; c))).
 
-?- nl, portray_clause((h(X) :- ( (a(X) ; y(A,B)) -> b; c))), nl.
+?- nl, portray_clause((h(X) :- ( (a(X) ; y(A,B)) -> b; c))).
 
-?- nl, portray_clause((h :- (a,d;b,c) ; (b,e;d))), nl.
+?- nl, portray_clause((h :- (a,d;b,c) ; (b,e;d))).
 
-?- nl, portray_clause((a :- b ; c ; d)), nl.
+?- nl, portray_clause((a :- b ; c ; d)).
 
 ?- nl, portray_clause((h :- L = '.')).
 
