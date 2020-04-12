@@ -1045,7 +1045,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let buf = heap_pstr_iter.to_string();
         let end_addr = heap_pstr_iter.focus();
 
-        if Addr::EmptyList == end_addr {
+        let at_cdr = self.at_cdr(",");
+
+        if !at_cdr && Addr::EmptyList == end_addr {
             if !self.machine_st.flags.double_quotes.is_codes() {
                 self.push_char('"');
 
@@ -1124,7 +1126,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 iter.stack().push(end_addr);
             }
         } else {
-            let switch = if !self.at_cdr(",") {
+            let switch = if !at_cdr {
                 self.push_char('[');
                 true
             } else {
