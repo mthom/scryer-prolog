@@ -288,7 +288,11 @@ impl Machine {
 
             Ok(self.indices.insert_module(module))
         } else {
-            Err(SessionError::ModuleNotFound)
+            let err = ExistenceError::SourceSink(ModuleSource::File(
+                clause_name!("$toplevel"),
+            ));
+
+            Err(SessionError::ExistenceError(err))
         }
     }
 

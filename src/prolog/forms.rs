@@ -377,6 +377,19 @@ pub enum ModuleSource {
     File(ClauseName),
 }
 
+impl ModuleSource {
+    pub fn as_functor_stub(&self) -> MachineStub {
+        match self {
+            ModuleSource::Library(ref name) => {
+                functor!("library", [clause_name(name.clone())])
+            }
+            ModuleSource::File(ref name) => {
+                functor!(clause_name(name.clone()))
+            }
+        }
+    }
+}
+
 pub type ScopedPredicateKey = (ClauseName, PredicateKey); // module name, predicate indicator.
 
 #[derive(Clone)]

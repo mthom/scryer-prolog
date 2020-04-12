@@ -289,6 +289,9 @@ impl fmt::Display for IndexingInstruction {
 impl fmt::Display for SessionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &SessionError::ExistenceError(ref err) => {
+                write!(f, "{}", err)
+            }
             &SessionError::CannotOverwriteBuiltIn(ref msg) => {
                 write!(f, "cannot overwrite {}", msg)
             }
@@ -298,7 +301,6 @@ impl fmt::Display for SessionError {
             &SessionError::InvalidFileName(ref filename) => {
                 write!(f, "filename {} is invalid", filename)
             }
-            &SessionError::ModuleNotFound => write!(f, "module not found."),
             &SessionError::ModuleDoesNotContainExport(ref module, ref key) => {
                 write!(
                     f,
@@ -319,6 +321,38 @@ impl fmt::Display for SessionError {
             }
             &SessionError::QueryCannotBePostedAsGoal => {
                 write!(f, "query forms cannot be posted as goals.")
+            }
+        }
+    }
+}
+
+impl fmt::Display for ExistenceError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &ExistenceError::Module(ref module_name) => {
+                write!(f, "the module {} does not exist", module_name)
+            }
+            &ExistenceError::Procedure(ref name, arity) => {
+                write!(f, "the procedure {}/{} does not exist", name, arity)
+            }
+            &ExistenceError::SourceSink(ref module_source) => {
+                write!(f, "the source/sink {} does not exist", module_source)
+            }
+            &ExistenceError::Stream(ref addr) => {
+                write!(f, "the stream at {} does not exist", addr)
+            }
+        }
+    }
+}
+
+impl fmt::Display for ModuleSource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &ModuleSource::File(ref file) => {
+                write!(f, "at the file {}", file)
+            }
+            &ModuleSource::Library(ref library) => {
+                write!(f, "at library({})", library)
             }
         }
     }

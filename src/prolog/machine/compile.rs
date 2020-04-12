@@ -607,7 +607,13 @@ fn load_library(
                 &listing_src,
             )
         }
-        None => Err(SessionError::ModuleNotFound)
+        None => {
+            let err = ExistenceError::SourceSink(ModuleSource::Library(
+                name.clone()
+            ));
+
+            Err(SessionError::ExistenceError(err))
+        }
     }
 }
 
@@ -693,7 +699,11 @@ impl ListingCompiler {
 
             Ok(wam_indices.insert_module(submodule))
         } else {
-            Err(SessionError::ModuleNotFound)
+            let err = ExistenceError::SourceSink(ModuleSource::File(
+                module_name,
+            ));
+
+            Err(SessionError::ExistenceError(err))
         }
     }
 
@@ -727,7 +737,11 @@ impl ListingCompiler {
 
             Ok(wam_indices.insert_module(submodule))
         } else {
-            Err(SessionError::ModuleNotFound)
+            let err = ExistenceError::SourceSink(ModuleSource::File(
+                module_name
+            ));
+
+            Err(SessionError::ExistenceError(err))
         }
     }
 
@@ -1057,7 +1071,11 @@ impl ListingCompiler {
                         insert_or_refresh_term_dir_quantum(term_dir, key, term_dirs);
                     }
                     None => {
-                        return Err(SessionError::ModuleNotFound);
+                        let err = ExistenceError::SourceSink(ModuleSource::File(
+                            module_name,
+                        ));
+
+                        return Err(SessionError::ExistenceError(err));
                     }
                 }
             }
@@ -1392,14 +1410,18 @@ pub(super) fn setup_indices(
     module: ClauseName,
     indices: &mut IndexStore,
 ) -> Result<(), SessionError> {
-    if let Some(module) = wam.indices.take_module(module) {
+    if let Some(module) = wam.indices.take_module(module.clone()) {
         let flags = wam.machine_flags();
         let result = indices.use_module(&mut wam.code_repo, flags, &module);
 
         wam.indices.insert_module(module);
         result
     } else {
-        Err(SessionError::ModuleNotFound)
+        let err = ExistenceError::SourceSink(ModuleSource::Library(
+            module
+        ));
+
+        Err(SessionError::ExistenceError(err))
     }
 }
 

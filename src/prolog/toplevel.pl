@@ -295,7 +295,7 @@ use_module(Module) :-
 use_module(Module, QualifiedExports) :-
     (  nonvar(Module) ->
        (  list_si(QualifiedExports) ->
-	  maplist('$module_export'(use_module/2), QualifiedExports) ->
+	      maplist('$module_export'(use_module/2), QualifiedExports) ->
 	  (  Module = library(Filename) ->
 	     '$use_qualified_module'(Filename, QualifiedExports)
 	  ;  atom(Module) ->

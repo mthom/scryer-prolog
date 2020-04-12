@@ -1,6 +1,6 @@
 use prolog_parser::ast::*;
 
-use crate::prolog::forms::{Number, PredicateKey};
+use crate::prolog::forms::{ModuleSource, Number, PredicateKey};
 use crate::prolog::machine::heap::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
@@ -207,7 +207,7 @@ impl MachineError {
             ExistenceError::Module(name) => {
                 let stub = functor!(
                     "existence_error",
-                    [atom("module"), clause_name(name)]
+                    [atom("source_sink"), clause_name(name)]
                 );
 
                 MachineError {
@@ -227,6 +227,21 @@ impl MachineError {
                     "existence_error",
                     [atom("procedure"), aux(h, 0)],
                     [culprit]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                    from: ErrorProvenance::Constructed,
+                }
+            }
+            ExistenceError::SourceSink(source) => {
+                let source_stub = source.as_functor_stub();
+
+                let stub = functor!(
+                    "existence_error",
+                    [atom("source_sink"), aux(h, 0)],
+                    [source_stub]
                 );
 
                 MachineError {
@@ -301,14 +316,17 @@ impl MachineError {
     pub(super)
     fn session_error(h: usize, err: SessionError) -> Self {
         match err {
-            SessionError::CannotOverwriteBuiltIn(pred_str)
-          | SessionError::CannotOverwriteImport(pred_str) => {
+            SessionError::CannotOverwriteBuiltIn(pred_str) |
+            SessionError::CannotOverwriteImport(pred_str) => {
                 Self::permission_error(
                     h,
                     Permission::Modify,
                     "private_procedure",
                     functor!(clause_name(pred_str)),
                 )
+            }
+            SessionError::ExistenceError(err) => {
+                Self::existence_error(h, err)
             }
             SessionError::InvalidFileName(filename) => {
                 Self::existence_error(h, ExistenceError::Module(filename))
@@ -319,14 +337,6 @@ impl MachineError {
                     Permission::Access,
                     "private_procedure",
                     functor!("module_does_not_contain_claimed_export"),
-                )
-            }
-            SessionError::ModuleNotFound => {
-                Self::permission_error(
-                    h,
-                    Permission::Access,
-                    "private_procedure",
-                    functor!("module_does_not_exist"),
                 )
             }
             SessionError::NamelessEntry => {
@@ -685,15 +695,16 @@ impl MachineState {
 pub enum ExistenceError {
     Module(ClauseName),
     Procedure(ClauseName, usize),
+    SourceSink(ModuleSource),
     Stream(Addr),
 }
 
 pub enum SessionError {
     CannotOverwriteBuiltIn(ClauseName),
     CannotOverwriteImport(ClauseName),
+    ExistenceError(ExistenceError),
     InvalidFileName(ClauseName),
     ModuleDoesNotContainExport(ClauseName, PredicateKey),
-    ModuleNotFound,
     NamelessEntry,
     OpIsInfixAndPostFix(ClauseName),
     QueryCannotBePostedAsGoal,
