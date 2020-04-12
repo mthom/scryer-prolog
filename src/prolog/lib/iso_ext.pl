@@ -7,8 +7,7 @@
 		            call_with_inference_limit/3, forall/2, maybe/0,
 		            partial_string/1, partial_string/3,
 		            partial_string_tail/2, set_random/1,
-		            setup_call_cleanup/3, variant/2,
-                    write_term_to_chars/3]).
+		            setup_call_cleanup/3, variant/2]).
 
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
@@ -176,26 +175,3 @@ partial_string_tail(String, Tail) :-
        '$partial_string_tail'(String, Tail)
     ;  throw(error(type_error(partial_string, String), partial_string_tail/2))
     ).
-
-
-write_term_to_chars(_, Options, _) :-
-    var(Options), throw(error(instantiation_error, write_term_to_chars/3)).
-write_term_to_chars(Term, Options, Chars) :-
-    '$skip_max_list'(_, -1, Options, Options0),
-    (  var(Options0)  ->
-       throw(error(instantiation_error, write_term_to_chars/3))
-    ;  var(Term) ->
-       throw(error(instantiation_error, write_term_to_chars/3))
-    ;  nonvar(Chars)  ->
-       throw(error(uninstantiation_error(Chars), write_term_to_chars/3))
-    ;  Options0 == [] ->
-       true
-    ;
-       throw(error(type_error(list, Options), write_term_to_chars/3))
-    ),
-    builtins:inst_member_or(Options, ignore_ops(IgnoreOps), ignore_ops(false)),
-    builtins:inst_member_or(Options, numbervars(NumberVars), numbervars(false)),
-    builtins:inst_member_or(Options, quoted(Quoted), quoted(false)),
-    builtins:inst_member_or(Options, variable_names(VarNames), variable_names([])),
-    builtins:inst_member_or(Options, max_depth(MaxDepth), max_depth(0)),
-    '$write_term_to_chars'(Term, IgnoreOps, NumberVars, Quoted, VarNames, MaxDepth, Chars).
