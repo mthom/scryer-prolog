@@ -89,7 +89,7 @@ impl CodeRepo {
             _ => {
                 in_situ_code_dir.insert((name, arity), p);
             }
-        }        
+        }
 
         let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt);
         let mut decl_code = cg.compile_predicate(&decl.0)?;

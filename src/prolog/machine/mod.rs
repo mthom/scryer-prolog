@@ -840,27 +840,33 @@ impl MachineState {
         current_output_stream: &mut Stream,
     ) {
         match instr {
-            &Line::Arithmetic(ref arith_instr) => self.execute_arith_instr(arith_instr),
+            &Line::Arithmetic(ref arith_instr) => {
+                self.execute_arith_instr(arith_instr)
+            }
             &Line::Choice(ref choice_instr) => {
                 self.execute_choice_instr(choice_instr, &mut policies.call_policy)
             }
             &Line::Cut(ref cut_instr) => {
                 self.execute_cut_instr(cut_instr, &mut policies.cut_policy)
             }
-            &Line::Control(ref control_instr) => self.execute_ctrl_instr(
-                indices,
-                code_repo,
-                &mut policies.call_policy,
-                &mut policies.cut_policy,
-                current_input_stream,
-                current_output_stream,
-                control_instr,
-            ),
+            &Line::Control(ref control_instr) => {
+                self.execute_ctrl_instr(
+                    indices,
+                    code_repo,
+                    &mut policies.call_policy,
+                    &mut policies.cut_policy,
+                    current_input_stream,
+                    current_output_stream,
+                    control_instr,
+                )
+            }
             &Line::Fact(ref fact_instr) => {
                 self.execute_fact_instr(&fact_instr);
                 self.p += 1;
             }
-            &Line::Indexing(ref indexing_instr) => self.execute_indexing_instr(&indexing_instr),
+            &Line::Indexing(ref indexing_instr) => {
+                self.execute_indexing_instr(&indexing_instr)
+            }
             &Line::IndexedChoice(ref choice_instr) => {
                 self.execute_indexed_choice_instr(choice_instr, &mut policies.call_policy)
             }

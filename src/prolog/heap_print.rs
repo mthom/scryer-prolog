@@ -578,7 +578,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, left_directed_op));
             self.state_stack.push(TokenOrRedirect::Op(ct.name(), spec));
         } else {
-            // if is_infix!(spec.assoc())
             match ct.name().as_str() {
                 "|" => {
                     self.format_bar_separator_op(iter, max_depth, ct.name(), spec);
@@ -1031,8 +1030,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         mut max_depth: usize,
         h: usize,
         n: usize,
-    )
-    {
+    ) {
         iter.stack().pop();
         iter.stack().pop();
 
@@ -1044,24 +1042,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let mut heap_pstr_iter =
             self.machine_st.heap_pstr_iter(Addr::PStrLocation(h, n));
 
-        let mut buf = String::new();
+        let buf = heap_pstr_iter.to_string();
+        let end_addr = heap_pstr_iter.focus();
 
-        while let Some(Some(c)) = heap_pstr_iter.next() {
-            buf.push(c);
-        }
-
-        let end_addr =
-            if let &HeapCellValue::PartialString(_, has_tail) = &self.machine_st.heap[h] {
-                if has_tail {
-                    self.machine_st.store(self.machine_st.deref(heap_pstr_iter.focus()))
-                } else {
-                    Addr::EmptyList
-                }
-            } else {
-                unreachable!()
-            };
-
-        if let Addr::EmptyList = end_addr {
+        if Addr::EmptyList == end_addr {
             if !self.machine_st.flags.double_quotes.is_codes() {
                 self.push_char('"');
 

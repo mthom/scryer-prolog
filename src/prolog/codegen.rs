@@ -163,40 +163,49 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         target.push(Target::to_void(1));
     }
 
-    fn subterm_to_instr<Target>(
+    fn deep_var_instr<Target: CompilationTarget<'a>>(
+        &mut self,
+        cell: &'a Cell<VarReg>,
+        var: &'a Rc<Var>,
+        term_loc: GenContext,
+        is_exposed: bool,
+        target: &mut Vec<Target>,
+    ) {
+        if is_exposed || self.get_var_count(var.as_ref()) > 1 {
+            self.marker.mark_var(var.clone(), Level::Deep, cell, term_loc, target);
+        } else {
+            Self::add_or_increment_void_instr(target);
+        }
+    }
+
+    fn subterm_to_instr<Target: CompilationTarget<'a>>(
         &mut self,
         subterm: &'a Term,
         term_loc: GenContext,
         is_exposed: bool,
         target: &mut Vec<Target>,
-    ) where
-        Target: CompilationTarget<'a>,
-    {
+    ) {
         match subterm {
             &Term::AnonVar if is_exposed => {
-                self.marker.mark_anon_var(Level::Deep, term_loc, target)
+                self.marker.mark_anon_var(Level::Deep, term_loc, target);
             }
-            &Term::AnonVar => Self::add_or_increment_void_instr(target),
+            &Term::AnonVar => {
+                Self::add_or_increment_void_instr(target);
+            }
             &Term::Cons(ref cell, _, _) | &Term::Clause(ref cell, _, _, _) => {
-                self.marker
-                    .mark_non_var(Level::Deep, term_loc, cell, target);
+                self.marker.mark_non_var(Level::Deep, term_loc, cell, target);
                 target.push(Target::clause_arg_to_instr(cell.get()));
             }
             &Term::Constant(_, ref constant) => {
-                target.push(Target::constant_subterm(constant.clone()))
+                target.push(Target::constant_subterm(constant.clone()));
             }
             &Term::Var(ref cell, ref var) => {
-                if is_exposed || self.get_var_count(var) > 1 {
-                    self.marker
-                        .mark_var(var.clone(), Level::Deep, cell, term_loc, target);
-                } else {
-                    Self::add_or_increment_void_instr(target);
-                }
+                self.deep_var_instr(cell, var, term_loc, is_exposed, target);
             }
         };
     }
 
-    fn compile_target<Target, Iter>(
+     fn compile_target<Target, Iter>(
         &mut self,
         iter: Iter,
         term_loc: GenContext,
@@ -210,6 +219,13 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
 
         for term in iter {
             match term {
+                TermRef::AnonVar(lvl @ Level::Shallow) => {
+                    if let GenContext::Head = term_loc {
+                        self.marker.advance_arg();
+                    } else {
+                        self.marker.mark_anon_var(lvl, term_loc, &mut target);
+                    }
+                }
                 TermRef::Clause(lvl, cell, ct, terms) => {
                     self.marker.mark_non_var(lvl, term_loc, cell, &mut target);
                     target.push(Target::to_structure(ct, terms.len(), cell.get()));
@@ -225,15 +241,22 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                     self.subterm_to_instr(head, term_loc, is_exposed, &mut target);
                     self.subterm_to_instr(tail, term_loc, is_exposed, &mut target);
                 }
+                TermRef::Constant(lvl @ Level::Shallow, cell, Constant::String(ref string)) => {
+                    self.marker.mark_non_var(lvl, term_loc, cell, &mut target);
+                    target.push(Target::to_pstr(lvl, string.to_string(), cell.get(), false));
+                }
                 TermRef::Constant(lvl @ Level::Shallow, cell, constant) => {
                     self.marker.mark_non_var(lvl, term_loc, cell, &mut target);
                     target.push(Target::to_constant(lvl, constant.clone(), cell.get()));
                 }
-                TermRef::AnonVar(lvl @ Level::Shallow) => {
-                    if let GenContext::Head = term_loc {
-                        self.marker.advance_arg();
+                TermRef::PartialString(lvl, cell, string, tail) => {
+                    self.marker.mark_non_var(lvl, term_loc, cell, &mut target);
+
+                    if let Some(tail) = tail {
+                        target.push(Target::to_pstr(lvl, string, cell.get(), true));
+                        self.subterm_to_instr(tail, term_loc, is_exposed, &mut target);
                     } else {
-                        self.marker.mark_anon_var(lvl, term_loc, &mut target);
+                        target.push(Target::to_pstr(lvl, string, cell.get(), false));
                     }
                 }
                 TermRef::Var(lvl @ Level::Shallow, cell, ref var) if var.as_str() == "!" => {
@@ -252,14 +275,13 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                         }
                     }
 
-                    self.marker
-                        .mark_var(var.clone(), lvl, cell, term_loc, &mut target);
+                    self.marker.mark_var(var.clone(), lvl, cell, term_loc, &mut target);
                 }
                 TermRef::Var(lvl @ Level::Shallow, cell, var) => {
-                    self.marker
-                        .mark_var(var.clone(), lvl, cell, term_loc, &mut target)
+                    self.marker.mark_var(var.clone(), lvl, cell, term_loc, &mut target);
                 }
-                _ => {}
+                _ => {
+                }
             };
         }
 

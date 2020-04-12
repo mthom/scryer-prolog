@@ -27,14 +27,14 @@ impl fmt::Display for REPLCodePtr {
         match self {
             REPLCodePtr::CompileBatch =>
                 write!(f, "REPLCodePtr::CompileBatch"),
-	    REPLCodePtr::UseModule =>
-		write!(f, "REPLCodePtr::UseModule"),
-	    REPLCodePtr::UseQualifiedModule =>
-		write!(f, "REPLCodePtr::UseQualifiedModule"),
-	    REPLCodePtr::UseModuleFromFile =>
-		write!(f, "REPLCodePtr::UseModuleFromFile"),
-	    REPLCodePtr::UseQualifiedModuleFromFile =>
-		write!(f, "REPLCodePtr::UseQualifiedModuleFromFile")
+	        REPLCodePtr::UseModule =>
+		        write!(f, "REPLCodePtr::UseModule"),
+	        REPLCodePtr::UseQualifiedModule =>
+		        write!(f, "REPLCodePtr::UseQualifiedModule"),
+	        REPLCodePtr::UseModuleFromFile =>
+		        write!(f, "REPLCodePtr::UseModuleFromFile"),
+	        REPLCodePtr::UseQualifiedModuleFromFile =>
+		        write!(f, "REPLCodePtr::UseQualifiedModuleFromFile")
         }
     }
 }
@@ -58,7 +58,13 @@ impl fmt::Display for FactInstruction {
             &FactInstruction::GetConstant(lvl, ref constant, ref r) => {
                 write!(f, "get_constant {}, {}{}", constant, lvl, r.reg_num())
             }
-            &FactInstruction::GetList(lvl, ref r) => write!(f, "get_list {}{}", lvl, r.reg_num()),
+            &FactInstruction::GetList(lvl, ref r) => {
+                write!(f, "get_list {}{}", lvl, r.reg_num())
+            }
+            &FactInstruction::GetPartialString(lvl, ref s, r, has_tail) => {
+                write!(f, "get_partial_string({}, {}, {}, {})",
+                       lvl, s, r, has_tail)
+            }
             &FactInstruction::GetStructure(ref ct, ref arity, ref r) => {
                 write!(f, "get_structure {}/{}, {}", ct.name(), arity, r)
             }
@@ -86,7 +92,13 @@ impl fmt::Display for QueryInstruction {
             &QueryInstruction::PutConstant(lvl, ref constant, ref r) => {
                 write!(f, "put_constant {}, {}{}", constant, lvl, r.reg_num())
             }
-            &QueryInstruction::PutList(lvl, ref r) => write!(f, "put_list {}{}", lvl, r.reg_num()),
+            &QueryInstruction::PutList(lvl, ref r) => {
+                write!(f, "put_list {}{}", lvl, r.reg_num())
+            }
+            &QueryInstruction::PutPartialString(lvl, ref s, r, has_tail) => {
+                write!(f, "put_partial_string({}, {}, {}, {})",
+                       lvl, s, r, has_tail)
+            }
             &QueryInstruction::PutStructure(ref ct, ref arity, ref r) => {
                 write!(f, "put_structure {}/{}, {}", ct.name(), arity, r)
             }
@@ -159,9 +171,12 @@ impl fmt::Display for HeapCellValue {
                 write!(f, "{}/{}", name.as_str(), arity)
             }
             &HeapCellValue::PartialString(ref pstr, has_tail) => {
-                write!(f, "pstr ( buf: 0x{:x}, has_tail({}) )",
-                       (pstr as *const _) as usize,
-                       has_tail)
+                write!(
+                    f,
+                    "pstr ( buf: \"{}\", has_tail({}) )",
+                    pstr.as_str_from(0),
+                    has_tail,
+                )
             }
             &HeapCellValue::Stream(ref stream) => {
                 write!(f, "$stream({})", stream.as_ptr() as usize)

@@ -225,7 +225,7 @@ fn arith_instr_unary_functor(
     t: usize,
 ) -> MachineStub {
     let at_stub = at.into_functor();
-    
+
     functor!(
         name,
         [aux(h, 0), integer(t)],
@@ -244,7 +244,7 @@ fn arith_instr_bin_functor(
     let at_2_stub = at_2.into_functor();
 
     functor!(
-        name,        
+        name,
         [aux(h, 0), aux(h, 1), integer(t)],
         [at_1_stub, at_2_stub]
     )
@@ -313,7 +313,7 @@ impl ArithmeticInstruction {
             &ArithmeticInstruction::Gcd(ref at_1, ref at_2, t) => {
                 arith_instr_bin_functor(h, "gcd", at_1, at_2, t)
             }
-            &ArithmeticInstruction::Sign(ref at, t) => { 
+            &ArithmeticInstruction::Sign(ref at, t) => {
                 arith_instr_unary_functor(h, "sign", at, t)
             }
             &ArithmeticInstruction::Cos(ref at, t)  => {
@@ -463,6 +463,7 @@ impl IndexingInstruction {
 pub enum FactInstruction {
     GetConstant(Level, Constant, RegType),
     GetList(Level, RegType),
+    GetPartialString(Level, String, RegType, bool),
     GetStructure(ClauseType, usize, RegType),
     GetValue(RegType, usize),
     GetVariable(RegType, usize),
@@ -479,7 +480,7 @@ impl FactInstruction {
             &FactInstruction::GetConstant(lvl, ref c, r) => {
                 let lvl_stub = lvl.into_functor();
                 let rt_stub  = reg_type_into_functor(r);
-                
+
                 functor!(
                     "get_constant",
                     [aux(h, 0), constant(h, c), aux(h, 1)],
@@ -493,6 +494,16 @@ impl FactInstruction {
                 functor!(
                     "get_list",
                     [aux(h, 0), aux(h, 1)],
+                    [lvl_stub, rt_stub]
+                )
+            }
+            &FactInstruction::GetPartialString(lvl, ref s, r, has_tail) => {
+                let lvl_stub = lvl.into_functor();
+                let rt_stub  = reg_type_into_functor(r);
+
+                functor!(
+                    "get_partial_string",
+                    [aux(h, 0), string(h, s), aux(h, 1), boolean(has_tail)],
                     [lvl_stub, rt_stub]
                 )
             }
@@ -528,7 +539,7 @@ impl FactInstruction {
             }
             &FactInstruction::UnifyLocalValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
-                
+
                 functor!(
                     "unify_local_value",
                     [aux(h, 0)],
@@ -546,7 +557,7 @@ impl FactInstruction {
             }
             &FactInstruction::UnifyValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
-                
+
                 functor!(
                     "unify_value",
                     [aux(h, 0)],
@@ -565,6 +576,7 @@ pub enum QueryInstruction {
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
     PutList(Level, RegType),
+    PutPartialString(Level, String, RegType, bool),
     PutStructure(ClauseType, usize, RegType),
     PutUnsafeValue(usize, usize),
     PutValue(RegType, usize),
@@ -596,10 +608,20 @@ impl QueryInstruction {
             &QueryInstruction::PutList(lvl, r) => {
                 let lvl_stub = lvl.into_functor();
                 let rt_stub  = reg_type_into_functor(r);
-                
+
                 functor!(
                     "put_list",
                     [aux(h, 0), aux(h, 1)],
+                    [lvl_stub, rt_stub]
+                )
+            }
+            &QueryInstruction::PutPartialString(lvl, ref s, r, has_tail) => {
+                let lvl_stub = lvl.into_functor();
+                let rt_stub  = reg_type_into_functor(r);
+
+                functor!(
+                    "put_partial_string",
+                    [aux(h, 0), string(h, s), aux(h, 1), boolean(has_tail)],
                     [lvl_stub, rt_stub]
                 )
             }
@@ -616,7 +638,7 @@ impl QueryInstruction {
                 let rt_stub = reg_type_into_functor(r);
 
                 functor!(
-                    "put_value",                
+                    "put_value",
                     [aux(h, 0), integer(arg)],
                     [rt_stub]
                 )
@@ -644,7 +666,7 @@ impl QueryInstruction {
             }
             &QueryInstruction::SetLocalValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
-                
+
                 functor!(
                     "set_local_value",
                     [aux(h, 0)],

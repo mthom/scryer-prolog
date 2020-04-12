@@ -164,7 +164,12 @@ impl PartialString {
 
     pub(super)
     fn clone_from_offset(&self, n: usize) -> Self {
-        let len = if self.len > n { self.len - n } else { 0 };
+        let len =
+            if self.len - '\u{0}'.len_utf8() > n {
+                self.len - n - '\u{0}'.len_utf8()
+            } else {
+                0
+            };
 
         let mut pstr = PartialString {
             buf: ptr::null_mut(),
@@ -214,6 +219,20 @@ impl PartialString {
     pub fn at_end(&self, end_n: usize) -> bool {
         unsafe {
             ptr::read((self.buf as usize + end_n) as *const u8) == 0u8
+        }
+    }
+
+    #[inline]
+    pub fn as_str_from(&self, n: usize) -> &str {
+        unsafe {
+            let slice = slice::from_raw_parts(
+                self.buf,
+                self.len - '\u{0}'.len_utf8(),
+            );
+
+            let s = str::from_utf8(slice).unwrap();
+
+            &s[n ..]
         }
     }
 }

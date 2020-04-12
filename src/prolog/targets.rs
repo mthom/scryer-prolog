@@ -17,6 +17,8 @@ pub trait CompilationTarget<'a> {
     fn to_void(_: usize) -> Self;
     fn is_void_instr(&self) -> bool;
 
+    fn to_pstr(lvl: Level, string: String, r: RegType, has_tail: bool) -> Self;
+
     fn incr_void_instr(&mut self);
 
     fn constant_subterm(_: Constant) -> Self;
@@ -60,6 +62,10 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
             &FactInstruction::UnifyVoid(_) => true,
             _ => false,
         }
+    }
+
+    fn to_pstr(lvl: Level, string: String, r: RegType, has_tail: bool) -> Self {
+        FactInstruction::GetPartialString(lvl, string, r, has_tail)
     }
 
     fn incr_void_instr(&mut self) {
@@ -115,6 +121,10 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
 
     fn to_list(lvl: Level, reg: RegType) -> Self {
         QueryInstruction::PutList(lvl, reg)
+    }
+
+    fn to_pstr(lvl: Level, string: String, r: RegType, has_tail: bool) -> Self {
+        QueryInstruction::PutPartialString(lvl, string, r, has_tail)
     }
 
     fn to_void(subterms: usize) -> Self {

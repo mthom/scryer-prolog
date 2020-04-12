@@ -274,16 +274,10 @@ impl Addr {
                 let mut heap_pstr_iter =
                     machine_st.heap_pstr_iter(Addr::PStrLocation(h, n));
 
-                let mut buf = String::new();
+                let buf = heap_pstr_iter.to_string();
+                let end_addr = heap_pstr_iter.focus();
 
-                while let Some(Some(c)) = heap_pstr_iter.next() {
-                    buf.push(c);
-                }
-
-                let end_addr =
-                    machine_st.store(machine_st.deref(heap_pstr_iter.focus()));
-
-                if let Addr::EmptyList = end_addr {
+                if end_addr == Addr::EmptyList {
                     Some(Constant::String(Rc::new(buf)))
                 } else {
                     None

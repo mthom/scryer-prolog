@@ -121,6 +121,21 @@ macro_rules! functor_term {
     (atom($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
         HeapCellValue::Atom(clause_name!($e), None)
     );
+    (string($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => ({
+        let len: usize = $aux_lens.iter().sum();
+        let h = len + $arity + 1 + $addendum.h() + $h;
+
+        $addendum.put_complete_string(&$e);
+
+        HeapCellValue::Addr(Addr::PStrLocation(h, 0))
+    });
+    (boolean($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => ({
+        if $e {
+            functor_term!(atom("true"), $arity, $aux_lens, $addendum)
+        } else {
+            functor_term!(atom("false"), $arity, $aux_lens, $addendum)
+        }
+    });
     ($e:expr, $arity:expr, $aux_lens:expr, $addendum:ident) => (
         $e
     );
@@ -154,7 +169,7 @@ macro_rules! from_constant {
                 let len: usize = $aux_lens.iter().sum();
                 let h = len + $arity + 1 + $addendum.h() + $over_h;
 
-                $addendum.put_constant(Constant::String(s.clone()));
+                $addendum.put_complete_string(&s);
 
                 HeapCellValue::Addr(Addr::PStrLocation(h, 0))
             }

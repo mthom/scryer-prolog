@@ -179,12 +179,23 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     }
 
     #[inline]
-    fn pop(&mut self) {
+    pub(crate)
+    fn put_complete_string(&mut self, s: &str) -> Addr {
+        let addr = self.allocate_pstr(s);
+        self.pop();
+
         let h = self.h();
 
-        if h > 0 {
-            self.truncate(h - 1);
+        match &mut self[h - 1] {
+            &mut HeapCellValue::PartialString(_, ref mut has_tail) => {
+                *has_tail = false;
+            }
+            _ => {
+                unreachable!()
+            }
         }
+
+        addr
     }
 
     #[inline]
@@ -219,26 +230,22 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
                 if s.is_empty() {
                     Addr::EmptyList
                 } else {
-                    let addr = self.allocate_pstr(&s);
-                    self.pop();
-
-                    let h = self.h();
-
-                    match &mut self[h - 1] {
-                        &mut HeapCellValue::PartialString(_, ref mut has_tail) => {
-                            *has_tail = false;
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    }
-
-                    addr
+                    self.put_complete_string(&s)
                 }
             }
             Constant::Usize(n) => {
                 Addr::Usize(n)
             }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn pop(&mut self) {
+        let h = self.h();
+
+        if h > 0 {
+            self.truncate(h - 1);
         }
     }
 

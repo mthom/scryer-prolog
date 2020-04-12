@@ -688,8 +688,8 @@ impl MachineState {
             HeapPtr::HeapCell(ref mut h) => {
                 *h += rhs;
             }
-            &mut HeapPtr::PStrChar(h, ref mut n)
-          | &mut HeapPtr::PStrLocation(h, ref mut n) => {
+            &mut HeapPtr::PStrChar(h, ref mut n) |
+            &mut HeapPtr::PStrLocation(h, ref mut n) => {
                 match &self.heap[h] {
                     HeapCellValue::PartialString(ref pstr, _) => {
                         for c in pstr.range_from(*n ..).take(rhs) {
@@ -769,12 +769,93 @@ impl MachineState {
     }
 
     pub(super)
+    fn match_partial_string(&mut self, addr: Addr, string: &String, has_tail: bool) {
+        let mut heap_pstr_iter = self.heap_pstr_iter(addr);
+
+        match compare_pstr_to_string(&mut heap_pstr_iter, string) {
+            Some(prefix_len) if prefix_len == string.len() => {
+                let focus = heap_pstr_iter.focus();
+
+                match focus {
+                    Addr::PStrLocation(h, n) => {
+                        if has_tail {
+                            self.s = HeapPtr::PStrLocation(h, n);
+                            self.mode = MachineMode::Read;
+                        } else {
+                            self.fail = true;
+                        }
+                    }
+                    addr => {
+                        if has_tail {
+                            let h = self.heap.h();
+
+                            self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+                            self.bind(Ref::HeapCell(h), addr);
+
+                            self.s = HeapPtr::HeapCell(h);
+                            self.mode = MachineMode::Read;
+                        } else {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::EmptyList);
+                            } else {
+                                self.fail = true;
+                            }
+                        }
+                    }
+                }
+            }
+            Some(prefix_len) => {
+                match heap_pstr_iter.focus() {
+                    addr @ Addr::AttrVar(_) |
+                    addr @ Addr::StackCell(..) |
+                    addr @ Addr::HeapCell(_) => {
+                        let h = self.heap.h();
+
+                        let pstr_addr =
+                            if has_tail {
+                                self.s = HeapPtr::HeapCell(h+1);
+                                self.mode = MachineMode::Read;
+
+                                self.heap.allocate_pstr(&string[prefix_len ..])
+                            } else {
+                                self.heap.put_complete_string(&string[prefix_len ..])
+                            };
+
+                        self.bind(addr.as_var().unwrap(), pstr_addr);
+                    }
+                    Addr::Lis(l) if !self.flags.double_quotes.is_atom() => {
+                        let h = self.heap.h();
+
+                        let pstr_addr =
+                            if has_tail {
+                                self.s = HeapPtr::HeapCell(h+1);
+                                self.mode = MachineMode::Read;
+
+                                self.heap.allocate_pstr(&string[prefix_len ..])
+                            } else {
+                                self.heap.put_complete_string(&string[prefix_len ..])
+                            };
+
+                        self.unify(Addr::Lis(l), pstr_addr);
+                    }
+                    _ => {
+                        self.fail = true;
+                    }
+                }
+            }
+            None => {
+                self.fail = true;
+            }
+        }
+    }
+
+    pub(super)
     fn write_constant_to_var(&mut self, addr: Addr, c: &Constant) {
         match self.store(self.deref(addr)) {
             Addr::Con(c1) => {
-                self.fail = match &self.heap[c1] {
+                match &self.heap[c1] {
                     HeapCellValue::Atom(ref n1, _) => {
-                        match c {
+                        self.fail = match c {
                             Constant::Atom(ref n2, _) => {
                                 n1 != n2
                             }
@@ -784,10 +865,10 @@ impl MachineState {
                             _ => {
                                 true
                             }
-                        }
+                        };
                     }
                     HeapCellValue::Integer(ref n1) => {
-                        match c {
+                        self.fail = match c {
                             Constant::Fixnum(n2) => {
                                 n1.to_isize() != Some(*n2)
                             }
@@ -800,10 +881,10 @@ impl MachineState {
                             _ => {
                                 true
                             }
-                        }
+                        };
                     }
                     HeapCellValue::Rational(ref r1) => {
-                        if let Constant::Rational(ref r2) = c {
+                        self.fail = if let Constant::Rational(ref r2) = c {
                             r1 != r2
                         } else {
                             true
@@ -811,10 +892,13 @@ impl MachineState {
                     }
                     HeapCellValue::PartialString(..) => {
                         if let Constant::String(ref s2) = c {
-                            let iter = self.heap_pstr_iter(Addr::PStrLocation(c1, 0));
-                            !compare_pstr(iter, s2.chars())
+                            self.match_partial_string(
+                                Addr::PStrLocation(c1, 0),
+                                &s2,
+                                false,
+                            );
                         } else {
-                            true
+                            self.fail = true;
                         }
                     }
                     _ => {
@@ -846,11 +930,14 @@ impl MachineState {
                 self.unify(Addr::Lis(l), addr);
             }
             Addr::PStrLocation(h, n) => {
-                self.fail = if let Constant::String(ref s2) = c {
-                    let iter = self.heap_pstr_iter(Addr::PStrLocation(h, n));
-                    !compare_pstr(iter, s2.chars())
+                if let Constant::String(ref s2) = c {
+                    self.match_partial_string(
+                        Addr::PStrLocation(h, n),
+                        &s2,
+                        false,
+                    )
                 } else {
-                    true
+                    self.fail = true;
                 };
             }
             Addr::Stream(_) => {
@@ -1154,9 +1241,9 @@ impl MachineState {
                         self.s = HeapPtr::PStrChar(h, n);
                         self.mode = MachineMode::Read;
                     }
-                    addr @ Addr::AttrVar(_)
-                  | addr @ Addr::StackCell(..)
-                  | addr @ Addr::HeapCell(_) => {
+                    addr @ Addr::AttrVar(_) |
+                    addr @ Addr::StackCell(..) |
+                    addr @ Addr::HeapCell(_) => {
                         let h = self.heap.h();
 
                         self.heap.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
@@ -1168,8 +1255,14 @@ impl MachineState {
                         self.s = HeapPtr::HeapCell(a);
                         self.mode = MachineMode::Read;
                     }
-                    _ => self.fail = true,
+                    _ => {
+                        self.fail = true;
+                    }
                 };
+            }
+            &FactInstruction::GetPartialString(_, ref string, reg, has_tail) => {
+                let addr = self.store(self.deref(self[reg]));
+                self.match_partial_string(addr, string, has_tail);
             }
             &FactInstruction::GetStructure(ref ct, arity, reg) => {
                 let addr = self.deref(self[reg]);
@@ -1191,14 +1284,15 @@ impl MachineState {
                         let h = self.heap.h();
 
                         self.heap.push(HeapCellValue::Addr(Addr::Str(h + 1)));
-                        self.heap
-                            .push(HeapCellValue::NamedStr(arity, ct.name(), ct.spec()));
+                        self.heap.push(HeapCellValue::NamedStr(arity, ct.name(), ct.spec()));
 
                         self.bind(addr.as_var().unwrap(), Addr::HeapCell(h));
 
                         self.mode = MachineMode::Write;
                     }
-                    _ => self.fail = true,
+                    _ => {
+                        self.fail = true;
+                    }
                 };
             }
             &FactInstruction::GetVariable(norm, arg) => {
@@ -1214,7 +1308,9 @@ impl MachineState {
                 match self.mode {
                     MachineMode::Read => {
                         let addr = self.s.read(&self.heap);
+
                         self.write_constant_to_var(addr, c);
+                        self.increment_s_ptr(1);
                     }
                     MachineMode::Write => {
                         let addr = self.heap.put_constant(c.clone());
@@ -1224,12 +1320,13 @@ impl MachineState {
                         }
                     }
                 };
-
-                self.increment_s_ptr(1);
             }
             &FactInstruction::UnifyVariable(reg) => {
                 match self.mode {
-                    MachineMode::Read => self[reg] = self.s.read(&self.heap),
+                    MachineMode::Read => {
+                        self[reg] = self.s.read(&self.heap);
+                        self.increment_s_ptr(1);
+                    }
                     MachineMode::Write => {
                         let h = self.heap.h();
 
@@ -1237,14 +1334,14 @@ impl MachineState {
                         self[reg] = Addr::HeapCell(h);
                     }
                 };
-
-                self.increment_s_ptr(1);
             }
             &FactInstruction::UnifyLocalValue(reg) => {
                 match self.mode {
                     MachineMode::Read => {
                         let reg_addr = self[reg];
+
                         self.unify(reg_addr, self.s.read(&self.heap));
+                        self.increment_s_ptr(1);
                     }
                     MachineMode::Write => {
                         let addr = self.deref(self[reg]);
@@ -1265,26 +1362,26 @@ impl MachineState {
                         self.bind(Ref::HeapCell(h), addr);
                     }
                 };
-
-                self.increment_s_ptr(1);
             }
             &FactInstruction::UnifyValue(reg) => {
                 match self.mode {
                     MachineMode::Read => {
                         let reg_addr = self[reg];
+
                         self.unify(reg_addr, self.s.read(&self.heap));
+                        self.increment_s_ptr(1);
                     }
                     MachineMode::Write => {
                         let heap_val = self.store(self[reg]);
                         self.heap.push(HeapCellValue::Addr(heap_val));
                     }
                 };
-
-                self.increment_s_ptr(1);
             }
             &FactInstruction::UnifyVoid(n) => {
                 match self.mode {
-                    MachineMode::Read => self.increment_s_ptr(n),
+                    MachineMode::Read => {
+                        self.increment_s_ptr(n);
+                    }
                     MachineMode::Write => {
                         let h = self.heap.h();
 
@@ -1394,6 +1491,18 @@ impl MachineState {
             &QueryInstruction::PutList(_, reg) => {
                 self[reg] = Addr::Lis(self.heap.h());
             }
+            &QueryInstruction::PutPartialString(_, ref string, reg, has_tail) => {
+                let pstr_addr =
+                    if has_tail {
+                        let pstr_addr = self.heap.allocate_pstr(&string);
+                        self.heap.pop(); // the tail will be added by the next instruction.
+                        pstr_addr
+                    } else {
+                        self.heap.put_complete_string(&string)
+                    };
+
+                self[reg] = pstr_addr;
+            }
             &QueryInstruction::PutStructure(ref ct, arity, reg) => {
                 let h = self.heap.h();
 
@@ -1466,7 +1575,7 @@ impl MachineState {
             &QueryInstruction::SetVoid(n) => {
                 let h = self.heap.h();
 
-                for i in h..h + n {
+                for i in h .. h + n {
                     self.heap.push(HeapCellValue::Addr(Addr::HeapCell(i)));
                 }
             }

@@ -21,8 +21,7 @@ use std::io::Write;
 use std::mem;
 use std::ops::{Index, IndexMut};
 
-pub(crate)
-struct HeapPStrIter<'a> {
+pub(crate) struct HeapPStrIter<'a> {
     focus: Addr,
     machine_st: &'a MachineState,
     seen: IndexSet<Addr>,
@@ -41,12 +40,44 @@ impl<'a> HeapPStrIter<'a> {
     #[inline]
     pub(crate)
     fn focus(&'a self) -> Addr {
-        self.focus
+        self.machine_st.store(self.machine_st.deref(self.focus))
+    }
+
+    #[inline]
+    pub(crate)
+    fn to_string(&mut self) -> String {
+        let mut buf = String::new();
+
+        while let Some(iteratee) = self.next() {
+            match iteratee {
+                PStrIteratee::Char(c) => {
+                    buf.push(c);
+                }
+                PStrIteratee::PStrSegment(h, n) => {
+                    match &self.machine_st.heap[h] {
+                        HeapCellValue::PartialString(ref pstr, _) => {
+                            buf += pstr.as_str_from(n);
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    }
+                }
+            }
+        }
+
+        buf
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum PStrIteratee {
+    Char(char),
+    PStrSegment(usize, usize),
+}
+
 impl<'a> Iterator for HeapPStrIter<'a> {
-    type Item = Option<char>;
+    type Item = PStrIteratee;
 
     fn next(&mut self) -> Option<Self::Item> {
         let addr = self.machine_st.store(self.machine_st.deref(self.focus));
@@ -59,13 +90,14 @@ impl<'a> Iterator for HeapPStrIter<'a> {
 
         match addr {
             Addr::PStrLocation(h, n) => {
-                if let &HeapCellValue::PartialString(ref pstr, _) = &self.machine_st.heap[h] {
-                    if let Some(c) = pstr.range_from(n ..).next() {
-                        self.focus = Addr::PStrLocation(h, n + c.len_utf8());
-                        return Some(Some(c));
+                if let &HeapCellValue::PartialString(_, has_tail) = &self.machine_st.heap[h] {
+                    self.focus = if has_tail {
+                        Addr::HeapCell(h + 1)
                     } else {
-                        unreachable!()
-                    }
+                        Addr::EmptyList
+                    };
+
+                    return Some(PStrIteratee::PStrSegment(h, n));
                 } else {
                     unreachable!()
                 }
@@ -73,16 +105,36 @@ impl<'a> Iterator for HeapPStrIter<'a> {
             Addr::Lis(l) => {
                 let addr = self.machine_st.store(self.machine_st.deref(Addr::HeapCell(l)));
 
-                if let Addr::Char(c) = addr {
+                let opt_c = match addr {
+                    Addr::Con(h) if self.machine_st.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(ref atom, _) = &self.machine_st.heap[h] {
+                            if atom.is_char() {
+                                Some(atom.as_str().chars().next().unwrap())
+                            } else {
+                                None
+                            }
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    Addr::Char(c) => {
+                        Some(c)
+                    }
+                    _ => {
+                        None
+                    }
+                };
+
+                if let Some(c) = opt_c {
                     self.focus = Addr::HeapCell(l + 1);
-                    return Some(Some(c));
+                    return Some(PStrIteratee::Char(c));
                 } else {
                     return None;
                 }
             }
             Addr::EmptyList => {
                 self.focus = Addr::EmptyList;
-                return Some(None);
+                return None;
             }
             _ => {
                 return None;
@@ -93,24 +145,51 @@ impl<'a> Iterator for HeapPStrIter<'a> {
 
 #[inline]
 pub(super)
-fn compare_pstr<'a>(
-    pstr_iter: HeapPStrIter<'a>,
-    mut c_iter: impl Iterator<Item = char>,
-) -> bool {
-    for opt_c in pstr_iter {
-        match opt_c {
-            Some(_) => {
-                if opt_c != c_iter.next() {
-                    return false;
+fn compare_pstr_to_string<'a>(
+    heap_pstr_iter: &mut HeapPStrIter<'a>,
+    s: &String,
+) -> Option<usize> {
+    let mut s_offset = 0;
+
+    while let Some(iteratee) = heap_pstr_iter.next() {
+        match iteratee {
+            PStrIteratee::Char(c1) => {
+                if let Some(c2) = s[s_offset ..].chars().next() {
+                    if c1 != c2 {
+                        return None;
+                    } else {
+                        s_offset += c1.len_utf8();
+                    }
+                } else {
+                    return None;
                 }
             }
-            None => {
-                return c_iter.next().is_none();
+            PStrIteratee::PStrSegment(h, n) => {
+                match heap_pstr_iter.machine_st.heap[h] {
+                    HeapCellValue::PartialString(ref pstr, _) => {
+                        let t = pstr.as_str_from(n);
+
+                        if s[s_offset ..].starts_with(t) {
+                            s_offset += t.len();
+                        } else if t.starts_with(&s[s_offset ..]) {
+                            heap_pstr_iter.focus =
+                                Addr::PStrLocation(h, n + s[s_offset ..].len());
+
+                            s_offset += s[s_offset ..].len();
+                            return Some(s_offset);
+                        } else {
+                            return None;
+                        }
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                }
             }
         }
     }
 
-    false
+    Some(s_offset)
 }
 
 pub struct Ball {

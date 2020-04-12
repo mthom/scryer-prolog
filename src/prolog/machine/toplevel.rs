@@ -1093,8 +1093,9 @@ impl RelationWorker {
                     Ok(TopLevel::Fact(self.setup_fact(term, true)?, self.line_num, self.col_num))
                 }
             }
-            term =>
-                Ok(TopLevel::Fact(self.setup_fact(term, true)?, self.line_num, self.col_num)),
+            term => {
+                Ok(TopLevel::Fact(self.setup_fact(term, true)?, self.line_num, self.col_num))
+            }
         }
     }
 
@@ -1132,8 +1133,7 @@ impl RelationWorker {
 
     fn absorb(&mut self, other: RelationWorker) {
         self.queue.extend(other.queue.into_iter());
-        self.dynamic_clauses
-            .extend(other.dynamic_clauses.into_iter());
+        self.dynamic_clauses.extend(other.dynamic_clauses.into_iter());
     }
 }
 
