@@ -65,8 +65,8 @@ parse_ruleml(AssertItem, QueryItem, XML) :-
  */
 
 parse_header -->
-    partial_string_ws("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"),
-    partial_string_ws("<?xml-model href=\"http://deliberation.ruleml.org\
+    list_ws("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"),
+    list_ws("<?xml-model href=\"http://deliberation.ruleml.org\
 /1.02/xsd/naffologeq.xsd\"?>").
 
 
@@ -176,15 +176,15 @@ ruleml_top_level_items(AssertItem, QueryItems) -->
 
 ruleml_assert(Items) -->
     (  { var(Items) } ->
-       partial_string_ws("<Assert mapClosure=\"universal\">"),
+       list_ws("<Assert mapClosure=\"universal\">"),
        ruleml_assert_items(Items),
        !,
-       partial_string_ws("</Assert>")
-    ;  partial_string("<Assert mapClosure=\"universal\">"),
+       list_ws("</Assert>")
+    ;  "<Assert mapClosure=\"universal\">",
        { Items \== [] },
        ruleml_assert_items(Items),
        !,
-       partial_string("</Assert>")
+       "</Assert>"
     ).
 
 
@@ -244,17 +244,17 @@ ruleml_query_items([]) --> [].
 
 ruleml_query_item(Item) -->
     (  { var(Item) } ->
-       partial_string_ws("<Query closure=\"existential\">"),
+       list_ws("<Query closure=\"existential\">"),
        (  ruleml_condition(Item0),
           { Item = (?- Item0) } ->
           { true }
        ;  { true }
        ),
-       partial_string_ws("</Query>")
-    ;  partial_string("<Query closure=\"existential\">"),
+       list_ws("</Query>")
+    ;  "<Query closure=\"existential\">",
        { Item = (?- Item0) },
        ruleml_condition(Item0),
-       partial_string("</Query>")
+       "</Query>"
     ).
 
 
@@ -264,7 +264,7 @@ ruleml_query_item(Item) -->
  * items. Whitespace, for example, is discarded immediately after
  * being read.
  *
- * partial_string_ws reads a string into its argument as a partial
+ * list_ws reads a string into its argument as a partial
  * string before consuming any following whitespace.
  */
 
@@ -283,9 +283,12 @@ sign('+') --> "+".
 
 double_quote('"') --> "\"".
 
-partial_string_ws(String) -->
-    partial_string(String),
+list_ws(Ls) -->
+    list(Ls),
     ws.
+
+list([]) --> [].
+list([L|Ls]) --> [L], list(Ls).
 
 /*
  * ruleml_assert_item//1 specifies the elements of RuleML that may
@@ -370,7 +373,7 @@ ruleml_item_conjunction([]) --> [].
 
 ruleml_conjunction_of_items(Items) -->
     (  { var(Items) } ->
-       partial_string_ws("<And>"),
+       list_ws("<And>"),
        ruleml_item_conjunction(ItemsList),
        (  { ItemsList = [_,_|_] } ->
           { fold_commas(ItemsList, Items) }
@@ -379,8 +382,8 @@ ruleml_conjunction_of_items(Items) -->
        ;  { ItemsList = [] } ->
           { Items = (true, true) }
        ),
-       partial_string_ws("</And>")
-    ;  partial_string("<And>"),
+       list_ws("</And>")
+    ;  "<And>",
        (  { Items = (true, true) } ->
           { true }
        ;  { Items = (true, Item0) } ->
@@ -389,7 +392,7 @@ ruleml_conjunction_of_items(Items) -->
           { unfold_commas(Items, ItemsList) },
           ruleml_item_conjunction(ItemsList)
        ),
-       partial_string("</And>")
+       "</And>"
     ).
 
 /*
@@ -417,7 +420,7 @@ ruleml_item_disjunction([]) --> [].
 
 ruleml_disjunction_of_items(Items) -->
     (  { var(Items) } ->
-       partial_string_ws("<Or>"),
+       list_ws("<Or>"),
        ruleml_item_disjunction(ItemsList),
        (  { ItemsList = [_,_|_] } ->
           { fold_semicolons(ItemsList, Items) }
@@ -426,8 +429,8 @@ ruleml_disjunction_of_items(Items) -->
        ;  { ItemsList = [] } ->
           { Items = (false ; false) }
        ),
-       partial_string_ws("</Or>")
-    ;  partial_string("<Or>"),
+       list_ws("</Or>")
+    ;  "<Or>",
        (  { Items = (false ; false) } ->
           { true }
        ;  { Items = (false ; Item0) } ->
@@ -436,7 +439,7 @@ ruleml_disjunction_of_items(Items) -->
           { unfold_semicolons(Items, ItemsList) },
           ruleml_item_disjunction(ItemsList)
        ),
-       partial_string("</Or>")
+       "</Or>"
     ).
 
 
@@ -485,32 +488,32 @@ split_plex(Xs, PlexItems, RepoItem) :-
 
 ruleml_plex(Plex) -->
     (  { var(Plex) } ->
-       (  partial_string_ws("<Plex>") ->
+       (  list_ws("<Plex>") ->
           ruleml_items(PlexItems),
-          (  partial_string_ws("<repo>") ->
+          (  list_ws("<repo>") ->
              ruleml_var(RepoVar),
-             partial_string_ws("</repo>"),
+             list_ws("</repo>"),
              { append(PlexItems, RepoVar, Plex) }
           ;  { Plex = PlexItems }
           ),
-          partial_string_ws("</Plex>")
-       ;  partial_string_ws("<Plex/>")
+          list_ws("</Plex>")
+       ;  list_ws("<Plex/>")
        )
     ;  {  \+ string(Plex),
           acyclic_term(Plex) },
        (  {  functor(Plex, ('.'), 2) } ->
           {  split_plex(Plex, PlexItems, RepoVar) },
-          partial_string("<Plex>"),
+          "<Plex>",
           ruleml_items(PlexItems),
           (  { RepoVar \== [] } ->
-             partial_string("<repo>"),
+             "<repo>",
              ruleml_var(RepoVar),
-             partial_string("</repo>")
+             "</repo>"
           ;  { true }
           ),
-          partial_string("</Plex>")
+          "</Plex>"
        ;  { Plex == [] } ->
-          partial_string("<Plex/>")
+          "<Plex/>"
        )
     ).
 
@@ -526,14 +529,14 @@ ruleml_plex(Plex) -->
 
 ruleml_naf(Item) -->
     (  { var(Item) } ->
-       partial_string_ws("<Naf>"),
+       list_ws("<Naf>"),
        ruleml_condition(NafItem),
        { Item = (\+ NafItem) },
-       partial_string_ws("</Naf>")
-    ;  partial_string("<Naf>"),
+       list_ws("</Naf>")
+    ;  "<Naf>",
        { Item = (\+ NafItem) },
        ruleml_condition(NafItem),
-       partial_string("</Naf>")
+       "</Naf>"
     ).
 
 
@@ -577,22 +580,22 @@ ruleml_atoms([]) --> [].
 
 ruleml_atom(Item) -->
     (  { var(Item) } ->
-       partial_string_ws("<Atom>"),
-       partial_string_ws("<Rel>"),
+       list_ws("<Atom>"),
+       list_ws("<Rel>"),
        prolog_symbol(Name),
        { Name \== (','), Name \== (';') },
-       partial_string_ws("</Rel>"),
+       list_ws("</Rel>"),
        ruleml_items(Args),
-       partial_string_ws("</Atom>"),
+       list_ws("</Atom>"),
        { Item =.. [Name | Args] }
     ;  { Item =.. [Name | Args] },
        { Name \== (','), Name \== (';') },
-       partial_string("<Atom>"),
-       partial_string("<Rel>"),
+       "<Atom>",
+       "<Rel>",
        prolog_symbol(Name),
-       partial_string("</Rel>"),
+       "</Rel>",
        ruleml_items(Args),
-       partial_string("</Atom>")
+       "</Atom>"
     ).
 
 /*
@@ -642,35 +645,35 @@ ruleml_item(Item) -->
 
 ruleml_expr(Item) -->
     (  { var(Item) } ->
-       partial_string_ws("<Expr>"),
-       partial_string_ws("<Fun>"),
+       list_ws("<Expr>"),
+       list_ws("<Fun>"),
        prolog_symbol(Name),
-       partial_string_ws("</Fun>"),
+       list_ws("</Fun>"),
        ruleml_items(Args),
-       (  partial_string_ws("<repo>"),
+       (  list_ws("<repo>"),
           ruleml_item(RepoItem),
-          partial_string_ws("</repo>"),
+          list_ws("</repo>"),
           !,
           { fold_commas(Args, ArgsCommas) },
           { Item =.. [Name, (ArgsCommas | RepoItem)] }
        ;  { Item =.. [Name | Args] }
        ),
-       partial_string_ws("</Expr>")
+       list_ws("</Expr>")
     ;  { Item =.. [Name | Args] },
-       partial_string("<Expr>"),
-       partial_string("<Fun>"),
+       "<Expr>",
+       "<Fun>",
        prolog_symbol(Name),
-       partial_string("</Fun>"),
+       "</Fun>",
        (  { Args = [(InnerArgs | RepoItem)] } ->
           {  InnerArgs = (_,_) -> unfold_commas(InnerArgs, InnerArgsList)
              ;  InnerArgsList = [InnerArgs] },
           ruleml_items(InnerArgsList),
-          partial_string("<repo>"),
+          "<repo>",
           ruleml_item(RepoItem),
-          partial_string("</repo>")
+          "</repo>"
        ;  ruleml_items(Args)
        ),
-       partial_string("</Expr>")
+       "</Expr>"
     ).
 
 
@@ -686,15 +689,15 @@ ruleml_expr(Item) -->
 
 ruleml_ind(Name) -->
     (  { var(Name) } ->
-       partial_string_ws("<Ind>"),
+       list_ws("<Ind>"),
        ruleml_ind_helper(Cs),
-       partial_string_ws("</Ind>"),
+       list_ws("</Ind>"),
        { atom_chars(Name, Cs) }
     ;  { atom(Name) },
-       partial_string("<Ind>"),
+       "<Ind>",
        { atom_chars(Name, Cs) },
        ruleml_ind_helper(Cs),
-       partial_string("</Ind>")
+       "</Ind>"
     ).
 
 
@@ -728,16 +731,16 @@ ruleml_ind_helper(Cs) -->
 
 ruleml_var(Var) -->
     (  { var(Var) } ->
-       partial_string_ws("<Var>"),
+       list_ws("<Var>"),
        ruleml_var_contents(VarChars),
        { atom_chars(VarName, VarChars) },
        { Var = '$V'(VarName) },
-       partial_string_ws("</Var>")
+       list_ws("</Var>")
     ;  { Var = '$V'(VarName) },
-       partial_string("<Var>"),
+       "<Var>",
        { atom_chars(VarName, VarChars) },
        ruleml_var_contents(VarChars),
-       partial_string("</Var>")
+       "</Var>"
     ).
 
 
@@ -801,18 +804,18 @@ constant_chars(symbol, Constant, Chars) :-
 
 ruleml_data(Name) -->
     (  { var(Name) } ->
-       partial_string_ws("<Data xsi:type=\""),
+       list_ws("<Data xsi:type=\""),
        prolog_symbol(Type),
-       partial_string_ws("\">"),
+       list_ws("\">"),
        ruleml_data_contents(Type, Cs),
        { constant_chars(Type, Name, Cs) },
-       partial_string_ws("</Data>")
-    ;  partial_string("<Data xsi:type=\""),
+       list_ws("</Data>")
+    ;  "<Data xsi:type=\"",
        { constant_chars(Type, Name, Cs) },
        prolog_symbol(Type),
-       partial_string("\">"),
+       "\">",
        ruleml_data_contents(Type, Cs),
-       partial_string("</Data>")
+       "</Data>"
     ).
 
 /*
@@ -1042,24 +1045,24 @@ ruleml_implies_head(Item) -->
 
 ruleml_implies(Rule) -->
     (  { var(Rule) } ->
-       partial_string_ws("<Implies>"),
-       partial_string_ws("<then>"),
+       list_ws("<Implies>"),
+       list_ws("<then>"),
        ruleml_implies_head(Head),
-       partial_string_ws("</then>"),
-       partial_string_ws("<if>"),
+       list_ws("</then>"),
+       list_ws("<if>"),
        ruleml_condition(Body),
-       partial_string_ws("</if>"),
-       partial_string_ws("</Implies>"),
+       list_ws("</if>"),
+       list_ws("</Implies>"),
        { Rule = ( Head :- Body ) }
     ;  { Rule = ( Head :- Body ) },
-       partial_string("<Implies>"),
-       partial_string("<then>"),
+       "<Implies>",
+       "<then>",
        ruleml_implies_head(Head),
-       partial_string("</then>"),
-       partial_string("<if>"),
+       "</then>",
+       "<if>",
        ruleml_condition(Body),
-       partial_string("</if>"),
-       partial_string("</Implies>")
+       "</if>",
+       "</Implies>"
     ).
 
 
@@ -1082,16 +1085,16 @@ ruleml_equal_item(EqualItem) -->
 
 ruleml_equal(Equal) -->
     (  { var(Equal) } ->
-       partial_string_ws("<Equal>"),
+       list_ws("<Equal>"),
        ruleml_equal_item(Left),
        ruleml_equal_item(Right),
-       partial_string_ws("</Equal>"),
+       list_ws("</Equal>"),
        { Equal = (Left = Right) }
     ;  { Equal = (Left = Right) },
-       partial_string("<Equal>"),
+       "<Equal>",
        ruleml_equal_item(Left),
        ruleml_equal_item(Right),
-       partial_string("</Equal>")
+       "</Equal>"
     ).
 
 
