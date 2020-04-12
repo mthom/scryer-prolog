@@ -236,7 +236,10 @@ the efficient packed representation is used internally.
 
 An important design goal of Scryer Prolog is to *automatically* use
 the efficient string representation whenever possible. Therefore, it
-is only very rarely necessary to use `partial_string/3` explicitly.
+is only very rarely necessary to use `partial_string/3` explicitly. In
+the above example, posting <tt>Ls0&nbsp;=&nbsp;[a,b,c|Ls]</tt> yields
+the exact same internal representation, and has the advantage that
+only the standard predicate&nbsp;`(=)/2` is used.
 
 Definite clause grammars as provided by `library(dcgs)` are ideally
 suited for reasoning about strings.
