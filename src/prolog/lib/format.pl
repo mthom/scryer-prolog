@@ -16,16 +16,16 @@
    The characters in FormatString are used literally, except
    for the following tokens with special meaning:
 
-     ~w    use the next available argument from Arguments here,
-           which must be atomic (a current limitation)
+     ~w    use the next available argument from Arguments here
+     ~q    use the next argument here, formatted as by writeq/1
      ~a    use the next argument here, which must be an atom
      ~s    use the next argument here, which must be a string
      ~d    use the next argument here, which must be an integer
      ~f    use the next argument here, a floating point number
      ~Nf   where N is an integer: format the float argument
            using N digits after the decimal point
-     ~Nd   like ~d, placing the last N digits after a decimal point
-           If N is 0 or omitted, no decimal point is used.
+     ~Nd   like ~d, placing the last N digits after a decimal point;
+           if N is 0 or omitted, no decimal point is used.
      ~ND   like ~Nd, separating digits to the left of the decimal point
            in groups of three, using the character "," (comma)
      ~N|   where N is an integer: place a tab stop at text column N
@@ -68,6 +68,7 @@
 :- use_module(library(dcgs)).
 :- use_module(library(lists)).
 :- use_module(library(error)).
+:- use_module(library(charsio)).
 
 format_(Fs, Args) -->
         { must_be(list, Fs),
@@ -149,7 +150,10 @@ cells([], Args, Tab, Es) -->
 cells([~,~|Fs], Args, Tab, Es) --> !,
         cells(Fs, Args, Tab, [chars("~")|Es]).
 cells([~,w|Fs], [Arg|Args], Tab, Es) --> !,
-        { arg_chars(Arg, Chars) },
+        { write_term_to_chars(Arg, [], Chars) },
+        cells(Fs, Args, Tab, [chars(Chars)|Es]).
+cells([~,q|Fs], [Arg|Args], Tab, Es) --> !,
+        { write_term_to_chars(Arg, [quoted(true)], Chars) },
         cells(Fs, Args, Tab, [chars(Chars)|Es]).
 cells([~,a|Fs], [Arg|Args], Tab, Es) --> !,
         { atom_chars(Arg, Chars) },
@@ -304,16 +308,6 @@ pow10(D, N0-Pow0, N-Pow) :-
         N is N0 + D*10^Pow0,
         Pow is Pow0 + 1.
 
-
-arg_chars(Arg, Chars) :-
-        (   (   integer(Arg)
-            ;   float(Arg)
-            ) ->
-            number_chars(Arg, Chars)
-        ;   must_be(atom, Arg),
-            atom_chars(Arg, Chars)
-        ).
-
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Impure I/O, implemented as a small wrapper over format_//2.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -345,38 +339,39 @@ Cs = [cell(0,4,[glue(' ',_38),chars([a]),glue(' ',_62)])].
 ?- phrase(format_("hello~n~tthere~6|", []), Ls).
 
 ?- format("~ta~t~4|", []).
- a  true ;
-false.
+    a  true
+;  false.
 
 ?- format("~ta~tb~tc~10|", []).
-  a  b   ctrue ;
-false.
+     a  b   ctrue
+;  false.
 
 ?- format("~tabc~3|", []).
 
 ?- format("~ta~t~4|", []).
 
 ?- format("~ta~t~tb~tc~20|", []).
-    a         b    c
-    a        b     ctrue ;
-false.
+       a        b     ctrue
+;  false.
 
 ?- format("~2f~n", [3]).
-3.00
-true ...
+   3.00
+true
 
 ?- format("~20f", [0.1]).
-0.10000000000000000000true ;   % this should use higher accuracy!
-false.
+   0.10000000000000000000true % this should use higher accuracy!
+;  false.
 
 ?- X is atan(2), format("~7f~n", [X]).
-1.1071487
-X = 1.1071487177940906 ...
+   1.1071487
+X = 1.1071487177940906
 
 ?- format("~`at~50|~n", []).
-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-true ...
+   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+true
 
 ?- format("~t~N", []).
 
+?- format("~q", [.]).
+   '.'true
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
