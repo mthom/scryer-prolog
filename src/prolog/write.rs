@@ -319,8 +319,8 @@ impl fmt::Display for SessionError {
             &SessionError::ParserError(ref e) => {
                 write!(f, "syntax_error({})", e.as_str())
             }
-            &SessionError::QueryCannotBePostedAsGoal => {
-                write!(f, "query forms cannot be posted as goals.")
+            &SessionError::QueryCannotBeDefinedAsFact => {
+                write!(f, "queries cannot be defined as facts.")
             }
         }
     }

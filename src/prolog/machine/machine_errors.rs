@@ -358,12 +358,12 @@ impl MachineError {
             SessionError::ParserError(err) => {
                 Self::syntax_error(h, err)
             }
-            SessionError::QueryCannotBePostedAsGoal => {
+            SessionError::QueryCannotBeDefinedAsFact => {
                 Self::permission_error(
                     h,
                     Permission::Create,
                     "static_procedure",
-                    functor!("query_cannot_be_posted_as_goal")
+                    functor!("query_cannot_be_defined_as_fact")
                 )
             }
         }
@@ -707,7 +707,7 @@ pub enum SessionError {
     ModuleDoesNotContainExport(ClauseName, PredicateKey),
     NamelessEntry,
     OpIsInfixAndPostFix(ClauseName),
-    QueryCannotBePostedAsGoal,
+    QueryCannotBeDefinedAsFact,
     ParserError(ParserError),
 }
 

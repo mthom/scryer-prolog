@@ -167,38 +167,8 @@ impl<'a> TermWriter<'a> {
             &TermRef::Clause(..) => {
                 Addr::Str(h)
             }
-            &TermRef::PartialString(..) => {//_, _, ref pstr, tail) => {
+            &TermRef::PartialString(..) => {
                 Addr::PStrLocation(h, 0)
-                /*
-                match tail {
-                    Term::AnonVar => {
-                        let h = self.machine_st.heap.h();
-                        self.machine_st.heap.allocate_pstr(pstr);
-
-                        Addr::PStrLocation(h, 0)
-                    }
-                    Term::Constant(_, Constant::EmptyList) => {
-                        self.machine_st.heap.put_complete_string(pstr)
-                    }
-                    Term::Var(_, ref var) => {
-                        let h = self.machine_st.heap.h();
-
-                        self.machine_st.heap.allocate_pstr(pstr);
-                        let tail_h = self.machine_st.heap.h() - 1;
-
-                        if let Some(addr) = self.var_dict.get(var) {
-                            self.machine_st.heap[tail_h] = HeapCellValue::Addr(*addr);
-                        } else {
-                            self.var_dict.insert(var.clone(), Addr::HeapCell(tail_h));
-                        }
-
-                        Addr::PStrLocation(h, 0)
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                }
-                */
             }
         }
     }
