@@ -289,7 +289,9 @@ impl fmt::Display for IndexingInstruction {
 impl fmt::Display for SessionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &SessionError::CannotOverwriteBuiltIn(ref msg) => write!(f, "cannot overwrite {}", msg),
+            &SessionError::CannotOverwriteBuiltIn(ref msg) => {
+                write!(f, "cannot overwrite {}", msg)
+            }
             &SessionError::CannotOverwriteImport(ref msg) => {
                 write!(f, "cannot overwrite import {}", msg)
             }
@@ -312,7 +314,12 @@ impl fmt::Display for SessionError {
             &SessionError::NamelessEntry => {
                 write!(f, "the predicate head is not an atom or clause.")
             }
-            &SessionError::ParserError(ref e) => write!(f, "syntax_error({})", e.as_str()),
+            &SessionError::ParserError(ref e) => {
+                write!(f, "syntax_error({})", e.as_str())
+            }
+            &SessionError::QueryCannotBePostedAsGoal => {
+                write!(f, "query forms cannot be posted as goals.")
+            }
         }
     }
 }

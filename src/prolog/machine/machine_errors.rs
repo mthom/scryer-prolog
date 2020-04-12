@@ -301,9 +301,6 @@ impl MachineError {
     pub(super)
     fn session_error(h: usize, err: SessionError) -> Self {
         match err {
-            SessionError::ParserError(err) => {
-                Self::syntax_error(h, err)
-            }
             SessionError::CannotOverwriteBuiltIn(pred_str)
           | SessionError::CannotOverwriteImport(pred_str) => {
                 Self::permission_error(
@@ -329,7 +326,15 @@ impl MachineError {
                     h,
                     Permission::Access,
                     "private_procedure",
-                    functor!("modules_does_not_exist"),
+                    functor!("module_does_not_exist"),
+                )
+            }
+            SessionError::NamelessEntry => {
+                Self::permission_error(
+                    h,
+                    Permission::Create,
+                    "static_procedure",
+                    functor!("nameless_procedure")
                 )
             }
             SessionError::OpIsInfixAndPostFix(op) => {
@@ -340,7 +345,17 @@ impl MachineError {
                     functor!(clause_name(op)),
                 )
             }
-            _ => unreachable!(),
+            SessionError::ParserError(err) => {
+                Self::syntax_error(h, err)
+            }
+            SessionError::QueryCannotBePostedAsGoal => {
+                Self::permission_error(
+                    h,
+                    Permission::Create,
+                    "static_procedure",
+                    functor!("query_cannot_be_posted_as_goal")
+                )
+            }
         }
     }
 
@@ -681,6 +696,7 @@ pub enum SessionError {
     ModuleNotFound,
     NamelessEntry,
     OpIsInfixAndPostFix(ClauseName),
+    QueryCannotBePostedAsGoal,
     ParserError(ParserError),
 }
 

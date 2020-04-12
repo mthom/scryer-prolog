@@ -1290,7 +1290,7 @@ impl<'a> TopLevelBatchWorker<'a> {
                 TopLevel::Declaration(decl) =>
                     return Ok(Some(decl)),
                 TopLevel::Query(_) =>
-                    return Err(SessionError::NamelessEntry),
+                    return Err(SessionError::QueryCannotBePostedAsGoal),
             }
         }
 
