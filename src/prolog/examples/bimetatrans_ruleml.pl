@@ -1,7 +1,6 @@
 :- module(ruleml_xml_parser, [parse_ruleml/3]).
 
 :- use_module(library(dcgs)).
-:- use_module(library(iso_ext)).
 
 :- set_prolog_flag(double_quotes, chars).
 
@@ -781,11 +780,7 @@ ruleml_var_contents(Cs) -->
  *   constant_chars(+Type, +Constant, -Chars)
  */
 
-constant_chars(string, Constant, Chars) :-
-    (  var(Constant) ->
-       catch(partial_string(Chars, Constant, []), _, false)
-    ;  catch(partial_string(Constant, Chars, []), _, false)
-    ).
+constant_chars(string, Chars, Chars).
 constant_chars(number, Constant, Chars) :-
     catch(number_chars(Constant, Chars), _, false).
 constant_chars(symbol, Constant, Chars) :-
