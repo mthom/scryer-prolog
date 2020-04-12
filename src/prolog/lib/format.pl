@@ -62,7 +62,8 @@
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(format, [format_//2,
-                   format/2
+                   format/2,
+                   portray_clause/1
                   ]).
 
 :- use_module(library(dcgs)).
@@ -308,9 +309,9 @@ pow10(D, N0-Pow0, N-Pow) :-
         N is N0 + D*10^Pow0,
         Pow is Pow0 + 1.
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Impure I/O, implemented as a small wrapper over format_//2.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 format(Fs, Args) :-
         phrase(format_(Fs, Args), Cs),
@@ -374,4 +375,107 @@ true
 
 ?- format("~q", [.]).
    '.'true
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   We also provide a rudimentary version of portray_clause/1.
+
+   In the eventual library organization, portray_clause/1
+   and related predicates (such as listing/1) may be placed
+   in their own dedicated library.
+
+   portray_clause/1 is useful for printing solutions in such a way
+   that they can be read back with read/1.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+portray_clause(Term) :-
+        phrase(portray_clause_(Term), Ls),
+        maplist(write, Ls).
+
+portray_clause_(Term) -->
+        portray_(Term), ".".
+
+literal(Lit) --> format_("~q", [Lit]).
+
+portray_(Var) --> { var(Var) }, !, literal(Var).
+portray_((Head :- Body)) --> !,
+        literal(Head), " :-\n",
+        body_(Body, 0, 8).
+portray_((Head --> Body)) --> !,
+        literal(Head), " -->\n",
+        body_(Body, 0, 8).
+portray_(Any) --> literal(Any).
+
+
+body_(Var, C, I) --> { var(Var) }, !,
+        indent_to(C, I),
+        literal(Var).
+body_((A,B), C, I) --> !,
+        body_(A, C, I), ",\n",
+        body_(B, 0, I).
+body_((A ; Else), C, I) --> % ( If -> Then ; Else )
+        { nonvar(A), A = (If -> Then) },
+        !,
+        indent_to(C, I),
+        "(  ",
+        { C1 is I + 3 },
+        body_(If, C1, C1), " ->\n",
+        body_(Then, 0, C1), "\n",
+        else_branch(Else, C1, I).
+body_((A;B), C, I) --> !,
+        indent_to(C, I),
+        "(  ",
+        { C1 is I + 3 },
+        body_(A, C1, C1), "\n",
+        else_branch(B, C1, I).
+body_(Goal, C, I) -->
+        indent_to(C, I), literal(Goal).
+
+
+else_branch(Else, C, I) -->
+        indent_to(0, I),
+        ";", "  ", % (see #336)
+        body_(Else, C, C), "\n",
+        indent_to(0, I),
+        ")".
+
+indent_to(CurrentColumn, Indent) -->
+        { Delta is Indent - CurrentColumn },
+        format_("~t~*|", [Delta]).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+?- portray_clause(a), nl.
+   a.
+
+?- nl, portray_clause((a :- b)), nl.
+a :-
+        b.
+
+?- nl, portray_clause((a :- b, c, d)), nl.
+a :-
+        b,
+        c,
+        d.
+
+
+?- nl, portray_clause([a,b,c,d]), nl.
+"abcd".
+
+?- nl, portray_clause(X), nl.
+?- nl, portray_clause((f(X) :- X)), nl.
+
+?- nl, portray_clause((h :- ( a -> b; c))), nl.
+
+?- nl, portray_clause((h :- ( (a -> x ; y) -> b; c))), nl.
+
+?- nl, portray_clause((h(X) :- ( (a(X) ; y(A,B)) -> b; c))), nl.
+
+?- nl, portray_clause((h :- (a,d;b,c) ; (b,e;d))), nl.
+
+?- nl, portray_clause((a :- b ; c ; d)), nl.
+
+?- nl, portray_clause((h :- L = '.')).
+
+?- nl, portray_clause(-->(a, (b, {t}, d))).
+
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
