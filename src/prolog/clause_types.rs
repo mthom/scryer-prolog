@@ -75,7 +75,6 @@ pub enum InlinedClauseType {
     IsCompound(RegType),
     IsInteger(RegType),
     IsRational(RegType),
-    IsString(RegType),
     IsFloat(RegType),
     IsNonVar(RegType),
     IsVar(RegType),
@@ -105,7 +104,6 @@ ref_thread_local! {
         m.insert(("compound", 1), ClauseType::Inlined(InlinedClauseType::IsCompound(r1)));
         m.insert(("integer", 1), ClauseType::Inlined(InlinedClauseType::IsInteger(r1)));
         m.insert(("rational", 1), ClauseType::Inlined(InlinedClauseType::IsRational(r1)));
-        m.insert(("string", 1), ClauseType::Inlined(InlinedClauseType::IsString(r1)));
         m.insert(("float", 1), ClauseType::Inlined(InlinedClauseType::IsFloat(r1)));
         m.insert(("nonvar", 1), ClauseType::Inlined(InlinedClauseType::IsNonVar(r1)));
         m.insert(("var", 1), ClauseType::Inlined(InlinedClauseType::IsVar(r1)));
@@ -140,7 +138,6 @@ impl InlinedClauseType {
             &InlinedClauseType::IsCompound(..) => "compound",
             &InlinedClauseType::IsInteger(..) => "integer",
             &InlinedClauseType::IsRational(..) => "rational",
-            &InlinedClauseType::IsString(..) => "string",
             &InlinedClauseType::IsFloat(..) => "float",
             &InlinedClauseType::IsNonVar(..) => "nonvar",
             &InlinedClauseType::IsVar(..) => "var",

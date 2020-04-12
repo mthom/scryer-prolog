@@ -2364,14 +2364,16 @@ impl MachineState {
         Some(iter.first_to_expire)
     }
 
-    pub(super) fn reset_block(&mut self, addr: Addr) {
+    pub(super)
+    fn reset_block(&mut self, addr: Addr) {
         match self.store(addr) {
             Addr::Usize(b) => self.block = b,
             _ => self.fail = true,
         };
     }
 
-    pub(super) fn execute_inlined(&mut self, inlined: &InlinedClauseType) {
+    pub(super)
+    fn execute_inlined(&mut self, inlined: &InlinedClauseType) {
         match inlined {
             &InlinedClauseType::CompareNumber(cmp, ref at_1, ref at_2) => {
                 let n1 = try_or_fail!(self, self.get_number(at_1));
@@ -2464,14 +2466,6 @@ impl MachineState {
                     _ => {
                         self.fail = true;
                     }
-                };
-            }
-            &InlinedClauseType::IsString(r1) => {
-                let d = self.store(self.deref(self[r1]));
-
-                match d {
-                    Addr::PStrLocation(..) => self.p += 1,
-                    _ => self.fail = true,
                 };
             }
             &InlinedClauseType::IsNonVar(r1) => {

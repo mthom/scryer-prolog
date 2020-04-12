@@ -443,18 +443,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                     code.push(fail!());
                 }
             },
-            &InlinedClauseType::IsString(..) => match terms[0].as_ref() {
-                &Term::Constant(_, Constant::String(..)) => {
-                    code.push(succeed!());
-                }
-                &Term::Var(ref vr, ref name) => {
-                    let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
-                    code.push(is_string!(r));
-                }
-                _ => {
-                    code.push(fail!());
-                }
-            },
             &InlinedClauseType::IsNonVar(..) => match terms[0].as_ref() {
                 &Term::AnonVar => {
                     code.push(fail!());

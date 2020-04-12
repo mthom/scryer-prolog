@@ -1196,15 +1196,20 @@ impl MachineState {
                 }
             }
             &SystemClauseType::IsPartialString => {
-                let pstr = self.store(self.deref(self[temp_v!(1)]));
+                let mut heap_pstr_iter = self.heap_pstr_iter(self[temp_v!(1)]);
 
-                match pstr {
-                    Addr::PStrLocation(..) => {
-                    }
-                    _ => {
-                        self.fail = true;
-                    }
-                }
+                while let Some(_) = heap_pstr_iter.next() {}
+
+                self.fail =
+                    match heap_pstr_iter.focus() {
+                        Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(..) |
+                        Addr::EmptyList => {
+                            false
+                        }
+                        _ => {
+                            true
+                        }
+                    };
             }
             &SystemClauseType::PartialStringTail => {
                 let pstr = self.store(self.deref(self[temp_v!(1)]));

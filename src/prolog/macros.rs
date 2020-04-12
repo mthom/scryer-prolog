@@ -225,12 +225,6 @@ macro_rules! is_nonvar {
     };
 }
 
-macro_rules! is_string {
-    ($r:expr) => {
-        call_clause!(ClauseType::Inlined(InlinedClauseType::IsString($r)), 1, 0)
-    };
-}
-
 macro_rules! is_var {
     ($r:expr) => {
         call_clause!(ClauseType::Inlined(InlinedClauseType::IsVar($r)), 1, 0)
