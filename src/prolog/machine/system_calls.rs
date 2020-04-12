@@ -421,62 +421,6 @@ impl MachineState {
         })
     }
 
-    fn read_term(
-        &mut self,
-        current_input_stream: &mut Stream,
-        indices: &mut IndexStore,
-    ) -> CallResult {
-        match self.read(
-            &mut parsing_stream(current_input_stream.clone()),
-            indices.atom_tbl.clone(),
-            &indices.op_dir,
-        ) {
-            Ok(term_write_result) => {
-                let a1 = self[temp_v!(1)];
-                self.unify(Addr::HeapCell(term_write_result.heap_loc), a1);
-
-                if self.fail {
-                    return Ok(());
-                }
-
-                let mut list_of_var_eqs = vec![];
-
-                for (var, binding) in term_write_result.var_dict.into_iter().rev() {
-                    let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
-
-                    let h = self.heap.h();
-                    let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
-
-                    self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
-                    self.heap.push(HeapCellValue::Atom(var_atom, None));
-                    self.heap.push(HeapCellValue::Addr(binding));
-
-                    list_of_var_eqs.push(Addr::Str(h));
-                }
-
-                let a2 = self[temp_v!(2)];
-                let list_offset =
-                    Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
-
-                Ok(self.unify(list_offset, a2))
-            }
-            Err(err) => {
-                if let ParserError::UnexpectedEOF = err {
-                    std::process::exit(0);
-                }
-
-                // reset the input stream after an input failure.
-                *current_input_stream = readline::input_stream();
-
-                let h = self.heap.h();
-                let syntax_error = MachineError::syntax_error(h, err);
-                let stub = MachineError::functor_stub(clause_name!("read_term"), 2);
-
-                Err(self.error_form(syntax_error, stub))
-            }
-        }
-    }
-
     #[inline]
     fn install_new_block(&mut self, r: RegType) -> usize {
         self.block = self.b;
@@ -2479,6 +2423,15 @@ impl MachineState {
 
                             self.unify(target, module);
                         }
+                        HeapCellValue::Addr(addr) if addr.is_ref() => {
+                            let err = MachineError::uninstantiation_error(addr);
+                            let stub = MachineError::functor_stub(
+                                clause_name!("$module_of"),
+                                2,
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
                         _ => {
                             unreachable!()
                         }
@@ -3061,6 +3014,44 @@ impl MachineState {
             &SystemClauseType::ReadTerm => {
                 readline::set_prompt(false);
                 self.read_term(current_input_stream, indices)?;
+            }
+            &SystemClauseType::ReadTermFromChars => {
+                let mut heap_pstr_iter = self.heap_pstr_iter(self[temp_v!(1)]);
+                let chars = heap_pstr_iter.to_string();
+
+                if let Addr::EmptyList = heap_pstr_iter.focus() {
+                    let term_write_result =
+                        match self.read(
+                            &mut parsing_stream(Stream::from(chars)),
+                            indices.atom_tbl.clone(),
+                            &indices.op_dir,
+                        ) {
+                            Ok(term_write_result) => {
+                                term_write_result
+                            }
+                            Err(e) => {
+                                let stub = MachineError::functor_stub(
+                                    clause_name!("read_term_from_chars"),
+                                    2,
+                                );
+
+                                let h = self.heap.h();
+                                let e = MachineError::session_error(h, SessionError::from(e));
+
+                                return Err(self.error_form(e, stub));
+                            }
+                        };
+
+                    let result = Addr::HeapCell(term_write_result.heap_loc);
+
+                    if let Some(var) = self.store(self.deref(self[temp_v!(2)])).as_var() {
+                        self.bind(var, result);
+                    } else {
+                        unreachable!()
+                    }
+                } else {
+                    unreachable!()
+                }
             }
             &SystemClauseType::ResetBlock => {
                 let addr = self.deref(self[temp_v!(1)]);

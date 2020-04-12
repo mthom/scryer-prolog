@@ -208,10 +208,7 @@ impl<'a> TermWriter<'a> {
                 &TermRef::AnonVar(Level::Root) | &TermRef::Constant(Level::Root, ..) |
                 &TermRef::Var(Level::Root, ..) => {
                     let addr = self.term_as_addr(&term, h);
-
-                    if !addr.is_heap_bound() {
-                        self.machine_st.heap.push(HeapCellValue::Addr(addr));
-                    }
+                    self.machine_st.heap.push(HeapCellValue::Addr(addr));
                 }
                 &TermRef::AnonVar(_) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {

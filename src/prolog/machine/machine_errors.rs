@@ -145,7 +145,8 @@ impl DomainError for Number {
 }
 
 impl MachineError {
-    pub(super) fn functor_stub(name: ClauseName, arity: usize) -> MachineStub {
+    pub(super)
+    fn functor_stub(name: ClauseName, arity: usize) -> MachineStub {
         functor!(
             "/",
             SharedOpDesc::new(400, YFX),
@@ -153,7 +154,8 @@ impl MachineError {
         )
     }
 
-    pub(super) fn evaluation_error(eval_error: EvalError) -> Self {
+    pub(super)
+    fn evaluation_error(eval_error: EvalError) -> Self {
         let stub = functor!("evaluation_error", [atom(eval_error.as_str())]);
 
         MachineError {
@@ -305,6 +307,20 @@ impl MachineError {
     pub(super)
     fn instantiation_error() -> Self {
         let stub = functor!("instantiation_error");
+
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Received,
+        }
+    }
+
+    pub(super)
+    fn uninstantiation_error(culprit: Addr) -> Self {
+        let stub = functor!(
+            "uninstantiation_error",
+            [addr(culprit)]
+        );
 
         MachineError {
             stub,
