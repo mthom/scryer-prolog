@@ -3,6 +3,7 @@
 		 phrase/2,
 		 phrase/3]).
 
+:- use_module(library(error)).
 :- use_module(library(lists), [append/3]).
 
 user:term_expansion(Term0, Term) :-
@@ -108,6 +109,7 @@ dcg_constr((_->_)). % 7.14.12 - if-then (existence implementation dep.)
 % the construct to be expanded.
 dcg_cbody([], S0, S, S0 = S).
 dcg_cbody([T|Ts], S0, S, Goal) :-
+    must_be(list, [T|Ts]),
     dcg_terminals([T|Ts], S0, S, Goal).
 dcg_cbody(( GRFirst, GRSecond ), S0, S, ( First, Second )) :-
     dcg_body(GRFirst, S0, S1, First),
