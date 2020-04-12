@@ -2,6 +2,7 @@ use prolog_parser::ast::*;
 
 use crate::prolog::clause_types::*;
 use crate::prolog::forms::*;
+use crate::prolog::heap_print::*;
 use crate::prolog::machine::attributed_variables::*;
 use crate::prolog::machine::copier::*;
 use crate::prolog::machine::heap::*;
@@ -14,9 +15,10 @@ use crate::prolog::rug::Integer;
 
 use downcast::Any;
 
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 
 use std::cmp::Ordering;
+use std::convert::TryFrom;
 use std::io::Write;
 use std::mem;
 use std::ops::{Index, IndexMut};
@@ -490,6 +492,114 @@ pub struct MachineState {
 }
 
 impl MachineState {
+    pub(crate)
+    fn write_term<'a>(
+        &'a self,
+        op_dir: &'a OpDir,
+    ) -> Result<Option<HCPrinter<'a, PrinterOutputter>>, MachineStub>
+    {
+        let ignore_ops = self.store(self.deref(self[temp_v!(2)]));
+        let numbervars = self.store(self.deref(self[temp_v!(3)]));
+        let quoted = self.store(self.deref(self[temp_v!(4)]));
+        let max_depth = self.store(self.deref(self[temp_v!(6)]));
+
+        let mut printer = HCPrinter::new(&self, op_dir, PrinterOutputter::new());
+
+        if let &Addr::Con(h) = &ignore_ops {
+	        if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+                printer.ignore_ops = name.as_str() == "true";
+            } else {
+                unreachable!()
+            }
+        }
+
+        if let &Addr::Con(h) = &numbervars {
+	        if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+                printer.numbervars = name.as_str() == "true";
+            } else {
+                unreachable!()
+            }
+        }
+
+        if let &Addr::Con(h) = &quoted {
+	        if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+                printer.quoted = name.as_str() == "true";
+            } else {
+                unreachable!()
+            }
+        }
+
+        match Number::try_from((max_depth, &self.heap)) {
+            Ok(Number::Fixnum(n)) => {
+                if let Ok(n) = usize::try_from(n) {
+                    printer.max_depth = n;
+                } else {
+                    return Ok(None);
+                }
+            }
+            Ok(Number::Integer(n)) => {
+                if let Some(n) = n.to_usize() {
+                    printer.max_depth = n;
+                } else {
+                    return Ok(None);
+                }
+            }
+            _ => {
+                unreachable!();
+            }
+        }
+
+        let stub = MachineError::functor_stub(clause_name!("write_term"), 2);
+
+        match self.try_from_list(temp_v!(5), stub) {
+            Ok(addrs) => {
+                let mut var_names: IndexMap<Addr, String> = IndexMap::new();
+
+                for addr in addrs {
+                    match addr {
+                        Addr::Str(s) => match &self.heap[s] {
+                            &HeapCellValue::NamedStr(2, ref name, _)
+                                if name.as_str() == "=" =>
+                            {
+                                let atom = self.heap[s + 1].as_addr(s + 1);
+                                let var = self.heap[s + 2].as_addr(s + 2);
+
+                                let atom = match self.store(self.deref(atom)) {
+                                    Addr::Con(h) => {
+                                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                                            atom.to_string()
+                                        } else {
+                                            unreachable!()
+                                        }
+                                    }
+                                    Addr::Char(c) => c.to_string(),
+                                    _ => unreachable!(),
+                                };
+
+                                let var = self.store(self.deref(var));
+
+                                if var_names.contains_key(&var) {
+                                    continue;
+                                }
+
+                                var_names.insert(var, atom);
+                            }
+                            _ => unreachable!(),
+                        },
+                        _ => unreachable!(),
+                    }
+                }
+
+                printer.var_names = var_names;
+            }
+            Err(err) => {
+                return Err(err);
+            }
+        }
+
+        Ok(Some(printer))
+    }
+
     #[inline]
     pub(crate)
     fn heap_pstr_iter<'a>(&'a self, focus: Addr) -> HeapPStrIter<'a> {

@@ -4,11 +4,11 @@ use prolog_parser::tabled_rc::*;
 
 use crate::prolog::clause_types::*;
 use crate::prolog::forms::*;
-use crate::prolog::heap_print::*;
 use crate::prolog::instructions::*;
 use crate::prolog::machine::code_repo::CodeRepo;
 use crate::prolog::machine::copier::*;
 use crate::prolog::machine::code_walker::*;
+use crate::prolog::heap_print::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
@@ -20,7 +20,7 @@ use crate::prolog::rug::Integer;
 
 use crate::ref_thread_local::RefThreadLocal;
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 
 use std::cmp;
 use std::convert::TryFrom;
@@ -3313,108 +3313,46 @@ impl MachineState {
             &SystemClauseType::WriteTerm => {
                 let addr = self[temp_v!(1)];
 
-                let ignore_ops = self.store(self.deref(self[temp_v!(2)]));
-                let numbervars = self.store(self.deref(self[temp_v!(3)]));
-                let quoted = self.store(self.deref(self[temp_v!(4)]));
-                let max_depth = self.store(self.deref(self[temp_v!(6)]));
-
-                let mut printer = HCPrinter::new(&self, &indices.op_dir, PrinterOutputter::new());
-
-                if let &Addr::Con(h) = &ignore_ops {
-	                if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
-                        printer.ignore_ops = name.as_str() == "true";
-                    } else {
-                        unreachable!()
-                    }
-                }
-
-                if let &Addr::Con(h) = &numbervars {
-	                if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
-                        printer.numbervars = name.as_str() == "true";
-                    } else {
-                        unreachable!()
-                    }
-                }
-
-                if let &Addr::Con(h) = &quoted {
-	                if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
-                        printer.quoted = name.as_str() == "true";
-                    } else {
-                        unreachable!()
-                    }
-                }
-
-                match Number::try_from((max_depth, &self.heap)) {
-                    Ok(Number::Fixnum(n)) => {
-                        if let Ok(n) = usize::try_from(n) {
-                            printer.max_depth = n;
-                        } else {
+                let printer =
+                    match self.write_term(&indices.op_dir)? {
+                        None => {
                             self.fail = true;
                             return Ok(());
                         }
-                    }
-                    Ok(Number::Integer(n)) => {
-                        if let Some(n) = n.to_usize() {
-                            printer.max_depth = n;
-                        } else {
-                            self.fail = true;
-                            return Ok(());
+                        Some(printer) => {
+                            printer
                         }
-                    }
-                    _ => {
-                        unreachable!();
-                    }
-                }
-
-                let stub = MachineError::functor_stub(clause_name!("write_term"), 2);
-
-                match self.try_from_list(temp_v!(5), stub) {
-                    Ok(addrs) => {
-                        let mut var_names: IndexMap<Addr, String> = IndexMap::new();
-
-                        for addr in addrs {
-                            match addr {
-                                Addr::Str(s) => match &self.heap[s] {
-                                    &HeapCellValue::NamedStr(2, ref name, _)
-                                        if name.as_str() == "=" =>
-                                    {
-                                        let atom = self.heap[s + 1].as_addr(s + 1);
-                                        let var = self.heap[s + 2].as_addr(s + 2);
-
-                                        let atom = match self.store(self.deref(atom)) {
-                                            Addr::Con(h) => {
-                                                if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                                                    atom.to_string()
-                                                } else {
-                                                    unreachable!()
-                                                }
-                                            }
-                                            Addr::Char(c) => c.to_string(),
-                                            _ => unreachable!(),
-                                        };
-
-                                        let var = self.store(self.deref(var));
-
-                                        if var_names.contains_key(&var) {
-                                            continue;
-                                        }
-
-                                        var_names.insert(var, atom);
-                                    }
-                                    _ => unreachable!(),
-                                },
-                                _ => unreachable!(),
-                            }
-                        }
-
-                        printer.var_names = var_names;
-                    }
-                    Err(err) => return Err(err),
-                }
+                    };
 
                 let output = printer.print(addr);
+
                 print!("{}", output.result());
                 stdout().flush().unwrap();
+            }
+            &SystemClauseType::WriteTermToChars => {
+                let addr = self[temp_v!(1)];
+
+                let printer =
+                    match self.write_term(&indices.op_dir)? {
+                        None => {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                        Some(printer) => {
+                            printer
+                        }
+                    };
+
+                let result = printer.print(addr).result();
+                let chars = self.heap.put_complete_string(&result);
+
+                let result_addr = self.store(self.deref(self[temp_v!(7)]));
+
+                if let Some(var) = result_addr.as_var() {
+                    self.bind(var, chars);
+                } else {
+                    unreachable!()
+                }
             }
         };
 

@@ -258,6 +258,7 @@ pub enum SystemClauseType {
     Variant,
     WAMInstructions,
     WriteTerm,
+    WriteTermToChars,
 }
 
 impl SystemClauseType {
@@ -284,16 +285,16 @@ impl SystemClauseType {
             &SystemClauseType::CurrentInput => clause_name!("$current_input"),
             &SystemClauseType::CurrentOutput => clause_name!("$current_output"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
-	    &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
-	    &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
-		clause_name!("$use_qualified_module")
-	    }
-	    &SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile) => {
-		clause_name!("$use_module_from_file")
-	    }
-	    &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile) => {
-		clause_name!("$use_qualified_module_from_file")
-	    }
+	        &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
+	        &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
+		        clause_name!("$use_qualified_module")
+	        }
+	        &SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile) => {
+		        clause_name!("$use_module_from_file")
+	        }
+	        &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile) => {
+		        clause_name!("$use_qualified_module_from_file")
+	        }
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
@@ -406,6 +407,7 @@ impl SystemClauseType {
             &SystemClauseType::Variant => clause_name!("$variant"),
             &SystemClauseType::WAMInstructions => clause_name!("$wam_instructions"),
             &SystemClauseType::WriteTerm => clause_name!("$write_term"),
+            &SystemClauseType::WriteTermToChars => clause_name!("$write_term_to_chars"),
         }
     }
 
@@ -524,16 +526,17 @@ impl SystemClauseType {
             ("$unwind_environments", 0) => Some(SystemClauseType::UnwindEnvironments),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             ("$unify_with_occurs_check", 2) => Some(SystemClauseType::UnifyWithOccursCheck),
-	    ("$use_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),
-	    ("$use_module_from_file", 1) =>
-		Some(SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile)),	    
-	    ("$use_qualified_module", 2) =>
-		Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule)),
-	    ("$use_qualified_module_from_file", 2) =>
-		Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile)),
+	        ("$use_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),
+	        ("$use_module_from_file", 1) =>
+		        Some(SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile)),
+	        ("$use_qualified_module", 2) =>
+		        Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule)),
+	        ("$use_qualified_module_from_file", 2) =>
+		        Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile)),
             ("$variant", 2) => Some(SystemClauseType::Variant),
-            ("$write_term", 6) => Some(SystemClauseType::WriteTerm),
             ("$wam_instructions", 3) => Some(SystemClauseType::WAMInstructions),
+            ("$write_term", 6) => Some(SystemClauseType::WriteTerm),
+            ("$write_term_to_chars", 7) => Some(SystemClauseType::WriteTermToChars),
             _ => None,
         }
     }
