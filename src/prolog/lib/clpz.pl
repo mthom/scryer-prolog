@@ -117,6 +117,7 @@
 :- use_module(library(terms)).
 :- use_module(library(error), []).
 :- use_module(library(si)).
+:- use_module(library(freeze)).
 
 % :- use_module(library(types)).
 
