@@ -1196,7 +1196,21 @@ impl MachineState {
                 }
             }
             &SystemClauseType::IsPartialString => {
-                let mut heap_pstr_iter = self.heap_pstr_iter(self[temp_v!(1)]);
+                let addr = self.store(self.deref(self[temp_v!(1)]));
+
+                match addr {
+                    Addr::EmptyList => {
+                        return return_from_clause!(self.last_call, self);
+                    }
+                    Addr::AttrVar(_) | Addr::HeapCell(_) | Addr::StackCell(..) => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                    _ => {
+                    }
+                }
+
+                let mut heap_pstr_iter = self.heap_pstr_iter(addr);
 
                 while let Some(_) = heap_pstr_iter.next() {}
 
