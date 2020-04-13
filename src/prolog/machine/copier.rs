@@ -104,7 +104,7 @@ impl<T: CopierTarget> CopyTermState<T> {
     fn copy_partial_string(&mut self, addr: usize, n: usize) {
         if let &HeapCellValue::Addr(Addr::PStrLocation(h, _)) = &self.target[addr] {
             if h >= self.old_h {
-                *self.value_at_scan() = HeapCellValue::Addr(Addr::PStrLocation(h, n));
+                *self.value_at_scan() = HeapCellValue::Addr(Addr::PStrLocation(h, 0));
                 self.scan += 1;
 
                 return;

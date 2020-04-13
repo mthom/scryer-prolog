@@ -165,16 +165,19 @@ impl Stack {
 
         unsafe {
             let new_top = self.buf.new_block(frame_size);
+            let e = self.buf.top as usize - self.buf.base as usize;
 
             for idx in 0 .. num_cells {
                 let offset = prelude_size::<AndFramePrelude>() + idx * mem::size_of::<Addr>();
-                ptr::write((self.buf.top as usize + offset) as *mut Addr, Addr::StackCell(0,0));
+                ptr::write(
+                    (self.buf.top as usize + offset) as *mut Addr,
+                    Addr::StackCell(e, idx + 1),
+                );
             }
 
             let and_frame = &mut *(self.buf.top as *mut AndFrame);
             and_frame.prelude.univ_prelude.num_cells = num_cells;
 
-            let e = self.buf.top as usize - self.buf.base as usize;
             self.buf.top = new_top;
 
             e
@@ -186,16 +189,19 @@ impl Stack {
 
         unsafe {
             let new_top = self.buf.new_block(frame_size);
+            let b = self.buf.top as usize - self.buf.base as usize;
 
             for idx in 0 .. num_cells {
                 let offset = prelude_size::<OrFramePrelude>() + idx * mem::size_of::<Addr>();
-                ptr::write((self.buf.top as usize + offset) as *mut Addr, Addr::StackCell(0,0));
+                ptr::write(
+                    (self.buf.top as usize + offset) as *mut Addr,
+                    Addr::StackCell(b, idx),
+                );
             }
 
             let or_frame = &mut *(self.buf.top as *mut OrFrame);
             or_frame.prelude.univ_prelude.num_cells = num_cells;
 
-            let b = self.buf.top as usize - self.buf.base as usize;
             self.buf.top = new_top;
 
             b
