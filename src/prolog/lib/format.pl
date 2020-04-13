@@ -434,7 +434,7 @@ body_(Goal, C, I) -->
 
 else_branch(Else, C, I) -->
         indent_to(0, I),
-        ";", "  ", % (see #336)
+        ";  ",
         body_(Else, C, C), "\n",
         indent_to(0, I),
         ")".
