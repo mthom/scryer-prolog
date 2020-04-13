@@ -24,8 +24,6 @@ write_term_to_chars(Term, Options, Chars) :-
     '$skip_max_list'(_, -1, Options, Options0),
     (  var(Options0)  ->
        throw(error(instantiation_error, write_term_to_chars/3))
-    ;  var(Term) ->
-       throw(error(instantiation_error, write_term_to_chars/3))
     ;  nonvar(Chars)  ->
        throw(error(uninstantiation_error(Chars), write_term_to_chars/3))
     ;  Options0 == [] ->
