@@ -340,23 +340,16 @@ impl Machine {
     }
 
     pub fn run_top_level(&mut self) {
-	    use std::env;
+        use std::env;
 
-	    let mut filename_atoms = vec![];
+        let mut arg_pstrs = vec![];
+        for arg in env::args() {
+            arg_pstrs.push(self.machine_st.heap.put_complete_string(&arg));
+        }
+        let list_addr = Addr::HeapCell(self.machine_st.heap.to_list(arg_pstrs.into_iter()));
 
-	    // the first of these is the path to the scryer-prolog executable, so skip
-	    // it.
-	    for filename in env::args().skip(1) {
-	        let atom = clause_name!(filename, self.indices.atom_tbl);
-	        filename_atoms.push(HeapCellValue::Atom(atom, None));
-	    }
-
-	    let list_addr =
-	        Addr::HeapCell(self.machine_st.heap.to_list(filename_atoms.into_iter()));
-
-	    self.machine_st[temp_v!(1)] = list_addr;
+        self.machine_st[temp_v!(1)] = list_addr;
         self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
-
         self.run_query();
     }
 

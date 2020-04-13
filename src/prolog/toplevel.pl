@@ -3,13 +3,14 @@
 
 :- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2]).
 
-'$repl'(ListOfModules) :-
-    maplist('$use_list_of_modules', ListOfModules),
+'$repl'([_|Args]) :-
+    maplist('$use_list_of_modules', Args),
     false.
 '$repl'(_) :- '$repl'.
 
-'$use_list_of_modules'(Module) :-
-    catch(use_module(Module), E, '$print_exception'(E)).
+'$use_list_of_modules'(Mod0) :-
+    atom_chars(Mod, Mod0),
+    catch(use_module(Mod), E, '$print_exception'(E)).
 
 '$repl' :-
     catch('$read_and_match', E, '$print_exception'(E)),
