@@ -36,7 +36,7 @@ fn main() {
     unsafe { signal::signal(signal::Signal::SIGINT, handler) }.unwrap();
 
     if env::args().skip(1).any(|a| a == "-v" || a == "--version") {
-        println!("{:}", git_version!());
+        println!("{:}", git_version!(cargo_prefix = "cargo:", fallback = "unknown"));
         return;
     }
 
