@@ -1,6 +1,7 @@
 :- module(ruleml_xml_parser, [parse_ruleml/3]).
 
 :- use_module(library(dcgs)).
+:- use_module(library(iso_ext)).
 
 :- set_prolog_flag(double_quotes, chars).
 
@@ -498,7 +499,7 @@ ruleml_plex(Plex) -->
           list_ws("</Plex>")
        ;  list_ws("<Plex/>")
        )
-    ;  {  \+ string(Plex),
+    ;  {  \+ partial_string(Plex),
           acyclic_term(Plex) },
        (  {  functor(Plex, ('.'), 2) } ->
           {  split_plex(Plex, PlexItems, RepoVar) },
