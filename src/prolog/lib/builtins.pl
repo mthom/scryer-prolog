@@ -349,11 +349,14 @@ write_term(Term, Options) :-
     inst_member_or(Options, max_depth(MaxDepth), max_depth(0)),
     '$write_term'(Term, IgnoreOps, NumberVars, Quoted, VarNames, MaxDepth).
 
-write(Term) :- write_term(Term, [numbervars(true)]).
+write(Term) :-
+    '$write_term'(Term, false, true, false, [], 0).
 
-write_canonical(Term) :- write_term(Term, [ignore_ops(true), quoted(true)]).
+write_canonical(Term) :-
+    '$write_term'(Term, true, false, true, [], 0).
 
-writeq(Term) :- write_term(Term, [quoted(true), numbervars(true)]).
+writeq(Term) :-
+    '$write_term'(Term, false, true, true, [], 0).
 
 %% TODO: complete the predicate! Most read options are missing.
 read_term(Term, Options) :-
