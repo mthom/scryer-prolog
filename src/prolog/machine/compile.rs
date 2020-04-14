@@ -1279,6 +1279,17 @@ fn compile_work_impl(
                 .filter(|(name, _)| name.owning_module().as_str() != "builtins")
                 .map(ModuleExport::PredicateKey)
                 .collect();
+
+            module.module_decl.exports.extend(
+                indices.op_dir.iter()
+                    .map(|((name, _), OpDirValue (shared_op_desc, _))|
+                        ModuleExport::OpDecl(OpDecl(
+                            shared_op_desc.prec(),
+                            shared_op_desc.assoc(),
+                            name.clone(),
+                        ))
+                    )
+            );
         }
 
         let mut clause_code_generator =

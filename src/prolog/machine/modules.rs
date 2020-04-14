@@ -166,7 +166,7 @@ pub trait SubModuleUser {
                                     }
                                 }
                             }
-                        }                    
+                        }
                         _ => {}
                     };
                 },
@@ -202,7 +202,7 @@ pub trait SubModuleUser {
         _: &Module,
         _: &Vec<ModuleExport>,
     ) -> Result<(), SessionError>;
-    
+
     fn use_module(
         &mut self,
         _: &mut CodeRepo,
@@ -232,7 +232,7 @@ where
 
                 if !user.import_decl(name.clone(), arity, submodule) {
                     let submodule_name = submodule.module_decl.name.clone();
-                    
+
                     return Err(SessionError::ModuleDoesNotContainExport(
                         submodule_name,
                         (name, arity)
@@ -250,12 +250,12 @@ where
 
                 let op_dir = user.op_dir();
                 let prec = op_decl.0;
-                
+
                 op_decl.insert_into_op_dir(
                     submodule.module_decl.name.clone(),
                     op_dir,
                     prec,
-                );                   
+                );
             }
         }
     }
@@ -282,12 +282,12 @@ pub fn use_module<User: SubModuleUser>(
             ModuleExport::OpDecl(op_decl) => {
                 let op_dir = user.op_dir();
                 let prec = op_decl.0;
-                
+
                 op_decl.insert_into_op_dir(
                     submodule.module_decl.name.clone(),
                     op_dir,
                     prec,
-                );                
+                );
             }
         }
     }
