@@ -1,7 +1,9 @@
-:- use_module(library(lists)).
-:- use_module(library(si)).
 
 :- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2]).
+
+:- use_module(library(charsio)).
+:- use_module(library(lists)).
+:- use_module(library(si)).
 
 '$repl'([_|Args]) :-
     maplist('$use_list_of_modules', Args),
@@ -67,57 +69,14 @@
        memberchk(EqSpec, [fx,xfx,yfx])
     ).
 
-'$fabricate_var_name'(VarName, N) :-
-    char_code('A', AC),
-    LN is N mod 26 + AC,
-    char_code(LC, LN),
-    NN is N // 26,
-    (  NN =:= 0 ->
-       atom_chars(VarName, ['_', LC])
-    ;  number_chars(NN, NNChars),
-       atom_chars(VarName, ['_', LC | NNChars])
-    ).
-
-'$var_list_contains_name'([VarName = _ | VarList], VarName0) :-
-    (  VarName == VarName0 -> true
-    ;  '$var_list_contains_name'(VarList, VarName0)
-    ).
-
-'$var_list_contains_variable'([_ = Var | VarList], Var0) :-
-    (  Var == Var0 -> true
-    ;  '$var_list_contains_variable'(VarList, Var0)
-    ).
-
-'$make_new_var_name'(V, VarName, N, N1, VarList) :-
-    '$fabricate_var_name'(VarName0, N),
-    (  '$var_list_contains_name'(VarList, VarName0) ->
-       N0 is N + 1,
-       '$make_new_var_name'(V, VarName, N0, N1, VarList)
-    ;  VarName = VarName0,
-       N1 is N + 1
-    ).
-
-'$extend_var_list'(Value, VarList, NewVarList) :-
-    term_variables(Value, Vars),
-    '$extend_var_list_'(Vars, 0, VarList, NewVarList).
-
-'$extend_var_list_'([], N, VarList, VarList).
-'$extend_var_list_'([V|Vs], N, VarList, NewVarList) :-
-    (  '$var_list_contains_variable'(VarList, V) ->
-       '$extend_var_list_'(Vs, N, VarList, NewVarList)
-    ;  '$make_new_var_name'(V, VarName, N, N1, VarList),
-       NewVarList = [VarName = V | NewVarList0],
-       '$extend_var_list_'(Vs, N1, VarList, NewVarList0)
-    ).
-
 '$write_goal'(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
        write(Var),
        write(' = '),
        (  '$needs_bracketing'(Value, (=)) ->
-	  write('('),
-	  write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
-	  write(')')
+	      write('('),
+	      write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
+	      write(')')
        ;  write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)])
        )
     ;  G == [] ->
@@ -130,14 +89,14 @@
        write(Var),
        write(' = '),
        (  '$needs_bracketing'(Value, (=)) ->
-	  write('('),
-	  write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
-	  write(')')
+	      write('('),
+	      write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
+	      write(')')
        ;  write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
-	  (  '$trailing_period_is_ambiguous'(Value) ->
-	     write(' ')
-	  ;  true
-	  )
+	      (  '$trailing_period_is_ambiguous'(Value) ->
+	         write(' ')
+	      ;  true
+	      )
        )
     ;  G == [] ->
        write('true')
@@ -167,7 +126,7 @@
     '$graphic_token_char'(Char).
 
 '$write_eqs_and_read_input'(B, VarList) :-
-    '$extend_var_list'(VarList, VarList, NewVarList),
+    charsio:extend_var_list(VarList, VarList, NewVarList),
     sort(NewVarList, SortedVarList),
     '$get_b_value'(B0),
     '$gather_goals'(SortedVarList, SortedVarList, Goals),
