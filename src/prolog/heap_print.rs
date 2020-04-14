@@ -1057,10 +1057,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         addr: Addr,
         mut max_depth: usize,
     ) {
-        let a1 = iter.stack().pop();
-        let a2 = iter.stack().pop();
-
         if self.check_max_depth(&mut max_depth) {
+            iter.stack().pop();
+            iter.stack().pop();
+
             self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
             return;
         }
@@ -1071,12 +1071,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let buf = heap_pstr_iter.to_string();
 
         if buf.is_empty() {
-            iter.stack().push(a2.unwrap());
-            iter.stack().push(a1.unwrap());
-
             self.push_list(iter, max_depth);
             return;
         }
+
+        iter.stack().pop();
+        iter.stack().pop();
 
         let end_addr = heap_pstr_iter.focus();
 
@@ -1349,7 +1349,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 if self.ignore_ops {
                     self.format_struct(iter, max_depth, 2, clause_name!("."));
                 } else {
-                    self.print_list_like(iter, Addr::Lis(l), max_depth); //self.push_list(iter, max_depth);
+                    self.print_list_like(iter, Addr::Lis(l), max_depth);
                 }
             }
             &HeapCellValue::Addr(addr) => {
