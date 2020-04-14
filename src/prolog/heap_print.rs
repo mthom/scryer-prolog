@@ -1024,15 +1024,41 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_string(
+    fn print_proper_string(&mut self, buf: String, max_depth: usize) {
+        self.push_char('"');
+
+        let buf =
+            if max_depth == 0 {
+                String::from_iter(buf.chars().map(|c| {
+                    char_to_string(self.quoted, c)
+                }))
+            } else {
+                let mut char_count = 0;
+                let mut buf =
+                    String::from_iter(buf.chars().take(max_depth).map(|c| {
+                        char_count += 1;
+                        char_to_string(self.quoted, c)
+                    }));
+
+                if char_count == max_depth {
+                    buf += " ...";
+                }
+
+                buf
+            };
+
+        self.append_str(&buf);
+        self.push_char('"');
+    }
+
+    fn print_list_like(
         &mut self,
         iter: &mut HCPreOrderIterator,
+        addr: Addr,
         mut max_depth: usize,
-        h: usize,
-        n: usize,
     ) {
-        iter.stack().pop();
-        iter.stack().pop();
+        let a1 = iter.stack().pop();
+        let a2 = iter.stack().pop();
 
         if self.check_max_depth(&mut max_depth) {
             self.state_stack.push(TokenOrRedirect::Atom(clause_name!("...")));
@@ -1040,40 +1066,25 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
 
         let mut heap_pstr_iter =
-            self.machine_st.heap_pstr_iter(Addr::PStrLocation(h, n));
+            self.machine_st.heap_pstr_iter(addr);
 
         let buf = heap_pstr_iter.to_string();
+
+        if buf.is_empty() {
+            iter.stack().push(a2.unwrap());
+            iter.stack().push(a1.unwrap());
+
+            self.push_list(iter, max_depth);
+            return;
+        }
+
         let end_addr = heap_pstr_iter.focus();
 
         let at_cdr = self.at_cdr(",");
 
         if !at_cdr && Addr::EmptyList == end_addr {
             if !self.machine_st.flags.double_quotes.is_codes() {
-                self.push_char('"');
-
-                let buf =
-                    if max_depth == 0 {
-                        String::from_iter(buf.chars().map(|c| {
-                            char_to_string(self.quoted, c)
-                        }))
-                    } else {
-                        let mut char_count = 0;
-                        let mut buf =
-                            String::from_iter(buf.chars().take(max_depth).map(|c| {
-                                char_count += 1;
-                                char_to_string(self.quoted, c)
-                            }));
-
-                        if char_count == max_depth {
-                            buf += " ...";
-                        }
-
-                        buf
-                    };
-
-                self.append_str(&buf);
-                self.push_char('"');
-
+                self.print_proper_string(buf, max_depth);
                 return;
             }
         }
@@ -1332,13 +1343,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.append_str(&format!("{}", u));
             }
             &HeapCellValue::Addr(Addr::PStrLocation(h, n)) => {
-                self.print_string(iter, max_depth, h, n);
+                self.print_list_like(iter, Addr::PStrLocation(h, n), max_depth);
             }
-            &HeapCellValue::Addr(Addr::Lis(_)) => {
+            &HeapCellValue::Addr(Addr::Lis(l)) => {
                 if self.ignore_ops {
                     self.format_struct(iter, max_depth, 2, clause_name!("."));
                 } else {
-                    self.push_list(iter, max_depth);
+                    self.print_list_like(iter, Addr::Lis(l), max_depth); //self.push_list(iter, max_depth);
                 }
             }
             &HeapCellValue::Addr(addr) => {
