@@ -2400,7 +2400,13 @@ impl MachineState {
                 let d = self.store(self.deref(self[r1]));
 
                 match d {
-                    Addr::Con(_) => self.p += 1,
+                    Addr::Char(_) |
+                    Addr::CharCode(_) |
+                    Addr::Con(_) |
+                    Addr::EmptyList |
+                    Addr::Fixnum(_) |
+                    Addr::Float(_) |
+                    Addr::Usize(_) => self.p += 1,
                     _ => self.fail = true,
                 };
             }

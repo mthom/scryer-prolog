@@ -790,7 +790,7 @@ constant_chars(symbol, Constant, Chars) :-
 
 /*
  * ruleml_data//1 delegates to ruleml_data_contents//2 to determine
- * the contents of <Data> nodes, with adjoining xsi:type elements.
+ * the contents of <Data> nodes, with adjoining iso:type elements.
  *
  * constant_chars/3 performs type-driven conversion between
  * Prolog/'$V' and RuleML/XML in both directions;
@@ -800,13 +800,13 @@ constant_chars(symbol, Constant, Chars) :-
 
 ruleml_data(Name) -->
     (  { var(Name) } ->
-       list_ws("<Data xsi:type=\""),
+       list_ws("<Data iso:type=\""),
        prolog_symbol(Type),
        list_ws("\">"),
        ruleml_data_contents(Type, Cs),
        { constant_chars(Type, Name, Cs) },
        list_ws("</Data>")
-    ;  "<Data xsi:type=\"",
+    ;  "<Data iso:type=\"",
        { constant_chars(Type, Name, Cs) },
        prolog_symbol(Type),
        "\">",
