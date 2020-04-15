@@ -343,14 +343,18 @@ impl Machine {
         use std::env;
 
         let mut arg_pstrs = vec![];
+
         for arg in env::args() {
             arg_pstrs.push(self.machine_st.heap.put_complete_string(&arg));
         }
-        let list_addr = Addr::HeapCell(self.machine_st.heap.to_list(arg_pstrs.into_iter()));
 
+        let list_addr = Addr::HeapCell(self.machine_st.heap.to_list(arg_pstrs.into_iter()));
         self.machine_st[temp_v!(1)] = list_addr;
-        self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
-        self.run_query();
+
+        loop {
+            self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
+            self.run_query();
+        }
     }
 
     pub fn new(current_input_stream: Stream, current_output_stream: Stream) -> Self
