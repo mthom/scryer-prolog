@@ -6,6 +6,7 @@ use crate::prolog::rug::Integer;
 use indexmap::IndexMap;
 
 use std::collections::VecDeque;
+use std::convert::TryFrom;
 use std::hash::Hash;
 use std::rc::Rc;
 
@@ -66,6 +67,16 @@ impl CodeOffsets {
                     .or_insert(vec![]);
 
                 code.push(Self::add_index(code.is_empty(), index));
+
+                if n >= 0 {
+                    if let Ok(n) = usize::try_from(n) {
+                        let code = self.constants
+                            .entry(Constant::Usize(n))
+                            .or_insert(vec![]);
+
+                        code.push(Self::add_index(code.is_empty(), index));
+                    }
+                }
             }
             &Constant::Integer(ref n) => {
                 if let Some(n) = n.to_isize() {
@@ -75,10 +86,33 @@ impl CodeOffsets {
 
                     code.push(Self::add_index(code.is_empty(), index));
                 }
+
+                if let Some(n) = n.to_usize() {
+                    let code = self.constants
+                        .entry(Constant::Usize(n))
+                        .or_insert(vec![]);
+
+                    code.push(Self::add_index(code.is_empty(), index));
+                }
             }
             &Constant::String(_) => {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
+            }
+            &Constant::Usize(n) => {
+                let code = self.constants
+                    .entry(Constant::Integer(Rc::new(Integer::from(n))))
+                    .or_insert(vec![]);
+
+                code.push(Self::add_index(code.is_empty(), index));
+
+                if let Ok(n) = isize::try_from(n) {
+                    let code = self.constants
+                        .entry(Constant::Fixnum(n))
+                        .or_insert(vec![]);
+
+                    code.push(Self::add_index(code.is_empty(), index));
+                }
             }
             _ => {
             }
