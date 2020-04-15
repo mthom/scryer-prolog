@@ -123,7 +123,7 @@
     atom(Value),
     atom_chars(Value, ValueChars),
     '$list_last_item'(ValueChars, Char),
-    Char \== '.',
+    ValueChars \== ['.'],
     '$graphic_token_char'(Char).
 
 '$write_eqs_and_read_input'(B, VarList) :-
