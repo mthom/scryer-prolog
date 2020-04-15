@@ -127,7 +127,7 @@
     '$graphic_token_char'(Char).
 
 '$write_eqs_and_read_input'(B, VarList) :-
-    charsio:extend_var_list(VarList, VarList, NewVarList),
+    charsio:extend_var_list(VarList, VarList, NewVarList, fabricated),
     sort(NewVarList, SortedVarList),
     '$get_b_value'(B0),
     '$gather_goals'(SortedVarList, SortedVarList, Goals),
