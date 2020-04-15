@@ -1083,7 +1083,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let at_cdr = self.at_cdr(",");
 
         if !at_cdr && Addr::EmptyList == end_addr {
-            if !self.machine_st.flags.double_quotes.is_codes() {
+            if self.machine_st.flags.double_quotes.is_chars() && !self.ignore_ops {
                 self.print_proper_string(buf, max_depth);
                 return;
             }
