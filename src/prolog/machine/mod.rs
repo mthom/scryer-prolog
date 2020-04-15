@@ -632,8 +632,12 @@ impl Machine {
             let addr = self.machine_st.store(self.machine_st.deref(module_spec));
 
             match self.machine_st.heap.index_addr(&addr).as_ref() {
-                HeapCellValue::Atom(name, _) => name.clone(),
-	            _ => unreachable!(),
+                HeapCellValue::Atom(name, _) =>
+                    name.clone(),
+                HeapCellValue::Addr(Addr::Char(c)) =>
+                    clause_name!(c.to_string(), self.indices.atom_tbl),
+	            _ =>
+                    unreachable!(),
             }
 	    };
 
@@ -679,8 +683,12 @@ impl Machine {
             let addr = self.machine_st.store(self.machine_st.deref(module_spec));
 
             match self.machine_st.heap.index_addr(&addr).as_ref() {
-                HeapCellValue::Atom(name, _) => name.clone(),
-	            _ => unreachable!(),
+                HeapCellValue::Atom(name, _) =>
+                    name.clone(),
+                HeapCellValue::Addr(Addr::Char(c)) =>
+                    clause_name!(c.to_string(), self.indices.atom_tbl),
+	            _ =>
+                    unreachable!(),
             }
 	    };
 
