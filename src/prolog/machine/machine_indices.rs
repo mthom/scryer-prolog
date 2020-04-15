@@ -283,6 +283,9 @@ impl Addr {
                     None
                 }
             }
+            &Addr::Usize(n) => {
+                Some(Constant::Usize(n))
+            }
             _ => {
                 None
             }
