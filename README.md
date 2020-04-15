@@ -124,61 +124,56 @@ The optional `--release` flag will perform various optimizations,
 producing a faster executable.
 
 ## Tutorial
-To enter a multi-clause predicate, the directive "[user]" is used.
 
-For example,
+Prolog files are loaded by specifying them as arguments on the command
+line. For example, to load `program.pl`, use:
+
+```
+$> scryer-prolog program.pl
+```
+
+Loading a Prolog file is also called “consulting” it. The built-in
+predicate `consult/1` can be used to consult a file from within
+Prolog:
+
+```
+?- consult('program.pl').
+```
+
+As an abbreviation for `consult/1`, you can specify a *list* of
+program files, given as *atoms*:
+
+```
+?- ['program.pl'].
+```
+
+The special notation `[user]` is used to read Prolog&nbsp;text from
+standard input. For example,
+
 ```
 ?- [user].
-(type Enter + Ctrl-D to terminate the stream when finished)
-p(f(f(X)), h(W), Y) :- g(W), h(W), f(X).
-p(X, Y, Z) :- h(Y), z(Z).
-?- [user].
-(type Enter + Ctrl-D to terminate the stream when finished)
-h(x). h(y).
-h(z).
-```
-In the example, `Enter + Ctrl-D` is used to terminate the standard
-input stream. The instructive message is always printed.
-
-Queries are issued as
-```
-?- p(X, Y, Z).
+hello(declarative_world).
+hello(pure_world).
 ```
 
-Pressing `SPACE` will backtrack through other possible answers, if any exist.
-Pressing `.` will abort the search and return to the prompt.
+Pressing `RETURN` followed by `Ctrl-d` stops reading from
+standard&nbsp;input and consults the entered Prolog&nbsp;text.
 
-Wildcards work as well:
+After a program is consulted, you can ask *queries* about the
+predicates it defines. For example, with the program shown above:
 
 ```
-?- [user].
-(type Enter + Ctrl-D to terminate the stream when finished)
-member(X, [X|_]).
-member(X, [_|Xs]) :- member(X, Xs).
-?- member(X, [a, b, c]).
-   X = a
-;  X = b
-;  X = c
-;  false.
-```
-and so do conjunctive queries:
-```
-?- [user].
-(type Enter + Ctrl-D to terminate the stream when finished)
-f(X) :- g(X).
-g(x). g(y). g(z).
-h(call(f, X)).
-?- h(X), X.
-   X = call(f,x)
-;  X = call(f,y)
-;  X = call(f,z).
+?- hello(What).
+   What = declarative_world
+;  What = pure_world.
 ```
 
-Note that the values of variables belonging to successful queries are
-printed out, on one line each. Uninstantiated variables are denoted by
-a number preceded by an underscore (`X = _0` in an example above).
+Press `SPACE` to show further answers, if any exist. Press&nbsp;`.` to
+abort the search and return to the toplevel&nbsp;prompt.
+Press&nbsp;`h` to show a help message.
 
-To quit scryer-prolog, type
+To quit Scryer Prolog, use the standard predicate `halt/0`:
+
 ```
 ?- halt.
 ```
