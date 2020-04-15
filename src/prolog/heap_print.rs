@@ -442,7 +442,7 @@ fn non_quoted_token<Iter: Iterator<Item = char>>(mut iter: Iter) -> bool {
     if let Some(c) = iter.next() {
         if small_letter_char!(c) {
             iter.all(|c| alpha_numeric_char!(c))
-        } else if graphic_token_char!(c) {
+        } else if c != '.' && graphic_token_char!(c) {
             non_quoted_graphic_token(iter, c)
         } else if semicolon_char!(c) {
             iter.next().is_none()
@@ -1116,7 +1116,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             let mut char_count = 0;
 
             for c in buf_iter {
-                self.push_char('.');
+                self.append_str("'.'");
                 self.push_char('(');
 
                 char_printer(self, c);
