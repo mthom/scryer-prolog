@@ -48,13 +48,15 @@ fn scan_for_terminator<Iter: Iterator<Item = char>>(iter: Iter) -> usize {
 
 pub struct PStrIter {
     buf: *const u8,
+    len: usize,
 }
 
 impl PStrIter {
     #[inline]
-    fn from(buf: *const u8, idx: usize) -> Self {
+    fn from(buf: *const u8, len: usize, idx: usize) -> Self {
         PStrIter {
-            buf: (buf as usize + idx) as *const _
+            buf: (buf as usize + idx) as *const _,
+            len: len - idx,
         }
     }
 }
@@ -64,27 +66,13 @@ impl Iterator for PStrIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            let mut byte_count = 0;
-
-            for n in 0 .. mem::size_of::<char>() {
-                let b = ptr::read((self.buf as usize + n) as *const u8);
-
-                if b == 0u8 {
-                    break;
-                } else {
-                    byte_count += 1;
-                }
-            }
-
-            if byte_count == 0 {
-                return None;
-            }
-
-            let slice = slice::from_raw_parts(self.buf, byte_count);
+            let slice = slice::from_raw_parts(self.buf, self.len);
             let s = str::from_utf8(slice).unwrap();
 
             if let Some(c) = s.chars().next() {
                 self.buf = self.buf.offset(c.len_utf8() as isize);
+                self.len -= c.len_utf8();
+
                 Some(c)
             } else {
                 None
@@ -212,7 +200,7 @@ impl PartialString {
 
     #[inline]
     pub fn range_from(&self, index: RangeFrom<usize>) -> PStrIter {
-        PStrIter::from(self.buf, index.start)
+        PStrIter::from(self.buf, self.len, index.start)
     }
 
     #[inline]
