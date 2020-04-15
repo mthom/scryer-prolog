@@ -2,7 +2,7 @@
 		  memberchk/2, reverse/2, length/2, maplist/2,
 		  maplist/3, maplist/4, maplist/5, maplist/6,
 		  maplist/7, maplist/8, maplist/9, same_length/2,
-		  sum_list/2, transpose/2]).
+		  sum_list/2, transpose/2, list_to_set/2]).
 
 
 :- use_module(library(error)).
@@ -149,3 +149,31 @@ transpose_(_, Fs, Lists0, Lists) :-
         maplist(list_first_rest, Lists0, Fs, Lists).
 
 list_first_rest([L|Ls], L, Ls).
+
+
+list_to_set(Ls0, Ls) :-
+        maplist(with_var, Ls0, LVs0),
+        keysort(LVs0, LVs),
+        same_elements(LVs),
+        pick_firsts(LVs0, Ls).
+
+pick_firsts([], []).
+pick_firsts([E-V|EVs], Fs0) :-
+        (   V == visited ->
+            Fs0 = Fs
+        ;   V = visited,
+            Fs0 = [E|Fs]
+        ),
+        pick_firsts(EVs, Fs).
+
+with_var(E, E-_).
+
+same_elements([]).
+same_elements([EV|EVs]) :-
+        foldl(unify_same, EVs, EV, _).
+
+unify_same(E-V, Prev-Var, E-V) :-
+        (   Prev == E ->
+            Var = V
+        ;   true
+        ).
