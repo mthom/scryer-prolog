@@ -77,6 +77,10 @@ pub fn get_single_char() -> char {
                     c = ch;
                     break;
                 },
+                KeyCode::Enter => {
+                    c = '\n';
+                    break;
+                },
                 _ => ()
             }
         }
