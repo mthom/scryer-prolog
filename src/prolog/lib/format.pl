@@ -55,7 +55,7 @@
    Example:
 
    ?- phrase(format_("~s~n~`.t~w!~12|", ["hello",there]), Cs).
-   %@    Cs = [h,e,l,l,o,'\n','.','.','.','.','.','.',t,h,e,r,e,!]
+   %@    Cs = "hello\n......there!"
    %@ ;  false.
 
    I place this code in the public domain. Use it in any way you want.
@@ -444,38 +444,38 @@ indent_to(CurrentColumn, Indent) -->
         format_("~t~*|", [Delta]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-?- portray_clause(a), nl.
-   a.
+?- portray_clause(a).
+a.
 
-?- nl, portray_clause((a :- b)), nl.
+?- portray_clause((a :- b)).
 a :-
         b.
 
-?- nl, portray_clause((a :- b, c, d)), nl.
+?- portray_clause((a :- b, c, d)).
 a :-
         b,
         c,
         d.
 
 
-?- nl, portray_clause([a,b,c,d]), nl.
+?- portray_clause([a,b,c,d]).
 "abcd".
 
-?- nl, portray_clause(X).
-?- nl, portray_clause((f(X) :- X)).
+?- portray_clause(X).
+?- portray_clause((f(X) :- X)).
 
-?- nl, portray_clause((h :- ( a -> b; c))).
+?- portray_clause((h :- ( a -> b; c))).
 
-?- nl, portray_clause((h :- ( (a -> x ; y) -> b; c))).
+?- portray_clause((h :- ( (a -> x ; y) -> b; c))).
 
-?- nl, portray_clause((h(X) :- ( (a(X) ; y(A,B)) -> b; c))).
+?- portray_clause((h(X) :- ( (a(X) ; y(A,B)) -> b; c))).
 
-?- nl, portray_clause((h :- (a,d;b,c) ; (b,e;d))).
+?- portray_clause((h :- (a,d;b,c) ; (b,e;d))).
 
-?- nl, portray_clause((a :- b ; c ; d)).
+?- portray_clause((a :- b ; c ; d)).
 
-?- nl, portray_clause((h :- L = '.')).
+?- portray_clause((h :- L = '.')).
 
-?- nl, portray_clause(-->(a, (b, {t}, d))).
+?- portray_clause(-->(a, (b, {t}, d))).
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
