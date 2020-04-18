@@ -161,7 +161,7 @@
     ;  C = h ->
        '$help_message',
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  C = '.' ->
+    ;  member(C, ['\n', .]) ->
        nl, write(';  ...'), nl
     ; '$read_input'(ThreadedGoals, NewVarList)
     ).
@@ -169,7 +169,7 @@
 '$help_message' :-
     nl, nl,
     write('SPACE, "n" or ";": next solution, if any\n'),
-    write('".": stop enumeration\n'),
+    write('RETURN or ".": stop enumeration\n'),
     write('"h": display this help message\n'),
     write('"w": write terms without depth limit\n'),
     write('"p": print terms with depth limit\n\n').
