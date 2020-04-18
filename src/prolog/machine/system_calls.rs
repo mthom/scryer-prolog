@@ -31,42 +31,6 @@ use std::rc::Rc;
 use crate::crossterm::event::{read, Event, KeyCode, KeyEvent};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
-pub enum ContinueResult {
-    ContinueQuery,
-    Conclude,
-    Help,
-    PrintWithoutMaxDepth,
-    PrintWithMaxDepth
-}
-
-pub fn next_keypress() -> ContinueResult {
-    loop {
-        match read() {
-            Ok(Event::Key(KeyEvent { code, .. })) => {
-                match code {
-                    KeyCode::Char('w') => {
-                        return ContinueResult::PrintWithoutMaxDepth;
-                    }
-                    KeyCode::Char('p') => {
-                        return ContinueResult::PrintWithMaxDepth;
-                    }
-                    KeyCode::Char(' ') | KeyCode::Char(';') | KeyCode::Char('n') => {
-                        return ContinueResult::ContinueQuery;
-                    }
-                    KeyCode::Char('.') => {
-                        return ContinueResult::Conclude;
-                    }
-                    KeyCode::Char('h') => {
-                        return ContinueResult::Help;
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
 pub fn get_single_char() -> char {
     let c;
     enable_raw_mode().expect("failed to enable raw mode");
@@ -2912,26 +2876,6 @@ impl MachineState {
             }
             &SystemClauseType::InstallNewBlock => {
                 self.install_new_block(temp_v!(1));
-            }
-            &SystemClauseType::RawInputReadChar => {
-		let keypress = {
-                    enable_raw_mode().expect("failed to transition into raw mode");
-		    let result = next_keypress();
-                    disable_raw_mode().expect("failed to transition out of raw mode");
-
-                    result
-		};
-
-                let c = match keypress {
-                    ContinueResult::ContinueQuery => ';',
-                    ContinueResult::Conclude => '.',
-                    ContinueResult::Help => 'h',
-                    ContinueResult::PrintWithoutMaxDepth => 'w',
-                    ContinueResult::PrintWithMaxDepth => 'p',
-                };
-
-                let target = self[temp_v!(1)];
-                self.unify(Addr::Char(c), target);
             }
             &SystemClauseType::NextEP => {
                 let first_arg = self.store(self.deref(self[temp_v!(1)]));
