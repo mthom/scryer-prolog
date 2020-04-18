@@ -28,6 +28,7 @@
            if N is 0 or omitted, no decimal point is used.
      ~ND   like ~Nd, separating digits to the left of the decimal point
            in groups of three, using the character "," (comma)
+     ~|    place a tab stop at this position
      ~N|   where N is an integer: place a tab stop at text column N
      ~N+   where N is an integer: place a tab stop N characters
            after the previous tab stop (or start of line)
@@ -340,11 +341,11 @@ Cs = [cell(0,4,[glue(' ',_38),chars([a]),glue(' ',_62)])].
 ?- phrase(format_("hello~n~tthere~6|", []), Ls).
 
 ?- format("~ta~t~4|", []).
-    a  true
+ a     true
 ;  false.
 
 ?- format("~ta~tb~tc~10|", []).
-     a  b   ctrue
+  a  b   c   true
 ;  false.
 
 ?- format("~tabc~3|", []).
@@ -352,29 +353,29 @@ Cs = [cell(0,4,[glue(' ',_38),chars([a]),glue(' ',_62)])].
 ?- format("~ta~t~4|", []).
 
 ?- format("~ta~t~tb~tc~20|", []).
-       a        b     ctrue
+    a        b     c   true
 ;  false.
 
 ?- format("~2f~n", [3]).
-   3.00
-true
+3.00
+   true
 
 ?- format("~20f", [0.1]).
-   0.10000000000000000000true % this should use higher accuracy!
+0.10000000000000000000   true % this should use higher accuracy!
 ;  false.
 
 ?- X is atan(2), format("~7f~n", [X]).
-   1.1071487
-X = 1.1071487177940906
+1.1071487
+   X = 1.1071487177940906
 
 ?- format("~`at~50|~n", []).
-   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-true
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+   true
 
 ?- format("~t~N", []).
 
 ?- format("~q", [.]).
-   '.'true
+'.'   true
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
