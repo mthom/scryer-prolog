@@ -46,16 +46,24 @@ instruction_match(Term, VarList) :-
        submit_query_and_print_results(Term, VarList)
     ).
 
+:- use_module(library(iso_ext)).
+
+% auxiliary predicates, so that using them in setup_call_cleanup/3 works
+get_b_value(B) :- '$get_b_value'(B).
+clear_attribute_goals :- '$clear_attribute_goals'.
+
 submit_query_and_print_results(Term0, VarList) :-
     (  expand_goals(Term0, Term) -> true
     ;  Term0 = Term
     ),
-    (  '$get_b_value'(B), write('   '), call(Term), write_eqs_and_read_input(B, VarList),
-       !
-    %  clear attribute goal lists, which may be populated by
-    %  copy_term/3 prior to failure.
-    ;  '$clear_attribute_goals', write('false.'), nl
-    ).
+    setup_call_cleanup(bb_put('$first_answer', true),
+                       (   get_b_value(B), call(Term), write_eqs_and_read_input(B, VarList),
+                           !
+                       ;   %  clear attribute goal lists, which may be populated by
+                           %  copy_term/3 prior to failure.
+                           clear_attribute_goals, write('false.'), nl
+                       ),
+                       bb_put('$first_answer', false)).
 
 needs_bracketing(Value, Op) :-
     catch((functor(Value, F, _),
@@ -132,6 +140,11 @@ write_eqs_and_read_input(B, VarList) :-
     sort(NewVarList, SortedVarList),
     '$get_b_value'(B0),
     gather_goals(SortedVarList, SortedVarList, Goals),
+    (   bb_get('$first_answer', true) ->
+        write('   '),
+        bb_put('$first_answer', false)
+    ;   true
+    ),
     (  B0 == B ->
        (  Goals == [] ->
 	  write('true.'), nl
