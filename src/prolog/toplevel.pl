@@ -156,7 +156,7 @@
        write('   '),
        '$write_eq'(ThreadedGoals, NewVarList, 20),
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  member(C, [';', ' ']) ->
+    ;  member(C, [';', ' ', n]) ->
        nl, write(';  '), false
     ;  C = h ->
        '$help_message',
