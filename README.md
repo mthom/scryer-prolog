@@ -168,8 +168,8 @@ predicates it defines. For example, with the program shown above:
 ;  What = pure_world.
 ```
 
-Press `SPACE` to show further answers, if any exist. Press&nbsp;`.` to
-abort the search and return to the toplevel&nbsp;prompt.
+Press `SPACE` to show further answers, if any exist. Press `RETURN` or
+&nbsp;`.` to abort the search and return to the toplevel&nbsp;prompt.
 Press&nbsp;`h` to show a help message.
 
 To quit Scryer Prolog, use the standard predicate `halt/0`:
