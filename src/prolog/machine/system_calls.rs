@@ -67,6 +67,24 @@ pub fn next_keypress() -> ContinueResult {
     }
 }
 
+pub fn get_single_char() -> char {
+    let c;
+    enable_raw_mode().expect("failed to enable raw mode");
+    loop {
+        if let Ok(Event::Key(KeyEvent { code, .. })) = read() {
+            match code {
+                KeyCode::Char(ch) => {
+                    c = ch;
+                    break;
+                },
+                _ => ()
+            }
+        }
+    }
+    disable_raw_mode().expect("failed to disable raw mode");
+    c
+}
+
 struct BrentAlgState {
     hare: Addr,
     tortoise: Addr,
@@ -1462,6 +1480,13 @@ impl MachineState {
                         return Err(err);
                     }
                 }
+            }
+            &SystemClauseType::GetSingleChar => {
+                let c = get_single_char();
+
+                let a1 = self[temp_v!(1)];
+
+                self.unify(Addr::Char(c), a1);
             }
             &SystemClauseType::GetModuleClause => {
                 let module = self[temp_v!(3)];
