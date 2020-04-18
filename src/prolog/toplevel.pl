@@ -146,24 +146,22 @@
 
 '$read_input'(ThreadedGoals, NewVarList) :-
     get_single_char(C),
-    (  C == w ->
+    (  C = w ->
        nl,
        write('   '),
        '$write_eq'(ThreadedGoals, NewVarList, 0),
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  C == p ->
+    ;  C = p ->
        nl,
        write('   '),
        '$write_eq'(ThreadedGoals, NewVarList, 20),
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  C == (';') ->
+    ;  member(C, [';', ' ']) ->
        nl, write(';  '), false
-    ;  C == (' ') ->
-       nl, write(';  '), false
-    ;  C == h ->
+    ;  C = h ->
        '$help_message',
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  C == '.' ->
+    ;  C = '.' ->
        nl, write(';  ...'), nl
     ; '$read_input'(ThreadedGoals, NewVarList)
     ).
