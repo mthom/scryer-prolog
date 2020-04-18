@@ -1,3 +1,5 @@
+use crate::divrem::*;
+
 use crate::prolog_parser::ast::*;
 
 use crate::prolog::arithmetic::*;
@@ -990,7 +992,7 @@ impl MachineState {
                         stub,
                     ))
                 } else {
-                    Ok(Number::from(n1 % n2))
+                    Ok(Number::from(n1.rem_floor(n2)))
                 }
             }
             (Number::Fixnum(n1), Number::Integer(n2)) => {
