@@ -505,6 +505,7 @@ impl ValidType {
 #[derive(Clone, Copy)]
 pub enum DomainErrorType {
     NotLessThanZero,
+    Order,
     Stream,
     StreamOrAlias,
 }
@@ -513,6 +514,7 @@ impl DomainErrorType {
     pub fn as_str(self) -> &'static str {
         match self {
             DomainErrorType::NotLessThanZero => "not_less_than_zero",
+            DomainErrorType::Order => "order",
             DomainErrorType::Stream => "stream",
             DomainErrorType::StreamOrAlias => "stream_or_alias",
         }

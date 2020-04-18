@@ -1076,9 +1076,37 @@ pub(crate) trait CallPolicy: Any {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Compare => {
-                let a1 = machine_st[temp_v!(1)];
+                let a1 = machine_st.store(machine_st.deref(machine_st[temp_v!(1)]));
                 let a2 = machine_st[temp_v!(2)];
                 let a3 = machine_st[temp_v!(3)];
+
+                match a1 {
+                    Addr::Con(h) if machine_st.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(ref atom, _) = &machine_st.heap[h] {
+                            match atom.as_str() {
+                                ">" | "<" | "=" => {
+                                }
+                                _ => {
+                                    let stub =
+                                        MachineError::functor_stub(clause_name!("compare"), 3);
+
+                                    let err = MachineError::domain_error(DomainErrorType::Order, a1);
+                                    return Err(machine_st.error_form(err, stub));
+                                }
+                            }
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    addr if !addr.is_ref() => {
+                        let h = machine_st.heap.h();
+                        let stub = MachineError::functor_stub(clause_name!("compare"), 3);
+                        let err = MachineError::type_error(h, ValidType::Atom, a1);
+                        return Err(machine_st.error_form(err, stub));
+                    }
+                    _ => {
+                    }
+                }
 
                 let atom = match machine_st.compare_term_test(&a2, &a3) {
                     Some(Ordering::Greater) => {
