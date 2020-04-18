@@ -146,7 +146,7 @@
     ).
 
 '$read_input'(ThreadedGoals, NewVarList) :-
-    '$get_single_char'(C),
+    get_single_char(C),
     (  C == w ->
        nl,
        write('   '),
