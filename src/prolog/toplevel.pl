@@ -159,6 +159,8 @@
        '$read_input'(ThreadedGoals, NewVarList)
     ;  C == (';') ->
        nl, write(';  '), false
+    ;  C == (' ') ->
+       nl, write(';  '), false
     ;  C == h ->
        '$help_message',
        '$read_input'(ThreadedGoals, NewVarList)
