@@ -2,6 +2,7 @@
 
 :- use_module(library(dcgs)).
 :- use_module(library(iso_ext)).
+:- use_module(library(lists)).
 
 :- set_prolog_flag(double_quotes, chars).
 
@@ -499,7 +500,7 @@ ruleml_plex(Plex) -->
           list_ws("</Plex>")
        ;  list_ws("<Plex/>")
        )
-    ;  {  \+ partial_string(Plex),
+    ;  {  ( \+ partial_string(Plex) ; Plex == [] ),
           acyclic_term(Plex) },
        (  {  functor(Plex, ('.'), 2) } ->
           {  split_plex(Plex, PlexItems, RepoVar) },
@@ -583,13 +584,11 @@ ruleml_atom(Item) -->
        list_ws("<Atom>"),
        list_ws("<Rel>"),
        prolog_symbol(Name),
-       { Name \== (','), Name \== (';') },
        list_ws("</Rel>"),
        ruleml_items(Args),
        list_ws("</Atom>"),
        { Item =.. [Name | Args] }
     ;  { Item =.. [Name | Args] },
-       { Name \== (','), Name \== (';') },
        "<Atom>",
        "<Rel>",
        prolog_symbol(Name),
