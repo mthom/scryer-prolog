@@ -145,7 +145,7 @@
     ).
 
 '$read_input'(ThreadedGoals, NewVarList) :-
-    '$raw_input_read_char'(C),
+    get_single_char(C),
     (  C == w ->
        nl,
        write('   '),
@@ -161,8 +161,9 @@
     ;  C == h ->
        '$help_message',
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  C == '.',
+    ;  C == '.' ->
        nl, write(';  ...'), nl
+    ; '$read_input'(ThreadedGoals, NewVarList)
     ).
 
 '$help_message' :-

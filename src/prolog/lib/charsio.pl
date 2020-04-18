@@ -1,4 +1,5 @@
-:- module(charsio, [read_term_from_chars/2,
+:- module(charsio, [get_single_char/1,
+                    read_term_from_chars/2,
                     write_term_to_chars/3]).
 
 :- use_module(library(iso_ext)).
@@ -53,6 +54,14 @@ extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
     ;  make_new_var_name(VarType, V, VarName, N, N1, VarList),
        NewVarList = [VarName = V | NewVarList0],
        extend_var_list_(Vs, N1, VarList, NewVarList0, VarType)
+    ).
+
+
+get_single_char(C) :-
+    (  var(C) -> '$get_single_char'(C)
+    ;  C == end_of_file  -> '$get_single_char'(C)
+    ;  atom_length(C, 1) -> '$get_single_char'(C)
+    ;  throw(error(domain_error(in_character, C), get_char/1))
     ).
 
 
