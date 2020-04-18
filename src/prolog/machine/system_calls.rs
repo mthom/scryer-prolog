@@ -81,6 +81,10 @@ pub fn get_single_char() -> char {
                     c = '\n';
                     break;
                 },
+                KeyCode::Tab => {
+                    c = '\t';
+                    break;
+                },
                 _ => ()
             }
         }
