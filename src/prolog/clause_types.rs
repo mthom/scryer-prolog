@@ -178,6 +178,7 @@ pub enum SystemClauseType {
     FetchGlobalVar,
     FetchGlobalVarWithOffset,
     GetChar,
+    GetSingleChar,
     ResetAttrVarState,
     TruncateIfNoLiftedHeapGrowthDiff,
     TruncateIfNoLiftedHeapGrowth,
@@ -241,7 +242,6 @@ pub enum SystemClauseType {
     InstallNewBlock,
     Maybe,
     QuotedToken,
-    RawInputReadChar,
     ReadTermFromChars,
     ResetBlock,
     ReturnFromVerifyAttr,
@@ -309,6 +309,7 @@ impl SystemClauseType {
                 clause_name!("$fetch_global_var_with_offset")
             }
             &SystemClauseType::GetChar => clause_name!("$get_char"),
+            &SystemClauseType::GetSingleChar => clause_name!("$get_single_char"),
             &SystemClauseType::ResetAttrVarState => clause_name!("$reset_attr_var_state"),
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
                 clause_name!("$truncate_if_no_lh_growth")
@@ -364,7 +365,6 @@ impl SystemClauseType {
             &SystemClauseType::QuotedToken => {
                 clause_name!("$quoted_token")
             }
-            &SystemClauseType::RawInputReadChar => clause_name!("$raw_input_read_char"),
             &SystemClauseType::RedoAttrVarBinding => clause_name!("$redo_attr_var_binding"),
             &SystemClauseType::RemoveCallPolicyCheck => clause_name!("$remove_call_policy_check"),
             &SystemClauseType::RemoveInferenceCounter => clause_name!("$remove_inference_counter"),
@@ -455,6 +455,7 @@ impl SystemClauseType {
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
             ("$get_char", 1) => Some(SystemClauseType::GetChar),
+            ("$get_single_char", 1) => Some(SystemClauseType::GetSingleChar),
             ("$points_to_cont_reset_marker", 1) => {
                 Some(SystemClauseType::PointsToContinuationResetMarker)
             }
@@ -506,7 +507,6 @@ impl SystemClauseType {
             ("$get_cp", 1) => Some(SystemClauseType::GetCutPoint),
             ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
             ("$quoted_token", 1) => Some(SystemClauseType::QuotedToken),
-            ("$raw_input_read_char", 1) => Some(SystemClauseType::RawInputReadChar),
             ("$nextEP", 3) => Some(SystemClauseType::NextEP),
             ("$read_query_term", 2) => Some(SystemClauseType::ReadQueryTerm),
             ("$read_term", 2) => Some(SystemClauseType::ReadTerm),

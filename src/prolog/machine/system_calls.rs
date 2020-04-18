@@ -31,40 +31,30 @@ use std::rc::Rc;
 use crate::crossterm::event::{read, Event, KeyCode, KeyEvent};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
-pub enum ContinueResult {
-    ContinueQuery,
-    Conclude,
-    Help,
-    PrintWithoutMaxDepth,
-    PrintWithMaxDepth
-}
-
-pub fn next_keypress() -> ContinueResult {
+pub fn get_single_char() -> char {
+    let c;
+    enable_raw_mode().expect("failed to enable raw mode");
     loop {
-        match read() {
-            Ok(Event::Key(KeyEvent { code, .. })) => {
-                match code {
-                    KeyCode::Char('w') => {
-                        return ContinueResult::PrintWithoutMaxDepth;
-                    }
-                    KeyCode::Char('p') => {
-                        return ContinueResult::PrintWithMaxDepth;
-                    }
-                    KeyCode::Char(' ') | KeyCode::Char(';') | KeyCode::Char('n') => {
-                        return ContinueResult::ContinueQuery;
-                    }
-                    KeyCode::Char('.') => {
-                        return ContinueResult::Conclude;
-                    }
-                    KeyCode::Char('h') => {
-                        return ContinueResult::Help;
-                    }
-                    _ => {}
-                }
+        if let Ok(Event::Key(KeyEvent { code, .. })) = read() {
+            match code {
+                KeyCode::Char(ch) => {
+                    c = ch;
+                    break;
+                },
+                KeyCode::Enter => {
+                    c = '\n';
+                    break;
+                },
+                KeyCode::Tab => {
+                    c = '\t';
+                    break;
+                },
+                _ => ()
             }
-            _ => {}
         }
     }
+    disable_raw_mode().expect("failed to disable raw mode");
+    c
 }
 
 struct BrentAlgState {
@@ -1462,6 +1452,13 @@ impl MachineState {
                         return Err(err);
                     }
                 }
+            }
+            &SystemClauseType::GetSingleChar => {
+                let c = get_single_char();
+
+                let a1 = self[temp_v!(1)];
+
+                self.unify(Addr::Char(c), a1);
             }
             &SystemClauseType::GetModuleClause => {
                 let module = self[temp_v!(3)];
@@ -2879,26 +2876,6 @@ impl MachineState {
             }
             &SystemClauseType::InstallNewBlock => {
                 self.install_new_block(temp_v!(1));
-            }
-            &SystemClauseType::RawInputReadChar => {
-		let keypress = {
-                    enable_raw_mode().expect("failed to transition into raw mode");
-		    let result = next_keypress();
-                    disable_raw_mode().expect("failed to transition out of raw mode");
-
-                    result
-		};
-
-                let c = match keypress {
-                    ContinueResult::ContinueQuery => ';',
-                    ContinueResult::Conclude => '.',
-                    ContinueResult::Help => 'h',
-                    ContinueResult::PrintWithoutMaxDepth => 'w',
-                    ContinueResult::PrintWithMaxDepth => 'p',
-                };
-
-                let target = self[temp_v!(1)];
-                self.unify(Addr::Char(c), target);
             }
             &SystemClauseType::NextEP => {
                 let first_arg = self.store(self.deref(self[temp_v!(1)]));

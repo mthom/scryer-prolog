@@ -145,30 +145,31 @@
     ).
 
 '$read_input'(ThreadedGoals, NewVarList) :-
-    '$raw_input_read_char'(C),
-    (  C == w ->
+    get_single_char(C),
+    (  C = w ->
        nl,
        write('   '),
        '$write_eq'(ThreadedGoals, NewVarList, 0),
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  C == p ->
+    ;  C = p ->
        nl,
        write('   '),
        '$write_eq'(ThreadedGoals, NewVarList, 20),
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  C == (';') ->
+    ;  member(C, [';', ' ', n]) ->
        nl, write(';  '), false
-    ;  C == h ->
+    ;  C = h ->
        '$help_message',
        '$read_input'(ThreadedGoals, NewVarList)
-    ;  C == '.',
+    ;  member(C, ['\n', .]) ->
        nl, write(';  ...'), nl
+    ; '$read_input'(ThreadedGoals, NewVarList)
     ).
 
 '$help_message' :-
     nl, nl,
     write('SPACE, "n" or ";": next solution, if any\n'),
-    write('".": stop enumeration\n'),
+    write('RETURN or ".": stop enumeration\n'),
     write('"h": display this help message\n'),
     write('"w": write terms without depth limit\n'),
     write('"p": print terms with depth limit\n\n').
