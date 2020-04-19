@@ -3089,6 +3089,14 @@ impl MachineState {
         self.p += 1;
     }
 
+    fn throw_interrupt_exception(&mut self) {
+        let err = MachineError::interrupt_error();
+        let src = functor!("repl");
+        let err = self.error_form(err, src);
+
+        self.throw_exception(err);
+    }
+
     fn handle_call_clause(
         &mut self,
         indices: &mut IndexStore,
@@ -3105,8 +3113,7 @@ impl MachineState {
 	    let interrupted = INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
 
 	    if INTERRUPT.compare_and_swap(interrupted, false, std::sync::atomic::Ordering::Relaxed) {
-	        self.reset();
-	        self.fail = true;
+            self.throw_interrupt_exception();
 	        return;
 	    }
 

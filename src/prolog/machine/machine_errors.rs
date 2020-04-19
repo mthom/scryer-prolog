@@ -154,6 +154,18 @@ impl MachineError {
         )
     }
 
+    #[inline]
+    pub(super)
+    fn interrupt_error() -> Self {
+        let stub = functor!("$interrupt_thrown");
+        
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Received,
+        }
+    }
+
     pub(super)
     fn evaluation_error(eval_error: EvalError) -> Self {
         let stub = functor!("evaluation_error", [atom(eval_error.as_str())]);

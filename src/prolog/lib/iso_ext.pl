@@ -22,9 +22,9 @@ bb_put(Key, _) :- throw(error(type_error(atom, Key), bb_put/2)).
 bb_b_put(Key, NewValue) :-
     (  '$bb_get_with_offset'(Key, OldValue, OldOffset) ->
        call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
-		    reset_global_var_at_offset(Key, OldValue, OldOffset))
+		            reset_global_var_at_offset(Key, OldValue, OldOffset))
     ;  call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
-		    reset_global_var_at_key(Key))
+		            reset_global_var_at_key(Key))
     ).
 
 store_global_var_with_offset(Key, Value) :- '$store_global_var_with_offset'(Key, Value).
