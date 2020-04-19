@@ -3,8 +3,8 @@
    Part of Scryer Prolog.
 
    This library provides predicates for reasoning about time.
-   sleep/1 should be implemented here, sleeping for a number of seconds.
-   In addition, this library should provide reasoning about time stamps.
+   Reasoning about time stamps would be a useful addition, for example
+   by obtaining the current time, comparing and formatting it.
 
    '$cpu_new' can be replaced by statistics/2 once that is implemented.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
