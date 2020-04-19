@@ -120,10 +120,11 @@ impl<'a> Iterator for HCPreOrderIterator<'a> {
     }
 }
 
-pub trait MutStackHCIterator
-where Self: Iterator<Item = Addr>
+pub trait MutStackHCIterator<'b> where Self: Iterator
 {
-    fn stack(&mut self) -> &mut Vec<Addr>;
+    type MutStack;
+
+    fn stack(&'b mut self) -> Self::MutStack;
 }
 
 pub struct HCPostOrderIterator<'a> {
@@ -220,8 +221,10 @@ impl MachineState {
     }
 }
 
-impl<'a> MutStackHCIterator for HCPreOrderIterator<'a> {
-    fn stack(&mut self) -> &mut Vec<Addr> {
+impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCPreOrderIterator<'a> {
+    type MutStack = &'b mut Vec<Addr>;
+
+    fn stack(&'b mut self) -> Self::MutStack {
         &mut self.state_stack
     }
 }
@@ -273,6 +276,14 @@ pub struct HCZippedAcyclicIterator<'a> {
     pub first_to_expire: Ordering,
 }
 
+impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCZippedAcyclicIterator<'a> {
+    type MutStack = (&'b mut Vec<Addr>, &'b mut Vec<Addr>);
+
+    fn stack(&'b mut self) -> Self::MutStack {
+        (self.i1.stack(), self.i2.stack())
+    }
+}
+
 impl<'a> HCZippedAcyclicIterator<'a> {
     pub fn new(i1: HCPreOrderIterator<'a>, i2: HCPreOrderIterator<'a>) -> Self {
         HCZippedAcyclicIterator {
@@ -293,6 +304,7 @@ impl<'a> Iterator for HCZippedAcyclicIterator<'a>
             if !self.seen.contains(&(a1.clone(), a2.clone())) {
                 self.i1.stack().push(a1.clone());
                 self.i2.stack().push(a2.clone());
+
                 self.seen.insert((a1, a2));
 
                 break;

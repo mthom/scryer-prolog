@@ -214,7 +214,10 @@ gather_goals([Var = Value | Pairs], VarList, Goals) :-
     ).
 
 print_exception(E) :-
-    (  E == error('$interrupt_thrown', repl) -> nl % print the exception on a newline to evade "^C".
+    (  E == error('$interrupt_thrown', repl) -> nl % print the
+                                                   % exception on a
+                                                   % newline to evade
+                                                   % "^C".
     ;  true
     ),
     write_term('caught: ', [quoted(false), max_depth(20)]),

@@ -1969,7 +1969,8 @@ impl MachineState {
         iter.first_to_expire != Ordering::Equal
     }
 
-    pub(super) fn compare_term_test(&self, a1: &Addr, a2: &Addr) -> Option<Ordering> {
+    pub(super)
+    fn compare_term_test(&self, a1: &Addr, a2: &Addr) -> Option<Ordering> {
         let mut iter = self.zipped_acyclic_pre_order_iter(*a1, *a2);
 
         while let Some((v1, v2)) = iter.next() {

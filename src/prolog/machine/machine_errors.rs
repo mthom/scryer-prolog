@@ -158,7 +158,7 @@ impl MachineError {
     pub(super)
     fn interrupt_error() -> Self {
         let stub = functor!("$interrupt_thrown");
-        
+
         MachineError {
             stub,
             location: None,
