@@ -16,7 +16,7 @@
 
 sleep(T) :-
     builtins:must_be_number(T, sleep),
-    (   T < 0.0 ->
+    (   T < 0 ->
         throw(domain_error(not_less_than_zero, T))
     ;   T > 0xfffffffffffffbff ->
         throw(domain_error(not_great_than_0xfffffffffffffbff, T))
