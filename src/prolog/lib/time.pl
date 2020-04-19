@@ -16,7 +16,13 @@
 
 time(Goal) :-
         '$cpu_now'(T0),
-        Goal,
+        setup_call_cleanup(true,
+                           (   Goal,
+                               report_time(T0)
+                           ),
+                           report_time(T0)).
+
+report_time(T0) :-
         '$cpu_now'(T),
         Time is T - T0,
         (   bb_get('$first_answer', true) ->
@@ -28,7 +34,8 @@ time(Goal) :-
 ?- time((true;false)).
    % CPU time: 0.000 seconds
    true
-;  false.
+;  % CPU time: 0.001 seconds
+   false.
 
 :- time(use_module(library(clpz))).
    % CPU time: 2.762 seconds
@@ -38,7 +45,8 @@ time(Goal) :-
 :- time(use_module(library(lists))).
    % CPU time: 0.000 seconds
    true
-;  false.
+;  % CPU time: 0.001 seconds
+   false.
 
 ?- time(member(X, [a,b,c])).
    % CPU time: 0.000 seconds
@@ -47,5 +55,6 @@ time(Goal) :-
    X = b
 ;  % CPU time: 0.004 seconds
    X = c
-;  false.
+;  % CPU time: 0.007 seconds
+   false.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
