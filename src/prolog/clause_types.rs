@@ -241,6 +241,7 @@ pub enum SystemClauseType {
     GetDoubleQuotes,
     InstallNewBlock,
     Maybe,
+    CPU_now,
     QuotedToken,
     ReadTermFromChars,
     ResetBlock,
@@ -347,6 +348,7 @@ impl SystemClauseType {
             &SystemClauseType::PartialStringTail => clause_name!("$partial_string_tail"),
             &SystemClauseType::LiftedHeapLength => clause_name!("$lh_length"),
             &SystemClauseType::Maybe => clause_name!("maybe"),
+            &SystemClauseType::CPU_now => clause_name!("$cpu_now"),
             &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
                 clause_name!("$module_asserta")
             }
@@ -480,6 +482,7 @@ impl SystemClauseType {
             ("$install_inference_counter", 3) => Some(SystemClauseType::InstallInferenceCounter),
             ("$lh_length", 1) => Some(SystemClauseType::LiftedHeapLength),
             ("$maybe", 0) => Some(SystemClauseType::Maybe),
+            ("$cpu_now", 1) => Some(SystemClauseType::CPU_now),
             ("$module_exists", 1) => Some(SystemClauseType::ModuleExists),
             ("$module_of", 2) => Some(SystemClauseType::ModuleOf),
             ("$module_retract_clause", 5) => Some(SystemClauseType::ModuleRetractClause),
