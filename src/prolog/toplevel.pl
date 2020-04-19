@@ -1,14 +1,14 @@
 
-:- module('$toplevel', [repl/1, consult/1, use_module/1, use_module/2]).
+:- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2]).
 
 :- use_module(library(charsio)).
 :- use_module(library(lists)).
 :- use_module(library(si)).
 
-repl([_|Args]) :-
+'$repl'([_|Args]) :-
     maplist(use_list_of_modules, Args),
     false.
-repl(_) :- repl.
+'$repl'(_) :- repl.
 
 use_list_of_modules(Mod0) :-
     atom_chars(Mod, Mod0),

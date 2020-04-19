@@ -2280,7 +2280,8 @@ impl MachineState {
                             }
                         }
                     }
-                    None => panic!("expected SCCCutPolicy trait object."),
+                    None => {
+                    }
                 };
 
                 self.fail = true;

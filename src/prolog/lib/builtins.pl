@@ -213,18 +213,36 @@ comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 
 ;(G1, G2) :- '$get_b_value'(B), ;(G1, G2, B).
 
+:- non_counted_backtracking semicolon_compound_selector/3.
+semicolon_compound_selector(->(G2, G3), G4, B) :-
+    (  call(G2) ->
+       call(G3)
+	;  '$set_cp'(B),
+	   call(G4)
+    ).
+semicolon_compound_selector(','(G2, G3), G4, B) :-
+    (  ','(G2, G3, B)
+    ;  '$set_cp'(B),
+       call(G4)
+    ).
+semicolon_compound_selector(';'(G2, G3), G4, B) :-
+    (  ';'(G2, G3, B)
+    ;  '$set_cp'(B),
+       call(G4)
+    ).
+
 :- non_counted_backtracking (;)/3.
-;(G1, G4, B) :- compound(G1),
-		'$call_with_default_policy'(G1 = ->(G2, G3)),
-		!,
-		(  call(G2) -> call(G3)
-		;  '$set_cp'(B),
-		   call(G4)
-		).
-;(G1, G2, B) :- G1 == !, '$set_cp'(B), call(G2).
-;(G1, G2, B) :- G2 == !, call(G1), '$set_cp'(B).
-;(G, _, _) :- call(G).
-;(_, G, _) :- call(G).
+;(G1, G4, B) :-
+    compound(G1),
+	semicolon_compound_selector(G1, G4, B).
+;(G1, G2, B) :-
+    G1 == !, '$set_cp'(B), call(G2).
+;(G1, G2, B) :-
+    G2 == !, call(G1), '$set_cp'(B).
+;(G, _, _) :-
+    call(G).
+;(_, G, _) :-
+    call(G).
 
 G1 -> G2 :- '$get_b_value'(B), '$call_with_default_policy'(->(G1, G2, B)).
 

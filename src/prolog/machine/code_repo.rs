@@ -60,7 +60,8 @@ impl CodeRepo {
             .unwrap_or((Predicate::new(), VecDeque::from(vec![])))
     }
 
-    pub(crate) fn add_in_situ_result(
+    pub(crate)
+    fn add_in_situ_result(
         &mut self,
         result: &CompiledResult,
         in_situ_code_dir: &mut InSituCodeDir,
@@ -100,16 +101,19 @@ impl CodeRepo {
     }
 
     #[inline]
-    pub(super) fn size_of_cached_query(&self) -> usize {
+    pub(super)
+    fn size_of_cached_query(&self) -> usize {
         self.cached_query.len()
     }
 
     #[inline]
-    pub(super) fn take_in_situ_code(&mut self) -> Code {
+    pub(super)
+    fn take_in_situ_code(&mut self) -> Code {
         mem::replace(&mut self.in_situ_code, Code::new())
     }
 
-    pub(super) fn lookup_instr<'a>(
+    pub(super)
+    fn lookup_instr<'a>(
         &'a self,
         last_call: bool,
         p: &CodePtr,

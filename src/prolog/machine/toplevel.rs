@@ -934,7 +934,7 @@ impl RelationWorker {
                 let mut term = *term;
 
                 if let Term::Clause(cell, name, terms, op_spec) = term {
-                    if name.as_str() == "," {
+                    if name.as_str() == "," && terms.len() == 2 {
                         let term = Term::Clause(cell, name, terms, op_spec);
                         let mut subterms = unfold_by_str(term, ",");
 

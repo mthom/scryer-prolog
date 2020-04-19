@@ -68,7 +68,8 @@ scc_helper(C, G, Bb) :-
     ; '$reset_block'(NBb),
       '$fail').
 scc_helper(_, _, Bb) :-
-    '$reset_block'(Bb), '$get_ball'(Ball),
+    '$reset_block'(Bb),
+    '$get_ball'(Ball),
     '$call_with_default_policy'(run_cleaners_with_handling),
     '$erase_ball',
     '$call_with_default_policy'(throw(Ball)).
