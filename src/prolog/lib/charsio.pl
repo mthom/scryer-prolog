@@ -60,7 +60,7 @@ extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
 get_single_char(C) :-
     (  var(C) -> '$get_single_char'(C)
     ;  atom_length(C, 1) -> '$get_single_char'(C)
-    ;  throw(error(domain_error(in_character, C), get_single_char/1))
+    ;  throw(error(type_error(in_character, C), get_single_char/1))
     ).
 
 
