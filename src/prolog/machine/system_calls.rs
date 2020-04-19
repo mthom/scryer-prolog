@@ -3092,6 +3092,22 @@ impl MachineState {
                 if let Err(err) = self.skip_max_list() {
                     return Err(err);
                 },
+            &SystemClauseType::Sleep => {
+                let time = self.store(self.deref(self[temp_v!(1)]));
+
+                let time = match Number::try_from((time, &self.heap)) {
+                    Ok(Number::Float(OrderedFloat(n))) => n,
+                    Ok(Number::Fixnum(n)) => n as f64,
+                    Ok(Number::Integer(n)) => n.to_f64(),
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                let duration = Duration::new(1, 0);
+                let duration = duration.mul_f64(time);
+                ::std::thread::sleep(duration);
+            }
             &SystemClauseType::StoreGlobalVar => {
                 let key = self[temp_v!(1)];
 

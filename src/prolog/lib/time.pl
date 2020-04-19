@@ -9,10 +9,14 @@
    '$cpu_new' can be replaced by statistics/2 once that is implemented.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-:- module(time, [time/1]).
+:- module(time, [sleep/1, time/1]).
 
 :- use_module(library(format)).
 :- use_module(library(iso_ext)).
+
+sleep(T) :-
+    builtins:must_be_number(T, sleep),
+    '$sleep'(T).
 
 time(Goal) :-
         '$cpu_now'(T0),

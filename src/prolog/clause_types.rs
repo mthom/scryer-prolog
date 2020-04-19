@@ -251,6 +251,7 @@ pub enum SystemClauseType {
     SetDoubleQuotes,
     SetSeed,
     SkipMaxList,
+    Sleep,
     Succeed,
     TermVariables,
     TruncateLiftedHeapTo,
@@ -287,16 +288,16 @@ impl SystemClauseType {
             &SystemClauseType::CurrentInput => clause_name!("$current_input"),
             &SystemClauseType::CurrentOutput => clause_name!("$current_output"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
-	        &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
-	        &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
-		        clause_name!("$use_qualified_module")
-	        }
-	        &SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile) => {
-		        clause_name!("$use_module_from_file")
-	        }
-	        &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile) => {
-		        clause_name!("$use_qualified_module_from_file")
-	        }
+            &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
+            &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
+                    clause_name!("$use_qualified_module")
+            }
+            &SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile) => {
+                    clause_name!("$use_module_from_file")
+            }
+            &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile) => {
+                    clause_name!("$use_qualified_module_from_file")
+            }
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
@@ -402,6 +403,7 @@ impl SystemClauseType {
             &SystemClauseType::SetCutPointByDefault(_) => clause_name!("$set_cp_by_default"),
             &SystemClauseType::SetDoubleQuotes => clause_name!("$set_double_quotes"),
             &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
+            &SystemClauseType::Sleep => clause_name!("$sleep"),
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::TermVariables => clause_name!("$term_variables"),
             &SystemClauseType::TruncateLiftedHeapTo => clause_name!("$truncate_lh_to"),
@@ -525,6 +527,7 @@ impl SystemClauseType {
             ("$set_double_quotes", 1) => Some(SystemClauseType::SetDoubleQuotes),
             ("$set_seed", 1) => Some(SystemClauseType::SetSeed),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
+            ("$sleep", 1) => Some(SystemClauseType::Sleep),
             ("$store_global_var", 2) => Some(SystemClauseType::StoreGlobalVar),
             ("$store_global_var_with_offset", 2) => Some(SystemClauseType::StoreGlobalVarWithOffset),
             ("$term_variables", 2) => Some(SystemClauseType::TermVariables),
@@ -532,13 +535,13 @@ impl SystemClauseType {
             ("$unwind_environments", 0) => Some(SystemClauseType::UnwindEnvironments),
             ("$unwind_stack", 0) => Some(SystemClauseType::UnwindStack),
             ("$unify_with_occurs_check", 2) => Some(SystemClauseType::UnifyWithOccursCheck),
-	        ("$use_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),
-	        ("$use_module_from_file", 1) =>
-		        Some(SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile)),
-	        ("$use_qualified_module", 2) =>
-		        Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule)),
-	        ("$use_qualified_module_from_file", 2) =>
-		        Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile)),
+            ("$use_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),
+            ("$use_module_from_file", 1) =>
+                    Some(SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile)),
+            ("$use_qualified_module", 2) =>
+                    Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule)),
+            ("$use_qualified_module_from_file", 2) =>
+                    Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile)),
             ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$wam_instructions", 3) => Some(SystemClauseType::WAMInstructions),
             ("$write_term", 6) => Some(SystemClauseType::WriteTerm),
