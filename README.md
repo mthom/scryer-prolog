@@ -185,8 +185,8 @@ arithmetic operators with the usual precedences,
 
 ```
 ?- write_canonical(-5 + 3 - (2 * 4) // 8), nl.
-   -(+(-5,3),//(*(2,4),8))
-true.
+-(+(-5,3),//(*(2,4),8))
+   true.
 ```
 
 New operators can be defined using the `op` declaration.
@@ -304,6 +304,9 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   CLP(B): Constraint Logic Programming over Boolean variables,
   a BDD-based SAT&nbsp;solver provided via the predicates
   `sat/1`, `taut/2`, `labeling/1` etc.
+* [`time`](src/prolog/lib/time.pl)
+  `time/1` reports the CPU&nbsp;time of a goal. It is useful
+  for measuring the performance of your code.
 
 To use predicates provided by the `lists` library, write:
 

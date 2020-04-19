@@ -28,6 +28,9 @@ use std::io::{stdout, Write};
 use std::iter::once;
 use std::rc::Rc;
 
+use std::time::Duration;
+use cpu_time::ProcessTime;
+
 use crate::crossterm::event::{read, Event, KeyCode, KeyEvent};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
@@ -1951,6 +1954,13 @@ impl MachineState {
                 };
 
                 self.fail = result;
+            }
+            &SystemClauseType::CPU_now => {
+                let a1 = self[temp_v!(1)];
+                let a2 = ProcessTime::now().as_duration().as_secs_f64();
+                let addr = self.heap.put_constant(Constant::Float(OrderedFloat(a2)));
+
+                self.unify(a1, addr);
             }
             &SystemClauseType::OpDeclaration => {
                 let priority = self[temp_v!(1)];
