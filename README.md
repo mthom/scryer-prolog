@@ -185,8 +185,8 @@ arithmetic operators with the usual precedences,
 
 ```
 ?- write_canonical(-5 + 3 - (2 * 4) // 8), nl.
-   -(+(-5,3),//(*(2,4),8))
-true.
+-(+(-5,3),//(*(2,4),8))
+   true.
 ```
 
 New operators can be defined using the `op` declaration.
