@@ -1955,7 +1955,7 @@ impl MachineState {
 
                 self.fail = result;
             }
-            &SystemClauseType::CPU_now => {
+            &SystemClauseType::CpuNow => {
                 let a1 = self[temp_v!(1)];
                 let a2 = ProcessTime::now().as_duration().as_secs_f64();
                 let addr = self.heap.put_constant(Constant::Float(OrderedFloat(a2)));
