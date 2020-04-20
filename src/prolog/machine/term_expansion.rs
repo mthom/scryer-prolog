@@ -368,7 +368,7 @@ impl MachineState {
 
         self.query_stepper(
             &mut wam.indices,
-            &mut wam.policies,
+            &mut MachinePolicies::default(),
             &mut wam.code_repo,
             &mut readline::input_stream(),
             &mut Stream::stdout(),
