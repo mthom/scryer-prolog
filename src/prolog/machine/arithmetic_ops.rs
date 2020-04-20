@@ -217,6 +217,8 @@ impl MachineState {
                         "ceiling" => interms.push(self.ceiling(a1)),
                         "floor" => interms.push(self.floor(a1)),
                         "\\" => interms.push(self.bitwise_complement(a1)?),
+                        "lsb" => interms.push(self.least_significant_bit(a1)?),
+                        "msb" => interms.push(self.most_significant_bit(a1)?),
                         "sign" => interms.push(self.sign(a1)),
                         _ => {
                             return Err(self.error_form(MachineError::instantiation_error(), caller));
@@ -848,6 +850,78 @@ impl MachineState {
         match n1 {
             Number::Fixnum(n) => Ok(Number::Fixnum(!n)),
             Number::Integer(n1) => Ok(Number::from(Integer::from(!&*n1))),
+            _ => Err(self.error_form(
+                MachineError::type_error(
+                    self.heap.h(),
+                    ValidType::Integer,
+                    n1,
+                ),
+                stub,
+            )),
+        }
+    }
+
+    pub(crate)
+    fn least_significant_bit(&self, n1: Number) -> Result<Number, MachineStub> {
+        let stub = MachineError::functor_stub(clause_name!("(lsb)"), 2);
+
+        match n1 {
+            Number::Fixnum(mut n) => {
+                //if n <= 0 {
+                //    // TODO
+                //    panic!();
+                //}
+                let mut lsb = 0;
+                while n & 1 != 1 {
+                    n >>= 1;
+                    lsb += 1;
+                }
+                Ok(Number::Fixnum(lsb))
+            },
+            Number::Integer(n1) => {
+                //if &*n1 <= &0 {
+                //    // TODO
+                //    panic!();
+                //}
+                let n2 = Integer::from(-&*n1);
+                let n3 = Integer::from(&*n1 & &n2);
+                Ok(Number::from(Integer::from(n3.significant_bits() - 1)))
+            },
+            _ => Err(self.error_form(
+                MachineError::type_error(
+                    self.heap.h(),
+                    ValidType::Integer,
+                    n1,
+                ),
+                stub,
+            )),
+        }
+    }
+
+    pub(crate)
+    fn most_significant_bit(&self, n1: Number) -> Result<Number, MachineStub> {
+        let stub = MachineError::functor_stub(clause_name!("(msb)"), 2);
+
+        match n1 {
+            Number::Fixnum(mut n) => {
+                //if n <= 0 {
+                //    // TODO
+                //    panic!();
+                //}
+                let mut msb = 0;
+                while n > 0 {
+                    n >>= 1;
+                    msb += 1;
+                }
+                Ok(Number::Fixnum(msb - 1))
+            },
+            Number::Integer(n1) => {
+                //if &*n1 <= &0 {
+                //    // TODO
+                //    panic!();
+                //}
+                Ok(Number::from(Integer::from(n1.significant_bits() - 1)))
+            },
             _ => Err(self.error_form(
                 MachineError::type_error(
                     self.heap.h(),

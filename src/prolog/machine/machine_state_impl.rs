@@ -1062,6 +1062,18 @@ impl MachineState {
                 self.interms[t - 1] = try_or_fail!(self, self.bitwise_complement(n1));
                 self.p += 1;
             }
+            &ArithmeticInstruction::LeastSignificantBit(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = try_or_fail!(self, self.least_significant_bit(n1));
+                self.p += 1;
+            }
+            &ArithmeticInstruction::MostSignificantBit(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = try_or_fail!(self, self.most_significant_bit(n1));
+                self.p += 1;
+            }
             &ArithmeticInstruction::Div(ref a1, ref a2, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
                 let n2 = try_or_fail!(self, self.get_number(a2));

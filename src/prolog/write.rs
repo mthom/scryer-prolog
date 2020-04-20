@@ -473,6 +473,12 @@ impl fmt::Display for ArithmeticInstruction {
             &ArithmeticInstruction::BitwiseComplement(ref a, ref t) => {
                 write!(f, "bitwise_complement {}, @{}", a, t)
             }
+            &ArithmeticInstruction::LeastSignificantBit(ref a, ref t) => {
+                write!(f, "least_significant_bit {}, @{}", a, t)
+            }
+            &ArithmeticInstruction::MostSignificantBit(ref a, ref t) => {
+                write!(f, "most_significant_bit {}, @{}", a, t)
+            }
             &ArithmeticInstruction::Truncate(ref a, ref t) => write!(f, "truncate {}, @{}", a, t),
             &ArithmeticInstruction::Round(ref a, ref t) => write!(f, "round {}, @{}", a, t),
             &ArithmeticInstruction::Ceiling(ref a, ref t) => write!(f, "ceiling {}, @{}", a, t),

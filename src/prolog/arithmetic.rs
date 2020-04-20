@@ -163,6 +163,8 @@ impl<'a> ArithmeticEvaluator<'a> {
             "floor" => Ok(ArithmeticInstruction::Floor(a1, t)),
             "sign" => Ok(ArithmeticInstruction::Sign(a1, t)),
             "\\" => Ok(ArithmeticInstruction::BitwiseComplement(a1, t)),
+            "lsb" => Ok(ArithmeticInstruction::LeastSignificantBit(a1, t)),
+            "msb" => Ok(ArithmeticInstruction::MostSignificantBit(a1, t)),
             _ => Err(ArithmeticError::NonEvaluableFunctor(
                 Constant::Atom(name, None),
                 1,

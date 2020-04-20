@@ -216,6 +216,8 @@ pub enum ArithmeticInstruction {
     Neg(ArithmeticTerm, usize),
     Plus(ArithmeticTerm, usize),
     BitwiseComplement(ArithmeticTerm, usize),
+    LeastSignificantBit(ArithmeticTerm, usize),
+    MostSignificantBit(ArithmeticTerm, usize),
 }
 
 fn arith_instr_unary_functor(
@@ -369,6 +371,12 @@ impl ArithmeticInstruction {
             }
             &ArithmeticInstruction::BitwiseComplement(ref at, t) => {
                 arith_instr_unary_functor(h, "\\", at, t)
+            }
+            &ArithmeticInstruction::LeastSignificantBit(ref at, t) => {
+                arith_instr_unary_functor(h, "lsb", at, t)
+            }
+            &ArithmeticInstruction::MostSignificantBit(ref at, t) => {
+                arith_instr_unary_functor(h, "msb", at, t)
             }
         }
     }
