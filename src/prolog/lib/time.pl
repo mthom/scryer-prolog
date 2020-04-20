@@ -19,9 +19,9 @@ max_sleep_time(0xfffffffffffffbff).
 sleep(T) :-
     builtins:must_be_number(T, sleep),
     (   T < 0 ->
-        throw(domain_error(not_less_than_zero, T))
+        throw(error(domain_error(not_less_than_zero, T), sleep/1))
     ;   max_sleep_time(N), T > N ->
-        throw(error(reprensentation_error(max_sleep_time), abolish/1))
+        throw(error(reprensentation_error(max_sleep_time), sleep/1))
     ;   '$sleep'(T)
     ).
 
