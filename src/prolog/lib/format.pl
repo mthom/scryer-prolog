@@ -394,49 +394,57 @@ portray_clause(Term) :-
         maplist(write, Ls).
 
 portray_clause_(Term) -->
-        portray_(Term), ".\n".
+        { term_variables(Term, Vs),
+          foldl(var_name, Vs, VNs, 0, _) },
+        portray_(Term, VNs), ".\n".
 
-literal(Lit) --> format_("~q", [Lit]).
+var_name(V, Name=V, Num0, Num) :-
+        charsio:fabricate_var_name(numbervars, Name, Num0),
+        Num is Num0 + 1.
 
-portray_(Var) --> { var(Var) }, !, literal(Var).
-portray_((Head :- Body)) --> !,
-        literal(Head), " :-\n",
-        body_(Body, 0, 8).
-portray_((Head --> Body)) --> !,
-        literal(Head), " -->\n",
-        body_(Body, 0, 8).
-portray_(Any) --> literal(Any).
+literal(Lit, VNs) -->
+        { write_term_to_chars(Lit, [quoted(true),variable_names(VNs)], Ls) },
+        list(Ls).
+
+portray_(Var, VNs) --> { var(Var) }, !, literal(Var, VNs).
+portray_((Head :- Body), VNs) --> !,
+        literal(Head, VNs), " :-\n",
+        body_(Body, 0, 3, VNs).
+portray_((Head --> Body), VNs) --> !,
+        literal(Head, VNs), " -->\n",
+        body_(Body, 0, 3, VNs).
+portray_(Any, VNs) --> literal(Any, VNs).
 
 
-body_(Var, C, I) --> { var(Var) }, !,
+body_(Var, C, I, VNs) --> { var(Var) }, !,
         indent_to(C, I),
-        literal(Var).
-body_((A,B), C, I) --> !,
-        body_(A, C, I), ",\n",
-        body_(B, 0, I).
-body_((A ; Else), C, I) --> % ( If -> Then ; Else )
+        literal(Var, VNs).
+body_((A,B), C, I, VNs) --> !,
+        body_(A, C, I, VNs), ",\n",
+        body_(B, 0, I, VNs).
+body_((A ; Else), C, I, VNs) --> % ( If -> Then ; Else )
         { nonvar(A), A = (If -> Then) },
         !,
         indent_to(C, I),
         "(  ",
         { C1 is I + 3 },
-        body_(If, C1, C1), " ->\n",
-        body_(Then, 0, C1), "\n",
-        else_branch(Else, C1, I).
-body_((A;B), C, I) --> !,
+        body_(If, C1, C1, VNs), " ->\n",
+        body_(Then, 0, C1, VNs), "\n",
+        else_branch(Else, C1, I, VNs).
+body_((A;B), C, I, VNs) --> !,
         indent_to(C, I),
         "(  ",
         { C1 is I + 3 },
-        body_(A, C1, C1), "\n",
-        else_branch(B, C1, I).
-body_(Goal, C, I) -->
-        indent_to(C, I), literal(Goal).
+        body_(A, C1, C1, VNs), "\n",
+        else_branch(B, C1, I, VNs).
+body_(Goal, C, I, VNs) -->
+        indent_to(C, I), literal(Goal, VNs).
 
 
-else_branch(Else, C, I) -->
+else_branch(Else, C, I, VNs) -->
         indent_to(0, I),
         ";  ",
-        body_(Else, C, C), "\n",
+        body_(Else, C, C, VNs), "\n",
         indent_to(0, I),
         ")".
 
@@ -450,13 +458,14 @@ a.
 
 ?- portray_clause((a :- b)).
 a :-
-        b.
+   b.
 
 ?- portray_clause((a :- b, c, d)).
 a :-
-        b,
-        c,
-        d.
+   b,
+   c,
+   d.
+   true
 
 
 ?- portray_clause([a,b,c,d]).
@@ -478,5 +487,7 @@ a :-
 ?- portray_clause((h :- L = '.')).
 
 ?- portray_clause(-->(a, (b, {t}, d))).
+
+?- portray_clause((A :- B)).
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
