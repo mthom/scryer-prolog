@@ -9,17 +9,19 @@
    '$cpu_new' can be replaced by statistics/2 once that is implemented.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-:- module(time, [sleep/1, time/1]).
+:- module(time, [max_sleep_time/1, sleep/1, time/1]).
 
 :- use_module(library(format)).
 :- use_module(library(iso_ext)).
+
+max_sleep_time(0xfffffffffffffbff).
 
 sleep(T) :-
     builtins:must_be_number(T, sleep),
     (   T < 0 ->
         throw(domain_error(not_less_than_zero, T))
-    ;   T > 0xfffffffffffffbff ->
-        throw(domain_error(not_great_than_0xfffffffffffffbff, T))
+    ;   max_sleep_time(N), T > N ->
+        throw(error(reprensentation_error(max_sleep_time), abolish/1))
     ;   '$sleep'(T)
     ).
 
