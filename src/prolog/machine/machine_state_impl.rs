@@ -281,19 +281,18 @@ impl MachineState {
                     (Addr::PStrLocation(h1, n1), Addr::PStrLocation(h2, n2)) => {
                         if let &HeapCellValue::PartialString(ref pstr1, has_tail_1) = &self.heap[h1] {
                             if let &HeapCellValue::PartialString(ref pstr2, has_tail_2) = &self.heap[h2] {
-                                let pstr1_iter = pstr1.range_from(n1 ..);
-                                let pstr2_iter = pstr2.range_from(n2 ..);
+                                let pstr1_s = pstr1.as_str_from(n1);
+                                let pstr2_s = pstr2.as_str_from(n2);
 
-                                let mut m_len = 0;
-
-                                for (c1, c2) in pstr1_iter.zip(pstr2_iter) {
-                                    if c1 != c2 {
+                                let m_len =
+                                    if pstr1_s.starts_with(pstr2_s) {
+                                        pstr2_s.len()
+                                    } else if pstr2_s.starts_with(pstr1_s) {
+                                        pstr1_s.len()
+                                    } else {
                                         self.fail = true;
                                         return;
-                                    }
-
-                                    m_len += c1.len_utf8();
-                                }
+                                    };
 
                                 if pstr1.at_end(n1 + m_len) {
                                     if has_tail_1 {
@@ -499,19 +498,18 @@ impl MachineState {
                     (Addr::PStrLocation(h1, n1), Addr::PStrLocation(h2, n2)) => {
                         if let &HeapCellValue::PartialString(ref pstr1, has_tail_1) = &self.heap[h1] {
                             if let &HeapCellValue::PartialString(ref pstr2, has_tail_2) = &self.heap[h2] {
-                                let pstr1_iter = pstr1.range_from(n1 ..);
-                                let pstr2_iter = pstr2.range_from(n2 ..);
+                                let pstr1_s = pstr1.as_str_from(n1);
+                                let pstr2_s = pstr2.as_str_from(n2);
 
-                                let mut m_len = 0;
-
-                                for (c1, c2) in pstr1_iter.zip(pstr2_iter) {
-                                    if c1 != c2 {
+                                let m_len =
+                                    if pstr1_s.starts_with(pstr2_s) {
+                                        pstr2_s.len()
+                                    } else if pstr2_s.starts_with(pstr1_s) {
+                                        pstr1_s.len()
+                                    } else {
                                         self.fail = true;
                                         return;
-                                    }
-
-                                    m_len += c1.len_utf8();
-                                }
+                                    };
 
                                 if pstr1.at_end(n1 + m_len) {
                                     if has_tail_1 {
