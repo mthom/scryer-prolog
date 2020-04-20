@@ -1886,8 +1886,28 @@ impl MachineState {
                     if !self.flags.double_quotes.is_atom() => {
                         continue;
                     }
-                (Addr::PStrLocation(..), Addr::PStrLocation(..)) => {
-                    continue;
+                (pstr1 @ Addr::PStrLocation(..), pstr2 @ Addr::PStrLocation(..)) => {
+                    let mut i1 = self.heap_pstr_iter(pstr1);
+                    let mut i2 = self.heap_pstr_iter(pstr2);
+
+                    let ordering = compare_pstr_prefixes(&mut i1, &mut i2);
+
+                    if let Some(ordering) = ordering {
+                        if ordering != Ordering::Equal {
+                            return false;
+                        }
+                    }
+
+                    let (lstack, rstack) = iter.stack();
+
+                    lstack.pop();
+                    lstack.pop();
+
+                    rstack.pop();
+                    rstack.pop();
+
+                    lstack.push(i1.focus());
+                    rstack.push(i2.focus());
                 }
                 (Addr::Lis(_), Addr::Lis(_)) => {
                     continue;
@@ -2274,9 +2294,30 @@ impl MachineState {
                         ) => {
                         }
                         (
-                            Addr::PStrLocation(..),
-                            Addr::PStrLocation(..),
+                            pstr1 @ Addr::PStrLocation(..),
+                            pstr2 @ Addr::PStrLocation(..),
                         ) => {
+                            let mut i1 = self.heap_pstr_iter(pstr1);
+                            let mut i2 = self.heap_pstr_iter(pstr2);
+
+                            let ordering = compare_pstr_prefixes(&mut i1, &mut i2);
+
+                            if let Some(ordering) = ordering {
+                                if ordering != Ordering::Equal {
+                                    return Some(ordering);
+                                }
+                            } else {
+                                let (lstack, rstack) = iter.stack();
+
+                                lstack.pop();
+                                lstack.pop();
+
+                                rstack.pop();
+                                rstack.pop();
+
+                                lstack.push(i1.focus());
+                                rstack.push(i2.focus());
+                            }
                         }
                         (
                             Addr::Str(h1),

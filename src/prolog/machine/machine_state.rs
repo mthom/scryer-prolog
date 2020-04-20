@@ -100,7 +100,7 @@ impl<'a> Iterator for HeapPStrIter<'a> {
                     } else {
                         Addr::EmptyList
                     };
-
+                    
                     return Some(PStrIteratee::PStrSegment(h, n));
                 } else {
                     unreachable!()
@@ -144,6 +144,116 @@ impl<'a> Iterator for HeapPStrIter<'a> {
                 return None;
             }
         }
+    }
+}
+
+#[inline]
+pub(super)
+fn compare_pstr_prefixes<'a>(
+    i1: &mut HeapPStrIter<'a>,
+    i2: &mut HeapPStrIter<'a>,
+) -> Option<Ordering> {
+    let mut r1 = i1.next();
+    let mut r2 = i2.next();
+
+    loop {
+        if let Some(r1i) = r1 {
+            if let Some(r2i) = r2 {
+                match (r1i, r2i) {
+                    (PStrIteratee::Char(c1), PStrIteratee::Char(c2)) => {
+                        if c1 != c2 {
+                            return c1.partial_cmp(&c2);
+                        }
+                    }
+                    (PStrIteratee::Char(c1), PStrIteratee::PStrSegment(h, n)) => {
+                        if let &HeapCellValue::PartialString(ref pstr, _) = &i2.machine_st.heap[h] {
+                            if let Some(c2) = pstr.as_str_from(n).chars().next() {
+                                if c1 != c2 {
+                                    return c1.partial_cmp(&c2);
+                                } else {
+                                    r1 = i1.next();
+                                    r2 = Some(PStrIteratee::PStrSegment(h, n + c2.len_utf8()));
+
+                                    continue;
+                                }
+                            } else {
+                                r2 = i2.next();
+                                continue;
+                            }
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    (PStrIteratee::PStrSegment(h, n), PStrIteratee::Char(c2)) => {
+                        if let &HeapCellValue::PartialString(ref pstr, _) = &i1.machine_st.heap[h] {
+                            if let Some(c1) = pstr.as_str_from(n).chars().next() {
+                                if c1 != c2 {
+                                    return c2.partial_cmp(&c1);
+                                } else {
+                                    r1 = i1.next();
+                                    r2 = Some(PStrIteratee::PStrSegment(h, n + c1.len_utf8()));
+
+                                    continue;
+                                }
+                            } else {
+                                r1 = i1.next();
+                                continue;
+                            }
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    (PStrIteratee::PStrSegment(h1, n1), PStrIteratee::PStrSegment(h2, n2)) => {
+                        match (&i1.machine_st.heap[h1], &i2.machine_st.heap[h2]) {
+                            (
+                                &HeapCellValue::PartialString(ref pstr1, _),
+                                &HeapCellValue::PartialString(ref pstr2, _),
+                            ) => {
+                                let str1 = pstr1.as_str_from(n1);
+                                let str2 = pstr2.as_str_from(n2);
+
+                                if str1.starts_with(str2) {
+                                    r1 = Some(PStrIteratee::PStrSegment(h1, n1 + str2.len()));
+                                    r2 = i2.next();
+
+                                    continue;
+                                } else if str2.starts_with(str1) {
+                                    r1 = i1.next();
+                                    r2 = Some(PStrIteratee::PStrSegment(h2, n2 + str1.len()));
+
+                                    continue;
+                                } else {
+                                    return str1.partial_cmp(str2);
+                                }
+                            }
+                            _ => {
+                                unreachable!()
+                            }
+                        }
+                    }
+                }
+
+                r1 = i1.next();
+                r2 = i2.next();
+
+                continue;
+            }
+        }
+
+        return match (i1.focus(), i2.focus()) {
+            (Addr::EmptyList, Addr::EmptyList) => {
+                Some(Ordering::Equal)
+            }
+            (Addr::EmptyList, _) => {
+                Some(Ordering::Less)
+            }
+            (_, Addr::EmptyList) => {
+                Some(Ordering::Greater)
+            }
+            _ => {
+                None
+            }
+        };
     }
 }
 

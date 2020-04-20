@@ -72,6 +72,13 @@ impl MachinePolicies {
     }
 }
 
+impl Default for MachinePolicies {
+    #[inline]
+    fn default() -> Self {
+        MachinePolicies::new()
+    }
+}
+
 pub struct Machine {
     pub(super) machine_st: MachineState,
     pub(super) inner_heap: Heap,
