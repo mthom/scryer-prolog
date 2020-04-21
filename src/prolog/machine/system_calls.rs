@@ -1337,6 +1337,71 @@ impl MachineState {
                     }
                 };
             }
+            &SystemClauseType::CharType => {
+                let a1 = self.store(self.deref(self[temp_v!(1)]));
+                let a2 = self.store(self.deref(self[temp_v!(2)]));
+
+                let c = match a1 {
+                    Addr::Char(c) => c,
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(name, _) = &self.heap[h] {
+                            name.as_str().chars().next().unwrap()
+                        }
+                        else {
+                            unreachable!()
+                        }
+                    }
+                    _ => unreachable!()
+                };
+                macro_rules! call {
+                    ($id:ident, $name:tt) => {
+                if $id!(c) {
+                    // let string = $name;
+                    // let chars =
+                    //     clause_name!(string.to_string(), indices.atom_tbl);
+                    // let atom = self
+                    //     .heap
+                    //     .to_unifiable(HeapCellValue::Atom(chars, None));
+                    let atom = self.heap.to_unifiable(
+                        HeapCellValue::Atom(clause_name!($name.to_string(), indices.atom_tbl), None)
+                    );
+
+                    self.unify(atom, a2);
+                }
+                    }
+                }
+                call!(symbolic_control_char, "symbolic_control");
+                call!(space_char, "space");
+                call!(layout_char, "layout");
+                call!(symbolic_hexadecimal_char, "symbolic_hexadecimal");
+                call!(octal_digit_char, "octal_digit");
+                call!(binary_digit_char, "binary_digit");
+                call!(hexadecimal_digit_char, "hexadecimal_digit");
+                call!(exponent_char, "exponent");
+                call!(sign_char, "sign");
+                //call!(new_line_char, "new_line");
+                //call!(comment_1_char, "comment_1");
+                //call!(comment_2_char, "comment_2");
+                //call!(capital_letter_char, "upper");
+                //call!(small_letter_char, "lower");
+                //call!(variable_indicator_char, "variable_indicator");
+                //call!(graphic_char, "graphic");
+                //call!(graphic_token_char, "graphic_token");
+                //call!(alpha_char, "alpha");
+                //call!(decimal_digit_char, "decimal_digit");
+                //call!(decimal_point_char, "decimal_point");
+                call!(alpha_numeric_char, "alnum");
+                //call!(cut_char, "cut");
+                //call!(semicolon_char, "semicolon");
+                //call!(backslash_char, "backslash");
+                //call!(single_quote_char, "single_quote");
+                //call!(double_quote_char, "double_quote");
+                //call!(back_quote_char, "back_quote");
+                //call!(meta_char, "meta");
+                //call!(solo_char, "solo");
+                //call!(prolog_char, "prolog");
+                //self.fail = true;
+            }
             &SystemClauseType::CheckCutPoint => {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
 

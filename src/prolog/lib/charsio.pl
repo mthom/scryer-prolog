@@ -1,4 +1,4 @@
-:- module(charsio, [get_single_char/1,
+:- module(charsio, [char_type/2, get_single_char/1,
                     read_term_from_chars/2,
                     write_term_to_chars/3]).
 
@@ -54,6 +54,13 @@ extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
     ;  make_new_var_name(VarType, V, VarName, N, N1, VarList),
        NewVarList = [VarName = V | NewVarList0],
        extend_var_list_(Vs, N1, VarList, NewVarList0, VarType)
+    ).
+
+
+char_type(C, T) :-
+    (   var(C) -> throw(error(instantiation_error, char_type/2))
+    ;   atom_length(C, 1) -> '$char_type'(C, T)
+    ;   throw(error(type_error(in_character, C), char_type/2))
     ).
 
 
