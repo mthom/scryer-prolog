@@ -57,10 +57,36 @@ extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
     ).
 
 
-char_type(C, T) :-
-    (   var(C) -> throw(error(instantiation_error, char_type/2))
-    ;   atom_length(C, 1) -> '$char_type'(C, T)
-    ;   throw(error(type_error(in_character, C), char_type/2))
+char_type(Char, Type) :-
+    (   var(Char) -> throw(error(instantiation_error, char_type/2))
+    ;   atom_length(Char, 1) ->
+        (   ground(Type) -> '$char_type'(Char, Type)
+        ;   Type = symbolic_control, '$char_type'(Char, Type)
+        ;   Type = layout, '$char_type'(Char, Type)
+        ;   Type = symbolic_hexadecimal, Char = x
+        ;   Type = octal_digit, '$char_type'(Char, Type)
+        ;   Type = binary_digit, '$char_type'(Char, Type)
+        ;   Type = hexadecimal_digit, '$char_type'(Char, Type)
+        ;   Type = exponent, '$char_type'(Char, Type)
+        ;   Type = sign, '$char_type'(Char, Type)
+        ;   Type = upper, '$char_type'(Char, Type)
+        ;   Type = lower, '$char_type'(Char, Type)
+        ;   Type = graphic, '$char_type'(Char, Type)
+        ;   Type = alpha, '$char_type'(Char, Type)
+        ;   Type = decimal_digit, '$char_type'(Char, Type)
+        ;   Type = alnum, '$char_type'(Char, Type)
+        ;   Type = meta, '$char_type'(Char, Type)
+        ;   Type = solo, '$char_type'(Char, Type)
+        ;   Type = prolog, '$char_type'(Char, Type)
+        ;   Type = alphabetic, '$char_type'(Char, Type)
+        ;   Type = whitespace, '$char_type'(Char, Type)
+        ;   Type = control, '$char_type'(Char, Type)
+        ;   Type = numeric, '$char_type'(Char, Type)
+        ;   Type = ascii, '$char_type'(Char, Type)
+        ;   Type = ascii_punctuation, '$char_type'(Char, Type)
+        ;   Type = ascii_graphic, '$char_type'(Char, Type)
+        )
+    ;   throw(error(type_error(in_character, Char), char_type/2))
     ).
 
 
