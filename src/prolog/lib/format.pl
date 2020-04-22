@@ -64,7 +64,8 @@
 
 :- module(format, [format_//2,
                    format/2,
-                   portray_clause/1
+                   portray_clause/1,
+                   listing/1
                   ]).
 
 :- use_module(library(dcgs)).
@@ -379,11 +380,10 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   We also provide a rudimentary version of portray_clause/1.
+   We also provide rudimentary versions of portray_clause/1 and listing/1.
 
-   In the eventual library organization, portray_clause/1
-   and related predicates (such as listing/1) may be placed
-   in their own dedicated library.
+   In the eventual library organization, portray_clause/1 and
+   related predicates may be placed in their own dedicated library.
 
    portray_clause/1 is useful for printing solutions in such a way
    that they can be read back with read/1.
@@ -491,3 +491,22 @@ a :-
 ?- portray_clause((A :- B)).
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+listing(PI) :-
+        nonvar(PI),
+        (   PI = Name/Arity0 ->
+            Arity = Arity0
+        ;   PI = Name//Arity0 ->
+            Arity is Arity0 + 2
+        ;   throw(error(type_error(predicate_indicator, PI), listing/1))
+        ),
+        functor(Head, Name, Arity),
+        \+ \+ clause(Head, Body), % only true if there is at least one clause
+        (   clause(Head, Body),
+            (   Body == true ->
+                portray_clause(Head)
+            ;   portray_clause((Head :- Body))
+            ),
+            false
+        ;   true
+        ).
