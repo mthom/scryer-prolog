@@ -1,4 +1,4 @@
-:- module(charsio, [get_single_char/1,
+:- module(charsio, [char_type/2, get_single_char/1,
                     read_term_from_chars/2,
                     write_term_to_chars/3]).
 
@@ -54,6 +54,39 @@ extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
     ;  make_new_var_name(VarType, V, VarName, N, N1, VarList),
        NewVarList = [VarName = V | NewVarList0],
        extend_var_list_(Vs, N1, VarList, NewVarList0, VarType)
+    ).
+
+
+char_type(Char, Type) :-
+    (   var(Char) -> throw(error(instantiation_error, char_type/2))
+    ;   atom_length(Char, 1) ->
+        (   ground(Type) -> '$char_type'(Char, Type)
+        ;   Type = symbolic_control, '$char_type'(Char, Type)
+        ;   Type = layout, '$char_type'(Char, Type)
+        ;   Type = symbolic_hexadecimal, Char = x
+        ;   Type = octal_digit, '$char_type'(Char, Type)
+        ;   Type = binary_digit, '$char_type'(Char, Type)
+        ;   Type = hexadecimal_digit, '$char_type'(Char, Type)
+        ;   Type = exponent, '$char_type'(Char, Type)
+        ;   Type = sign, '$char_type'(Char, Type)
+        ;   Type = upper, '$char_type'(Char, Type)
+        ;   Type = lower, '$char_type'(Char, Type)
+        ;   Type = graphic, '$char_type'(Char, Type)
+        ;   Type = alpha, '$char_type'(Char, Type)
+        ;   Type = decimal_digit, '$char_type'(Char, Type)
+        ;   Type = alnum, '$char_type'(Char, Type)
+        ;   Type = meta, '$char_type'(Char, Type)
+        ;   Type = solo, '$char_type'(Char, Type)
+        ;   Type = prolog, '$char_type'(Char, Type)
+        ;   Type = alphabetic, '$char_type'(Char, Type)
+        ;   Type = whitespace, '$char_type'(Char, Type)
+        ;   Type = control, '$char_type'(Char, Type)
+        ;   Type = numeric, '$char_type'(Char, Type)
+        ;   Type = ascii, '$char_type'(Char, Type)
+        ;   Type = ascii_punctuation, '$char_type'(Char, Type)
+        ;   Type = ascii_graphic, '$char_type'(Char, Type)
+        )
+    ;   throw(error(type_error(in_character, Char), char_type/2))
     ).
 
 

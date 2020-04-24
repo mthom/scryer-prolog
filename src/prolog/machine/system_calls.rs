@@ -1337,6 +1337,96 @@ impl MachineState {
                     }
                 };
             }
+            &SystemClauseType::CharType => {
+                let a1 = self.store(self.deref(self[temp_v!(1)]));
+                let a2 = self.store(self.deref(self[temp_v!(2)]));
+
+                let c = match a1 {
+                    Addr::Char(c) => c,
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(name, _) = &self.heap[h] {
+                            name.as_str().chars().next().unwrap()
+                        }
+                        else {
+                            unreachable!()
+                        }
+                    }
+                    _ => unreachable!()
+                };
+                let chars = match a2 {
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(name, _) = &self.heap[h] {
+                            name.as_str().to_string()
+                        }
+                        else {
+                            unreachable!()
+                        }
+                    }
+                    Addr::Char(c) => {
+                        c.to_string()
+                    }
+                    _ => unreachable!()
+                };
+                self.fail = true; // This predicate fails by default.
+                macro_rules! macro_check {
+                    ($id:ident, $name:tt) => {
+                if $id!(c) && chars == $name {
+                    self.fail = false;
+
+                    return return_from_clause!(self.last_call, self);
+                }
+                    }
+                }
+                macro_rules! method_check {
+                    ($id:ident, $name:tt) => {
+                if c.$id() && chars == $name {
+                    self.fail = false;
+
+                    return return_from_clause!(self.last_call, self);
+                }
+                    }
+                }
+                macro_check!(symbolic_control_char, "symbolic_control");
+                // macro_check!(space_char, "space");
+                macro_check!(layout_char, "layout");
+                macro_check!(symbolic_hexadecimal_char, "symbolic_hexadecimal");
+                macro_check!(octal_digit_char, "octal_digit");
+                macro_check!(binary_digit_char, "binary_digit");
+                macro_check!(hexadecimal_digit_char, "hexadecimal_digit");
+                macro_check!(exponent_char, "exponent");
+                macro_check!(sign_char, "sign");
+                // macro_check!(new_line_char, "new_line");
+                // macro_check!(comment_1_char, "comment_1");
+                // macro_check!(comment_2_char, "comment_2");
+                // macro_check!(capital_letter_char, "upper");
+                // macro_check!(small_letter_char, "lower");
+                // macro_check!(variable_indicator_char, "variable_indicator");
+                macro_check!(graphic_char, "graphic");
+                macro_check!(graphic_token_char, "graphic_token");
+                macro_check!(alpha_char, "alpha");
+                macro_check!(decimal_digit_char, "decimal_digit");
+                // macro_check!(decimal_point_char, "decimal_point");
+                // macro_check!(alpha_numeric_char, "alnum");
+                // macro_check!(cut_char, "cut");
+                // macro_check!(semicolon_char, "semicolon");
+                // macro_check!(backslash_char, "backslash");
+                // macro_check!(single_quote_char, "single_quote");
+                // macro_check!(double_quote_char, "double_quote");
+                // macro_check!(back_quote_char, "back_quote");
+                macro_check!(meta_char, "meta");
+                macro_check!(solo_char, "solo");
+                macro_check!(prolog_char, "prolog");
+                method_check!(is_alphabetic, "alphabetic");
+                method_check!(is_lowercase, "lower");
+                method_check!(is_uppercase, "upper");
+                method_check!(is_whitespace, "whitespace");
+                method_check!(is_alphanumeric, "alnum");
+                method_check!(is_control, "control");
+                method_check!(is_numeric, "numeric");
+                method_check!(is_ascii, "ascii");
+                method_check!(is_ascii_punctuation, "ascii_ponctuaction");
+                method_check!(is_ascii_graphic, "ascii_graphic");
+            }
             &SystemClauseType::CheckCutPoint => {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
 
