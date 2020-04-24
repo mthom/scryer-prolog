@@ -867,22 +867,14 @@ impl MachineState {
 
         match n1 {
             Number::Fixnum(mut n) => {
-                //if n <= 0 {
-                //    // TODO
-                //    panic!();
-                //}
                 let mut lsb = 0;
-                while n & 1 != 1 {
+                while n & 1 != 1 && n != 0 {
                     n >>= 1;
                     lsb += 1;
                 }
                 Ok(Number::Fixnum(lsb))
             },
             Number::Integer(n1) => {
-                //if &*n1 <= &0 {
-                //    // TODO
-                //    panic!();
-                //}
                 let n2 = Integer::from(-&*n1);
                 let n3 = Integer::from(&*n1 & &n2);
                 Ok(Number::from(Integer::from(n3.significant_bits() - 1)))
@@ -904,23 +896,36 @@ impl MachineState {
 
         match n1 {
             Number::Fixnum(mut n) => {
-                //if n <= 0 {
-                //    // TODO
-                //    panic!();
-                //}
                 let mut msb = 0;
-                while n > 0 {
-                    n >>= 1;
-                    msb += 1;
+                if n == 0 {
+                    Ok(Number::Fixnum(msb))
                 }
-                Ok(Number::Fixnum(msb - 1))
+                else {
+                    if n < 0 {
+                        msb += 1; // Plus one for the sign.
+                        n = -n;
+                    }
+                    n >>= 1;
+                    while n > 0 {
+                        msb += 1;
+                        n >>= 1;
+                    }
+                    Ok(Number::Fixnum(msb))
+                }
             },
             Number::Integer(n1) => {
-                //if &*n1 <= &0 {
-                //    // TODO
-                //    panic!();
-                //}
-                Ok(Number::from(Integer::from(n1.significant_bits() - 1)))
+                if &*n1 == &0 {
+                    Ok(Number::Fixnum(0))
+                }
+                else {
+                    if &*n1 < &0 {
+                        // Plus one for the sign.
+                        Ok(Number::from(Integer::from(n1.significant_bits())))
+                    }
+                    else {
+                        Ok(Number::from(Integer::from(n1.significant_bits() - 1)))
+                    }
+                }
             },
             _ => Err(self.error_form(
                 MachineError::type_error(
