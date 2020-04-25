@@ -1583,7 +1583,7 @@ impl MachineState {
                         return Ok(());
                     }
                 };
-                let chars = buffer.trim().chars().map(|c| Addr::Char(c));
+                let chars = buffer.chars().map(|c| Addr::Char(c));
                 let char_list = Addr::HeapCell(self.heap.to_list(chars));
 
                 self.unify(char_list, a2);
