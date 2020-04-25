@@ -47,7 +47,7 @@ extend_var_list(Value, VarList, NewVarList, VarType) :-
     term_variables(Value, Vars),
     extend_var_list_(Vars, 0, VarList, NewVarList, VarType).
 
-extend_var_list_([], N, VarList, VarList, _).
+extend_var_list_([], _, VarList, VarList, _).
 extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
     (  var_list_contains_variable(VarList, V) ->
        extend_var_list_(Vs, N, VarList, NewVarList, VarType)
