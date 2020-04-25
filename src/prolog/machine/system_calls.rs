@@ -24,8 +24,9 @@ use indexmap::IndexSet;
 
 use std::cmp;
 use std::convert::TryFrom;
-use std::io::{stdout, Write};
+use std::io::{stdout, Read, Write};
 use std::iter::once;
+use std::fs::File;
 use std::rc::Rc;
 
 use std::time::Duration;
@@ -1518,6 +1519,74 @@ impl MachineState {
                         self.fail = true
                     }
                 };
+            }
+            &SystemClauseType::FileToChars => {
+                let a1 = self.store(self.deref(self[temp_v!(1)]));
+                let a2 = self.store(self.deref(self[temp_v!(2)]));
+
+                let file_name = match a1 {
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(name, _) = &self.heap[h] {
+                            name.as_str().to_string()
+                        }
+                        else {
+                            unreachable!()
+                        }
+                    }
+                    Addr::Char(c) => {
+                        c.to_string()
+                    }
+                    _ => unreachable!()
+                };
+                let name = clause_name!("$file_to_chars");
+                let mut file = match File::open(&file_name) {
+                    Ok(f) => f,
+                    Err(_e) => {
+                        let file_name_ = clause_name!(file_name.clone(),
+                            indices.atom_tbl.clone());
+                        let arity = 2;
+                        let stub = MachineError::functor_stub(name.clone(), arity);
+                        let h = self.heap.h();
+
+                        let err = MachineError::existence_error(
+                            h,
+                            ExistenceError::SourceSink(
+                                ModuleSource::File(file_name_)
+                            ),
+                        );
+                        let err = self.error_form(err, stub);
+
+                        self.throw_exception(err);
+                        return Ok(());
+                    }
+                };
+                let mut buffer = String::new();
+                let _ = match file.read_to_string(&mut buffer) {
+                    Ok(size) => size,
+                    Err(_e) => {
+                        // TODO: Distinguish the case/error.
+                        let file_name_ = clause_name!(file_name.clone(),
+                            indices.atom_tbl.clone());
+                        let arity = 2;
+                        let stub = MachineError::functor_stub(name.clone(), arity);
+                        let h = self.heap.h();
+
+                        let err = MachineError::existence_error(
+                            h,
+                            ExistenceError::SourceSink(
+                                ModuleSource::File(file_name_)
+                            ),
+                        );
+                        let err = self.error_form(err, stub);
+
+                        self.throw_exception(err);
+                        return Ok(());
+                    }
+                };
+                let chars = buffer.chars().map(|c| Addr::Char(c));
+                let char_list = Addr::HeapCell(self.heap.to_list(chars));
+
+                self.unify(char_list, a2);
             }
             &SystemClauseType::GetChar => {
                 let mut iter = parsing_stream(current_input_stream.clone());

@@ -178,6 +178,7 @@ pub enum SystemClauseType {
     ExpandTerm,
     FetchGlobalVar,
     FetchGlobalVarWithOffset,
+    FileToChars,
     GetChar,
     GetSingleChar,
     ResetAttrVarState,
@@ -312,6 +313,7 @@ impl SystemClauseType {
             &SystemClauseType::FetchGlobalVarWithOffset => {
                 clause_name!("$fetch_global_var_with_offset")
             }
+            &SystemClauseType::FileToChars => clause_name!("$file_to_chars"),
             &SystemClauseType::GetChar => clause_name!("$get_char"),
             &SystemClauseType::GetSingleChar => clause_name!("$get_single_char"),
             &SystemClauseType::ResetAttrVarState => clause_name!("$reset_attr_var_state"),
@@ -461,6 +463,7 @@ impl SystemClauseType {
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
+            ("$file_to_chars", 2) => Some(SystemClauseType::FileToChars),
             ("$get_char", 1) => Some(SystemClauseType::GetChar),
             ("$get_single_char", 1) => Some(SystemClauseType::GetSingleChar),
             ("$points_to_cont_reset_marker", 1) => {
