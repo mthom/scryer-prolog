@@ -308,6 +308,12 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   `time/1` reports the CPU&nbsp;time of a goal. It is useful
   for measuring the performance of your code.
 
+To read contents of external files, use `phrase_from_file/2` from
+[`library(pio)`](src/prolog/lib/pio.pl) to apply a&nbsp;DCG to
+file&nbsp;contents. The predicates in
+[`library(charsio)`](src/prolog/lib/charsio.pl) are also useful for
+parsing.
+
 To use predicates provided by the `lists` library, write:
 
 ```
