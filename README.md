@@ -343,7 +343,6 @@ REPL:
 
 ```
 ?- [user].
-(type Enter + Ctrl-D to terminate the stream when finished)
 :- module(test, [local_member/2]).
 :- use_module(library(lists)).
 
