@@ -17,12 +17,14 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::vec::Vec;
 
+#[derive(Debug)]
 pub struct CodeGenerator<TermMarker> {
     marker: TermMarker,
     pub var_count: IndexMap<Rc<Var>, usize>,
     non_counted_bt: bool,
 }
 
+#[derive(Debug)]
 pub struct ConjunctInfo<'a> {
     pub perm_vs: VariableFixtures<'a>,
     pub num_of_chunks: usize,

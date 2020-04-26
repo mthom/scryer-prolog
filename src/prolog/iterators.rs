@@ -6,11 +6,12 @@ use crate::prolog::machine::machine_indices::*;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
+use std::fmt;
 use std::iter::*;
 use std::rc::Rc;
 use std::vec::Vec;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum TermRef<'a> {
     AnonVar(Level),
     Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
@@ -33,6 +34,7 @@ impl<'a> TermRef<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum TermIterState<'a> {
     AnonVar(Level),
     Constant(Level, &'a Cell<RegType>, &'a Constant),
@@ -124,6 +126,7 @@ impl<'a> TermIterState<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct QueryIterator<'a> {
     state_stack: Vec<TermIterState<'a>>,
 }
@@ -294,6 +297,7 @@ impl<'a> Iterator for QueryIterator<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct FactIterator<'a> {
     state_queue: VecDeque<TermIterState<'a>>,
     iterable_root: bool,
@@ -402,6 +406,7 @@ pub fn breadth_first_iter(term: &Term, iterable_root: bool) -> FactIterator {
     FactIterator::new(term, iterable_root)
 }
 
+#[derive(Debug)]
 pub enum ChunkedTerm<'a> {
     HeadClause(ClauseName, &'a Vec<Box<Term>>),
     BodyTerm(&'a QueryTerm),
@@ -437,6 +442,18 @@ pub struct ChunkedIterator<'a> {
     iter: Box<dyn Iterator<Item = ChunkedTerm<'a>> + 'a>,
     deep_cut_encountered: bool,
     cut_var_in_head: bool,
+}
+
+impl<'a> fmt::Debug for ChunkedIterator<'a> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("ChunkedIterator")
+            .field("chunk_num", &self.chunk_num)
+            // Hacky solution.
+            .field("iter", &"Box<dyn Iterator<Item = ChunkedTerm<'a>> + 'a>")
+            .field("deep_cut_encountered", &self.deep_cut_encountered)
+            .field("cut_var_in_head", &self.cut_var_in_head)
+            .finish()
+    }
 }
 
 type ChunkedIteratorItem<'a> = (usize, usize, Vec<ChunkedTerm<'a>>);

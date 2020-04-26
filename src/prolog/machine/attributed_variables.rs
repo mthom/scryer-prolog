@@ -8,6 +8,7 @@ pub static PROJECT_ATTRS: &str = include_str!("project_attributes.pl");
 
 pub(super) type Bindings = Vec<(usize, Addr)>;
 
+#[derive(Debug)]
 pub(super) struct AttrVarInitializer {
     pub(super) attribute_goals: Vec<Addr>,
     pub(super) attr_var_queue: Vec<usize>,

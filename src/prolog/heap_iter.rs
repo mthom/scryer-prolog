@@ -7,6 +7,7 @@ use std::cmp::Ordering;
 use std::ops::Deref;
 use std::vec::Vec;
 
+#[derive(Debug)]
 pub struct HCPreOrderIterator<'a> {
     pub machine_st: &'a MachineState,
     pub state_stack: Vec<Addr>,
@@ -127,6 +128,7 @@ pub trait MutStackHCIterator<'b> where Self: Iterator
     fn stack(&'b mut self) -> Self::MutStack;
 }
 
+#[derive(Debug)]
 pub struct HCPostOrderIterator<'a> {
     base_iter: HCPreOrderIterator<'a>,
     parent_stack: Vec<(usize, Addr)>, // number of children, parent node.
@@ -229,6 +231,7 @@ impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCPreOrderIterator<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct HCAcyclicIterator<'a> {
     iter: HCPreOrderIterator<'a>,
     seen: IndexSet<Addr>,
@@ -269,6 +272,7 @@ impl<'a> Iterator for HCAcyclicIterator<'a>
     }
 }
 
+#[derive(Debug)]
 pub struct HCZippedAcyclicIterator<'a> {
     i1: HCPreOrderIterator<'a>,
     i2: HCPreOrderIterator<'a>,

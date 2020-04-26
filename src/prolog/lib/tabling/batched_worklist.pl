@@ -291,7 +291,7 @@ wkl_add_to_existing_answer_cluster(Worklist, Answer) :-
 wkl_add_to_new_answer_cluster(
     wkl_worklist(Dll,_Ria,_FlagExecutingWork,_AlreadyInMetaworklist,_TableIdentifier),
     Answer,AnswerClusterPointer
-) :-  
+) :-
     dll_append_left(Dll,wkl_answer_cluster(AnswerFlag),AnswerClusterPointer),
     put_atts(AnswerFlag, wkl_answer_cluster([Answer])).
 

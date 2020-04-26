@@ -61,6 +61,7 @@ pub fn get_single_char() -> char {
     c
 }
 
+#[derive(Debug)]
 struct BrentAlgState {
     hare: Addr,
     tortoise: Addr,

@@ -35,6 +35,7 @@ pub mod readline {
         }
     }
 
+    #[derive(Debug)]
     pub struct ReadlineStream {
         rl: Editor<()>,
         pending_input: Cursor<String>,
@@ -114,12 +115,14 @@ fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteRe
     term_writer.write_term_to_heap(term)
 }
 
+#[derive(Debug)]
 struct TermWriter<'a> {
     machine_st: &'a mut MachineState,
     queue: SubtermDeque,
     var_dict: HeapVarDict,
 }
 
+#[derive(Debug)]
 pub struct TermWriteResult {
     pub(crate) heap_loc: usize,
     pub(crate) var_dict: HeapVarDict,

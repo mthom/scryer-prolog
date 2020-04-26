@@ -53,6 +53,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 
+#[derive(Debug)]
 pub struct MachinePolicies {
     call_policy: Box<dyn CallPolicy>,
     cut_policy: Box<dyn CutPolicy>,
@@ -79,6 +80,7 @@ impl Default for MachinePolicies {
     }
 }
 
+#[derive(Debug)]
 pub struct Machine {
     pub(super) machine_st: MachineState,
     pub(super) inner_heap: Heap,

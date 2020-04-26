@@ -22,7 +22,7 @@ pub type PredicateKey = (ClauseName, usize); // name, arity.
 // of vars (we get their adjoining cells this way).
 pub type JumpStub = Vec<Term>;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum TopLevel {
     Declaration(Declaration),
     Fact(Term, usize, usize), // Term, line_num, col_num
@@ -42,7 +42,7 @@ impl TopLevel {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Level {
     Deep,
     Root,
@@ -58,7 +58,7 @@ impl Level {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum QueryTerm {
     // register, clause type, subterms, use default call policy.
     Clause(Cell<RegType>, ClauseType, Vec<Box<Term>>, bool),
@@ -86,13 +86,13 @@ impl QueryTerm {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Rule {
     pub head: (ClauseName, Vec<Box<Term>>, QueryTerm),
     pub clauses: Vec<QueryTerm>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Predicate(pub Vec<PredicateClause>);
 
 impl Predicate {
@@ -114,7 +114,7 @@ impl Predicate {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ListingSource {
     File(ClauseName, PathBuf), // filename, path
     User,
@@ -326,7 +326,7 @@ impl ClauseConsistency for Predicate {
 
 pub type CompiledResult = (Predicate, VecDeque<TopLevel>);
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum PredicateClause {
     Fact(Term, usize, usize), // Term, line number, column number.
     Rule(Rule, usize, usize), // Term, line number, column number.
@@ -371,7 +371,7 @@ impl PredicateClause {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ModuleSource {
     Library(ClauseName),
     File(ClauseName),
@@ -392,13 +392,13 @@ impl ModuleSource {
 
 pub type ScopedPredicateKey = (ClauseName, PredicateKey); // module name, predicate indicator.
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum MultiFileIndicator {
     LocalScoped(ClauseName, usize), // name, arity
     ModuleScoped(ScopedPredicateKey),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Declaration {
     Dynamic(ClauseName, usize), // name, arity
     EndOfFile,
@@ -433,7 +433,7 @@ impl Declaration {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct OpDecl(pub usize, pub Specifier, pub ClauseName);
 
 impl OpDecl {
@@ -558,18 +558,19 @@ pub fn fetch_op_spec(
 
 pub type ModuleDir = IndexMap<ClauseName, Module>;
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ModuleExport {
     OpDecl(OpDecl),
     PredicateKey(PredicateKey),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ModuleDecl {
     pub name: ClauseName,
     pub exports: Vec<ModuleExport>,
 }
 
+#[derive(Debug)]
 pub struct Module {
     pub atom_tbl: TabledData<Atom>,
     pub module_decl: ModuleDecl,
@@ -587,7 +588,7 @@ pub struct Module {
     pub listing_src: ListingSource,
  }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Number {
     Float(OrderedFloat<f64>),
     Integer(Rc<Integer>),

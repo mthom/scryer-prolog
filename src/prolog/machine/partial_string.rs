@@ -7,6 +7,7 @@ use std::ops::RangeFrom;
 use std::slice;
 use std::str;
 
+#[derive(Debug)]
 pub struct PartialString {
     buf: *const u8,
     len: usize,
@@ -46,6 +47,7 @@ fn scan_for_terminator<Iter: Iterator<Item = char>>(iter: Iter) -> usize {
     terminator_idx
 }
 
+#[derive(Debug)]
 pub struct PStrIter {
     buf: *const u8,
     len: usize,

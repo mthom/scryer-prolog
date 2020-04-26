@@ -14,6 +14,7 @@ use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
+use std::fmt;
 use std::mem;
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -23,6 +24,15 @@ enum IndexSource<'a, T> {
     Local(&'a mut T)
 }
 
+impl<'a, T: fmt::Debug> fmt::Debug for IndexSource<'a, T> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            IndexSource::TermStream => write!(fmt, "TermStream"),
+            IndexSource::Local(ref local) => write!(fmt, "Local({:?})", local),
+        }
+    }
+}
+
 fn op_dir<'a, 'b: 'a>(from: &'b IndexSource<'a, IndexStore>) -> RefOrOwned<'a, OpDir> {
     match from {
         IndexSource::TermStream => RefOrOwned::Owned(OpDir::new()),
@@ -30,6 +40,7 @@ fn op_dir<'a, 'b: 'a>(from: &'b IndexSource<'a, IndexStore>) -> RefOrOwned<'a, O
     }
 }
 
+#[derive(Debug)]
 struct CompositeIndices<'a, 'b, 'c> {
     term_stream: &'b mut TermStream<'a>,
     index_src: IndexSource<'c, IndexStore>,
@@ -690,6 +701,7 @@ fn setup_declaration<'a, 'b, 'c>(
     }
 }
 
+#[derive(Debug)]
 struct RelationWorker {
     flags: MachineFlags,
     dynamic_clauses: Vec<(Term, Term)>, // Head, Body.
@@ -1141,6 +1153,7 @@ pub type DynamicClause = Vec<(Term, Term)>;
 
 pub type DynamicClauseMap = IndexMap<(ClauseName, usize), DynamicClause>;
 
+#[derive(Debug)]
 pub struct TopLevelBatchWorker<'a> {
     pub(crate) term_stream: TermStream<'a>,
     rel_worker: RelationWorker,
