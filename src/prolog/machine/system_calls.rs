@@ -1522,6 +1522,8 @@ impl MachineState {
                 };
             }
             &SystemClauseType::FileToChars => {
+                // TODO: Replace this with stream.
+                use std::io;
                 let a1 = self.store(self.deref(self[temp_v!(1)]));
                 let a2 = self.store(self.deref(self[temp_v!(2)]));
 
@@ -1542,50 +1544,64 @@ impl MachineState {
                 let name = clause_name!("$file_to_chars");
                 let mut file = match File::open(&file_name) {
                     Ok(f) => f,
-                    Err(_e) => {
+                    Err(e) => {
                         let file_name_ = clause_name!(file_name.clone(),
                             indices.atom_tbl.clone());
                         let arity = 2;
                         let stub = MachineError::functor_stub(name.clone(), arity);
                         let h = self.heap.h();
+                        let err = match e.kind() {
+                            io::ErrorKind::NotFound => {
+                                MachineError::existence_error(
+                                    h,
+                                    ExistenceError::SourceSink(
+                                        ModuleSource::File(file_name_)
+                                    ),
+                                )
+                            }
+                            io::ErrorKind::PermissionDenied => {
+                                let stub = MachineError::functor_stub(
+                                    name.clone(),
+                                    arity
+                                );
+                                let source_sink = self.store(self.deref(a1));
+                                MachineError::permission_error(
+                                    h,
+                                    Permission::Access,
+                                    "source_sink",
+                                    source_sink
+                                )
+                            }
+                            _ => unreachable!()  // Not nice.
+                        };
 
-                        let err = MachineError::existence_error(
-                            h,
-                            ExistenceError::SourceSink(
-                                ModuleSource::File(file_name_)
-                            ),
-                        );
                         let err = self.error_form(err, stub);
 
                         self.throw_exception(err);
                         return Ok(());
                     }
                 };
-                let mut buffer = String::new();
-                let _ = match file.read_to_string(&mut buffer) {
-                    Ok(size) => size,
-                    Err(_e) => {
-                        // TODO: Distinguish the case/error.
-                        let file_name_ = clause_name!(file_name.clone(),
-                            indices.atom_tbl.clone());
-                        let arity = 2;
-                        let stub = MachineError::functor_stub(name.clone(), arity);
-                        let h = self.heap.h();
-
-                        let err = MachineError::existence_error(
-                            h,
-                            ExistenceError::SourceSink(
-                                ModuleSource::File(file_name_)
-                            ),
-                        );
-                        let err = self.error_form(err, stub);
-
-                        self.throw_exception(err);
-                        return Ok(());
+                let char_list = {
+                    let mut buffer = String::new();
+                    match file.read_to_string(&mut buffer) {
+                        Ok(_size) => {
+                            let chars = buffer.chars().map(|c| Addr::Char(c));
+                            Addr::HeapCell(self.heap.to_list(chars))
+                        }
+                        Err(_e) => {
+                            // This case if the data isn't UTF-8 valid.
+                            let mut buffer = Vec::new();
+                            let _ = match file.read_to_end(&mut buffer) {
+                                Ok(size) => size,
+                                Err(_e) => unreachable!()
+                            };
+                            let chars = buffer
+                                .into_iter()
+                                .map(|b| Addr::Char(b as char));
+                            Addr::HeapCell(self.heap.to_list(chars))
+                        }
                     }
                 };
-                let chars = buffer.chars().map(|c| Addr::Char(c));
-                let char_list = Addr::HeapCell(self.heap.to_list(chars));
 
                 self.unify(char_list, a2);
             }
