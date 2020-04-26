@@ -23,6 +23,7 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::rc::Rc;
 use std::vec::Vec;
 
+#[derive(Debug)]
 pub struct ArithInstructionIterator<'a> {
     state_stack: Vec<TermIterState<'a>>,
 }
@@ -68,6 +69,7 @@ impl<'a> ArithInstructionIterator<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum ArithTermRef<'a> {
     Constant(&'a Constant),
     Op(ClauseName, usize), // name, arity.
@@ -109,6 +111,7 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct ArithmeticEvaluator<'a> {
     bindings: &'a AllocVarDict,
     interm: Vec<ArithmeticTerm>,

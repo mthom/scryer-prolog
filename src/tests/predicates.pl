@@ -33,6 +33,6 @@ test_queries_on_predicates :-
     assertz((p(X, Y) :- q(Z), p(X, X))),
     once(p(X,b)),
     retract((p(X, Y) :- q(Z), p(X, X))),
-    retract(q(z)).    
+    retract(q(z)).
 
 :- initialization(test_queries_on_predicates).

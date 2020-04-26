@@ -30,7 +30,7 @@ valid_time([H1,H2,M1,M2], T) :-
     memberd_t(H2, [0,1,2,3,4,5,6,7,8,9], TH2),
     memberd_t(M1, [0,1,2,3,4,5], TM1),
     memberd_t(M2, [0,1,2,3,4,5,6,7,8,9], TM2),
-    (  maplist(=(true), [TH1, TH2, TM1, TM2]) ->       
+    (  maplist(=(true), [TH1, TH2, TM1, TM2]) ->
        (  H1 =:= 2 ->
 	  (  H2 =< 3 ->
 	     T = true

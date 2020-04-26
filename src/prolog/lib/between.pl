@@ -9,7 +9,7 @@ between(Lower, Upper, X) :-
     must_be(integer, Lower),
     must_be(integer, Upper),
     can_be(integer, X),
-    between_(Lower, Upper, X). 
+    between_(Lower, Upper, X).
 
 between_(Lower, Upper, Lower) :-
     Lower =< Upper.

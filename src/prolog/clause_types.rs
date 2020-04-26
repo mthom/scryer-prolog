@@ -8,7 +8,7 @@ use ref_thread_local::RefThreadLocal;
 
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum CompareNumberQT {
     GreaterThan,
     LessThan,
@@ -31,7 +31,7 @@ impl CompareNumberQT {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompareTermQT {
     LessThan,
     LessThanOrEqual,
@@ -50,7 +50,7 @@ impl CompareTermQT {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArithmeticTerm {
     Reg(RegType),
     Interm(usize),
@@ -67,7 +67,7 @@ impl ArithmeticTerm {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum InlinedClauseType {
     CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
     IsAtom(RegType),
@@ -145,7 +145,7 @@ impl InlinedClauseType {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum SystemClauseType {
     AbolishClause,
     AbolishModuleClause,
@@ -557,7 +557,7 @@ impl SystemClauseType {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum BuiltInClauseType {
     AcyclicTerm,
     Arg,
@@ -575,7 +575,7 @@ pub enum BuiltInClauseType {
     Sort,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClauseType {
     BuiltIn(BuiltInClauseType),
     CallN,

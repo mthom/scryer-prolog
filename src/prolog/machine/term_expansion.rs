@@ -47,6 +47,7 @@ fn extract_from_list(
     }
 }
 
+#[derive(Debug)]
 pub struct TermStream<'a> {
     stack: Vec<Term>,
     pub(crate) wam: &'a mut Machine,
@@ -57,6 +58,7 @@ pub struct TermStream<'a> {
     top_level_terms: Vec<(Term, usize, usize)>, // term, line_num, col_num.
 }
 
+#[derive(Debug)]
 pub struct ExpansionAdditionResult {
     term_expansion_additions: (Predicate, VecDeque<TopLevel>),
     goal_expansion_additions: (Predicate, VecDeque<TopLevel>),

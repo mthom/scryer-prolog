@@ -21,16 +21,17 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, VecDeque};
 use std::convert::TryFrom;
+use std::fmt;
 use std::mem;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::rc::Rc;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OrderedOpDirKey(pub ClauseName, pub Fixity);
 
 pub type OssifiedOpDir = BTreeMap<OrderedOpDirKey, (usize, Specifier)>;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DBRef {
     NamedPred(ClauseName, usize, Option<SharedOpDesc>),
     Op(
@@ -43,7 +44,7 @@ pub enum DBRef {
 }
 
 // 7.2
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TermOrderCategory {
     Variable,
     FloatingPoint,
@@ -52,7 +53,7 @@ pub enum TermOrderCategory {
     Compound,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Addr {
     AttrVar(usize),
     Char(char),
@@ -71,7 +72,7 @@ pub enum Addr {
     Usize(usize),
 }
 
-#[derive(Clone, Copy, Hash, Eq, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd)]
 pub enum Ref {
     AttrVar(usize),
     HeapCell(usize),
@@ -361,7 +362,7 @@ impl SubAssign<usize> for Addr {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum TrailRef {
     Ref(Ref),
     AttrVarHeapLink(usize),
@@ -374,6 +375,7 @@ impl From<Ref> for TrailRef {
     }
 }
 
+#[derive(Debug)]
 pub enum HeapCellValue {
     Addr(Addr),
     Atom(ClauseName, Option<SharedOpDesc>),
@@ -446,7 +448,7 @@ impl From<Addr> for HeapCellValue {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexPtr {
     DynamicUndefined, // a predicate, declared as dynamic, whose location in code is as yet undefined.
     Undefined,
@@ -456,7 +458,7 @@ pub enum IndexPtr {
     UserTermExpansion
 }
 
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct CodeIndex(pub Rc<RefCell<(IndexPtr, ClauseName)>>);
 
 impl CodeIndex {
@@ -511,7 +513,7 @@ impl From<(usize, ClauseName)> for CodeIndex {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DynamicAssertPlace {
     Back,
     Front,
@@ -535,7 +537,7 @@ impl DynamicAssertPlace {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DynamicTransactionType {
     Abolish,
     Assert(DynamicAssertPlace),
@@ -545,7 +547,7 @@ pub enum DynamicTransactionType {
     Retract, // dynamic index of the clause to remove.
 }
 
-#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum REPLCodePtr {
     CompileBatch,
     UseModule,
@@ -554,7 +556,7 @@ pub enum REPLCodePtr {
     UseQualifiedModuleFromFile
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
     CallN(usize, LocalCodePtr, bool),               // arity, local, last call.
@@ -773,7 +775,7 @@ impl AddAssign<usize> for CodePtr {
 pub type HeapVarDict = IndexMap<Rc<Var>, Addr>;
 pub type AllocVarDict = IndexMap<Rc<Var>, VarData>;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct DynamicPredicateInfo {
     pub(super) clauses_subsection_p: usize, // a LocalCodePtr::DirEntry value.
 }
@@ -793,6 +795,7 @@ pub type DynamicCodeDir = IndexMap<(ClauseName, ClauseName, usize), DynamicPredi
 
 pub type GlobalVarDir = IndexMap<ClauseName, (Ball, Option<usize>)>;
 
+#[derive(Debug)]
 pub(crate) struct ModuleStub {
     pub(crate) atom_tbl: TabledData<Atom>,
     pub(crate) in_situ_code_dir: InSituCodeDir,
@@ -810,6 +813,7 @@ impl ModuleStub {
 pub(crate) type ModuleStubDir = IndexMap<ClauseName, ModuleStub>;
 pub(crate) type StreamAliasDir = IndexMap<ClauseName, Stream>;
 
+#[derive(Debug)]
 pub struct IndexStore {
     pub(super) atom_tbl: TabledData<Atom>,
     pub(super) code_dir: CodeDir,
@@ -960,6 +964,7 @@ impl IndexStore {
 pub type CodeDir = BTreeMap<PredicateKey, CodeIndex>;
 pub type TermDir = IndexMap<PredicateKey, (Predicate, VecDeque<TopLevel>)>;
 
+#[derive(Debug)]
 pub struct TermDirQuantumEntry {
     pub old_terms: (Predicate, VecDeque<TopLevel>),
     pub new_terms: (Predicate, VecDeque<TopLevel>),
@@ -988,6 +993,7 @@ impl TermDirQuantumEntry {
     }
 }
 
+#[derive(Debug)]
 pub struct TermDirQuantum(IndexMap<PredicateKey, TermDirQuantumEntry>);
 
 impl TermDirQuantum {
@@ -1031,7 +1037,7 @@ impl TermDirQuantum {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 pub enum CompileTimeHook {
     GoalExpansion,
     TermExpansion,
@@ -1083,6 +1089,16 @@ impl CompileTimeHook {
 pub enum RefOrOwned<'a, T: 'a> {
     Borrowed(&'a T),
     Owned(T),
+}
+
+impl<'a, T: 'a + fmt::Debug> fmt::Debug for RefOrOwned<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &RefOrOwned::Borrowed(ref borrowed) =>
+                write!(f, "Borrowed({:?})", borrowed),
+            &RefOrOwned::Owned(ref owned) => write!(f, "Owned({:?})", owned),
+        }
+    }
 }
 
 impl<'a, T> RefOrOwned<'a, T> {

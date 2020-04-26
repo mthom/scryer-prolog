@@ -13,6 +13,7 @@ use std::rc::Rc;
 use std::vec::Vec;
 
 // labeled with chunk numbers.
+#[derive(Debug)]
 pub enum VarStatus {
     Perm(usize),
     Temp(usize, TempVarData), // Perm(chunk_num) | Temp(chunk_num, _)
@@ -22,6 +23,7 @@ pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
 
 // Perm: 0 initially, a stack register once processed.
 // Temp: labeled with chunk_num and temp offset (unassigned if 0).
+#[derive(Debug)]
 pub enum VarData {
     Perm(usize),
     Temp(usize, usize, TempVarData),
@@ -36,6 +38,7 @@ impl VarData {
     }
 }
 
+#[derive(Debug)]
 pub struct TempVarData {
     pub last_term_arity: usize,
     pub use_set: OccurrenceSet,
@@ -79,6 +82,7 @@ impl TempVarData {
 
 type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
 
+#[derive(Debug)]
 pub struct VariableFixtures<'a>{
     perm_vars: IndexMap<Rc<Var>, VariableFixture<'a>>,
     last_chunk_temp_vars: IndexSet<Rc<Var>>
@@ -248,6 +252,7 @@ impl<'a> VariableFixtures<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct UnsafeVarMarker {
     pub unsafe_vars: IndexMap<RegType, usize>,
     pub safe_vars: IndexSet<RegType>,

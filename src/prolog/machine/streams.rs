@@ -11,13 +11,13 @@ use std::hash::{Hash, Hasher};
 use std::net::TcpStream;
 use std::rc::Rc;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StreamType {
     Binary,
     Text,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EOFAction {
     EOFCode,
     Error,
@@ -37,7 +37,26 @@ pub enum StreamInstance {
     TcpStream(TcpStream),
 }
 
-#[derive(Clone)]
+impl fmt::Debug for StreamInstance {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &StreamInstance::Bytes(ref bytes) =>
+                write!(fmt, "Bytes({:?})", bytes),
+            &StreamInstance::DynReadSource(_) =>
+                write!(fmt, "DynReadSource(_)"),  // Hacky solution.
+            &StreamInstance::File(ref file) => write!(fmt, "File({:?})", file),
+            &StreamInstance::Null => write!(fmt, "Null"),
+            &StreamInstance::ReadlineStream(ref readline_stream) =>
+                write!(fmt, "ReadlineStream({:?})", readline_stream),
+            &StreamInstance::Stdin => write!(fmt, "Stdin"),
+            &StreamInstance::Stdout => write!(fmt, "Stdout"),
+            &StreamInstance::TcpStream(ref tcp_stream) =>
+                write!(fmt, "TcpStream({:?})", tcp_stream),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 struct WrappedStreamInstance(Rc<RefCell<StreamInstance>>);
 
 impl WrappedStreamInstance {
@@ -95,7 +114,7 @@ impl fmt::Display for StreamError {
 
 impl Error for StreamError {}
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StreamOptions {
     pub stream_type: StreamType,
     pub reposition: bool,
@@ -115,7 +134,7 @@ impl Default for StreamOptions {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Stream {
     pub options: StreamOptions,
     stream_inst: WrappedStreamInstance,

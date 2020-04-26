@@ -45,6 +45,7 @@ impl ArithmeticTerm {
     }
 }
 
+#[derive(Debug)]
 pub enum ChoiceInstruction {
     DefaultRetryMeElse(usize),
     DefaultTrustMe,
@@ -75,6 +76,7 @@ impl ChoiceInstruction {
     }
 }
 
+#[derive(Debug)]
 pub enum CutInstruction {
     Cut(RegType),
     GetLevel(RegType),
@@ -104,6 +106,7 @@ impl CutInstruction {
     }
 }
 
+#[derive(Debug)]
 pub enum IndexedChoiceInstruction {
     Retry(usize),
     Trust(usize),
@@ -140,6 +143,7 @@ impl IndexedChoiceInstruction {
     }
 }
 
+#[derive(Debug)]
 pub enum Line {
     Arithmetic(ArithmeticInstruction),
     Choice(ChoiceInstruction),
@@ -175,7 +179,7 @@ impl Line {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ArithmeticInstruction {
     Add(ArithmeticTerm, ArithmeticTerm, usize),
     Sub(ArithmeticTerm, ArithmeticTerm, usize),
@@ -374,6 +378,7 @@ impl ArithmeticInstruction {
     }
 }
 
+#[derive(Debug)]
 pub enum ControlInstruction {
     Allocate(usize), // num_frames.
     // name, arity, perm_vars after threshold, last call, use default call policy.
@@ -419,6 +424,7 @@ impl ControlInstruction {
     }
 }
 
+#[derive(Debug)]
 pub enum IndexingInstruction {
     SwitchOnTerm(usize, usize, usize, usize),
     SwitchOnConstant(usize, IndexMap<Constant, usize>),
@@ -459,7 +465,7 @@ impl IndexingInstruction {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum FactInstruction {
     GetConstant(Level, Constant, RegType),
     GetList(Level, RegType),
@@ -571,7 +577,7 @@ impl FactInstruction {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum QueryInstruction {
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),

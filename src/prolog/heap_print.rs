@@ -18,7 +18,7 @@ use std::ops::{Range, RangeFrom};
 use std::rc::Rc;
 
 /* contains the location, name, precision and Specifier of the parent op. */
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum DirectedOp {
     Left(ClauseName, SharedOpDesc),
     Right(ClauseName, SharedOpDesc),
@@ -162,7 +162,7 @@ fn char_to_string(is_quoted: bool, c: char) -> String {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum TokenOrRedirect {
     Atom(ClauseName),
     BarAsOp,
@@ -197,6 +197,7 @@ pub trait HCValueOutputter {
     fn range_from(&self, range: RangeFrom<usize>) -> &str;
 }
 
+#[derive(Debug)]
 pub struct PrinterOutputter {
     contents: String,
 }
@@ -335,6 +336,7 @@ impl MachineState {
 
 type ReverseHeapVarDict = IndexMap<Addr, Rc<Var>>;
 
+#[derive(Debug)]
 pub struct HCPrinter<'a, Outputter> {
     outputter: Outputter,
     machine_st: &'a MachineState,

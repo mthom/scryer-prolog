@@ -409,6 +409,7 @@ fn compile_into_module_impl(
     Ok(compiler.drop_expansions(&mut wam.code_repo))
 }
 
+#[derive(Debug)]
 pub struct GatherResult {
     dynamic_clause_map: DynamicClauseMap,
     pub(crate) worker_results: Vec<PredicateCompileQueue>,
@@ -423,6 +424,7 @@ pub struct GatherResult {
     in_situ_module_dir: ModuleStubDir,
 }
 
+#[derive(Debug)]
 pub struct ClauseCodeGenerator {
     len_offset: usize,
     code: Code,
@@ -529,6 +531,7 @@ fn insert_or_refresh_term_dir_quantum(
     }
 }
 
+#[derive(Debug)]
 pub struct ListingCompiler {
     module: Option<Module>,
     user_term_dir: TermDir,
