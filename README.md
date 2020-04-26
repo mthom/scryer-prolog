@@ -239,6 +239,40 @@ only the standard predicate&nbsp;`(=)/2` is used.
 Definite clause grammars as provided by `library(dcgs)` are ideally
 suited for reasoning about strings.
 
+### Tabling (SLG resolution)
+
+One of the foremost attractions of Prolog is that logical consequences
+of pure&nbsp;programs can be derived by various execution strategies
+that differ regarding essential properties such as termination,
+completeness and efficiency.
+
+The default execution strategy of Prolog is depth-first search with
+chronological backtracking. This strategy is very efficient. Its main
+drawback is that it is *incomplete*: It may fail to find any solution
+even if one exists.
+
+Scryer Prolog supports an alternative execution strategy which is
+called *tabling* and also known as tabled&nbsp;execution and
+SLG&nbsp;resolution. To enable tabled execution for a predicate, use
+[`library(tabling)`](src/prolog/lib/tabling.pl) and add a `(table)/1`
+directive for the desired predicate indicator. For example, if we
+write:
+
+```
+:- use_module(library(tabling)).
+:- table a/0.
+
+a :- a.
+```
+
+Then the query `?- a.` *terminates* (and fails), whereas it
+does&nbsp;not terminate with the default execution strategy.
+
+Scryer Prolog implements tabling via *delimited continuations* as
+described in [*Tabling as a Library with Delimited
+Control*](https://biblio.ugent.be/publication/6880648/file/6885145.pdf)
+by Desouter&nbsp;et.&nbsp;al.
+
 ### Modules
 
 Scryer has a simple predicate-based module system. It provides a
