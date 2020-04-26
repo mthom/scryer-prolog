@@ -4,10 +4,10 @@
 %% ?- use_module(library(iso_ext)).
 
 :- module(iso_ext, [bb_b_put/2, bb_get/2, bb_put/2, call_cleanup/2,
-		            call_with_inference_limit/3, forall/2, maybe/0,
-		            partial_string/1, partial_string/3,
-		            partial_string_tail/2, set_random/1,
-		            setup_call_cleanup/3, variant/2]).
+                    call_with_inference_limit/3, forall/2,
+                    partial_string/1, partial_string/3,
+                    partial_string_tail/2, setup_call_cleanup/3,
+                    variant/2]).
 
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
@@ -22,9 +22,9 @@ bb_put(Key, _) :- throw(error(type_error(atom, Key), bb_put/2)).
 bb_b_put(Key, NewValue) :-
     (  '$bb_get_with_offset'(Key, OldValue, OldOffset) ->
        call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
-		            reset_global_var_at_offset(Key, OldValue, OldOffset))
+                    reset_global_var_at_offset(Key, OldValue, OldOffset))
     ;  call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
-		            reset_global_var_at_key(Key))
+                    reset_global_var_at_key(Key))
     ).
 
 store_global_var_with_offset(Key, Value) :- '$store_global_var_with_offset'(Key, Value).
@@ -144,27 +144,12 @@ call_with_inference_limit(_, _, R, Bb, B) :-
 
 variant(X, Y) :- '$variant'(X, Y).
 
-% succeeds with probability 0.5.
-maybe :- '$maybe'.
-
-set_random(Seed) :-
-    (  nonvar(Seed) ->
-       (  Seed = seed(S) ->
-	  (  var(S) -> throw(error(instantiation_error, set_random/1))
-	  ;  integer(S) -> '$set_seed'(S)
-	  ;  throw(error(type_error(integer(S), set_random/1)))
-	  )
-       )
-    ;  throw(error(instantiation_error, set_random/1))
-    ).
-
-
 partial_string(String, L, L0) :-
     (  String == [] ->
        L = L0
     ;  catch(atom_chars(Atom, String),
-	     error(E, _),
-	     throw(error(E, partial_string/3))),
+         error(E, _),
+         throw(error(E, partial_string/3))),
        '$create_partial_string'(Atom, L, L0)
     ).
 
