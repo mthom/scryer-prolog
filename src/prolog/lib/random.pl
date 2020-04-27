@@ -1,5 +1,11 @@
 :- module(random, [maybe/0, random/1, random_integer/3, set_random/1]).
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   To retain desirable declarative properties, predicates that internally
+   use random numbers should be equipped with an argument that specifies
+   the random seed. This makes everything completely reproducible.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
 % succeeds with probability 0.5.
 maybe :- '$maybe'.
 
