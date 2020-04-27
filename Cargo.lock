@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "prolog_parser"
-version = "0.8.53"
+version = "0.8.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "lexical 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -638,7 +638,7 @@ dependencies = [
  "nix 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-rug-adapter 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "ordered-float 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "prolog_parser 0.8.53 (registry+https://github.com/rust-lang/crates.io-index)",
+ "prolog_parser 0.8.54 (registry+https://github.com/rust-lang/crates.io-index)",
  "ref_thread_local 0.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rug 1.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustyline 6.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -870,7 +870,7 @@ dependencies = [
 "checksum proc-macro-hack 0.5.14 (registry+https://github.com/rust-lang/crates.io-index)" = "fcfdefadc3d57ca21cf17990a28ef4c0f7c61383a28cb7604cf4a18e6ede1420"
 "checksum proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)" = "cf3d2011ab5c909338f7887f4fc896d35932e29146c12c8d01da6b22a80ba759"
 "checksum proc-macro2 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)" = "6c09721c6781493a2a492a96b5a5bf19b65917fe6728884e7c44dd0c60ca3435"
-"checksum prolog_parser 0.8.53 (registry+https://github.com/rust-lang/crates.io-index)" = "772ac5f493b6c0d1a4fb486da6b05cba8d2486f4d7f9872ae363d5fb097728c7"
+"checksum prolog_parser 0.8.54 (registry+https://github.com/rust-lang/crates.io-index)" = "1724f289e6a670073445192ee382afd21138c106e2f4fa9797a7252926e7dea0"
 "checksum quote 0.6.13 (registry+https://github.com/rust-lang/crates.io-index)" = "6ce23b6b870e8f94f81fb0a363d65d86675884b34a09043c81e5562f11c1f8e1"
 "checksum quote 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2bdc6c187c65bca4260c9011c9e3132efe4909da44726bad24cf7572ae338d7f"
 "checksum rand_core 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7a6fdeb83b075e8266dcc8762c22776f6877a63111121f5f8c7411e5be7eed4b"

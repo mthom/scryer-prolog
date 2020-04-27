@@ -1565,6 +1565,7 @@ impl MachineState {
                                     arity
                                 );
                                 let source_sink = self.store(self.deref(a1));
+
                                 MachineError::permission_error(
                                     h,
                                     Permission::Access,
