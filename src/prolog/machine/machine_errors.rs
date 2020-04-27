@@ -10,12 +10,13 @@ use std::rc::Rc;
 
 pub(crate) type MachineStub = Vec<HeapCellValue>;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum ErrorProvenance {
     Constructed, // if constructed, offset the addresses.
     Received,    // otherwise, preserve the addresses.
 }
 
+#[derive(Debug)]
 pub(super) struct MachineError {
     stub: MachineStub,
     location: Option<(usize, usize)>, // line_num, col_num
@@ -447,7 +448,7 @@ impl MachineError {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Permission {
     Access,
     Create,
@@ -469,7 +470,7 @@ impl Permission {
 }
 
 // from 7.12.2 b) of 13211-1:1995
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum ValidType {
     Atom,
     Atomic,
@@ -514,7 +515,7 @@ impl ValidType {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum DomainErrorType {
     NotLessThanZero,
     Order,
@@ -534,7 +535,7 @@ impl DomainErrorType {
 }
 
 // from 7.12.2 f) of 13211-1:1995
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum RepFlag {
     Character,
     CharacterCode,
@@ -558,7 +559,7 @@ impl RepFlag {
 }
 
 // from 7.12.2 g) of 13211-1:1995
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum EvalError {
     FloatOverflow,
     Undefined,
@@ -578,7 +579,7 @@ impl EvalError {
 }
 
 // used by '$skip_max_list'.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub(super) enum CycleSearchResult {
     EmptyList,
     NotList,
@@ -722,6 +723,7 @@ impl MachineState {
     }
 }
 
+#[derive(Debug)]
 pub enum ExistenceError {
     Module(ClauseName),
     Procedure(ClauseName, usize),
@@ -729,6 +731,7 @@ pub enum ExistenceError {
     Stream(Addr),
 }
 
+#[derive(Debug)]
 pub enum SessionError {
     CannotOverwriteBuiltIn(ClauseName),
     CannotOverwriteImport(ClauseName),
@@ -741,6 +744,7 @@ pub enum SessionError {
     ParserError(ParserError),
 }
 
+#[derive(Debug)]
 pub enum EvalSession {
     EntrySuccess,
     Error(SessionError),

@@ -24,5 +24,5 @@ test_queries_on_setup_call_cleanup :-
     findall(Pat, catch(setup_call_cleanup(true,throw(goal),throw(cl)), Pat, true), [goal]),
     findall(Pat, catch(( setup_call_cleanup(true,(G=1;G=2),throw(cl)), throw(cont)), Pat, true), [cont]),
     findall([X,Y], (setup_call_cleanup(true, (X=1;X=2), writeq(a)), setup_call_cleanup(true,(Y=1;Y=2),writeq(b)), !), [[1,1]]).
-    
+
 :- initialization(test_queries_on_setup_call_cleanup).

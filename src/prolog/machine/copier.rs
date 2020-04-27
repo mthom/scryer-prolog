@@ -7,7 +7,7 @@ use std::ops::IndexMut;
 
 type Trail = Vec<(Ref, HeapCellValue)>;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum AttrVarPolicy {
     DeepCopy,
     StripAttributes
@@ -28,6 +28,7 @@ fn copy_term<T: CopierTarget>(target: T, addr: Addr, attr_var_policy: AttrVarPol
     copy_term_state.copy_term_impl(addr);
 }
 
+#[derive(Debug)]
 struct CopyTermState<T: CopierTarget> {
     trail: Trail,
     scan: usize,

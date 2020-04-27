@@ -12,6 +12,7 @@ use std::cell::Cell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
+#[derive(Debug)]
 pub struct DebrayAllocator {
     bindings: IndexMap<Rc<Var>, VarData>,
     arg_c: usize,

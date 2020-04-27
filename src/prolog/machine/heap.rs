@@ -11,6 +11,7 @@ use std::mem;
 use std::ops::{Index, IndexMut};
 use std::ptr;
 
+#[derive(Debug)]
 pub(crate) struct StandardHeapTraits {}
 
 impl RawBlockTraits for StandardHeapTraits {
@@ -25,6 +26,7 @@ impl RawBlockTraits for StandardHeapTraits {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct HeapTemplate<T: RawBlockTraits> {
     buf: RawBlock<T>,
     _marker: PhantomData<HeapCellValue>,
@@ -39,6 +41,7 @@ impl<T: RawBlockTraits> Drop for HeapTemplate<T> {
     }
 }
 
+#[derive(Debug)]
 pub(crate)
 struct HeapIntoIter<T: RawBlockTraits> {
     offset: usize,
@@ -72,6 +75,7 @@ impl<T: RawBlockTraits> Iterator for HeapIntoIter<T> {
     }
 }
 
+#[derive(Debug)]
 pub(crate)
 struct HeapIter<'a, T: RawBlockTraits> {
     offset: usize,
@@ -110,6 +114,7 @@ fn print_heap_terms<'a, I: Iterator<Item = &'a HeapCellValue>>(heap: I, h: usize
     }
 }
 
+#[derive(Debug)]
 pub(crate)
 struct HeapIterMut<'a, T: RawBlockTraits> {
     offset: usize,

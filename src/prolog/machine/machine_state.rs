@@ -21,10 +21,12 @@ use indexmap::{IndexMap, IndexSet};
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
+use std::fmt;
 use std::io::Write;
 use std::mem;
 use std::ops::{Index, IndexMut};
 
+#[derive(Debug)]
 pub(crate) struct HeapPStrIter<'a> {
     focus: Addr,
     machine_st: &'a MachineState,
@@ -74,7 +76,7 @@ impl<'a> HeapPStrIter<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum PStrIteratee {
     Char(char),
     PStrSegment(usize, usize),
@@ -100,7 +102,7 @@ impl<'a> Iterator for HeapPStrIter<'a> {
                     } else {
                         Addr::EmptyList
                     };
-                    
+
                     return Some(PStrIteratee::PStrSegment(h, n));
                 } else {
                     unreachable!()
@@ -306,6 +308,7 @@ fn compare_pstr_to_string<'a>(
     Some(s_offset)
 }
 
+#[derive(Debug)]
 pub struct Ball {
     pub(super) boundary: usize,
     pub(super) stub: Heap,
@@ -357,6 +360,7 @@ impl Ball {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct CopyTerm<'a> {
     state: &'a mut MachineState,
 }
@@ -404,6 +408,7 @@ impl<'a> CopierTarget for CopyTerm<'a> {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct CopyBallTerm<'a> {
     stack: &'a mut Stack,
     heap: &'a mut Heap,
@@ -529,13 +534,13 @@ impl IndexMut<RegType> for MachineState {
 
 pub type Registers = Vec<Addr>;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub(super) enum MachineMode {
     Read,
     Write,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(super) enum HeapPtr {
     HeapCell(usize),
     PStrChar(usize, usize),
@@ -576,6 +581,7 @@ impl Default for HeapPtr {
     }
 }
 
+#[derive(Debug)]
 pub struct MachineState {
     pub(super) s: HeapPtr,
     pub(super) p: CodePtr,
@@ -934,7 +940,7 @@ fn try_in_situ(
 
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
-pub(crate) trait CallPolicy: Any {
+pub(crate) trait CallPolicy: Any + fmt::Debug {
     fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
         let b = machine_st.b;
         let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
@@ -1517,10 +1523,12 @@ impl CallPolicy for CWILCallPolicy {
 
 downcast!(dyn CallPolicy);
 
+#[derive(Debug)]
 pub(crate) struct DefaultCallPolicy {}
 
 impl CallPolicy for DefaultCallPolicy {}
 
+#[derive(Debug)]
 pub(crate) struct CWILCallPolicy {
     pub(crate) prev_policy: Box<dyn CallPolicy>,
     count: Integer,
@@ -1601,7 +1609,7 @@ impl CWILCallPolicy {
     }
 }
 
-pub(crate) trait CutPolicy: Any {
+pub(crate) trait CutPolicy: Any + fmt::Debug {
     // returns true iff we fail or cut redirected the MachineState's p itself
     fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool;
 }
@@ -1627,6 +1635,7 @@ fn cut_body(machine_st: &mut MachineState, addr: &Addr) -> bool {
     false
 }
 
+#[derive(Debug)]
 pub(crate) struct DefaultCutPolicy {}
 
 pub(super) fn deref_cut(machine_st: &mut MachineState, r: RegType) {
@@ -1641,6 +1650,7 @@ impl CutPolicy for DefaultCutPolicy {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct SCCCutPolicy {
     // locations of cleaners, cut points, the previous block
     cont_pts: Vec<(Addr, usize, usize)>,

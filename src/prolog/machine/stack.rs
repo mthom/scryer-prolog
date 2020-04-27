@@ -7,6 +7,7 @@ use std::mem;
 use std::ops::{Index, IndexMut};
 use std::ptr;
 
+#[derive(Debug)]
 struct StackTraits {}
 
 impl RawBlockTraits for StackTraits {
@@ -35,6 +36,7 @@ const fn prelude_size<Prelude>() -> usize {
     (size & !(align - 1)) + align
 }
 
+#[derive(Debug)]
 pub struct Stack {
     buf: RawBlock<StackTraits>,
     _marker: PhantomData<Addr>,
@@ -47,11 +49,12 @@ impl Drop for Stack {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct FramePrelude {
     pub num_cells: usize,
 }
 
+#[derive(Debug)]
 pub struct AndFramePrelude {
     pub univ_prelude: FramePrelude,
     pub e: usize,
@@ -59,6 +62,7 @@ pub struct AndFramePrelude {
     pub interrupt_cp: LocalCodePtr,
 }
 
+#[derive(Debug)]
 pub struct AndFrame {
     pub prelude: AndFramePrelude,
 }
@@ -99,6 +103,7 @@ impl IndexMut<usize> for AndFrame {
     }
 }
 
+#[derive(Debug)]
 pub struct OrFramePrelude {
     pub univ_prelude: FramePrelude,
     pub e: usize,
@@ -113,6 +118,7 @@ pub struct OrFramePrelude {
     pub attr_var_init_bindings_b: usize,
 }
 
+#[derive(Debug)]
 pub struct OrFrame {
     pub prelude: OrFramePrelude,
 }

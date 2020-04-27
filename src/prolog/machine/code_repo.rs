@@ -12,6 +12,7 @@ use indexmap::IndexSet;
 use std::collections::VecDeque;
 use std::mem;
 
+#[derive(Debug)]
 pub struct CodeRepo {
     pub(super) cached_query: Code,
     pub(super) goal_expanders: Code,

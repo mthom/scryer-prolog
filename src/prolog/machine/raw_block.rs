@@ -14,6 +14,7 @@ pub(crate) trait RawBlockTraits {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct RawBlock<T: RawBlockTraits> {
     pub(crate) size: usize,
     pub(crate) base: *const u8,
