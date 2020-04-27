@@ -13,13 +13,14 @@
 
 :- use_module(library(format)).
 :- use_module(library(iso_ext)).
+:- use_module(library(error)).
 
 max_sleep_time(0xfffffffffffffbff).
 
 sleep(T) :-
     builtins:must_be_number(T, sleep),
     (   T < 0 ->
-        throw(error(domain_error(not_less_than_zero, T), sleep/1))
+        domain_error(not_less_than_zero, T, sleep/1)
     ;   max_sleep_time(N), T > N ->
         throw(error(reprensentation_error(max_sleep_time), sleep/1))
     ;   '$sleep'(T)

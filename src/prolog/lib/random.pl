@@ -1,5 +1,13 @@
 :- module(random, [maybe/0, random/1, random_integer/3, set_random/1]).
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   To retain desirable declarative properties, predicates that internally
+   use random numbers should be equipped with an argument that specifies
+   the random seed. This makes everything completely reproducible.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+:- use_module(library(error)).
+
 % succeeds with probability 0.5.
 maybe :- '$maybe'.
 
@@ -16,9 +24,9 @@ random_integer(Lower, Upper, R) :-
     (   (var(Lower) ; var(Upper)) ->
             throw(error(instantiation_error, random_integer/3))
     ;   \+ integer(Lower) ->
-            throw(error(domain_error(integer, Lower), random_integer/3))
+            domain_error(integer, Lower, random_integer/3)
     ;   \+ integer(Upper) ->
-            throw(error(domain_error(integer, Upper), random_integer/3))
+            domain_error(integer, Upper, random_integer/3)
     ;   Upper > Lower,
         random(R0),
         R is floor((Upper - Lower) * R0 + Lower)
@@ -41,11 +49,11 @@ rnd_(N, R0, R) :-
 set_random(Seed) :-
     (   nonvar(Seed) ->
         (  Seed = seed(S) ->
-        (  var(S) -> throw(error(instantiation_error, set_random/1))
+        (  var(S) -> instantiation_error(set_random/1)
         ;  integer(S) -> '$set_seed'(S)
-        ;  throw(error(type_error(integer(S), set_random/1)))
+        ;  type_error(integer, S, set_random/1)
         )
         )
-    ;   throw(error(instantiation_error, set_random/1))
+    ;   instantiation_error(set_random/1)
     ).
 

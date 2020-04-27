@@ -1,5 +1,9 @@
 :- module(error, [must_be/2,
-                  can_be/2]).
+                  can_be/2,
+                  instantiation_error/1,
+                  domain_error/3,
+                  type_error/3
+                  ]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Written September 2018 by Markus Triska (triska@metalevel.at)
@@ -32,10 +36,10 @@ must_be(Type, Term) :-
 
 must_be_(Type, _) :-
         var(Type),
-        instantiation_error(Type).
+        instantiation_error(must_be/2).
 must_be_(var, Term) :-
         (   var(Term) -> true
-        ;   throw(error(uninstantiation_error, _))
+        ;   throw(error(uninstantiation_error, must_be/2))
         ).
 must_be_(integer, Term) :- check_(integer, integer, Term).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
@@ -43,12 +47,12 @@ must_be_(list, Term)    :- check_(ilist, list, Term).
 must_be_(type, Term)    :- check_(type, type, Term).
 
 check_(Pred, Type, Term) :-
-        (   var(Term) -> instantiation_error(Term)
+        (   var(Term) -> instantiation_error(must_be/2)
         ;   call(Pred, Term) -> true
-        ;   type_error(Type, Term)
+        ;   type_error(Type, Term, must_be/2)
         ).
 
-ilist(V) :- var(V), instantiation_error(V).
+ilist(V) :- var(V), instantiation_error(must_be/2).
 ilist([]).
 ilist([_|Ls]) :- ilist(Ls).
 
@@ -76,7 +80,7 @@ can_be(Type, Term) :-
         must_be(type, Type),
         (   var(Term) -> true
         ;   can_(Type, Term) -> true
-        ;   type_error(Type, Term)
+        ;   type_error(Type, Term, can_be/2)
         ).
 
 can_(integer, Term) :- integer(Term).
@@ -92,11 +96,11 @@ list_or_partial_list([_|Ls]) :-
    Shorthands for throwing ISO errors.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-instantiation_error(_Term) :-
-    throw(error(instantiation_error, _)).
+instantiation_error(Context) :-
+    throw(error(instantiation_error, Context)).
 
-domain_error(Type, Term) :-
-    throw(error(domain_error(Type, Term), _)).
+domain_error(Type, Term, Context) :-
+    throw(error(domain_error(Type, Term), Context)).
 
-type_error(Type, Term) :-
-    throw(error(type_error(Type, Term), _)).
+type_error(Type, Term, Context) :-
+    throw(error(type_error(Type, Term), Context)).
