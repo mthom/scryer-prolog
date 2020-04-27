@@ -40,7 +40,7 @@ Extend Scryer Prolog to include the following, among other features:
   - [x] Support for `verify_attributes/3`
   - [x] Support for `attribute_goals/2` and `project_attributes/2`
   - [x] `call_residue_vars/2`
-- [x] `if_` and related predicates, following the developments of the
+- [x] `if_/3` and related predicates, following the developments of the
       paper "Indexing `dif/2`".
 - [x] All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`, `forall/2`).
 - [x] Clause creation and destruction (`asserta/1`, `assertz/1`,
@@ -272,6 +272,24 @@ Scryer Prolog implements tabling via *delimited continuations* as
 described in [*Tabling as a Library with Delimited
 Control*](https://biblio.ugent.be/publication/6880648/file/6885145.pdf)
 by Desouter&nbsp;et.&nbsp;al.
+
+### Constraint Logic Programming (CLP)
+
+Scryer Prolog provides excellent support for Constraint Logic
+Programming&nbsp;(CLP), which is the amalgamation of
+Logic&nbsp;Programming&nbsp;(LP) and Constraints.
+
+In addition to built-in support for [`dif/2`](src/prolog/lib/dif.pl),
+[`freeze/2`](src/prolog/lib/freeze.pl),
+[CLP(ℤ)](src/prolog/lib/clpz.pl) and [CLP(B)](src/prolog/lib/clpb.pl),
+Scryer provides a convenient way to implement new user-defined
+constraints: *Attributed variables* are available via
+[`library(atts)`](src/prolog/lib/atts.pl) as in SICStus&nbsp;Prolog,
+which is one of the most sophisticated and fastest constraint systems
+in existence.
+
+These features make Scryer Prolog an ideal platform for teaching,
+learning and developing portable CLP&nbsp;applications.
 
 ### Modules
 
