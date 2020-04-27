@@ -40,7 +40,7 @@ Extend Scryer Prolog to include the following, among other features:
   - [x] Support for `verify_attributes/3`
   - [x] Support for `attribute_goals/2` and `project_attributes/2`
   - [x] `call_residue_vars/2`
-- [x] `if_` and related predicates, following the developments of the
+- [x] `if_/3` and related predicates, following the developments of the
       paper "Indexing `dif/2`".
 - [x] All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`, `forall/2`).
 - [x] Clause creation and destruction (`asserta/1`, `assertz/1`,
