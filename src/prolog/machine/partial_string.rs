@@ -202,7 +202,11 @@ impl PartialString {
 
     #[inline]
     pub fn range_from(&self, index: RangeFrom<usize>) -> PStrIter {
-        PStrIter::from(self.buf, self.len - '\u{0}'.len_utf8(), index.start)
+        if self.len >= '\u{0}'.len_utf8() {
+            PStrIter::from(self.buf, self.len - '\u{0}'.len_utf8(), index.start)
+        } else {
+            PStrIter::from(self.buf, 0, 0)
+        }
     }
 
     #[inline]
