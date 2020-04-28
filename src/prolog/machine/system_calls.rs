@@ -1560,10 +1560,6 @@ impl MachineState {
                                 )
                             }
                             io::ErrorKind::PermissionDenied => {
-                                let stub = MachineError::functor_stub(
-                                    name.clone(),
-                                    arity
-                                );
                                 let source_sink = self.store(self.deref(a1));
 
                                 MachineError::permission_error(
