@@ -21,9 +21,9 @@ length(Xs, N) :-
     ;  var(Xs0)  -> R is N-M, length_rundown(Xs0, R)).
 length(_, N) :-
     integer(N), !,
-    throw(error(domain_error(not_less_than_zero, N), length/2)).
+    domain_error(not_less_than_zero, N, length/2).
 length(_, N) :-
-    throw(error(type_error(integer, N), length/2)).
+    type_error(integer, N, length/2).
 
 length_addendum([], N, N).
 length_addendum([_|Xs], N, M) :-
