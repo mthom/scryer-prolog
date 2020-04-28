@@ -1815,6 +1815,9 @@ impl MachineState {
                             Addr::Lis(l) => {
                                 let tail = self.store(self.deref(Addr::HeapCell(l + 1)));
                                 let tail = if tail.is_ref() {
+                                    self.heap[h] = HeapCellValue::Addr(Addr::HeapCell(h));
+                                    self.trail(TrailRef::Ref(Ref::AttrVar(h)));
+
                                     Addr::HeapCell(h + 1)
                                 } else {
                                     tail
@@ -1823,10 +1826,14 @@ impl MachineState {
                                 self.heap[h + 1] = HeapCellValue::Addr(tail);
                                 self.trail(TrailRef::AttrVarListLink(h + 1, l));
                             }
-                            _ => unreachable!(),
+                            _ => {
+                                unreachable!();
+                            }
                         }
                     }
-                    _ => unreachable!(),
+                    _ => {
+                        unreachable!();
+                    }
                 }
             }
             &SystemClauseType::DynamicModuleResolution(narity) => {
@@ -2229,16 +2236,16 @@ impl MachineState {
                         Addr::AttrVar(h) => {
                             h + 1
                         }
-                        attr_var @ Addr::HeapCell(_)
-                      | attr_var @ Addr::StackCell(..) => {
-                          // create an AttrVar in the heap.
-                          let h = self.heap.h();
+                        attr_var @ Addr::HeapCell(_) |
+                        attr_var @ Addr::StackCell(..) => {
+                            // create an AttrVar in the heap.
+                            let h = self.heap.h();
 
-                          self.heap.push(HeapCellValue::Addr(Addr::AttrVar(h)));
-                          self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h + 1)));
+                            self.heap.push(HeapCellValue::Addr(Addr::AttrVar(h)));
+                            self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h + 1)));
 
-                          self.bind(Ref::AttrVar(h), attr_var);
-                          h + 1
+                            self.bind(Ref::AttrVar(h), attr_var);
+                            h + 1
                         }
                         _ => {
                             self.fail = true;
@@ -2247,7 +2254,7 @@ impl MachineState {
                     };
 
                 let list_addr = self[temp_v!(2)];
-                self.unify(Addr::HeapCell(attr_var_list), list_addr);
+                self.bind(Ref::HeapCell(attr_var_list), list_addr);
             }
             &SystemClauseType::GetAttrVarQueueDelimiter => {
                 let addr = self[temp_v!(1)];
@@ -2658,26 +2665,12 @@ impl MachineState {
                 };
             }
             &SystemClauseType::RedoAttrVarBinding => {
-                let var = self.store(self.deref(self[temp_v!(1)]));
+                let var   = self.store(self.deref(self[temp_v!(1)]));
                 let value = self.store(self.deref(self[temp_v!(2)]));
 
                 match var {
                     Addr::AttrVar(h) => {
-                        if let Addr::AttrVar(h1) = value {
-                            self.heap[h] = HeapCellValue::Addr(Addr::AttrVar(h1));
-
-                            // append h's attributes list to h1's.
-                            let mut l = h1 + 1;
-
-                            while let Addr::Lis(l1) = self.store(self.deref(self.heap[l].as_addr(l))) {
-                                l = l1 + 1;
-                            }
-
-                            self.heap[l] = HeapCellValue::Addr(Addr::HeapCell(h + 1));
-                            self.trail(TrailRef::Ref(Ref::HeapCell(l)));
-                        } else {
-                            self.heap[h] = HeapCellValue::Addr(value);
-                        }
+                        self.heap[h] = HeapCellValue::Addr(value);
                     }
                     _ => {
                         unreachable!()

@@ -56,7 +56,8 @@
 '$del_attr'(Ls0, V, Attr) :-
     Ls0 = [Att | Ls1],
     nonvar(Att),
-    (  Att \= Attr -> '$del_attr_buried'(Ls0, Ls1, V, Attr)
+    (  Att \= Attr ->
+       '$del_attr_buried'(Ls0, Ls1, V, Attr)
     ;  '$enqueue_attr_var'(V),
        '$del_attr_head'(V),
        '$del_attr'(Ls1, V, Attr)
