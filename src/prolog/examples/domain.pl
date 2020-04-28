@@ -22,7 +22,6 @@ verify_attributes(Var, Other, Goals) :-
                 (   Els = [] ->             % exactly one element
                     Goals = [Other=El]      % implied binding
                 ;   Goals = [],
-		    put_atts(Other, -dom(_)),
                     put_atts(Other, dom(Dc))% rescue intersection
                 )
             ;   Goals = [],
