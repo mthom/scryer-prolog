@@ -1,7 +1,7 @@
 :- module(lists, [member/2, select/3, append/2, append/3, foldl/4, foldl/5,
 		  memberchk/2, reverse/2, length/2, maplist/2,
 		  maplist/3, maplist/4, maplist/5, maplist/6,
-		  maplist/7, maplist/8, maplist/9, same_length/2,
+		  maplist/7, maplist/8, maplist/9, same_length/2, nth0/3,
 		  sum_list/2, transpose/2, list_to_set/2]).
 
 
@@ -177,3 +177,26 @@ unify_same(E-V, Prev-Var, E-V) :-
             Var = V
         ;   true
         ).
+
+
+nth0(N, Es, E) :-
+        can_be(integer, N),
+        can_be(list, Es),
+        (   integer(N) ->
+            nth0_index(N, Es, E)
+        ;   nth0_search(N, Es, E)
+        ).
+
+nth0_index(0, [E|_], E) :- !.
+nth0_index(N, [_|Es], E) :-
+        N > 0,
+        N1 is N - 1,
+        nth0_index(N1, Es, E).
+
+nth0_search(N, Es, E) :-
+        nth0_search(0, N, Es, E).
+
+nth0_search(N, N, [E|_], E).
+nth0_search(N0, N, [_|Es], E) :-
+        N1 is N0 + 1,
+        nth0_search(N1, N, Es, E).
