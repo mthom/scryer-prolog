@@ -63,7 +63,7 @@ reverse(Xs, Ys) :-
     ).
 
 reverse([], [], YsRev, YsRev).
-reverse([X1|Xs], [Y1|Ys], YsPreludeRev, Xss) :-
+reverse([_|Xs], [Y1|Ys], YsPreludeRev, Xss) :-
     reverse(Xs, Ys, [Y1|YsPreludeRev], Xss).
 
 
@@ -104,7 +104,7 @@ maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7
 
 maplist(_, [], [], [], [], [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7s], [E8|E8s]) :-
-    call(Cont, E1, E2, E3, E4, E5, E6, E7),
+    call(Cont, E1, E2, E3, E4, E5, E6, E7, E8),
     maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s, E7s, E8s).
 
 
