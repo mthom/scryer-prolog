@@ -22,7 +22,7 @@ random(R) :-
 random_integer(Lower, Upper, R) :-
     var(R),
     (   (var(Lower) ; var(Upper)) ->
-            throw(error(instantiation_error, random_integer/3))
+            instantiation_error(random_integer/3)
     ;   \+ integer(Lower) ->
             domain_error(integer, Lower, random_integer/3)
     ;   \+ integer(Upper) ->

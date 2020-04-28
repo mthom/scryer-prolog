@@ -6,7 +6,7 @@
    Reasoning about time stamps would be a useful addition, for example
    by obtaining the current time, comparing and formatting it.
 
-   '$cpu_new' can be replaced by statistics/2 once that is implemented.
+   '$cpu_now' can be replaced by statistics/2 once that is implemented.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(time, [max_sleep_time/1, sleep/1, time/1]).
@@ -22,7 +22,7 @@ sleep(T) :-
     (   T < 0 ->
         domain_error(not_less_than_zero, T, sleep/1)
     ;   max_sleep_time(N), T > N ->
-        throw(error(reprensentation_error(max_sleep_time), sleep/1))
+        throw(error(representation_error(max_sleep_time), sleep/1))
     ;   '$sleep'(T)
     ).
 
