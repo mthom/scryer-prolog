@@ -1,7 +1,7 @@
 :- module(lists, [member/2, select/3, append/2, append/3, foldl/4, foldl/5,
 		  memberchk/2, reverse/2, length/2, maplist/2,
 		  maplist/3, maplist/4, maplist/5, maplist/6,
-		  maplist/7, maplist/8, maplist/9, same_length/2,
+		  maplist/7, maplist/8, maplist/9, same_length/2, nth0/3,
 		  sum_list/2, transpose/2, list_to_set/2]).
 
 
@@ -21,9 +21,9 @@ length(Xs, N) :-
     ;  var(Xs0)  -> R is N-M, length_rundown(Xs0, R)).
 length(_, N) :-
     integer(N), !,
-    throw(error(domain_error(not_less_than_zero, N), length/2)).
+    domain_error(not_less_than_zero, N, length/2).
 length(_, N) :-
-    throw(error(type_error(integer, N), length/2)).
+    type_error(integer, N, length/2).
 
 length_addendum([], N, N).
 length_addendum([_|Xs], N, M) :-
@@ -63,7 +63,7 @@ reverse(Xs, Ys) :-
     ).
 
 reverse([], [], YsRev, YsRev).
-reverse([X1|Xs], [Y1|Ys], YsPreludeRev, Xss) :-
+reverse([_|Xs], [Y1|Ys], YsPreludeRev, Xss) :-
     reverse(Xs, Ys, [Y1|YsPreludeRev], Xss).
 
 
@@ -104,7 +104,7 @@ maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7
 
 maplist(_, [], [], [], [], [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7s], [E8|E8s]) :-
-    call(Cont, E1, E2, E3, E4, E5, E6, E7),
+    call(Cont, E1, E2, E3, E4, E5, E6, E7, E8),
     maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s, E7s, E8s).
 
 
@@ -177,3 +177,26 @@ unify_same(E-V, Prev-Var, E-V) :-
             Var = V
         ;   true
         ).
+
+
+nth0(N, Es, E) :-
+        can_be(integer, N),
+        can_be(list, Es),
+        (   integer(N) ->
+            nth0_index(N, Es, E)
+        ;   nth0_search(N, Es, E)
+        ).
+
+nth0_index(0, [E|_], E) :- !.
+nth0_index(N, [_|Es], E) :-
+        N > 0,
+        N1 is N - 1,
+        nth0_index(N1, Es, E).
+
+nth0_search(N, Es, E) :-
+        nth0_search(0, N, Es, E).
+
+nth0_search(N, N, [E|_], E).
+nth0_search(N0, N, [_|Es], E) :-
+        N1 is N0 + 1,
+        nth0_search(N1, N, Es, E).

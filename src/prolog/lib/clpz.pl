@@ -6917,12 +6917,6 @@ contribution_at(T, Task, Offset-Bs, Contribution) :-
             ?(Contribution) #= B*C
         ).
 
-nth0(0, [E|_], E) :- !.
-nth0(N, [_|Ls], E) :-
-        N > 0,
-        N1 is N - 1,
-        nth0(N1, Ls, E).
-
 nth1(I, Es, E) :-
         I0 is I-1,
         nth0(I0, Es, E).

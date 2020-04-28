@@ -281,12 +281,15 @@ Logic&nbsp;Programming&nbsp;(LP) and Constraints.
 
 In addition to built-in support for [`dif/2`](src/prolog/lib/dif.pl),
 [`freeze/2`](src/prolog/lib/freeze.pl),
-[CLP(ℤ)](src/prolog/lib/clpz.pl) and [CLP(B)](src/prolog/lib/clpb.pl),
+[CLP(B)](src/prolog/lib/clpb.pl) and [CLP(ℤ)](src/prolog/lib/clpz.pl),
 Scryer provides a convenient way to implement new user-defined
 constraints: *Attributed variables* are available via
 [`library(atts)`](src/prolog/lib/atts.pl) as in SICStus&nbsp;Prolog,
 which is one of the most sophisticated and fastest constraint systems
-in existence.
+in existence. In [`library(iso_ext)`](src/prolog/lib/iso_ext.pl),
+Scryer provides predicates for backtrackable (`bb_b_put/2`) and
+non-backtrackable (`bb_put/2`) global variables, which are needed to
+implement certain types of constraint&nbsp;solvers.
 
 These features make Scryer Prolog an ideal platform for teaching,
 learning and developing portable CLP&nbsp;applications.
@@ -347,7 +350,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`format`](src/prolog/lib/format.pl)
   The nonterminal `format_//2` is used to describe formatted output,
   arranging arguments according to a given format&nbsp;string.
-  The predicate `format/2` is provided for impure output.
+  The predicates `format/2`, `portray_clause/1` and `listing/1`
+  provide formatted *impure* output.
 * [`assoc`](src/prolog/lib/assoc.pl)
   providing `empty_assoc/1`, `get_assoc/3`, `put_assoc/4` etc.
   to manage elements in AVL&nbsp;trees which ensure
