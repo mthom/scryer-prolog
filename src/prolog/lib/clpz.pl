@@ -115,7 +115,7 @@
 :- use_module(library(iso_ext)).
 :- use_module(library(dcgs)).
 :- use_module(library(terms)).
-:- use_module(library(error), []).
+:- use_module(library(error), [domain_error/3, type_error/3]).
 :- use_module(library(si)).
 :- use_module(library(freeze)).
 
@@ -185,15 +185,8 @@ instantiation_error(_, Goal-Arg) :-
 domain_error(Expectation, Term) :-
         domain_error(Expectation, Term, unknown(Term)-1).
 
-domain_error(Expectation, Term, Goal-Arg) :-
-        throw(error(domain_error(Expectation, Term), domain_error(Goal, Arg, Expectation, Term))).
-
-
 type_error(Expectation, Term) :-
         type_error(Expectation, Term, unknown(Term)-1).
-
-type_error(Expectation, Term, Goal-Arg) :-
-        throw(error(type_error(Expectation, Term), type_error(Goal, Arg, Expectation, Term))).
 
 
 partition(Pred, Ls0, As, Bs) :-

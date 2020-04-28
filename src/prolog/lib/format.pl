@@ -148,7 +148,7 @@ element_gluevar(glue(_,V), N, N) --> [V].
 
 cells([], Args, Tab, Es) -->
         (   { Args == [] } -> cell(Tab, Tab, Es)
-        ;   { domain_error(no_remaining_arguments, Args) }
+        ;   { domain_error(no_remaining_arguments, Args, format_//2) }
         ).
 cells([~,~|Fs], Args, Tab, Es) --> !,
         cells(Fs, Args, Tab, [chars("~")|Es]).
@@ -253,14 +253,11 @@ cells([~|Fs0], Args0, Tab0, Es) -->
         cells(Fs, Args, Tab, []).
 cells([~,C|_], _, _, _) -->
         { atom_chars(A, [~,C]),
-          domain_error(format_string, A) }.
+          domain_error(format_string, A, format_//2) }.
 cells(Fs0, Args, Tab, Es) -->
         { phrase(upto_what(Fs1, ~), Fs0, Fs),
           Fs1 = [_|_] },
         cells(Fs, Args, Tab, [chars(Fs1)|Es]).
-
-domain_error(Type, Term) :-
-        throw(error(domain_error(Type, Term), _)).
 
 n_newlines(0) --> !.
 n_newlines(1) --> !, [newline].
@@ -498,7 +495,7 @@ listing(PI) :-
             Arity = Arity0
         ;   PI = Name//Arity0 ->
             Arity is Arity0 + 2
-        ;   throw(error(type_error(predicate_indicator, PI), listing/1))
+        ;   type_error(predicate_indicator, PI, listing/1)
         ),
         functor(Head, Name, Arity),
         \+ \+ clause(Head, Body), % only true if there is at least one clause
