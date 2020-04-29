@@ -356,6 +356,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   providing `empty_assoc/1`, `get_assoc/3`, `put_assoc/4` etc.
   to manage elements in AVL&nbsp;trees which ensure
   *O*(log(*N*))&nbsp;access.
+* [`ordsets`](src/prolog/lib/ordsets.pl)
+  represents ordered sets as lists.
 * [`clpb`](src/prolog/lib/clpb.pl)
   CLP(B): Constraint Logic Programming over Boolean variables,
   a BDD-based SAT&nbsp;solver provided via the predicates
