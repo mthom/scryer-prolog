@@ -7,7 +7,7 @@ use crate::prolog::machine::heap::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 use crate::prolog::ordered_float::OrderedFloat;
-use crate::prolog::rug::Integer;
+use crate::prolog::rug::{Integer, Rational};
 
 use indexmap::{IndexMap, IndexSet};
 
@@ -170,6 +170,7 @@ enum TokenOrRedirect {
     NumberedVar(String),
     CompositeRedirect(usize, DirectedOp),
     FunctorRedirect(usize),
+    Number(Number, Option<DirectedOp>),
     Open,
     Close,
     Comma,
@@ -989,6 +990,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
                 }
             }
+            Number::Rational(r) => {
+                self.print_rational(&r, add_brackets);
+                return;
+            }
             n => {
                 let output_str = format!("{}", n);
 
@@ -1000,6 +1005,71 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         if add_brackets {
             self.push_char(')');
+        }
+    }
+
+    fn print_rational(&mut self, r: &Rational, add_brackets: bool) {
+        match self.op_dir.get(&(clause_name!("rdiv"), Fixity::In)) {
+            Some(OpDirValue(ref spec, _)) => {
+                if add_brackets {
+                    self.state_stack.push(TokenOrRedirect::Close);
+                }
+
+                let rdiv_ct = clause_name!("rdiv");
+
+                let left_directed_op =
+                    if spec.prec() > 0 {
+                        Some(DirectedOp::Left(rdiv_ct.clone(), spec.clone()))
+                    } else {
+                        None
+                    };
+
+                let right_directed_op =
+                    if spec.prec() > 0 {
+                        Some(DirectedOp::Right(rdiv_ct.clone(), spec.clone()))
+                    } else {
+                        None
+                    };
+
+                if spec.prec() > 0 {
+                    self.state_stack.push(TokenOrRedirect::Number(
+                        Number::from(r.denom()),
+                        left_directed_op,
+                    ));
+
+                    self.state_stack.push(TokenOrRedirect::Op(
+                        rdiv_ct,
+                        spec.clone(),
+                    ));
+
+                    self.state_stack.push(TokenOrRedirect::Number(
+                        Number::from(r.numer()),
+                        right_directed_op,
+                    ));
+                } else {
+                    self.state_stack.push(TokenOrRedirect::Close);
+
+                    self.state_stack.push(TokenOrRedirect::Number(
+                        Number::from(r.denom()),
+                        None,
+                    ));
+
+                    self.state_stack.push(TokenOrRedirect::Comma);
+
+                    self.state_stack.push(TokenOrRedirect::Number(
+                        Number::from(r.numer()),
+                        None,
+                    ));
+
+                    self.state_stack.push(TokenOrRedirect::Open);
+                    self.state_stack.push(TokenOrRedirect::Atom(rdiv_ct));
+                }
+
+                return;
+            }
+            _ => {
+                unreachable!()
+            }
         }
     }
 
@@ -1431,6 +1501,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         }
                     }
                     TokenOrRedirect::HeadTailSeparator => self.append_str("|"),
+                    TokenOrRedirect::Number(n, op) => self.print_number(n, &op),
                     TokenOrRedirect::Comma => self.append_str(","),
                     TokenOrRedirect::Space => self.push_char(' '),
                     TokenOrRedirect::LeftCurly => self.push_char('{'),

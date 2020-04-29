@@ -789,6 +789,13 @@ impl<'a> TryFrom<&'a HeapCellValue> for Number {
     }
 }
 
+impl<'a> From<&'a Integer> for Number {
+    #[inline]
+    fn from(src: &'a Integer) -> Self {
+        Number::Integer(Rc::new(Integer::from(src)))
+    }
+}
+
 // Computes n ^ power. Ignores the sign of power.
 pub fn binary_pow(mut n: Integer, power: &Integer) -> Integer {
     let mut power = Integer::from(power.abs_ref());
