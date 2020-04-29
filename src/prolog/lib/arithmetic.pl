@@ -1,6 +1,10 @@
-:- module(arithmetic, [lsb/2, msb/2, stern_brocot/3]).
+:- module(arithmetic, [lsb/2, msb/2, number_to_rational/2,
+                       number_to_rational/3,
+                       rational_numerator_denominator/3]).
 
+:- use_module(library(charsio), [write_term_to_chars/3]).
 :- use_module(library(error)).
+:- use_module(library(lists), [append/3, member/2]).
 
 lsb(X, N) :-
     builtins:must_be_number(X, lsb/2),
@@ -26,76 +30,79 @@ msb_(X, M, N) :-
     M1 is M + 1,
     msb_(X1, M1, N).
 
-stern_brocot(E0/E1, Fraction0, Fraction) :-
-    P1/Q1 = Fraction0,
-    !,
-    (   \+ integer(E0) -> type_error(integer, E0, stern_brocot/3)
-    ;   \+ integer(E1) -> type_error(integer, E1, stern_brocot/3)
-    ;   \+ integer(P1) -> type_error(integer, P1, stern_brocot/3)
-    ;   \+ integer(Q1) -> type_error(integer, Q1, stern_brocot/3)
-    ;   S is sign(E0) * sign(E1), S < 0 ->
-            domain_error(not_less_than_zero, E0/E1, stern_brocot/3)
-    ;   P2 is abs(P1),
-        Q2 is abs(Q1),
-        Qn1n is P2 * E1 - Q2 * E0,
-        Qn1d is Q2 * E1,
-        simplify_fraction(Qn1n/Qn1d, Qn1),
-        Qp1n is P2 * E1 + Q2 * E0,
-        Qp1d = Qn1d,
-        simplify_fraction(Qp1n/Qp1d, Qp1),
-        fraction_stern_brocot_(Qn1, Qp1, 0/1, 1/0, P3/Q3),
-        P4 is sign(P1) * sign(Q1) * P3,
-        Fraction = P4/Q3
-    ).
+number_to_rational(Real0, Fraction) :-
+    (   var(Real0) -> instantiation_error(number_to_rational/2)
+    ;   Real0 = R1/R2 ->
+        (   member(R, [R1, R2]), \+ number(R) ->
+                type_error(number, R, number_to_rational/2)
+        ;   Real = R1/R2
+        )
+    ;   number(Real0),
+        Real = Real0/1
+    ),
+    number_to_rational(1.0e-6/1, Real, Fraction).
 
 % If 0 <= Eps0 <= 1e-16 then the search is for "infinite" precision.
-stern_brocot(Eps0, Real0, Fraction) :-
-    (   Real0 = R1/R2 ->
-            builtins:must_be_number(R1, stern_brocot/3),
-            builtins:must_be_number(R2, stern_brocot/3),
-            Real is R1/R2
-    ;   builtins:must_be_number(Real0, stern_brocot/3),
-        Real = Real0
+number_to_rational(Eps0, Real0, Fraction) :-
+    (   var(Eps0) -> instantiation_error(number_to_rational/3)
+    ;   Eps0 = E0/E1 ->
+        (   member(E, [E0, E1]), \+ number(E) ->
+                type_error(number, E, number_to_rational/3)
+        ;   Eps = E0/E1
+        )
+    ;   number(Eps0),
+        Eps = Eps0/1
     ),
-    (   Eps0 = E0/E1 ->
-            builtins:must_be_number(E0, stern_brocot/3),
-            builtins:must_be_number(E1, stern_brocot/3),
-            % Eps is Eps0 % doesn't work
-            Eps is E0/E1
-    ;   Eps = Eps0
+    (   var(Real0) -> instantiation_error(number_to_rational/3)
+    ;   Real0 = R1/R2 ->
+        (   member(R, [R1, R2]), \+ number(R) ->
+                type_error(number, R, number_to_rational/3)
+        ;   Real = R1/R2
+        )
+    ;   number(Real0),
+        Real = Real0/1
     ),
-    S is sign(Eps),
-    (   S < 0 -> domain_error(not_less_than_zero, Eps0, stern_brocot/3)
-    ;   Rn is abs(Real) - Eps,
-        Rp is abs(Real) + Eps,
-        stern_brocot_(Rn, Rp, 0/1, 1/0, P1/Q),
-        P is sign(Real) * P1,
-        Fraction = P/Q
+    E0/E1 = Eps,
+    P0/Q0 = Real,
+    S is sign(E0) * sign(E1),
+    (   S < 0 -> domain_error(not_less_than_zero, Eps0, number_to_rational/3)
+    ;   P1 is abs(P0),
+        Q1 is abs(Q0),
+        Qn1n is P1 * E1 - Q1 * E0,
+        Qn1d is Q1 * E1,
+        Qn1 = Qn1n/Qn1d,
+        Qp1n is P1 * E1 + Q1 * E0,
+        Qp1d = Qn1d,
+        Qp1 = Qp1n/Qp1d,
+        stern_brocot_(Qn1, Qp1, 0/1, 1/0, P2/Q2),
+        P3 is sign(P0) * sign(Q0) * P2,
+        Fraction is P3 rdiv Q2
     ).
 
-fraction_stern_brocot_(Qnn/Qnd, Qpn/Qpd, A/B, C/D, Fraction) :-
+number(X) :-
+    (   integer(X)
+    ;   float(X)
+    ;   rational(X)
+    ).
+
+stern_brocot_(Qnn/Qnd, Qpn/Qpd, A/B, C/D, Fraction) :-
     Fn1 is A + C,
     Fd1 is B + D,
     simplify_fraction(Fn1/Fd1, Fn/Fd),
     S1 is sign(Fn * Qnd - Fd * Qnn),
     S2 is sign(Fn * Qpd - Fd * Qpn),
-    (   S1 < 0 ->
-            fraction_stern_brocot_(Qnn/Qnd, Qpn/Qpd, Fn/Fd, C/D, Fraction)
-    ;   S2 > 0 ->
-            fraction_stern_brocot_(Qnn/Qnd, Qpn/Qpd, A/B, Fn/Fd, Fraction)
+    (   S1 < 0 -> stern_brocot_(Qnn/Qnd, Qpn/Qpd, Fn/Fd, C/D, Fraction)
+    ;   S2 > 0 -> stern_brocot_(Qnn/Qnd, Qpn/Qpd, A/B, Fn/Fd, Fraction)
     ;   Fraction = Fn/Fd
-    ).
-
-stern_brocot_(Rn, Rp, A/B, C/D, Fraction) :-
-    M0 is A + C,
-    M1 is B + D,
-    M is M0 / M1,
-    (   M < Rn -> stern_brocot_(Rn, Rp, M0/M1, C/D, Fraction)
-    ;   M > Rp -> stern_brocot_(Rn, Rp, A/B, M0/M1, Fraction)
-    ;   Fraction = M0/M1
     ).
 
 simplify_fraction(A0/B0, A/B) :-
     G is gcd(A0, B0),
     A is A0 div G,
     B is B0 div G.
+
+rational_numerator_denominator(R, N, D) :-
+    write_term_to_chars(R, [], Cs),
+    append(Ns, [' ', r, d, i, v, ' '|Ds], Cs),
+    number_chars(N, Ns),
+    number_chars(D, Ds).
