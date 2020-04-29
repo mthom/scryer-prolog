@@ -31,7 +31,7 @@ msb_(X, M, N) :-
     msb_(X1, M1, N).
 
 number_to_rational(Real0, Fraction) :-
-    (   var(Real) -> instantiation_error(number_to_rational/2)
+    (   var(Real0) -> instantiation_error(number_to_rational/2)
     ;   Real0 = R1/R2 ->
         (   member(R, [R1, R2]), \+ number(R) ->
                 type_error(number, R, number_to_rational/2)
