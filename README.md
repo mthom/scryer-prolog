@@ -360,6 +360,9 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   CLP(B): Constraint Logic Programming over Boolean variables,
   a BDD-based SAT&nbsp;solver provided via the predicates
   `sat/1`, `taut/2`, `labeling/1` etc.
+* [`arithmetic`](src/prolog/lib/arithmetic.pl)
+  Arithmetic predicates such as `lsb/2`, `msb/2` and
+  `number_to_rational/2`.
 * [`time`](src/prolog/lib/time.pl)
   `time/1` reports the CPU&nbsp;time of a goal. It is useful
   for measuring the performance of your code.
