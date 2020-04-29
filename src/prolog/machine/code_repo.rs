@@ -53,12 +53,23 @@ impl CodeRepo {
         self.term_dir
             .get_mut(&key)
             .map(|entry| {
-                (
-                    Predicate((entry.0).0.drain(len..).collect()),
-                    entry.1.drain(queue_len..).collect(),
-                )
+                let terms =
+                    if len < (entry.0).0.len() {
+                        (entry.0).0.drain(len ..).collect()
+                    } else {
+                        vec![]
+                    };
+
+                let queue =
+                    if queue_len < entry.1.len() {
+                        entry.1.drain(queue_len ..).collect()
+                    } else {
+                        VecDeque::new()
+                    };
+
+                (Predicate(terms), queue)
             })
-            .unwrap_or((Predicate::new(), VecDeque::from(vec![])))
+            .unwrap_or((Predicate::new(), VecDeque::new()))
     }
 
     pub(crate)

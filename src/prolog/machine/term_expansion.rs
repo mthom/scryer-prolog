@@ -181,6 +181,7 @@ impl<'a> TermStream<'a> {
             te_len,
             te_queue_len,
         );
+
         let goal_expansion_additions = self.wam.code_repo.truncate_terms(
             (clause_name!("goal_expansion"), 2),
             ge_len,
