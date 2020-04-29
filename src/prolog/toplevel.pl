@@ -80,13 +80,17 @@ needs_bracketing(Value, Op) :-
 
 write_goal(G, VarList, MasterVarList, MaxDepth) :-
     (  G = (Var = Value) ->
+       (  var(Value) ->
+	  select((Var = _), VarList, NewVarList)
+       ;  VarList = NewVarList
+       ),
        write(Var),
        write(' = '),
        (  needs_bracketing(Value, (=)) ->
 	      write('('),
-	      write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
+	      write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
 	      write(')')
-       ;  write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)])
+       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)])
        )
     ;  G == [] ->
        write('true')
@@ -95,24 +99,28 @@ write_goal(G, VarList, MasterVarList, MaxDepth) :-
 
 write_last_goal(G, VarList, MasterVarList, MaxDepth) :-
     (  G = (Var = Value) ->
+       (  var(Value) ->
+	  select((Var = _), VarList, NewVarList)
+       ;  VarList = NewVarList
+       ),          
        write(Var),
        write(' = '),
        (  needs_bracketing(Value, (=)) ->
-	      write('('),
-	      write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
-	      write(')')
-       ;  write_term(Value, [quoted(true), variable_names(VarList), max_depth(MaxDepth)]),
-	      (  trailing_period_is_ambiguous(Value) ->
-	         write(' ')
-	      ;  true
-	      )
+	  write('('),
+	  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+	  write(')')
+       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+	  (  trailing_period_is_ambiguous(Value) ->
+	     write(' ')
+	  ;  true
+	  )
        )
     ;  G == [] ->
        write('true')
     ;  write_term(G, [quoted(true), variable_names(MasterVarList), max_depth(MaxDepth)])
     ).
 
-write_eq((G1, G2), [_|VarList], MasterVarList, MaxDepth) :-
+write_eq((G1, G2), VarList, MasterVarList, MaxDepth) :-
     !,
     write_goal(G1, VarList, MasterVarList, MaxDepth),
     write(', '),
@@ -176,7 +184,7 @@ read_input(ThreadedGoals, NewVarList) :-
        read_input(ThreadedGoals, NewVarList)
     ;  member(C, ['\n', .]) ->
        nl, write(';  ...'), nl
-    ; read_input(ThreadedGoals, NewVarList)
+    ;  read_input(ThreadedGoals, NewVarList)
     ).
 
 help_message :-
