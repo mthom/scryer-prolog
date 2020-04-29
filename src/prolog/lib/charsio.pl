@@ -4,6 +4,7 @@
 
 :- use_module(library(iso_ext)).
 :- use_module(library(error)).
+:- use_module(library(lists), [append/3]).
 
 fabricate_var_name(VarType, VarName, N) :-
     char_code('A', AC),
@@ -45,9 +46,10 @@ make_new_var_name(VarType, V, VarName, N, N1, VarList) :-
 
 extend_var_list(Value, VarList, NewVarList, VarType) :-
     term_variables(Value, Vars),
-    extend_var_list_(Vars, 0, VarList, NewVarList, VarType).
+    extend_var_list_(Vars, 0, VarList, NewVarList0, VarType),
+    append(VarList, NewVarList0, NewVarList).
 
-extend_var_list_([], _, VarList, VarList, _).
+extend_var_list_([], _, VarList, [], _).
 extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
     (  var_list_contains_variable(VarList, V) ->
        extend_var_list_(Vs, N, VarList, NewVarList, VarType)

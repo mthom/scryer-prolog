@@ -78,7 +78,7 @@ needs_bracketing(Value, Op) :-
        memberchk(EqSpec, [fx,xfx,yfx])
     ).
 
-write_goal(G, VarList, MaxDepth) :-
+write_goal(G, VarList, MasterVarList, MaxDepth) :-
     (  G = (Var = Value) ->
        write(Var),
        write(' = '),
@@ -90,10 +90,10 @@ write_goal(G, VarList, MaxDepth) :-
        )
     ;  G == [] ->
        write('true')
-    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth)])
+    ;  write_term(G, [quoted(true), variable_names(MasterVarList), max_depth(MaxDepth)])
     ).
 
-write_last_goal(G, VarList, MaxDepth) :-
+write_last_goal(G, VarList, MasterVarList, MaxDepth) :-
     (  G = (Var = Value) ->
        write(Var),
        write(' = '),
@@ -109,16 +109,16 @@ write_last_goal(G, VarList, MaxDepth) :-
        )
     ;  G == [] ->
        write('true')
-    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth)])
+    ;  write_term(G, [quoted(true), variable_names(MasterVarList), max_depth(MaxDepth)])
     ).
 
-write_eq((G1, G2), VarList, MaxDepth) :-
+write_eq((G1, G2), [_|VarList], MasterVarList, MaxDepth) :-
     !,
-    write_goal(G1, VarList, MaxDepth),
+    write_goal(G1, VarList, MasterVarList, MaxDepth),
     write(', '),
-    write_eq(G2, VarList, MaxDepth).
-write_eq(G, VarList, MaxDepth) :-
-    write_last_goal(G, VarList, MaxDepth).
+    write_eq(G2, VarList, MasterVarList, MaxDepth).
+write_eq(G, VarList, MasterVarList, MaxDepth) :-
+    write_last_goal(G, VarList, MasterVarList, MaxDepth).
 
 graphic_token_char(C) :-
     memberchk(C, ['#', '$', '&', '*', '+', '-', '.', ('/'), ':',
@@ -137,9 +137,8 @@ trailing_period_is_ambiguous(Value) :-
 
 write_eqs_and_read_input(B, VarList) :-
     charsio:extend_var_list(VarList, VarList, NewVarList, fabricated),
-    sort(NewVarList, SortedVarList),
     '$get_b_value'(B0),
-    gather_goals(SortedVarList, SortedVarList, Goals),
+    gather_goals(NewVarList, NewVarList, Goals),
     (   bb_get('$first_answer', true) ->
         write('   '),
         bb_put('$first_answer', false)
@@ -147,14 +146,14 @@ write_eqs_and_read_input(B, VarList) :-
     ),
     (  B0 == B ->
        (  Goals == [] ->
-	  write('true.'), nl
+	      write('true.'), nl
        ;  thread_goals(Goals, ThreadedGoals, (',')),
-	  write_eq(ThreadedGoals, NewVarList, 20),
-	  write('.'),
-	  nl
+	      write_eq(ThreadedGoals, NewVarList, NewVarList, 20),
+	      write('.'),
+	      nl
        )
     ;  thread_goals(Goals, ThreadedGoals, (',')),
-       write_eq(ThreadedGoals, NewVarList, 20),
+       write_eq(ThreadedGoals, NewVarList, NewVarList, 20),
        read_input(ThreadedGoals, NewVarList)
     ).
 
@@ -163,12 +162,12 @@ read_input(ThreadedGoals, NewVarList) :-
     (  C = w ->
        nl,
        write('   '),
-       write_eq(ThreadedGoals, NewVarList, 0),
+       write_eq(ThreadedGoals, NewVarList, NewVarList, 0),
        read_input(ThreadedGoals, NewVarList)
     ;  C = p ->
        nl,
        write('   '),
-       write_eq(ThreadedGoals, NewVarList, 20),
+       write_eq(ThreadedGoals, NewVarList, NewVarList, 20),
        read_input(ThreadedGoals, NewVarList)
     ;  member(C, [';', ' ', n]) ->
        nl, write(';  '), false
