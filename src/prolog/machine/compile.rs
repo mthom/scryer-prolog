@@ -882,25 +882,44 @@ impl ListingCompiler {
 
         let (mut len, mut queue_len) = ((preds.0).0.len(), preds.1.len());
 
-        let module_preds = self
-            .user_term_dir
-            .entry(key.clone())
-            .or_insert((Predicate::new(), VecDeque::from(vec![])));
+        if self.module.is_some() && hook.has_module_scope() {
+            let module_preds = self
+                .user_term_dir
+                .entry(key.clone())
+                .or_insert((Predicate::new(), VecDeque::from(vec![])));
 
-        if let Some(ref mut module) = &mut self.module {
-            module.add_expansion_record(hook, clause.clone(), queue.clone());
-            module.add_local_expansion(hook, clause.clone(), queue.clone());
-        }
+            if let Some(ref mut module) = &mut self.module {
+                module.add_expansion_record(hook, clause.clone(), queue.clone());
+                module.add_local_expansion(hook, clause.clone(), queue.clone());
+            }
 
-        (module_preds.0).0.push(clause);
-        module_preds.1.extend(queue.into_iter());
+            (module_preds.0).0.push(clause);
+            module_preds.1.extend(queue.into_iter());
 
-        (preds.0).0.extend((module_preds.0).0.iter().cloned());
-        preds.1.extend(module_preds.1.iter().cloned());
+            (preds.0).0.extend((module_preds.0).0.iter().cloned());
+            preds.1.extend(module_preds.1.iter().cloned());
+        } else {
+            let module_preds = self
+                .user_term_dir
+                .entry(key.clone())
+                .or_insert((Predicate::new(), VecDeque::from(vec![])));
 
-        if !(self.module.is_some() && hook.has_module_scope()) {
+            if let Some(ref mut module) = &mut self.module {
+                module.add_expansion_record(hook, clause.clone(), queue.clone());
+                module.add_local_expansion(hook, clause.clone(), queue.clone());
+            }
+
             len += 1;
             queue_len += queue_len;
+
+            (preds.0).0.push(clause.clone());
+            preds.1.extend(queue.iter().cloned());
+
+            (preds.0).0.extend((module_preds.0).0.iter().cloned());
+            preds.1.extend(module_preds.1.iter().cloned());
+
+            (module_preds.0).0.push(clause);
+            module_preds.1.extend(queue.into_iter());
         }
 
         (len, queue_len)
