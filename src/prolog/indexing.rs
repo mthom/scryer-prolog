@@ -1,4 +1,5 @@
 use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::*;
 
 use crate::prolog::instructions::*;
 use crate::prolog::rug::Integer;
@@ -18,6 +19,7 @@ enum IntIndex {
 }
 
 pub struct CodeOffsets {
+    atom_tbl: TabledData<Atom>,
     pub constants: IndexMap<Constant, ThirdLevelIndex>,
     pub lists: ThirdLevelIndex,
     pub structures: IndexMap<(ClauseName, usize), ThirdLevelIndex>,
@@ -26,6 +28,7 @@ pub struct CodeOffsets {
 impl CodeOffsets {
     pub fn new() -> Self {
         CodeOffsets {
+            atom_tbl: TabledData::new(Rc::new("_index".to_string())),
             constants: IndexMap::new(),
             lists: Vec::new(),
             structures: IndexMap::new(),
@@ -53,10 +56,34 @@ impl CodeOffsets {
 
     fn intercept_constant(&mut self, constant: &Constant, index: usize) {
         match constant {
-            &Constant::Atom(ref name, _) if name.is_char() => {
+            &Constant::Atom(ref name, ref op) if name.is_char() => {
                 let c = name.as_str().chars().next().unwrap();
                 let code = self.constants
                     .entry(Constant::Char(c))
+                    .or_insert(vec![]);
+
+                code.push(Self::add_index(code.is_empty(), index));
+
+                if op.is_some() {
+                    let code = self.constants
+                        .entry(Constant::Atom(name.clone(), None))
+                        .or_insert(vec![]);
+
+                    code.push(Self::add_index(false, index));
+                }
+            }
+            &Constant::Atom(ref name, Some(_)) => {
+                let code = self.constants
+                    .entry(Constant::Atom(name.clone(), None))
+                    .or_insert(vec![]);
+
+                code.push(Self::add_index(code.is_empty(), index));
+            }
+            &Constant::Char(c) => {
+                let atom = clause_name!(c.to_string(), self.atom_tbl.clone());
+
+                let code = self.constants
+                    .entry(Constant::Atom(atom, None))
                     .or_insert(vec![]);
 
                 code.push(Self::add_index(code.is_empty(), index));
