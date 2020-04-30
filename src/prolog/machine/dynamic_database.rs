@@ -307,6 +307,12 @@ impl Machine {
                     }
                 }
             }
+            Addr::Usize(n) => {
+                n
+            }
+            Addr::Fixnum(n) => {
+                usize::try_from(n).unwrap()
+            }
             _ => {
                 unreachable!()
             }

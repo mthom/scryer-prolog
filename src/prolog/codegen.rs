@@ -343,7 +343,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 &mut ControlInstruction::CallClause(_, _, _, ref mut last_call, _) => {
                     *last_call = true
                 }
-                &mut ControlInstruction::JmpBy(_, _, _, ref mut last_call) => *last_call = true,
+                &mut ControlInstruction::JmpBy(_, _, _, ref mut last_call) => {
+                    *last_call = true
+                }
                 &mut ControlInstruction::Proceed => {}
                 _ => dealloc_index += 1,
             },

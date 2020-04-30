@@ -188,6 +188,8 @@ fn set_first_index(code: &mut Code) {
                 if *offset == 0 =>
             {
                 *offset = code_len - idx;
+                debug_assert!(*offset > 0);
+
                 break;
             }
             _ => {}
@@ -634,7 +636,7 @@ impl ListingCompiler {
                 .term_dir_entry_len((clause_name!("term_expansion"), 2)),
             orig_goal_expansion_lens: code_repo
                 .term_dir_entry_len((clause_name!("goal_expansion"), 2)),
-	    initialization_goals: (vec![], VecDeque::from(vec![])),
+	        initialization_goals: (vec![], VecDeque::from(vec![])),
             suppress_warnings,
             listing_src
         }
@@ -880,36 +882,25 @@ impl ListingCompiler {
 
         let (mut len, mut queue_len) = ((preds.0).0.len(), preds.1.len());
 
-        if self.module.is_some() && hook.has_module_scope() {
-            let module_preds = self
-                .user_term_dir
-                .entry(key.clone())
-                .or_insert((Predicate::new(), VecDeque::from(vec![])));
+        let module_preds = self
+            .user_term_dir
+            .entry(key.clone())
+            .or_insert((Predicate::new(), VecDeque::from(vec![])));
 
-            if let Some(ref mut module) = &mut self.module {
-                module.add_expansion_record(hook, clause.clone(), queue.clone());
-                module.add_local_expansion(hook, clause.clone(), queue.clone());
-            }
+        if let Some(ref mut module) = &mut self.module {
+            module.add_expansion_record(hook, clause.clone(), queue.clone());
+            module.add_local_expansion(hook, clause.clone(), queue.clone());
+        }
 
-            (module_preds.0).0.push(clause);
-            module_preds.1.extend(queue.into_iter());
+        (module_preds.0).0.push(clause);
+        module_preds.1.extend(queue.into_iter());
 
-            (preds.0).0.extend((module_preds.0).0.iter().cloned());
-            preds.1.extend(module_preds.1.iter().cloned());
-        } else {
-            let module_preds = self
-                .user_term_dir
-                .entry(key.clone())
-                .or_insert((Predicate::new(), VecDeque::from(vec![])));
+        (preds.0).0.extend((module_preds.0).0.iter().cloned());
+        preds.1.extend(module_preds.1.iter().cloned());
 
+        if !(self.module.is_some() && hook.has_module_scope()) {
             len += 1;
             queue_len += queue_len;
-
-            (preds.0).0.push(clause);
-            preds.1.extend(queue.into_iter());
-
-            (preds.0).0.extend((module_preds.0).0.iter().cloned());
-            preds.1.extend(module_preds.1.iter().cloned());
         }
 
         (len, queue_len)
@@ -980,12 +971,12 @@ impl ListingCompiler {
                     Err(SessionError::from(ParserError::InvalidModuleDecl))
                 }
             }
-	    Declaration::ModuleInitialization(query_terms, queue) => {
-		self.initialization_goals.0.extend(query_terms.into_iter());
-		self.initialization_goals.1.extend(queue.into_iter());
+	        Declaration::ModuleInitialization(query_terms, queue) => {
+		        self.initialization_goals.0.extend(query_terms.into_iter());
+		        self.initialization_goals.1.extend(queue.into_iter());
 
-		Ok(())
-	    }
+		        Ok(())
+	        }
             Declaration::MultiFile(..) => {
                 Ok(())
             }

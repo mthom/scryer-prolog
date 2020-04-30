@@ -872,6 +872,7 @@ impl RelationWorker {
                     let term = Term::Clause(Cell::default(), clause_name!(";"), terms, None);
                     let (stub, clauses) = self.fabricate_disjunct(term);
 
+                    debug_assert!(clauses.len() > 0);
                     self.queue.push_back(clauses);
                     Ok(QueryTerm::Jump(stub))
                 }

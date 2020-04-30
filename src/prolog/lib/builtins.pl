@@ -569,18 +569,19 @@ setof(Template, Goal, Solution) :-
 
 clause(H, B) :-
     (  var(H) -> throw(error(instantiation_error, clause/2))
-    ;  functor(H, Name, Arity) -> (  Name == '.' -> throw(error(type_error(callable, H), clause/2))
-				  ;  Name == (:), Arity =:= 2 ->
-				     arg(1, H, Module),
-				     arg(2, H, F),
-				     '$module_clause'(F, B, Module)
-				  %% '$no_such_predicate' fails if H is not callable.
-				  ;  '$no_such_predicate'(H) -> '$fail'
-				  ;  '$head_is_dynamic'(H) -> '$clause_body_is_valid'(B),
-							      '$get_clause'(H, B)
-				  ;  throw(error(permission_error(access, private_procedure, Name/Arity),
-						 clause/2))
-				  )
+    ;  functor(H, Name, Arity) ->
+       (  Name == '.' -> throw(error(type_error(callable, H), clause/2))
+	   ;  Name == (:), Arity =:= 2 ->
+		  arg(1, H, Module),
+		  arg(2, H, F),
+		  '$module_clause'(F, B, Module)
+	   %% '$no_such_predicate' fails if H is not callable.
+	   ;  '$no_such_predicate'(H) -> '$fail'
+	   ;  '$head_is_dynamic'(H) -> '$clause_body_is_valid'(B),
+							       '$get_clause'(H, B)
+	   ;  throw(error(permission_error(access, private_procedure, Name/Arity),
+					  clause/2))
+	   )
     ;  throw(error(type_error(callable, H), clause/2))
     ).
 

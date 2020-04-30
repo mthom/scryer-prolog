@@ -48,6 +48,7 @@ impl Module {
             (te.0)
                 .0
                 .extend((self.user_term_expansions.0).0.iter().cloned());
+
             te.1.extend(self.user_term_expansions.1.iter().cloned());
         }
 
@@ -60,6 +61,7 @@ impl Module {
             (ge.0)
                 .0
                 .extend((self.user_goal_expansions.0).0.iter().cloned());
+
             ge.1.extend(self.user_goal_expansions.1.iter().cloned());
         }
 
