@@ -904,22 +904,14 @@ impl ListingCompiler {
                 .entry(key.clone())
                 .or_insert((Predicate::new(), VecDeque::from(vec![])));
 
-            if let Some(ref mut module) = &mut self.module {
-                module.add_expansion_record(hook, clause.clone(), queue.clone());
-                module.add_local_expansion(hook, clause.clone(), queue.clone());
-            }
-
             len += 1;
-            queue_len += queue_len;
+            queue_len += queue.len();
 
-            (preds.0).0.push(clause.clone());
-            preds.1.extend(queue.iter().cloned());
+            (preds.0).0.push(clause);
+            preds.1.extend(queue.into_iter());
 
             (preds.0).0.extend((module_preds.0).0.iter().cloned());
             preds.1.extend(module_preds.1.iter().cloned());
-
-            (module_preds.0).0.push(clause);
-            module_preds.1.extend(queue.into_iter());
         }
 
         (len, queue_len)
