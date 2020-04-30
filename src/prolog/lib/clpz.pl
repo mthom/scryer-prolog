@@ -3064,7 +3064,7 @@ is_false(var(X)) :- nonvar(X).
 
 :- dynamic(goal_expansion/1).
 
-goal_expansion(Goal0, _Layout1, _Module, Goal, []) :-
+user:goal_expansion(Goal0, Goal) :-
         \+ goal_expansion(false),
         clpz_expandable(Goal0),
         clpz_expansion(Goal0, Goal).
