@@ -653,7 +653,7 @@ fn setup_declaration<'a, 'b, 'c>(
 		        }
 		        ("initialization", 1) => {
 		            let mut rel_worker = RelationWorker::new(flags, line_num, col_num);
-		            let query_terms = rel_worker.setup_query(indices, terms, false)?;
+		            let (query_terms, _) = rel_worker.setup_query(indices, terms, false, false)?;
 		            let queue = rel_worker.parse_queue(indices)?;
 
 		            Ok(Declaration::ModuleInitialization(query_terms, queue))
@@ -924,10 +924,13 @@ impl RelationWorker {
         indices: &mut CompositeIndices<'a, 'b, 'c>,
         terms: Vec<Box<Term>>,
         blocks_cuts: bool,
-    ) -> Result<Vec<QueryTerm>, ParserError> {
+        assume_dyn: bool,
+    ) -> Result<(Vec<QueryTerm>, Term), ParserError> {
         let mut query_terms = vec![];
         let mut work_queue = VecDeque::from(terms);
         let mut machine_st = MachineState::new();
+
+        let mut dynamic_clause_terms = vec![];
 
         while let Some(term) = work_queue.pop_front() {
             let term = *term;
@@ -965,11 +968,22 @@ impl RelationWorker {
                     mark_cut_variable(&mut term);
                 }
 
+                if assume_dyn {
+                    dynamic_clause_terms.push(term.clone());
+                }
+
                 query_terms.push(self.pre_query_term(indices, term)?);
             }
         }
 
-        Ok(query_terms)
+        let dynamic_clause_body =
+            if let Some(term) = dynamic_clause_terms.pop() {
+                fold_by_str(dynamic_clause_terms.into_iter(), term, clause_name!(","))
+            } else {
+                Term::Constant(Cell::default(), Constant::Atom(clause_name!("true"), None))
+            };
+
+        Ok((query_terms, dynamic_clause_body))
     }
 
     fn setup_hook<'a, 'b, 'c>(
@@ -1003,17 +1017,17 @@ impl RelationWorker {
         blocks_cuts: bool,
         assume_dyn: bool,
     ) -> Result<Rule, ParserError> {
-        let head = *terms.first().cloned().unwrap();
-        let post_head_terms: Vec<_> = terms.drain(1..).collect();
+        let dynamic_term_head = *terms.first().cloned().unwrap();
+        let post_head_terms: Vec<_> = terms.drain(1 ..).collect();
 
-        let tail = *post_head_terms.first().cloned().unwrap();
+        let (mut query_terms, dynamic_term_body) =
+            self.setup_query(indices, post_head_terms, blocks_cuts, assume_dyn)?;
 
         if assume_dyn {
-            self.dynamic_clauses.push((head, tail));
+            self.dynamic_clauses.push((dynamic_term_head, dynamic_term_body));
         }
 
-        let mut query_terms = self.setup_query(indices, post_head_terms, blocks_cuts)?;
-        let clauses = query_terms.drain(1..).collect();
+        let clauses = query_terms.drain(1 ..).collect();
         let qt = query_terms.pop().unwrap();
 
         match *terms.pop().unwrap() {
@@ -1035,11 +1049,14 @@ impl RelationWorker {
         terms: Vec<Box<Term>>,
         blocks_cuts: bool,
     ) -> Result<TopLevel, ParserError> {
-        Ok(TopLevel::Query(self.setup_query(
+        let (result, _) = self.setup_query(
             indices,
             terms,
             blocks_cuts,
-        )?))
+            false,
+        )?;
+
+        Ok(TopLevel::Query(result))
     }
 
     fn compact_module_scoped_head<'a, 'b, 'c>(
@@ -1257,7 +1274,7 @@ impl<'a> TopLevelBatchWorker<'a> {
         match self.dynamic_clause_map.get_mut(&(name.clone(), arity)) {
             Some(ref mut entry) => {
                 entry.clear(); // don't treat dynamic predicates as if they're discontiguous.
-                entry.extend(self.rel_worker.dynamic_clauses.drain(0..));
+                entry.extend(self.rel_worker.dynamic_clauses.drain(0 ..));
             }
             _ => {
                 self.rel_worker.dynamic_clauses.clear();
