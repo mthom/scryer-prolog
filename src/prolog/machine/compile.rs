@@ -77,9 +77,11 @@ fn load_module(
         listing_src.clone(),
     );
 
+    let mut stream = parsing_stream(stream)?;
+
     let results = compiler.gather_items(
         wam,
-        &mut parsing_stream(stream),
+        &mut stream,
         &mut indices,
     );
 
@@ -373,9 +375,11 @@ fn compile_into_module_impl(
     wam.code_repo.compile_hook(CompileTimeHook::TermExpansion)?;
     wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion)?;
 
+    let mut stream = parsing_stream(src)?;
+
     let mut results = compiler.gather_items(
         wam,
-        &mut parsing_stream(src),
+        &mut stream,
         &mut indices,
     )?;
 
@@ -1357,7 +1361,8 @@ fn compile_work(
     src: Stream,
     mut indices: IndexStore,
 ) -> EvalSession {
-    let src = &mut parsing_stream(src);
+    let mut stream = try_eval_session!(parsing_stream(src));
+    let src = &mut stream;
     let results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
 
     try_eval_session!(compile_work_impl(compiler, wam, indices, results));
@@ -1376,9 +1381,9 @@ pub fn compile_special_form(
     let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
     setup_indices(wam, clause_name!("builtins"), &mut indices)?;
 
-    let src = &mut parsing_stream(src);
+    let mut src = parsing_stream(src)?;
     let mut compiler = ListingCompiler::new(&wam.code_repo, true, listing_src);
-    let mut results = compiler.gather_items(wam, src, &mut indices)?;
+    let mut results = compiler.gather_items(wam, &mut src, &mut indices)?;
 
     compiler.adapt_in_situ_code(
         results.worker_results,

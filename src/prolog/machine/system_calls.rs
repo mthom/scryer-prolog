@@ -595,8 +595,26 @@ impl MachineState {
 
         string.push('.');
 
-        let mut stream = parsing_stream(std::io::Cursor::new(string));
-        let mut parser = Parser::new(&mut stream, indices.atom_tbl.clone(), self.machine_flags());
+        let mut stream =
+            match parsing_stream(std::io::Cursor::new(string)) {
+                Ok(stream) => {
+                    stream
+                }
+                Err(e) => {
+                    let err = MachineError::session_error(
+                        self.heap.h(),
+                        SessionError::from(e),
+                    );
+
+                    return Err(self.error_form(err, stub));
+                }
+            };
+
+        let mut parser = Parser::new(
+            &mut stream,
+            indices.atom_tbl.clone(),
+            self.machine_flags(),
+        );
 
         match parser.read_term(composite_op!(&indices.op_dir)) {
             Err(err) => {
@@ -1603,9 +1621,13 @@ impl MachineState {
                 self.unify(char_list, a2);
             }
             &SystemClauseType::GetChar => {
-                let mut iter = parsing_stream(current_input_stream.clone());
-                let result = iter.next();
+                let mut iter = self.open_parsing_stream(
+                    current_input_stream.clone(),
+                    "get_char",
+                    1,
+                )?;
 
+                let result = iter.next();
                 let a1 = self[temp_v!(1)];
 
                 match result {
@@ -3173,10 +3195,16 @@ impl MachineState {
                 let mut heap_pstr_iter = self.heap_pstr_iter(self[temp_v!(1)]);
                 let chars = heap_pstr_iter.to_string();
 
+                let mut stream = self.open_parsing_stream(
+                    Stream::from(chars),
+                    "read_term_from_chars",
+                    2,
+                )?;
+
                 if let Addr::EmptyList = heap_pstr_iter.focus() {
                     let term_write_result =
                         match self.read(
-                            &mut parsing_stream(Stream::from(chars)),
+                            &mut stream,
                             indices.atom_tbl.clone(),
                             &indices.op_dir,
                         ) {

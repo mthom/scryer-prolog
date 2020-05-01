@@ -221,7 +221,7 @@ impl<'a> TermStream<'a> {
         term_string: &str,
         op_dir: &OpDir,
     ) -> Result<Term, ParserError> {
-        let mut stream = parsing_stream(term_string.trim().as_bytes());
+        let mut stream = parsing_stream(term_string.trim().as_bytes())?;
         let mut parser = Parser::new(&mut stream, self.parser.get_atom_tbl(), self.flags);
 
         parser.read_term(composite_op!(

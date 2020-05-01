@@ -12,7 +12,7 @@ use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::modules::*;
 use crate::prolog::machine::stack::*;
 use crate::prolog::machine::streams::*;
-use crate::prolog::read::readline;
+use crate::prolog::read::{PrologStream, readline};
 use crate::prolog::rug::Integer;
 
 use downcast::Any;
@@ -611,13 +611,42 @@ pub struct MachineState {
 
 impl MachineState {
     pub(crate)
+    fn open_parsing_stream(
+        &self,
+        stream: Stream,
+        stub_name: &'static str,
+        stub_arity: usize,
+    ) -> Result<PrologStream, MachineStub> {
+        match parsing_stream(stream) {
+            Ok(stream) => {
+                Ok(stream)
+            }
+            Err(e) => {
+                let stub = MachineError::functor_stub(clause_name!(stub_name), stub_arity);
+                let err = MachineError::session_error(
+                    self.heap.h(),
+                    SessionError::from(e),
+                );
+
+                Err(self.error_form(err, stub))
+            }
+        }
+    }
+
+    pub(crate)
     fn read_term(
         &mut self,
         current_input_stream: &mut Stream,
         indices: &mut IndexStore,
     ) -> CallResult {
+        let mut stream = self.open_parsing_stream(
+            current_input_stream.clone(),
+            "read_term",
+            2,
+        )?;
+
         match self.read(
-            &mut parsing_stream(current_input_stream.clone()),
+            &mut stream,
             indices.atom_tbl.clone(),
             &indices.op_dir,
         ) {
@@ -1257,8 +1286,14 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Read => {
+                let mut stream = machine_st.open_parsing_stream(
+                    current_input_stream.clone(),
+                    "read",
+                    1,
+                )?;
+
                 match machine_st.read(
-                    &mut parsing_stream(current_input_stream.clone()),
+                    &mut stream,
                     indices.atom_tbl.clone(),
                     &indices.op_dir,
                 ) {
