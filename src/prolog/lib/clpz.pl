@@ -3038,13 +3038,13 @@ expansion_simpler((A0,B0), (A,B)) :- !,
 expansion_simpler(Var is Expr0, Goal) :-
         ground(Expr0), !,
         phrase(expr_conds(Expr0, Expr), Gs),
-        (   maplist(call, Gs) -> Var is Expr, Goal = true
+        (   maplist(call, Gs) -> Value is Expr, Goal = (Var = Value)
         ;   Goal = false
         ).
 expansion_simpler(Var =:= Expr0, Goal) :-
         ground(Expr0), !,
         phrase(expr_conds(Expr0, Expr), Gs),
-        (   maplist(call, Gs) -> Goal = (Var =:= Expr)
+        (   maplist(call, Gs) -> Value is Expr, Goal = (Var =:= Value)
         ;   Goal = false
         ).
 expansion_simpler(between(L,U,V), Goal) :- maplist(integer, [L,U,V]), !,
