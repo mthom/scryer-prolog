@@ -1,18 +1,107 @@
 
-:- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2]).
+:- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2,
+                        argv/1]).
 
 :- use_module(library(charsio)).
 :- use_module(library(lists)).
 :- use_module(library(si)).
 
-'$repl'([_|Args]) :-
-    maplist(use_list_of_modules, Args),
-    false.
-'$repl'(_) :- repl.
+:- dynamic(argv/1).
 
-use_list_of_modules(Mod0) :-
-    atom_chars(Mod, Mod0),
-    catch(use_module(Mod), E, print_exception(E)).
+'$repl'([_|Args0]) :-
+    \+ argv(_),
+    (   append(Args1, ["--"|Args2], Args0) ->
+            asserta(argv(Args2)),
+            Args = Args1
+    ;   asserta(argv([])),
+        Args = Args0
+    ),
+    delegate_task(Args, []),
+    repl.
+'$repl'(_) :-
+    (   \+ argv(_) -> asserta(argv([]))
+    ;   true
+    ),
+    repl.
+
+delegate_task([], []).
+delegate_task([], Goals0) :-
+    reverse(Goals0, Goals),
+    run_goals(Goals),
+    repl.
+delegate_task([Arg0|Args], Goals0) :-
+    (   member(Arg0, ["-h", "--help"]) -> print_help(Args)
+    ;   member(Arg0, ["-v", "--version"]) -> print_version(Args)
+    ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
+    ;   atom_chars(Mod, Arg0),
+        catch(use_module(Mod), E, print_exception(E))
+    ),
+    delegate_task(Args, Goals0).
+
+print_help(_) :-
+    write('Usage: scryer-prolog [OPTIONS] [FILES] [-- ARGUMENTS]'),
+    nl, nl,
+    write('Options:'), nl,
+    write('   -h, --help           '),
+    write('Display this message'), nl,
+    write('   -v, --version        '),
+    write('Print version information and exit'), nl,
+    write('   -g, --goal GOAL      '),
+    write('Run the query GOAL'), nl,
+    % write('                        '),
+    halt.
+
+print_version(_) :-
+    '$scryer_prolog_version'(Version),
+    write(Version), nl,
+    halt.
+
+gather_goal(Type, Args0, Goals) :-
+    length(Args0, N),
+    (   N < 1 -> print_help(_), halt
+    ;   true
+    ),
+    [Gs1|Args] = Args0,
+    (   Type = g -> Gs =.. [Type, Gs1]
+    ;   write('caught: '),
+        write(error(domain_error(arg_type, Type), gather_goal/3)), nl,
+        halt
+    ),
+    delegate_task(Args, [Gs|Goals]).
+
+arg_type(g).
+arg_type(t).
+arg_type(g(_)).
+arg_type(t(_)).
+
+ends_with_dot(Ls0) :-
+        reverse(Ls0, Ls),
+        layout_and_dot(Ls).
+
+layout_and_dot(['.'|_]).
+layout_and_dot([C|Cs]) :-
+        char_type(C, layout),
+        layout_and_dot(Cs).
+
+run_goals([]).
+run_goals([g(Gs0)|Goals]) :-
+    (   ends_with_dot(Gs0) -> Gs1 = Gs0
+    ;   append(Gs0, ".", Gs1)
+    ),
+    read_term_from_chars(Gs1, Goal),
+    (   catch(
+            Goal,
+            Exception,
+            (write(Gs0), write(' causes: '), write(Exception), nl) % halt?
+        )
+    ;   write('Warning: initialization failed for '),
+        write(Gs0), nl
+    ),
+    run_goals(Goals).
+run_goals([Goal|_]) :-
+    write('caught: '),
+    write(error(domain_error(arg_type, Goal), run_goals/1)), nl,
+    halt.
 
 repl :-
     catch(read_and_match, E, print_exception(E)),
@@ -363,3 +452,4 @@ thread_goals(Goals0, Goals1, Functor) :-
        )
     ;  Goals1 = Goals0
     ).
+
