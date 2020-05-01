@@ -238,7 +238,7 @@ impl Addr {
         }
     }
 
-    pub fn as_constant(&self, machine_st: &MachineState) -> Option<Constant> {
+    pub fn as_constant_index(&self, machine_st: &MachineState) -> Option<Constant> {
         match self {
             &Addr::Char(c) => {
                 Some(Constant::Char(c))
@@ -249,7 +249,7 @@ impl Addr {
             &Addr::Con(h) => {
                 match &machine_st.heap[h] {
                     &HeapCellValue::Atom(ref name, ref op) => {
-                        Some(Constant::Atom(name.clone(), op.clone()))
+                        Some(Constant::Atom(name.clone(), None))
                     }
                     &HeapCellValue::Integer(ref n) => {
                         Some(Constant::Integer(n.clone()))

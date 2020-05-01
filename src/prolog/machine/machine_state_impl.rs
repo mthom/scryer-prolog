@@ -1433,7 +1433,7 @@ impl MachineState {
                 let addr = self.store(self.deref(addr));
 
                 let offset =
-                    match addr.as_constant(&self) {
+                    match addr.as_constant_index(&self) {
                         Some(c) => {
                             match hm.get(&c) {
                                 Some(offset) => *offset,

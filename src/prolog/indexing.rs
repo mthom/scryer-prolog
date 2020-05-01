@@ -54,7 +54,7 @@ impl CodeOffsets {
         }
     }
 
-    fn intercept_constant(&mut self, constant: &Constant, index: usize) {
+    fn intercept_overlapping_constant(&mut self, constant: &Constant, index: usize) {
         match constant {
             &Constant::Atom(ref name, ref op) if name.is_char() => {
                 let c = name.as_str().chars().next().unwrap();
@@ -162,7 +162,7 @@ impl CodeOffsets {
                 self.lists.push(Self::add_index(is_initial_index, index));
             }
             &Term::Constant(_, ref constant) => {
-                self.intercept_constant(constant, index);
+                self.intercept_overlapping_constant(constant, index);
 
                 let code = self.constants
                     .entry(constant.clone())
