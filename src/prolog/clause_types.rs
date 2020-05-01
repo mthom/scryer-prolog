@@ -264,7 +264,6 @@ pub enum SystemClauseType {
     WAMInstructions,
     WriteTerm,
     WriteTermToChars,
-    ScryerPrologVersion,
 }
 
 impl SystemClauseType {
@@ -419,7 +418,6 @@ impl SystemClauseType {
             &SystemClauseType::WAMInstructions => clause_name!("$wam_instructions"),
             &SystemClauseType::WriteTerm => clause_name!("$write_term"),
             &SystemClauseType::WriteTermToChars => clause_name!("$write_term_to_chars"),
-            &SystemClauseType::ScryerPrologVersion => clause_name!("$scryer_prolog_version"),
         }
     }
 
@@ -554,7 +552,6 @@ impl SystemClauseType {
             ("$wam_instructions", 3) => Some(SystemClauseType::WAMInstructions),
             ("$write_term", 6) => Some(SystemClauseType::WriteTerm),
             ("$write_term_to_chars", 7) => Some(SystemClauseType::WriteTermToChars),
-            ("$scryer_prolog_version", 1) => Some(SystemClauseType::ScryerPrologVersion),
             _ => None,
         }
     }
