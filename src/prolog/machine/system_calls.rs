@@ -3543,6 +3543,15 @@ impl MachineState {
                     unreachable!()
                 }
             }
+            &SystemClauseType::ScryerPrologVersion => {
+                use crate::git_version::git_version;
+                let version = self[temp_v!(1)];
+                let buffer =
+                    git_version!(cargo_prefix = "cargo:", fallback = "unknown");
+                let chars = buffer.chars().map(|c| Addr::Char(c));
+                let result = Addr::HeapCell(self.heap.to_list(chars));
+                self.unify(version, result);
+            }
         };
 
         return_from_clause!(self.last_call, self)

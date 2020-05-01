@@ -30,15 +30,15 @@ delegate_task([], Goals0) :-
     run_goals(Goals),
     repl.
 delegate_task([Arg0|Args], Goals0) :-
-    (   member(Arg0, ["-h", "--help"]) -> print_help(Args)
-    ;   member(Arg0, ["-v", "--version"]) -> print_version(Args)
+    (   member(Arg0, ["-h", "--help"]) -> print_help
+    ;   member(Arg0, ["-v", "--version"]) -> print_version
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
     ;   atom_chars(Mod, Arg0),
         catch(use_module(Mod), E, print_exception(E))
     ),
     delegate_task(Args, Goals0).
 
-print_help(_) :-
+print_help :-
     write('Usage: scryer-prolog [OPTIONS] [FILES] [-- ARGUMENTS]'),
     nl, nl,
     write('Options:'), nl,
@@ -51,22 +51,18 @@ print_help(_) :-
     % write('                        '),
     halt.
 
-print_version(_) :-
+print_version :-
     '$scryer_prolog_version'(Version),
     write(Version), nl,
     halt.
 
 gather_goal(Type, Args0, Goals) :-
     length(Args0, N),
-    (   N < 1 -> print_help(_), halt
+    (   N < 1 -> print_help, halt
     ;   true
     ),
     [Gs1|Args] = Args0,
-    (   Type = g -> Gs =.. [Type, Gs1]
-    ;   write('caught: '),
-        write(error(domain_error(arg_type, Type), gather_goal/3)), nl,
-        halt
-    ),
+    Gs =.. [Type, Gs1],
     delegate_task(Args, [Gs|Goals]).
 
 arg_type(g).

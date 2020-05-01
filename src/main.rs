@@ -28,18 +28,13 @@ use std::sync::atomic::Ordering;
 extern fn handle_sigint(signal: libc::c_int) {
     let signal = signal::Signal::from_c_int(signal).unwrap();
     if signal == signal::Signal::SIGINT {
-	INTERRUPT.store(true, Ordering::Relaxed);
+        INTERRUPT.store(true, Ordering::Relaxed);
     }
 }
 
 fn main() {
     let handler = signal::SigHandler::Handler(handle_sigint);
     unsafe { signal::signal(signal::Signal::SIGINT, handler) }.unwrap();
-
-    if env::args().skip(1).any(|a| a == "-v" || a == "--version") {
-        println!("{:}", git_version!(cargo_prefix = "cargo:", fallback = "unknown"));
-        return;
-    }
 
     let mut wam = Machine::new(readline::input_stream(), Stream::stdout());
     wam.run_top_level();
