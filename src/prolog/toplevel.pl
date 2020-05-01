@@ -54,7 +54,8 @@ print_help(Args) :-
     halt.
 
 print_version(Args) :-
-    write('v0.8.120'), nl, % TODO: Something better is required here.
+    '$scryer_prolog_version'(Version),
+    write(Version), nl,
     halt.
 
 gather_goal(Type, Args0, Goals) :-
