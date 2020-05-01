@@ -1,11 +1,11 @@
-/*  CLP(Z): Constraint Logic Programming over Integers.
+/*  CLP(ℤ): Constraint Logic Programming over Integers.
 
     Author:        Markus Triska
     E-mail:        triska@metalevel.at
     WWW:           https://www.metalevel.at
     Copyright (C): 2016-2020 Markus Triska
 
-    This library provides CLP(Z):
+    This library provides CLP(ℤ):
 
               Constraint Logic Programming over Integers
               ==========================================
@@ -274,15 +274,15 @@ exclude_([L|Ls0], Goal, Ls) :-
 
 ## Introduction			{#clpz-intro}
 
-This library provides CLP(Z): Constraint Logic Programming over
+This library provides CLP(ℤ): Constraint Logic Programming over
 Integers.
 
-CLP(Z) is an instance of the general CLP(.) scheme, extending logic
-programming with reasoning over specialised domains. CLP(Z) lets us
+CLP(ℤ) is an instance of the general CLP(.) scheme, extending logic
+programming with reasoning over specialised domains. CLP(ℤ) lets us
 reason about **integers** in a way that honors the relational nature
 of Prolog.
 
-There are two major use cases of CLP(Z) constraints:
+There are two major use cases of CLP(ℤ) constraints:
 
     1. [**declarative integer arithmetic**](<#clpz-integer-arith>)
     2. solving **combinatorial problems** such as planning, scheduling
@@ -300,7 +300,7 @@ The predicates of this library can be classified as:
 In most cases, [_arithmetic constraints_](<#clpz-arith-constraints>)
 are the only predicates you will ever need from this library. When
 reasoning over integers, simply replace low-level arithmetic
-predicates like `(is)/2` and `(>)/2` by the corresponding CLP(Z)
+predicates like `(is)/2` and `(>)/2` by the corresponding CLP(ℤ)
 constraints like #=/2 and #>/2 to honor and preserve declarative
 properties of your programs. For satisfactory performance, arithmetic
 constraints are implicitly rewritten at compilation time so that
@@ -308,7 +308,7 @@ low-level fallback predicates are automatically used whenever
 possible.
 
 Almost all Prolog programs also reason about integers. Therefore, it
-is highly advisable that you make CLP(Z) constraints available in all
+is highly advisable that you make CLP(ℤ) constraints available in all
 your programs. One way to do this is to put the following directive in
 your =|~/.swiplrc|= initialisation file:
 
@@ -316,7 +316,7 @@ your =|~/.swiplrc|= initialisation file:
 :- use_module(library(clpz)).
 ==
 
-All example programs that appear in the CLP(Z) documentation assume
+All example programs that appear in the CLP(ℤ) documentation assume
 that you have done this.
 
 Important concepts and principles of this library are illustrated by
@@ -324,7 +324,7 @@ means of usage examples that are available in a public git repository:
 [**github.com/triska/clpz**](https://github.com/triska/clpz)
 
 If you are used to the complicated operational considerations that
-low-level arithmetic primitives necessitate, then moving to CLP(Z)
+low-level arithmetic primitives necessitate, then moving to CLP(ℤ)
 constraints may, due to their power and convenience, at first feel to
 you excessive and almost like cheating. It _isn't_. Constraints are an
 integral part of all popular Prolog systems, and they are designed
@@ -332,7 +332,7 @@ to help you eliminate and avoid the use of low-level and less general
 primitives by providing declarative alternatives that are meant to be
 used instead.
 
-When teaching Prolog, CLP(Z) constraints should be introduced
+When teaching Prolog, CLP(ℤ) constraints should be introduced
 _before_ explaining low-level arithmetic predicates and their
 procedural idiosyncrasies. This is because constraints are easy to
 explain, understand and use due to their purely relational nature. In
@@ -340,13 +340,13 @@ contrast, the modedness and directionality of low-level arithmetic
 primitives are impure limitations that are better deferred to more
 advanced lectures.
 
-More information about CLP(Z) constraints and their implementation is
+More information about CLP(ℤ) constraints and their implementation is
 contained in: [**metalevel.at/drt.pdf**](https://www.metalevel.at/drt.pdf)
 
-The best way to discuss applying, improving and extending CLP(Z)
+The best way to discuss applying, improving and extending CLP(ℤ)
 constraints is to use the dedicated `clpz` tag on
 [stackoverflow.com](http://stackoverflow.com). Several of the world's
-foremost CLP(Z) experts regularly participate in these discussions
+foremost CLP(ℤ) experts regularly participate in these discussions
 and will help you for free on this platform.
 
 ## Arithmetic constraints		{#clpz-arith-constraints}
@@ -401,7 +401,7 @@ etc. are meant to be used _instead_ of the primitives `(is)/2`,
 `(=:=)/2`, `(>)/2` etc. over integers. Almost all Prolog programs also
 reason about integers. Therefore, it is recommended that you put the
 following directive in your =|~/.swiplrc|= initialisation file to make
-CLP(Z) constraints available in all your programs:
+CLP(ℤ) constraints available in all your programs:
 
 ==
 :- use_module(library(clpz)).
@@ -409,7 +409,7 @@ CLP(Z) constraints available in all your programs:
 
 Throughout the following, it is assumed that you have done this.
 
-The most basic use of CLP(Z) constraints is _evaluation_ of
+The most basic use of CLP(ℤ) constraints is _evaluation_ of
 arithmetic expressions involving integers. For example:
 
 ==
@@ -428,7 +428,7 @@ partially instantiated. For example:
 Y = 1.
 ==
 
-This relational nature makes CLP(Z) constraints easy to explain and
+This relational nature makes CLP(ℤ) constraints easy to explain and
 use, and well suited for beginners and experienced Prolog programmers
 alike. In contrast, when using low-level integer arithmetic, we get:
 
@@ -444,7 +444,7 @@ Due to the necessary operational considerations, the use of these
 low-level arithmetic predicates is considerably harder to understand
 and should therefore be deferred to more advanced lectures.
 
-For supported expressions, CLP(Z) constraints are drop-in
+For supported expressions, CLP(ℤ) constraints are drop-in
 replacements of these low-level arithmetic predicates, often yielding
 more general programs. See [`n_factorial/2`](<#clpz-factorial>) for an
 example.
@@ -468,13 +468,13 @@ positive_integer(N) :-
         ).
 ==
 
-This illustrates why the performance of CLP(Z) constraints is almost
+This illustrates why the performance of CLP(ℤ) constraints is almost
 always completely satisfactory when they are used in modes that can be
 handled by low-level arithmetic. To disable the automatic rewriting,
 set the Prolog flag `clpz_goal_expansion` to `false`.
 
 If you are used to the complicated operational considerations that
-low-level arithmetic primitives necessitate, then moving to CLP(Z)
+low-level arithmetic primitives necessitate, then moving to CLP(ℤ)
 constraints may, due to their power and convenience, at first feel to
 you excessive and almost like cheating. It _isn't_. Constraints are an
 integral part of all popular Prolog systems, and they are designed
@@ -500,9 +500,9 @@ n_factorial(N, F) :-
         F #= N * F1.
 ==
 
-This program uses CLP(Z) constraints _instead_ of low-level
+This program uses CLP(ℤ) constraints _instead_ of low-level
 arithmetic throughout, and everything that _would have worked_ with
-low-level arithmetic _also_ works with CLP(Z) constraints, retaining
+low-level arithmetic _also_ works with CLP(ℤ) constraints, retaining
 roughly the same performance. For example:
 
 ==
@@ -512,7 +512,7 @@ false.
 ==
 
 Now the point: Due to the increased flexibility and generality of
-CLP(Z) constraints, we are free to _reorder_ the goals as follows:
+CLP(ℤ) constraints, we are free to _reorder_ the goals as follows:
 
 ==
 n_factorial(0, 1).
@@ -541,18 +541,18 @@ the (implied) constraint `F #\= 0` before the recursive call.
 Otherwise, the query `n_factorial(N, 0)` is the only non-terminating
 case of this kind.
 
-The value of CLP(Z) constraints does _not_ lie in completely freeing
+The value of CLP(ℤ) constraints does _not_ lie in completely freeing
 us from _all_ procedural phenomena. For example, the two programs do
 not even have the same _termination properties_ in all cases.
-Instead, the primary benefit of CLP(Z) constraints is that they allow
+Instead, the primary benefit of CLP(ℤ) constraints is that they allow
 you to try different execution orders and apply [**declarative
 debugging**](https://www.metalevel.at/prolog/debugging.html)
 techniques _at all_!  Reordering goals (and clauses) can significantly
 impact the performance of Prolog programs, and you are free to try
 different variants if you use declarative approaches. Moreover, since
-all CLP(Z) constraints _always terminate_, placing them earlier can
+all CLP(ℤ) constraints _always terminate_, placing them earlier can
 at most _improve_, never worsen, the termination properties of your
-programs. An additional benefit of CLP(Z) constraints is that they
+programs. An additional benefit of CLP(ℤ) constraints is that they
 eliminate the complexity of introducing `(is)/2` and `(=:=)/2` to
 beginners, since _both_ predicates are subsumed by #=/2 when reasoning
 over integers.
@@ -560,7 +560,7 @@ over integers.
 ## Combinatorial constraints  {#clpz-combinatorial}
 
 In addition to subsuming and replacing low-level arithmetic
-predicates, CLP(Z) constraints are often used to solve combinatorial
+predicates, CLP(ℤ) constraints are often used to solve combinatorial
 problems such as planning, scheduling and allocation tasks. Among the
 most frequently used *combinatorial constraints* are all_distinct/1,
 global_cardinality/2 and cumulative/2. This library also provides
@@ -569,12 +569,12 @@ useful in more specialized applications.
 
 ## Domains                             {#clpz-domains}
 
-Each CLP(Z) variable has an associated set of admissible integers,
+Each CLP(ℤ) variable has an associated set of admissible integers,
 which we call the variable's *domain*. Initially, the domain of each
-CLP(Z) variable is the set of _all_ integers. CLP(Z) constraints
+CLP(ℤ) variable is the set of _all_ integers. CLP(ℤ) constraints
 like #=/2, #>/2 and #\=/2 can at most reduce, and never extend, the
 domains of their arguments. The constraints in/2 and ins/2 let us
-explicitly state domains of CLP(Z) variables. The process of
+explicitly state domains of CLP(ℤ) variables. The process of
 determining and adjusting domains of variables is called constraint
 *propagation*, and it is performed automatically by this library. When
 the domain of a variable contains only one element, then the variable
@@ -586,7 +586,7 @@ and by enumeration predicates like labeling/2.
 ## Example: Sudoku {#clpz-sudoku}
 
 As another example, consider _Sudoku_: It is a popular puzzle
-over integers that can be easily solved with CLP(Z) constraints.
+over integers that can be easily solved with CLP(ℤ) constraints.
 
 ==
 sudoku(Rows) :-
@@ -690,7 +690,7 @@ own labeling strategies.
 
 ## Core relations and search    {#clpz-search}
 
-Using CLP(Z) constraints to solve combinatorial tasks typically
+Using CLP(ℤ) constraints to solve combinatorial tasks typically
 consists of two phases:
 
     1. First, all relevant constraints are stated.
@@ -706,7 +706,7 @@ search, and more easily try different search strategies.
 
 As an example of a constraint satisfaction problem, consider the
 cryptoarithmetic puzzle SEND + MORE = MONEY, where different letters
-denote distinct integers between 0 and 9. It can be modeled in CLP(Z)
+denote distinct integers between 0 and 9. It can be modeled in CLP(ℤ)
 as follows:
 
 ==
@@ -769,13 +769,13 @@ so-called _eight queens puzzle_. The task is to place 8 queens on an
 8x8 chessboard such that none of the queens is under attack. This
 means that no two queens share the same row, column or diagonal.
 
-To express this puzzle via CLP(Z) constraints, we must first pick a
-suitable representation. Since CLP(Z) constraints reason over
+To express this puzzle via CLP(ℤ) constraints, we must first pick a
+suitable representation. Since CLP(ℤ) constraints reason over
 _integers_, we must find a way to map the positions of queens to
 integers. Several such mappings are conceivable, and it is not
 immediately obvious which we should use. On top of that, different
 constraints can be used to express the desired relations. For such
-reasons, _modeling_ combinatorial problems via CLP(Z) constraints
+reasons, _modeling_ combinatorial problems via CLP(ℤ) constraints
 often necessitates some creativity and has been described as more of
 an art than a science.
 
@@ -840,7 +840,7 @@ separated the core relation from the actual search.
 
 ## Optimisation    {#clpz-optimisation}
 
-We can use labeling/2 to minimize or maximize the value of a CLP(Z)
+We can use labeling/2 to minimize or maximize the value of a CLP(ℤ)
 expression, and generate solutions in increasing or decreasing order
 of the value. See the labeling options `min(Expr)` and `max(Expr)`,
 respectively.
@@ -857,9 +857,9 @@ solutions that are _also_ optimal, so that we can choose among optimal
 solutions by other criteria. For the sake of
 [**purity**](https://www.metalevel.at/prolog/purity.html) and
 completeness, we recommend to avoid `once/1` and other constructs that
-lead to impurities in CLP(Z) programs.
+lead to impurities in CLP(ℤ) programs.
 
-Related to optimisation with CLP(Z) constraints are `library(simplex)`
+Related to optimisation with CLP(ℤ) constraints are `library(simplex)`
 and CLP(Q) which reason about _linear_ constraints over rational
 numbers.
 
@@ -883,9 +883,9 @@ The constraints of this table are reifiable as well.
 When reasoning over Boolean variables, also consider using CLP(B)
 constraints as provided by `library(clpb)`.
 
-## Enabling monotonic CLP(Z)		{#clpz-monotonicity}
+## Enabling monotonic CLP(ℤ)		{#clpz-monotonicity}
 
-In the default execution mode, CLP(Z) constraints still exhibit some
+In the default execution mode, CLP(ℤ) constraints still exhibit some
 non-relational properties. For example, _adding_ constraints can yield
 new solutions:
 
@@ -900,7 +900,7 @@ X = 1+1.
 This behaviour is highly problematic from a logical point of view, and
 it may render declarative debugging techniques inapplicable.
 
-Assert `clpz:monotonic` to make CLP(Z) **monotonic**: This means
+Assert `clpz:monotonic` to make CLP(ℤ) **monotonic**: This means
 that _adding_ new constraints _cannot_ yield new solutions. When this
 flag is `true`, we must wrap variables that occur in arithmetic
 expressions with the functor `(?)/1` or `(#)/1`. For example:
@@ -2509,7 +2509,7 @@ remove_lower([C*X|CXs], Min) :-
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Parsing a CLP(Z) expression has two important side-effects: First,
+   Parsing a CLP(ℤ) expression has two important side-effects: First,
    it constrains the variables occurring in the expression to
    integers. Second, it constrains some of them even more: For
    example, in X/Y and X mod Y, Y is constrained to be #\= 0.
@@ -2947,7 +2947,7 @@ expr_conds(A0 mod B0, A mod B)   -->
 expr_conds(A0^B0, A^B)           -->
         expr_conds(A0, A), expr_conds(B0, B),
         [(B >= 0 ; A =:= -1)].
-% Bitwise operations, added to make CLP(Z) usable in more cases
+% Bitwise operations, added to make CLP(ℤ) usable in more cases
 expr_conds(\ A0, \ A) --> expr_conds(A0, A).
 expr_conds(A0<<B0, A<<B) --> expr_conds(A0, A), expr_conds(B0, B).
 expr_conds(A0>>B0, A>>B) --> expr_conds(A0, A), expr_conds(B0, B).
@@ -7259,7 +7259,7 @@ chain(Relation, X, Prev, X) :- call(Relation, ?(Prev), ?(X)).
 
 %% fd_var(+Var)
 %
-%  True iff Var is a CLP(Z) variable.
+%  True iff Var is a CLP(ℤ) variable.
 
 fd_var(X) :- get_attr(X, clpz, _).
 
