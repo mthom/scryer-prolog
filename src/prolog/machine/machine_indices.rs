@@ -248,7 +248,10 @@ impl Addr {
             }
             &Addr::Con(h) => {
                 match &machine_st.heap[h] {
-                    &HeapCellValue::Atom(ref name, ref op) => {
+                    &HeapCellValue::Atom(ref name, _) if name.is_char() => {
+                        Some(Constant::Char(name.as_str().chars().next().unwrap()))
+                    }
+                    &HeapCellValue::Atom(ref name, _) => {
                         Some(Constant::Atom(name.clone(), None))
                     }
                     &HeapCellValue::Integer(ref n) => {
