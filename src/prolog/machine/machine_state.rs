@@ -277,7 +277,7 @@ fn compare_pstr_to_string<'a>(
                         s_offset += c1.len_utf8();
                     }
                 } else {
-                    return None;
+                    return Some(s_offset);
                 }
             }
             PStrIteratee::PStrSegment(h, n) => {
