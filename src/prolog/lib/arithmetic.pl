@@ -1,10 +1,32 @@
-:- module(arithmetic, [lsb/2, msb/2, number_to_rational/2,
+:- module(arithmetic, [expmod/4, lsb/2, msb/2, number_to_rational/2,
                        number_to_rational/3,
                        rational_numerator_denominator/3]).
 
 :- use_module(library(charsio), [write_term_to_chars/3]).
 :- use_module(library(error)).
 :- use_module(library(lists), [append/3, member/2]).
+
+expmod(Base, Expo, Mod, R) :-
+    (   member(N, [Base, Expo, Mod]), var(N) -> instantiation_error(expmod/4)
+    ;   member(N, [Base, Expo, Mod]), \+ integer(N) ->
+        type_error(integer, N, expmod/4)
+    ;   Expo < 0 -> domain_error(not_less_than_zero, Expo, expmod/4)
+    ;   expmod_(Base, Expo, Mod, 1, R)
+    ).
+
+expmod_(_, _, 1, _, 0) :- !.
+expmod_(_, 0, _, R, R) :- !.
+expmod_(Base0, Expo0, Mod, C0, R) :-
+    Expo0 /\ 1 =:= 1,
+    C is (C0 * Base0) mod Mod,
+    !,
+    Expo is Expo0 >> 1,
+    Base is (Base0 * Base0) mod Mod,
+    expmod_(Base, Expo, Mod, C, R).
+expmod_(Base0, Expo0, Mod, C, R) :-
+    Expo is Expo0 >> 1,
+    Base is (Base0 * Base0) mod Mod,
+    expmod_(Base, Expo, Mod, C, R).
 
 lsb(X, N) :-
     builtins:must_be_number(X, lsb/2),
