@@ -49,11 +49,11 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      expand_goal/2, expand_term/2, fail/0, false/0,
                      findall/3, findall/4, get_char/1, halt/0,
                      max_arity/1, number_chars/2, number_codes/2,
-                     once/1, op/3, read_term/2, repeat/0, retract/1,
-                     set_prolog_flag/2, set_input/1, set_output/1,
-                     setof/3, sub_atom/5, subsumes_term/2,
-                     term_variables/2, throw/1, true/0,
-                     unify_with_occurs_check/2, write/1,
+                     once/1, op/3, read_term/2, read_term/3, repeat/0,
+                     retract/1, set_prolog_flag/2, set_input/1,
+                     set_output/1, setof/3, sub_atom/5,
+                     subsumes_term/2, term_variables/2, throw/1,
+                     true/0, unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, writeq/1]).
 
 
@@ -234,11 +234,12 @@ semicolon_compound_selector(';'(G2, G3), G4, B) :-
 :- non_counted_backtracking (;)/3.
 ;(G1, G4, B) :-
     compound(G1),
+    !,
 	semicolon_compound_selector(G1, G4, B).
 ;(G1, G2, B) :-
-    G1 == !, '$set_cp'(B), call(G2).
+    G1 == !, !, '$set_cp'(B), call(G2).
 ;(G1, G2, B) :-
-    G2 == !, call(G1), '$set_cp'(B).
+    G2 == !, !, call(G1), '$set_cp'(B).
 ;(G, _, _) :-
     call(G).
 ;(_, G, _) :-
@@ -376,17 +377,70 @@ write_canonical(Term) :-
 writeq(Term) :-
     '$write_term'(Term, false, true, true, [], 0).
 
-%% TODO: complete the predicate! Most read options are missing.
-read_term(Term, Options) :-
-    '$skip_max_list'(_, -1, Options, Options0),
-    (  Options0 == [] -> true
-    ;  var(Options0)  -> throw(error(instantiation_error, read_term/2)) % 8.14.1.3 b)
-    ;  throw(error(type_error(list, Options), read_term/2)) % 8.14.1.3 d)
-    ),
-    (  Options = [variable_names(VarList)] -> '$read_term'(Term, VarList)
-    ;  Options = [] -> read(Term)
-    ;  false
+
+
+select_rightmost_options([Option-Value | OptionPairs], OptionValues) :-
+    (  pairs:same_key(Option, OptionPairs, OtherValues, _),
+       OtherValues == []  ->
+       OptionValues = [Value | OptionValues0],
+       select_rightmost_options(OptionPairs, OptionValues0)
+    ;
+       select_rightmost_options(OptionPairs, OptionValues)
     ).
+select_rightmost_options([], []).
+
+
+parse_options_list(Options, Selector, DefaultPairs, OptionValues, Stub) :-
+    '$skip_max_list'(_, -1, Options, Tail),
+    (  Tail == [] ->
+       true
+    ;  var(Tail) ->
+       throw(error(instantiation_error, Stub))       % 8.11.5.3c)
+    ;  Tail \== [] ->
+       throw(error(type_error(list, Options), Stub)) % 8.11.5.3e)
+    ),
+    (  lists:maplist(nonvar, Options),
+       catch(lists:maplist(Selector, Options, OptionPairs0),
+             error(E, _),
+             throw(error(E, Stub))) ->
+       lists:append(DefaultPairs, OptionPairs0, OptionPairs1),
+       keysort(OptionPairs1, OptionPairs),
+       select_rightmost_options(OptionPairs, OptionValues)
+    ;
+       throw(error(instantiation_error, Stub))       % 8.11.5.3c)
+    ).
+
+
+parse_read_term_options(Options, OptionValues, Stub) :-
+    DefaultOptions = [singletons-_, variables-_, variable_names-_],
+    parse_options_list(Options, parse_read_term_options_, DefaultOptions, OptionValues, Stub).
+
+
+parse_read_term_options_(singletons(Vars), singletons-Vars) :-
+    (  '$skip_max_list'(Vars, _, -1, Tail), Tail == [], !
+    ;
+       throw(error(domain_error(read_option, singletons(Vars)), _))
+    ).
+parse_read_term_options_(variables(Vars), variables-Vars) :-
+    (  '$skip_max_list'(Vars, _, -1, Tail), Tail == [], !
+    ;
+       throw(error(domain_error(read_option, variables(Vars)), _))
+    ).
+parse_read_term_options_(variable_names(Vars), variable_names-Vars) :-
+    (  '$skip_max_list'(Vars, _, -1, Tail), Tail == [], !
+    ;
+       throw(error(domain_error(read_option, variable_names(Vars)), _))
+    ).
+
+
+read_term(Stream, Term, Options) :-
+    parse_read_term_options(Options, [Singletons, Variables, VariableNames], read_term/3),
+    '$read_term'(Stream, Term, Singletons, Variables, VariableNames).
+
+read_term(Term, Options) :-
+    current_input(Stream),
+    read_term(Stream, Term, Options).
+
 
 % expand_goal.
 
@@ -1061,3 +1115,33 @@ set_output(S) :-
        throw(error(instantiation_error, set_output/1))
     ;  '$set_output'(S)
     ).
+
+
+parse_stream_options(Options, OptionValues, Stub) :-
+    DefaultOptions = [alias-[], eof_action-eof_code, reposition-false, type-text],
+    parse_options_list(Options, parse_stream_options_, DefaultOptions, OptionValues, Stub).
+
+
+parse_stream_options_(type(Type), type-Type) :-
+    (  nonvar(Type), lists:member(Type, [text, binary]), !, true
+    ;
+       throw(error(domain_error(stream_option, type(Type)), _))
+    ).
+parse_stream_options_(reposition(Bool), reposition-Bool) :-
+    (  nonvar(Bool), lists:member(Bool, [true, false]), !, true
+    ;
+       throw(error(domain_error(stream_option, reposition(Bool)), _))
+    ).
+parse_stream_options_(alias(A), alias-A) :-
+    (  atom(A), A \== [], !, true
+    ;
+       throw(error(domain_error(stream_option, alias(A)), _))
+    ).
+parse_stream_options_(eof_action(Action), eof_action-Action) :-
+    (  nonvar(Action), lists:member(Action, [eof_code, error, reset]), !, true
+    ;
+       throw(error(domain_error(stream_option, eof_action(Action)), _))
+    ).
+parse_stream_options_(E, _) :-
+    throw(error(domain_error(stream_option, E), _)). % 8.11.5.3i)
+
