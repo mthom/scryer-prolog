@@ -512,6 +512,8 @@ dependencies = [
 [[package]]
 name = "prolog_parser"
 version = "0.8.55"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf0562d1a4c03539b8dae2eb6c7ce733f1a0bd3bdb476aaa3682414d7d540517"
 dependencies = [
  "lexical",
  "num-rug-adapter",

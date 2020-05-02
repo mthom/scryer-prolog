@@ -234,8 +234,8 @@ semicolon_compound_selector(';'(G2, G3), G4, B) :-
 :- non_counted_backtracking (;)/3.
 ;(G1, G4, B) :-
     compound(G1),
-    !,
-	semicolon_compound_selector(G1, G4, B).
+	semicolon_compound_selector(G1, G4, B),
+    !.
 ;(G1, G2, B) :-
     G1 == !, !, '$set_cp'(B), call(G2).
 ;(G1, G2, B) :-
