@@ -217,8 +217,8 @@ comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
 semicolon_compound_selector(->(G2, G3), G4, B) :-
     (  call(G2) ->
        call(G3)
-	;  '$set_cp'(B),
-	   call(G4)
+    ;  '$set_cp'(B),
+       call(G4)
     ).
 semicolon_compound_selector(','(G2, G3), G4, B) :-
     (  ','(G2, G3, B)
@@ -233,9 +233,13 @@ semicolon_compound_selector(';'(G2, G3), G4, B) :-
 
 :- non_counted_backtracking (;)/3.
 ;(G1, G4, B) :-
-    compound(G1),
-	semicolon_compound_selector(G1, G4, B),
-    !.
+    ( (  G1 = (_ -> _)
+      ;  G1 = (_ , _)
+      ;  G1 = (_ ; _) 
+      ) ->
+      !,
+      semicolon_compound_selector(G1, G4, B)
+    ).
 ;(G1, G2, B) :-
     G1 == !, !, '$set_cp'(B), call(G2).
 ;(G1, G2, B) :-
@@ -1144,4 +1148,3 @@ parse_stream_options_(eof_action(Action), eof_action-Action) :-
     ).
 parse_stream_options_(E, _) :-
     throw(error(domain_error(stream_option, E), _)). % 8.11.5.3i)
-

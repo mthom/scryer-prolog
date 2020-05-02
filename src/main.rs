@@ -13,7 +13,6 @@ extern crate prolog_parser;
 #[macro_use]
 extern crate ref_thread_local;
 
-use git_version::git_version;
 use nix::sys::signal;
 
 mod prolog;
@@ -22,7 +21,6 @@ use crate::prolog::machine::*;
 use crate::prolog::machine::streams::*;
 use crate::prolog::read::*;
 
-use std::env;
 use std::sync::atomic::Ordering;
 
 extern fn handle_sigint(signal: libc::c_int) {

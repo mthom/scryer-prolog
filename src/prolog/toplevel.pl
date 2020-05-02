@@ -11,8 +11,8 @@
 '$repl'([_|Args0]) :-
     \+ argv(_),
     (   append(Args1, ["--"|Args2], Args0) ->
-            asserta(argv(Args2)),
-            Args = Args1
+        asserta(argv(Args2)),
+        Args = Args1
     ;   asserta(argv([])),
         Args = Args0
     ),
@@ -152,10 +152,10 @@ submit_query_and_print_results(Term0, VarList) :-
 
 needs_bracketing(Value, Op) :-
     catch((functor(Value, F, _),
-	       current_op(EqPrec, EqSpec, Op),
-	       current_op(FPrec, _, F)),
-	      _,
-	      false),
+	   current_op(EqPrec, EqSpec, Op),
+	   current_op(FPrec, _, F)),
+	  _,
+	  false),
     (  EqPrec < FPrec -> true
     ;  '$quoted_token'(F) -> true
     ;  atom_length(F, 1), graphic_token_char(F) -> true
