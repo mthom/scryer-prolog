@@ -4,11 +4,11 @@ use prolog_parser::tabled_rc::*;
 
 use crate::prolog::clause_types::*;
 use crate::prolog::forms::*;
+use crate::prolog::heap_print::*;
 use crate::prolog::instructions::*;
 use crate::prolog::machine::code_repo::CodeRepo;
 use crate::prolog::machine::copier::*;
 use crate::prolog::machine::code_walker::*;
-use crate::prolog::heap_print::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
@@ -3367,6 +3367,12 @@ impl MachineState {
                 self.unify(value, Addr::HeapCell(h));
             }
             &SystemClauseType::Succeed => {
+            }
+            &SystemClauseType::TermAttributedVariables => {
+                let seen_vars = self.attr_vars_of_term(self[temp_v!(1)]);
+                let outcome = Addr::HeapCell(self.heap.to_list(seen_vars.into_iter()));
+
+                self.unify(self[temp_v!(2)], outcome);
             }
             &SystemClauseType::TermVariables => {
                 let a1 = self[temp_v!(1)];

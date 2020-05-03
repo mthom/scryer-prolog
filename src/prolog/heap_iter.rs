@@ -254,6 +254,14 @@ impl<'a> Deref for HCAcyclicIterator<'a> {
     }
 }
 
+impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCAcyclicIterator<'a> {
+    type MutStack = &'b mut Vec<Addr>;
+
+    fn stack(&'b mut self) -> Self::MutStack {
+        self.iter.stack()
+    }
+}
+
 impl<'a> Iterator for HCAcyclicIterator<'a>
 {
     type Item = Addr;
