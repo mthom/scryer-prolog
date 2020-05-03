@@ -1,9 +1,9 @@
-
 :- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2,
                         argv/1]).
 
 :- use_module(library(charsio)).
 :- use_module(library(lists)).
+:- use_module(library(ordsets)).
 :- use_module(library(si)).
 
 :- dynamic(argv/1).
@@ -71,13 +71,13 @@ arg_type(g(_)).
 arg_type(t(_)).
 
 ends_with_dot(Ls0) :-
-        reverse(Ls0, Ls),
-        layout_and_dot(Ls).
+    reverse(Ls0, Ls),
+    layout_and_dot(Ls).
 
 layout_and_dot(['.'|_]).
 layout_and_dot([C|Cs]) :-
-        char_type(C, layout),
-        layout_and_dot(Cs).
+    char_type(C, layout),
+    layout_and_dot(Cs).
 
 run_goals([]).
 run_goals([g(Gs0)|Goals]) :-
@@ -116,19 +116,19 @@ instruction_match(Term, VarList) :-
     (  var(Term) ->
        throw(error(instantiation_error, repl/0))
     ;
-       Term = [Item] -> !,
-       (  atom(Item) ->
-	      (  Item == user ->
-	         catch(compile_batch, E, print_exception_with_check(E))
-	      ;  consult(Item)
-	      )
-       ;
-	   catch(throw(error(type_error(atom, Item), repl/0)),
-		     E,
-		     print_exception_with_check(E))
-       )
+    Term = [Item] -> !,
+                     (  atom(Item) ->
+	                    (  Item == user ->
+	                       catch(compile_batch, E, print_exception_with_check(E))
+	                    ;  consult(Item)
+	                    )
+                     ;
+	                 catch(throw(error(type_error(atom, Item), repl/0)),
+		                   E,
+		                   print_exception_with_check(E))
+                     )
     ;
-       submit_query_and_print_results(Term, VarList)
+    submit_query_and_print_results(Term, VarList)
     ).
 
 :- use_module(library(iso_ext)).
@@ -152,10 +152,10 @@ submit_query_and_print_results(Term0, VarList) :-
 
 needs_bracketing(Value, Op) :-
     catch((functor(Value, F, _),
-	   current_op(EqPrec, EqSpec, Op),
-	   current_op(FPrec, _, F)),
-	  _,
-	  false),
+	       current_op(EqPrec, EqSpec, Op),
+	       current_op(FPrec, _, F)),
+	      _,
+	      false),
     (  EqPrec < FPrec -> true
     ;  '$quoted_token'(F) -> true
     ;  atom_length(F, 1), graphic_token_char(F) -> true
@@ -166,7 +166,7 @@ needs_bracketing(Value, Op) :-
 write_goal(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
        (  var(Value) ->
-	  select((Var = _), VarList, NewVarList)
+	      select((Var = _), VarList, NewVarList)
        ;  VarList = NewVarList
        ),
        write(Var),
@@ -185,20 +185,20 @@ write_goal(G, VarList, MaxDepth) :-
 write_last_goal(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
        (  var(Value) ->
-	  select((Var = _), VarList, NewVarList)
+	      select((Var = _), VarList, NewVarList)
        ;  VarList = NewVarList
-       ),          
+       ),
        write(Var),
        write(' = '),
        (  needs_bracketing(Value, (=)) ->
-	  write('('),
-	  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	  write(')')
+	      write('('),
+	      write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+	      write(')')
        ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	  (  trailing_period_is_ambiguous(Value) ->
-	     write(' ')
-	  ;  true
-	  )
+	      (  trailing_period_is_ambiguous(Value) ->
+	         write(' ')
+	      ;  true
+	      )
        )
     ;  G == [] ->
        write('true')
@@ -229,9 +229,12 @@ trailing_period_is_ambiguous(Value) :-
     graphic_token_char(Char).
 
 write_eqs_and_read_input(B, VarList) :-
-    charsio:extend_var_list(VarList, VarList, NewVarList, fabricated),
+    term_variables(VarList, Vars0),
+    '$term_attributed_variables'(VarList, AttrVars),
+    append(Vars0, AttrVars, Vars),
+    charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
     '$get_b_value'(B0),
-    gather_goals(NewVarList, NewVarList, Goals),
+    gather_goals(NewVarList, NewVarList, VarList, Goals),
     (   bb_get('$first_answer', true) ->
         write('   '),
         bb_put('$first_answer', false)
@@ -239,11 +242,11 @@ write_eqs_and_read_input(B, VarList) :-
     ),
     (  B0 == B ->
        (  Goals == [] ->
-	  write('true.'), nl
+	      write('true.'), nl
        ;  thread_goals(Goals, ThreadedGoals, (',')),
-	  write_eq(ThreadedGoals, NewVarList, 20),
-	  write('.'),
-	  nl
+	      write_eq(ThreadedGoals, NewVarList, 20),
+	      write('.'),
+	      nl
        )
     ;  thread_goals(Goals, ThreadedGoals, (',')),
        write_eq(ThreadedGoals, NewVarList, 20),
@@ -293,23 +296,53 @@ is_a_different_variable([_ = Binding | Pairs], Value) :-
     ;  is_a_different_variable(Pairs, Value)
     ).
 
-gather_goals([], VarList, Goals) :-
-    gather_query_vars(VarList, QueryVars),
-    copy_term(QueryVars, QueryVars, Goals).
-gather_goals([Var = Value | Pairs], VarList, Goals) :-
+filter_goals([Goal|Goals], FGoals, QueryVars) :-
+    term_variables(Goal, GoalVars0),
+    sort(GoalVars0, GoalVars),
+    (  ord_intersect(GoalVars, QueryVars) ->
+       append(GoalVars, QueryVars, QueryVars0),
+       sort(QueryVars0, QueryVars1),
+       FGoals = [Goal | FGoals0],
+       filter_goals(Goals, FGoals0, QueryVars1)
+    ;
+       filter_goals(Goals, FGoals, QueryVars)
+    ).
+filter_goals([], [], _).
+
+gather_goals([], VarList, QueryVarList, Goals) :-
+    gather_query_vars(VarList, Vars),
+    term_variables(QueryVarList, QueryVars),
+    copy_term(Vars, Vars, Goals0),
+    filter_goals(Goals0, Goals, QueryVars).
+gather_goals([Var = Value | Pairs], VarList, QueryVarList, Goals) :-
     (  (  nonvar(Value)
        ;  is_a_different_variable(Pairs, Value)
        ) ->
        Goals = [Var = Value | Goals0],
-       gather_goals(Pairs, VarList, Goals0)
-    ;  gather_goals(Pairs, VarList, Goals)
+       gather_goals(Pairs, VarList, QueryVarList, Goals0)
+    ;  gather_goals(Pairs, VarList, QueryVarList, Goals)
     ).
+
+/*
+gather_goals([], VarList, QueryVarList, Goals) :-
+    gather_query_vars(VarList, Vars),
+    copy_term(Vars, Vars, Goals).
+%    filter_goals(Goals0, Goals, Vars).
+gather_goals([Var = Value | Pairs], VarList, QueryVarList, Goals) :-
+    (  (  nonvar(Value)
+       ;  is_a_different_variable(Pairs, Value)
+       ) ->
+       Goals = [Var = Value | Goals0],
+       gather_goals(Pairs, VarList, QueryVarList, Goals0)
+    ;  gather_goals(Pairs, VarList, QueryVarList, Goals)
+    ).
+*/
 
 print_exception(E) :-
     (  E == error('$interrupt_thrown', repl) -> nl % print the
-                                                   % exception on a
-                                                   % newline to evade
-                                                   % "^C".
+    % exception on a
+    % newline to evade
+    % "^C".
     ;  true
     ),
     write_term('caught: ', [quoted(false), max_depth(20)]),
@@ -318,8 +351,8 @@ print_exception(E) :-
 
 print_exception_with_check(E) :-
     (  E = error(_, _:_) -> true % if the error source contains a line
-                                 % number, a GNU-style error message
-                                 % is expected to be printed instead.
+    % number, a GNU-style error message
+    % is expected to be printed instead.
     ;  print_exception(E)
     ).
 
@@ -370,12 +403,12 @@ use_module(Module, QualifiedExports) :-
     (  nonvar(Module) ->
        (  list_si(QualifiedExports) ->
 	      maplist('$module_export'(use_module/2), QualifiedExports) ->
-	  (  Module = library(Filename) ->
-	     '$use_qualified_module'(Filename, QualifiedExports)
-	  ;  atom(Module) ->
-	     '$use_qualified_module_from_file'(Module, QualifiedExports)
-	  ;  throw(error(invalid_module_specifier, use_module/2))
-	  )
+	          (  Module = library(Filename) ->
+	             '$use_qualified_module'(Filename, QualifiedExports)
+	          ;  atom(Module) ->
+	             '$use_qualified_module_from_file'(Module, QualifiedExports)
+	          ;  throw(error(invalid_module_specifier, use_module/2))
+	          )
        ;  throw(error(type_error(list, QualifiedExports), use_module/2))
        )
     ;  throw(error(instantiation_error, use_module/2))

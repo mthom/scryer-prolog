@@ -436,9 +436,17 @@ impl Machine {
                             )
         );
 
-
         compile_user_module(&mut wam,
                             Stream::from(CHARSIO),
+                            true,
+                            ListingSource::from_file_and_path(
+                                clause_name!("si"),
+                                lib_path.clone(),
+                            )
+        );
+
+        compile_user_module(&mut wam,
+                            Stream::from(ORDSETS),
                             true,
                             ListingSource::from_file_and_path(
                                 clause_name!("si"),

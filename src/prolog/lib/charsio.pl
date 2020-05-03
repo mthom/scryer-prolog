@@ -44,8 +44,7 @@ make_new_var_name(VarType, V, VarName, N, N1, VarList) :-
        N1 is N + 1
     ).
 
-extend_var_list(Value, VarList, NewVarList, VarType) :-
-    term_variables(Value, Vars),
+extend_var_list(Vars, VarList, NewVarList, VarType) :-
     extend_var_list_(Vars, 0, VarList, NewVarList0, VarType),
     append(VarList, NewVarList0, NewVarList).
 
@@ -140,5 +139,6 @@ write_term_to_chars(Term, Options, Chars) :-
     builtins:inst_member_or(Options, quoted(Quoted), quoted(false)),
     builtins:inst_member_or(Options, variable_names(VarNames), variable_names([])),
     builtins:inst_member_or(Options, max_depth(MaxDepth), max_depth(0)),
-    extend_var_list(Term, VarNames, NewVarNames, numbervars),
+    term_variables(Term, Vars),
+    extend_var_list(Vars, VarNames, NewVarNames, numbervars),
     '$write_term_to_chars'(Term, IgnoreOps, NumberVars, Quoted, NewVarNames, MaxDepth, Chars).

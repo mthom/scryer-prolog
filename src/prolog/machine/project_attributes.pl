@@ -101,7 +101,7 @@ call_attribute_goals_with_module_prefix([Module | Modules], GoalCaller, AttrVars
     call_attribute_goals_with_module_prefix(Modules, GoalCaller, AttrVars, Gs).
 
 copy_term(Source, Dest, Goals) :-
-    term_variables(Source, Vars),
+    '$term_attributed_variables'(Source, Vars),
     gather_modules(Vars, Modules0, _),
     sort(Modules0, Modules),
     call_attribute_goals_with_module_prefix(Modules, call_query_var_goals, Vars, Goals0),
