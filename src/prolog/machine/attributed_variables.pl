@@ -1,3 +1,5 @@
+:- module('$atts', []).
+
 driver(Vars, Values) :-
     iterate(Vars, Values, ListOfListsOfGoalLists),
     !,

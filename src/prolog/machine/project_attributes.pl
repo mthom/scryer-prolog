@@ -1,3 +1,5 @@
+:- module('$project_atts', [copy_term/3]).
+
 '$attribute_goals_driver'(QueryVars, AttrVars) :-
     gather_modules(AttrVars, Modules0, _),
     sort(Modules0, Modules),
