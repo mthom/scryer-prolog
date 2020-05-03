@@ -1301,6 +1301,15 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                         let addr = machine_st[temp_v!(1)];
                         machine_st.unify(addr, Addr::HeapCell(offset.heap_loc));
                     }
+                    Err(ParserError::UnexpectedEOF) => {
+                        let addr = machine_st[temp_v!(1)];
+                        let eof = clause_name!("end_of_file".to_string(),
+                            indices.atom_tbl);
+                        let atom = machine_st.heap.to_unifiable(
+                            HeapCellValue::Atom(eof, None)
+                        );
+                        machine_st.unify(addr, atom);
+                    }
                     Err(e) => {
                         let h = machine_st.heap.h();
                         let stub = MachineError::functor_stub(clause_name!("read"), 1);
