@@ -25,7 +25,7 @@ use indexmap::IndexSet;
 use std::cmp;
 use std::convert::TryFrom;
 use std::io::{stdout, Read, Write};
-use std::iter::once;
+use std::iter::{once, FromIterator};
 use std::fs::File;
 use std::rc::Rc;
 
@@ -1542,38 +1542,41 @@ impl MachineState {
             &SystemClauseType::FileToChars => {
                 // TODO: Replace this with stream.
                 use std::io;
+
                 let a1 = self.store(self.deref(self[temp_v!(1)]));
                 let a2 = self.store(self.deref(self[temp_v!(2)]));
 
                 let file_name = match a1 {
                     Addr::Con(h) if self.heap.atom_at(h) => {
                         if let HeapCellValue::Atom(name, _) = &self.heap[h] {
-                            name.as_str().to_string()
+                            name.clone()
                         }
                         else {
                             unreachable!()
                         }
                     }
                     Addr::Char(c) => {
-                        c.to_string()
+                        clause_name!(c.to_string(), indices.atom_tbl.clone())
                     }
-                    _ => unreachable!()
+                    _ => {
+                        unreachable!()
+                    }
                 };
+
                 let name = clause_name!("$file_to_chars");
-                let mut file = match File::open(&file_name) {
+                let mut file = match File::open(file_name.as_str()) {
                     Ok(f) => f,
                     Err(e) => {
-                        let file_name_ = clause_name!(file_name.clone(),
-                            indices.atom_tbl.clone());
                         let arity = 2;
                         let stub = MachineError::functor_stub(name.clone(), arity);
                         let h = self.heap.h();
+
                         let err = match e.kind() {
                             io::ErrorKind::NotFound => {
                                 MachineError::existence_error(
                                     h,
                                     ExistenceError::SourceSink(
-                                        ModuleSource::File(file_name_)
+                                        ModuleSource::File(file_name)
                                     ),
                                 )
                             }
@@ -1590,18 +1593,15 @@ impl MachineState {
                             _ => unreachable!()  // Not nice.
                         };
 
-                        let err = self.error_form(err, stub);
-
-                        self.throw_exception(err);
-                        return Ok(());
+                        return Err(self.error_form(err, stub));
                     }
                 };
-                let char_list = {
+
+                let complete_string = {
                     let mut buffer = String::new();
                     match file.read_to_string(&mut buffer) {
                         Ok(_size) => {
-                            let chars = buffer.chars().map(|c| Addr::Char(c));
-                            Addr::HeapCell(self.heap.to_list(chars))
+                            self.heap.put_complete_string(&buffer)
                         }
                         Err(_e) => {
                             // This case if the data isn't UTF-8 valid.
@@ -1610,15 +1610,17 @@ impl MachineState {
                                 Ok(size) => size,
                                 Err(_e) => unreachable!()
                             };
-                            let chars = buffer
-                                .into_iter()
-                                .map(|b| Addr::Char(b as char));
-                            Addr::HeapCell(self.heap.to_list(chars))
+
+                            let buffer = String::from_iter(
+                                buffer.into_iter().map(|b| b as char)
+                            );
+
+                            self.heap.put_complete_string(&buffer)
                         }
                     }
                 };
 
-                self.unify(char_list, a2);
+                self.unify(complete_string, a2);
             }
             &SystemClauseType::GetChar => {
                 let mut iter = self.open_parsing_stream(
