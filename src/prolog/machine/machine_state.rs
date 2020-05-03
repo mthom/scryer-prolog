@@ -45,7 +45,7 @@ impl<'a> HeapPStrIter<'a> {
 
     #[inline]
     pub(crate)
-    fn focus(&'a self) -> Addr {
+    fn focus(&self) -> Addr {
         self.machine_st.store(self.machine_st.deref(self.focus))
     }
 
@@ -302,6 +302,10 @@ fn compare_pstr_to_string<'a>(
                     }
                 }
             }
+        }
+
+        if s[s_offset ..].is_empty() {
+            return Some(s_offset);
         }
     }
 

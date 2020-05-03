@@ -323,21 +323,6 @@ gather_goals([Var = Value | Pairs], VarList, QueryVarList, Goals) :-
     ;  gather_goals(Pairs, VarList, QueryVarList, Goals)
     ).
 
-/*
-gather_goals([], VarList, QueryVarList, Goals) :-
-    gather_query_vars(VarList, Vars),
-    copy_term(Vars, Vars, Goals).
-%    filter_goals(Goals0, Goals, Vars).
-gather_goals([Var = Value | Pairs], VarList, QueryVarList, Goals) :-
-    (  (  nonvar(Value)
-       ;  is_a_different_variable(Pairs, Value)
-       ) ->
-       Goals = [Var = Value | Goals0],
-       gather_goals(Pairs, VarList, QueryVarList, Goals0)
-    ;  gather_goals(Pairs, VarList, QueryVarList, Goals)
-    ).
-*/
-
 print_exception(E) :-
     (  E == error('$interrupt_thrown', repl) -> nl % print the
     % exception on a
