@@ -445,15 +445,6 @@ impl Machine {
                             )
         );
 
-        compile_user_module(&mut wam,
-                            Stream::from(ORDSETS),
-                            true,
-                            ListingSource::from_file_and_path(
-                                clause_name!("si"),
-                                lib_path.clone(),
-                            )
-        );
-
         if wam.compile_top_level().is_err() {
             panic!("Loading '$toplevel' module failed");
         }

@@ -3,7 +3,6 @@
 
 :- use_module(library(charsio)).
 :- use_module(library(lists)).
-:- use_module(library(ordsets)).
 :- use_module(library(si)).
 
 :- dynamic(argv/1).
@@ -231,10 +230,12 @@ trailing_period_is_ambiguous(Value) :-
 write_eqs_and_read_input(B, VarList) :-
     term_variables(VarList, Vars0),
     '$term_attributed_variables'(VarList, AttrVars),
-    append(Vars0, AttrVars, Vars),
+    copy_term(AttrVars, AttrVars, AttrGoals),
+    term_variables(AttrGoals, AttrGoalVars),
+    append([Vars0, AttrVars, AttrGoalVars], Vars),
     charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
     '$get_b_value'(B0),
-    gather_goals(NewVarList, NewVarList, VarList, Goals),
+    gather_equations(NewVarList, Goals, AttrGoals),
     (   bb_get('$first_answer', true) ->
         write('   '),
         bb_put('$first_answer', false)
@@ -296,31 +297,14 @@ is_a_different_variable([_ = Binding | Pairs], Value) :-
     ;  is_a_different_variable(Pairs, Value)
     ).
 
-filter_goals([Goal|Goals], FGoals, QueryVars) :-
-    term_variables(Goal, GoalVars0),
-    sort(GoalVars0, GoalVars),
-    (  ord_intersect(GoalVars, QueryVars) ->
-       append(GoalVars, QueryVars, QueryVars0),
-       sort(QueryVars0, QueryVars1),
-       FGoals = [Goal | FGoals0],
-       filter_goals(Goals, FGoals0, QueryVars1)
-    ;
-       filter_goals(Goals, FGoals, QueryVars)
-    ).
-filter_goals([], [], _).
-
-gather_goals([], VarList, QueryVarList, Goals) :-
-    gather_query_vars(VarList, Vars),
-    term_variables(QueryVarList, QueryVars),
-    copy_term(Vars, Vars, Goals0),
-    filter_goals(Goals0, Goals, QueryVars).
-gather_goals([Var = Value | Pairs], VarList, QueryVarList, Goals) :-
+gather_equations([], Goals, Goals).
+gather_equations([Var = Value | Pairs], Goals, Goals1) :-
     (  (  nonvar(Value)
        ;  is_a_different_variable(Pairs, Value)
        ) ->
        Goals = [Var = Value | Goals0],
-       gather_goals(Pairs, VarList, QueryVarList, Goals0)
-    ;  gather_goals(Pairs, VarList, QueryVarList, Goals)
+       gather_equations(Pairs, Goals0, Goals1)
+    ;  gather_equations(Pairs, Goals, Goals1)
     ).
 
 print_exception(E) :-
