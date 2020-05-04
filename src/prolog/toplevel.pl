@@ -235,7 +235,7 @@ write_eqs_and_read_input(B, VarList) :-
     append([Vars0, AttrVars, AttrGoalVars], Vars),
     charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
     '$get_b_value'(B0),
-    gather_equations(NewVarList, Goals, AttrGoals),
+    gather_equations(NewVarList, NewVarList, Goals, AttrGoals),
     (   bb_get('$first_answer', true) ->
         write('   '),
         bb_put('$first_answer', false)
@@ -294,17 +294,18 @@ gather_query_vars([], []).
 
 is_a_different_variable([_ = Binding | Pairs], Value) :-
     (  Value == Binding, !
-    ;  is_a_different_variable(Pairs, Value)
+    ;  is_a_different_variable(Pairs, Var)
     ).
 
-gather_equations([], Goals, Goals).
-gather_equations([Var = Value | Pairs], Goals, Goals1) :-
+gather_equations([], MasterList, Goals, Goals).
+gather_equations([Var = Value | Pairs], MasterList, Goals, Goals1) :-
+    select((Var = _), MasterList, MasterPairs),
     (  (  nonvar(Value)
-       ;  is_a_different_variable(Pairs, Value)
+       ;  is_a_different_variable(MasterPairs, Value)
        ) ->
        Goals = [Var = Value | Goals0],
-       gather_equations(Pairs, Goals0, Goals1)
-    ;  gather_equations(Pairs, Goals, Goals1)
+       gather_equations(Pairs, MasterList, Goals0, Goals1)
+    ;  gather_equations(Pairs, MasterList, Goals, Goals1)
     ).
 
 print_exception(E) :-
