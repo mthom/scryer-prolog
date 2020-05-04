@@ -1400,9 +1400,11 @@ impl MachineState {
                 let addr = self.store(self.deref(addr));
 
                 let offset = match addr {
-                    Addr::HeapCell(_) | Addr::StackCell(..) |
-                    Addr::AttrVar(..) | Addr::Stream(_) => {
-                      v
+                    Addr::Stream(_) | Addr::TcpListener(_) => {
+                        0
+                    }
+                    Addr::HeapCell(_) | Addr::StackCell(..) | Addr::AttrVar(..) => {
+                        v
                     }
                     Addr::PStrLocation(..) => {
                         if !self.flags.double_quotes.is_atom() {

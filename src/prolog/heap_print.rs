@@ -6,6 +6,7 @@ use crate::prolog::heap_iter::*;
 use crate::prolog::machine::heap::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
+use crate::prolog::machine::streams::*;
 use crate::prolog::ordered_float::OrderedFloat;
 use crate::prolog::rug::{Integer, Rational};
 
@@ -14,6 +15,7 @@ use indexmap::{IndexMap, IndexSet};
 use std::cell::Cell;
 use std::convert::TryFrom;
 use std::iter::{FromIterator, once};
+use std::net::{IpAddr, TcpListener};
 use std::ops::{Range, RangeFrom};
 use std::rc::Rc;
 
@@ -170,10 +172,12 @@ enum TokenOrRedirect {
     NumberedVar(String),
     CompositeRedirect(usize, DirectedOp),
     FunctorRedirect(usize),
+    IpAddr(IpAddr),
     Number(Number, Option<DirectedOp>),
     Open,
     Close,
     Comma,
+    RawPtr(*const u8),
     Space,
     LeftCurly,
     RightCurly,
@@ -643,8 +647,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
 
         self.state_stack.pop();
-        self.state_stack.push(TokenOrRedirect::Open);
 
+        self.state_stack.push(TokenOrRedirect::Open);
         self.state_stack.push(TokenOrRedirect::Atom(name));
 
         true
@@ -962,6 +966,18 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         push_space_if_amb!(self, &result, {
             self.append_str(&result);
         });
+    }
+
+    #[inline]
+    fn print_ip_addr(&mut self, ip: IpAddr) {
+        self.push_char('\'');
+        self.append_str(&format!("{}", ip));
+        self.push_char('\'');
+    }
+
+    #[inline]
+    fn print_raw_ptr(&mut self, ptr: *const u8) {
+        self.append_str(&format!("0x{:x}", ptr as usize));
     }
 
     fn print_number(&mut self, n: Number, op: &Option<DirectedOp>) {
@@ -1330,6 +1346,66 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
+    fn print_tcp_listener(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+        tcp_listener: &TcpListener,
+        max_depth: usize,
+    ) {
+        let (ip, port) =
+            if let Some(addr) = tcp_listener.local_addr().ok() {
+                (addr.ip(), Number::from(addr.port() as isize))
+            } else {
+                let disconnected_atom = clause_name!("$disconnected_tcp_listener");
+                self.state_stack.push(TokenOrRedirect::Atom(disconnected_atom));
+
+                return;
+            };
+
+        if self.format_struct(iter, max_depth, 1, clause_name!("$tcp_listener")) {
+            let atom = self.state_stack.pop().unwrap();
+
+            self.state_stack.pop();
+            self.state_stack.pop();
+
+            self.state_stack.push(TokenOrRedirect::Number(port, None));
+            self.state_stack.push(TokenOrRedirect::Comma);
+            self.state_stack.push(TokenOrRedirect::IpAddr(ip));
+
+            self.state_stack.push(TokenOrRedirect::Open);
+            self.state_stack.push(atom);
+        }
+    }
+
+    fn print_stream(
+        &mut self,
+        iter: &mut HCPreOrderIterator,
+        stream: &Stream,
+        max_depth: usize,
+    ) {
+        if let Some(alias) = &stream.options.alias {
+            self.print_atom(alias);
+        } else {
+            if self.format_struct(iter, max_depth, 1, clause_name!("$stream")) {
+                let atom =
+                    if stream.is_stdout() || stream.is_stdin() {
+                        TokenOrRedirect::Atom(clause_name!("user"))
+                    } else {
+                        TokenOrRedirect::RawPtr(stream.as_ptr())
+                    };
+
+                let stream_root = self.state_stack.pop().unwrap();
+
+                self.state_stack.pop();
+                self.state_stack.pop();
+
+                self.state_stack.push(atom);
+                self.state_stack.push(TokenOrRedirect::Open);
+                self.state_stack.push(stream_root);
+            }
+        }
+    }
+
     fn handle_heap_term(
         &mut self,
         iter: &mut HCPreOrderIterator,
@@ -1440,15 +1516,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.print_number(Number::Rational(n.clone()), &op);
             }
             &HeapCellValue::Stream(ref stream) => {
-                if let Some(alias) = &stream.options.alias {
-                    self.print_atom(alias);
-                } else {
-                    if stream.is_stdout() || stream.is_stdin() {
-                        self.print_atom(&clause_name!("user"));
-                    } else {
-                        self.format_struct(iter, max_depth, 1, clause_name!("$stream"));
-                    }
-                }
+                self.print_stream(iter, stream, max_depth);
+            }
+            &HeapCellValue::TcpListener(ref tcp_listener) => {
+                self.print_tcp_listener(iter, tcp_listener, max_depth);
             }
             _ => {
                 unreachable!()
@@ -1486,6 +1557,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         self.handle_heap_term(&mut iter, None, true, max_depth)
                     }
                     TokenOrRedirect::Close => self.push_char(')'),
+                    TokenOrRedirect::IpAddr(ip) => self.print_ip_addr(ip),
+                    TokenOrRedirect::RawPtr(ptr) => self.print_raw_ptr(ptr),
                     TokenOrRedirect::Open => self.push_char('('),
                     TokenOrRedirect::OpenList(delimit) => {
                         if !self.at_cdr(",") {

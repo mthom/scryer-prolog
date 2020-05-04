@@ -106,7 +106,7 @@ repl :-
     repl.
 
 read_and_match :-
-    '$read_query_term'(Term, VarList),
+    '$read_query_term'(_, Term, _, _, VarList),
     instruction_match(Term, VarList).
 
 % make compile_batch, a system routine, callable.

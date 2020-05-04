@@ -3,6 +3,7 @@ extern crate divrem;
 #[macro_use]
 extern crate downcast;
 extern crate git_version;
+extern crate hostname;
 extern crate indexmap;
 #[macro_use]
 extern crate lazy_static;

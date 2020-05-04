@@ -23,6 +23,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::convert::TryFrom;
 use std::fmt;
 use std::mem;
+use std::net::TcpListener;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::rc::Rc;
 
@@ -69,6 +70,7 @@ pub enum Addr {
     StackCell(usize, usize),
     Str(usize),
     Stream(usize),
+    TcpListener(usize),
     Usize(usize),
 }
 
@@ -230,7 +232,7 @@ impl Addr {
                     Addr::Lis(_) | Addr::PStrLocation(..) | Addr::Str(_) => {
                         Some(TermOrderCategory::Compound)
                     }
-                    Addr::CutPoint(_) | Addr::Stream(_) => {
+                    Addr::CutPoint(_) | Addr::Stream(_) | Addr::TcpListener(_) => {
                         None
                     }
                 }
@@ -388,6 +390,7 @@ pub enum HeapCellValue {
     Rational(Rc<Rational>),
     PartialString(PartialString, bool), // the partial string, a bool indicating whether it came from a Constant.
     Stream(Stream),
+    TcpListener(TcpListener),
 }
 
 impl HeapCellValue {
@@ -409,6 +412,9 @@ impl HeapCellValue {
             }
             HeapCellValue::Stream(_) => {
                 Addr::Stream(focus)
+            }
+            HeapCellValue::TcpListener(_) => {
+                Addr::TcpListener(focus)
             }
         }
     }
@@ -439,6 +445,9 @@ impl HeapCellValue {
             }
             &HeapCellValue::Stream(_) => {
                 HeapCellValue::Stream(Stream::null_stream())
+            }
+            &HeapCellValue::TcpListener(_) => {
+                HeapCellValue::Atom(clause_name!("$socket_server"), None)
             }
         }
     }

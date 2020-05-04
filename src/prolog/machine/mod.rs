@@ -297,7 +297,7 @@ impl Machine {
 
             Ok(self.indices.insert_module(module))
         } else {
-            let err = ExistenceError::SourceSink(ModuleSource::File(
+            let err = ExistenceError::ModuleSource(ModuleSource::File(
                 clause_name!("$toplevel"),
             ));
 
@@ -405,6 +405,15 @@ impl Machine {
                             true,
                             ListingSource::from_file_and_path(
                                 clause_name!("error"),
+                                lib_path.clone(),
+                            )
+        );
+
+        compile_user_module(&mut wam,
+                            Stream::from(PAIRS),
+                            true,
+                            ListingSource::from_file_and_path(
+                                clause_name!("pairs"),
                                 lib_path.clone(),
                             )
         );

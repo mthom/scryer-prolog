@@ -12,7 +12,6 @@ use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::modules::*;
 use crate::prolog::machine::stack::*;
 use crate::prolog::machine::streams::*;
-use crate::prolog::read::{PrologStream, readline};
 use crate::prolog::rug::Integer;
 
 use downcast::Any;
@@ -615,39 +614,12 @@ pub struct MachineState {
 
 impl MachineState {
     pub(crate)
-    fn open_parsing_stream(
-        &self,
-        stream: Stream,
-        stub_name: &'static str,
-        stub_arity: usize,
-    ) -> Result<PrologStream, MachineStub> {
-        match parsing_stream(stream) {
-            Ok(stream) => {
-                Ok(stream)
-            }
-            Err(e) => {
-                let stub = MachineError::functor_stub(clause_name!(stub_name), stub_arity);
-                let err = MachineError::session_error(
-                    self.heap.h(),
-                    SessionError::from(e),
-                );
-
-                Err(self.error_form(err, stub))
-            }
-        }
-    }
-
-    pub(crate)
     fn read_term(
         &mut self,
-        current_input_stream: &mut Stream,
+        stream: Stream,
         indices: &mut IndexStore,
     ) -> CallResult {
-        let mut stream = self.open_parsing_stream(
-            current_input_stream.clone(),
-            "read_term",
-            2,
-        )?;
+        let mut stream = self.open_parsing_stream(stream, "read_term", 3)?;
 
         match self.read(
             &mut stream,
@@ -655,8 +627,8 @@ impl MachineState {
             &indices.op_dir,
         ) {
             Ok(term_write_result) => {
-                let a1 = self[temp_v!(1)];
-                self.unify(Addr::HeapCell(term_write_result.heap_loc), a1);
+                let term = self[temp_v!(2)];
+                self.unify(Addr::HeapCell(term_write_result.heap_loc), term);
 
                 if self.fail {
                     return Ok(());
@@ -677,11 +649,56 @@ impl MachineState {
                     list_of_var_eqs.push(Addr::Str(h));
                 }
 
-                let a2 = self[temp_v!(2)];
-                let list_offset =
+                let mut var_set: IndexMap<Ref, bool> = IndexMap::new();
+
+                for addr in self.acyclic_pre_order_iter(term) {
+                    if let Some(var) = addr.as_var() {
+                        if !var_set.contains_key(&var) {
+                            var_set.insert(var, true);
+                        } else {
+                            var_set.insert(var, false);
+                        }
+                    }
+                }
+
+                let mut var_list = vec![];
+                let mut singleton_var_list = vec![];
+
+                for addr in self.acyclic_pre_order_iter(term) {
+                    if let Some(var) = addr.as_var() {
+                        if var_set.get(&var) == Some(&true) {
+                            singleton_var_list.push(var.as_addr());
+                        }
+
+                        var_list.push(var.as_addr());
+                    }
+                }
+
+                let singleton_addr = self[temp_v!(3)];
+                let singletons_offset =
+                    Addr::HeapCell(self.heap.to_list(singleton_var_list.into_iter()));
+
+                self.unify(singletons_offset, singleton_addr);
+
+                if self.fail {
+                    return Ok(());
+                }
+
+                let vars_addr = self[temp_v!(4)];
+                let vars_offset =
+                    Addr::HeapCell(self.heap.to_list(var_list.into_iter()));
+
+                self.unify(vars_offset, vars_addr);
+
+                if self.fail {
+                    return Ok(());
+                }
+
+                let var_names_addr = self[temp_v!(5)];
+                let var_names_offset =
                     Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
 
-                Ok(self.unify(list_offset, a2))
+                Ok(self.unify(var_names_offset, var_names_addr))
             }
             Err(err) => {
                 if let ParserError::UnexpectedEOF = err {
@@ -689,7 +706,7 @@ impl MachineState {
                 }
 
                 // reset the input stream after an input failure.
-                *current_input_stream = readline::input_stream();
+                //*stream = readline::input_stream();
 
                 let h = self.heap.h();
                 let syntax_error = MachineError::syntax_error(h, err);

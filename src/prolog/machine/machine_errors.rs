@@ -17,7 +17,7 @@ enum ErrorProvenance {
 }
 
 #[derive(Debug)]
-pub(super) struct MachineError {
+pub(crate) struct MachineError {
     stub: MachineStub,
     location: Option<(usize, usize)>, // line_num, col_num
     from: ErrorProvenance,
@@ -74,7 +74,7 @@ impl TypeError for Number {
     }
 }
 
-pub(super)
+pub(crate)
 trait PermissionError {
     fn permission_error(self, h: usize, index_str: &'static str, perm: Permission) -> MachineError;
 }
@@ -250,13 +250,25 @@ impl MachineError {
                     from: ErrorProvenance::Constructed,
                 }
             }
-            ExistenceError::SourceSink(source) => {
+            ExistenceError::ModuleSource(source) => {
                 let source_stub = source.as_functor_stub();
 
                 let stub = functor!(
                     "existence_error",
                     [atom("source_sink"), aux(h, 0)],
                     [source_stub]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                    from: ErrorProvenance::Constructed,
+                }
+            }
+            ExistenceError::SourceSink(culprit) => {
+                let stub = functor!(
+                    "existence_error",
+                    [atom("source_sink"), addr(culprit)]
                 );
 
                 MachineError {
@@ -454,6 +466,7 @@ pub enum Permission {
     Create,
     InputStream,
     Modify,
+    Open,
     OutputStream,
 }
 
@@ -464,6 +477,7 @@ impl Permission {
             Permission::Create => "create",
             Permission::InputStream => "input",
             Permission::Modify => "modify",
+            Permission::Open => "open",
             Permission::OutputStream => "output",
         }
     }
@@ -489,6 +503,7 @@ pub enum ValidType {
     Pair,
     //    PredicateIndicator,
     //    Variable
+    TcpListener,
 }
 
 impl ValidType {
@@ -511,6 +526,7 @@ impl ValidType {
             ValidType::Pair => "pair",
             //            ValidType::PredicateIndicator => "predicate_indicator",
             //            ValidType::Variable => "variable"
+            ValidType::TcpListener => "tcp_listener",
         }
     }
 }
@@ -726,8 +742,9 @@ impl MachineState {
 #[derive(Debug)]
 pub enum ExistenceError {
     Module(ClauseName),
+    ModuleSource(ModuleSource),
     Procedure(ClauseName, usize),
-    SourceSink(ModuleSource),
+    SourceSink(Addr),
     Stream(Addr),
 }
 

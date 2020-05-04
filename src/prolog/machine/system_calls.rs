@@ -22,9 +22,10 @@ use crate::ref_thread_local::RefThreadLocal;
 
 use std::cmp;
 use std::convert::TryFrom;
-use std::io::{stdout, Read, Write};
+use std::io::{stdout, ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
 use std::fs::File;
+use std::net::{TcpListener, TcpStream};
 use std::rc::Rc;
 
 use std::time::Duration;
@@ -362,56 +363,6 @@ impl MachineState {
         }
 
         Ok(())
-    }
-
-    fn get_stream_or_alias(
-        &mut self,
-        addr: Addr,
-        indices: &IndexStore,
-        caller: &'static str,
-    ) -> Result<Stream, MachineStub>
-    {
-        Ok(match addr {
-            Addr::Con(h) if self.heap.atom_at(h) => {
-	        if let HeapCellValue::Atom(ref atom, ref spec) = self.heap.clone(h) {
-                    match indices.stream_aliases.get(atom) {
-                        Some(stream) => {
-                            stream.clone()
-                        }
-                        None => {
-                            let stub = MachineError::functor_stub(clause_name!(caller), 1);
-                            let h = self.heap.h();
-
-                            let addr = self.heap.to_unifiable(
-                                HeapCellValue::Atom(atom.clone(), spec.clone())
-                            );
-
-                            return Err(self.error_form(
-                                MachineError::existence_error(h + 1, ExistenceError::Stream(addr)),
-                                stub,
-                            ));
-                        }
-                    }
-                } else {
-                    unreachable!()
-                }
-            }
-            Addr::Stream(h) => {
-                if let HeapCellValue::Stream(ref stream) = &self.heap[h] {
-                    stream.clone()
-                } else {
-                    unreachable!()
-                }
-            }
-            _ => {
-                let stub = MachineError::functor_stub(clause_name!(caller), 1);
-
-                return Err(self.error_form(
-                    MachineError::domain_error(DomainErrorType::StreamOrAlias, addr),
-                    stub,
-                ));
-            }
-        })
     }
 
     #[inline]
@@ -777,6 +728,29 @@ impl MachineState {
                 let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Back);
 
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
+                return Ok(());
+            }
+            &SystemClauseType::CurrentHostname => {
+                match hostname::get().ok() {
+                    Some(host) => {
+                        match host.into_string().ok() {
+                            Some(host) => {
+                                let hostname = self.heap.to_unifiable(
+                                    HeapCellValue::Atom(clause_name!(host, indices.atom_tbl), None)
+                                );
+
+                                self.unify(self[temp_v!(1)], hostname);
+                                return return_from_clause!(self.last_call, self);
+                            }
+                            None => {
+                            }
+                        }
+                    }
+                    None => {
+                    }
+                }
+
+                self.fail = true;
                 return Ok(());
             }
             &SystemClauseType::CurrentInput => {
@@ -1539,8 +1513,6 @@ impl MachineState {
             }
             &SystemClauseType::FileToChars => {
                 // TODO: Replace this with stream.
-                use std::io;
-
                 let a1 = self.store(self.deref(self[temp_v!(1)]));
                 let a2 = self.store(self.deref(self[temp_v!(2)]));
 
@@ -1570,15 +1542,15 @@ impl MachineState {
                         let h = self.heap.h();
 
                         let err = match e.kind() {
-                            io::ErrorKind::NotFound => {
+                            ErrorKind::NotFound => {
                                 MachineError::existence_error(
                                     h,
-                                    ExistenceError::SourceSink(
+                                    ExistenceError::ModuleSource(
                                         ModuleSource::File(file_name)
                                     ),
                                 )
                             }
-                            io::ErrorKind::PermissionDenied => {
+                            ErrorKind::PermissionDenied => {
                                 let source_sink = self.store(self.deref(a1));
 
                                 MachineError::permission_error(
@@ -2545,17 +2517,14 @@ impl MachineState {
                                 3,
                             );
 
-                            let type_error = self.error_form(
+                            return Err(self.error_form(
                                 MachineError::type_error(
                                     self.heap.h(),
                                     ValidType::Integer,
                                     a2,
                                 ),
                                 stub,
-                            );
-
-                            self.throw_exception(type_error);
-                            return Ok(());
+                            ));
                         }
                     };
 
@@ -2868,7 +2837,7 @@ impl MachineState {
             }
             &SystemClauseType::SetInput => {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
-                let stream = self.get_stream_or_alias(addr, indices, "set_input")?;
+                let stream = self.get_stream_or_alias(addr, indices, "set_input", 1)?;
 
                 if stream.is_output_stream() {
                     let stub = MachineError::functor_stub(
@@ -2894,7 +2863,7 @@ impl MachineState {
             }
             &SystemClauseType::SetOutput => {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
-                let stream = self.get_stream_or_alias(addr, indices, "set_output")?;
+                let stream = self.get_stream_or_alias(addr, indices, "set_output", 1)?;
 
                 if stream.is_input_stream() {
                     let stub = MachineError::functor_stub(
@@ -3182,14 +3151,29 @@ impl MachineState {
             }
             &SystemClauseType::ReadQueryTerm => {
                 readline::set_prompt(true);
-                let result = self.read_term(current_input_stream, indices);
+                let result = self.read_term(current_input_stream.clone(), indices);
                 readline::set_prompt(false);
 
-                let _ = result?;
+                match result {
+                    Ok(()) => {
+                    }
+                    Err(e) => {
+                        *current_input_stream = readline::input_stream();
+                        return Err(e);
+                    }
+                }
             }
             &SystemClauseType::ReadTerm => {
                 readline::set_prompt(false);
-                self.read_term(current_input_stream, indices)?;
+
+                let stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    indices,
+                    "read_term",
+                    3,
+                )?;
+
+                self.read_term(stream, indices)?;
             }
             &SystemClauseType::ReadTermFromChars => {
                 let mut heap_pstr_iter = self.heap_pstr_iter(self[temp_v!(1)]);
@@ -3301,6 +3285,304 @@ impl MachineState {
                 let duration = Duration::new(1, 0);
                 let duration = duration.mul_f64(time);
                 ::std::thread::sleep(duration);
+            }
+            &SystemClauseType::SocketClientOpen => {
+                let addr = self.store(self.deref(self[temp_v!(1)]));
+                let port = self.store(self.deref(self[temp_v!(2)]));
+
+                let socket_atom =
+                    match addr {
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+                                name.clone()
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let port =
+                    match port {
+                        Addr::Fixnum(n) => {
+                            n.to_string()
+                        }
+                        Addr::Usize(n) => {
+                            n.to_string()
+                        }
+                        Addr::Con(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Atom(ref name, _) => {
+                                    name.as_str().to_string()
+                                }
+                                HeapCellValue::Integer(ref n) => {
+                                    n.to_string()
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let socket_addr =
+                    format!(
+                        "{}:{}",
+                        if socket_atom.as_str() == "" {
+                            "127.0.0.1"
+                        } else {
+                            socket_atom.as_str()
+                        },
+                        port,
+                    );
+
+                let alias = self[temp_v!(4)];
+                let eof_action = self[temp_v!(5)];
+                let reposition = self[temp_v!(6)];
+                let stream_type = self[temp_v!(7)];
+
+                let options =
+                    self.to_stream_options(alias, eof_action, reposition, stream_type);
+
+                if options.reposition {
+                    return Err(self.reposition_error("socket_client_open", 3));
+                }
+
+                if let Some(ref alias) = &options.alias {
+                    if indices.stream_aliases.contains_key(alias) {
+                        return Err(self.occupied_alias_permission_error(
+                            alias.clone(),
+                            "socket_client_open",
+                            3,
+                        ));
+                    }
+                }
+
+                let stream =
+                    match TcpStream::connect(socket_addr).map_err(|e| e.kind()) {
+                        Ok(tcp_stream) => {
+                            let mut stream = Stream::from(tcp_stream);
+
+                            if let Some(ref alias) = &options.alias {
+                                indices.stream_aliases.insert(alias.clone(), stream.clone());
+                            }
+
+                            stream.options = options;
+                            self.heap.to_unifiable(HeapCellValue::Stream(stream))
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            return Err(self.open_permission_error(addr, "socket_client_open", 3));
+                        }
+                        Err(ErrorKind::NotFound) => {
+                            let stub = MachineError::functor_stub(
+                                clause_name!("socket_client_open"),
+                                3,
+                            );
+
+                            let err = MachineError::existence_error(
+                                self.heap.h(),
+                                ExistenceError::SourceSink(addr),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+                        Err(_) => {
+                            // for now, just fail. expand to meaningful error messages later.
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    };
+
+                let stream_addr = self.store(self.deref(self[temp_v!(3)]));
+                self.bind(stream_addr.as_var().unwrap(), stream);
+            }
+            &SystemClauseType::SocketServerOpen => {
+                let addr = self.store(self.deref(self[temp_v!(1)]));
+                let socket_atom =
+                    match addr {
+                        Addr::EmptyList => {
+                            "127.0.0.1".to_string()
+                        }
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Atom(ref name, _) => {
+                                    name.as_str().to_string()
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let port =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        Addr::Fixnum(n) => {
+                            n.to_string()
+                        }
+                        Addr::Usize(n) => {
+                            n.to_string()
+                        }
+                        Addr::Con(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Integer(ref n) => {
+                                    n.to_string()
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                        addr if addr.is_ref() => {
+                            "0".to_string()
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let had_zero_port = &port == "0";
+
+                let server_addr = if socket_atom.is_empty() {
+                    port
+                } else {
+                    format!("{}:{}", socket_atom, port)
+                };
+
+                let (tcp_listener, port) =
+                    match TcpListener::bind(server_addr).map_err(|e| e.kind()) {
+                        Ok(tcp_listener) => {
+                            let port = tcp_listener.local_addr().map(|addr| addr.port()).ok();
+
+                            if let Some(port) = port {
+                                (
+                                    self.heap.to_unifiable(HeapCellValue::TcpListener(tcp_listener)),
+                                    port as usize,
+                                )
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            return Err(self.open_permission_error(addr, "socket_server_open", 2));
+                        }
+                        _ => {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    };
+
+                let addr = self.store(self.deref(self[temp_v!(3)]));
+                self.bind(addr.as_var().unwrap(), tcp_listener);
+
+                if had_zero_port {
+                    self.unify(self[temp_v!(2)], Addr::Usize(port));
+                }
+            }
+            &SystemClauseType::SocketServerAccept => {
+                let alias = self[temp_v!(4)];
+                let eof_action = self[temp_v!(5)];
+                let reposition = self[temp_v!(6)];
+                let stream_type = self[temp_v!(7)];
+
+                let options =
+                    self.to_stream_options(alias, eof_action, reposition, stream_type);
+
+                if options.reposition {
+                    return Err(self.reposition_error("socket_server_accept", 4));
+                }
+
+                match self.store(self.deref(self[temp_v!(1)])) {
+                    Addr::TcpListener(h) => {
+                        match &mut self.heap[h] {
+                            HeapCellValue::TcpListener(ref mut tcp_listener) => {
+                                match tcp_listener.accept().ok() {
+                                    Some((tcp_stream, socket_addr)) => {
+                                        let mut tcp_stream = Stream::from(tcp_stream);
+                                        tcp_stream.options = options;
+
+                                        let tcp_stream =
+                                            self.heap.to_unifiable(HeapCellValue::Stream(tcp_stream));
+
+                                        let client =
+                                            clause_name!(format!("{}", socket_addr), indices.atom_tbl);
+                                        let client =
+                                            self.heap.to_unifiable(HeapCellValue::Atom(client, None));
+
+                                        let client_addr = self.store(self.deref(self[temp_v!(2)]));
+                                        let stream_addr = self.store(self.deref(self[temp_v!(3)]));
+
+                                        self.bind(client_addr.as_var().unwrap(), client);
+                                        self.bind(stream_addr.as_var().unwrap(), tcp_stream);
+                                    }
+                                    None => {
+                                        self.fail = true;
+                                        return Ok(());
+                                    }
+                                }
+                            }
+                            culprit => {
+                                let culprit = culprit.as_addr(h);
+                                let stub = MachineError::functor_stub(
+                                    clause_name!("socket_server_close"),
+                                    1,
+                                );
+
+                                let err = MachineError::type_error(
+                                    self.heap.h(),
+                                    ValidType::TcpListener,
+                                    culprit,
+                                );
+
+                                return Err(self.error_form(err, stub));
+                            }
+                        }
+                    }
+                    culprit => {
+                        let stub = MachineError::functor_stub(
+                            clause_name!("socket_server_accept"),
+                            4,
+                        );
+
+                        let err = MachineError::type_error(
+                            self.heap.h(),
+                            ValidType::TcpListener,
+                            culprit,
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }
+            }
+            &SystemClauseType::SocketServerClose => {
+                match self.store(self.deref(self[temp_v!(1)])) {
+                    Addr::TcpListener(h) => {
+                        self.heap[h] = HeapCellValue::Addr(Addr::EmptyList);
+                    }
+                    culprit => {
+                        let stub = MachineError::functor_stub(
+                            clause_name!("socket_server_close"),
+                            1,
+                        );
+
+                        let err = MachineError::type_error(
+                            self.heap.h(),
+                            ValidType::TcpListener,
+                            culprit,
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }
             }
             &SystemClauseType::StoreGlobalVar => {
                 let key = self[temp_v!(1)];

@@ -617,7 +617,7 @@ fn load_library(
             )
         }
         None => {
-            let err = ExistenceError::SourceSink(ModuleSource::Library(
+            let err = ExistenceError::ModuleSource(ModuleSource::Library(
                 name.clone()
             ));
 
@@ -708,7 +708,7 @@ impl ListingCompiler {
 
             Ok(wam_indices.insert_module(submodule))
         } else {
-            let err = ExistenceError::SourceSink(ModuleSource::File(
+            let err = ExistenceError::ModuleSource(ModuleSource::File(
                 module_name,
             ));
 
@@ -746,7 +746,7 @@ impl ListingCompiler {
 
             Ok(wam_indices.insert_module(submodule))
         } else {
-            let err = ExistenceError::SourceSink(ModuleSource::File(
+            let err = ExistenceError::ModuleSource(ModuleSource::File(
                 module_name
             ));
 
@@ -1080,7 +1080,7 @@ impl ListingCompiler {
                         insert_or_refresh_term_dir_quantum(term_dir, key, term_dirs);
                     }
                     None => {
-                        let err = ExistenceError::SourceSink(ModuleSource::File(
+                        let err = ExistenceError::ModuleSource(ModuleSource::File(
                             module_name,
                         ));
 
@@ -1438,7 +1438,7 @@ pub(super) fn setup_indices(
         wam.indices.insert_module(module);
         result
     } else {
-        let err = ExistenceError::SourceSink(ModuleSource::Library(
+        let err = ExistenceError::ModuleSource(ModuleSource::Library(
             module
         ));
 

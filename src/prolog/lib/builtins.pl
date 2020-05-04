@@ -420,25 +420,16 @@ parse_read_term_options(Options, OptionValues, Stub) :-
     parse_options_list(Options, parse_read_term_options_, DefaultOptions, OptionValues, Stub).
 
 
-parse_read_term_options_(singletons(Vars), singletons-Vars) :-
-    (  '$skip_max_list'(Vars, _, -1, Tail), Tail == [], !
-    ;
-       throw(error(domain_error(read_option, singletons(Vars)), _))
-    ).
-parse_read_term_options_(variables(Vars), variables-Vars) :-
-    (  '$skip_max_list'(Vars, _, -1, Tail), Tail == [], !
-    ;
-       throw(error(domain_error(read_option, variables(Vars)), _))
-    ).
-parse_read_term_options_(variable_names(Vars), variable_names-Vars) :-
-    (  '$skip_max_list'(Vars, _, -1, Tail), Tail == [], !
-    ;
-       throw(error(domain_error(read_option, variable_names(Vars)), _))
-    ).
+parse_read_term_options_(singletons(Vars), singletons-Vars).
+parse_read_term_options_(variables(Vars), variables-Vars).
+parse_read_term_options_(variable_names(Vars), variable_names-Vars).
+parse_read_term_options_(E,_) :-
+    throw(error(domain_error(read_option, E), _)).
+
 
 
 read_term(Stream, Term, Options) :-
-    parse_read_term_options(Options, [Singletons, Variables, VariableNames], read_term/3),
+    parse_read_term_options(Options, [Singletons, VariableNames, Variables], read_term/3),
     '$read_term'(Stream, Term, Singletons, Variables, VariableNames).
 
 read_term(Term, Options) :-

@@ -1,12 +1,16 @@
 use crate::prolog_parser::ast::*;
 
 use crate::prolog::read::readline::*;
+use crate::prolog::machine::machine_errors::*;
+use crate::prolog::machine::machine_indices::*;
+use crate::prolog::machine::machine_state::*;
+use crate::prolog::read::PrologStream;
 
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{stdin, stdout, Cursor, ErrorKind, Read, Write};
+use std::io::{stdout, Cursor, ErrorKind, Read, Write};
 use std::hash::{Hash, Hasher};
 use std::net::TcpStream;
 use std::rc::Rc;
@@ -32,7 +36,7 @@ pub enum StreamInstance {
     File(File),
     Null,
     ReadlineStream(ReadlineStream),
-    Stdin,
+    // Stdin,
     Stdout,
     TcpStream(TcpStream),
 }
@@ -48,7 +52,7 @@ impl fmt::Debug for StreamInstance {
             &StreamInstance::Null => write!(fmt, "Null"),
             &StreamInstance::ReadlineStream(ref readline_stream) =>
                 write!(fmt, "ReadlineStream({:?})", readline_stream),
-            &StreamInstance::Stdin => write!(fmt, "Stdin"),
+            // &StreamInstance::Stdin => write!(fmt, "Stdin"),
             &StreamInstance::Stdout => write!(fmt, "Stdout"),
             &StreamInstance::TcpStream(ref tcp_stream) =>
                 write!(fmt, "TcpStream({:?})", tcp_stream),
@@ -140,6 +144,17 @@ pub struct Stream {
     stream_inst: WrappedStreamInstance,
 }
 
+impl From<TcpStream> for Stream {
+    fn from(tcp_stream: TcpStream) -> Self {
+        Stream {
+            options: StreamOptions::default(),
+            stream_inst: WrappedStreamInstance::new(
+                StreamInstance::TcpStream(tcp_stream)
+            )
+        }
+    }
+}
+
 impl From<String> for Stream {
     fn from(string: String) -> Self {
         Stream {
@@ -187,7 +202,7 @@ impl From<File> for Stream {
 impl Stream {
     #[inline]
     pub(crate)
-    fn as_ptr(&self) -> *const RefCell<StreamInstance> {
+    fn as_ptr(&self) -> *const u8 {
         let rc = self.stream_inst.0.clone();
         let ptr = Rc::into_raw(rc);
 
@@ -196,7 +211,7 @@ impl Stream {
             let _ = Rc::from_raw(ptr);
         }
 
-        ptr
+        ptr as *const u8
     }
 
     #[inline]
@@ -210,6 +225,7 @@ impl Stream {
         }
     }
 
+/*
     #[inline]
     pub(crate)
     fn stdin() -> Self {
@@ -220,6 +236,7 @@ impl Stream {
             ),
         }
     }
+*/
 
     #[inline]
     pub(crate)
@@ -249,7 +266,8 @@ impl Stream {
     pub(crate)
     fn is_stdin(&self) -> bool {
         match *self.stream_inst.0.borrow() {
-            StreamInstance::Stdin | StreamInstance::ReadlineStream(_) => {
+            //StreamInstance::Stdin |
+            StreamInstance::ReadlineStream(_) => {
                 true
             }
             _ => {
@@ -262,12 +280,12 @@ impl Stream {
     pub(crate)
     fn is_input_stream(&self) -> bool {
         match *self.stream_inst.0.borrow() {
-            StreamInstance::Stdin
-          | StreamInstance::TcpStream(_)
-          | StreamInstance::Bytes(_)
-          | StreamInstance::ReadlineStream(_)
-          | StreamInstance::DynReadSource(_)
-          | StreamInstance::File(_) => {
+            // StreamInstance::Stdin |
+            StreamInstance::TcpStream(_) |
+            StreamInstance::Bytes(_) |
+            StreamInstance::ReadlineStream(_) |
+            StreamInstance::DynReadSource(_) |
+            StreamInstance::File(_) => {
                 true
            }
             _ => {
@@ -293,6 +311,221 @@ impl Stream {
     }
 }
 
+impl MachineState {
+    pub(crate)
+    fn to_stream_options(
+        &self,
+        alias: Addr,
+        eof_action: Addr,
+        reposition: Addr,
+        stream_type: Addr,
+    ) -> StreamOptions {
+        let alias =
+            match self.store(self.deref(alias)) {
+                Addr::Con(h) if self.heap.atom_at(h) => {
+                    if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+                        Some(name.clone())
+                    } else {
+                        unreachable!()
+                    }
+                }
+                _ => {
+                    None
+                }
+            };
+
+        let eof_action =
+            match self.store(self.deref(eof_action)) {
+                Addr::Con(h) if self.heap.atom_at(h) => {
+                    if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+                        match name.as_str() {
+                            "eof_code" => EOFAction::EOFCode,
+                            "error" => EOFAction::Error,
+                            "reset" => EOFAction::Reset,
+                            _ => unreachable!(),
+                        }
+                    } else {
+                        unreachable!()
+                    }
+                }
+                _ => {
+                    unreachable!()
+                }
+            };
+
+        let reposition =
+            match self.store(self.deref(reposition)) {
+                Addr::Con(h) if self.heap.atom_at(h) => {
+                    if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+                        name.as_str() == "true"
+                    } else {
+                        unreachable!()
+                    }
+                }
+                _ => {
+                    unreachable!()
+                }
+            };
+
+        let stream_type =
+            match self.store(self.deref(stream_type)) {
+                Addr::Con(h) if self.heap.atom_at(h) => {
+                    if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+                        match name.as_str() {
+                            "text"   => StreamType::Text,
+                            "binary" => StreamType::Binary,
+                            _ => unreachable!()
+                        }
+                    } else {
+                        unreachable!()
+                    }
+                }
+                _ => {
+                    unreachable!()
+                }
+            };
+
+        let mut options = StreamOptions::default();
+
+        options.stream_type = stream_type;
+        options.reposition  = reposition;
+        options.alias = alias;
+        options.eof_action = eof_action;
+
+        options
+    }
+
+    pub(crate)
+    fn get_stream_or_alias(
+        &mut self,
+        addr: Addr,
+        indices: &IndexStore,
+        caller: &'static str,
+        arity: usize,
+    ) -> Result<Stream, MachineStub>
+    {
+        Ok(match addr {
+            Addr::Con(h) if self.heap.atom_at(h) => {
+	        if let HeapCellValue::Atom(ref atom, ref spec) = self.heap.clone(h) {
+                    match indices.stream_aliases.get(atom) {
+                        Some(stream) => {
+                            stream.clone()
+                        }
+                        None => {
+                            let stub = MachineError::functor_stub(clause_name!(caller), arity);
+                            let h = self.heap.h();
+
+                            let addr = self.heap.to_unifiable(
+                                HeapCellValue::Atom(atom.clone(), spec.clone())
+                            );
+
+                            return Err(self.error_form(
+                                MachineError::existence_error(h + 1, ExistenceError::Stream(addr)),
+                                stub,
+                            ));
+                        }
+                    }
+                } else {
+                    unreachable!()
+                }
+            }
+            Addr::Stream(h) => {
+                if let HeapCellValue::Stream(ref stream) = &self.heap[h] {
+                    stream.clone()
+                } else {
+                    unreachable!()
+                }
+            }
+            _ => {
+                let stub = MachineError::functor_stub(clause_name!(caller), arity);
+
+                return Err(self.error_form(
+                    MachineError::domain_error(DomainErrorType::StreamOrAlias, addr),
+                    stub,
+                ));
+            }
+        })
+    }
+
+    pub(crate)
+    fn open_parsing_stream(
+        &self,
+        stream: Stream,
+        stub_name: &'static str,
+        stub_arity: usize,
+    ) -> Result<PrologStream, MachineStub> {
+        match parsing_stream(stream) {
+            Ok(stream) => {
+                Ok(stream)
+            }
+            Err(e) => {
+                let stub = MachineError::functor_stub(clause_name!(stub_name), stub_arity);
+                let err = MachineError::session_error(
+                    self.heap.h(),
+                    SessionError::from(e),
+                );
+
+                Err(self.error_form(err, stub))
+            }
+        }
+    }
+
+    pub(crate)
+    fn open_permission_error<T: PermissionError>(
+        &self,
+        culprit: T,
+        stub_name: &'static str,
+        stub_arity: usize,
+    ) -> MachineStub {
+        let stub = MachineError::functor_stub(clause_name!(stub_name), stub_arity);
+        let err = MachineError::permission_error(
+            self.heap.h(),
+            Permission::Open,
+            "source_sink",
+            culprit,
+        );
+
+        return self.error_form(err, stub);
+    }
+
+    pub(crate)
+    fn occupied_alias_permission_error(
+        &self,
+        alias: ClauseName,
+        stub_name: &'static str,
+        stub_arity: usize,
+    ) -> MachineStub {
+        let stub = MachineError::functor_stub(clause_name!(stub_name), stub_arity);
+        let err = MachineError::permission_error(
+            self.heap.h(),
+            Permission::Open,
+            "source_sink",
+            functor!("alias", [clause_name(alias)]),
+        );
+
+        return self.error_form(err, stub);
+    }
+
+    pub(crate)
+    fn reposition_error(
+        &self,
+        stub_name: &'static str,
+        stub_arity: usize,
+    ) -> MachineStub {
+        let stub = MachineError::functor_stub(clause_name!(stub_name), stub_arity);
+        let rep_stub = functor!("reposition", [atom("true")]);
+
+        let err = MachineError::permission_error(
+            self.heap.h(),
+            Permission::Open,
+            "source_sink",
+            rep_stub,
+        );
+
+        return self.error_form(err, stub);
+    }
+}
+
 impl Read for Stream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match *self.stream_inst.0.borrow_mut() {
@@ -311,9 +544,11 @@ impl Read for Stream {
             StreamInstance::Bytes(ref mut cursor) => {
                 cursor.read(buf)
             }
+/*
             StreamInstance::Stdin => {
                 stdin().read(buf)
             }
+*/
             StreamInstance::Stdout | StreamInstance::Null => {
                 Err(std::io::Error::new(
                     ErrorKind::PermissionDenied,

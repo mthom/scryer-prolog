@@ -171,14 +171,17 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             &HeapCellValue::NamedStr(arity, ref name, ref op) => {
                 HeapCellValue::NamedStr(arity, name.clone(), op.clone())
             }
-            &HeapCellValue::Rational(ref r) => {
-                HeapCellValue::Rational(r.clone())
-            }
             &HeapCellValue::PartialString(..) => {
                 HeapCellValue::Addr(Addr::PStrLocation(h, 0))
             }
+            &HeapCellValue::Rational(ref r) => {
+                HeapCellValue::Rational(r.clone())
+            }
             &HeapCellValue::Stream(_) => {
                 HeapCellValue::Addr(Addr::Stream(h))
+            }
+            &HeapCellValue::TcpListener(_) => {
+                HeapCellValue::Addr(Addr::TcpListener(h))
             }
         }
     }
@@ -294,9 +297,6 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             val @ HeapCellValue::NamedStr(..) => {
                 Addr::Str(self.push(val))
             }
-            val @ HeapCellValue::Stream(..) => {
-                Addr::Stream(self.push(val))
-            }
             HeapCellValue::PartialString(pstr, has_tail) => {
                 let h = self.push(HeapCellValue::PartialString(pstr, has_tail));
 
@@ -305,6 +305,12 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
                 }
 
                 Addr::Con(h)
+            }
+            val @ HeapCellValue::Stream(..) => {
+                Addr::Stream(self.push(val))
+            }
+            val @ HeapCellValue::TcpListener(..) => {
+                Addr::TcpListener(self.push(val))
             }
         }
     }
@@ -517,7 +523,7 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     pub
     fn index_addr<'a>(&'a self, addr: &Addr) -> RefOrOwned<'a, HeapCellValue> {
         match addr {
-            &Addr::Con(h) | &Addr::Str(h) | &Addr::Stream(h) => {
+            &Addr::Con(h) | &Addr::Str(h) | &Addr::Stream(h) | &Addr::TcpListener(h) => {
                 RefOrOwned::Borrowed(&self[h])
             }
             addr => {
