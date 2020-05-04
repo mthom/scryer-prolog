@@ -763,14 +763,14 @@ impl ListingCompiler {
     }
 
     fn generate_init_goal_code(
-	&mut self,
+	    &mut self,
     ) -> Result<Code, SessionError> {
-	let query_terms = mem::replace(&mut self.initialization_goals.0, vec![]);
-	let queue = mem::replace(&mut self.initialization_goals.1, VecDeque::new());
+	    let query_terms = mem::replace(&mut self.initialization_goals.0, vec![]);
+	    let queue = mem::replace(&mut self.initialization_goals.1, VecDeque::new());
 
-	compile_query(query_terms, queue)
-	    .map(|(code, _)| code)
-	    .map_err(SessionError::from)
+	    compile_query(query_terms, queue)
+	        .map(|(code, _)| code)
+	        .map_err(SessionError::from)
     }
 
     fn set_code_index(
@@ -1143,7 +1143,8 @@ impl ListingCompiler {
         result
     }
 
-    pub(crate) fn gather_items(
+    pub(crate)
+    fn gather_items(
         &mut self,
         wam: &mut Machine,
         src: &mut ParsingStream<Stream>,
@@ -1339,7 +1340,7 @@ fn compile_work_impl(
     let init_goal_code = compiler.generate_init_goal_code()?;
 
     if init_goal_code.len() > 0 {
-	if !wam.run_init_code(init_goal_code) {
+	    if !wam.run_init_code(init_goal_code) {
             println!("Warning: initialization goal for {} failed",
                      compiler.listing_src.name());
         }
