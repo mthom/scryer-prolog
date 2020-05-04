@@ -20,8 +20,6 @@ use crate::prolog::rug::Integer;
 
 use crate::ref_thread_local::RefThreadLocal;
 
-use indexmap::IndexSet;
-
 use std::cmp;
 use std::convert::TryFrom;
 use std::io::{stdout, Read, Write};
@@ -3378,18 +3376,16 @@ impl MachineState {
             }
             &SystemClauseType::TermVariables => {
                 let a1 = self[temp_v!(1)];
-                let mut seen_vars = IndexSet::new();
+                let mut seen_vars = vec![];
 
                 for addr in self.acyclic_pre_order_iter(a1) {
                     if addr.is_ref() {
-                        seen_vars.insert(addr);
+                        seen_vars.push(addr);
                     }
                 }
 
                 let outcome = Addr::HeapCell(self.heap.to_list(seen_vars.into_iter()));
-
-                let a2 = self[temp_v!(2)];
-                self.unify(a2, outcome);
+                self.unify(self[temp_v!(2)], outcome);
             }
             &SystemClauseType::TruncateLiftedHeapTo => {
                 match self.store(self.deref(self[temp_v!(1)])) {
