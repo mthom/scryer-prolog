@@ -405,3 +405,26 @@ macro_rules! ar_reg {
         ArithmeticTerm::Reg($r)
     };
 }
+
+macro_rules! atom_from {
+    ($self:expr, $indices:expr, $e:expr) => {
+        match $e {
+            Addr::Con(h) if $self.heap.atom_at(h) => {
+                match &$self.heap[h] {
+                    HeapCellValue::Atom(ref atom, _) => {
+                        atom.clone()
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                }
+            }
+            Addr::Char(c) => {
+                clause_name!(c.to_string(), $indices.atom_tbl.clone())
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+}

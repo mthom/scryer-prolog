@@ -274,7 +274,7 @@ impl MachineError {
                 MachineError {
                     stub,
                     location: None,
-                    from: ErrorProvenance::Constructed,
+                    from: ErrorProvenance::Received,
                 }
             }
             ExistenceError::Stream(culprit) => {
@@ -533,6 +533,7 @@ impl ValidType {
 
 #[derive(Debug, Clone, Copy)]
 pub enum DomainErrorType {
+    IOMode,
     NotLessThanZero,
     Order,
     Stream,
@@ -542,6 +543,7 @@ pub enum DomainErrorType {
 impl DomainErrorType {
     pub fn as_str(self) -> &'static str {
         match self {
+            DomainErrorType::IOMode => "io_mode",
             DomainErrorType::NotLessThanZero => "not_less_than_zero",
             DomainErrorType::Order => "order",
             DomainErrorType::Stream => "stream",

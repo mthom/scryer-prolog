@@ -315,7 +315,7 @@ impl Machine {
 
         if path.is_file() {
             let file_src = match File::open(&path) {
-                Ok(file_handle) => Stream::from(file_handle),
+                Ok(file_handle) => Stream::from_file_as_input(file_handle),
                 Err(_) => return,
             };
 

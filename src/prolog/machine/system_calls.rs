@@ -22,9 +22,9 @@ use crate::ref_thread_local::RefThreadLocal;
 
 use std::cmp;
 use std::convert::TryFrom;
-use std::io::{stdout, ErrorKind, Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::net::{TcpListener, TcpStream};
 use std::rc::Rc;
 
@@ -2206,6 +2206,103 @@ impl MachineState {
                     }
                 };
             }
+            &SystemClauseType::Open => {
+                let alias = self[temp_v!(4)];
+                let eof_action = self[temp_v!(5)];
+                let reposition = self[temp_v!(6)];
+                let stream_type = self[temp_v!(7)];
+
+                let options =
+                    self.to_stream_options(alias, eof_action, reposition, stream_type);
+
+                let file_spec =
+                    atom_from!(self, indices, self.store(self.deref(self[temp_v!(1)])));
+
+                // 8.11.5.3l)
+                if let Some(ref alias) = &options.alias {
+                    if indices.stream_aliases.contains_key(alias) {
+                        return Err(self.occupied_alias_permission_error(
+                            alias.clone(),
+                            "open",
+                            4,
+                        ));
+                    }
+                }
+
+                let mode =
+                    atom_from!(self, indices, self.store(self.deref(self[temp_v!(2)])));
+
+                let mut open_options = OpenOptions::new();
+
+                let is_input_file =
+                    match mode.as_str() {
+                        "read" => {
+                            open_options.read(true).write(false).create(false);
+                            true
+                        }
+                        "write" => {
+                            open_options.read(false).write(true).create(true).append(false);
+                            false
+                        }
+                        "append" => {
+                            open_options.read(false).write(true).create(true).append(true);
+                            false
+                        }
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("open"), 4);
+                            let err  = MachineError::domain_error(
+                                DomainErrorType::IOMode,
+                                self[temp_v!(2)],
+                            );
+
+                            // 8.11.5.3h)
+                            return Err(self.error_form(err, stub));
+                        }
+                    };
+
+                let file =
+                    match open_options.open(file_spec.as_str()).map_err(|e| e.kind()) {
+                        Ok(file) => {
+                            file
+                        }
+                        Err(ErrorKind::NotFound) => {
+                            // 8.11.5.3j)
+                            let stub = MachineError::functor_stub(
+                                clause_name!("open"),
+                                4,
+                            );
+
+                            let err = MachineError::existence_error(
+                                self.heap.h(),
+                                ExistenceError::SourceSink(self[temp_v!(1)]),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            // 8.11.5.3k)
+                            return Err(self.open_permission_error(self[temp_v!(1)], "open", 4));
+                        }
+                        Err(_) => {
+                            // for now, just fail. expand to meaningful error messages later.
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    };
+
+                let mut stream = if is_input_file {
+                    Stream::from_file_as_input(file)
+                } else {
+                    Stream::from_file_as_output(file)
+                };
+
+                stream.options = options;
+
+                let stream = self.heap.to_unifiable(HeapCellValue::Stream(stream));
+                let stream_var = self.store(self.deref(self[temp_v!(3)]));
+
+                self.bind(stream_var.as_var().unwrap(), stream);
+            }
             &SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff => {
                 self.truncate_if_no_lifted_heap_diff(|h| Addr::HeapCell(h))
             }
@@ -3786,7 +3883,41 @@ impl MachineState {
                 self.unify(listing, listing_var);
             }
             &SystemClauseType::WriteTerm => {
-                let addr = self[temp_v!(1)];
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    indices,
+                    "write_term",
+                    3,
+                )?;
+
+                let opt_err =
+                    if !stream.is_output_stream() {
+                        Some("stream") // 8.14.2.3 g)
+                    } else if stream.options.stream_type == StreamType::Binary {
+                        Some("binary_stream") // 8.14.2.3 h)
+                    } else {
+                        None
+                    };
+
+                if let Some(err_string) = opt_err {
+                    let stub = MachineError::functor_stub(clause_name!("write_term"), 3);
+                    let h = self.heap.h();
+
+                    let addr = self.heap.to_unifiable(
+                        HeapCellValue::Stream(stream)
+                    );
+
+                    let err = MachineError::permission_error(
+                        h + 1,
+                        Permission::OutputStream,
+                        err_string,
+                        addr,
+                    );
+
+                    return Err(self.error_form(err, stub));
+                }
+
+                let addr = self[temp_v!(2)];
 
                 let printer =
                     match self.write_term(&indices.op_dir)? {
@@ -3801,8 +3932,21 @@ impl MachineState {
 
                 let output = printer.print(addr);
 
-                print!("{}", output.result());
-                stdout().flush().unwrap();
+                match write!(&mut stream, "{}", output.result()) {
+                    Ok(_) => {
+                    }
+                    Err(_) => {
+                        let stub = MachineError::functor_stub(clause_name!("open"), 4);
+                        let err = MachineError::existence_error(
+                            self.heap.h(),
+                            ExistenceError::Stream(self[temp_v!(1)]),
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }
+
+                stream.flush().unwrap();
             }
             &SystemClauseType::WriteTermToChars => {
                 let addr = self[temp_v!(1)];

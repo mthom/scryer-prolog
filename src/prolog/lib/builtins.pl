@@ -49,12 +49,14 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      expand_goal/2, expand_term/2, fail/0, false/0,
                      findall/3, findall/4, get_char/1, halt/0,
                      max_arity/1, number_chars/2, number_codes/2,
-                     once/1, op/3, read_term/2, read_term/3, repeat/0,
-                     retract/1, set_prolog_flag/2, set_input/1,
-                     set_output/1, setof/3, sub_atom/5,
-                     subsumes_term/2, term_variables/2, throw/1,
-                     true/0, unify_with_occurs_check/2, write/1,
-                     write_canonical/1, write_term/2, writeq/1]).
+                     once/1, op/3, open/3, open/4, read_term/2,
+                     read_term/3, repeat/0, retract/1,
+                     set_prolog_flag/2, set_input/1, set_output/1,
+                     setof/3, sub_atom/5, subsumes_term/2,
+                     term_variables/2, throw/1, true/0,
+                     unify_with_occurs_check/2, write/1,
+                     write_canonical/1, write_term/2, write_term/3,
+                     writeq/1]).
 
 
 % the maximum arity flag. needs to be replaced with
@@ -312,36 +314,39 @@ get_args([Arg|Args], Func, I0, N) :-
     '$call_with_default_policy'(I1 is I0 + 1),
     '$call_with_default_policy'(get_args(Args, Func, I1, N)).
 
-% write, write_canonical, writeq, write_term.
-is_write_option(Functor) :-
-    Functor =.. [Name, Arg],
-    (  Arg == true -> true
-    ;  Arg == false -> true
-    ;  Name == variable_names -> must_be_var_names_list(Arg)
-    ;  Name == max_depth -> integer(Arg), Arg >= 0
-    ;  var(Arg) -> throw(error(instantiation_error, write_term/2))
-    ;  throw(error(domain_error(write_option, Functor), write_term/2))
-    ), % 8.14.2.3 e)
-    (  Name == ignore_ops -> true
-    ;  Name == quoted -> true
-    ;  Name == numbervars -> true
-    ;  Name == variable_names -> true
-    ;  Name == max_depth -> true
-    ;  throw(error(domain_error(write_option, Functor), write_term/2))
-    ). % 8.14.2.3 e)
+parse_write_options(Options, OptionValues, Stub) :-
+    DefaultOptions = [ignore_ops-false, max_depth-0, numbervars-false,
+                      quoted-false, variable_names-[]],
+    parse_options_list(Options, parse_write_options_, DefaultOptions, OptionValues, Stub).
 
-inst_member_or([X|Xs], Y, Z) :-
-    (  var(X) -> throw(error(instantiation_error, write_term/2))
-    ;  is_write_option(X) -> ( Y = X, ! ; inst_member_or(Xs, Y, Z) )
-    ;  throw(error(domain_error(write_option, X), write_term/2))
+parse_write_options_(ignore_ops(IgnoreOps), ignore_ops-IgnoreOps) :-
+    (  nonvar(IgnoreOps), lists:member(IgnoreOps, [true, false])
+    ;
+       throw(error(domain_error(write_option, ignore_ops(IgnoreOps)), _))
     ).
-inst_member_or([], Y, Y).
+parse_write_options_(quoted(Quoted), quoted-Quoted) :-
+    (  nonvar(Quoted), lists:member(Quoted, [true, false])
+    ;
+       throw(error(domain_error(write_option, quoted(Quoted)), _))
+    ).
+parse_write_options_(numbervars(NumberVars), numbervars-NumberVars) :-
+    (  nonvar(NumberVars), lists:member(NumberVars, [true, false])
+    ;
+       throw(error(domain_error(write_option, numbervars(NumberVars)), _))
+    ).
+parse_write_options_(variable_names(VNNames), variable_names-VNNames) :-
+    must_be_var_names_list(VNNames).
+parse_write_options_(max_depth(MaxDepth), max_depth-MaxDepth) :-
+    (  integer(MaxDepth), MaxDepth >= 0
+    ;
+       throw(error(domain_error(write_option, max_depth(MaxDepth)), _))
+    ).
 
 must_be_var_names_list(VarNames) :-
     '$skip_max_list'(_, -1, VarNames, Tail),
     (  Tail == [] -> must_be_var_names_list_(VarNames, VarNames)
     ;  var(Tail)  -> throw(error(instantiation_error, write_term/2))
-    ;  throw(error(domain_error(write_options, variable_names(VarNames)), write_term/2))
+    ;  throw(error(domain_error(write_option, variable_names(VarNames)), write_term/2))
     ).
 
 must_be_var_names_list_([], List).
@@ -350,36 +355,34 @@ must_be_var_names_list_([VarName | VarNames], List) :-
        (  VarName = (Atom = _) ->
 	      (  atom(Atom) -> must_be_var_names_list_(VarNames, List)
 	      ;  var(Atom)  -> throw(error(instantiation_error, write_term/2))
-	      ;  throw(error(domain_error(write_options, variable_names(List)), write_term/2))
+	      ;  throw(error(domain_error(write_option, variable_names(List)), write_term/2))
 	      )
-       ;  throw(error(domain_error(write_options, variable_names(List)), write_term/2))
+       ;  throw(error(domain_error(write_option, variable_names(List)), write_term/2))
        )
-    ;  throw(error(instantiation_error, write_term/2)) % throw(error(domain_error(write_options, variable_names(List)), write_term/2))
+    ;  throw(error(instantiation_error, write_term/2))
     ).
 
-write_term(_, Options) :-
-    var(Options), throw(error(instantiation_error, write_term/2)).
+
 write_term(Term, Options) :-
-    '$skip_max_list'(_, -1, Options, Options0),
-    (  var(Options0)  -> throw(error(instantiation_error, write_term/2))
-    ;  Options0 == [] -> true
-    ;  throw(error(type_error(list, Options), write_term/2))
-    ), % 8.14.2.3 c)
-    inst_member_or(Options, ignore_ops(IgnoreOps), ignore_ops(false)),
-    inst_member_or(Options, numbervars(NumberVars), numbervars(false)),
-    inst_member_or(Options, quoted(Quoted), quoted(false)),
-    inst_member_or(Options, variable_names(VarNames), variable_names([])),
-    inst_member_or(Options, max_depth(MaxDepth), max_depth(0)),
-    '$write_term'(Term, IgnoreOps, NumberVars, Quoted, VarNames, MaxDepth).
+    current_output(Stream),
+    write_term(Stream, Term, Options).
+
+write_term(Stream, Term, Options) :-
+    parse_write_options(Options, [IgnoreOps, MaxDepth, NumberVars, Quoted, VNNames], write_term/3),
+    '$write_term'(Stream, Term, IgnoreOps, NumberVars, Quoted, VNNames, MaxDepth).
+
 
 write(Term) :-
-    '$write_term'(Term, false, true, false, [], 0).
+    current_output(Stream),
+    '$write_term'(Stream, Term, false, true, false, [], 0).
 
 write_canonical(Term) :-
-    '$write_term'(Term, true, false, true, [], 0).
+    current_output(Stream),
+    '$write_term'(Stream, Term, true, false, true, [], 0).
 
 writeq(Term) :-
-    '$write_term'(Term, false, true, true, [], 0).
+    current_output(Stream),
+    '$write_term'(Stream, Term, false, true, true, [], 0).
 
 
 
@@ -1139,3 +1142,22 @@ parse_stream_options_(eof_action(Action), eof_action-Action) :-
     ).
 parse_stream_options_(E, _) :-
     throw(error(domain_error(stream_option, E), _)). % 8.11.5.3i)
+
+
+open(SourceSink, Mode, Stream) :-
+    open(SourceSink, Mode, Stream, []).
+
+open(SourceSink, Mode, Stream, StreamOptions) :-
+    (  var(SourceSink) ->
+       throw(error(instantiation_error, open/4)) % 8.11.5.3a)
+    ;  var(Mode) ->
+       throw(error(instantiation_error, open/4)) % 8.11.5.3b)
+    ;  \+ atom(Mode) ->
+       throw(error(type_error(atom, Mode), open/4)) % 8.11.5.3d)
+    ;  nonvar(Stream) ->
+       throw(error(type_error(variable, Stream), open/4)) % 8.11.5.3f)
+    ;
+       parse_stream_options(StreamOptions, [Alias, EOFAction, Reposition, Type], open/4),
+       '$open'(SourceSink, Mode, Stream, Alias, EOFAction, Reposition, Type)
+    ).
+

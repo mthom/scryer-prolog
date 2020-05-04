@@ -723,10 +723,10 @@ impl MachineState {
         op_dir: &'a OpDir,
     ) -> Result<Option<HCPrinter<'a, PrinterOutputter>>, MachineStub>
     {
-        let ignore_ops = self.store(self.deref(self[temp_v!(2)]));
-        let numbervars = self.store(self.deref(self[temp_v!(3)]));
-        let quoted = self.store(self.deref(self[temp_v!(4)]));
-        let max_depth = self.store(self.deref(self[temp_v!(6)]));
+        let ignore_ops = self.store(self.deref(self[temp_v!(3)]));
+        let numbervars = self.store(self.deref(self[temp_v!(4)]));
+        let quoted = self.store(self.deref(self[temp_v!(5)]));
+        let max_depth = self.store(self.deref(self[temp_v!(7)]));
 
         let mut printer = HCPrinter::new(&self, op_dir, PrinterOutputter::new());
 
@@ -776,7 +776,7 @@ impl MachineState {
 
         let stub = MachineError::functor_stub(clause_name!("write_term"), 2);
 
-        match self.try_from_list(temp_v!(5), stub) {
+        match self.try_from_list(temp_v!(6), stub) {
             Ok(addrs) => {
                 let mut var_names: IndexMap<Addr, String> = IndexMap::new();
 
