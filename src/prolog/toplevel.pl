@@ -235,7 +235,8 @@ write_eqs_and_read_input(B, VarList) :-
     append([Vars0, AttrVars, AttrGoalVars], Vars),
     charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
     '$get_b_value'(B0),
-    gather_equations(NewVarList, NewVarList, Goals, AttrGoals),
+    gather_query_vars(VarList, OrigVars),
+    gather_equations(NewVarList, OrigVars, Goals, AttrGoals),
     (   bb_get('$first_answer', true) ->
         write('   '),
         bb_put('$first_answer', false)
@@ -286,8 +287,8 @@ help_message :-
 
 gather_query_vars([_ = Var | Vars], QueryVars) :-
     (  var(Var) ->
-       QueryVars = [Var | QueryVars1],
-       gather_query_vars(Vars, QueryVars1)
+       QueryVars = [Var | QueryVars0],
+       gather_query_vars(Vars, QueryVars0)
     ;  gather_query_vars(Vars, QueryVars)
     ).
 gather_query_vars([], []).
@@ -297,16 +298,38 @@ is_a_different_variable([_ = Binding | Pairs], Value) :-
     ;  is_a_different_variable(Pairs, Var)
     ).
 
+eq_member(X, [Y|_])  :- X == Y, !.
+eq_member(X, [_|Ys]) :- eq_member(X, Ys).
+
+gather_equations([], _, Goals, Goals).
+gather_equations([Var = Value | Pairs], OrigVarList, Goals, Goals1) :-
+    (  var(Value) ->
+       eq_member(Value, OrigVarList),
+       (  (  Pairs == [], NewPairs = []
+          ;  ( select((OtherVar = OtherValue), Pairs, NewPairs),
+               Value == OtherValue, Var \== OtherVar
+             )
+          )  ->
+             Goals = [Var = Value | Goals0],
+             gather_equations(NewPairs, OrigVarList, Goals0, Goals1)
+       ;  gather_equations(Pairs, OrigVarList, Goals, Goals1)
+       )
+    ;  Goals = [Var = Value | Goals0],
+       gather_equations(Pairs, OrigVarList, Goals0, Goals1)
+    ).
+
+/*
 gather_equations([], MasterList, Goals, Goals).
 gather_equations([Var = Value | Pairs], MasterList, Goals, Goals1) :-
-    select((Var = _), MasterList, MasterPairs),
     (  (  nonvar(Value)
-       ;  is_a_different_variable(MasterPairs, Value)
+       ;  select((Var = _), MasterList, MasterPairs),
+          is_a_different_variable(MasterPairs, Value)
        ) ->
        Goals = [Var = Value | Goals0],
        gather_equations(Pairs, MasterList, Goals0, Goals1)
     ;  gather_equations(Pairs, MasterList, Goals, Goals1)
     ).
+*/
 
 print_exception(E) :-
     (  E == error('$interrupt_thrown', repl) -> nl % print the
