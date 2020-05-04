@@ -295,7 +295,7 @@ gather_query_vars([], []).
 
 is_a_different_variable([_ = Binding | Pairs], Value) :-
     (  Value == Binding, !
-    ;  is_a_different_variable(Pairs, Var)
+    ;  is_a_different_variable(Pairs, Value)
     ).
 
 eq_member(X, [Y|_])  :- X == Y, !.
@@ -304,8 +304,8 @@ eq_member(X, [_|Ys]) :- eq_member(X, Ys).
 gather_equations([], _, Goals, Goals).
 gather_equations([Var = Value | Pairs], OrigVarList, Goals, Goals1) :-
     (  var(Value) ->
-       eq_member(Value, OrigVarList),
-       (  (  Pairs == [], NewPairs = []
+       (  eq_member(Value, OrigVarList),
+          (  Pairs == [], NewPairs = []
           ;  ( select((OtherVar = OtherValue), Pairs, NewPairs),
                Value == OtherValue, Var \== OtherVar
              )
