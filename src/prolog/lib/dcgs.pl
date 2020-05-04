@@ -6,11 +6,6 @@
 :- use_module(library(error)).
 :- use_module(library(lists), [append/3]).
 
-user:term_expansion(Term0, Term) :-
-    nonvar(Term0),
-    dcg_rule(Term0, (Head :- Body)),
-    Term = (Head :- Body).
-
 phrase(GRBody, S0) :-
     phrase(GRBody, S0, []).
 
@@ -133,3 +128,8 @@ dcg_cbody(\+ GRBody, S0, S, ( \+ phrase(GRBody,S0,_), S0 = S )).
 dcg_cbody(( GRIf -> GRThen ), S0, S, ( If -> Then )) :-
     dcg_body(GRIf, S0, S1, If),
     dcg_body(GRThen, S1, S, Then).
+
+user:term_expansion(Term0, Term) :-
+    nonvar(Term0),
+    dcg_rule(Term0, (Head :- Body)),
+    Term = (Head :- Body).

@@ -350,10 +350,6 @@ fn compile_into_module(
     match compile_into_module_impl(wam, &mut compiler, module, src, indices) {
         Ok(()) => EvalSession::EntrySuccess,
         Err(e) => {
-            if let Some(module) = compiler.module.take() {
-                wam.indices.insert_module(module);
-            }
-
             compiler.drop_expansions(&mut wam.code_repo);
             EvalSession::from(e)
         }
@@ -370,16 +366,16 @@ fn compile_into_module_impl(
     setup_module_expansions(wam, &module);
 
     let module_name = module.module_decl.name.clone();
-    compiler.module = Some(module);
+    // compiler.module = Some(module); This trips the goal expansion up. Should be possible to 'merge' modules.
+    // A much better strategy!
+    wam.indices.insert_module(module);
 
     wam.code_repo.compile_hook(CompileTimeHook::TermExpansion)?;
     wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion)?;
 
-    let mut stream = parsing_stream(src)?;
-
     let mut results = compiler.gather_items(
         wam,
-        &mut stream,
+        &mut parsing_stream(src)?,
         &mut indices,
     )?;
 
@@ -401,10 +397,11 @@ fn compile_into_module_impl(
     clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;
 
     let top_level_term_dir = results.top_level_term_dirs.consolidate();
+    let module = wam.indices.take_module(module_name).unwrap();
 
     add_module(
         wam,
-        compiler.module.take().unwrap(),
+        module,
         indices,
         top_level_term_dir,
     );
@@ -1109,9 +1106,9 @@ impl ListingCompiler {
                     .entry((name.clone(), arity))
                     .or_insert(vec![]);
 
-		indices.code_dir
-		       .entry((name.clone(), arity))
-		       .or_insert(CodeIndex::dynamic_undefined(self.get_module_name()));
+		        indices.code_dir
+		            .entry((name.clone(), arity))
+		            .or_insert(CodeIndex::dynamic_undefined(self.get_module_name()));
             }
             &Declaration::Hook(hook, _, ref queue) if self.module.is_none() => worker
                 .term_stream
