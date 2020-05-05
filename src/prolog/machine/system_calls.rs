@@ -30,33 +30,28 @@ use std::rc::Rc;
 use std::time::Duration;
 use cpu_time::ProcessTime;
 
-use crate::crossterm::event::{read, Event, KeyCode, KeyEvent};
+use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
-pub fn get_single_char() -> char {
-    let c;
+pub fn get_key() -> KeyEvent {
+    let key;
     enable_raw_mode().expect("failed to enable raw mode");
     loop {
-        if let Ok(Event::Key(KeyEvent { code, .. })) = read() {
-            match code {
-                KeyCode::Char(ch) => {
-                    c = ch;
-                    break;
-                },
-                KeyCode::Enter => {
-                    c = '\n';
-                    break;
-                },
-                KeyCode::Tab => {
-                    c = '\t';
-                    break;
-                },
-                _ => ()
+        let key_ = read();
+        if let Ok(key_) = key_ {
+            if let Event::Key(key_) = key_ {
+                match key_.code {
+                    KeyCode::Char(_) | KeyCode::Enter | KeyCode::Tab => {
+                        key = key_;
+                        break;
+                    },
+                    _ => ()
+                }
             }
         }
     }
     disable_raw_mode().expect("failed to disable raw mode");
-    c
+    key
 }
 
 #[derive(Debug)]
@@ -1652,7 +1647,27 @@ impl MachineState {
                 }
             }
             &SystemClauseType::GetSingleChar => {
-                let c = get_single_char();
+                let ctrl_c = KeyEvent {
+                    code: KeyCode::Char('c'),
+                    modifiers: KeyModifiers::CONTROL
+                };
+                let key = get_key();
+                if key == ctrl_c {
+                    let stub = MachineError::functor_stub(
+                        clause_name!("get_single_char"),
+                        1
+                    );
+                    let err = MachineError::interrupt_error();
+                    let err = self.error_form(err, stub);
+
+                    return Err(err);
+                }
+                let c = match key.code {
+                    KeyCode::Enter => '\n',
+                    KeyCode::Tab => '\t',
+                    KeyCode::Char(c) => c,
+                    _ => unreachable!()
+                };
 
                 let a1 = self[temp_v!(1)];
 
