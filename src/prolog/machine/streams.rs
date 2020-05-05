@@ -278,6 +278,17 @@ impl Stream {
     pub(crate)
     fn close(&mut self) {
         *self.stream_inst.0.borrow_mut() = StreamInstance::Null;
+        self.past_end_of_stream = true;
+    }
+
+    #[inline]
+    pub(crate)
+    fn is_null_stream(&self) -> bool {
+        if let StreamInstance::Null = *self.stream_inst.0.borrow() {
+            true
+        } else {
+            false
+        }
     }
 
     #[inline]
@@ -485,7 +496,15 @@ impl MachineState {
             }
             Addr::Stream(h) => {
                 if let HeapCellValue::Stream(ref stream) = &self.heap[h] {
-                    stream.clone()
+                    if stream.is_null_stream() {
+                        return Err(self.open_permission_error(
+                            Addr::Stream(h),
+                            caller,
+                            arity,
+                        ));
+                    } else {
+                        stream.clone()
+                    }
                 } else {
                     unreachable!()
                 }

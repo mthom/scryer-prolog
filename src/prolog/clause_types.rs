@@ -222,6 +222,8 @@ pub enum SystemClauseType {
     Open,
     PartialStringTail,
     PointsToContinuationResetMarker,
+    PutByte,
+    PutChar,
     REPL(REPLCodePtr),
     ReadQueryTerm,
     ReadTerm,
@@ -385,6 +387,12 @@ impl SystemClauseType {
             &SystemClauseType::PointsToContinuationResetMarker => {
                 clause_name!("$points_to_cont_reset_marker")
             }
+            &SystemClauseType::PutByte => {
+                clause_name!("$put_byte")
+            }
+            &SystemClauseType::PutChar => {
+                clause_name!("$put_char")
+            }
             &SystemClauseType::QuotedToken => {
                 clause_name!("$quoted_token")
             }
@@ -494,6 +502,12 @@ impl SystemClauseType {
             ("$get_single_char", 1) => Some(SystemClauseType::GetSingleChar),
             ("$points_to_cont_reset_marker", 1) => {
                 Some(SystemClauseType::PointsToContinuationResetMarker)
+            }
+            ("$put_byte", 2) => {
+                Some(SystemClauseType::PutByte)
+            }
+            ("$put_char", 2) => {
+                Some(SystemClauseType::PutChar)
             }
             ("$reset_attr_var_state", 0) => Some(SystemClauseType::ResetAttrVarState),
             ("$truncate_if_no_lh_growth", 1) => {

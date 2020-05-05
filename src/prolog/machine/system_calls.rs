@@ -1592,6 +1592,109 @@ impl MachineState {
 
                 self.unify(complete_string, a2);
             }
+            &SystemClauseType::PutChar => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "put_char", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    None,
+                    clause_name!("put_char"),
+                    2,
+                )?;
+
+                match self.store(self.deref(self[temp_v!(2)])) {
+                    addr if addr.is_ref() => {
+                        let stub = MachineError::functor_stub(clause_name!("put_char"), 2);
+                        let err = MachineError::instantiation_error();
+
+                        return Err(self.error_form(err, stub));
+                    }
+                    addr => {
+                        match self.store(self.deref(self[temp_v!(2)])) {
+                            Addr::Con(h) if self.heap.atom_at(h) => {
+                                match &self.heap[h] {
+                                    HeapCellValue::Atom(ref atom, _) if atom.is_char() => {
+                                        if let Some(c) = atom.as_str().chars().next() {
+                                            write!(&mut stream, "{}", c).unwrap();
+                                            return return_from_clause!(self.last_call, self);
+                                        } else {
+                                            unreachable!()
+                                        }
+                                    }
+                                    _ => {
+                                        unreachable!()
+                                    }
+                                }
+                            }
+                            Addr::Char(c) => {
+                                write!(&mut stream, "{}", c).unwrap();
+                                return return_from_clause!(self.last_call, self);
+                            }
+                            _ => {
+                            }
+                        }
+
+                        let stub = MachineError::functor_stub(clause_name!("put_char"), 2);
+                        let err = MachineError::type_error(
+                            self.heap.h(),
+                            ValidType::Character,
+                            addr,
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }
+            }
+            &SystemClauseType::PutByte => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "put_byte", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Binary,
+                    None,
+                    clause_name!("put_byte"),
+                    2,
+                )?;
+
+                match self.store(self.deref(self[temp_v!(2)])) {
+                    addr if addr.is_ref() => {
+                        let stub = MachineError::functor_stub(clause_name!("put_byte"), 2);
+                        let err = MachineError::instantiation_error();
+
+                        return Err(self.error_form(err, stub));
+                    }
+                    addr => {
+                        match Number::try_from((addr, &self.heap)) {
+                            Ok(Number::Integer(n)) => {
+                                if let Some(nb) = n.to_u8() {
+                                    stream.write(&mut [nb]).unwrap();
+                                    return return_from_clause!(self.last_call, self);
+                                }
+                            }
+                            Ok(Number::Fixnum(n)) => {
+                                if let Ok(nb) = u8::try_from(n) {
+                                    stream.write(&mut [nb]).unwrap();
+                                    return return_from_clause!(self.last_call, self);
+                                }
+                            }
+                            _ => {
+                            }
+                        }
+
+                        let stub = MachineError::functor_stub(clause_name!("put_byte"), 2);
+                        let err = MachineError::type_error(
+                            self.heap.h(),
+                            ValidType::Byte,
+                            self[temp_v!(2)],
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }
+            }
             &SystemClauseType::GetByte => {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "get_byte", 2)?;
@@ -2436,7 +2539,7 @@ impl MachineState {
                             true
                         }
                         "write" => {
-                            open_options.read(false).write(true).create(true).append(false);
+                            open_options.read(false).write(true).truncate(true).create(true);
                             false
                         }
                         "append" => {
