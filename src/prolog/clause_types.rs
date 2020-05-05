@@ -181,6 +181,7 @@ pub enum SystemClauseType {
     FetchGlobalVar,
     FetchGlobalVarWithOffset,
     FileToChars,
+    FlushOutput,
     GetChar,
     GetSingleChar,
     ResetAttrVarState,
@@ -325,6 +326,7 @@ impl SystemClauseType {
                 clause_name!("$fetch_global_var_with_offset")
             }
             &SystemClauseType::FileToChars => clause_name!("$file_to_chars"),
+            &SystemClauseType::FlushOutput => clause_name!("$flush_output"),
             &SystemClauseType::GetChar => clause_name!("$get_char"),
             &SystemClauseType::GetSingleChar => clause_name!("$get_single_char"),
             &SystemClauseType::ResetAttrVarState => clause_name!("$reset_attr_var_state"),
@@ -468,6 +470,7 @@ impl SystemClauseType {
             ("$current_hostname", 1) => Some(SystemClauseType::CurrentHostname),
             ("$current_input", 1) => Some(SystemClauseType::CurrentInput),
             ("$current_output", 1) => Some(SystemClauseType::CurrentOutput),
+            ("$flush_output", 1) => Some(SystemClauseType::FlushOutput),
             ("$del_attr_non_head", 1) => Some(SystemClauseType::DeleteAttribute),
             ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),
             ("$get_next_db_ref", 2) => Some(SystemClauseType::GetNextDBRef),

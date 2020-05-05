@@ -37,7 +37,6 @@ pub enum StreamInstance {
     OutputFile(File),
     Null,
     ReadlineStream(ReadlineStream),
-    // Stdin,
     Stdout,
     TcpStream(TcpStream),
 }
@@ -154,6 +153,7 @@ impl Default for StreamOptions {
 
 #[derive(Debug, Clone, Hash)]
 pub struct Stream {
+    past_end_of_stream: bool,
     pub options: StreamOptions,
     stream_inst: WrappedStreamInstance,
 }
@@ -172,45 +172,25 @@ impl From<TcpStream> for Stream {
         tcp_stream.set_read_timeout(None).unwrap();
         tcp_stream.set_write_timeout(None).unwrap();
 
-        Stream {
-            options: StreamOptions::default(),
-            stream_inst: WrappedStreamInstance::new(
-                StreamInstance::TcpStream(tcp_stream)
-            )
-        }
+        Stream::from_inst(StreamInstance::TcpStream(tcp_stream))
     }
 }
 
 impl From<String> for Stream {
     fn from(string: String) -> Self {
-        Stream {
-            options: StreamOptions::default(),
-            stream_inst: WrappedStreamInstance::new(
-                StreamInstance::Bytes(Cursor::new(string.into_bytes()))
-            )
-        }
+        Stream::from_inst(StreamInstance::Bytes(Cursor::new(string.into_bytes())))
     }
 }
 
 impl From<ReadlineStream> for Stream {
     fn from(rl_stream: ReadlineStream) -> Self {
-        Stream {
-            options: StreamOptions::default(),
-            stream_inst: WrappedStreamInstance::new(
-                StreamInstance::ReadlineStream(rl_stream)
-            ),
-        }
+        Stream::from_inst(StreamInstance::ReadlineStream(rl_stream))
     }
 }
 
 impl From<&'static str> for Stream {
     fn from(src: &'static str) -> Stream {
-        Stream {
-            options: StreamOptions::default(),
-            stream_inst: WrappedStreamInstance::new(
-                StreamInstance::DynReadSource(Box::new(src.as_bytes()))
-            ),
-        }
+        Stream::from_inst(StreamInstance::DynReadSource(Box::new(src.as_bytes())))
     }
 }
 
@@ -230,60 +210,30 @@ impl Stream {
     }
 
     #[inline]
+    fn from_inst(stream_inst: StreamInstance) -> Self {
+        Stream {
+            past_end_of_stream: false,
+            options: StreamOptions::default(),
+            stream_inst: WrappedStreamInstance::new(stream_inst)
+        }
+    }
+
+    #[inline]
     pub(crate)
     fn stdout() -> Self {
-        Stream {
-            options: StreamOptions::default(),
-            stream_inst: WrappedStreamInstance::new(
-                StreamInstance::Stdout
-            ),
-        }
+        Stream::from_inst(StreamInstance::Stdout)
     }
 
     #[inline]
     pub(crate)
     fn from_file_as_output(file: File) -> Self {
-        Stream {
-            options: StreamOptions::default(),
-            stream_inst: WrappedStreamInstance::new(
-                StreamInstance::OutputFile(file)
-            ),
-        }
+        Stream::from_inst(StreamInstance::OutputFile(file))
     }
 
     #[inline]
     pub(crate)
     fn from_file_as_input(file: File) -> Self {
-        Stream {
-            options: StreamOptions::default(),
-            stream_inst: WrappedStreamInstance::new(
-                StreamInstance::InputFile(file)
-            ),
-        }
-    }
-
-/*
-    #[inline]
-    pub(crate)
-    fn stdin() -> Self {
-        Stream {
-            options: StreamOptions::default(),
-            stream_inst: WrappedStreamInstance::new(
-                StreamInstance::Stdin
-            ),
-        }
-    }
-*/
-
-    #[inline]
-    pub(crate)
-    fn null_stream() -> Self {
-        Stream {
-            options: StreamOptions::default(), // TODO: null_options?
-            stream_inst: WrappedStreamInstance::new(
-                StreamInstance::Null
-            ),
-        }
+        Stream::from_inst(StreamInstance::InputFile(file))
     }
 
     #[inline]
@@ -388,9 +338,10 @@ impl MachineState {
     ) -> CallResult {
         match stream.options.eof_action {
             EOFAction::Error => {
-                let stub = MachineError::functor_stub(caller, arity);
+                stream.past_end_of_stream = true;
 
-                let stream = vec![
+                let stub = MachineError::functor_stub(caller, arity);
+                let payload = vec![
                     HeapCellValue::Stream(stream.clone())
                 ];
 
@@ -398,7 +349,7 @@ impl MachineState {
                     self.heap.h(),
                     Permission::InputStream,
                     "past_end_of_stream",
-                    stream,
+                    payload,
                 );
 
                 Err(self.error_form(err, stub))
@@ -408,10 +359,12 @@ impl MachineState {
                     HeapCellValue::Atom(clause_name!("end_of_stream"), None)
                 );
 
+                stream.past_end_of_stream = true;
                 Ok(self.unify(result, end_of_stream))
             }
             EOFAction::Reset => {
-                Ok(self.fail = !stream.reset())
+                stream.past_end_of_stream = !stream.reset();
+                Ok(self.fail = stream.past_end_of_stream)
             }
         }
     }

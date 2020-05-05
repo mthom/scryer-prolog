@@ -1,6 +1,5 @@
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::stack::*;
-use crate::prolog::machine::streams::*;
 
 use std::mem;
 use std::ops::IndexMut;
@@ -215,24 +214,6 @@ impl<T: CopierTarget> CopyTermState<T> {
         }
     }
 
-    fn copy_stream(&mut self, addr: usize) {
-        let threshold = self.target.threshold();
-
-        let trail_item = mem::replace(
-            &mut self.target[addr],
-            HeapCellValue::Addr(Addr::Stream(threshold)),
-        );
-
-        self.trail.push((
-            Ref::HeapCell(addr),
-            trail_item,
-        ));
-
-        self.target.push(HeapCellValue::Stream(Stream::null_stream()));
-
-        self.scan += 1;
-    }
-
     fn copy_structure(&mut self, addr: usize) {
         match self.target[addr].context_free_clone() {
             HeapCellValue::NamedStr(arity, name, fixity) => {
@@ -285,11 +266,12 @@ impl<T: CopierTarget> CopyTermState<T> {
                                 *self.value_at_scan() = HeapCellValue::Addr(addr);
                             }
                         }
-                        Addr::Lis(h) if h >= self.old_h => {
-                            self.scan += 1;
-                        }
                         Addr::Lis(h) => {
-                            self.copy_list(h);
+                            if h >= self.old_h {
+                                self.scan += 1;
+                            } else {
+                                self.copy_list(h);
+                            }
                         }
                         addr @ Addr::AttrVar(_) |
                         addr @ Addr::HeapCell(_) |
@@ -303,7 +285,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                             self.copy_partial_string(addr, n);
                         }
                         Addr::Stream(h) => {
-                            self.copy_stream(h);
+                            *self.value_at_scan() = self.target[h].context_free_clone();
                         }
                         _ => {
                             self.scan += 1;

@@ -443,8 +443,8 @@ impl HeapCellValue {
             &HeapCellValue::PartialString(ref pstr, has_tail) => {
                 HeapCellValue::PartialString(pstr.clone(), has_tail)
             }
-            &HeapCellValue::Stream(_) => {
-                HeapCellValue::Stream(Stream::null_stream())
+            &HeapCellValue::Stream(ref stream) => {
+                HeapCellValue::Stream(stream.clone())
             }
             &HeapCellValue::TcpListener(_) => {
                 HeapCellValue::Atom(clause_name!("$socket_server"), None)

@@ -1603,8 +1603,8 @@ impl MachineState {
                 let a1 = self[temp_v!(1)];
 
                 match result {
-                    Some(Ok(b)) => {
-                        self.unify(Addr::Char(b as char), a1);
+                    Some(Ok(c)) => {
+                        self.unify(Addr::Char(c), a1);
                     }
                     Some(Err(_)) => {
                         let end_of_file = self.heap.to_unifiable(HeapCellValue::Atom(
@@ -1622,6 +1622,29 @@ impl MachineState {
                         return Err(err);
                     }
                 }
+            }
+            &SystemClauseType::FlushOutput => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "flush_output", 1)?;
+
+                if stream.is_input_stream() {
+                    let stub = MachineError::functor_stub(clause_name!("flush_output"), 1);
+
+                    let addr = vec![
+                        HeapCellValue::Stream(stream)
+                    ];
+
+                    let err = MachineError::permission_error(
+                        self.heap.h(),
+                        Permission::OutputStream,
+                        "stream",
+                        addr,
+                    );
+
+                    return Err(self.error_form(err, stub));
+                }
+
+                stream.flush().unwrap();
             }
             &SystemClauseType::GetSingleChar => {
                 let c = get_single_char();
@@ -3925,14 +3948,12 @@ impl MachineState {
 
                 if let Some(err_string) = opt_err {
                     let stub = MachineError::functor_stub(clause_name!("write_term"), 3);
-                    let h = self.heap.h();
-
-                    let addr = self.heap.to_unifiable(
+                    let addr = vec![
                         HeapCellValue::Stream(stream)
-                    );
+                    ];
 
                     let err = MachineError::permission_error(
-                        h + 1,
+                        self.heap.h(),
                         Permission::OutputStream,
                         err_string,
                         addr,

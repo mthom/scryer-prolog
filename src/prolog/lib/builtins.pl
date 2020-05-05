@@ -48,13 +48,14 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      current_op/3, current_predicate/1,
                      current_prolog_flag/2, expand_goal/2,
                      expand_term/2, fail/0, false/0, findall/3,
-                     findall/4, get_char/1, halt/0, max_arity/1,
-                     number_chars/2, number_codes/2, once/1, op/3,
-                     open/3, open/4, read_term/2, read_term/3,
-                     repeat/0, retract/1, set_prolog_flag/2,
-                     set_input/1, set_output/1, setof/3, sub_atom/5,
-                     subsumes_term/2, term_variables/2, throw/1,
-                     true/0, unify_with_occurs_check/2, write/1,
+                     findall/4, flush_output/0, flush_output/1,
+                     get_char/1, halt/0, max_arity/1, number_chars/2,
+                     number_codes/2, once/1, op/3, open/3, open/4,
+                     read_term/2, read_term/3, repeat/0, retract/1,
+                     set_prolog_flag/2, set_input/1, set_output/1,
+                     setof/3, sub_atom/5, subsumes_term/2,
+                     term_variables/2, throw/1, true/0,
+                     unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, write_term/3,
                      writeq/1]).
 
@@ -1180,4 +1181,12 @@ close(Stream, CloseOptions) :-
     '$close'(Stream, CloseOptions).
 
 close(Stream) :-
-    close(Stream, []).
+    '$close'(Stream, []).
+
+
+flush_output(S) :-
+    '$flush_output'(S).
+
+flush_output :-
+    current_output(S),
+    '$flush_output'(S).

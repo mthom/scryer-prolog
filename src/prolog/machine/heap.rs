@@ -288,10 +288,10 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             HeapCellValue::Addr(addr) => {
                 addr
             }
-            val @ HeapCellValue::Atom(..)
-          | val @ HeapCellValue::Integer(_)
-          | val @ HeapCellValue::DBRef(_)
-          | val @ HeapCellValue::Rational(_) => {
+            val @ HeapCellValue::Atom(..) |
+            val @ HeapCellValue::Integer(_) |
+            val @ HeapCellValue::DBRef(_) |
+            val @ HeapCellValue::Rational(_) => {
                 Addr::Con(self.push(val))
             }
             val @ HeapCellValue::NamedStr(..) => {

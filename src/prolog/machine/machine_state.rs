@@ -619,6 +619,32 @@ impl MachineState {
         stream: Stream,
         indices: &mut IndexStore,
     ) -> CallResult {
+        let opt_err =
+            if !stream.is_input_stream() {
+                Some("stream") // 8.14.2.3 g)
+            } else if stream.options.stream_type == StreamType::Binary {
+                Some("binary_stream") // 8.14.2.3 h)
+            } else {
+                None
+            };
+
+        if let Some(err_string) = opt_err {
+            let stub = MachineError::functor_stub(clause_name!("read_term"), 3);
+
+            let addr = vec![
+                HeapCellValue::Stream(stream)
+            ];
+
+            let err = MachineError::permission_error(
+                self.heap.h(),
+                Permission::InputStream,
+                err_string,
+                addr,
+            );
+
+            return Err(self.error_form(err, stub));
+        }
+
         let mut orig_stream = stream.clone();
         let mut stream = self.open_parsing_stream(stream, "read_term", 3)?;
 
