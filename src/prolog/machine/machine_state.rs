@@ -629,20 +629,13 @@ impl MachineState {
             };
 
         if let Some(err_string) = opt_err {
-            let stub = MachineError::functor_stub(clause_name!("read_term"), 3);
-
-            let addr = vec![
-                HeapCellValue::Stream(stream)
-            ];
-
-            let err = MachineError::permission_error(
-                self.heap.h(),
+            return Err(self.stream_permission_error(
                 Permission::InputStream,
                 err_string,
-                addr,
-            );
-
-            return Err(self.error_form(err, stub));
+                stream,
+                clause_name!("read_term"),
+                3,
+            ));
         }
 
         let mut orig_stream = stream.clone();

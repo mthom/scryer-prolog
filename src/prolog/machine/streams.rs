@@ -153,7 +153,7 @@ impl Default for StreamOptions {
 
 #[derive(Debug, Clone, Hash)]
 pub struct Stream {
-    past_end_of_stream: bool,
+    pub past_end_of_stream: bool,
     pub options: StreamOptions,
     stream_inst: WrappedStreamInstance,
 }
@@ -339,20 +339,7 @@ impl MachineState {
         match stream.options.eof_action {
             EOFAction::Error => {
                 stream.past_end_of_stream = true;
-
-                let stub = MachineError::functor_stub(caller, arity);
-                let payload = vec![
-                    HeapCellValue::Stream(stream.clone())
-                ];
-
-                let err = MachineError::permission_error(
-                    self.heap.h(),
-                    Permission::InputStream,
-                    "past_end_of_stream",
-                    payload,
-                );
-
-                Err(self.error_form(err, stub))
+                return Err(self.open_past_eos_error(stream.clone(), caller, arity));
             }
             EOFAction::EOFCode => {
                 let end_of_stream = self.heap.to_unifiable(
@@ -531,6 +518,47 @@ impl MachineState {
                 Err(self.error_form(err, stub))
             }
         }
+    }
+
+    pub(crate)
+    fn stream_permission_error(
+        &self,
+        perm: Permission,
+        err_string: &'static str,
+        stream: Stream,
+        caller: ClauseName,
+        arity: usize,
+    ) -> MachineStub {
+        let stub = MachineError::functor_stub(caller, arity);
+        let payload = vec![
+            HeapCellValue::Stream(stream)
+        ];
+
+        let err = MachineError::permission_error(
+            self.heap.h(),
+            perm,
+            err_string,
+            payload,
+        );
+
+        return self.error_form(err, stub);
+    }
+
+    #[inline]
+    pub(crate)
+    fn open_past_eos_error(
+        &self,
+        stream: Stream,
+        caller: ClauseName,
+        arity: usize,
+    ) -> MachineStub {
+        self.stream_permission_error(
+            Permission::InputStream,
+            "past_end_of_stream",
+            stream,
+            caller,
+            arity,
+        )
     }
 
     pub(crate)

@@ -1592,6 +1592,104 @@ impl MachineState {
 
                 self.unify(complete_string, a2);
             }
+            &SystemClauseType::GetByte => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_byte", 2)?;
+
+                let opt_err =
+                    if !stream.is_input_stream() {
+                        Some("stream") // 8.14.2.3 g)
+                    } else if stream.options.stream_type == StreamType::Text {
+                        Some("text_stream") // 8.14.2.3 h)
+                    } else {
+                        None
+                    };
+
+                if let Some(err_string) = opt_err {
+                    return Err(self.stream_permission_error(
+                        Permission::InputStream,
+                        err_string,
+                        stream,
+                        clause_name!("get_byte"),
+                        2,
+                    ));
+                }
+
+                if stream.past_end_of_stream {
+                    self.eof_action(
+                        self[temp_v!(2)],
+                        &mut stream,
+                        clause_name!("get_byte"),
+                        2,
+                    )?;
+
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                loop {
+                    let mut b = [0u8; 1];
+
+                    match stream.read(&mut b) {
+                        Ok(1) => {
+                            match self.store(self.deref(self[temp_v!(2)])) {
+                                addr if addr.is_ref() => {
+                                    if let Some(var) = addr.as_var() {
+                                        self.bind(var, Addr::Usize(b[0] as usize));
+                                        return return_from_clause!(self.last_call, self);
+                                    } else {
+                                        unreachable!()
+                                    }
+                                }
+                                addr => {
+                                    match Number::try_from((addr, &self.heap)) {
+                                        Ok(Number::Integer(n)) => {
+                                            if let Some(nb) = n.to_u8() {
+                                                self.fail = b[0] != nb;
+                                                return return_from_clause!(self.last_call, self);
+                                            }
+                                        }
+                                        Ok(Number::Fixnum(n)) => {
+                                            if let Ok(nb) = u8::try_from(n) {
+                                                self.fail = b[0] != nb;
+                                                return return_from_clause!(self.last_call, self);
+                                            }
+                                        }
+                                        _ => {
+                                        }
+                                    }
+                                }
+                            }
+
+                            let stub = MachineError::functor_stub(clause_name!("get_byte"), 2);
+                            let err = MachineError::type_error(
+                                self.heap.h(),
+                                ValidType::InByte,
+                                self[temp_v!(2)],
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("get_byte"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
             &SystemClauseType::GetChar => {
                 let mut iter = self.open_parsing_stream(
                     current_input_stream.clone(),
@@ -3947,19 +4045,13 @@ impl MachineState {
                     };
 
                 if let Some(err_string) = opt_err {
-                    let stub = MachineError::functor_stub(clause_name!("write_term"), 3);
-                    let addr = vec![
-                        HeapCellValue::Stream(stream)
-                    ];
-
-                    let err = MachineError::permission_error(
-                        self.heap.h(),
+                    return Err(self.stream_permission_error(
                         Permission::OutputStream,
                         err_string,
-                        addr,
-                    );
-
-                    return Err(self.error_form(err, stub));
+                        stream,
+                        clause_name!("write_term"),
+                        3,
+                    ));
                 }
 
                 let addr = self[temp_v!(2)];
