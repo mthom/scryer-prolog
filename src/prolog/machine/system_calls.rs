@@ -1596,33 +1596,15 @@ impl MachineState {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "get_byte", 2)?;
 
-                let opt_err =
-                    if !stream.is_input_stream() {
-                        Some("stream") // 8.14.2.3 g)
-                    } else if stream.options.stream_type == StreamType::Text {
-                        Some("text_stream") // 8.14.2.3 h)
-                    } else {
-                        None
-                    };
-
-                if let Some(err_string) = opt_err {
-                    return Err(self.stream_permission_error(
-                        Permission::InputStream,
-                        err_string,
-                        stream,
-                        clause_name!("get_byte"),
-                        2,
-                    ));
-                }
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Binary,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("get_byte"),
+                    2,
+                )?;
 
                 if stream.past_end_of_stream {
-                    self.eof_action(
-                        self[temp_v!(2)],
-                        &mut stream,
-                        clause_name!("get_byte"),
-                        2,
-                    )?;
-
                     if EOFAction::Reset != stream.options.eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
@@ -1691,33 +1673,105 @@ impl MachineState {
                 }
             }
             &SystemClauseType::GetChar => {
-                let mut iter = self.open_parsing_stream(
-                    current_input_stream.clone(),
-                    "get_char",
-                    1,
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_char", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("get_char"),
+                    2,
                 )?;
 
-                let result = iter.next();
-                let a1 = self[temp_v!(1)];
-
-                match result {
-                    Some(Ok(c)) => {
-                        self.unify(Addr::Char(c), a1);
+                if stream.past_end_of_stream {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
                     }
-                    Some(Err(_)) => {
-                        let end_of_file = self.heap.to_unifiable(HeapCellValue::Atom(
-                            clause_name!("end_of_file"),
-                            None,
-                        ));
+                }
 
-                        self.unify(a1, end_of_file);
-                    }
-                    None => {
-                        let stub = MachineError::functor_stub(clause_name!("get_char"), 1);
-                        let err = MachineError::representation_error(RepFlag::Character);
-                        let err = self.error_form(err, stub);
+                let mut iter = self.open_parsing_stream(
+                    stream.clone(),
+                    "get_char",
+                    2,
+                )?;
 
-                        return Err(err);
+                loop {
+                    let result = iter.next();
+
+                    match result {
+                        Some(Ok(c)) => {
+                            match self.store(self.deref(self[temp_v!(2)])) {
+                                addr if addr.is_ref() => {
+                                    if let Some(var) = addr.as_var() {
+                                        self.bind(var, Addr::Char(c));
+                                        return return_from_clause!(self.last_call, self);
+                                    } else {
+                                        unreachable!()
+                                    }
+                                }
+                                Addr::Con(h) if self.heap.atom_at(h) => {
+                                    match &self.heap[h] {
+                                        HeapCellValue::Atom(ref atom, _) if atom.is_char() => {
+                                            if let Some(d) = atom.as_str().chars().next() {
+                                                if c == d {
+                                                    return return_from_clause!(self.last_call, self);
+                                                } else {
+                                                    self.fail = true;
+                                                    return Ok(());
+                                                }
+                                            } else {
+                                                unreachable!()
+                                            }
+                                        }
+                                        _ => {
+                                            unreachable!()
+                                        }
+                                    }
+                                }
+                                Addr::Char(d) => {
+                                    if c == d {
+                                        return return_from_clause!(self.last_call, self);
+                                    } else {
+                                        self.fail = true;
+                                        return Ok(());
+                                    }
+                                }
+                                culprit => {
+                                    let stub = MachineError::functor_stub(clause_name!("get_char"), 2);
+                                    let err = MachineError::type_error(
+                                        self.heap.h(),
+                                        ValidType::InCharacter,
+                                        culprit,
+                                    );
+
+                                    return Err(self.error_form(err, stub));
+                                }
+                            }
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("get_char"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }/*
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("get_char"), 2);
+                            let err = MachineError::representation_error(RepFlag::Character);
+                            let err = self.error_form(err, stub);
+
+                            return Err(err);
+                        }*/
                     }
                 }
             }
@@ -4032,6 +4086,14 @@ impl MachineState {
                     self[temp_v!(1)],
                     indices,
                     "write_term",
+                    3,
+                )?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    None, // input
+                    clause_name!("write_term"),
                     3,
                 )?;
 

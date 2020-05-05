@@ -21,6 +21,17 @@ pub enum StreamType {
     Text,
 }
 
+impl StreamType {
+    #[inline]
+    pub(crate)
+    fn as_str(&self) -> &'static str {
+        match self {
+            StreamType::Binary => "binary_stream",
+            StreamType::Text => "text_stream",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EOFAction {
     EOFCode,
@@ -614,6 +625,54 @@ impl MachineState {
         );
 
         return self.error_form(err, stub);
+    }
+
+
+    pub(crate)
+    fn check_stream_properties(
+        &mut self,
+        stream: &mut Stream,
+        expected_type: StreamType,
+        input: Option<Addr>,
+        caller: ClauseName,
+        arity: usize,
+    ) -> CallResult {
+        let opt_err =
+            if input.is_some() && !stream.is_input_stream() {
+                Some("stream") // 8.14.2.3 g)
+            } else if input.is_none() && stream.is_input_stream() {
+                Some("stream") // 8.14.2.3 g)
+            } else if stream.options.stream_type != expected_type {
+                Some(expected_type.as_str()) // 8.14.2.3 h)
+            } else {
+                None
+            };
+
+        let permission =
+            if input.is_some() { Permission::InputStream } else { Permission::OutputStream };
+
+        if let Some(err_string) = opt_err {
+            return Err(self.stream_permission_error(
+                permission,
+                err_string,
+                stream.clone(),
+                caller,
+                arity,
+            ));
+        }
+
+        if let Some(input) = input {
+            if stream.past_end_of_stream {
+                self.eof_action(
+                    input,
+                    stream,
+                    caller,
+                    arity,
+                )?;
+            }
+        }
+
+        Ok(())
     }
 }
 

@@ -616,26 +616,23 @@ impl MachineState {
     pub(crate)
     fn read_term(
         &mut self,
-        stream: Stream,
+        mut stream: Stream,
         indices: &mut IndexStore,
     ) -> CallResult {
-        let opt_err =
-            if !stream.is_input_stream() {
-                Some("stream") // 8.14.2.3 g)
-            } else if stream.options.stream_type == StreamType::Binary {
-                Some("binary_stream") // 8.14.2.3 h)
-            } else {
-                None
-            };
+        self.check_stream_properties(
+            &mut stream,
+            StreamType::Text,
+            Some(self[temp_v!(2)]),
+            clause_name!("read_term"),
+            3,
+        )?;
 
-        if let Some(err_string) = opt_err {
-            return Err(self.stream_permission_error(
-                Permission::InputStream,
-                err_string,
-                stream,
-                clause_name!("read_term"),
-                3,
-            ));
+        if stream.past_end_of_stream {
+            if EOFAction::Reset != stream.options.eof_action {
+                return return_from_clause!(self.last_call, self);
+            } else if self.fail {
+                return Ok(());
+            }
         }
 
         let mut orig_stream = stream.clone();

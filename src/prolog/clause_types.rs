@@ -490,7 +490,7 @@ impl SystemClauseType {
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
             ("$file_to_chars", 2) => Some(SystemClauseType::FileToChars),
             ("$get_byte", 2) => Some(SystemClauseType::GetByte),
-            ("$get_char", 1) => Some(SystemClauseType::GetChar),
+            ("$get_char", 2) => Some(SystemClauseType::GetChar),
             ("$get_single_char", 1) => Some(SystemClauseType::GetSingleChar),
             ("$points_to_cont_reset_marker", 1) => {
                 Some(SystemClauseType::PointsToContinuationResetMarker)
