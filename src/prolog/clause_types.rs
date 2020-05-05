@@ -165,6 +165,7 @@ pub enum SystemClauseType {
     CodesToNumber,
     CopyTermWithoutAttrVars,
     CheckCutPoint,
+    Close,
     CopyToLiftedHeap,
     CreatePartialString,
     CurrentHostname,
@@ -310,6 +311,7 @@ impl SystemClauseType {
             &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile) => {
                     clause_name!("$use_qualified_module_from_file")
             }
+            &SystemClauseType::Close => clause_name!("$close"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
@@ -462,6 +464,7 @@ impl SystemClauseType {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
             ("$compile_batch", 0) => Some(SystemClauseType::REPL(REPLCodePtr::CompileBatch)),
             ("$copy_to_lh", 2) => Some(SystemClauseType::CopyToLiftedHeap),
+            ("$close", 2) => Some(SystemClauseType::Close),
             ("$current_hostname", 1) => Some(SystemClauseType::CurrentHostname),
             ("$current_input", 1) => Some(SystemClauseType::CurrentInput),
             ("$current_output", 1) => Some(SystemClauseType::CurrentOutput),

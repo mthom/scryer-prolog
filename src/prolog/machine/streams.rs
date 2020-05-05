@@ -12,7 +12,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{stdout, Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::hash::{Hash, Hasher};
-use std::net::TcpStream;
+use std::net::{Shutdown, TcpStream};
 use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -40,6 +40,18 @@ pub enum StreamInstance {
     // Stdin,
     Stdout,
     TcpStream(TcpStream),
+}
+
+impl Drop for StreamInstance {
+    fn drop(&mut self) {
+        match self {
+            StreamInstance::TcpStream(ref mut tcp_stream) => {
+                tcp_stream.shutdown(Shutdown::Both).unwrap();
+            }
+            _ => {
+            }
+        }
+    }
 }
 
 impl fmt::Debug for StreamInstance {
@@ -140,11 +152,20 @@ impl Default for StreamOptions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Hash)]
 pub struct Stream {
     pub options: StreamOptions,
     stream_inst: WrappedStreamInstance,
 }
+
+impl PartialEq for Stream {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.stream_inst == other.stream_inst
+    }
+}
+
+impl Eq for Stream {}
 
 impl From<TcpStream> for Stream {
     fn from(tcp_stream: TcpStream) -> Self {
@@ -290,6 +311,12 @@ impl Stream {
                 false
             }
         }
+    }
+
+    #[inline]
+    pub(crate)
+    fn close(&mut self) {
+        *self.stream_inst.0.borrow_mut() = StreamInstance::Null;
     }
 
     #[inline]

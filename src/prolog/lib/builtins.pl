@@ -43,18 +43,18 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      (:)/7, (:)/8, (:)/9, (:)/10, (:)/11, (:)/12,
                      abolish/1, asserta/1, assertz/1, atom_chars/2,
                      atom_codes/2, atom_concat/3, atom_length/2,
-                     bagof/3, catch/3, char_code/2, clause/2,
-                     current_input/1, current_output/1, current_op/3,
-                     current_predicate/1, current_prolog_flag/2,
-                     expand_goal/2, expand_term/2, fail/0, false/0,
-                     findall/3, findall/4, get_char/1, halt/0,
-                     max_arity/1, number_chars/2, number_codes/2,
-                     once/1, op/3, open/3, open/4, read_term/2,
-                     read_term/3, repeat/0, retract/1,
-                     set_prolog_flag/2, set_input/1, set_output/1,
-                     setof/3, sub_atom/5, subsumes_term/2,
-                     term_variables/2, throw/1, true/0,
-                     unify_with_occurs_check/2, write/1,
+                     bagof/3, catch/3, char_code/2, clause/2, close/1,
+                     close/2, current_input/1, current_output/1,
+                     current_op/3, current_predicate/1,
+                     current_prolog_flag/2, expand_goal/2,
+                     expand_term/2, fail/0, false/0, findall/3,
+                     findall/4, get_char/1, halt/0, max_arity/1,
+                     number_chars/2, number_codes/2, once/1, op/3,
+                     open/3, open/4, read_term/2, read_term/3,
+                     repeat/0, retract/1, set_prolog_flag/2,
+                     set_input/1, set_output/1, setof/3, sub_atom/5,
+                     subsumes_term/2, term_variables/2, throw/1,
+                     true/0, unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, write_term/3,
                      writeq/1]).
 
@@ -1161,3 +1161,23 @@ open(SourceSink, Mode, Stream, StreamOptions) :-
        '$open'(SourceSink, Mode, Stream, Alias, EOFAction, Reposition, Type)
     ).
 
+
+parse_close_options(Options, OptionValues, Stub) :-
+    DefaultOptions = [force-false],
+    parse_options_list(Options, parse_close_options_, DefaultOptions, OptionValues, Stub).
+
+parse_close_options_(force(Force), force-Force) :-
+    (  nonvar(Force), lists:member(Force, [true, false]), !
+    ;
+       throw(error(domain_error(close_option, force(Force)), _))
+    ).
+parse_close_options_(E, _) :-
+    throw(error(domain_error(close_option, E), _)).
+
+
+close(Stream, CloseOptions) :-
+    parse_close_options(CloseOptions, [Force], close/2),
+    '$close'(Stream, CloseOptions).
+
+close(Stream) :-
+    close(Stream, []).

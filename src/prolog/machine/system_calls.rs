@@ -1743,6 +1743,26 @@ impl MachineState {
                     }
                 };
             }
+            &SystemClauseType::Close => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "close", 2)?;
+
+                if stream.is_output_stream() {
+                    stream.flush().unwrap(); // 8.11.6.1b)
+                }
+
+                if stream == *current_input_stream {
+                    *current_input_stream = readline::input_stream();
+                } else if stream == *current_output_stream {
+                    *current_output_stream = Stream::stdout();
+                }
+
+                stream.close();
+
+                if let Some(alias) = stream.options.alias {
+                    indices.stream_aliases.remove(&alias);
+                }
+            }
             &SystemClauseType::CopyToLiftedHeap => {
                 match self.store(self.deref(self[temp_v!(1)])) {
                     Addr::Usize(lh_offset) => {
@@ -2297,6 +2317,10 @@ impl MachineState {
                 };
 
                 stream.options = options;
+
+                if let Some(ref alias) = &stream.options.alias {
+                    indices.stream_aliases.insert(alias.clone(), stream.clone());
+                }
 
                 let stream = self.heap.to_unifiable(HeapCellValue::Stream(stream));
                 let stream_var = self.store(self.deref(self[temp_v!(3)]));
@@ -3464,12 +3488,12 @@ impl MachineState {
                     match TcpStream::connect(socket_addr).map_err(|e| e.kind()) {
                         Ok(tcp_stream) => {
                             let mut stream = Stream::from(tcp_stream);
+                            stream.options = options;
 
-                            if let Some(ref alias) = &options.alias {
+                            if let Some(ref alias) = &stream.options.alias {
                                 indices.stream_aliases.insert(alias.clone(), stream.clone());
                             }
 
-                            stream.options = options;
                             self.heap.to_unifiable(HeapCellValue::Stream(stream))
                         }
                         Err(ErrorKind::PermissionDenied) => {
