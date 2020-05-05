@@ -619,100 +619,109 @@ impl MachineState {
         stream: Stream,
         indices: &mut IndexStore,
     ) -> CallResult {
+        let mut orig_stream = stream.clone();
         let mut stream = self.open_parsing_stream(stream, "read_term", 3)?;
 
-        match self.read(
-            &mut stream,
-            indices.atom_tbl.clone(),
-            &indices.op_dir,
-        ) {
-            Ok(term_write_result) => {
-                let term = self[temp_v!(2)];
-                self.unify(Addr::HeapCell(term_write_result.heap_loc), term);
+        loop {
+            match self.read(
+                &mut stream,
+                indices.atom_tbl.clone(),
+                &indices.op_dir,
+            ) {
+                Ok(term_write_result) => {
+                    let term = self[temp_v!(2)];
+                    self.unify(Addr::HeapCell(term_write_result.heap_loc), term);
 
-                if self.fail {
-                    return Ok(());
-                }
+                    if self.fail {
+                        return Ok(());
+                    }
 
-                let mut list_of_var_eqs = vec![];
+                    let mut list_of_var_eqs = vec![];
 
-                for (var, binding) in term_write_result.var_dict.into_iter() {
-                    let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
+                    for (var, binding) in term_write_result.var_dict.into_iter() {
+                        let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
 
-                    let h = self.heap.h();
-                    let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
+                        let h = self.heap.h();
+                        let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
 
-                    self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
-                    self.heap.push(HeapCellValue::Atom(var_atom, None));
-                    self.heap.push(HeapCellValue::Addr(binding));
+                        self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
+                        self.heap.push(HeapCellValue::Atom(var_atom, None));
+                        self.heap.push(HeapCellValue::Addr(binding));
 
-                    list_of_var_eqs.push(Addr::Str(h));
-                }
+                        list_of_var_eqs.push(Addr::Str(h));
+                    }
 
-                let mut var_set: IndexMap<Ref, bool> = IndexMap::new();
+                    let mut var_set: IndexMap<Ref, bool> = IndexMap::new();
 
-                for addr in self.acyclic_pre_order_iter(term) {
-                    if let Some(var) = addr.as_var() {
-                        if !var_set.contains_key(&var) {
-                            var_set.insert(var, true);
-                        } else {
-                            var_set.insert(var, false);
+                    for addr in self.acyclic_pre_order_iter(term) {
+                        if let Some(var) = addr.as_var() {
+                            if !var_set.contains_key(&var) {
+                                var_set.insert(var, true);
+                            } else {
+                                var_set.insert(var, false);
+                            }
                         }
                     }
-                }
 
-                let mut var_list = vec![];
-                let mut singleton_var_list = vec![];
+                    let mut var_list = vec![];
+                    let mut singleton_var_list = vec![];
 
-                for addr in self.acyclic_pre_order_iter(term) {
-                    if let Some(var) = addr.as_var() {
-                        if var_set.get(&var) == Some(&true) {
-                            singleton_var_list.push(var.as_addr());
+                    for addr in self.acyclic_pre_order_iter(term) {
+                        if let Some(var) = addr.as_var() {
+                            if var_set.get(&var) == Some(&true) {
+                                singleton_var_list.push(var.as_addr());
+                            }
+
+                            var_list.push(var.as_addr());
                         }
-
-                        var_list.push(var.as_addr());
                     }
+
+                    let singleton_addr = self[temp_v!(3)];
+                    let singletons_offset =
+                        Addr::HeapCell(self.heap.to_list(singleton_var_list.into_iter()));
+
+                    self.unify(singletons_offset, singleton_addr);
+
+                    if self.fail {
+                        return Ok(());
+                    }
+
+                    let vars_addr = self[temp_v!(4)];
+                    let vars_offset =
+                        Addr::HeapCell(self.heap.to_list(var_list.into_iter()));
+
+                    self.unify(vars_offset, vars_addr);
+
+                    if self.fail {
+                        return Ok(());
+                    }
+
+                    let var_names_addr = self[temp_v!(5)];
+                    let var_names_offset =
+                        Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
+
+                    return Ok(self.unify(var_names_offset, var_names_addr));
                 }
+                Err(err) => {
+                    if let ParserError::UnexpectedEOF = err {
+                        self.eof_action(
+                            self[temp_v!(2)],
+                            &mut orig_stream,
+                            clause_name!("read_term"),
+                            3
+                        )?;
 
-                let singleton_addr = self[temp_v!(3)];
-                let singletons_offset =
-                    Addr::HeapCell(self.heap.to_list(singleton_var_list.into_iter()));
+                        if orig_stream.options.eof_action == EOFAction::Reset {
+                            if self.fail == false {
+                                continue;
+                            } else {
+                                return Ok(());
+                            }
+                        }
+                    }
 
-                self.unify(singletons_offset, singleton_addr);
-
-                if self.fail {
                     return Ok(());
                 }
-
-                let vars_addr = self[temp_v!(4)];
-                let vars_offset =
-                    Addr::HeapCell(self.heap.to_list(var_list.into_iter()));
-
-                self.unify(vars_offset, vars_addr);
-
-                if self.fail {
-                    return Ok(());
-                }
-
-                let var_names_addr = self[temp_v!(5)];
-                let var_names_offset =
-                    Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
-
-                Ok(self.unify(var_names_offset, var_names_addr))
-            }
-            Err(err) => {
-                if let ParserError::UnexpectedEOF = err {
-                    std::process::exit(0);
-                }
-
-                // reset the input stream after an input failure.
-                //*stream = readline::input_stream();
-
-                let h = self.heap.h();
-                let syntax_error = MachineError::syntax_error(h, err);
-                let stub = MachineError::functor_stub(clause_name!("read_term"), 2);
-
-                Err(self.error_form(syntax_error, stub))
             }
         }
     }
@@ -809,9 +818,11 @@ impl MachineState {
 
                                 var_names.insert(var, atom);
                             }
-                            _ => unreachable!(),
+                            _ => {
+                            }
                         },
-                        _ => unreachable!(),
+                        _ => {
+                        }
                     }
                 }
 

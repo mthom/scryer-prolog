@@ -124,21 +124,14 @@ read_term_from_chars(Chars, Term) :-
 write_term_to_chars(_, Options, _) :-
     var(Options), instantiation_error(write_term_to_chars/3).
 write_term_to_chars(Term, Options, Chars) :-
-    '$skip_max_list'(_, -1, Options, Options0),
-    (  var(Options0)  ->
-       instantiation_error(write_term_to_chars/3)
-    ;  nonvar(Chars)  ->
+    builtins:parse_write_options(Options,
+                                 [IgnoreOps, MaxDepth, NumberVars, Quoted, VNNames],
+                                 write_term_to_chars/3),
+    (  nonvar(Chars)  ->
        throw(error(uninstantiation_error(Chars), write_term_to_chars/3))
-    ;  Options0 == [] ->
-       true
     ;
-       type_error(list, Options, write_term_to_chars/3)
+       true
     ),
-    builtins:inst_member_or(Options, ignore_ops(IgnoreOps), ignore_ops(false)),
-    builtins:inst_member_or(Options, numbervars(NumberVars), numbervars(false)),
-    builtins:inst_member_or(Options, quoted(Quoted), quoted(false)),
-    builtins:inst_member_or(Options, variable_names(VarNames), variable_names([])),
-    builtins:inst_member_or(Options, max_depth(MaxDepth), max_depth(0)),
     term_variables(Term, Vars),
     extend_var_list(Vars, VarNames, NewVarNames, numbervars),
-    '$write_term_to_chars'(Term, IgnoreOps, NumberVars, Quoted, NewVarNames, MaxDepth, Chars).
+    '$write_term_to_chars'(Chars, Term, IgnoreOps, NumberVars, Quoted, NewVarNames, MaxDepth).

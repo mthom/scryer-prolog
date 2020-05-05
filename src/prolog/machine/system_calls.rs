@@ -3949,7 +3949,7 @@ impl MachineState {
                 stream.flush().unwrap();
             }
             &SystemClauseType::WriteTermToChars => {
-                let addr = self[temp_v!(1)];
+                let addr = self[temp_v!(2)];
 
                 let printer =
                     match self.write_term(&indices.op_dir)? {
@@ -3965,7 +3965,7 @@ impl MachineState {
                 let result = printer.print(addr).result();
                 let chars = self.heap.put_complete_string(&result);
 
-                let result_addr = self.store(self.deref(self[temp_v!(7)]));
+                let result_addr = self.store(self.deref(self[temp_v!(1)]));
 
                 if let Some(var) = result_addr.as_var() {
                     self.bind(var, chars);

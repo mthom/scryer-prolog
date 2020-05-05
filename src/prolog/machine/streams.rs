@@ -1,16 +1,16 @@
 use crate::prolog_parser::ast::*;
 
+use crate::prolog::read::PrologStream;
 use crate::prolog::read::readline::*;
 use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
-use crate::prolog::read::PrologStream;
 
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{stdout, Cursor, ErrorKind, Read, Write};
+use std::io::{stdout, Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::hash::{Hash, Hasher};
 use std::net::TcpStream;
 use std::rc::Rc;
@@ -148,6 +148,9 @@ pub struct Stream {
 
 impl From<TcpStream> for Stream {
     fn from(tcp_stream: TcpStream) -> Self {
+        tcp_stream.set_read_timeout(None).unwrap();
+        tcp_stream.set_write_timeout(None).unwrap();
+
         Stream {
             options: StreamOptions::default(),
             stream_inst: WrappedStreamInstance::new(
@@ -322,9 +325,70 @@ impl Stream {
             }
         }
     }
+
+    // returns true on success.
+    #[inline]
+    fn reset(&mut self) -> bool {
+        match *self.stream_inst.0.borrow_mut() {
+            StreamInstance::Bytes(ref mut cursor) => {
+                cursor.set_position(0);
+                true
+            }
+            StreamInstance::InputFile(ref mut file) => {
+                file.seek(SeekFrom::Start(0)).unwrap();
+                true
+            }
+            StreamInstance::ReadlineStream(ref mut stream) => {
+                *stream = ReadlineStream::new(String::new());
+                true
+            }
+            _ => {
+                false
+            }
+        }
+    }
 }
 
 impl MachineState {
+    #[inline]
+    pub(crate)
+    fn eof_action(
+        &mut self,
+        result: Addr,
+        stream: &mut Stream,
+        caller: ClauseName,
+        arity: usize,
+    ) -> CallResult {
+        match stream.options.eof_action {
+            EOFAction::Error => {
+                let stub = MachineError::functor_stub(caller, arity);
+
+                let stream = vec![
+                    HeapCellValue::Stream(stream.clone())
+                ];
+
+                let err = MachineError::permission_error(
+                    self.heap.h(),
+                    Permission::InputStream,
+                    "past_end_of_stream",
+                    stream,
+                );
+
+                Err(self.error_form(err, stub))
+            }
+            EOFAction::EOFCode => {
+                let end_of_stream = self.heap.to_unifiable(
+                    HeapCellValue::Atom(clause_name!("end_of_stream"), None)
+                );
+
+                Ok(self.unify(result, end_of_stream))
+            }
+            EOFAction::Reset => {
+                Ok(self.fail = !stream.reset())
+            }
+        }
+    }
+
     pub(crate)
     fn to_stream_options(
         &self,
@@ -426,14 +490,13 @@ impl MachineState {
                         }
                         None => {
                             let stub = MachineError::functor_stub(clause_name!(caller), arity);
-                            let h = self.heap.h();
 
                             let addr = self.heap.to_unifiable(
                                 HeapCellValue::Atom(atom.clone(), spec.clone())
                             );
 
                             return Err(self.error_form(
-                                MachineError::existence_error(h + 1, ExistenceError::Stream(addr)),
+                                MachineError::existence_error(self.heap.h(), ExistenceError::Stream(addr)),
                                 stub,
                             ));
                         }
@@ -474,9 +537,9 @@ impl MachineState {
         stub_name: &'static str,
         stub_arity: usize,
     ) -> Result<PrologStream, MachineStub> {
-        match parsing_stream(stream) {
-            Ok(stream) => {
-                Ok(stream)
+        match parsing_stream(stream.clone()) {
+            Ok(parsing_stream) => {
+                Ok(parsing_stream)
             }
             Err(e) => {
                 let stub = MachineError::functor_stub(clause_name!(stub_name), stub_arity);
