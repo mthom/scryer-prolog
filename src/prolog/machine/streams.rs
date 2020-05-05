@@ -356,7 +356,7 @@ impl MachineState {
             }
             EOFAction::EOFCode => {
                 let end_of_stream = self.heap.to_unifiable(
-                    HeapCellValue::Atom(clause_name!("end_of_stream"), None)
+                    HeapCellValue::Atom(clause_name!("end_of_file"), None)
                 );
 
                 stream.past_end_of_stream = true;
