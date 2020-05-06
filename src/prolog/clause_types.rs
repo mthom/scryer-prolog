@@ -184,6 +184,7 @@ pub enum SystemClauseType {
     FlushOutput,
     GetByte,
     GetChar,
+    GetCode,
     GetSingleChar,
     ResetAttrVarState,
     TruncateIfNoLiftedHeapGrowthDiff,
@@ -224,6 +225,7 @@ pub enum SystemClauseType {
     PointsToContinuationResetMarker,
     PutByte,
     PutChar,
+    PutCode,
     REPL(REPLCodePtr),
     ReadQueryTerm,
     ReadTerm,
@@ -332,6 +334,7 @@ impl SystemClauseType {
             &SystemClauseType::FlushOutput => clause_name!("$flush_output"),
             &SystemClauseType::GetByte => clause_name!("$get_byte"),
             &SystemClauseType::GetChar => clause_name!("$get_char"),
+            &SystemClauseType::GetCode => clause_name!("$get_code"),
             &SystemClauseType::GetSingleChar => clause_name!("$get_single_char"),
             &SystemClauseType::ResetAttrVarState => clause_name!("$reset_attr_var_state"),
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
@@ -392,6 +395,9 @@ impl SystemClauseType {
             }
             &SystemClauseType::PutChar => {
                 clause_name!("$put_char")
+            }
+            &SystemClauseType::PutCode => {
+                clause_name!("$put_code")
             }
             &SystemClauseType::QuotedToken => {
                 clause_name!("$quoted_token")
@@ -499,6 +505,7 @@ impl SystemClauseType {
             ("$file_to_chars", 2) => Some(SystemClauseType::FileToChars),
             ("$get_byte", 2) => Some(SystemClauseType::GetByte),
             ("$get_char", 2) => Some(SystemClauseType::GetChar),
+            ("$get_code", 2) => Some(SystemClauseType::GetCode),
             ("$get_single_char", 1) => Some(SystemClauseType::GetSingleChar),
             ("$points_to_cont_reset_marker", 1) => {
                 Some(SystemClauseType::PointsToContinuationResetMarker)
@@ -508,6 +515,9 @@ impl SystemClauseType {
             }
             ("$put_char", 2) => {
                 Some(SystemClauseType::PutChar)
+            }
+            ("$put_code", 2) => {
+                Some(SystemClauseType::PutCode)
             }
             ("$reset_attr_var_state", 0) => Some(SystemClauseType::ResetAttrVarState),
             ("$truncate_if_no_lh_growth", 1) => {

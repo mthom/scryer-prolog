@@ -50,9 +50,10 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      expand_term/2, fail/0, false/0, findall/3,
                      findall/4, flush_output/0, flush_output/1,
                      get_byte/1, get_byte/2, get_char/1, get_char/2,
-                     halt/0, max_arity/1, number_chars/2,
-                     number_codes/2, once/1, op/3, open/3, open/4,
-                     put_byte/1, put_byte/2, put_char/1, put_char/2,
+                     get_code/1, get_code/2, halt/0, max_arity/1,
+                     number_chars/2, number_codes/2, once/1, op/3,
+                     open/3, open/4, put_byte/1, put_byte/2,
+                     put_code/1, put_code/2, put_char/1, put_char/2,
                      read_term/2, read_term/3, repeat/0, retract/1,
                      set_prolog_flag/2, set_input/1, set_output/1,
                      setof/3, sub_atom/5, subsumes_term/2,
@@ -1197,7 +1198,7 @@ flush_output :-
 get_byte(S, B) :-
     '$get_byte'(S, B).
 
-get_byte(S) :-
+get_byte(B) :-
     current_input(S),
     '$get_byte'(S, B).
 
@@ -1216,3 +1217,19 @@ put_byte(C) :-
 
 put_byte(S, C) :-
     '$put_byte'(S, C).
+
+
+put_code(C) :-
+    current_output(S),
+    '$put_code'(S, C).
+
+put_code(S, C) :-
+    '$put_code'(S, C).
+
+
+get_code(C) :-
+    current_input(S),
+    '$get_code'(S, C).
+
+get_code(S, C) :-
+    '$get_code'(S, C).

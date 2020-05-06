@@ -23,7 +23,7 @@ pub(crate) struct MachineError {
     from: ErrorProvenance,
 }
 
-pub(super)
+pub(crate)
 trait TypeError {
     fn type_error(self, h: usize, valid_type: ValidType) -> MachineError;
 }
@@ -557,7 +557,7 @@ impl DomainErrorType {
 pub enum RepFlag {
     //    Character,
     CharacterCode,
-    //    InCharacterCode,
+    InCharacterCode,
     MaxArity,
     //    MaxInteger,
     //    MinInteger
@@ -568,7 +568,7 @@ impl RepFlag {
         match self {
             //            RepFlag::Character => "character",
             RepFlag::CharacterCode => "character_code",
-            //            RepFlag::InCharacterCode => "in_character_code",
+            RepFlag::InCharacterCode => "in_character_code",
             RepFlag::MaxArity => "max_arity",
             //            RepFlag::MaxInteger => "max_integer",
             //            RepFlag::MinInteger => "min_integer"
@@ -697,6 +697,41 @@ impl MachineState {
         }?;
 
         self.check_for_list_pairs(sorted)
+    }
+
+    #[inline]
+    pub(crate)
+    fn type_error<T: TypeError>(
+        &self,
+        valid_type: ValidType,
+        culprit: T,
+        caller: ClauseName,
+        arity: usize,
+    ) -> MachineStub {
+        let stub = MachineError::functor_stub(caller, arity);
+        let err = MachineError::type_error(
+            self.heap.h(),
+            valid_type,
+            culprit,
+        );
+
+        return self.error_form(err, stub);
+    }
+
+    #[inline]
+    pub(crate)
+    fn representation_error(
+        &self,
+        rep_flag: RepFlag,
+        caller: ClauseName,
+        arity: usize,
+    ) -> MachineStub {
+        let stub = MachineError::functor_stub(caller, arity);
+        let err = MachineError::representation_error(
+            rep_flag,
+        );
+
+        return self.error_form(err, stub);
     }
 
     pub(super)

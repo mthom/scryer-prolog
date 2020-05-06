@@ -1592,6 +1592,64 @@ impl MachineState {
 
                 self.unify(complete_string, a2);
             }
+            &SystemClauseType::PutCode => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "put_code", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    None,
+                    clause_name!("put_code"),
+                    2,
+                )?;
+
+                match self.store(self.deref(self[temp_v!(2)])) {
+                    addr if addr.is_ref() => {
+                        let stub = MachineError::functor_stub(clause_name!("put_code"), 2);
+                        let err = MachineError::instantiation_error();
+
+                        return Err(self.error_form(err, stub));
+                    }
+                    Addr::CharCode(c) => {
+                        let c = char::try_from(c).unwrap();
+                        write!(&mut stream, "{}", c).unwrap();
+                    }
+                    addr => {
+                        match Number::try_from((addr, &self.heap)) {
+                            Ok(Number::Integer(n)) => {
+                                if let Some(c) = n.to_u32().and_then(|c| char::try_from(c).ok()) {
+                                    write!(&mut stream, "{}", c).unwrap();
+                                    return return_from_clause!(self.last_call, self);
+                                }
+                            }
+                            Ok(Number::Fixnum(n)) => {
+                                if let Some(c) = u32::try_from(n).ok().and_then(|c| char::try_from(c).ok()) {
+                                    write!(&mut stream, "{}", c).unwrap();
+                                    return return_from_clause!(self.last_call, self);
+                                }
+                            }
+                            _ => {
+                                let stub = MachineError::functor_stub(clause_name!("put_code"), 2);
+                                let err = MachineError::type_error(
+                                    self.heap.h(),
+                                    ValidType::Integer,
+                                    self[temp_v!(2)],
+                                );
+
+                                return Err(self.error_form(err, stub));
+                            }
+                        }
+
+                        let stub = MachineError::functor_stub(clause_name!("put_code"), 2);
+                        let err = MachineError::representation_error(
+                            RepFlag::CharacterCode,
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }
+            }
             &SystemClauseType::PutChar => {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "put_char", 2)?;
@@ -1715,48 +1773,63 @@ impl MachineState {
                     }
                 }
 
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        addr => {
+                            match Number::try_from((addr, &self.heap)) {
+                                Ok(Number::Integer(n)) => {
+                                    if let Some(nb) = n.to_u8() {
+                                        Addr::Usize(nb as usize)
+                                    } else {
+                                        return Err(self.type_error(
+                                            ValidType::InByte,
+                                            addr,
+                                            clause_name!("get_byte"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                Ok(Number::Fixnum(n)) => {
+                                    if let Ok(nb) = u8::try_from(n) {
+                                        Addr::Usize(nb as usize)
+                                    } else {
+                                        return Err(self.type_error(
+                                            ValidType::InByte,
+                                            addr,
+                                            clause_name!("get_byte"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(self.type_error(
+                                        ValidType::InByte,
+                                        addr,
+                                        clause_name!("get_byte"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                    };
+
                 loop {
                     let mut b = [0u8; 1];
 
                     match stream.read(&mut b) {
                         Ok(1) => {
-                            match self.store(self.deref(self[temp_v!(2)])) {
-                                addr if addr.is_ref() => {
-                                    if let Some(var) = addr.as_var() {
-                                        self.bind(var, Addr::Usize(b[0] as usize));
-                                        return return_from_clause!(self.last_call, self);
-                                    } else {
-                                        unreachable!()
-                                    }
-                                }
-                                addr => {
-                                    match Number::try_from((addr, &self.heap)) {
-                                        Ok(Number::Integer(n)) => {
-                                            if let Some(nb) = n.to_u8() {
-                                                self.fail = b[0] != nb;
-                                                return return_from_clause!(self.last_call, self);
-                                            }
-                                        }
-                                        Ok(Number::Fixnum(n)) => {
-                                            if let Ok(nb) = u8::try_from(n) {
-                                                self.fail = b[0] != nb;
-                                                return return_from_clause!(self.last_call, self);
-                                            }
-                                        }
-                                        _ => {
-                                        }
-                                    }
-                                }
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::Usize(b[0] as usize));
+                                break;
+                            } else if addr == Addr::Usize(b[0] as usize) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
                             }
-
-                            let stub = MachineError::functor_stub(clause_name!("get_byte"), 2);
-                            let err = MachineError::type_error(
-                                self.heap.h(),
-                                ValidType::InByte,
-                                self[temp_v!(2)],
-                            );
-
-                            return Err(self.error_form(err, stub));
                         }
                         _ => {
                             self.eof_action(
@@ -1801,57 +1874,56 @@ impl MachineState {
                     2,
                 )?;
 
-                loop {
-                    let result = iter.next();
-
-                    match result {
-                        Some(Ok(c)) => {
-                            match self.store(self.deref(self[temp_v!(2)])) {
-                                addr if addr.is_ref() => {
-                                    if let Some(var) = addr.as_var() {
-                                        self.bind(var, Addr::Char(c));
-                                        return return_from_clause!(self.last_call, self);
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Atom(ref atom, _) if atom.is_char() => {
+                                    if let Some(c) = atom.as_str().chars().next() {
+                                        Addr::Char(c)
                                     } else {
                                         unreachable!()
                                     }
                                 }
-                                Addr::Con(h) if self.heap.atom_at(h) => {
-                                    match &self.heap[h] {
-                                        HeapCellValue::Atom(ref atom, _) if atom.is_char() => {
-                                            if let Some(d) = atom.as_str().chars().next() {
-                                                if c == d {
-                                                    return return_from_clause!(self.last_call, self);
-                                                } else {
-                                                    self.fail = true;
-                                                    return Ok(());
-                                                }
-                                            } else {
-                                                unreachable!()
-                                            }
-                                        }
-                                        _ => {
-                                            unreachable!()
-                                        }
-                                    }
-                                }
-                                Addr::Char(d) => {
-                                    if c == d {
-                                        return return_from_clause!(self.last_call, self);
-                                    } else {
-                                        self.fail = true;
-                                        return Ok(());
-                                    }
-                                }
                                 culprit => {
-                                    let stub = MachineError::functor_stub(clause_name!("get_char"), 2);
-                                    let err = MachineError::type_error(
-                                        self.heap.h(),
+                                    return Err(self.type_error(
                                         ValidType::InCharacter,
-                                        culprit,
-                                    );
-
-                                    return Err(self.error_form(err, stub));
+                                        culprit.as_addr(h),
+                                        clause_name!("get_char"),
+                                        2,
+                                    ));
                                 }
+                            }
+                        }
+                        Addr::Char(d) => {
+                            Addr::Char(d)
+                        }
+                        culprit => {
+                            return Err(self.type_error(
+                                ValidType::InCharacter,
+                                culprit,
+                                clause_name!("get_char"),
+                                2,
+                            ));
+                        }
+                    };
+
+                loop {
+                    let result = iter.next();
+
+                    match result {
+                        Some(Ok(d)) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::Char(d));
+                                break;
+                            } else if addr == Addr::Char(d) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
                             }
                         }
                         _ => {
@@ -1859,6 +1931,115 @@ impl MachineState {
                                 self[temp_v!(2)],
                                 &mut stream,
                                 clause_name!("get_char"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }/*
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("get_char"), 2);
+                            let err = MachineError::representation_error(RepFlag::Character);
+                            let err = self.error_form(err, stub);
+
+                            return Err(err);
+                        }*/
+                    }
+                }
+            }
+            &SystemClauseType::GetCode => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_code", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("get_code"),
+                    2,
+                )?;
+
+                if stream.past_end_of_stream {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        Addr::CharCode(d) => {
+                            Addr::CharCode(d)
+                        }
+                        addr => {
+                            match Number::try_from((addr, &self.heap)) {
+                                Ok(Number::Integer(n)) => {
+                                    if let Some(c) = n.to_u32().and_then(|c| char::try_from(c).ok()) {
+                                        Addr::CharCode(c as u32)
+                                    } else {
+                                        return Err(self.representation_error(
+                                            RepFlag::InCharacterCode,
+                                            clause_name!("get_code"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                Ok(Number::Fixnum(n)) => {
+                                    if let Some(c) = u32::try_from(n).ok().and_then(|c| char::try_from(c).ok()) {
+                                        Addr::CharCode(c as u32)
+                                    } else {
+                                        return Err(self.representation_error(
+                                            RepFlag::InCharacterCode,
+                                            clause_name!("get_code"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(self.type_error(
+                                        ValidType::Integer,
+                                        self[temp_v!(2)],
+                                        clause_name!("get_code"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                    };
+
+                let mut iter = self.open_parsing_stream(
+                    stream.clone(),
+                    "get_code",
+                    2,
+                )?;
+
+                loop {
+                    let result = iter.next();
+
+                    match result {
+                        Some(Ok(c)) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::CharCode(c as u32));
+                                break;
+                            } else if addr == Addr::CharCode(c as u32) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("get_coder"),
                                 2,
                             )?;
 

@@ -30,6 +30,15 @@ impl StreamType {
             StreamType::Text => "text_stream",
         }
     }
+
+    #[inline]
+    pub(crate)
+    fn other(self) -> StreamType {
+        match self {
+            StreamType::Binary => StreamType::Text,
+            StreamType::Text => StreamType::Binary,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -662,7 +671,7 @@ impl MachineState {
             } else if input.is_none() && stream.is_input_stream() {
                 Some("stream") // 8.14.2.3 g)
             } else if stream.options.stream_type != expected_type {
-                Some(expected_type.as_str()) // 8.14.2.3 h)
+                Some(expected_type.other().as_str()) // 8.14.2.3 h)
             } else {
                 None
             };
