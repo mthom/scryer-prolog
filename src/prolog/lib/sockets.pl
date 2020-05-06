@@ -6,8 +6,6 @@
                     current_hostname/1]).
 
 :- use_module(library(error)).
-:- use_module(library(lists)).
-:- use_module(library(pairs)).
 
 
 socket_client_open(Addr, Stream, Options) :-

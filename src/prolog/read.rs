@@ -18,7 +18,7 @@ pub mod readline {
     use crate::prolog::machine::streams::Stream;
     use crate::prolog::rustyline::error::ReadlineError;
     use crate::prolog::rustyline::{Cmd, Editor, KeyPress};
-    use std::io::{Cursor, Read};
+    use std::io::{Cursor, Error, ErrorKind, Read};
 
     static mut PROMPT: bool = false;
 
@@ -73,7 +73,61 @@ pub mod readline {
                     Ok(0)
                 }
                 Err(e) => {
-                    Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+                    Err(Error::new(ErrorKind::InvalidInput, e))
+                }
+            }
+        }
+
+        pub fn peek_byte(&mut self) -> std::io::Result<u8> {
+            set_prompt(false);
+
+            loop {
+                match self.pending_input.get_ref().bytes().next() {
+                    Some(b) => {
+                        return Ok(b);
+                    }
+                    None => {
+                        match self.call_readline(&mut []) {
+                            Err(e) => {
+                                return Err(e);
+                            }
+                            Ok(0) => {
+                                return Err(Error::new(
+                                    ErrorKind::UnexpectedEof,
+                                    "end of file",
+                                ));
+                            }
+                            _ => {
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        pub fn peek_char(&mut self) -> std::io::Result<char> {
+            set_prompt(false);
+
+            loop {
+                match self.pending_input.get_ref().chars().next() {
+                    Some(c) => {
+                        return Ok(c);
+                    }
+                    None => {
+                        match self.call_readline(&mut []) {
+                            Err(e) => {
+                                return Err(e);
+                            }
+                            Ok(0) => {
+                                return Err(Error::new(
+                                    ErrorKind::UnexpectedEof,
+                                    "end of file",
+                                ));
+                            }
+                            _ => {
+                            }
+                        }
+                    }
                 }
             }
         }

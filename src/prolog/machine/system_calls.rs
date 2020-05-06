@@ -1169,6 +1169,308 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::PeekByte => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "peek_byte", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Binary,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("peek_byte"),
+                    2,
+                )?;
+
+                if stream.past_end_of_stream {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        addr => {
+                            match Number::try_from((addr, &self.heap)) {
+                                Ok(Number::Integer(n)) => {
+                                    if let Some(nb) = n.to_u8() {
+                                        Addr::Usize(nb as usize)
+                                    } else {
+                                        return Err(self.type_error(
+                                            ValidType::InByte,
+                                            addr,
+                                            clause_name!("peek_byte"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                Ok(Number::Fixnum(n)) => {
+                                    if let Ok(nb) = u8::try_from(n) {
+                                        Addr::Usize(nb as usize)
+                                    } else {
+                                        return Err(self.type_error(
+                                            ValidType::InByte,
+                                            addr,
+                                            clause_name!("peek_byte"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(self.type_error(
+                                        ValidType::InByte,
+                                        addr,
+                                        clause_name!("peek_byte"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                    };
+
+                loop {
+                    match stream.peek_byte().map_err(|e| e.kind()) {
+                        Ok(b) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::Usize(b as usize));
+                                break;
+                            } else if addr == Addr::Usize(b as usize) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            self.fail = true;
+                            break;
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("peek_byte"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+            &SystemClauseType::PeekChar => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "peek_char", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("peek_char"),
+                    2,
+                )?;
+
+                if stream.past_end_of_stream {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Atom(ref atom, _) if atom.is_char() => {
+                                    if let Some(c) = atom.as_str().chars().next() {
+                                        Addr::Char(c)
+                                    } else {
+                                        unreachable!()
+                                    }
+                                }
+                                culprit => {
+                                    return Err(self.type_error(
+                                        ValidType::InCharacter,
+                                        culprit.as_addr(h),
+                                        clause_name!("peek_char"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                        Addr::Char(d) => {
+                            Addr::Char(d)
+                        }
+                        culprit => {
+                            return Err(self.type_error(
+                                ValidType::InCharacter,
+                                culprit,
+                                clause_name!("peek_char"),
+                                2,
+                            ));
+                        }
+                    };
+
+                loop {
+                    match stream.peek_char().map_err(|e| e.kind()) {
+                        Ok(d) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::Char(d));
+                                break;
+                            } else if addr == Addr::Char(d) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            self.fail = true;
+                            break;
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("peek_char"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }/*
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("peek_char"), 2);
+                            let err = MachineError::representation_error(RepFlag::Character);
+                            let err = self.error_form(err, stub);
+
+                            return Err(err);
+                        }*/
+                    }
+                }
+            }
+            &SystemClauseType::PeekCode => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "peek_code", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("peek_code"),
+                    2,
+                )?;
+
+                if stream.past_end_of_stream {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        Addr::CharCode(d) => {
+                            Addr::CharCode(d)
+                        }
+                        addr => {
+                            match Number::try_from((addr, &self.heap)) {
+                                Ok(Number::Integer(n)) => {
+                                    if let Some(c) = n.to_u32().and_then(|c| char::try_from(c).ok()) {
+                                        Addr::CharCode(c as u32)
+                                    } else {
+                                        return Err(self.representation_error(
+                                            RepFlag::InCharacterCode,
+                                            clause_name!("peek_code"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                Ok(Number::Fixnum(n)) => {
+                                    if let Some(c) = u32::try_from(n).ok().and_then(|c| char::try_from(c).ok()) {
+                                        Addr::CharCode(c as u32)
+                                    } else {
+                                        return Err(self.representation_error(
+                                            RepFlag::InCharacterCode,
+                                            clause_name!("peek_code"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(self.type_error(
+                                        ValidType::Integer,
+                                        self[temp_v!(2)],
+                                        clause_name!("peek_code"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                    };
+
+                loop {
+                    let result = stream.peek_char();
+
+                    match result.map_err(|e| e.kind()) {
+                        Ok(c) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::CharCode(c as u32));
+                                break;
+                            } else if addr == Addr::CharCode(c as u32) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            self.fail = true;
+                            break;
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("peek_code"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }/*
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("get_char"), 2);
+                            let err = MachineError::representation_error(RepFlag::Character);
+                            let err = self.error_form(err, stub);
+
+                            return Err(err);
+                        }*/
+                    }
+                }
+            }
             &SystemClauseType::NumberToChars => {
                 let n = self[temp_v!(1)];
                 let chs = self[temp_v!(2)];
@@ -2039,7 +2341,7 @@ impl MachineState {
                             self.eof_action(
                                 self[temp_v!(2)],
                                 &mut stream,
-                                clause_name!("get_coder"),
+                                clause_name!("get_code"),
                                 2,
                             )?;
 

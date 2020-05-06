@@ -447,7 +447,7 @@ impl HeapCellValue {
                 HeapCellValue::Stream(stream.clone())
             }
             &HeapCellValue::TcpListener(_) => {
-                HeapCellValue::Atom(clause_name!("$socket_server"), None)
+                HeapCellValue::Atom(clause_name!("$tcp_listener"), None)
             }
         }
     }

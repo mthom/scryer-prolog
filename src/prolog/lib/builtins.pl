@@ -52,9 +52,11 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      get_byte/1, get_byte/2, get_char/1, get_char/2,
                      get_code/1, get_code/2, halt/0, max_arity/1,
                      number_chars/2, number_codes/2, once/1, op/3,
-                     open/3, open/4, put_byte/1, put_byte/2,
-                     put_code/1, put_code/2, put_char/1, put_char/2,
-                     read_term/2, read_term/3, repeat/0, retract/1,
+                     open/3, open/4, peek_byte/1, peek_byte/2,
+                     peek_char/1, peek_char/2, peek_code/1,
+                     peek_code/2, put_byte/1, put_byte/2, put_code/1,
+                     put_code/2, put_char/1, put_char/2, read_term/2,
+                     read_term/3, repeat/0, retract/1,
                      set_prolog_flag/2, set_input/1, set_output/1,
                      setof/3, sub_atom/5, subsumes_term/2,
                      term_variables/2, throw/1, true/0,
@@ -1233,3 +1235,27 @@ get_code(C) :-
 
 get_code(S, C) :-
     '$get_code'(S, C).
+
+
+peek_byte(S, B) :-
+    '$peek_byte'(S, B).
+
+peek_byte(B) :-
+    current_input(S),
+    '$peek_byte'(S, B).
+
+
+peek_code(C) :-
+    current_input(S),
+    '$peek_code'(S, C).
+
+peek_code(S, C) :-
+    '$peek_code'(S, C).
+
+
+peek_char(C) :-
+    current_input(S),
+    '$peek_char'(S, C).
+
+peek_char(S, C) :-
+    '$peek_char'(S, C).

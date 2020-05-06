@@ -128,6 +128,10 @@ impl Hash for WrappedStreamInstance {
 
 #[derive(Debug)]
 enum StreamError {
+    PeekByteFailed,
+    PeekByteFromNonPeekableStream,
+    PeekCharFailed,
+    PeekCharFromNonPeekableStream,
     ReadFromOutputStream,
     WriteToInputStream,
     FlushToInputStream,
@@ -136,6 +140,18 @@ enum StreamError {
 impl fmt::Display for StreamError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StreamError::PeekByteFailed => {
+                write!(f, "peek byte failed!")
+            }
+            StreamError::PeekByteFromNonPeekableStream => {
+                write!(f, "attempted to peek byte from a non-peekable input stream")
+            }
+            StreamError::PeekCharFailed => {
+                write!(f, "peek char failed!")
+            }
+            StreamError::PeekCharFromNonPeekableStream => {
+                write!(f, "attempted to peek char from a non-peekable input stream")
+            }
             StreamError::ReadFromOutputStream => {
                 write!(f, "attempted to read from a write-only stream")
             }
@@ -352,6 +368,115 @@ impl Stream {
             }
             _ => {
                 false
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn peek_byte(&mut self) -> std::io::Result<u8> {
+        match *self.stream_inst.0.borrow_mut() {
+            StreamInstance::Bytes(ref mut cursor) => {
+                let mut b = [0u8; 1];
+                let pos = cursor.position();
+
+                match cursor.read(&mut b)? {
+                    1 => {
+                        cursor.set_position(pos);
+                        Ok(b[0])
+                    }
+                    _ => {
+                        Err(std::io::Error::new(
+                            ErrorKind::UnexpectedEof,
+                            "end of file",
+                        ))
+                    }
+                }
+            }
+            StreamInstance::InputFile(ref mut file) => {
+                let mut b = [0u8; 1];
+
+                match file.read(&mut b)? {
+                    1 => {
+                        file.seek(SeekFrom::Current(-1))?;
+                        Ok(b[0])
+                    }
+                    _ => {
+                        Err(std::io::Error::new(
+                            ErrorKind::UnexpectedEof,
+                            StreamError::PeekByteFailed,
+                        ))
+                    }
+                }
+            }
+            StreamInstance::ReadlineStream(ref mut stream) => {
+                stream.peek_byte()
+            }
+            StreamInstance::TcpStream(ref mut tcp_stream) => {
+                let mut b = [0u8; 1];
+                tcp_stream.peek(&mut b)?;
+                Ok(b[0])
+            }
+            _ => {
+                Err(std::io::Error::new(
+                    ErrorKind::PermissionDenied,
+                    StreamError::PeekByteFromNonPeekableStream,
+                ))
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn peek_char(&mut self) -> std::io::Result<char> {
+        use unicode_reader::CodePoints;
+
+        match *self.stream_inst.0.borrow_mut() {
+            StreamInstance::InputFile(ref mut file) => {
+                let c = {
+                    let mut iter = CodePoints::from(&*file);
+
+                    if let Some(Ok(c)) = iter.next() {
+                        c
+                    } else {
+                        return Err(std::io::Error::new(
+                            ErrorKind::UnexpectedEof,
+                            StreamError::PeekCharFailed
+                        ));
+                    }
+                };
+
+                file.seek(SeekFrom::Current(- (c.len_utf8() as i64)))?;
+
+                Ok(c)
+            }
+            StreamInstance::ReadlineStream(ref mut stream) => {
+                stream.peek_char()
+            }
+            StreamInstance::TcpStream(ref tcp_stream) => {
+                let c = {
+                    let mut buf = [0u8; 8];
+                    tcp_stream.peek(&mut buf)?;
+
+                    let mut iter = CodePoints::from(buf.bytes());
+
+                    if let Some(Ok(c)) = iter.next() {
+                        c
+                    } else {
+                        return Err(std::io::Error::new(
+                            ErrorKind::UnexpectedEof,
+                            StreamError::PeekCharFailed
+                        ));
+                    }
+                };
+
+                Ok(c)
+            }
+            _ => {
+                Err(std::io::Error::new(
+                    ErrorKind::PermissionDenied,
+                    StreamError::PeekCharFromNonPeekableStream,
+                ))
             }
         }
     }
@@ -668,7 +793,7 @@ impl MachineState {
         let opt_err =
             if input.is_some() && !stream.is_input_stream() {
                 Some("stream") // 8.14.2.3 g)
-            } else if input.is_none() && stream.is_input_stream() {
+            } else if input.is_none() && !stream.is_output_stream() {
                 Some("stream") // 8.14.2.3 g)
             } else if stream.options.stream_type != expected_type {
                 Some(expected_type.other().as_str()) // 8.14.2.3 h)
