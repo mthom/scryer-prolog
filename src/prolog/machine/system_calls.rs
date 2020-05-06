@@ -4112,55 +4112,39 @@ impl MachineState {
                             }
                             culprit => {
                                 let culprit = culprit.as_addr(h);
-                                let stub = MachineError::functor_stub(
-                                    clause_name!("socket_server_close"),
-                                    1,
-                                );
 
-                                let err = MachineError::type_error(
-                                    self.heap.h(),
+                                return Err(self.type_error(
                                     ValidType::TcpListener,
                                     culprit,
-                                );
-
-                                return Err(self.error_form(err, stub));
+                                    clause_name!("socket_server_accept"),
+                                    4,
+                                ));
                             }
                         }
                     }
                     culprit => {
-                        let stub = MachineError::functor_stub(
-                            clause_name!("socket_server_accept"),
-                            4,
-                        );
-
-                        let err = MachineError::type_error(
-                            self.heap.h(),
+                        return Err(self.type_error(
                             ValidType::TcpListener,
                             culprit,
-                        );
-
-                        return Err(self.error_form(err, stub));
+                            clause_name!("socket_server_accept"),
+                            4,
+                        ));
                     }
                 }
             }
             &SystemClauseType::SocketServerClose => {
                 match self.store(self.deref(self[temp_v!(1)])) {
                     Addr::TcpListener(h) => {
-                        self.heap[h] = HeapCellValue::Addr(Addr::EmptyList);
+                        let closed_tcp_listener = clause_name!("$closed_tcp_listener");
+                        self.heap[h] = HeapCellValue::Atom(closed_tcp_listener, None);
                     }
                     culprit => {
-                        let stub = MachineError::functor_stub(
-                            clause_name!("socket_server_close"),
-                            1,
-                        );
-
-                        let err = MachineError::type_error(
-                            self.heap.h(),
+                        return Err(self.type_error(
                             ValidType::TcpListener,
                             culprit,
-                        );
-
-                        return Err(self.error_form(err, stub));
+                            clause_name!("socket_server_close"),
+                            1,
+                        ));
                     }
                 }
             }
