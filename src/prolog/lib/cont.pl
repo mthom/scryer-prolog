@@ -10,7 +10,7 @@ shift(Ball) :-
     '$nextEP'(first, E, P),
     get_chunks(E, P, L),
     (  L == [] ->
-       Cont = none
+       Cont = cont(true)
     ;  Cont = cont(call_continuation(L))
     ),
     '$write_cont_and_term'(_, _, Cont, Ball),
