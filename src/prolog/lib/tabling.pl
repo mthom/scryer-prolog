@@ -136,18 +136,14 @@ activate(Wrapper,Worker,T) :-
 delim(Wrapper,Worker,Table) :-
 %   debug(tabling, 'ACT: ~p on ~p', [Wrapper, Table]),
     reset(Worker,SourceCall,Continuation),
-   ( Continuation == none, var(SourceCall) ->
+   ( Continuation = none ->
      (	 add_answer(Table,Wrapper)
      ->	 true %debug(tabling, 'ADD: ~p', [Wrapper])
      ;	 %debug(tabling, 'DUP: ~p', [Wrapper]),
 	 fail
      )
    ;
-     (   Continuation = cont(Cont) ->
-	     true
-     ;   Continuation = none ->
-	     Cont = true
-     ),
+     Continuation = cont(Cont),
      SourceCall = call_info(_,SourceTable),
      TargetCall = call_info(Wrapper,Table),
      Dependency = dependency(SourceCall,Cont,TargetCall),
