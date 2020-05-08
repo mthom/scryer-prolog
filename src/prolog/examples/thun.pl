@@ -43,11 +43,16 @@ Table of Contents
 
  */
 
-:- use_module(library(clpfd)).
-:- use_module(library(dcg/basics)).
-:- dynamic func/3.
-:- dynamic def/2.
+:- use_module(library(clpz)).
+:- use_module(library(dcgs)).
 
+:- use_module(library(lists), [append/3, list_to_set /2, maplist/2, member/2, select/3]).
+:- use_module(library(assoc), [assoc_to_list/2, del_assoc/4, empty_assoc/1, put_assoc/4]).
+:- use_module(library(format), [format_/2, portray_clause/1]).
+:- use_module(library(pio), [phrase_from_file/2]).
+
+:- dynamic(func/3).
+:- dynamic(def/2).
 
 /*
 An entry point.
@@ -420,8 +425,10 @@ prepare_mapping(    Pl, S, [T|In],                                  Acc,  Out) :
 joy_def --> joy_parse([symbol(Name)|Body]), { assert_def(Name, Body) }.
 
 assert_defs(DefsFile) :-
-    read_file_to_codes(DefsFile, Codes, []),
-    lines(Codes, Lines),
+    write("hello~n"),
+    format("hello = ~w~n", hello),
+    phrase_from_file(lines(Lines), DefsFile),
+    format("lines = ~w~n", Lines),
     maplist(phrase(joy_def), Lines).
 
 assert_def(Symbol, Body) :-
@@ -435,11 +442,12 @@ assert_def(Symbol, Body) :-
 
 % Split on newline chars a list of codes into a list of lists of codes
 % one per line.  Helper function.
-lines([], []) :- !.
-lines(Codes, [Line|Lines]) :- append(Line, [0'\n|Rest], Codes), !, lines(Rest, Lines).
-lines(Codes, [Codes]).
+lines([]) --> [].
+lines([Line|Lines]) --> line(Line), lines(Lines).
+line([]) --> '\n', !, [].
+line([H|T]) --> [H], line(T).
 
-:- assert_defs("defs.txt").
+:- initialization(assert_defs("defs.txt")).
 
 
 % A meta function that finds the names of all available functions.
@@ -557,7 +565,7 @@ jcmpl(Name, Expression, Rule) :-
     rule(Head, Gs, Rule).
 
 rule(Head, [],    Head).
-rule(Head, [A|B], Head :- maplist(call, [A|B])).
+rule(Head, [A|B], (Head :- maplist(call, [A|B]))).
 
 sjc(Name, InputString) :- phrase(joy_parse(E), InputString), show_joy_compile(Name, E).
 
@@ -1024,7 +1032,7 @@ StackOut = [r0, r1|StackIn] .
 
 % Simple DCGs to expand/contract definitions.
 
-expando,    Body --> [Def], {def(Def, Body)}.
+expando,    [Head|Body] --> [Def], {def(Def, [Head|Body])}.
 contracto, [Def] --> {def(Def, Body)}, Body.
 
 % Apply expando/contracto more than once, and descend into sub-lists.
