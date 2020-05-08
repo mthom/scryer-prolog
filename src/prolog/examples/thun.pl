@@ -425,10 +425,7 @@ prepare_mapping(    Pl, S, [T|In],                                  Acc,  Out) :
 joy_def --> joy_parse([symbol(Name)|Body]), { assert_def(Name, Body) }.
 
 assert_defs(DefsFile) :-
-    write("hello~n"),
-    format("hello = ~w~n", hello),
     phrase_from_file(lines(Lines), DefsFile),
-    format("lines = ~w~n", Lines),
     maplist(phrase(joy_def), Lines).
 
 assert_def(Symbol, Body) :-
@@ -442,12 +439,15 @@ assert_def(Symbol, Body) :-
 
 % Split on newline chars a list of codes into a list of lists of codes
 % one per line.  Helper function.
-lines([]) --> [].
-lines([Line|Lines]) --> line(Line), lines(Lines).
-line([]) --> '\n', !, [].
-line([H|T]) --> [H], line(T).
+lines([])     --> call(eos), !.
+lines([L|Ls]) --> line(L), lines(Ls).
 
-:- initialization(assert_defs("defs.txt")).
+line([])     --> ( "\n" | call(eos) ), !.
+line([C|Cs]) --> [C], line(Cs).
+
+eos([], []).
+
+:- initialization(assert_defs('defs.txt')).
 
 
 % A meta function that finds the names of all available functions.
