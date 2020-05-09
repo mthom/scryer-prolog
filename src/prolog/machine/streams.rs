@@ -59,6 +59,7 @@ pub enum EOFAction {
     Reset,
 }
 
+#[derive(Debug)]
 pub enum AtEndOfStream {
     Not,
     End,

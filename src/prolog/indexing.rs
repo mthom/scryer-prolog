@@ -11,13 +11,14 @@ use std::convert::TryFrom;
 use std::hash::Hash;
 use std::rc::Rc;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum IntIndex {
     External(usize),
     Fail,
     Internal(usize),
 }
 
+#[derive(Debug)]
 pub struct CodeOffsets {
     atom_tbl: TabledData<Atom>,
     pub constants: IndexMap<Constant, ThirdLevelIndex>,
