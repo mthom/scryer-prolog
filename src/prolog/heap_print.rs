@@ -458,9 +458,9 @@ fn non_quoted_token<Iter: Iterator<Item = char>>(mut iter: Iter) -> bool {
         } else if cut_char!(c) {
             iter.next().is_none()
         } else if c == '[' {
-            (iter.next() == Some(']') && iter.next().is_none())
+            iter.next() == Some(']') && iter.next().is_none()
         } else if c == '{' {
-            (iter.next() == Some('}') && iter.next().is_none())
+            iter.next() == Some('}') && iter.next().is_none()
         } else if solo_char!(c) {
             !(c == '(' || c == ')' || c == '}' || c == ']' || c == ',' || c == '%' || c == '|')
         } else {
