@@ -48,7 +48,7 @@ Table of Contents
 
 :- use_module(library(lists), [append/3, list_to_set /2, maplist/2, member/2, select/3]).
 :- use_module(library(assoc), [assoc_to_list/2, del_assoc/4, empty_assoc/1, put_assoc/4]).
-:- use_module(library(format), [format_/2, portray_clause/1]).
+:- use_module(library(format), [format/2, format_/2, portray_clause/1]).
 :- use_module(library(pio), [phrase_from_file/2]).
 
 :- dynamic(func/3).
@@ -116,22 +116,24 @@ atoms, and list literals to Prolog lists.
 
 */
 
-joy_parse([J|Js]) --> blanks, joy_term(J), blanks, joy_parse(Js).
+joy_parse([J|Js]) --> {write("blanks")},blanks, joy_term(J), blanks, joy_parse(Js).
 joy_parse([]) --> [].
 
-joy_term(int(I)) --> integer(I), !.
-joy_term(list(J)) --> "[", !, joy_parse(J), "]".
-joy_term(bool(true)) --> "true", !.
-joy_term(bool(false)) --> "false", !.
-joy_term(symbol(S)) --> symbol(S).
+joy_term(J) --> {write("list")},"[", !, joy_parse(X), "]".
+% joy_term(X) --> {write("int")},N, { number_chars(N, I) }, !.
+joy_term(true) --> "true", !.
+joy_term(false) --> "false", !.
+joy_term(X) --> {write("symbol")}, symbol(S).
 
-symbol(C) --> chars(Chars), !, {atom_string(C, Chars)}.
+symbol(C) --> chars(Chars), !, {write("got char"),C = Chars}.
 
-chars([Ch|Rest]) --> char(Ch), chars(Rest).
-chars([Ch])      --> char(Ch).
+chars([Ch|Rest]) --> {write("X"),portray_clause(Ch)}, char(Ch), {write("Y"),portray_clause(Ch)}, chars(Rest).
+chars([Ch])      --> {write("Z"),portray_clause(Ch)}, char(Ch).
 
-char(Ch) --> [Ch], {Ch \== 91, Ch \== 93, code_type(Ch, graph)}.
+char(Ch) --> [Ch], {format("Ch = |~w|~n", [Ch]), Ch \== '[', Ch \== ']', format("Ch is not or ~n", []), format("Ch is graphic~n", [])}.
 
+blanks --> [C], { format("is whitespace~n", []), C == ' ', format("is not whitespace~n", [])}, (blanks | call(eos)), !.
+blanks --> [].
 
 /* Here is an example of Joy code:
 
