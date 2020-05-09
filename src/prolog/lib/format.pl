@@ -28,6 +28,10 @@
            if N is 0 or omitted, no decimal point is used.
      ~ND   like ~Nd, separating digits to the left of the decimal point
            in groups of three, using the character "," (comma)
+     ~Nr   where N is an integer between 2 and 36: format the
+           next argument, which must be an integer, in radix N.
+           The characters "a" to "z" are used for radices 10 to 36.
+     ~NR   like ~Nr, except that "A" to "Z" are used for radices > 9
      ~|    place a tab stop at this position
      ~N|   where N is an integer: place a tab stop at text column N
      ~N+   where N is an integer: place a tab stop N characters
@@ -72,6 +76,7 @@
 :- use_module(library(lists)).
 :- use_module(library(error)).
 :- use_module(library(charsio)).
+:- use_module(library(between)).
 
 format_(Fs, Args) -->
         { must_be(list, Fs),
@@ -236,6 +241,16 @@ cells([~|Fs0], Args0, Tab, Es) -->
               append(Bs, ['.'|Ds], Chars)
           ) },
         cells(Fs, Args, Tab, [chars(Chars)|Es]).
+cells([~|Fs0], Args0, Tab, Es) -->
+        { numeric_argument(Fs0, Num, [r|Fs], Args0, [Arg|Args]) },
+        !,
+        { integer_to_radix(Arg, Num, lowercase, Cs) },
+        cells(Fs, Args, Tab, [chars(Cs)|Es]).
+cells([~|Fs0], Args0, Tab, Es) -->
+        { numeric_argument(Fs0, Num, ['R'|Fs], Args0, [Arg|Args]) },
+        !,
+        { integer_to_radix(Arg, Num, uppercase, Cs) },
+        cells(Fs, Args, Tab, [chars(Cs)|Es]).
 cells([~,'`',Char,t|Fs], Args, Tab, Es) --> !,
         cells(Fs, Args, Tab, [glue(Char,_)|Es]).
 cells([~,t|Fs], Args, Tab, Es) --> !,
@@ -308,6 +323,35 @@ pow10(D, N0-Pow0, N-Pow) :-
         N is N0 + D*10^Pow0,
         Pow is Pow0 + 1.
 
+integer_to_radix(I, R, Which, Cs) :-
+        must_be(integer, I),
+        must_be(integer, R),
+        (   \+ between(2, 36, R) ->
+            domain_error(radix, R, format_//2)
+        ;   true
+        ),
+        digits(Which, Ds),
+        (   I < 0 ->
+            Pos is abs(I),
+            phrase(integer_to_radix_(Pos, R, Ds), Cs0, "-")
+        ;   I =:= 0 -> Cs0 = "0"
+        ;   phrase(integer_to_radix_(I, R, Ds), Cs0)
+        ),
+        reverse(Cs0, Cs).
+
+integer_to_radix_(0, _, _) --> !.
+integer_to_radix_(I0, R, Ds) -->
+        { M is I0 mod R,
+          nth0(M, Ds, D),
+          I is I0 // R
+          },
+        [D],
+        integer_to_radix_(I, R, Ds).
+
+digits(lowercase, "0123456789abcdefghijklmnopqrstuvwxyz").
+digits(uppercase, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ").
+
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Impure I/O, implemented as a small wrapper over format_//2.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -374,6 +418,9 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 ?- format("~q", [.]).
 '.'   true
+
+?- format("~12r", [300]).
+210   true
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
