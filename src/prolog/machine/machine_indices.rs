@@ -19,7 +19,7 @@ use indexmap::IndexMap;
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::TryFrom;
 use std::fmt;
 use std::mem;
@@ -824,6 +824,7 @@ impl ModuleStub {
 
 pub(crate) type ModuleStubDir = IndexMap<ClauseName, ModuleStub>;
 pub(crate) type StreamAliasDir = IndexMap<ClauseName, Stream>;
+pub(crate) type StreamDir = BTreeSet<Stream>;
 
 #[derive(Debug)]
 pub struct IndexStore {
@@ -836,6 +837,7 @@ pub struct IndexStore {
     pub(super) module_dir: ModuleDir,
     pub(super) modules: ModuleDir,
     pub(super) op_dir: OpDir,
+    pub(super) streams: StreamDir,
     pub(super) stream_aliases: StreamAliasDir,
 }
 
@@ -924,6 +926,7 @@ impl IndexStore {
             op_dir: default_op_dir(),
             modules: ModuleDir::new(),
             stream_aliases: StreamAliasDir::new(),
+            streams: StreamDir::new(),
         }
     }
 

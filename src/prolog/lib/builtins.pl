@@ -58,9 +58,9 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      put_code/2, put_char/1, put_char/2, read_term/2,
                      read_term/3, repeat/0, retract/1,
                      set_prolog_flag/2, set_input/1, set_output/1,
-                     setof/3, sub_atom/5, subsumes_term/2,
-                     term_variables/2, throw/1, true/0,
-                     unify_with_occurs_check/2, write/1,
+                     setof/3, stream_property/2, sub_atom/5,
+                     subsumes_term/2, term_variables/2, throw/1,
+                     true/0, unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, write_term/3,
                      writeq/1]).
 
@@ -1259,3 +1259,45 @@ peek_char(C) :-
 
 peek_char(S, C) :-
     '$peek_char'(S, C).
+
+
+check_stream_property(file_name(F), file_name, F) :-
+    ( var(F) -> true ; atom(F) ).
+check_stream_property(mode(M), mode, M) :-
+    ( var(M) -> true ; lists:member(M, [read, write, append]) ).
+check_stream_property(D, direction, D) :-
+    ( var(D) -> true ; lists:member(D, [input, output, input_output]), ! ).
+check_stream_property(alias(A), alias, A) :-
+    ( var(A) -> true ; atom(A) ).
+check_stream_property(position(P), position, P) :-
+    ( var(P) -> true ; integer(P), P >= 0 ).
+check_stream_property(end_of_stream(E), end_of_stream, E) :-
+    ( var(E) -> true ; lists:member(E, [not, at, past]) ).
+check_stream_property(eof_action(A), eof_action, A) :-
+    ( var(A) -> true ; lists:member(A, [error, eof_code, reset]) ).
+check_stream_property(reposition(B), reposition, B) :-
+    ( var(B) -> true ; lists:member(B, [true, false]) ).
+check_stream_property(type(T), type, T) :-
+    ( var(T) -> true ; lists:member(T, [text, binary]) ).
+
+
+stream_iter_(S, S).
+stream_iter_(S, S1) :-
+    '$next_stream'(S, S0),
+    stream_iter_(S0, S1).
+
+stream_iter(S) :-
+    (  nonvar(S) ->
+       true
+    ;  '$first_stream'(S0),
+       stream_iter_(S0, S)
+    ).
+
+
+stream_property(S, P) :-
+    (  nonvar(P), \+ check_stream_property(P, _, _) ->
+       throw(error(domain_error(stream_property, P), stream_property/2))
+    ;  stream_iter(S),
+       check_stream_property(P, PropertyName, PropertyValue),
+       '$stream_property'(S, PropertyName, PropertyValue)
+    ).

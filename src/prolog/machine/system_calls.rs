@@ -21,11 +21,13 @@ use crate::prolog::rug::Integer;
 use crate::ref_thread_local::RefThreadLocal;
 
 use std::cmp;
+use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::io::{ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
 use std::fs::{File, OpenOptions};
 use std::net::{TcpListener, TcpStream};
+use std::ops::Sub;
 use std::rc::Rc;
 
 use std::time::Duration;
@@ -2361,11 +2363,75 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::FirstStream => {
+                let mut first_stream = None;
+                let mut null_streams = BTreeSet::new();
+
+                for stream in indices.streams.iter().cloned() {
+                    if !stream.is_null_stream() {
+                        first_stream = Some(stream);
+                        break;
+                    } else {
+                        null_streams.insert(stream);
+                    }
+                }
+
+                indices.streams = indices.streams.sub(&null_streams);
+
+                if let Some(first_stream) = first_stream {
+                    let stream = self.heap.to_unifiable(HeapCellValue::Stream(first_stream));
+
+                    let var = self.store(self.deref(self[temp_v!(1)])).as_var().unwrap();
+                    self.bind(var, stream);
+                } else {
+                    self.fail = true;
+                    return Ok(());
+                }
+            }
+            &SystemClauseType::NextStream => {
+                let prev_stream =
+                    match self.store(self.deref(self[temp_v!(1)])) {
+                        Addr::Stream(h) => {
+                            if let HeapCellValue::Stream(ref stream) = &self.heap[h] {
+                                stream.clone()
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let mut next_stream  = None;
+                let mut null_streams = BTreeSet::new();
+
+                for stream in indices.streams.range(prev_stream.clone() ..).skip(1).cloned() {
+                    if !stream.is_null_stream() {
+                        next_stream = Some(stream);
+                        break;
+                    } else {
+                        null_streams.insert(stream);
+                    }
+                }
+
+                indices.streams = indices.streams.sub(&null_streams);
+
+                if let Some(next_stream) = next_stream {
+                    let var = self.store(self.deref(self[temp_v!(2)])).as_var().unwrap();
+                    let next_stream = self.heap.to_unifiable(HeapCellValue::Stream(next_stream));
+
+                    self.bind(var, next_stream);
+                } else {
+                    self.fail = true;
+                    return Ok(());
+                }
+            }
             &SystemClauseType::FlushOutput => {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "flush_output", 1)?;
 
-                if stream.is_input_stream() {
+                if !stream.is_output_stream() {
                     let stub = MachineError::functor_stub(clause_name!("flush_output"), 1);
 
                     let addr = vec![
@@ -2508,14 +2574,24 @@ impl MachineState {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "close", 2)?;
 
-                if stream.is_output_stream() {
+                if !stream.is_input_stream() {
                     stream.flush().unwrap(); // 8.11.6.1b)
                 }
 
+                indices.streams.remove(&stream);
+
                 if stream == *current_input_stream {
-                    *current_input_stream = readline::input_stream();
+                    *current_input_stream = indices.stream_aliases.get(
+                        &clause_name!("user_input")
+                    ).cloned().unwrap();
+
+                    indices.streams.insert(current_input_stream.clone());
                 } else if stream == *current_output_stream {
-                    *current_output_stream = Stream::stdout();
+                    *current_output_stream = indices.stream_aliases.get(
+                        &clause_name!("user_output")
+                    ).cloned().unwrap();
+
+                    indices.streams.insert(current_output_stream.clone());
                 }
 
                 stream.close();
@@ -3015,19 +3091,19 @@ impl MachineState {
 
                 let mut open_options = OpenOptions::new();
 
-                let is_input_file =
+                let (is_input_file, in_append_mode) =
                     match mode.as_str() {
                         "read" => {
                             open_options.read(true).write(false).create(false);
-                            true
+                            (true, false)
                         }
                         "write" => {
                             open_options.read(false).write(true).truncate(true).create(true);
-                            false
+                            (false, false)
                         }
                         "append" => {
                             open_options.read(false).write(true).create(true).append(true);
-                            false
+                            (false, true)
                         }
                         _ => {
                             let stub = MachineError::functor_stub(clause_name!("open"), 4);
@@ -3072,12 +3148,14 @@ impl MachineState {
                     };
 
                 let mut stream = if is_input_file {
-                    Stream::from_file_as_input(file)
+                    Stream::from_file_as_input(file_spec, file)
                 } else {
-                    Stream::from_file_as_output(file)
+                    Stream::from_file_as_output(file_spec, file, in_append_mode)
                 };
 
                 stream.options = options;
+
+                indices.streams.insert(stream.clone());
 
                 if let Some(ref alias) = &stream.options.alias {
                     indices.stream_aliases.insert(alias.clone(), stream.clone());
@@ -3721,7 +3799,7 @@ impl MachineState {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
                 let stream = self.get_stream_or_alias(addr, indices, "set_input", 1)?;
 
-                if stream.is_output_stream() {
+                if !stream.is_input_stream() {
                     let stub = MachineError::functor_stub(
                         clause_name!("set_input"),
                         1,
@@ -3747,7 +3825,7 @@ impl MachineState {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
                 let stream = self.get_stream_or_alias(addr, indices, "set_output", 1)?;
 
-                if stream.is_input_stream() {
+                if !stream.is_output_stream() {
                     let stub = MachineError::functor_stub(
                         clause_name!("set_input"),
                         1,
@@ -4246,14 +4324,18 @@ impl MachineState {
                 }
 
                 let stream =
-                    match TcpStream::connect(socket_addr).map_err(|e| e.kind()) {
+                    match TcpStream::connect(&socket_addr).map_err(|e| e.kind()) {
                         Ok(tcp_stream) => {
-                            let mut stream = Stream::from(tcp_stream);
+                            let socket_addr = clause_name!(socket_addr, indices.atom_tbl.clone());
+
+                            let mut stream = Stream::from_tcp_stream(socket_addr, tcp_stream);
                             stream.options = options;
 
                             if let Some(ref alias) = &stream.options.alias {
                                 indices.stream_aliases.insert(alias.clone(), stream.clone());
                             }
+
+                            indices.streams.insert(stream.clone());
 
                             self.heap.to_unifiable(HeapCellValue::Stream(stream))
                         }
@@ -4383,20 +4465,42 @@ impl MachineState {
                     return Err(self.reposition_error("socket_server_accept", 4));
                 }
 
+                if let Some(ref alias) = &options.alias {
+                    if indices.stream_aliases.contains_key(alias) {
+                        return Err(self.occupied_alias_permission_error(
+                            alias.clone(),
+                            "socket_server_accept",
+                            4,
+                        ));
+                    }
+                }
+
                 match self.store(self.deref(self[temp_v!(1)])) {
                     Addr::TcpListener(h) => {
                         match &mut self.heap[h] {
                             HeapCellValue::TcpListener(ref mut tcp_listener) => {
                                 match tcp_listener.accept().ok() {
                                     Some((tcp_stream, socket_addr)) => {
-                                        let mut tcp_stream = Stream::from(tcp_stream);
+                                        let client =
+                                            clause_name!(format!("{}", socket_addr), indices.atom_tbl);
+
+                                        let mut tcp_stream =
+                                            Stream::from_tcp_stream(client.clone(), tcp_stream);
+
                                         tcp_stream.options = options;
+
+                                        if let Some(ref alias) = &tcp_stream.options.alias {
+                                            indices.stream_aliases.insert(
+                                                alias.clone(),
+                                                tcp_stream.clone(),
+                                            );
+                                        }
+
+                                        indices.streams.insert(tcp_stream.clone());
 
                                         let tcp_stream =
                                             self.heap.to_unifiable(HeapCellValue::Stream(tcp_stream));
 
-                                        let client =
-                                            clause_name!(format!("{}", socket_addr), indices.atom_tbl);
                                         let client =
                                             self.heap.to_unifiable(HeapCellValue::Atom(client, None));
 
@@ -4449,6 +4553,120 @@ impl MachineState {
                         ));
                     }
                 }
+            }
+            &SystemClauseType::StreamProperty => {
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    indices,
+                    "stream_property",
+                    2,
+                )?;
+
+                let property =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Atom(ref name, _) => {
+                                    match name.as_str() {
+                                        "file_name" => {
+                                            if let Some(file_name) = stream.file_name() {
+                                                HeapCellValue::Atom(
+                                                    file_name,
+                                                    None,
+                                                )
+                                            } else {
+                                                self.fail = true;
+                                                return Ok(());
+                                            }
+                                        }
+                                        "mode" => {
+                                            HeapCellValue::Atom(
+                                                clause_name!(stream.mode()),
+                                                None,
+                                            )
+                                        }
+                                        "direction" => {
+                                            HeapCellValue::Atom(
+                                                if stream.is_input_stream() && stream.is_output_stream() {
+                                                    clause_name!("input_output")
+                                                } else if stream.is_input_stream() {
+                                                    clause_name!("input")
+                                                } else {
+                                                    clause_name!("output")
+                                                },
+                                                None,
+                                            )
+                                        }
+                                        "alias" => {
+                                            if let Some(alias) = &stream.options.alias {
+                                                HeapCellValue::Atom(
+                                                    alias.clone(),
+                                                    None,
+                                                )
+                                            } else {
+                                                self.fail = true;
+                                                return Ok(());
+                                            }
+                                        }
+                                        "position" => {
+                                            if stream.options.reposition {
+                                                if let Some(position) = stream.position() {
+                                                    HeapCellValue::Addr(Addr::Usize(position as usize))
+                                                } else {
+                                                    unreachable!()
+                                                }
+                                            } else {
+                                                self.fail = true;
+                                                return Ok(());
+                                            }
+                                        }
+                                        "end_of_stream" => {
+                                            let end_of_stream_pos = stream.position_relative_to_end();
+
+                                            HeapCellValue::Atom(
+                                                clause_name!(end_of_stream_pos.as_str()),
+                                                None,
+                                            )
+                                        }
+                                        "eof_action" => {
+                                            HeapCellValue::Atom(
+                                                clause_name!(stream.options.eof_action.as_str()),
+                                                None,
+                                            )
+                                        }
+                                        "reposition" => {
+                                            HeapCellValue::Atom(
+                                                clause_name!(if stream.options.reposition {
+                                                    "true"
+                                                } else {
+                                                    "false"
+                                                }),
+                                                None,
+                                            )
+                                        }
+                                        "type" => {
+                                            HeapCellValue::Atom(
+                                                clause_name!(stream.options.stream_type.as_str()),
+                                                None,
+                                            )
+                                        }
+                                        _ => {
+                                            unreachable!()
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let property = self.heap.to_unifiable(property);
+                self.unify(self[temp_v!(3)], property);
             }
             &SystemClauseType::StoreGlobalVar => {
                 let key = self[temp_v!(1)];

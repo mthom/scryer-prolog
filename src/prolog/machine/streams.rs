@@ -6,6 +6,7 @@ use crate::prolog::machine::machine_errors::*;
 use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::machine_state::*;
 
+use std::cmp::Ordering;
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
@@ -26,8 +27,8 @@ impl StreamType {
     pub(crate)
     fn as_str(&self) -> &'static str {
         match self {
-            StreamType::Binary => "binary_stream",
-            StreamType::Text => "text_stream",
+            StreamType::Binary => "binary",
+            StreamType::Text => "text",
         }
     }
 
@@ -48,23 +49,53 @@ pub enum EOFAction {
     Reset,
 }
 
+pub enum AtEndOfStream {
+    Not,
+    End,
+    Past
+}
+
+impl AtEndOfStream {
+    #[inline]
+    pub(crate)
+    fn as_str(&self) -> &'static str {
+        match self {
+            AtEndOfStream::Not => "not",
+            AtEndOfStream::Past => "past",
+            AtEndOfStream::End => "end",
+        }
+    }
+}
+
+impl EOFAction {
+    #[inline]
+    pub(crate)
+    fn as_str(&self) -> &'static str {
+        match self {
+            EOFAction::EOFCode => "eof_code",
+            EOFAction::Error => "error",
+            EOFAction::Reset => "reset",
+        }
+    }
+}
+
 /* all these streams are closed automatically when the instance is
  * dropped. */
 pub enum StreamInstance {
     Bytes(Cursor<Vec<u8>>),
     DynReadSource(Box<dyn Read>),
-    InputFile(File),
-    OutputFile(File),
+    InputFile(ClauseName, File),
+    OutputFile(ClauseName, File, bool), // File, append.
     Null,
     ReadlineStream(ReadlineStream),
     Stdout,
-    TcpStream(TcpStream),
+    TcpStream(ClauseName, TcpStream),
 }
 
 impl Drop for StreamInstance {
     fn drop(&mut self) {
         match self {
-            StreamInstance::TcpStream(ref mut tcp_stream) => {
+            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
                 tcp_stream.shutdown(Shutdown::Both).unwrap();
             }
             _ => {
@@ -80,14 +111,14 @@ impl fmt::Debug for StreamInstance {
                 write!(fmt, "Bytes({:?})", bytes),
             &StreamInstance::DynReadSource(_) =>
                 write!(fmt, "DynReadSource(_)"),  // Hacky solution.
-            &StreamInstance::InputFile(ref file) => write!(fmt, "InputFile({:?})", file),
-            &StreamInstance::OutputFile(ref file) => write!(fmt, "OutputFile({:?})", file),
+            &StreamInstance::InputFile(_, ref file) => write!(fmt, "InputFile({:?})", file),
+            &StreamInstance::OutputFile(_, ref file, _) => write!(fmt, "OutputFile({:?})", file),
             &StreamInstance::Null => write!(fmt, "Null"),
             &StreamInstance::ReadlineStream(ref readline_stream) =>
                 write!(fmt, "ReadlineStream({:?})", readline_stream),
             // &StreamInstance::Stdin => write!(fmt, "Stdin"),
             &StreamInstance::Stdout => write!(fmt, "Stdout"),
-            &StreamInstance::TcpStream(ref tcp_stream) =>
+            &StreamInstance::TcpStream(_, ref tcp_stream) =>
                 write!(fmt, "TcpStream({:?})", tcp_stream),
         }
     }
@@ -194,6 +225,20 @@ pub struct Stream {
     stream_inst: WrappedStreamInstance,
 }
 
+impl PartialOrd for Stream {
+    #[inline]
+    fn partial_cmp(&self, other: &Stream) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Stream {
+    #[inline]
+    fn cmp(&self, other: &Stream) -> Ordering {
+        self.as_ptr().cmp(&other.as_ptr())
+    }
+}
+
 impl PartialEq for Stream {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
@@ -202,15 +247,6 @@ impl PartialEq for Stream {
 }
 
 impl Eq for Stream {}
-
-impl From<TcpStream> for Stream {
-    fn from(tcp_stream: TcpStream) -> Self {
-        tcp_stream.set_read_timeout(None).unwrap();
-        tcp_stream.set_write_timeout(None).unwrap();
-
-        Stream::from_inst(StreamInstance::TcpStream(tcp_stream))
-    }
-}
 
 impl From<String> for Stream {
     fn from(string: String) -> Self {
@@ -246,6 +282,105 @@ impl Stream {
     }
 
     #[inline]
+    pub(crate)
+    fn position(&mut self) -> Option<u64> {
+        match *self.stream_inst.0.borrow_mut() {
+            StreamInstance::InputFile(_, ref mut file) => {
+                file.seek(SeekFrom::Current(0)).ok()
+            }
+            _ => {
+                None
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn position_relative_to_end(&mut self) -> AtEndOfStream {
+        if self.past_end_of_stream {
+            return AtEndOfStream::Past;
+        }
+
+        match *self.stream_inst.0.borrow_mut() {
+            StreamInstance::InputFile(_, ref mut file) => {
+                match file.metadata() {
+                    Ok(metadata) => {
+                        if let Ok(position) = file.seek(SeekFrom::Current(0)) {
+                            return match position.cmp(&metadata.len()) {
+                                Ordering::Equal => {
+                                    AtEndOfStream::End
+                                }
+                                Ordering::Less => {
+                                    AtEndOfStream::Not
+                                }
+                                Ordering::Greater => {
+                                    self.past_end_of_stream = true;
+                                    AtEndOfStream::Past
+                                }
+                            };
+                        } else {
+                            self.past_end_of_stream = true;
+                            AtEndOfStream::Past
+                        }
+                    }
+                    _ => {
+                        self.past_end_of_stream = true;
+                        AtEndOfStream::Past
+                    }
+                }
+            }
+            _ => {
+                AtEndOfStream::Not
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn file_name(&self) -> Option<ClauseName> {
+        match *self.stream_inst.0.borrow() {
+            StreamInstance::InputFile(ref name, _) => {
+                Some(name.clone())
+            }
+            StreamInstance::OutputFile(ref name, ..) => {
+                Some(name.clone())
+            }
+            StreamInstance::TcpStream(ref name, _) => {
+                Some(name.clone())
+            }
+            _ => {
+                None
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn mode(&self) -> &'static str {
+        match *self.stream_inst.0.borrow() {
+            StreamInstance::Bytes(_) |
+            StreamInstance::ReadlineStream(_) |
+            StreamInstance::DynReadSource(_) |
+            StreamInstance::InputFile(..) => {
+                "read"
+            }
+            StreamInstance::TcpStream(..) => {
+                "read_append"
+            }
+            StreamInstance::OutputFile(_, _, true) => {
+                "append"
+            }
+            StreamInstance::Stdout |
+            StreamInstance::OutputFile(_, _, false) => {
+                "write"
+            }
+            StreamInstance::Null => {
+                ""
+            }
+        }
+    }
+
+    #[inline]
     fn from_inst(stream_inst: StreamInstance) -> Self {
         Stream {
             past_end_of_stream: false,
@@ -262,14 +397,23 @@ impl Stream {
 
     #[inline]
     pub(crate)
-    fn from_file_as_output(file: File) -> Self {
-        Stream::from_inst(StreamInstance::OutputFile(file))
+    fn from_tcp_stream(address: ClauseName, tcp_stream: TcpStream) -> Self {
+        tcp_stream.set_read_timeout(None).unwrap();
+        tcp_stream.set_write_timeout(None).unwrap();
+
+        Stream::from_inst(StreamInstance::TcpStream(address, tcp_stream))
     }
 
     #[inline]
     pub(crate)
-    fn from_file_as_input(file: File) -> Self {
-        Stream::from_inst(StreamInstance::InputFile(file))
+    fn from_file_as_output(name: ClauseName, file: File, in_append_mode: bool) -> Self {
+        Stream::from_inst(StreamInstance::OutputFile(name, file, in_append_mode))
+    }
+
+    #[inline]
+    pub(crate)
+    fn from_file_as_input(name: ClauseName, file: File) -> Self {
+        Stream::from_inst(StreamInstance::InputFile(name, file))
     }
 
     #[inline]
@@ -321,11 +465,11 @@ impl Stream {
     fn is_input_stream(&self) -> bool {
         match *self.stream_inst.0.borrow() {
             // StreamInstance::Stdin |
-            StreamInstance::TcpStream(_) |
+            StreamInstance::TcpStream(..) |
             StreamInstance::Bytes(_) |
             StreamInstance::ReadlineStream(_) |
             StreamInstance::DynReadSource(_) |
-            StreamInstance::InputFile(_) => {
+            StreamInstance::InputFile(..) => {
                 true
             }
             _ => {
@@ -339,9 +483,9 @@ impl Stream {
     fn is_output_stream(&self) -> bool {
         match *self.stream_inst.0.borrow() {
             StreamInstance::Stdout
-          | StreamInstance::TcpStream(_)
+          | StreamInstance::TcpStream(..)
           | StreamInstance::Bytes(_)
-          | StreamInstance::OutputFile(_) => {
+          | StreamInstance::OutputFile(..) => {
                 true
            }
             _ => {
@@ -358,7 +502,7 @@ impl Stream {
                 cursor.set_position(0);
                 true
             }
-            StreamInstance::InputFile(ref mut file) => {
+            StreamInstance::InputFile(_, ref mut file) => {
                 file.seek(SeekFrom::Start(0)).unwrap();
                 true
             }
@@ -393,7 +537,7 @@ impl Stream {
                     }
                 }
             }
-            StreamInstance::InputFile(ref mut file) => {
+            StreamInstance::InputFile(_, ref mut file) => {
                 let mut b = [0u8; 1];
 
                 match file.read(&mut b)? {
@@ -412,7 +556,7 @@ impl Stream {
             StreamInstance::ReadlineStream(ref mut stream) => {
                 stream.peek_byte()
             }
-            StreamInstance::TcpStream(ref mut tcp_stream) => {
+            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
                 let mut b = [0u8; 1];
                 tcp_stream.peek(&mut b)?;
                 Ok(b[0])
@@ -432,7 +576,7 @@ impl Stream {
         use unicode_reader::CodePoints;
 
         match *self.stream_inst.0.borrow_mut() {
-            StreamInstance::InputFile(ref mut file) => {
+            StreamInstance::InputFile(_, ref mut file) => {
                 let c = {
                     let mut iter = CodePoints::from(&*file);
 
@@ -453,7 +597,7 @@ impl Stream {
             StreamInstance::ReadlineStream(ref mut stream) => {
                 stream.peek_char()
             }
-            StreamInstance::TcpStream(ref tcp_stream) => {
+            StreamInstance::TcpStream(_, ref tcp_stream) => {
                 let c = {
                     let mut buf = [0u8; 8];
                     tcp_stream.peek(&mut buf)?;
@@ -832,10 +976,10 @@ impl MachineState {
 impl Read for Stream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match *self.stream_inst.0.borrow_mut() {
-            StreamInstance::InputFile(ref mut file) => {
+            StreamInstance::InputFile(_, ref mut file) => {
                 file.read(buf)
             }
-            StreamInstance::TcpStream(ref mut tcp_stream) => {
+            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
                 tcp_stream.read(buf)
             }
             StreamInstance::ReadlineStream(ref mut rl_stream) => {
@@ -852,7 +996,7 @@ impl Read for Stream {
                 stdin().read(buf)
             }
 */
-            StreamInstance::OutputFile(_) | StreamInstance::Stdout | StreamInstance::Null => {
+            StreamInstance::OutputFile(..) | StreamInstance::Stdout | StreamInstance::Null => {
                 Err(std::io::Error::new(
                     ErrorKind::PermissionDenied,
                     StreamError::ReadFromOutputStream,
@@ -865,10 +1009,10 @@ impl Read for Stream {
 impl Write for Stream {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match *self.stream_inst.0.borrow_mut() {
-            StreamInstance::OutputFile(ref mut file) => {
+            StreamInstance::OutputFile(_, ref mut file, _) => {
                 file.write(buf)
             }
-            StreamInstance::TcpStream(ref mut tcp_stream) => {
+            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
                 tcp_stream.write(buf)
             }
             StreamInstance::Bytes(ref mut cursor) => {
@@ -878,7 +1022,7 @@ impl Write for Stream {
                 stdout().write(buf)
             }
             StreamInstance::DynReadSource(_) | StreamInstance::ReadlineStream(_) |
-            StreamInstance::InputFile(_) | StreamInstance::Null => {
+            StreamInstance::InputFile(..) | StreamInstance::Null => {
                 Err(std::io::Error::new(
                     ErrorKind::PermissionDenied,
                     StreamError::WriteToInputStream,
@@ -889,10 +1033,10 @@ impl Write for Stream {
 
     fn flush(&mut self) -> std::io::Result<()> {
         match *self.stream_inst.0.borrow_mut() {
-            StreamInstance::OutputFile(ref mut file) => {
+            StreamInstance::OutputFile(_, ref mut file, _) => {
                 file.flush()
             }
-            StreamInstance::TcpStream(ref mut tcp_stream) => {
+            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
                 tcp_stream.flush()
             }
             StreamInstance::Bytes(ref mut cursor) => {
@@ -902,7 +1046,7 @@ impl Write for Stream {
                 stdout().flush()
             }
             StreamInstance::DynReadSource(_) | StreamInstance::ReadlineStream(_) |
-            StreamInstance::InputFile(_) | StreamInstance::Null => {
+            StreamInstance::InputFile(..) | StreamInstance::Null => {
                 Err(std::io::Error::new(
                     ErrorKind::PermissionDenied,
                     StreamError::FlushToInputStream,
@@ -911,5 +1055,3 @@ impl Write for Stream {
         }
     }
 }
-
-//TODO: write a Seek instance.

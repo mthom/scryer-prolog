@@ -119,7 +119,7 @@ fn load_module_from_file(
     let mut path_buf = fix_filename(wam.indices.atom_tbl.clone(), path_buf)?;
     let filename = clause_name!(path_buf.to_string_lossy().to_string(), wam.indices.atom_tbl);
 
-    let file_handle = Stream::from_file_as_input(File::open(&path_buf).or_else(|_| {
+    let file_handle = Stream::from_file_as_input(filename.clone(), File::open(&path_buf).or_else(|_| {
         Err(SessionError::InvalidFileName(filename.clone()))
     })?);
 

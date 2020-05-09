@@ -358,6 +358,7 @@ macro_rules! index_store {
             op_dir: $op_dir,
             modules: $modules,
             stream_aliases: StreamAliasDir::new(),
+            streams: StreamDir::new(),
         }
     };
 }
