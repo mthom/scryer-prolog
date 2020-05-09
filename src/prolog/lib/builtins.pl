@@ -41,26 +41,28 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
 :- module(builtins, [(=)/2, (\=)/2, (\+)/1, (',')/2, (->)/2, (;)/2,
                      (=..)/2, (:)/2, (:)/3, (:)/4, (:)/5, (:)/6,
                      (:)/7, (:)/8, (:)/9, (:)/10, (:)/11, (:)/12,
-                     abolish/1, asserta/1, assertz/1, atom_chars/2,
-                     atom_codes/2, atom_concat/3, atom_length/2,
-                     bagof/3, catch/3, char_code/2, clause/2, close/1,
-                     close/2, current_input/1, current_output/1,
-                     current_op/3, current_predicate/1,
-                     current_prolog_flag/2, expand_goal/2,
-                     expand_term/2, fail/0, false/0, findall/3,
-                     findall/4, flush_output/0, flush_output/1,
-                     get_byte/1, get_byte/2, get_char/1, get_char/2,
-                     get_code/1, get_code/2, halt/0, max_arity/1,
-                     number_chars/2, number_codes/2, once/1, op/3,
-                     open/3, open/4, peek_byte/1, peek_byte/2,
-                     peek_char/1, peek_char/2, peek_code/1,
-                     peek_code/2, put_byte/1, put_byte/2, put_code/1,
-                     put_code/2, put_char/1, put_char/2, read_term/2,
-                     read_term/3, repeat/0, retract/1,
-                     set_prolog_flag/2, set_input/1, set_output/1,
-                     setof/3, stream_property/2, sub_atom/5,
-                     subsumes_term/2, term_variables/2, throw/1,
-                     true/0, unify_with_occurs_check/2, write/1,
+                     abolish/1, asserta/1, assertz/1,
+                     at_end_of_stream/0, at_end_of_stream/1,
+                     atom_chars/2, atom_codes/2, atom_concat/3,
+                     atom_length/2, bagof/3, catch/3, char_code/2,
+                     clause/2, close/1, close/2, current_input/1,
+                     current_output/1, current_op/3,
+                     current_predicate/1, current_prolog_flag/2,
+                     expand_goal/2, expand_term/2, fail/0, false/0,
+                     findall/3, findall/4, flush_output/0,
+                     flush_output/1, get_byte/1, get_byte/2,
+                     get_char/1, get_char/2, get_code/1, get_code/2,
+                     halt/0, max_arity/1, number_chars/2,
+                     number_codes/2, once/1, op/3, open/3, open/4,
+                     peek_byte/1, peek_byte/2, peek_char/1,
+                     peek_char/2, peek_code/1, peek_code/2,
+                     put_byte/1, put_byte/2, put_code/1, put_code/2,
+                     put_char/1, put_char/2, read_term/2, read_term/3,
+                     repeat/0, retract/1, set_prolog_flag/2,
+                     set_input/1, set_output/1, setof/3,
+                     stream_property/2, sub_atom/5, subsumes_term/2,
+                     term_variables/2, throw/1, true/0,
+                     unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, write_term/3,
                      writeq/1]).
 
@@ -1301,3 +1303,20 @@ stream_property(S, P) :-
        check_stream_property(P, PropertyName, PropertyValue),
        '$stream_property'(S, PropertyName, PropertyValue)
     ).
+
+
+at_end_of_stream(S_or_a) :-
+    (  atom(S_or_a) ->
+       stream_property(S, alias(A))
+    ;  S = S_or_a
+    ),
+    stream_property(S, end_of_stream(E)),
+    !,
+    ( E = at ; E = past ).
+
+at_end_of_stream :-
+    current_input(S),
+    stream_property(S, end_of_stream(E)),
+    !,
+    ( E = at ; E = past ).
+
