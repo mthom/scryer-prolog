@@ -19,10 +19,11 @@ use indexmap::IndexMap;
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::TryFrom;
 use std::fmt;
 use std::mem;
+use std::net::TcpListener;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::rc::Rc;
 
@@ -69,6 +70,7 @@ pub enum Addr {
     StackCell(usize, usize),
     Str(usize),
     Stream(usize),
+    TcpListener(usize),
     Usize(usize),
 }
 
@@ -230,7 +232,7 @@ impl Addr {
                     Addr::Lis(_) | Addr::PStrLocation(..) | Addr::Str(_) => {
                         Some(TermOrderCategory::Compound)
                     }
-                    Addr::CutPoint(_) | Addr::Stream(_) => {
+                    Addr::CutPoint(_) | Addr::Stream(_) | Addr::TcpListener(_) => {
                         None
                     }
                 }
@@ -388,6 +390,7 @@ pub enum HeapCellValue {
     Rational(Rc<Rational>),
     PartialString(PartialString, bool), // the partial string, a bool indicating whether it came from a Constant.
     Stream(Stream),
+    TcpListener(TcpListener),
 }
 
 impl HeapCellValue {
@@ -409,6 +412,9 @@ impl HeapCellValue {
             }
             HeapCellValue::Stream(_) => {
                 Addr::Stream(focus)
+            }
+            HeapCellValue::TcpListener(_) => {
+                Addr::TcpListener(focus)
             }
         }
     }
@@ -437,8 +443,11 @@ impl HeapCellValue {
             &HeapCellValue::PartialString(ref pstr, has_tail) => {
                 HeapCellValue::PartialString(pstr.clone(), has_tail)
             }
-            &HeapCellValue::Stream(_) => {
-                HeapCellValue::Stream(Stream::null_stream())
+            &HeapCellValue::Stream(ref stream) => {
+                HeapCellValue::Stream(stream.clone())
+            }
+            &HeapCellValue::TcpListener(_) => {
+                HeapCellValue::Atom(clause_name!("$tcp_listener"), None)
             }
         }
     }
@@ -815,6 +824,7 @@ impl ModuleStub {
 
 pub(crate) type ModuleStubDir = IndexMap<ClauseName, ModuleStub>;
 pub(crate) type StreamAliasDir = IndexMap<ClauseName, Stream>;
+pub(crate) type StreamDir = BTreeSet<Stream>;
 
 #[derive(Debug)]
 pub struct IndexStore {
@@ -827,6 +837,7 @@ pub struct IndexStore {
     pub(super) module_dir: ModuleDir,
     pub(super) modules: ModuleDir,
     pub(super) op_dir: OpDir,
+    pub(super) streams: StreamDir,
     pub(super) stream_aliases: StreamAliasDir,
 }
 
@@ -915,6 +926,7 @@ impl IndexStore {
             op_dir: default_op_dir(),
             modules: ModuleDir::new(),
             stream_aliases: StreamAliasDir::new(),
+            streams: StreamDir::new(),
         }
     }
 

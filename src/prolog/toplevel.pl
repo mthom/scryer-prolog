@@ -105,7 +105,7 @@ repl :-
     repl.
 
 read_and_match :-
-    '$read_query_term'(Term, VarList),
+    '$read_query_term'(_, Term, _, _, VarList),
     instruction_match(Term, VarList).
 
 % make compile_batch, a system routine, callable.
@@ -235,8 +235,8 @@ write_eqs_and_read_input(B, VarList) :-
     append([Vars0, AttrVars, AttrGoalVars], Vars),
     charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
     '$get_b_value'(B0),
-    gather_query_vars(VarList, QueryVars),
-    gather_equations(NewVarList, QueryVars, Goals, AttrGoals),
+    gather_query_vars(VarList, OrigVars),
+    gather_equations(NewVarList, OrigVars, Goals, AttrGoals),
     (   bb_get('$first_answer', true) ->
         write('   '),
         bb_put('$first_answer', false)
@@ -287,8 +287,8 @@ help_message :-
 
 gather_query_vars([_ = Var | Vars], QueryVars) :-
     (  var(Var) ->
-       QueryVars = [Var | QueryVars1],
-       gather_query_vars(Vars, QueryVars1)
+       QueryVars = [Var | QueryVars0],
+       gather_query_vars(Vars, QueryVars0)
     ;  gather_query_vars(Vars, QueryVars)
     ).
 gather_query_vars([], []).
@@ -298,7 +298,7 @@ is_a_different_variable([_ = Binding | Pairs], Value) :-
     ;  is_a_different_variable(Pairs, Value)
     ).
 
-eq_member(X, [Y|_]) :- X == Y, !.
+eq_member(X, [Y|_])  :- X == Y, !.
 eq_member(X, [_|Ys]) :- eq_member(X, Ys).
 
 gather_equations([], _, Goals, Goals).
@@ -321,9 +321,9 @@ gather_equations([Var = Value | Pairs], OrigVarList, Goals, Goals1) :-
 /*
 gather_equations([], MasterList, Goals, Goals).
 gather_equations([Var = Value | Pairs], MasterList, Goals, Goals1) :-
-    select((Var = _), MasterList, MasterPairs),
     (  (  nonvar(Value)
-       ;  is_a_different_variable(MasterPairs, Value)
+       ;  select((Var = _), MasterList, MasterPairs),
+          is_a_different_variable(MasterPairs, Value)
        ) ->
        Goals = [Var = Value | Goals0],
        gather_equations(Pairs, MasterList, Goals0, Goals1)

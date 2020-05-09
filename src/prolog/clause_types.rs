@@ -165,8 +165,10 @@ pub enum SystemClauseType {
     CodesToNumber,
     CopyTermWithoutAttrVars,
     CheckCutPoint,
+    Close,
     CopyToLiftedHeap,
     CreatePartialString,
+    CurrentHostname,
     CurrentInput,
     CurrentOutput,
     DeleteAttribute,
@@ -179,7 +181,11 @@ pub enum SystemClauseType {
     FetchGlobalVar,
     FetchGlobalVarWithOffset,
     FileToChars,
+    FirstStream,
+    FlushOutput,
+    GetByte,
     GetChar,
+    GetCode,
     GetSingleChar,
     ResetAttrVarState,
     TruncateIfNoLiftedHeapGrowthDiff,
@@ -215,8 +221,16 @@ pub enum SystemClauseType {
     NumberToChars,
     NumberToCodes,
     OpDeclaration,
+    Open,
+    NextStream,
     PartialStringTail,
+    PeekByte,
+    PeekChar,
+    PeekCode,
     PointsToContinuationResetMarker,
+    PutByte,
+    PutChar,
+    PutCode,
     REPL(REPLCodePtr),
     ReadQueryTerm,
     ReadTerm,
@@ -233,6 +247,8 @@ pub enum SystemClauseType {
     SetOutput,
     StoreGlobalVar,
     StoreGlobalVarWithOffset,
+    StreamProperty,
+    SetStreamPosition,
     InferenceLevel,
     CleanUpBlock,
     EraseBall,
@@ -254,6 +270,10 @@ pub enum SystemClauseType {
     SetSeed,
     SkipMaxList,
     Sleep,
+    SocketClientOpen,
+    SocketServerOpen,
+    SocketServerAccept,
+    SocketServerClose,
     Succeed,
     TermAttributedVariables,
     TermVariables,
@@ -291,6 +311,7 @@ impl SystemClauseType {
             &SystemClauseType::CopyTermWithoutAttrVars => clause_name!("$copy_term_without_attr_vars"),
             &SystemClauseType::CreatePartialString => clause_name!("$create_partial_string"),
             &SystemClauseType::CurrentInput => clause_name!("$current_input"),
+            &SystemClauseType::CurrentHostname => clause_name!("$current_hostname"),
             &SystemClauseType::CurrentOutput => clause_name!("$current_output"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
             &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
@@ -303,6 +324,7 @@ impl SystemClauseType {
             &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile) => {
                     clause_name!("$use_qualified_module_from_file")
             }
+            &SystemClauseType::Close => clause_name!("$close"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
             &SystemClauseType::DeleteHeadAttribute => clause_name!("$del_attr_head"),
@@ -316,7 +338,11 @@ impl SystemClauseType {
                 clause_name!("$fetch_global_var_with_offset")
             }
             &SystemClauseType::FileToChars => clause_name!("$file_to_chars"),
+            &SystemClauseType::FirstStream => clause_name!("$first_stream"),
+            &SystemClauseType::FlushOutput => clause_name!("$flush_output"),
+            &SystemClauseType::GetByte => clause_name!("$get_byte"),
             &SystemClauseType::GetChar => clause_name!("$get_char"),
+            &SystemClauseType::GetCode => clause_name!("$get_code"),
             &SystemClauseType::GetSingleChar => clause_name!("$get_single_char"),
             &SystemClauseType::ResetAttrVarState => clause_name!("$reset_attr_var_state"),
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
@@ -346,13 +372,17 @@ impl SystemClauseType {
             &SystemClauseType::GetSCCCleaner => clause_name!("$get_scc_cleaner"),
             &SystemClauseType::Halt => clause_name!("$halt"),
             &SystemClauseType::HeadIsDynamic => clause_name!("$head_is_dynamic"),
-            &SystemClauseType::OpDeclaration => clause_name!("$op$"),
+            &SystemClauseType::Open => clause_name!("$open"),
+            &SystemClauseType::OpDeclaration => clause_name!("$op"),
             &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
             &SystemClauseType::InstallInferenceCounter => {
                 clause_name!("$install_inference_counter")
             }
             &SystemClauseType::IsPartialString => clause_name!("$is_partial_string"),
             &SystemClauseType::PartialStringTail => clause_name!("$partial_string_tail"),
+            &SystemClauseType::PeekByte => clause_name!("$peek_byte"),
+            &SystemClauseType::PeekChar => clause_name!("$peek_char"),
+            &SystemClauseType::PeekCode => clause_name!("$peek_code"),
             &SystemClauseType::LiftedHeapLength => clause_name!("$lh_length"),
             &SystemClauseType::Maybe => clause_name!("maybe"),
             &SystemClauseType::CpuNow => clause_name!("$cpu_now"),
@@ -365,11 +395,21 @@ impl SystemClauseType {
             &SystemClauseType::ModuleHeadIsDynamic => clause_name!("$module_head_is_dynamic"),
             &SystemClauseType::ModuleExists => clause_name!("$module_exists"),
             &SystemClauseType::ModuleOf => clause_name!("$module_of"),
+            &SystemClauseType::NextStream => clause_name!("$next_stream"),
             &SystemClauseType::NoSuchPredicate => clause_name!("$no_such_predicate"),
             &SystemClauseType::NumberToChars => clause_name!("$number_to_chars"),
             &SystemClauseType::NumberToCodes => clause_name!("$number_to_codes"),
             &SystemClauseType::PointsToContinuationResetMarker => {
                 clause_name!("$points_to_cont_reset_marker")
+            }
+            &SystemClauseType::PutByte => {
+                clause_name!("$put_byte")
+            }
+            &SystemClauseType::PutChar => {
+                clause_name!("$put_char")
+            }
+            &SystemClauseType::PutCode => {
+                clause_name!("$put_code")
             }
             &SystemClauseType::QuotedToken => {
                 clause_name!("$quoted_token")
@@ -382,6 +422,8 @@ impl SystemClauseType {
             &SystemClauseType::SetInput => clause_name!("$set_input"),
             &SystemClauseType::SetOutput => clause_name!("$set_output"),
             &SystemClauseType::SetSeed => clause_name!("$set_seed"),
+            &SystemClauseType::StreamProperty => clause_name!("$stream_property"),
+            &SystemClauseType::SetStreamPosition => clause_name!("$set_stream_position"),
             &SystemClauseType::StoreGlobalVar => clause_name!("$store_global_var"),
             &SystemClauseType::StoreGlobalVarWithOffset => {
                 clause_name!("$store_global_var_with_offset")
@@ -410,6 +452,10 @@ impl SystemClauseType {
             &SystemClauseType::SetDoubleQuotes => clause_name!("$set_double_quotes"),
             &SystemClauseType::SkipMaxList => clause_name!("$skip_max_list"),
             &SystemClauseType::Sleep => clause_name!("$sleep"),
+            &SystemClauseType::SocketClientOpen => clause_name!("$socket_client_open"),
+            &SystemClauseType::SocketServerOpen => clause_name!("$socket_server_open"),
+            &SystemClauseType::SocketServerAccept => clause_name!("$socket_server_accept"),
+            &SystemClauseType::SocketServerClose => clause_name!("$socket_server_close"),
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::TermAttributedVariables => clause_name!("$term_attributed_variables"),
             &SystemClauseType::TermVariables => clause_name!("$term_variables"),
@@ -450,8 +496,13 @@ impl SystemClauseType {
             ("$check_cp", 1) => Some(SystemClauseType::CheckCutPoint),
             ("$compile_batch", 0) => Some(SystemClauseType::REPL(REPLCodePtr::CompileBatch)),
             ("$copy_to_lh", 2) => Some(SystemClauseType::CopyToLiftedHeap),
+            ("$close", 2) => Some(SystemClauseType::Close),
+            ("$current_hostname", 1) => Some(SystemClauseType::CurrentHostname),
             ("$current_input", 1) => Some(SystemClauseType::CurrentInput),
             ("$current_output", 1) => Some(SystemClauseType::CurrentOutput),
+            ("$first_stream", 1) => Some(SystemClauseType::FirstStream),
+            ("$next_stream", 2) => Some(SystemClauseType::NextStream),
+            ("$flush_output", 1) => Some(SystemClauseType::FlushOutput),
             ("$del_attr_non_head", 1) => Some(SystemClauseType::DeleteAttribute),
             ("$del_attr_head", 1) => Some(SystemClauseType::DeleteHeadAttribute),
             ("$get_next_db_ref", 2) => Some(SystemClauseType::GetNextDBRef),
@@ -462,16 +513,30 @@ impl SystemClauseType {
             ("$enqueue_attribute_goal", 1) => Some(SystemClauseType::EnqueueAttributeGoal),
             ("$enqueue_attr_var", 1) => Some(SystemClauseType::EnqueueAttributedVar),
             ("$partial_string_tail", 2) => Some(SystemClauseType::PartialStringTail),
+            ("$peek_byte", 2) => Some(SystemClauseType::PeekByte),
+            ("$peek_char", 2) => Some(SystemClauseType::PeekChar),
+            ("$peek_code", 2) => Some(SystemClauseType::PeekCode),
             ("$is_partial_string", 1) => Some(SystemClauseType::IsPartialString),
             ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
             ("$file_to_chars", 2) => Some(SystemClauseType::FileToChars),
-            ("$get_char", 1) => Some(SystemClauseType::GetChar),
+            ("$get_byte", 2) => Some(SystemClauseType::GetByte),
+            ("$get_char", 2) => Some(SystemClauseType::GetChar),
+            ("$get_code", 2) => Some(SystemClauseType::GetCode),
             ("$get_single_char", 1) => Some(SystemClauseType::GetSingleChar),
             ("$points_to_cont_reset_marker", 1) => {
                 Some(SystemClauseType::PointsToContinuationResetMarker)
+            }
+            ("$put_byte", 2) => {
+                Some(SystemClauseType::PutByte)
+            }
+            ("$put_char", 2) => {
+                Some(SystemClauseType::PutChar)
+            }
+            ("$put_code", 2) => {
+                Some(SystemClauseType::PutCode)
             }
             ("$reset_attr_var_state", 0) => Some(SystemClauseType::ResetAttrVarState),
             ("$truncate_if_no_lh_growth", 1) => {
@@ -503,6 +568,7 @@ impl SystemClauseType {
             ("$number_to_chars", 2) => Some(SystemClauseType::NumberToChars),
             ("$number_to_codes", 2) => Some(SystemClauseType::NumberToCodes),
             ("$op", 3) => Some(SystemClauseType::OpDeclaration),
+            ("$open", 7) => Some(SystemClauseType::Open),
             ("$redo_attr_var_binding", 2) => Some(SystemClauseType::RedoAttrVarBinding),
             ("$remove_call_policy_check", 1) => Some(SystemClauseType::RemoveCallPolicyCheck),
             ("$remove_inference_counter", 2) => Some(SystemClauseType::RemoveInferenceCounter),
@@ -510,6 +576,8 @@ impl SystemClauseType {
             ("$set_cp", 1) => Some(SystemClauseType::SetCutPoint(temp_v!(1))),
             ("$set_input", 1) => Some(SystemClauseType::SetInput),
             ("$set_output", 1) => Some(SystemClauseType::SetOutput),
+            ("$stream_property", 3) => Some(SystemClauseType::StreamProperty),
+            ("$set_stream_position", 2) => Some(SystemClauseType::SetStreamPosition),
             ("$inference_level", 2) => Some(SystemClauseType::InferenceLevel),
             ("$clean_up_block", 1) => Some(SystemClauseType::CleanUpBlock),
             ("$erase_ball", 0) => Some(SystemClauseType::EraseBall),
@@ -523,8 +591,8 @@ impl SystemClauseType {
             ("$install_new_block", 1) => Some(SystemClauseType::InstallNewBlock),
             ("$quoted_token", 1) => Some(SystemClauseType::QuotedToken),
             ("$nextEP", 3) => Some(SystemClauseType::NextEP),
-            ("$read_query_term", 2) => Some(SystemClauseType::ReadQueryTerm),
-            ("$read_term", 2) => Some(SystemClauseType::ReadTerm),
+            ("$read_query_term", 5) => Some(SystemClauseType::ReadQueryTerm),
+            ("$read_term", 5) => Some(SystemClauseType::ReadTerm),
             ("$read_term_from_chars", 2) => Some(SystemClauseType::ReadTermFromChars),
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
             ("$reset_cont_marker", 0) => Some(SystemClauseType::ResetContinuationMarker),
@@ -538,6 +606,10 @@ impl SystemClauseType {
             ("$set_seed", 1) => Some(SystemClauseType::SetSeed),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$sleep", 1) => Some(SystemClauseType::Sleep),
+            ("$socket_client_open", 7) => Some(SystemClauseType::SocketClientOpen),
+            ("$socket_server_open", 3) => Some(SystemClauseType::SocketServerOpen),
+            ("$socket_server_accept", 7) => Some(SystemClauseType::SocketServerAccept),
+            ("$socket_server_close", 1) => Some(SystemClauseType::SocketServerClose),
             ("$store_global_var", 2) => Some(SystemClauseType::StoreGlobalVar),
             ("$store_global_var_with_offset", 2) => Some(SystemClauseType::StoreGlobalVarWithOffset),
             ("$term_attributed_variables", 2) => Some(SystemClauseType::TermAttributedVariables),
@@ -555,7 +627,7 @@ impl SystemClauseType {
                     Some(SystemClauseType::REPL(REPLCodePtr::UseQualifiedModuleFromFile)),
             ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$wam_instructions", 3) => Some(SystemClauseType::WAMInstructions),
-            ("$write_term", 6) => Some(SystemClauseType::WriteTerm),
+            ("$write_term", 7) => Some(SystemClauseType::WriteTerm),
             ("$write_term_to_chars", 7) => Some(SystemClauseType::WriteTermToChars),
             ("$scryer_prolog_version", 1) => Some(SystemClauseType::ScryerPrologVersion),
             _ => None,

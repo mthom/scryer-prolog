@@ -181,6 +181,9 @@ impl fmt::Display for HeapCellValue {
             &HeapCellValue::Stream(ref stream) => {
                 write!(f, "$stream({})", stream.as_ptr() as usize)
             }
+            &HeapCellValue::TcpListener(ref tcp_listener) => {
+                write!(f, "$tcp_listener({})", tcp_listener.local_addr().unwrap())
+            }
         }
     }
 }
@@ -213,6 +216,7 @@ impl fmt::Display for Addr {
             &Addr::Str(s) => write!(f, "Addr::Str({})", s),
             &Addr::PStrLocation(h, n) => write!(f, "Addr::PStrLocation({}, {})", h, n),
             &Addr::Stream(stream) => write!(f, "Addr::Stream({})", stream),
+            &Addr::TcpListener(tcp_listener) => write!(f, "Addr::TcpListener({})", tcp_listener),
             &Addr::Usize(cp) => write!(f, "Addr::Usize({})", cp),
         }
     }
@@ -332,11 +336,14 @@ impl fmt::Display for ExistenceError {
             &ExistenceError::Module(ref module_name) => {
                 write!(f, "the module {} does not exist", module_name)
             }
+            &ExistenceError::ModuleSource(ref module_source) => {
+                write!(f, "the source/sink {} does not exist", module_source)
+            }
             &ExistenceError::Procedure(ref name, arity) => {
                 write!(f, "the procedure {}/{} does not exist", name, arity)
             }
-            &ExistenceError::SourceSink(ref module_source) => {
-                write!(f, "the source/sink {} does not exist", module_source)
+            &ExistenceError::SourceSink(ref addr) => {
+                write!(f, "the source/sink {} does not exist", addr)
             }
             &ExistenceError::Stream(ref addr) => {
                 write!(f, "the stream at {} does not exist", addr)

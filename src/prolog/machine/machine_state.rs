@@ -12,7 +12,6 @@ use crate::prolog::machine::machine_indices::*;
 use crate::prolog::machine::modules::*;
 use crate::prolog::machine::stack::*;
 use crate::prolog::machine::streams::*;
-use crate::prolog::read::{PrologStream, readline};
 use crate::prolog::rug::Integer;
 
 use downcast::Any;
@@ -615,87 +614,130 @@ pub struct MachineState {
 
 impl MachineState {
     pub(crate)
-    fn open_parsing_stream(
-        &self,
-        stream: Stream,
-        stub_name: &'static str,
-        stub_arity: usize,
-    ) -> Result<PrologStream, MachineStub> {
-        match parsing_stream(stream) {
-            Ok(stream) => {
-                Ok(stream)
-            }
-            Err(e) => {
-                let stub = MachineError::functor_stub(clause_name!(stub_name), stub_arity);
-                let err = MachineError::session_error(
-                    self.heap.h(),
-                    SessionError::from(e),
-                );
-
-                Err(self.error_form(err, stub))
-            }
-        }
-    }
-
-    pub(crate)
     fn read_term(
         &mut self,
-        current_input_stream: &mut Stream,
+        mut stream: Stream,
         indices: &mut IndexStore,
     ) -> CallResult {
-        let mut stream = self.open_parsing_stream(
-            current_input_stream.clone(),
-            "read_term",
-            2,
+        self.check_stream_properties(
+            &mut stream,
+            StreamType::Text,
+            Some(self[temp_v!(2)]),
+            clause_name!("read_term"),
+            3,
         )?;
 
-        match self.read(
-            &mut stream,
-            indices.atom_tbl.clone(),
-            &indices.op_dir,
-        ) {
-            Ok(term_write_result) => {
-                let a1 = self[temp_v!(1)];
-                self.unify(Addr::HeapCell(term_write_result.heap_loc), a1);
+        if stream.past_end_of_stream() {
+            if EOFAction::Reset != stream.options.eof_action {
+                return return_from_clause!(self.last_call, self);
+            } else if self.fail {
+                return Ok(());
+            }
+        }
 
-                if self.fail {
+        let mut orig_stream = stream.clone();
+        let mut stream = self.open_parsing_stream(stream, "read_term", 3)?;
+
+        loop {
+            match self.read(
+                &mut stream,
+                indices.atom_tbl.clone(),
+                &indices.op_dir,
+            ) {
+                Ok(term_write_result) => {
+                    let term = self[temp_v!(2)];
+                    self.unify(Addr::HeapCell(term_write_result.heap_loc), term);
+
+                    if self.fail {
+                        return Ok(());
+                    }
+
+                    let mut list_of_var_eqs = vec![];
+
+                    for (var, binding) in term_write_result.var_dict.into_iter() {
+                        let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
+
+                        let h = self.heap.h();
+                        let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
+
+                        self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
+                        self.heap.push(HeapCellValue::Atom(var_atom, None));
+                        self.heap.push(HeapCellValue::Addr(binding));
+
+                        list_of_var_eqs.push(Addr::Str(h));
+                    }
+
+                    let mut var_set: IndexMap<Ref, bool> = IndexMap::new();
+
+                    for addr in self.acyclic_pre_order_iter(term) {
+                        if let Some(var) = addr.as_var() {
+                            if !var_set.contains_key(&var) {
+                                var_set.insert(var, true);
+                            } else {
+                                var_set.insert(var, false);
+                            }
+                        }
+                    }
+
+                    let mut var_list = vec![];
+                    let mut singleton_var_list = vec![];
+
+                    for addr in self.acyclic_pre_order_iter(term) {
+                        if let Some(var) = addr.as_var() {
+                            if var_set.get(&var) == Some(&true) {
+                                singleton_var_list.push(var.as_addr());
+                            }
+
+                            var_list.push(var.as_addr());
+                        }
+                    }
+
+                    let singleton_addr = self[temp_v!(3)];
+                    let singletons_offset =
+                        Addr::HeapCell(self.heap.to_list(singleton_var_list.into_iter()));
+
+                    self.unify(singletons_offset, singleton_addr);
+
+                    if self.fail {
+                        return Ok(());
+                    }
+
+                    let vars_addr = self[temp_v!(4)];
+                    let vars_offset =
+                        Addr::HeapCell(self.heap.to_list(var_list.into_iter()));
+
+                    self.unify(vars_offset, vars_addr);
+
+                    if self.fail {
+                        return Ok(());
+                    }
+
+                    let var_names_addr = self[temp_v!(5)];
+                    let var_names_offset =
+                        Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
+
+                    return Ok(self.unify(var_names_offset, var_names_addr));
+                }
+                Err(err) => {
+                    if let ParserError::UnexpectedEOF = err {
+                        self.eof_action(
+                            self[temp_v!(2)],
+                            &mut orig_stream,
+                            clause_name!("read_term"),
+                            3
+                        )?;
+
+                        if orig_stream.options.eof_action == EOFAction::Reset {
+                            if self.fail == false {
+                                continue;
+                            } else {
+                                return Ok(());
+                            }
+                        }
+                    }
+
                     return Ok(());
                 }
-
-                let mut list_of_var_eqs = vec![];
-
-                for (var, binding) in term_write_result.var_dict.into_iter() {
-                    let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
-
-                    let h = self.heap.h();
-                    let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
-
-                    self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
-                    self.heap.push(HeapCellValue::Atom(var_atom, None));
-                    self.heap.push(HeapCellValue::Addr(binding));
-
-                    list_of_var_eqs.push(Addr::Str(h));
-                }
-
-                let a2 = self[temp_v!(2)];
-                let list_offset =
-                    Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
-
-                Ok(self.unify(list_offset, a2))
-            }
-            Err(err) => {
-                if let ParserError::UnexpectedEOF = err {
-                    std::process::exit(0);
-                }
-
-                // reset the input stream after an input failure.
-                *current_input_stream = readline::input_stream();
-
-                let h = self.heap.h();
-                let syntax_error = MachineError::syntax_error(h, err);
-                let stub = MachineError::functor_stub(clause_name!("read_term"), 2);
-
-                Err(self.error_form(syntax_error, stub))
             }
         }
     }
@@ -706,10 +748,10 @@ impl MachineState {
         op_dir: &'a OpDir,
     ) -> Result<Option<HCPrinter<'a, PrinterOutputter>>, MachineStub>
     {
-        let ignore_ops = self.store(self.deref(self[temp_v!(2)]));
-        let numbervars = self.store(self.deref(self[temp_v!(3)]));
-        let quoted = self.store(self.deref(self[temp_v!(4)]));
-        let max_depth = self.store(self.deref(self[temp_v!(6)]));
+        let ignore_ops = self.store(self.deref(self[temp_v!(3)]));
+        let numbervars = self.store(self.deref(self[temp_v!(4)]));
+        let quoted = self.store(self.deref(self[temp_v!(5)]));
+        let max_depth = self.store(self.deref(self[temp_v!(7)]));
 
         let mut printer = HCPrinter::new(&self, op_dir, PrinterOutputter::new());
 
@@ -759,7 +801,7 @@ impl MachineState {
 
         let stub = MachineError::functor_stub(clause_name!("write_term"), 2);
 
-        match self.try_from_list(temp_v!(5), stub) {
+        match self.try_from_list(temp_v!(6), stub) {
             Ok(addrs) => {
                 let mut var_names: IndexMap<Addr, String> = IndexMap::new();
 
@@ -792,9 +834,11 @@ impl MachineState {
 
                                 var_names.insert(var, atom);
                             }
-                            _ => unreachable!(),
+                            _ => {
+                            }
                         },
-                        _ => unreachable!(),
+                        _ => {
+                        }
                     }
                 }
 

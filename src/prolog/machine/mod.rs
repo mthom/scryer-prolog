@@ -297,7 +297,7 @@ impl Machine {
 
             Ok(self.indices.insert_module(module))
         } else {
-            let err = ExistenceError::SourceSink(ModuleSource::File(
+            let err = ExistenceError::ModuleSource(ModuleSource::File(
                 clause_name!("$toplevel"),
             ));
 
@@ -315,7 +315,10 @@ impl Machine {
 
         if path.is_file() {
             let file_src = match File::open(&path) {
-                Ok(file_handle) => Stream::from(file_handle),
+                Ok(file_handle) => Stream::from_file_as_input(
+                    clause_name!(".scryerrc"),
+                    file_handle,
+                ),
                 Err(_) => return,
             };
 
@@ -410,6 +413,15 @@ impl Machine {
         );
 
         compile_user_module(&mut wam,
+                            Stream::from(PAIRS),
+                            true,
+                            ListingSource::from_file_and_path(
+                                clause_name!("pairs"),
+                                lib_path.clone(),
+                            )
+        );
+
+        compile_user_module(&mut wam,
                             Stream::from(LISTS),
                             true,
                             ListingSource::from_file_and_path(
@@ -450,6 +462,28 @@ impl Machine {
         }
 
         wam.compile_scryerrc();
+
+        wam.current_input_stream.options.alias  = Some(clause_name!("user_input"));
+
+        wam.indices.stream_aliases.insert(
+            clause_name!("user_input"),
+            wam.current_input_stream.clone(),
+        );
+
+        wam.indices.streams.insert(
+            wam.current_input_stream.clone()
+        );
+
+        wam.current_output_stream.options.alias = Some(clause_name!("user_output"));
+
+        wam.indices.stream_aliases.insert(
+            clause_name!("user_output"),
+            wam.current_output_stream.clone(),
+        );
+
+        wam.indices.streams.insert(
+            wam.current_output_stream.clone()
+        );
 
         wam
     }

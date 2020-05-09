@@ -17,13 +17,13 @@ enum ErrorProvenance {
 }
 
 #[derive(Debug)]
-pub(super) struct MachineError {
+pub(crate) struct MachineError {
     stub: MachineStub,
     location: Option<(usize, usize)>, // line_num, col_num
     from: ErrorProvenance,
 }
 
-pub(super)
+pub(crate)
 trait TypeError {
     fn type_error(self, h: usize, valid_type: ValidType) -> MachineError;
 }
@@ -74,7 +74,7 @@ impl TypeError for Number {
     }
 }
 
-pub(super)
+pub(crate)
 trait PermissionError {
     fn permission_error(self, h: usize, index_str: &'static str, perm: Permission) -> MachineError;
 }
@@ -250,7 +250,7 @@ impl MachineError {
                     from: ErrorProvenance::Constructed,
                 }
             }
-            ExistenceError::SourceSink(source) => {
+            ExistenceError::ModuleSource(source) => {
                 let source_stub = source.as_functor_stub();
 
                 let stub = functor!(
@@ -263,6 +263,18 @@ impl MachineError {
                     stub,
                     location: None,
                     from: ErrorProvenance::Constructed,
+                }
+            }
+            ExistenceError::SourceSink(culprit) => {
+                let stub = functor!(
+                    "existence_error",
+                    [atom("source_sink"), addr(culprit)]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                    from: ErrorProvenance::Received,
                 }
             }
             ExistenceError::Stream(culprit) => {
@@ -454,17 +466,22 @@ pub enum Permission {
     Create,
     InputStream,
     Modify,
+    Open,
     OutputStream,
+    Reposition,
 }
 
 impl Permission {
+    #[inline]
     pub fn as_str(self) -> &'static str {
         match self {
             Permission::Access => "access",
             Permission::Create => "create",
             Permission::InputStream => "input",
             Permission::Modify => "modify",
+            Permission::Open => "open",
             Permission::OutputStream => "output",
+            Permission::Reposition => "reposition",
         }
     }
 }
@@ -475,20 +492,21 @@ pub enum ValidType {
     Atom,
     Atomic,
     //    Boolean,
-    //    Byte,
+    Byte,
     Callable,
     Character,
     Compound,
     Evaluable,
     Float,
-    //    InByte,
-    //    InCharacter,
+    InByte,
+    InCharacter,
     Integer,
     List,
     //    Number,
     Pair,
     //    PredicateIndicator,
     //    Variable
+    TcpListener,
 }
 
 impl ValidType {
@@ -497,26 +515,28 @@ impl ValidType {
             ValidType::Atom => "atom",
             ValidType::Atomic => "atomic",
             //            ValidType::Boolean => "boolean",
-            //            ValidType::Byte => "byte",
+            ValidType::Byte => "byte",
             ValidType::Callable => "callable",
             ValidType::Character => "character",
             ValidType::Compound => "compound",
             ValidType::Evaluable => "evaluable",
             ValidType::Float => "float",
-            //            ValidType::InByte => "in_byte",
-            //            ValidType::InCharacter => "in_character",
+            ValidType::InByte => "in_byte",
+            ValidType::InCharacter => "in_character",
             ValidType::Integer => "integer",
             ValidType::List => "list",
             //            ValidType::Number => "number",
             ValidType::Pair => "pair",
             //            ValidType::PredicateIndicator => "predicate_indicator",
             //            ValidType::Variable => "variable"
+            ValidType::TcpListener => "tcp_listener",
         }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum DomainErrorType {
+    IOMode,
     NotLessThanZero,
     Order,
     Stream,
@@ -526,6 +546,7 @@ pub enum DomainErrorType {
 impl DomainErrorType {
     pub fn as_str(self) -> &'static str {
         match self {
+            DomainErrorType::IOMode => "io_mode",
             DomainErrorType::NotLessThanZero => "not_less_than_zero",
             DomainErrorType::Order => "order",
             DomainErrorType::Stream => "stream",
@@ -537,9 +558,9 @@ impl DomainErrorType {
 // from 7.12.2 f) of 13211-1:1995
 #[derive(Debug, Clone, Copy)]
 pub enum RepFlag {
-    Character,
+    //    Character,
     CharacterCode,
-    //    InCharacterCode,
+    InCharacterCode,
     MaxArity,
     //    MaxInteger,
     //    MinInteger
@@ -548,9 +569,9 @@ pub enum RepFlag {
 impl RepFlag {
     pub fn as_str(self) -> &'static str {
         match self {
-            RepFlag::Character => "character",
+            //            RepFlag::Character => "character",
             RepFlag::CharacterCode => "character_code",
-            //            RepFlag::InCharacterCode => "in_character_code",
+            RepFlag::InCharacterCode => "in_character_code",
             RepFlag::MaxArity => "max_arity",
             //            RepFlag::MaxInteger => "max_integer",
             //            RepFlag::MinInteger => "min_integer"
@@ -681,6 +702,41 @@ impl MachineState {
         self.check_for_list_pairs(sorted)
     }
 
+    #[inline]
+    pub(crate)
+    fn type_error<T: TypeError>(
+        &self,
+        valid_type: ValidType,
+        culprit: T,
+        caller: ClauseName,
+        arity: usize,
+    ) -> MachineStub {
+        let stub = MachineError::functor_stub(caller, arity);
+        let err = MachineError::type_error(
+            self.heap.h(),
+            valid_type,
+            culprit,
+        );
+
+        return self.error_form(err, stub);
+    }
+
+    #[inline]
+    pub(crate)
+    fn representation_error(
+        &self,
+        rep_flag: RepFlag,
+        caller: ClauseName,
+        arity: usize,
+    ) -> MachineStub {
+        let stub = MachineError::functor_stub(caller, arity);
+        let err = MachineError::representation_error(
+            rep_flag,
+        );
+
+        return self.error_form(err, stub);
+    }
+
     pub(super)
     fn error_form(&self, err: MachineError, src: MachineStub) -> MachineStub {
         let location = err.location;
@@ -726,8 +782,9 @@ impl MachineState {
 #[derive(Debug)]
 pub enum ExistenceError {
     Module(ClauseName),
+    ModuleSource(ModuleSource),
     Procedure(ClauseName, usize),
-    SourceSink(ModuleSource),
+    SourceSink(Addr),
     Stream(Addr),
 }
 

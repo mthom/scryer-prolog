@@ -119,7 +119,7 @@ fn load_module_from_file(
     let mut path_buf = fix_filename(wam.indices.atom_tbl.clone(), path_buf)?;
     let filename = clause_name!(path_buf.to_string_lossy().to_string(), wam.indices.atom_tbl);
 
-    let file_handle = Stream::from(File::open(&path_buf).or_else(|_| {
+    let file_handle = Stream::from_file_as_input(filename.clone(), File::open(&path_buf).or_else(|_| {
         Err(SessionError::InvalidFileName(filename.clone()))
     })?);
 
@@ -614,7 +614,7 @@ fn load_library(
             )
         }
         None => {
-            let err = ExistenceError::SourceSink(ModuleSource::Library(
+            let err = ExistenceError::ModuleSource(ModuleSource::Library(
                 name.clone()
             ));
 
@@ -705,7 +705,7 @@ impl ListingCompiler {
 
             Ok(wam_indices.insert_module(submodule))
         } else {
-            let err = ExistenceError::SourceSink(ModuleSource::File(
+            let err = ExistenceError::ModuleSource(ModuleSource::File(
                 module_name,
             ));
 
@@ -743,7 +743,7 @@ impl ListingCompiler {
 
             Ok(wam_indices.insert_module(submodule))
         } else {
-            let err = ExistenceError::SourceSink(ModuleSource::File(
+            let err = ExistenceError::ModuleSource(ModuleSource::File(
                 module_name
             ));
 
@@ -1077,7 +1077,7 @@ impl ListingCompiler {
                         insert_or_refresh_term_dir_quantum(term_dir, key, term_dirs);
                     }
                     None => {
-                        let err = ExistenceError::SourceSink(ModuleSource::File(
+                        let err = ExistenceError::ModuleSource(ModuleSource::File(
                             module_name,
                         ));
 
@@ -1436,7 +1436,7 @@ pub(super) fn setup_indices(
         wam.indices.insert_module(module);
         result
     } else {
-        let err = ExistenceError::SourceSink(ModuleSource::Library(
+        let err = ExistenceError::ModuleSource(ModuleSource::Library(
             module
         ));
 

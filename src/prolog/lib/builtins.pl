@@ -41,20 +41,30 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
 :- module(builtins, [(=)/2, (\=)/2, (\+)/1, (',')/2, (->)/2, (;)/2,
                      (=..)/2, (:)/2, (:)/3, (:)/4, (:)/5, (:)/6,
                      (:)/7, (:)/8, (:)/9, (:)/10, (:)/11, (:)/12,
-                     abolish/1, asserta/1, assertz/1, atom_chars/2,
-                     atom_codes/2, atom_concat/3, atom_length/2,
-                     bagof/3, catch/3, char_code/2, clause/2,
-                     current_input/1, current_output/1, current_op/3,
+                     abolish/1, asserta/1, assertz/1,
+                     at_end_of_stream/0, at_end_of_stream/1,
+                     atom_chars/2, atom_codes/2, atom_concat/3,
+                     atom_length/2, bagof/3, catch/3, char_code/2,
+                     clause/2, close/1, close/2, current_input/1,
+                     current_output/1, current_op/3,
                      current_predicate/1, current_prolog_flag/2,
                      expand_goal/2, expand_term/2, fail/0, false/0,
-                     findall/3, findall/4, get_char/1, halt/0,
-                     max_arity/1, number_chars/2, number_codes/2,
-                     once/1, op/3, read_term/2, read_term/3, repeat/0,
-                     retract/1, set_prolog_flag/2, set_input/1,
-                     set_output/1, setof/3, sub_atom/5,
+                     findall/3, findall/4, flush_output/0,
+                     flush_output/1, get_byte/1, get_byte/2,
+                     get_char/1, get_char/2, get_code/1, get_code/2,
+                     halt/0, max_arity/1, number_chars/2,
+                     number_codes/2, once/1, op/3, open/3, open/4,
+                     peek_byte/1, peek_byte/2, peek_char/1,
+                     peek_char/2, peek_code/1, peek_code/2,
+                     put_byte/1, put_byte/2, put_code/1, put_code/2,
+                     put_char/1, put_char/2, read_term/2, read_term/3,
+                     repeat/0, retract/1, set_prolog_flag/2,
+                     set_input/1, set_stream_position/2, set_output/1,
+                     setof/3, stream_property/2, sub_atom/5,
                      subsumes_term/2, term_variables/2, throw/1,
                      true/0, unify_with_occurs_check/2, write/1,
-                     write_canonical/1, write_term/2, writeq/1]).
+                     write_canonical/1, write_term/2, write_term/3,
+                     writeq/1]).
 
 
 % the maximum arity flag. needs to be replaced with
@@ -312,36 +322,39 @@ get_args([Arg|Args], Func, I0, N) :-
     '$call_with_default_policy'(I1 is I0 + 1),
     '$call_with_default_policy'(get_args(Args, Func, I1, N)).
 
-% write, write_canonical, writeq, write_term.
-is_write_option(Functor) :-
-    Functor =.. [Name, Arg],
-    (  Arg == true -> true
-    ;  Arg == false -> true
-    ;  Name == variable_names -> must_be_var_names_list(Arg)
-    ;  Name == max_depth -> integer(Arg), Arg >= 0
-    ;  var(Arg) -> throw(error(instantiation_error, write_term/2))
-    ;  throw(error(domain_error(write_option, Functor), write_term/2))
-    ), % 8.14.2.3 e)
-    (  Name == ignore_ops -> true
-    ;  Name == quoted -> true
-    ;  Name == numbervars -> true
-    ;  Name == variable_names -> true
-    ;  Name == max_depth -> true
-    ;  throw(error(domain_error(write_option, Functor), write_term/2))
-    ). % 8.14.2.3 e)
+parse_write_options(Options, OptionValues, Stub) :-
+    DefaultOptions = [ignore_ops-false, max_depth-0, numbervars-false,
+                      quoted-false, variable_names-[]],
+    parse_options_list(Options, parse_write_options_, DefaultOptions, OptionValues, Stub).
 
-inst_member_or([X|Xs], Y, Z) :-
-    (  var(X) -> throw(error(instantiation_error, write_term/2))
-    ;  is_write_option(X) -> ( Y = X, ! ; inst_member_or(Xs, Y, Z) )
-    ;  throw(error(domain_error(write_option, X), write_term/2))
+parse_write_options_(ignore_ops(IgnoreOps), ignore_ops-IgnoreOps) :-
+    (  nonvar(IgnoreOps), lists:member(IgnoreOps, [true, false])
+    ;
+       throw(error(domain_error(write_option, ignore_ops(IgnoreOps)), _))
     ).
-inst_member_or([], Y, Y).
+parse_write_options_(quoted(Quoted), quoted-Quoted) :-
+    (  nonvar(Quoted), lists:member(Quoted, [true, false])
+    ;
+       throw(error(domain_error(write_option, quoted(Quoted)), _))
+    ).
+parse_write_options_(numbervars(NumberVars), numbervars-NumberVars) :-
+    (  nonvar(NumberVars), lists:member(NumberVars, [true, false])
+    ;
+       throw(error(domain_error(write_option, numbervars(NumberVars)), _))
+    ).
+parse_write_options_(variable_names(VNNames), variable_names-VNNames) :-
+    must_be_var_names_list(VNNames).
+parse_write_options_(max_depth(MaxDepth), max_depth-MaxDepth) :-
+    (  integer(MaxDepth), MaxDepth >= 0
+    ;
+       throw(error(domain_error(write_option, max_depth(MaxDepth)), _))
+    ).
 
 must_be_var_names_list(VarNames) :-
     '$skip_max_list'(_, -1, VarNames, Tail),
     (  Tail == [] -> must_be_var_names_list_(VarNames, VarNames)
     ;  var(Tail)  -> throw(error(instantiation_error, write_term/2))
-    ;  throw(error(domain_error(write_options, variable_names(VarNames)), write_term/2))
+    ;  throw(error(domain_error(write_option, variable_names(VarNames)), write_term/2))
     ).
 
 must_be_var_names_list_([], List).
@@ -350,36 +363,34 @@ must_be_var_names_list_([VarName | VarNames], List) :-
        (  VarName = (Atom = _) ->
 	      (  atom(Atom) -> must_be_var_names_list_(VarNames, List)
 	      ;  var(Atom)  -> throw(error(instantiation_error, write_term/2))
-	      ;  throw(error(domain_error(write_options, variable_names(List)), write_term/2))
+	      ;  throw(error(domain_error(write_option, variable_names(List)), write_term/2))
 	      )
-       ;  throw(error(domain_error(write_options, variable_names(List)), write_term/2))
+       ;  throw(error(domain_error(write_option, variable_names(List)), write_term/2))
        )
-    ;  throw(error(instantiation_error, write_term/2)) % throw(error(domain_error(write_options, variable_names(List)), write_term/2))
+    ;  throw(error(instantiation_error, write_term/2))
     ).
 
-write_term(_, Options) :-
-    var(Options), throw(error(instantiation_error, write_term/2)).
+
 write_term(Term, Options) :-
-    '$skip_max_list'(_, -1, Options, Options0),
-    (  var(Options0)  -> throw(error(instantiation_error, write_term/2))
-    ;  Options0 == [] -> true
-    ;  throw(error(type_error(list, Options), write_term/2))
-    ), % 8.14.2.3 c)
-    inst_member_or(Options, ignore_ops(IgnoreOps), ignore_ops(false)),
-    inst_member_or(Options, numbervars(NumberVars), numbervars(false)),
-    inst_member_or(Options, quoted(Quoted), quoted(false)),
-    inst_member_or(Options, variable_names(VarNames), variable_names([])),
-    inst_member_or(Options, max_depth(MaxDepth), max_depth(0)),
-    '$write_term'(Term, IgnoreOps, NumberVars, Quoted, VarNames, MaxDepth).
+    current_output(Stream),
+    write_term(Stream, Term, Options).
+
+write_term(Stream, Term, Options) :-
+    parse_write_options(Options, [IgnoreOps, MaxDepth, NumberVars, Quoted, VNNames], write_term/3),
+    '$write_term'(Stream, Term, IgnoreOps, NumberVars, Quoted, VNNames, MaxDepth).
+
 
 write(Term) :-
-    '$write_term'(Term, false, true, false, [], 0).
+    current_output(Stream),
+    '$write_term'(Stream, Term, false, true, false, [], 0).
 
 write_canonical(Term) :-
-    '$write_term'(Term, true, false, true, [], 0).
+    current_output(Stream),
+    '$write_term'(Stream, Term, true, false, true, [], 0).
 
 writeq(Term) :-
-    '$write_term'(Term, false, true, true, [], 0).
+    current_output(Stream),
+    '$write_term'(Stream, Term, false, true, true, [], 0).
 
 
 
@@ -420,25 +431,16 @@ parse_read_term_options(Options, OptionValues, Stub) :-
     parse_options_list(Options, parse_read_term_options_, DefaultOptions, OptionValues, Stub).
 
 
-parse_read_term_options_(singletons(Vars), singletons-Vars) :-
-    (  '$skip_max_list'(Vars, _, -1, Tail), Tail == [], !
-    ;
-       throw(error(domain_error(read_option, singletons(Vars)), _))
-    ).
-parse_read_term_options_(variables(Vars), variables-Vars) :-
-    (  '$skip_max_list'(Vars, _, -1, Tail), Tail == [], !
-    ;
-       throw(error(domain_error(read_option, variables(Vars)), _))
-    ).
-parse_read_term_options_(variable_names(Vars), variable_names-Vars) :-
-    (  '$skip_max_list'(Vars, _, -1, Tail), Tail == [], !
-    ;
-       throw(error(domain_error(read_option, variable_names(Vars)), _))
-    ).
+parse_read_term_options_(singletons(Vars), singletons-Vars).
+parse_read_term_options_(variables(Vars), variables-Vars).
+parse_read_term_options_(variable_names(Vars), variable_names-Vars).
+parse_read_term_options_(E,_) :-
+    throw(error(domain_error(read_option, E), _)).
+
 
 
 read_term(Stream, Term, Options) :-
-    parse_read_term_options(Options, [Singletons, Variables, VariableNames], read_term/3),
+    parse_read_term_options(Options, [Singletons, VariableNames, Variables], read_term/3),
     '$read_term'(Stream, Term, Singletons, Variables, VariableNames).
 
 read_term(Term, Options) :-
@@ -1004,11 +1006,11 @@ char_code(Char, Code) :-
     ).
 
 get_char(C) :-
-    (  var(C) -> '$get_char'(C)
-    ;  C == end_of_file  -> '$get_char'(C)
-    ;  atom_length(C, 1) -> '$get_char'(C)
-    ;  throw(error(type_error(in_character, C), get_char/1))
-    ).
+    current_input(S),
+    '$get_char'(S, C).
+
+get_char(S, C) :-
+    '$get_char'(S, C).
 
 can_be_number(N, PI) :-
     (  var(N) -> true
@@ -1148,3 +1150,182 @@ parse_stream_options_(eof_action(Action), eof_action-Action) :-
     ).
 parse_stream_options_(E, _) :-
     throw(error(domain_error(stream_option, E), _)). % 8.11.5.3i)
+
+
+open(SourceSink, Mode, Stream) :-
+    open(SourceSink, Mode, Stream, []).
+
+open(SourceSink, Mode, Stream, StreamOptions) :-
+    (  var(SourceSink) ->
+       throw(error(instantiation_error, open/4)) % 8.11.5.3a)
+    ;  var(Mode) ->
+       throw(error(instantiation_error, open/4)) % 8.11.5.3b)
+    ;  \+ atom(Mode) ->
+       throw(error(type_error(atom, Mode), open/4)) % 8.11.5.3d)
+    ;  nonvar(Stream) ->
+       throw(error(type_error(variable, Stream), open/4)) % 8.11.5.3f)
+    ;
+       parse_stream_options(StreamOptions, [Alias, EOFAction, Reposition, Type], open/4),
+       '$open'(SourceSink, Mode, Stream, Alias, EOFAction, Reposition, Type)
+    ).
+
+
+parse_close_options(Options, OptionValues, Stub) :-
+    DefaultOptions = [force-false],
+    parse_options_list(Options, parse_close_options_, DefaultOptions, OptionValues, Stub).
+
+parse_close_options_(force(Force), force-Force) :-
+    (  nonvar(Force), lists:member(Force, [true, false]), !
+    ;
+       throw(error(domain_error(close_option, force(Force)), _))
+    ).
+parse_close_options_(E, _) :-
+    throw(error(domain_error(close_option, E), _)).
+
+
+close(Stream, CloseOptions) :-
+    parse_close_options(CloseOptions, [Force], close/2),
+    '$close'(Stream, CloseOptions).
+
+close(Stream) :-
+    '$close'(Stream, []).
+
+
+flush_output(S) :-
+    '$flush_output'(S).
+
+flush_output :-
+    current_output(S),
+    '$flush_output'(S).
+
+
+get_byte(S, B) :-
+    '$get_byte'(S, B).
+
+get_byte(B) :-
+    current_input(S),
+    '$get_byte'(S, B).
+
+
+put_char(C) :-
+    current_output(S),
+    '$put_char'(S, C).
+
+put_char(S, C) :-
+    '$put_char'(S, C).
+
+
+put_byte(C) :-
+    current_output(S),
+    '$put_byte'(S, C).
+
+put_byte(S, C) :-
+    '$put_byte'(S, C).
+
+
+put_code(C) :-
+    current_output(S),
+    '$put_code'(S, C).
+
+put_code(S, C) :-
+    '$put_code'(S, C).
+
+
+get_code(C) :-
+    current_input(S),
+    '$get_code'(S, C).
+
+get_code(S, C) :-
+    '$get_code'(S, C).
+
+
+peek_byte(S, B) :-
+    '$peek_byte'(S, B).
+
+peek_byte(B) :-
+    current_input(S),
+    '$peek_byte'(S, B).
+
+
+peek_code(C) :-
+    current_input(S),
+    '$peek_code'(S, C).
+
+peek_code(S, C) :-
+    '$peek_code'(S, C).
+
+
+peek_char(C) :-
+    current_input(S),
+    '$peek_char'(S, C).
+
+peek_char(S, C) :-
+    '$peek_char'(S, C).
+
+
+check_stream_property(file_name(F), file_name, F) :-
+    ( var(F) -> true ; atom(F) ).
+check_stream_property(mode(M), mode, M) :-
+    ( var(M) -> true ; lists:member(M, [read, write, append]) ).
+check_stream_property(D, direction, D) :-
+    ( var(D) -> true ; lists:member(D, [input, output, input_output]), ! ).
+check_stream_property(alias(A), alias, A) :-
+    ( var(A) -> true ; atom(A) ).
+check_stream_property(position(P), position, P) :-
+    ( var(P) -> true ; integer(P), P >= 0 ).
+check_stream_property(end_of_stream(E), end_of_stream, E) :-
+    ( var(E) -> true ; lists:member(E, [not, at, past]) ).
+check_stream_property(eof_action(A), eof_action, A) :-
+    ( var(A) -> true ; lists:member(A, [error, eof_code, reset]) ).
+check_stream_property(reposition(B), reposition, B) :-
+    ( var(B) -> true ; lists:member(B, [true, false]) ).
+check_stream_property(type(T), type, T) :-
+    ( var(T) -> true ; lists:member(T, [text, binary]) ).
+
+
+stream_iter_(S, S).
+stream_iter_(S, S1) :-
+    '$next_stream'(S, S0),
+    stream_iter_(S0, S1).
+
+stream_iter(S) :-
+    (  nonvar(S) ->
+       true
+    ;  '$first_stream'(S0),
+       stream_iter_(S0, S)
+    ).
+
+
+stream_property(S, P) :-
+    (  nonvar(P), \+ check_stream_property(P, _, _) ->
+       throw(error(domain_error(stream_property, P), stream_property/2))
+    ;  stream_iter(S),
+       check_stream_property(P, PropertyName, PropertyValue),
+       '$stream_property'(S, PropertyName, PropertyValue)
+    ).
+
+
+at_end_of_stream(S_or_a) :-
+    (  atom(S_or_a) ->
+       stream_property(S, alias(A))
+    ;  S = S_or_a
+    ),
+    stream_property(S, end_of_stream(E)),
+    !,
+    ( E = at ; E = past ).
+
+at_end_of_stream :-
+    current_input(S),
+    stream_property(S, end_of_stream(E)),
+    !,
+    ( E = at ; E = past ).
+
+
+set_stream_position(S_or_a, Position) :-
+    (  var(Position) ->
+       throw(error(instantiation_error, set_stream_position/2))
+    ;  integer(Position), Position >= 0 ->
+       true
+    ;  throw(error(domain_error(stream_position, Position)))
+    ),
+    '$set_stream_position'(S_or_a, Position).

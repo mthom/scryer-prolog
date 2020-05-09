@@ -48,6 +48,9 @@ impl<'a> HCPreOrderIterator<'a> {
             HeapCellValue::Stream(_) => {
                 Addr::Stream(h)
             }
+            &HeapCellValue::TcpListener(_) => {
+                Addr::TcpListener(h)
+            }
         }
     }
 

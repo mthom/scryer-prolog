@@ -21,10 +21,13 @@ use crate::prolog::rug::Integer;
 use crate::ref_thread_local::RefThreadLocal;
 
 use std::cmp;
+use std::collections::BTreeSet;
 use std::convert::TryFrom;
-use std::io::{stdout, Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
+use std::net::{TcpListener, TcpStream};
+use std::ops::Sub;
 use std::rc::Rc;
 
 use std::time::Duration;
@@ -357,56 +360,6 @@ impl MachineState {
         }
 
         Ok(())
-    }
-
-    fn get_stream_or_alias(
-        &mut self,
-        addr: Addr,
-        indices: &IndexStore,
-        caller: &'static str,
-    ) -> Result<Stream, MachineStub>
-    {
-        Ok(match addr {
-            Addr::Con(h) if self.heap.atom_at(h) => {
-	        if let HeapCellValue::Atom(ref atom, ref spec) = self.heap.clone(h) {
-                    match indices.stream_aliases.get(atom) {
-                        Some(stream) => {
-                            stream.clone()
-                        }
-                        None => {
-                            let stub = MachineError::functor_stub(clause_name!(caller), 1);
-                            let h = self.heap.h();
-
-                            let addr = self.heap.to_unifiable(
-                                HeapCellValue::Atom(atom.clone(), spec.clone())
-                            );
-
-                            return Err(self.error_form(
-                                MachineError::existence_error(h + 1, ExistenceError::Stream(addr)),
-                                stub,
-                            ));
-                        }
-                    }
-                } else {
-                    unreachable!()
-                }
-            }
-            Addr::Stream(h) => {
-                if let HeapCellValue::Stream(ref stream) = &self.heap[h] {
-                    stream.clone()
-                } else {
-                    unreachable!()
-                }
-            }
-            _ => {
-                let stub = MachineError::functor_stub(clause_name!(caller), 1);
-
-                return Err(self.error_form(
-                    MachineError::domain_error(DomainErrorType::StreamOrAlias, addr),
-                    stub,
-                ));
-            }
-        })
     }
 
     #[inline]
@@ -772,6 +725,29 @@ impl MachineState {
                 let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Back);
 
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
+                return Ok(());
+            }
+            &SystemClauseType::CurrentHostname => {
+                match hostname::get().ok() {
+                    Some(host) => {
+                        match host.into_string().ok() {
+                            Some(host) => {
+                                let hostname = self.heap.to_unifiable(
+                                    HeapCellValue::Atom(clause_name!(host, indices.atom_tbl), None)
+                                );
+
+                                self.unify(self[temp_v!(1)], hostname);
+                                return return_from_clause!(self.last_call, self);
+                            }
+                            None => {
+                            }
+                        }
+                    }
+                    None => {
+                    }
+                }
+
+                self.fail = true;
                 return Ok(());
             }
             &SystemClauseType::CurrentInput => {
@@ -1190,6 +1166,308 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::PeekByte => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "peek_byte", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Binary,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("peek_byte"),
+                    2,
+                )?;
+
+                if stream.past_end_of_stream() {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        addr => {
+                            match Number::try_from((addr, &self.heap)) {
+                                Ok(Number::Integer(n)) => {
+                                    if let Some(nb) = n.to_u8() {
+                                        Addr::Usize(nb as usize)
+                                    } else {
+                                        return Err(self.type_error(
+                                            ValidType::InByte,
+                                            addr,
+                                            clause_name!("peek_byte"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                Ok(Number::Fixnum(n)) => {
+                                    if let Ok(nb) = u8::try_from(n) {
+                                        Addr::Usize(nb as usize)
+                                    } else {
+                                        return Err(self.type_error(
+                                            ValidType::InByte,
+                                            addr,
+                                            clause_name!("peek_byte"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(self.type_error(
+                                        ValidType::InByte,
+                                        addr,
+                                        clause_name!("peek_byte"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                    };
+
+                loop {
+                    match stream.peek_byte().map_err(|e| e.kind()) {
+                        Ok(b) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::Usize(b as usize));
+                                break;
+                            } else if addr == Addr::Usize(b as usize) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            self.fail = true;
+                            break;
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("peek_byte"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+            &SystemClauseType::PeekChar => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "peek_char", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("peek_char"),
+                    2,
+                )?;
+
+                if stream.past_end_of_stream() {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Atom(ref atom, _) if atom.is_char() => {
+                                    if let Some(c) = atom.as_str().chars().next() {
+                                        Addr::Char(c)
+                                    } else {
+                                        unreachable!()
+                                    }
+                                }
+                                culprit => {
+                                    return Err(self.type_error(
+                                        ValidType::InCharacter,
+                                        culprit.as_addr(h),
+                                        clause_name!("peek_char"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                        Addr::Char(d) => {
+                            Addr::Char(d)
+                        }
+                        culprit => {
+                            return Err(self.type_error(
+                                ValidType::InCharacter,
+                                culprit,
+                                clause_name!("peek_char"),
+                                2,
+                            ));
+                        }
+                    };
+
+                loop {
+                    match stream.peek_char().map_err(|e| e.kind()) {
+                        Ok(d) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::Char(d));
+                                break;
+                            } else if addr == Addr::Char(d) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            self.fail = true;
+                            break;
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("peek_char"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }/*
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("peek_char"), 2);
+                            let err = MachineError::representation_error(RepFlag::Character);
+                            let err = self.error_form(err, stub);
+
+                            return Err(err);
+                        }*/
+                    }
+                }
+            }
+            &SystemClauseType::PeekCode => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "peek_code", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("peek_code"),
+                    2,
+                )?;
+
+                if stream.past_end_of_stream() {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        Addr::CharCode(d) => {
+                            Addr::CharCode(d)
+                        }
+                        addr => {
+                            match Number::try_from((addr, &self.heap)) {
+                                Ok(Number::Integer(n)) => {
+                                    if let Some(c) = n.to_u32().and_then(|c| char::try_from(c).ok()) {
+                                        Addr::CharCode(c as u32)
+                                    } else {
+                                        return Err(self.representation_error(
+                                            RepFlag::InCharacterCode,
+                                            clause_name!("peek_code"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                Ok(Number::Fixnum(n)) => {
+                                    if let Some(c) = u32::try_from(n).ok().and_then(|c| char::try_from(c).ok()) {
+                                        Addr::CharCode(c as u32)
+                                    } else {
+                                        return Err(self.representation_error(
+                                            RepFlag::InCharacterCode,
+                                            clause_name!("peek_code"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(self.type_error(
+                                        ValidType::Integer,
+                                        self[temp_v!(2)],
+                                        clause_name!("peek_code"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                    };
+
+                loop {
+                    let result = stream.peek_char();
+
+                    match result.map_err(|e| e.kind()) {
+                        Ok(c) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::CharCode(c as u32));
+                                break;
+                            } else if addr == Addr::CharCode(c as u32) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            self.fail = true;
+                            break;
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("peek_code"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }/*
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("get_char"), 2);
+                            let err = MachineError::representation_error(RepFlag::Character);
+                            let err = self.error_form(err, stub);
+
+                            return Err(err);
+                        }*/
+                    }
+                }
+            }
             &SystemClauseType::NumberToChars => {
                 let n = self[temp_v!(1)];
                 let chs = self[temp_v!(2)];
@@ -1534,8 +1812,6 @@ impl MachineState {
             }
             &SystemClauseType::FileToChars => {
                 // TODO: Replace this with stream.
-                use std::io;
-
                 let a1 = self.store(self.deref(self[temp_v!(1)]));
                 let a2 = self.store(self.deref(self[temp_v!(2)]));
 
@@ -1565,15 +1841,15 @@ impl MachineState {
                         let h = self.heap.h();
 
                         let err = match e.kind() {
-                            io::ErrorKind::NotFound => {
+                            ErrorKind::NotFound => {
                                 MachineError::existence_error(
                                     h,
-                                    ExistenceError::SourceSink(
+                                    ExistenceError::ModuleSource(
                                         ModuleSource::File(file_name)
                                     ),
                                 )
                             }
-                            io::ErrorKind::PermissionDenied => {
+                            ErrorKind::PermissionDenied => {
                                 let source_sink = self.store(self.deref(a1));
 
                                 MachineError::permission_error(
@@ -1615,36 +1891,559 @@ impl MachineState {
 
                 self.unify(complete_string, a2);
             }
-            &SystemClauseType::GetChar => {
-                let mut iter = self.open_parsing_stream(
-                    current_input_stream.clone(),
-                    "get_char",
-                    1,
+            &SystemClauseType::PutCode => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "put_code", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    None,
+                    clause_name!("put_code"),
+                    2,
                 )?;
 
-                let result = iter.next();
-                let a1 = self[temp_v!(1)];
+                match self.store(self.deref(self[temp_v!(2)])) {
+                    addr if addr.is_ref() => {
+                        let stub = MachineError::functor_stub(clause_name!("put_code"), 2);
+                        let err = MachineError::instantiation_error();
 
-                match result {
-                    Some(Ok(b)) => {
-                        self.unify(Addr::Char(b as char), a1);
+                        return Err(self.error_form(err, stub));
                     }
-                    Some(Err(_)) => {
-                        let end_of_file = self.heap.to_unifiable(HeapCellValue::Atom(
-                            clause_name!("end_of_file"),
-                            None,
-                        ));
-
-                        self.unify(a1, end_of_file);
+                    Addr::CharCode(c) => {
+                        let c = char::try_from(c).unwrap();
+                        write!(&mut stream, "{}", c).unwrap();
                     }
-                    None => {
-                        let stub = MachineError::functor_stub(clause_name!("get_char"), 1);
-                        let err = MachineError::representation_error(RepFlag::Character);
-                        let err = self.error_form(err, stub);
+                    addr => {
+                        match Number::try_from((addr, &self.heap)) {
+                            Ok(Number::Integer(n)) => {
+                                if let Some(c) = n.to_u32().and_then(|c| char::try_from(c).ok()) {
+                                    write!(&mut stream, "{}", c).unwrap();
+                                    return return_from_clause!(self.last_call, self);
+                                }
+                            }
+                            Ok(Number::Fixnum(n)) => {
+                                if let Some(c) = u32::try_from(n).ok().and_then(|c| char::try_from(c).ok()) {
+                                    write!(&mut stream, "{}", c).unwrap();
+                                    return return_from_clause!(self.last_call, self);
+                                }
+                            }
+                            _ => {
+                                let stub = MachineError::functor_stub(clause_name!("put_code"), 2);
+                                let err = MachineError::type_error(
+                                    self.heap.h(),
+                                    ValidType::Integer,
+                                    self[temp_v!(2)],
+                                );
 
-                        return Err(err);
+                                return Err(self.error_form(err, stub));
+                            }
+                        }
+
+                        let stub = MachineError::functor_stub(clause_name!("put_code"), 2);
+                        let err = MachineError::representation_error(
+                            RepFlag::CharacterCode,
+                        );
+
+                        return Err(self.error_form(err, stub));
                     }
                 }
+            }
+            &SystemClauseType::PutChar => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "put_char", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    None,
+                    clause_name!("put_char"),
+                    2,
+                )?;
+
+                match self.store(self.deref(self[temp_v!(2)])) {
+                    addr if addr.is_ref() => {
+                        let stub = MachineError::functor_stub(clause_name!("put_char"), 2);
+                        let err = MachineError::instantiation_error();
+
+                        return Err(self.error_form(err, stub));
+                    }
+                    addr => {
+                        match self.store(self.deref(self[temp_v!(2)])) {
+                            Addr::Con(h) if self.heap.atom_at(h) => {
+                                match &self.heap[h] {
+                                    HeapCellValue::Atom(ref atom, _) if atom.is_char() => {
+                                        if let Some(c) = atom.as_str().chars().next() {
+                                            write!(&mut stream, "{}", c).unwrap();
+                                            return return_from_clause!(self.last_call, self);
+                                        } else {
+                                            unreachable!()
+                                        }
+                                    }
+                                    _ => {
+                                        unreachable!()
+                                    }
+                                }
+                            }
+                            Addr::Char(c) => {
+                                write!(&mut stream, "{}", c).unwrap();
+                                return return_from_clause!(self.last_call, self);
+                            }
+                            _ => {
+                            }
+                        }
+
+                        let stub = MachineError::functor_stub(clause_name!("put_char"), 2);
+                        let err = MachineError::type_error(
+                            self.heap.h(),
+                            ValidType::Character,
+                            addr,
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }
+            }
+            &SystemClauseType::PutByte => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "put_byte", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Binary,
+                    None,
+                    clause_name!("put_byte"),
+                    2,
+                )?;
+
+                match self.store(self.deref(self[temp_v!(2)])) {
+                    addr if addr.is_ref() => {
+                        let stub = MachineError::functor_stub(clause_name!("put_byte"), 2);
+                        let err = MachineError::instantiation_error();
+
+                        return Err(self.error_form(err, stub));
+                    }
+                    addr => {
+                        match Number::try_from((addr, &self.heap)) {
+                            Ok(Number::Integer(n)) => {
+                                if let Some(nb) = n.to_u8() {
+                                    stream.write(&mut [nb]).unwrap();
+                                    return return_from_clause!(self.last_call, self);
+                                }
+                            }
+                            Ok(Number::Fixnum(n)) => {
+                                if let Ok(nb) = u8::try_from(n) {
+                                    stream.write(&mut [nb]).unwrap();
+                                    return return_from_clause!(self.last_call, self);
+                                }
+                            }
+                            _ => {
+                            }
+                        }
+
+                        let stub = MachineError::functor_stub(clause_name!("put_byte"), 2);
+                        let err = MachineError::type_error(
+                            self.heap.h(),
+                            ValidType::Byte,
+                            self[temp_v!(2)],
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }
+            }
+            &SystemClauseType::GetByte => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_byte", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Binary,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("get_byte"),
+                    2,
+                )?;
+
+                if stream.past_end_of_stream() {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        addr => {
+                            match Number::try_from((addr, &self.heap)) {
+                                Ok(Number::Integer(n)) => {
+                                    if let Some(nb) = n.to_u8() {
+                                        Addr::Usize(nb as usize)
+                                    } else {
+                                        return Err(self.type_error(
+                                            ValidType::InByte,
+                                            addr,
+                                            clause_name!("get_byte"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                Ok(Number::Fixnum(n)) => {
+                                    if let Ok(nb) = u8::try_from(n) {
+                                        Addr::Usize(nb as usize)
+                                    } else {
+                                        return Err(self.type_error(
+                                            ValidType::InByte,
+                                            addr,
+                                            clause_name!("get_byte"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(self.type_error(
+                                        ValidType::InByte,
+                                        addr,
+                                        clause_name!("get_byte"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                    };
+
+                loop {
+                    let mut b = [0u8; 1];
+
+                    match stream.read(&mut b) {
+                        Ok(1) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::Usize(b[0] as usize));
+                                break;
+                            } else if addr == Addr::Usize(b[0] as usize) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("get_byte"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+            &SystemClauseType::GetChar => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_char", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("get_char"),
+                    2,
+                )?;
+
+                if stream.past_end_of_stream() {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                let mut iter = self.open_parsing_stream(
+                    stream.clone(),
+                    "get_char",
+                    2,
+                )?;
+
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Atom(ref atom, _) if atom.is_char() => {
+                                    if let Some(c) = atom.as_str().chars().next() {
+                                        Addr::Char(c)
+                                    } else {
+                                        unreachable!()
+                                    }
+                                }
+                                culprit => {
+                                    return Err(self.type_error(
+                                        ValidType::InCharacter,
+                                        culprit.as_addr(h),
+                                        clause_name!("get_char"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                        Addr::Char(d) => {
+                            Addr::Char(d)
+                        }
+                        culprit => {
+                            return Err(self.type_error(
+                                ValidType::InCharacter,
+                                culprit,
+                                clause_name!("get_char"),
+                                2,
+                            ));
+                        }
+                    };
+
+                loop {
+                    let result = iter.next();
+
+                    match result {
+                        Some(Ok(d)) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::Char(d));
+                                break;
+                            } else if addr == Addr::Char(d) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("get_char"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }/*
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("get_char"), 2);
+                            let err = MachineError::representation_error(RepFlag::Character);
+                            let err = self.error_form(err, stub);
+
+                            return Err(err);
+                        }*/
+                    }
+                }
+            }
+            &SystemClauseType::GetCode => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_code", 2)?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    Some(self[temp_v!(2)]),
+                    clause_name!("get_code"),
+                    2,
+                )?;
+
+                if stream.past_end_of_stream() {
+                    if EOFAction::Reset != stream.options.eof_action {
+                        return return_from_clause!(self.last_call, self);
+                    } else if self.fail {
+                        return Ok(());
+                    }
+                }
+
+                let addr =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        addr if addr.is_ref() => {
+                            addr
+                        }
+                        Addr::CharCode(d) => {
+                            Addr::CharCode(d)
+                        }
+                        addr => {
+                            match Number::try_from((addr, &self.heap)) {
+                                Ok(Number::Integer(n)) => {
+                                    if let Some(c) = n.to_u32().and_then(|c| char::try_from(c).ok()) {
+                                        Addr::CharCode(c as u32)
+                                    } else {
+                                        return Err(self.representation_error(
+                                            RepFlag::InCharacterCode,
+                                            clause_name!("get_code"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                Ok(Number::Fixnum(n)) => {
+                                    if let Some(c) = u32::try_from(n).ok().and_then(|c| char::try_from(c).ok()) {
+                                        Addr::CharCode(c as u32)
+                                    } else {
+                                        return Err(self.representation_error(
+                                            RepFlag::InCharacterCode,
+                                            clause_name!("get_code"),
+                                            2,
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(self.type_error(
+                                        ValidType::Integer,
+                                        self[temp_v!(2)],
+                                        clause_name!("get_code"),
+                                        2,
+                                    ));
+                                }
+                            }
+                        }
+                    };
+
+                let mut iter = self.open_parsing_stream(
+                    stream.clone(),
+                    "get_code",
+                    2,
+                )?;
+
+                loop {
+                    let result = iter.next();
+
+                    match result {
+                        Some(Ok(c)) => {
+                            if let Some(var) = addr.as_var() {
+                                self.bind(var, Addr::CharCode(c as u32));
+                                break;
+                            } else if addr == Addr::CharCode(c as u32) {
+                                break;
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        _ => {
+                            self.eof_action(
+                                self[temp_v!(2)],
+                                &mut stream,
+                                clause_name!("get_code"),
+                                2,
+                            )?;
+
+                            if EOFAction::Reset != stream.options.eof_action {
+                                return return_from_clause!(self.last_call, self);
+                            } else if self.fail {
+                                return Ok(());
+                            }
+                        }/*
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("get_char"), 2);
+                            let err = MachineError::representation_error(RepFlag::Character);
+                            let err = self.error_form(err, stub);
+
+                            return Err(err);
+                        }*/
+                    }
+                }
+            }
+            &SystemClauseType::FirstStream => {
+                let mut first_stream = None;
+                let mut null_streams = BTreeSet::new();
+
+                for stream in indices.streams.iter().cloned() {
+                    if !stream.is_null_stream() {
+                        first_stream = Some(stream);
+                        break;
+                    } else {
+                        null_streams.insert(stream);
+                    }
+                }
+
+                indices.streams = indices.streams.sub(&null_streams);
+
+                if let Some(first_stream) = first_stream {
+                    let stream = self.heap.to_unifiable(HeapCellValue::Stream(first_stream));
+
+                    let var = self.store(self.deref(self[temp_v!(1)])).as_var().unwrap();
+                    self.bind(var, stream);
+                } else {
+                    self.fail = true;
+                    return Ok(());
+                }
+            }
+            &SystemClauseType::NextStream => {
+                let prev_stream =
+                    match self.store(self.deref(self[temp_v!(1)])) {
+                        Addr::Stream(h) => {
+                            if let HeapCellValue::Stream(ref stream) = &self.heap[h] {
+                                stream.clone()
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let mut next_stream  = None;
+                let mut null_streams = BTreeSet::new();
+
+                for stream in indices.streams.range(prev_stream.clone() ..).skip(1).cloned() {
+                    if !stream.is_null_stream() {
+                        next_stream = Some(stream);
+                        break;
+                    } else {
+                        null_streams.insert(stream);
+                    }
+                }
+
+                indices.streams = indices.streams.sub(&null_streams);
+
+                if let Some(next_stream) = next_stream {
+                    let var = self.store(self.deref(self[temp_v!(2)])).as_var().unwrap();
+                    let next_stream = self.heap.to_unifiable(HeapCellValue::Stream(next_stream));
+
+                    self.bind(var, next_stream);
+                } else {
+                    self.fail = true;
+                    return Ok(());
+                }
+            }
+            &SystemClauseType::FlushOutput => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "flush_output", 1)?;
+
+                if !stream.is_output_stream() {
+                    let stub = MachineError::functor_stub(clause_name!("flush_output"), 1);
+
+                    let addr = vec![
+                        HeapCellValue::Stream(stream)
+                    ];
+
+                    let err = MachineError::permission_error(
+                        self.heap.h(),
+                        Permission::OutputStream,
+                        "stream",
+                        addr,
+                    );
+
+                    return Err(self.error_form(err, stub));
+                }
+
+                stream.flush().unwrap();
             }
             &SystemClauseType::GetSingleChar => {
                 let ctrl_c = KeyEvent {
@@ -1785,6 +2584,38 @@ impl MachineState {
                         unreachable!()
                     }
                 };
+            }
+            &SystemClauseType::Close => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "close", 2)?;
+
+                if !stream.is_input_stream() {
+                    stream.flush().unwrap(); // 8.11.6.1b)
+                }
+
+                indices.streams.remove(&stream);
+
+                if stream == *current_input_stream {
+                    *current_input_stream = indices.stream_aliases.get(
+                        &clause_name!("user_input")
+                    ).cloned().unwrap();
+
+                    indices.streams.insert(current_input_stream.clone());
+                } else if stream == *current_output_stream {
+                    *current_output_stream = indices.stream_aliases.get(
+                        &clause_name!("user_output")
+                    ).cloned().unwrap();
+
+                    indices.streams.insert(current_output_stream.clone());
+                }
+
+                if !stream.is_stdin() && !stream.is_stdout() {
+                    stream.close();
+
+                    if let Some(alias) = stream.options.alias {
+                        indices.stream_aliases.remove(&alias);
+                    }
+                }
             }
             &SystemClauseType::CopyToLiftedHeap => {
                 match self.store(self.deref(self[temp_v!(1)])) {
@@ -2249,6 +3080,109 @@ impl MachineState {
                     }
                 };
             }
+            &SystemClauseType::Open => {
+                let alias = self[temp_v!(4)];
+                let eof_action = self[temp_v!(5)];
+                let reposition = self[temp_v!(6)];
+                let stream_type = self[temp_v!(7)];
+
+                let options =
+                    self.to_stream_options(alias, eof_action, reposition, stream_type);
+
+                let file_spec =
+                    atom_from!(self, indices, self.store(self.deref(self[temp_v!(1)])));
+
+                // 8.11.5.3l)
+                if let Some(ref alias) = &options.alias {
+                    if indices.stream_aliases.contains_key(alias) {
+                        return Err(self.occupied_alias_permission_error(
+                            alias.clone(),
+                            "open",
+                            4,
+                        ));
+                    }
+                }
+
+                let mode =
+                    atom_from!(self, indices, self.store(self.deref(self[temp_v!(2)])));
+
+                let mut open_options = OpenOptions::new();
+
+                let (is_input_file, in_append_mode) =
+                    match mode.as_str() {
+                        "read" => {
+                            open_options.read(true).write(false).create(false);
+                            (true, false)
+                        }
+                        "write" => {
+                            open_options.read(false).write(true).truncate(true).create(true);
+                            (false, false)
+                        }
+                        "append" => {
+                            open_options.read(false).write(true).create(true).append(true);
+                            (false, true)
+                        }
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("open"), 4);
+                            let err  = MachineError::domain_error(
+                                DomainErrorType::IOMode,
+                                self[temp_v!(2)],
+                            );
+
+                            // 8.11.5.3h)
+                            return Err(self.error_form(err, stub));
+                        }
+                    };
+
+                let file =
+                    match open_options.open(file_spec.as_str()).map_err(|e| e.kind()) {
+                        Ok(file) => {
+                            file
+                        }
+                        Err(ErrorKind::NotFound) => {
+                            // 8.11.5.3j)
+                            let stub = MachineError::functor_stub(
+                                clause_name!("open"),
+                                4,
+                            );
+
+                            let err = MachineError::existence_error(
+                                self.heap.h(),
+                                ExistenceError::SourceSink(self[temp_v!(1)]),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            // 8.11.5.3k)
+                            return Err(self.open_permission_error(self[temp_v!(1)], "open", 4));
+                        }
+                        Err(_) => {
+                            // for now, just fail. expand to meaningful error messages later.
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    };
+
+                let mut stream = if is_input_file {
+                    Stream::from_file_as_input(file_spec, file)
+                } else {
+                    Stream::from_file_as_output(file_spec, file, in_append_mode)
+                };
+
+                stream.options = options;
+
+                indices.streams.insert(stream.clone());
+
+                if let Some(ref alias) = &stream.options.alias {
+                    indices.stream_aliases.insert(alias.clone(), stream.clone());
+                }
+
+                let stream = self.heap.to_unifiable(HeapCellValue::Stream(stream));
+                let stream_var = self.store(self.deref(self[temp_v!(3)]));
+
+                self.bind(stream_var.as_var().unwrap(), stream);
+            }
             &SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff => {
                 self.truncate_if_no_lifted_heap_diff(|h| Addr::HeapCell(h))
             }
@@ -2560,17 +3494,14 @@ impl MachineState {
                                 3,
                             );
 
-                            let type_error = self.error_form(
+                            return Err(self.error_form(
                                 MachineError::type_error(
                                     self.heap.h(),
                                     ValidType::Integer,
                                     a2,
                                 ),
                                 stub,
-                            );
-
-                            self.throw_exception(type_error);
-                            return Ok(());
+                            ));
                         }
                     };
 
@@ -2883,9 +3814,9 @@ impl MachineState {
             }
             &SystemClauseType::SetInput => {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
-                let stream = self.get_stream_or_alias(addr, indices, "set_input")?;
+                let stream = self.get_stream_or_alias(addr, indices, "set_input", 1)?;
 
-                if stream.is_output_stream() {
+                if !stream.is_input_stream() {
                     let stub = MachineError::functor_stub(
                         clause_name!("set_input"),
                         1,
@@ -2909,9 +3840,9 @@ impl MachineState {
             }
             &SystemClauseType::SetOutput => {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
-                let stream = self.get_stream_or_alias(addr, indices, "set_output")?;
+                let stream = self.get_stream_or_alias(addr, indices, "set_output", 1)?;
 
-                if stream.is_input_stream() {
+                if !stream.is_output_stream() {
                     let stub = MachineError::functor_stub(
                         clause_name!("set_input"),
                         1,
@@ -3197,14 +4128,29 @@ impl MachineState {
             }
             &SystemClauseType::ReadQueryTerm => {
                 readline::set_prompt(true);
-                let result = self.read_term(current_input_stream, indices);
+                let result = self.read_term(current_input_stream.clone(), indices);
                 readline::set_prompt(false);
 
-                let _ = result?;
+                match result {
+                    Ok(()) => {
+                    }
+                    Err(e) => {
+                        *current_input_stream = readline::input_stream();
+                        return Err(e);
+                    }
+                }
             }
             &SystemClauseType::ReadTerm => {
                 readline::set_prompt(false);
-                self.read_term(current_input_stream, indices)?;
+
+                let stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    indices,
+                    "read_term",
+                    3,
+                )?;
+
+                self.read_term(stream, indices)?;
             }
             &SystemClauseType::ReadTermFromChars => {
                 let mut heap_pstr_iter = self.heap_pstr_iter(self[temp_v!(1)]);
@@ -3316,6 +4262,471 @@ impl MachineState {
                 let duration = Duration::new(1, 0);
                 let duration = duration.mul_f64(time);
                 ::std::thread::sleep(duration);
+            }
+            &SystemClauseType::SocketClientOpen => {
+                let addr = self.store(self.deref(self[temp_v!(1)]));
+                let port = self.store(self.deref(self[temp_v!(2)]));
+
+                let socket_atom =
+                    match addr {
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+                                name.clone()
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let port =
+                    match port {
+                        Addr::Fixnum(n) => {
+                            n.to_string()
+                        }
+                        Addr::Usize(n) => {
+                            n.to_string()
+                        }
+                        Addr::Con(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Atom(ref name, _) => {
+                                    name.as_str().to_string()
+                                }
+                                HeapCellValue::Integer(ref n) => {
+                                    n.to_string()
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let socket_addr =
+                    format!(
+                        "{}:{}",
+                        if socket_atom.as_str() == "" {
+                            "127.0.0.1"
+                        } else {
+                            socket_atom.as_str()
+                        },
+                        port,
+                    );
+
+                let alias = self[temp_v!(4)];
+                let eof_action = self[temp_v!(5)];
+                let reposition = self[temp_v!(6)];
+                let stream_type = self[temp_v!(7)];
+
+                let options =
+                    self.to_stream_options(alias, eof_action, reposition, stream_type);
+
+                if options.reposition {
+                    return Err(self.reposition_error("socket_client_open", 3));
+                }
+
+                if let Some(ref alias) = &options.alias {
+                    if indices.stream_aliases.contains_key(alias) {
+                        return Err(self.occupied_alias_permission_error(
+                            alias.clone(),
+                            "socket_client_open",
+                            3,
+                        ));
+                    }
+                }
+
+                let stream =
+                    match TcpStream::connect(&socket_addr).map_err(|e| e.kind()) {
+                        Ok(tcp_stream) => {
+                            let socket_addr = clause_name!(socket_addr, indices.atom_tbl.clone());
+
+                            let mut stream = Stream::from_tcp_stream(socket_addr, tcp_stream);
+                            stream.options = options;
+
+                            if let Some(ref alias) = &stream.options.alias {
+                                indices.stream_aliases.insert(alias.clone(), stream.clone());
+                            }
+
+                            indices.streams.insert(stream.clone());
+
+                            self.heap.to_unifiable(HeapCellValue::Stream(stream))
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            return Err(self.open_permission_error(addr, "socket_client_open", 3));
+                        }
+                        Err(ErrorKind::NotFound) => {
+                            let stub = MachineError::functor_stub(
+                                clause_name!("socket_client_open"),
+                                3,
+                            );
+
+                            let err = MachineError::existence_error(
+                                self.heap.h(),
+                                ExistenceError::SourceSink(addr),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+                        Err(_) => {
+                            // for now, just fail. expand to meaningful error messages later.
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    };
+
+                let stream_addr = self.store(self.deref(self[temp_v!(3)]));
+                self.bind(stream_addr.as_var().unwrap(), stream);
+            }
+            &SystemClauseType::SocketServerOpen => {
+                let addr = self.store(self.deref(self[temp_v!(1)]));
+                let socket_atom =
+                    match addr {
+                        Addr::EmptyList => {
+                            "127.0.0.1".to_string()
+                        }
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Atom(ref name, _) => {
+                                    name.as_str().to_string()
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let port =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        Addr::Fixnum(n) => {
+                            n.to_string()
+                        }
+                        Addr::Usize(n) => {
+                            n.to_string()
+                        }
+                        Addr::Con(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Integer(ref n) => {
+                                    n.to_string()
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                        addr if addr.is_ref() => {
+                            "0".to_string()
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let had_zero_port = &port == "0";
+
+                let server_addr = if socket_atom.is_empty() {
+                    port
+                } else {
+                    format!("{}:{}", socket_atom, port)
+                };
+
+                let (tcp_listener, port) =
+                    match TcpListener::bind(server_addr).map_err(|e| e.kind()) {
+                        Ok(tcp_listener) => {
+                            let port = tcp_listener.local_addr().map(|addr| addr.port()).ok();
+
+                            if let Some(port) = port {
+                                (
+                                    self.heap.to_unifiable(HeapCellValue::TcpListener(tcp_listener)),
+                                    port as usize,
+                                )
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        Err(ErrorKind::PermissionDenied) => {
+                            return Err(self.open_permission_error(addr, "socket_server_open", 2));
+                        }
+                        _ => {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    };
+
+                let addr = self.store(self.deref(self[temp_v!(3)]));
+                self.bind(addr.as_var().unwrap(), tcp_listener);
+
+                if had_zero_port {
+                    self.unify(self[temp_v!(2)], Addr::Usize(port));
+                }
+            }
+            &SystemClauseType::SocketServerAccept => {
+                let alias = self[temp_v!(4)];
+                let eof_action = self[temp_v!(5)];
+                let reposition = self[temp_v!(6)];
+                let stream_type = self[temp_v!(7)];
+
+                let options =
+                    self.to_stream_options(alias, eof_action, reposition, stream_type);
+
+                if options.reposition {
+                    return Err(self.reposition_error("socket_server_accept", 4));
+                }
+
+                if let Some(ref alias) = &options.alias {
+                    if indices.stream_aliases.contains_key(alias) {
+                        return Err(self.occupied_alias_permission_error(
+                            alias.clone(),
+                            "socket_server_accept",
+                            4,
+                        ));
+                    }
+                }
+
+                match self.store(self.deref(self[temp_v!(1)])) {
+                    Addr::TcpListener(h) => {
+                        match &mut self.heap[h] {
+                            HeapCellValue::TcpListener(ref mut tcp_listener) => {
+                                match tcp_listener.accept().ok() {
+                                    Some((tcp_stream, socket_addr)) => {
+                                        let client =
+                                            clause_name!(format!("{}", socket_addr), indices.atom_tbl);
+
+                                        let mut tcp_stream =
+                                            Stream::from_tcp_stream(client.clone(), tcp_stream);
+
+                                        tcp_stream.options = options;
+
+                                        if let Some(ref alias) = &tcp_stream.options.alias {
+                                            indices.stream_aliases.insert(
+                                                alias.clone(),
+                                                tcp_stream.clone(),
+                                            );
+                                        }
+
+                                        indices.streams.insert(tcp_stream.clone());
+
+                                        let tcp_stream =
+                                            self.heap.to_unifiable(HeapCellValue::Stream(tcp_stream));
+
+                                        let client =
+                                            self.heap.to_unifiable(HeapCellValue::Atom(client, None));
+
+                                        let client_addr = self.store(self.deref(self[temp_v!(2)]));
+                                        let stream_addr = self.store(self.deref(self[temp_v!(3)]));
+
+                                        self.bind(client_addr.as_var().unwrap(), client);
+                                        self.bind(stream_addr.as_var().unwrap(), tcp_stream);
+                                    }
+                                    None => {
+                                        self.fail = true;
+                                        return Ok(());
+                                    }
+                                }
+                            }
+                            culprit => {
+                                let culprit = culprit.as_addr(h);
+
+                                return Err(self.type_error(
+                                    ValidType::TcpListener,
+                                    culprit,
+                                    clause_name!("socket_server_accept"),
+                                    4,
+                                ));
+                            }
+                        }
+                    }
+                    culprit => {
+                        return Err(self.type_error(
+                            ValidType::TcpListener,
+                            culprit,
+                            clause_name!("socket_server_accept"),
+                            4,
+                        ));
+                    }
+                }
+            }
+            &SystemClauseType::SocketServerClose => {
+                match self.store(self.deref(self[temp_v!(1)])) {
+                    Addr::TcpListener(h) => {
+                        let closed_tcp_listener = clause_name!("$closed_tcp_listener");
+                        self.heap[h] = HeapCellValue::Atom(closed_tcp_listener, None);
+                    }
+                    culprit => {
+                        return Err(self.type_error(
+                            ValidType::TcpListener,
+                            culprit,
+                            clause_name!("socket_server_close"),
+                            1,
+                        ));
+                    }
+                }
+            }
+            &SystemClauseType::SetStreamPosition => {
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    indices,
+                    "set_stream_position",
+                    2,
+                )?;
+
+                if !stream.options.reposition {
+                    let stub = MachineError::functor_stub(clause_name!("set_stream_position"), 2);
+
+                    let err = MachineError::permission_error(
+                        self.heap.h(),
+                        Permission::Reposition,
+                        "stream",
+                        vec![HeapCellValue::Stream(stream)],
+                    );
+
+                    return Err(self.error_form(err, stub));
+                }
+
+                let position = self.store(self.deref(self[temp_v!(2)]));
+
+                let position =
+                    match Number::try_from((position, &self.heap)) {
+                        Ok(Number::Fixnum(n)) => {
+                            n as u64
+                        }
+                        Ok(Number::Integer(n)) => {
+                            if let Some(n) = n.to_u64() {
+                                n
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                stream.set_position(position);
+            }
+            &SystemClauseType::StreamProperty => {
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    indices,
+                    "stream_property",
+                    2,
+                )?;
+
+                let property =
+                    match self.store(self.deref(self[temp_v!(2)])) {
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            match &self.heap[h] {
+                                HeapCellValue::Atom(ref name, _) => {
+                                    match name.as_str() {
+                                        "file_name" => {
+                                            if let Some(file_name) = stream.file_name() {
+                                                HeapCellValue::Atom(
+                                                    file_name,
+                                                    None,
+                                                )
+                                            } else {
+                                                self.fail = true;
+                                                return Ok(());
+                                            }
+                                        }
+                                        "mode" => {
+                                            HeapCellValue::Atom(
+                                                clause_name!(stream.mode()),
+                                                None,
+                                            )
+                                        }
+                                        "direction" => {
+                                            HeapCellValue::Atom(
+                                                if stream.is_input_stream() && stream.is_output_stream() {
+                                                    clause_name!("input_output")
+                                                } else if stream.is_input_stream() {
+                                                    clause_name!("input")
+                                                } else {
+                                                    clause_name!("output")
+                                                },
+                                                None,
+                                            )
+                                        }
+                                        "alias" => {
+                                            if let Some(alias) = &stream.options.alias {
+                                                HeapCellValue::Atom(
+                                                    alias.clone(),
+                                                    None,
+                                                )
+                                            } else {
+                                                self.fail = true;
+                                                return Ok(());
+                                            }
+                                        }
+                                        "position" => {
+                                            if stream.options.reposition {
+                                                if let Some(position) = stream.position() {
+                                                    HeapCellValue::Addr(Addr::Usize(position as usize))
+                                                } else {
+                                                    unreachable!()
+                                                }
+                                            } else {
+                                                self.fail = true;
+                                                return Ok(());
+                                            }
+                                        }
+                                        "end_of_stream" => {
+                                            let end_of_stream_pos = stream.position_relative_to_end();
+
+                                            HeapCellValue::Atom(
+                                                clause_name!(end_of_stream_pos.as_str()),
+                                                None,
+                                            )
+                                        }
+                                        "eof_action" => {
+                                            HeapCellValue::Atom(
+                                                clause_name!(stream.options.eof_action.as_str()),
+                                                None,
+                                            )
+                                        }
+                                        "reposition" => {
+                                            HeapCellValue::Atom(
+                                                clause_name!(if stream.options.reposition {
+                                                    "true"
+                                                } else {
+                                                    "false"
+                                                }),
+                                                None,
+                                            )
+                                        }
+                                        "type" => {
+                                            HeapCellValue::Atom(
+                                                clause_name!(stream.options.stream_type.as_property_str()),
+                                                None,
+                                            )
+                                        }
+                                        _ => {
+                                            unreachable!()
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let property = self.heap.to_unifiable(property);
+                self.unify(self[temp_v!(3)], property);
             }
             &SystemClauseType::StoreGlobalVar => {
                 let key = self[temp_v!(1)];
@@ -3519,7 +4930,41 @@ impl MachineState {
                 self.unify(listing, listing_var);
             }
             &SystemClauseType::WriteTerm => {
-                let addr = self[temp_v!(1)];
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    indices,
+                    "write_term",
+                    3,
+                )?;
+
+                self.check_stream_properties(
+                    &mut stream,
+                    StreamType::Text,
+                    None, // input
+                    clause_name!("write_term"),
+                    3,
+                )?;
+
+                let opt_err =
+                    if !stream.is_output_stream() {
+                        Some("stream") // 8.14.2.3 g)
+                    } else if stream.options.stream_type == StreamType::Binary {
+                        Some("binary_stream") // 8.14.2.3 h)
+                    } else {
+                        None
+                    };
+
+                if let Some(err_string) = opt_err {
+                    return Err(self.stream_permission_error(
+                        Permission::OutputStream,
+                        err_string,
+                        stream,
+                        clause_name!("write_term"),
+                        3,
+                    ));
+                }
+
+                let addr = self[temp_v!(2)];
 
                 let printer =
                     match self.write_term(&indices.op_dir)? {
@@ -3534,11 +4979,24 @@ impl MachineState {
 
                 let output = printer.print(addr);
 
-                print!("{}", output.result());
-                stdout().flush().unwrap();
+                match write!(&mut stream, "{}", output.result()) {
+                    Ok(_) => {
+                    }
+                    Err(_) => {
+                        let stub = MachineError::functor_stub(clause_name!("open"), 4);
+                        let err = MachineError::existence_error(
+                            self.heap.h(),
+                            ExistenceError::Stream(self[temp_v!(1)]),
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+                }
+
+                stream.flush().unwrap();
             }
             &SystemClauseType::WriteTermToChars => {
-                let addr = self[temp_v!(1)];
+                let addr = self[temp_v!(2)];
 
                 let printer =
                     match self.write_term(&indices.op_dir)? {
@@ -3554,7 +5012,7 @@ impl MachineState {
                 let result = printer.print(addr).result();
                 let chars = self.heap.put_complete_string(&result);
 
-                let result_addr = self.store(self.deref(self[temp_v!(7)]));
+                let result_addr = self.store(self.deref(self[temp_v!(1)]));
 
                 if let Some(var) = result_addr.as_var() {
                     self.bind(var, chars);
