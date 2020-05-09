@@ -14,6 +14,7 @@ use std::fs::File;
 use std::io::{stdout, Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::hash::{Hash, Hasher};
 use std::net::{Shutdown, TcpStream};
+use std::ops::DerefMut;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -125,12 +126,14 @@ impl fmt::Debug for StreamInstance {
 }
 
 #[derive(Debug, Clone)]
-struct WrappedStreamInstance(Rc<RefCell<StreamInstance>>);
+struct WrappedStreamInstance(Rc<RefCell<(bool, StreamInstance)>>);
 
 impl WrappedStreamInstance {
     #[inline]
     fn new(stream_inst: StreamInstance) -> Self {
-        WrappedStreamInstance(Rc::new(RefCell::new(stream_inst)))
+        WrappedStreamInstance(
+            Rc::new(RefCell::new((false, stream_inst)))
+        )
     }
 }
 
@@ -220,7 +223,6 @@ impl Default for StreamOptions {
 
 #[derive(Debug, Clone, Hash)]
 pub struct Stream {
-    pub past_end_of_stream: bool,
     pub options: StreamOptions,
     stream_inst: WrappedStreamInstance,
 }
@@ -284,7 +286,7 @@ impl Stream {
     #[inline]
     pub(crate)
     fn position(&mut self) -> Option<u64> {
-        match *self.stream_inst.0.borrow_mut() {
+        match self.stream_inst.0.borrow_mut().1 {
             StreamInstance::InputFile(_, ref mut file) => {
                 file.seek(SeekFrom::Current(0)).ok()
             }
@@ -296,13 +298,25 @@ impl Stream {
 
     #[inline]
     pub(crate)
+    fn past_end_of_stream(&self) -> bool {
+        self.stream_inst.0.borrow_mut().0
+    }
+
+    #[inline]
+    pub(crate)
+    fn set_past_end_of_stream(&mut self) {
+        self.stream_inst.0.borrow_mut().0 = true;
+    }
+
+    #[inline]
+    pub(crate)
     fn position_relative_to_end(&mut self) -> AtEndOfStream {
-        if self.past_end_of_stream {
+        if self.past_end_of_stream() {
             return AtEndOfStream::Past;
         }
 
-        match *self.stream_inst.0.borrow_mut() {
-            StreamInstance::InputFile(_, ref mut file) => {
+        match self.stream_inst.0.borrow_mut().deref_mut() {
+            (past_end_of_stream, StreamInstance::InputFile(_, ref mut file)) => {
                 match file.metadata() {
                     Ok(metadata) => {
                         if let Ok(position) = file.seek(SeekFrom::Current(0)) {
@@ -314,17 +328,17 @@ impl Stream {
                                     AtEndOfStream::Not
                                 }
                                 Ordering::Greater => {
-                                    self.past_end_of_stream = true;
+                                    *past_end_of_stream = true; //self.set_past_end_of_stream();
                                     AtEndOfStream::Past
                                 }
                             };
                         } else {
-                            self.past_end_of_stream = true;
+                            *past_end_of_stream = true; //self.set_past_end_of_stream();
                             AtEndOfStream::Past
                         }
                     }
                     _ => {
-                        self.past_end_of_stream = true;
+                        *past_end_of_stream = true; //self.set_past_end_of_stream();
                         AtEndOfStream::Past
                     }
                 }
@@ -338,7 +352,7 @@ impl Stream {
     #[inline]
     pub(crate)
     fn file_name(&self) -> Option<ClauseName> {
-        match *self.stream_inst.0.borrow() {
+        match self.stream_inst.0.borrow().1 {
             StreamInstance::InputFile(ref name, _) => {
                 Some(name.clone())
             }
@@ -357,7 +371,7 @@ impl Stream {
     #[inline]
     pub(crate)
     fn mode(&self) -> &'static str {
-        match *self.stream_inst.0.borrow() {
+        match self.stream_inst.0.borrow().1 {
             StreamInstance::Bytes(_) |
             StreamInstance::ReadlineStream(_) |
             StreamInstance::DynReadSource(_) |
@@ -383,7 +397,6 @@ impl Stream {
     #[inline]
     fn from_inst(stream_inst: StreamInstance) -> Self {
         Stream {
-            past_end_of_stream: false,
             options: StreamOptions::default(),
             stream_inst: WrappedStreamInstance::new(stream_inst)
         }
@@ -419,7 +432,7 @@ impl Stream {
     #[inline]
     pub(crate)
     fn is_stdout(&self) -> bool {
-        match *self.stream_inst.0.borrow() {
+        match self.stream_inst.0.borrow().1 {
             StreamInstance::Stdout => {
                 true
             }
@@ -432,7 +445,7 @@ impl Stream {
     #[inline]
     pub(crate)
     fn is_stdin(&self) -> bool {
-        match *self.stream_inst.0.borrow() {
+        match self.stream_inst.0.borrow().1 {
             //StreamInstance::Stdin |
             StreamInstance::ReadlineStream(_) => {
                 true
@@ -446,14 +459,13 @@ impl Stream {
     #[inline]
     pub(crate)
     fn close(&mut self) {
-        *self.stream_inst.0.borrow_mut() = StreamInstance::Null;
-        self.past_end_of_stream = true;
+        self.stream_inst.0.borrow_mut().1 = StreamInstance::Null;
     }
 
     #[inline]
     pub(crate)
     fn is_null_stream(&self) -> bool {
-        if let StreamInstance::Null = *self.stream_inst.0.borrow() {
+        if let StreamInstance::Null = self.stream_inst.0.borrow().1 {
             true
         } else {
             false
@@ -463,7 +475,7 @@ impl Stream {
     #[inline]
     pub(crate)
     fn is_input_stream(&self) -> bool {
-        match *self.stream_inst.0.borrow() {
+        match self.stream_inst.0.borrow().1 {
             // StreamInstance::Stdin |
             StreamInstance::TcpStream(..) |
             StreamInstance::Bytes(_) |
@@ -481,7 +493,7 @@ impl Stream {
     #[inline]
     pub(crate)
     fn is_output_stream(&self) -> bool {
-        match *self.stream_inst.0.borrow() {
+        match self.stream_inst.0.borrow().1 {
             StreamInstance::Stdout
           | StreamInstance::TcpStream(..)
           | StreamInstance::Bytes(_)
@@ -497,7 +509,7 @@ impl Stream {
     // returns true on success.
     #[inline]
     fn reset(&mut self) -> bool {
-        match *self.stream_inst.0.borrow_mut() {
+        match self.stream_inst.0.borrow_mut().1 {
             StreamInstance::Bytes(ref mut cursor) => {
                 cursor.set_position(0);
                 true
@@ -519,7 +531,7 @@ impl Stream {
     #[inline]
     pub(crate)
     fn peek_byte(&mut self) -> std::io::Result<u8> {
-        match *self.stream_inst.0.borrow_mut() {
+        match self.stream_inst.0.borrow_mut().1 {
             StreamInstance::Bytes(ref mut cursor) => {
                 let mut b = [0u8; 1];
                 let pos = cursor.position();
@@ -575,7 +587,7 @@ impl Stream {
     fn peek_char(&mut self) -> std::io::Result<char> {
         use unicode_reader::CodePoints;
 
-        match *self.stream_inst.0.borrow_mut() {
+        match self.stream_inst.0.borrow_mut().1 {
             StreamInstance::InputFile(_, ref mut file) => {
                 let c = {
                     let mut iter = CodePoints::from(&*file);
@@ -638,7 +650,7 @@ impl MachineState {
     ) -> CallResult {
         match stream.options.eof_action {
             EOFAction::Error => {
-                stream.past_end_of_stream = true;
+                stream.set_past_end_of_stream();
                 return Err(self.open_past_eos_error(stream.clone(), caller, arity));
             }
             EOFAction::EOFCode => {
@@ -646,12 +658,15 @@ impl MachineState {
                     HeapCellValue::Atom(clause_name!("end_of_file"), None)
                 );
 
-                stream.past_end_of_stream = true;
+                stream.set_past_end_of_stream();
                 Ok(self.unify(result, end_of_stream))
             }
             EOFAction::Reset => {
-                stream.past_end_of_stream = !stream.reset();
-                Ok(self.fail = stream.past_end_of_stream)
+                if !stream.reset() {
+                    stream.set_past_end_of_stream();
+                }
+
+                Ok(self.fail = stream.past_end_of_stream())
             }
         }
     }
@@ -752,10 +767,10 @@ impl MachineState {
             Addr::Con(h) if self.heap.atom_at(h) => {
 	            if let HeapCellValue::Atom(ref atom, ref spec) = self.heap.clone(h) {
                     match indices.stream_aliases.get(atom) {
-                        Some(stream) => {
+                        Some(stream) if !stream.is_null_stream() => {
                             stream.clone()
                         }
-                        None => {
+                        _ => {
                             let stub = MachineError::functor_stub(clause_name!(caller), arity);
 
                             let addr = self.heap.to_unifiable(
@@ -959,7 +974,7 @@ impl MachineState {
         }
 
         if let Some(input) = input {
-            if stream.past_end_of_stream {
+            if stream.past_end_of_stream() {
                 self.eof_action(
                     input,
                     stream,
@@ -975,7 +990,7 @@ impl MachineState {
 
 impl Read for Stream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match *self.stream_inst.0.borrow_mut() {
+        match self.stream_inst.0.borrow_mut().1 {
             StreamInstance::InputFile(_, ref mut file) => {
                 file.read(buf)
             }
@@ -1008,7 +1023,7 @@ impl Read for Stream {
 
 impl Write for Stream {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match *self.stream_inst.0.borrow_mut() {
+        match self.stream_inst.0.borrow_mut().1 {
             StreamInstance::OutputFile(_, ref mut file, _) => {
                 file.write(buf)
             }
@@ -1032,7 +1047,7 @@ impl Write for Stream {
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        match *self.stream_inst.0.borrow_mut() {
+        match self.stream_inst.0.borrow_mut().1 {
             StreamInstance::OutputFile(_, ref mut file, _) => {
                 file.flush()
             }

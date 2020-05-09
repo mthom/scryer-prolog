@@ -1183,7 +1183,7 @@ impl MachineState {
                     2,
                 )?;
 
-                if stream.past_end_of_stream {
+                if stream.past_end_of_stream() {
                     if EOFAction::Reset != stream.options.eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
@@ -1280,7 +1280,7 @@ impl MachineState {
                     2,
                 )?;
 
-                if stream.past_end_of_stream {
+                if stream.past_end_of_stream() {
                     if EOFAction::Reset != stream.options.eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
@@ -1378,7 +1378,7 @@ impl MachineState {
                     2,
                 )?;
 
-                if stream.past_end_of_stream {
+                if stream.past_end_of_stream() {
                     if EOFAction::Reset != stream.options.eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
@@ -2069,7 +2069,7 @@ impl MachineState {
                     2,
                 )?;
 
-                if stream.past_end_of_stream {
+                if stream.past_end_of_stream() {
                     if EOFAction::Reset != stream.options.eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
@@ -2164,7 +2164,7 @@ impl MachineState {
                     2,
                 )?;
 
-                if stream.past_end_of_stream {
+                if stream.past_end_of_stream() {
                     if EOFAction::Reset != stream.options.eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
@@ -2266,7 +2266,7 @@ impl MachineState {
                     2,
                 )?;
 
-                if stream.past_end_of_stream {
+                if stream.past_end_of_stream() {
                     if EOFAction::Reset != stream.options.eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
@@ -2594,10 +2594,12 @@ impl MachineState {
                     indices.streams.insert(current_output_stream.clone());
                 }
 
-                stream.close();
+                if !stream.is_stdin() && !stream.is_stdout() {
+                    stream.close();
 
-                if let Some(alias) = stream.options.alias {
-                    indices.stream_aliases.remove(&alias);
+                    if let Some(alias) = stream.options.alias {
+                        indices.stream_aliases.remove(&alias);
+                    }
                 }
             }
             &SystemClauseType::CopyToLiftedHeap => {

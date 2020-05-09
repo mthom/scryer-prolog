@@ -627,7 +627,7 @@ impl MachineState {
             3,
         )?;
 
-        if stream.past_end_of_stream {
+        if stream.past_end_of_stream() {
             if EOFAction::Reset != stream.options.eof_action {
                 return return_from_clause!(self.last_call, self);
             } else if self.fail {
