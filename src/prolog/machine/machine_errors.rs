@@ -468,9 +468,11 @@ pub enum Permission {
     Modify,
     Open,
     OutputStream,
+    Reposition,
 }
 
 impl Permission {
+    #[inline]
     pub fn as_str(self) -> &'static str {
         match self {
             Permission::Access => "access",
@@ -479,6 +481,7 @@ impl Permission {
             Permission::Modify => "modify",
             Permission::Open => "open",
             Permission::OutputStream => "output",
+            Permission::Reposition => "reposition",
         }
     }
 }

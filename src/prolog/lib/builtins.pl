@@ -59,10 +59,10 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      put_byte/1, put_byte/2, put_code/1, put_code/2,
                      put_char/1, put_char/2, read_term/2, read_term/3,
                      repeat/0, retract/1, set_prolog_flag/2,
-                     set_input/1, set_output/1, setof/3,
-                     stream_property/2, sub_atom/5, subsumes_term/2,
-                     term_variables/2, throw/1, true/0,
-                     unify_with_occurs_check/2, write/1,
+                     set_input/1, set_stream_position/2, set_output/1,
+                     setof/3, stream_property/2, sub_atom/5,
+                     subsumes_term/2, term_variables/2, throw/1,
+                     true/0, unify_with_occurs_check/2, write/1,
                      write_canonical/1, write_term/2, write_term/3,
                      writeq/1]).
 
@@ -1320,3 +1320,12 @@ at_end_of_stream :-
     !,
     ( E = at ; E = past ).
 
+
+set_stream_position(S_or_a, Position) :-
+    (  var(Position) ->
+       throw(error(instantiation_error, set_stream_position/2))
+    ;  integer(Position), Position >= 0 ->
+       true
+    ;  throw(error(domain_error(stream_position, Position)))
+    ),
+    '$set_stream_position'(S_or_a, Position).

@@ -248,6 +248,7 @@ pub enum SystemClauseType {
     StoreGlobalVar,
     StoreGlobalVarWithOffset,
     StreamProperty,
+    SetStreamPosition,
     InferenceLevel,
     CleanUpBlock,
     EraseBall,
@@ -422,6 +423,7 @@ impl SystemClauseType {
             &SystemClauseType::SetOutput => clause_name!("$set_output"),
             &SystemClauseType::SetSeed => clause_name!("$set_seed"),
             &SystemClauseType::StreamProperty => clause_name!("$stream_property"),
+            &SystemClauseType::SetStreamPosition => clause_name!("$set_stream_position"),
             &SystemClauseType::StoreGlobalVar => clause_name!("$store_global_var"),
             &SystemClauseType::StoreGlobalVarWithOffset => {
                 clause_name!("$store_global_var_with_offset")
@@ -575,6 +577,7 @@ impl SystemClauseType {
             ("$set_input", 1) => Some(SystemClauseType::SetInput),
             ("$set_output", 1) => Some(SystemClauseType::SetOutput),
             ("$stream_property", 3) => Some(SystemClauseType::StreamProperty),
+            ("$set_stream_position", 2) => Some(SystemClauseType::SetStreamPosition),
             ("$inference_level", 2) => Some(SystemClauseType::InferenceLevel),
             ("$clean_up_block", 1) => Some(SystemClauseType::CleanUpBlock),
             ("$erase_ball", 0) => Some(SystemClauseType::EraseBall),

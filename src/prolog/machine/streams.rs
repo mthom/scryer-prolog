@@ -28,6 +28,15 @@ impl StreamType {
     pub(crate)
     fn as_str(&self) -> &'static str {
         match self {
+            StreamType::Binary => "binary_stream",
+            StreamType::Text => "text_stream",
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn as_property_str(&self) -> &'static str {
+        match self {
             StreamType::Binary => "binary",
             StreamType::Text => "text",
         }
@@ -292,6 +301,22 @@ impl Stream {
             }
             _ => {
                 None
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn set_position(&mut self, position: u64) {
+        match self.stream_inst.0.borrow_mut().deref_mut() {
+            (past_end_of_stream, StreamInstance::InputFile(_, ref mut file)) => {
+                file.seek(SeekFrom::Start(position)).unwrap();
+
+                if let Ok(metadata) = file.metadata() {
+                    *past_end_of_stream = position > metadata.len();
+                }
+            }
+            _ => {
             }
         }
     }

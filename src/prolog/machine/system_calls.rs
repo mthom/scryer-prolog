@@ -4556,6 +4556,49 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::SetStreamPosition => {
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    indices,
+                    "set_stream_position",
+                    2,
+                )?;
+
+                if !stream.options.reposition {
+                    let stub = MachineError::functor_stub(clause_name!("set_stream_position"), 2);
+
+                    let err = MachineError::permission_error(
+                        self.heap.h(),
+                        Permission::Reposition,
+                        "stream",
+                        vec![HeapCellValue::Stream(stream)],
+                    );
+
+                    return Err(self.error_form(err, stub));
+                }
+
+                let position = self.store(self.deref(self[temp_v!(2)]));
+
+                let position =
+                    match Number::try_from((position, &self.heap)) {
+                        Ok(Number::Fixnum(n)) => {
+                            n as u64
+                        }
+                        Ok(Number::Integer(n)) => {
+                            if let Some(n) = n.to_u64() {
+                                n
+                            } else {
+                                self.fail = true;
+                                return Ok(());
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                stream.set_position(position);
+            }
             &SystemClauseType::StreamProperty => {
                 let mut stream = self.get_stream_or_alias(
                     self[temp_v!(1)],
@@ -4648,7 +4691,7 @@ impl MachineState {
                                         }
                                         "type" => {
                                             HeapCellValue::Atom(
-                                                clause_name!(stream.options.stream_type.as_str()),
+                                                clause_name!(stream.options.stream_type.as_property_str()),
                                                 None,
                                             )
                                         }
