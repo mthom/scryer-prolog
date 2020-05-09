@@ -55,7 +55,10 @@ Extend Scryer Prolog to include the following, among other features:
 - [x] A _redone_ representation of strings as difference lists of
       characters, using a packed internal representation.
 - [x] clp(B) and clp(ℤ) as builtin libraries.
-- [ ] Streams and predicates for stream control (_in progress_).
+- [x] Streams and predicates for stream control.
+  - [x] A simple sockets library representing TCP connections as streams.  
+- [ ] Incremental compilation and loading process, newly written,
+      primarily in Prolog. (_in progress_)
 - [ ] A compacting garbage collector satisfying the five
       properties of "Precise Garbage Collection in Prolog."
 - [ ] Mode declarations.
@@ -372,6 +375,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   Provides *delimited continuations* via `reset/3` and `shift/1`.
 * [`random`](src/prolog/lib/random.pl)
   Probabilistic predicates and random number generators.
+* [`sockets`](src/prolog/lib/sockets.pl)
+  Predicates for opening and accepting TCP connections as streams.
 
 To read contents of external files, use `phrase_from_file/2` from
 [`library(pio)`](src/prolog/lib/pio.pl) to apply a&nbsp;DCG to
