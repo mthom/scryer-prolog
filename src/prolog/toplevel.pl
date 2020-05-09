@@ -127,6 +127,8 @@ instruction_match(Term, VarList) :-
 		                   print_exception_with_check(E))
                      )
     ;
+    Term = end_of_file -> halt
+    ;
     submit_query_and_print_results(Term, VarList)
     ).
 
