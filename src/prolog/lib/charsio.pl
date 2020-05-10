@@ -134,4 +134,5 @@ write_term_to_chars(Term, Options, Chars) :-
     ),
     term_variables(Term, Vars),
     extend_var_list(Vars, VarNames, NewVarNames, numbervars),
+    !,
     '$write_term_to_chars'(Chars, Term, IgnoreOps, NumberVars, Quoted, NewVarNames, MaxDepth).
