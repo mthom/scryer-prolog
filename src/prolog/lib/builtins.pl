@@ -932,7 +932,7 @@ atom_chars(Atom, List) :-
     ),
     (  var(Atom) ->
        (  var(Tail) -> throw(error(instantiation_error, atom_chars/2))
-       ;  ground(List), Tail == [] -> '$atom_chars'(Atom, List)
+       ;  ground(List) -> '$atom_chars'(Atom, List)
        ;  throw(error(instantiation_error, atom_chars/2))
        )
     ;  atom(Atom) -> can_be_chars_or_vars(List, atom_chars/2), '$atom_chars'(Atom, List)

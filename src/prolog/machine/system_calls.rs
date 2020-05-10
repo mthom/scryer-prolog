@@ -864,30 +864,34 @@ impl MachineState {
                         self.unify(a2, list_of_chars);
                     }
                     addr if addr.is_ref() => {
-                        let stub = MachineError::functor_stub(clause_name!("atom_chars"), 2);
+                        let mut iter = self.heap_pstr_iter(self[temp_v!(2)]);
+                        let string = iter.to_string();
 
-                        match self.try_from_list(temp_v!(2), stub) {
-                            Err(e) => {
-                                return Err(e);
+                        match iter.focus() {
+                            Addr::EmptyList => {
+                                let chars = clause_name!(string, indices.atom_tbl);
+                                let atom  = self.heap.to_unifiable(
+                                    HeapCellValue::Atom(chars, None)
+                                );
+
+                                self.unify(addr, atom);
                             }
-                            Ok(addrs) => {
-                                match self.try_char_list(addrs) {
-                                    Ok(string) => {
-                                        let chars = clause_name!(string, indices.atom_tbl);
-                                        let atom  = self.heap.to_unifiable(
-                                            HeapCellValue::Atom(chars, None)
-                                        );
+                            focus => {
+                                let stub = MachineError::functor_stub(
+                                    clause_name!("atom_chars"),
+                                    2,
+                                );
 
-                                        self.unify(addr, atom);
-                                    }
-                                    Err(err) => {
-                                        let stub = MachineError::functor_stub(
-                                            clause_name!("atom_chars"),
-                                            2,
-                                        );
+                                if let Addr::Lis(l) = focus {
+                                    let err = MachineError::type_error(
+                                        self.heap.h(),
+                                        ValidType::Character,
+                                        Addr::HeapCell(l),
+                                    );
 
-                                        return Err(self.error_form(err, stub));
-                                    }
+                                    return Err(self.error_form(err, stub));
+                                } else {
+                                    unreachable!()
                                 }
                             }
                         }
