@@ -59,7 +59,7 @@ pub enum EOFAction {
     Reset,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum AtEndOfStream {
     Not,
     At,
@@ -326,6 +326,12 @@ impl Stream {
     pub(crate)
     fn past_end_of_stream(&self) -> bool {
         self.stream_inst.0.borrow_mut().0
+    }
+
+    #[inline]
+    pub(crate)
+    fn at_end_of_stream(&mut self) -> bool {
+        self.position_relative_to_end() == AtEndOfStream::At
     }
 
     #[inline]

@@ -1190,6 +1190,12 @@ impl MachineState {
                     }
                 }
 
+                if stream.at_end_of_stream() {
+                    stream.set_past_end_of_stream();
+                    self.unify(self[temp_v!(2)], Addr::Fixnum(-1));
+                    return return_from_clause!(self.last_call, self);
+                }
+
                 let addr =
                     match self.store(self.deref(self[temp_v!(2)])) {
                         addr if addr.is_ref() => {
@@ -1285,6 +1291,18 @@ impl MachineState {
                     } else if self.fail {
                         return Ok(());
                     }
+                }
+
+                if stream.at_end_of_stream() {
+                    let end_of_file = clause_name!("end_of_file");
+                    let end_of_file = self.heap.to_unifiable(
+                        HeapCellValue::Atom(end_of_file, None),
+                    );
+
+                    stream.set_past_end_of_stream();
+
+                    self.unify(self[temp_v!(2)], end_of_file);
+                    return return_from_clause!(self.last_call, self);
                 }
 
                 let addr =
@@ -1383,6 +1401,18 @@ impl MachineState {
                     } else if self.fail {
                         return Ok(());
                     }
+                }
+
+                if stream.at_end_of_stream() {
+                    let end_of_file = clause_name!("end_of_file");
+                    let end_of_file = self.heap.to_unifiable(
+                        HeapCellValue::Atom(end_of_file, None),
+                    );
+
+                    stream.set_past_end_of_stream();
+
+                    self.unify(self[temp_v!(2)], end_of_file);
+                    return return_from_clause!(self.last_call, self);
                 }
 
                 let addr =
@@ -2076,6 +2106,12 @@ impl MachineState {
                     }
                 }
 
+                if stream.at_end_of_stream() {
+                    stream.set_past_end_of_stream();
+                    self.unify(self[temp_v!(2)], Addr::Fixnum(-1));
+                    return return_from_clause!(self.last_call, self);
+                }
+
                 let addr =
                     match self.store(self.deref(self[temp_v!(2)])) {
                         addr if addr.is_ref() => {
@@ -2169,6 +2205,18 @@ impl MachineState {
                     } else if self.fail {
                         return Ok(());
                     }
+                }
+
+                if stream.at_end_of_stream() {
+                    let end_of_file = clause_name!("end_of_file");
+                    let end_of_file = self.heap.to_unifiable(
+                        HeapCellValue::Atom(end_of_file, None),
+                    );
+
+                    stream.set_past_end_of_stream();
+
+                    self.unify(self[temp_v!(2)], end_of_file);
+                    return return_from_clause!(self.last_call, self);
                 }
 
                 let mut iter = self.open_parsing_stream(
@@ -2271,6 +2319,18 @@ impl MachineState {
                     } else if self.fail {
                         return Ok(());
                     }
+                }
+
+                if stream.at_end_of_stream() {
+                    let end_of_file = clause_name!("end_of_file");
+                    let end_of_file = self.heap.to_unifiable(
+                        HeapCellValue::Atom(end_of_file, None),
+                    );
+
+                    stream.set_past_end_of_stream();
+
+                    self.unify(self[temp_v!(2)], end_of_file);
+                    return return_from_clause!(self.last_call, self);
                 }
 
                 let addr =
