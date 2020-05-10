@@ -1,7 +1,10 @@
-:- module(charsio, [char_type/2, get_single_char/1,
+:- module(charsio, [char_type/2,
+                    char_utf8bytes/2,
+                    get_single_char/1,
                     read_term_from_chars/2,
                     write_term_to_chars/3]).
 
+:- use_module(library(dcgs)).
 :- use_module(library(iso_ext)).
 :- use_module(library(error)).
 :- use_module(library(lists), [append/3]).
@@ -135,3 +138,22 @@ write_term_to_chars(Term, Options, Chars) :-
     term_variables(Term, Vars),
     extend_var_list(Vars, VNNames, NewVarNames, numbervars),
     '$write_term_to_chars'(Chars, Term, IgnoreOps, NumberVars, Quoted, NewVarNames, MaxDepth).
+
+% Encodes Ch character to list of Bytes.
+% TODO: if Ch is variable, decode Bytes to Char.
+char_utf8bytes(Ch, Bytes) :-
+  char_code(Ch, Code),
+  phrase(char_to_utf8(Code), Bytes).
+
+char_to_utf8(Code) --> {Code @< 0x80},     [Code], !.
+char_to_utf8(Code) --> {Code @< 0x800},    encode(0xC0, Code, 6), !.
+char_to_utf8(Code) --> {Code @< 0x10000},  encode(0xE0, Code, 12), !.
+char_to_utf8(Code) --> {Code @< 0x110000}, encode(0xF0, Code, 18), !.
+
+encode(Prefix, Code, NumBits) --> { MSB is Prefix \/ (Code >> NumBits) },
+  [MSB], encode(Code, NumBits).
+
+encode(_, 0) --> [], !.
+encode(Code, NumBits) -->
+  { Remaining is NumBits - 6, Byte is 0x80 \/ ((Code >> Remaining) /\ 0x3F) },
+  [Byte], encode(Code, Remaining).
