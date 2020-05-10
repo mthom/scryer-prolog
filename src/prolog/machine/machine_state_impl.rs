@@ -796,7 +796,7 @@ impl MachineState {
                             if let Some(var) = addr.as_var() {
                                 self.bind(var, Addr::EmptyList);
                             } else {
-                                self.fail = true;
+                                self.fail = addr != Addr::EmptyList;
                             }
                         }
                     }
@@ -804,9 +804,7 @@ impl MachineState {
             }
             Some(prefix_len) => {
                 match heap_pstr_iter.focus() {
-                    addr @ Addr::AttrVar(_) |
-                    addr @ Addr::StackCell(..) |
-                    addr @ Addr::HeapCell(_) => {
+                    addr if addr.is_ref() => {
                         let h = self.heap.h();
 
                         let pstr_addr =
