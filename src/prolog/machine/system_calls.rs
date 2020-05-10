@@ -4709,12 +4709,8 @@ impl MachineState {
                                             }
                                         }
                                         "position" => {
-                                            if stream.options.reposition {
-                                                if let Some(position) = stream.position() {
-                                                    HeapCellValue::Addr(Addr::Usize(position as usize))
-                                                } else {
-                                                    unreachable!()
-                                                }
+                                            if let Some(position) = stream.position() {
+                                                HeapCellValue::Addr(Addr::Usize(position as usize))
                                             } else {
                                                 self.fail = true;
                                                 return Ok(());
