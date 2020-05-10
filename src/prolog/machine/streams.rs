@@ -62,7 +62,7 @@ pub enum EOFAction {
 #[derive(Debug)]
 pub enum AtEndOfStream {
     Not,
-    End,
+    At,
     Past
 }
 
@@ -73,7 +73,7 @@ impl AtEndOfStream {
         match self {
             AtEndOfStream::Not => "not",
             AtEndOfStream::Past => "past",
-            AtEndOfStream::End => "end",
+            AtEndOfStream::At => "at",
         }
     }
 }
@@ -348,7 +348,7 @@ impl Stream {
                         if let Ok(position) = file.seek(SeekFrom::Current(0)) {
                             return match position.cmp(&metadata.len()) {
                                 Ordering::Equal => {
-                                    AtEndOfStream::End
+                                    AtEndOfStream::At
                                 }
                                 Ordering::Less => {
                                     AtEndOfStream::Not
