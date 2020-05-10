@@ -1,6 +1,8 @@
 use crate::prolog::heap_iter::*;
 use crate::prolog::machine::*;
 
+use crate::indexmap::IndexSet;
+
 use std::cmp::Ordering;
 use std::vec::IntoIter;
 
@@ -141,12 +143,19 @@ impl MachineState {
 
     pub(super)
     fn attr_vars_of_term(&self, addr: Addr) -> Vec<Addr> {
+        let mut seen_set  = IndexSet::new();
         let mut seen_vars = vec![];
+
         let mut iter = self.acyclic_pre_order_iter(addr);
 
         while let Some(addr) = iter.next() {
             if let HeapCellValue::Addr(Addr::AttrVar(h)) = self.heap.index_addr(&addr).as_ref() {
+                if seen_set.contains(h) {
+                    continue;
+                }
+
                 seen_vars.push(addr);
+                seen_set.insert(*h);
 
                 let mut l = h + 1;
                 let mut list_elements = vec![];

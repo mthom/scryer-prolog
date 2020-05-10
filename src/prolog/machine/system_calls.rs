@@ -18,6 +18,8 @@ use crate::prolog::ordered_float::OrderedFloat;
 use crate::prolog::read::readline;
 use crate::prolog::rug::Integer;
 
+use crate::indexmap::IndexSet;
+
 use crate::ref_thread_local::RefThreadLocal;
 
 use std::cmp;
@@ -4838,11 +4840,13 @@ impl MachineState {
             }
             &SystemClauseType::TermVariables => {
                 let a1 = self[temp_v!(1)];
+                let mut seen_set  = IndexSet::new();
                 let mut seen_vars = vec![];
 
                 for addr in self.acyclic_pre_order_iter(a1) {
-                    if addr.is_ref() {
+                    if addr.is_ref() && !seen_set.contains(&addr) {
                         seen_vars.push(addr);
+                        seen_set.insert(addr);
                     }
                 }
 
