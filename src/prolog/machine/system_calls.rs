@@ -3090,7 +3090,47 @@ impl MachineState {
                     self.to_stream_options(alias, eof_action, reposition, stream_type);
 
                 let file_spec =
-                    atom_from!(self, indices, self.store(self.deref(self[temp_v!(1)])));
+                    match self.store(self.deref(self[temp_v!(1)])) {
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            match &self.heap[h] {
+                                &HeapCellValue::Atom(ref atom, _) => {
+                                    atom.clone()
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                        Addr::PStrLocation(h, n) => {
+                            match &self.heap[h] {
+                                &HeapCellValue::PartialString(_, true) => {
+                                    let mut heap_pstr_iter =
+                                        self.heap_pstr_iter(Addr::PStrLocation(h, n));
+
+                                    clause_name!(
+                                        heap_pstr_iter.to_string(),
+                                        indices.atom_tbl.clone()
+                                    )
+                                }
+                                _ => {
+                                    clause_name!("")
+                                }
+                            }
+                        }
+                        _ => {
+                            clause_name!("")
+                        }
+                    };
+
+                if file_spec.as_str().is_empty() {
+                    let stub = MachineError::functor_stub(clause_name!("open"), 4);
+                    let err = MachineError::domain_error(
+                        DomainErrorType::SourceSink,
+                        self[temp_v!(1)],
+                    );
+
+                    return Err(self.error_form(err, stub));
+                }
 
                 // 8.11.5.3l)
                 if let Some(ref alias) = &options.alias {

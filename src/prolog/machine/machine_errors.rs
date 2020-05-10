@@ -539,6 +539,7 @@ pub enum DomainErrorType {
     IOMode,
     NotLessThanZero,
     Order,
+    SourceSink,
     Stream,
     StreamOrAlias,
 }
@@ -549,6 +550,7 @@ impl DomainErrorType {
             DomainErrorType::IOMode => "io_mode",
             DomainErrorType::NotLessThanZero => "not_less_than_zero",
             DomainErrorType::Order => "order",
+            DomainErrorType::SourceSink => "source_sink",
             DomainErrorType::Stream => "stream",
             DomainErrorType::StreamOrAlias => "stream_or_alias",
         }
