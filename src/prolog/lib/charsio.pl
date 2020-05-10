@@ -133,6 +133,5 @@ write_term_to_chars(Term, Options, Chars) :-
        true
     ),
     term_variables(Term, Vars),
-    extend_var_list(Vars, VarNames, NewVarNames, numbervars),
-    !,
+    extend_var_list(Vars, VNNames, NewVarNames, numbervars),
     '$write_term_to_chars'(Chars, Term, IgnoreOps, NumberVars, Quoted, NewVarNames, MaxDepth).
