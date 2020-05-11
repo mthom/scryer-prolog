@@ -540,7 +540,10 @@ impl Stream {
 
     // returns true on success.
     #[inline]
+    pub(super)
     fn reset(&mut self) -> bool {
+        self.stream_inst.0.borrow_mut().0 = false;
+
         match self.stream_inst.0.borrow_mut().1 {
             StreamInstance::Bytes(ref mut cursor) => {
                 cursor.set_position(0);
@@ -550,8 +553,7 @@ impl Stream {
                 file.seek(SeekFrom::Start(0)).unwrap();
                 true
             }
-            StreamInstance::ReadlineStream(ref mut stream) => {
-                *stream = ReadlineStream::new(String::new());
+            StreamInstance::ReadlineStream(_) => {
                 true
             }
             _ => {

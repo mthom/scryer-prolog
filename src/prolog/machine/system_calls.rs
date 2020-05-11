@@ -4235,6 +4235,8 @@ impl MachineState {
                 }
             }
             &SystemClauseType::ReadQueryTerm => {
+                current_input_stream.reset();
+
                 readline::set_prompt(true);
                 let result = self.read_term(current_input_stream.clone(), indices);
                 readline::set_prompt(false);

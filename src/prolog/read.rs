@@ -42,11 +42,6 @@ pub mod readline {
     }
 
     impl ReadlineStream {
-        pub fn new(pending_input: String) -> Self {
-            let rl = Editor::<()>::new();
-            ReadlineStream { rl, pending_input: Cursor::new(pending_input) }
-        }
-
         pub fn input_stream(pending_input: String) -> Stream {
             let mut rl = Editor::<()>::new();
             rl.bind_sequence(KeyPress::Tab, Cmd::Insert(1, "\t".to_string()));
