@@ -267,9 +267,13 @@ impl<'a> TermWriter<'a> {
                         continue;
                     }
                 }
-                &TermRef::AnonVar(Level::Root) | &TermRef::Constant(Level::Root, ..) |
-                &TermRef::Var(Level::Root, ..) => {
+                &TermRef::AnonVar(Level::Root) | &TermRef::Constant(Level::Root, ..) => {
                     let addr = self.term_as_addr(&term, h);
+                    self.machine_st.heap.push(HeapCellValue::Addr(addr));
+                }
+                &TermRef::Var(Level::Root, _, ref var) => {
+                    let addr = self.term_as_addr(&term, h);
+                    self.var_dict.insert(var.clone(), Addr::HeapCell(h));
                     self.machine_st.heap.push(HeapCellValue::Addr(addr));
                 }
                 &TermRef::AnonVar(_) => {
