@@ -38,6 +38,8 @@ use cpu_time::ProcessTime;
 use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
+use ring::rand::{SecureRandom, SystemRandom};
+
 pub fn get_key() -> KeyEvent {
     let key;
     enable_raw_mode().expect("failed to enable raw mode");
@@ -5137,8 +5139,27 @@ impl MachineState {
                 let result = Addr::HeapCell(self.heap.to_list(chars));
                 self.unify(version, result);
             }
+            &SystemClauseType::CryptoRandomByte => {
+                let arg = self[temp_v!(1)];
+                let mut bytes: Vec<u8> = vec![0];
+                rng().fill(&mut bytes);
+
+                let byte = self.heap.put_constant(Constant::Integer(Rc::new(Integer::from(bytes[0]))));
+                self.unify(arg, byte);
+            }
         };
 
         return_from_clause!(self.last_call, self)
     }
+}
+
+
+fn rng() -> &'static SecureRandom {
+    use std::ops::Deref;
+
+    lazy_static! {
+        static ref RANDOM: SystemRandom = SystemRandom::new();
+    }
+
+    RANDOM.deref()
 }
