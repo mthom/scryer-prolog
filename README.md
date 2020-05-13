@@ -377,6 +377,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   Probabilistic predicates and random number generators.
 * [`sockets`](src/prolog/lib/sockets.pl)
   Predicates for opening and accepting TCP connections as streams.
+* [`crypto`](src/prolog/lib/crypto.pl)
+  Cryptographically secure random numbers and hashes.
 
 To read contents of external files, use `phrase_from_file/2` from
 [`library(pio)`](src/prolog/lib/pio.pl) to apply a&nbsp;DCG to
