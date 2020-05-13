@@ -1892,7 +1892,7 @@ impl MachineState {
 
                     if let Some(ordering) = ordering {
                         if ordering != Ordering::Equal {
-                            return false;
+                            return true;
                         }
                     }
 
