@@ -2065,14 +2065,56 @@ impl MachineState {
                         match Number::try_from((addr, &self.heap)) {
                             Ok(Number::Integer(n)) => {
                                 if let Some(nb) = n.to_u8() {
-                                    discard_result!(stream.write(&mut [nb]));
-                                    return return_from_clause!(self.last_call, self);
+                                    match stream.write(&mut [nb]) {
+                                        Ok(1) => {
+                                            return return_from_clause!(self.last_call, self);
+                                        }
+                                        _ => {
+                                            let stub = MachineError::functor_stub(
+                                                clause_name!("put_byte"),
+                                                2,
+                                            );
+
+                                            let addr = self.heap.to_unifiable(
+                                                HeapCellValue::Stream(stream.clone()),
+                                            );
+
+                                            return Err(self.error_form(
+                                                MachineError::existence_error(
+                                                    self.heap.h(),
+                                                    ExistenceError::Stream(addr),
+                                                ),
+                                                stub,
+                                            ));
+                                        }
+                                    }
                                 }
                             }
                             Ok(Number::Fixnum(n)) => {
                                 if let Ok(nb) = u8::try_from(n) {
-                                    discard_result!(stream.write(&mut [nb]));
-                                    return return_from_clause!(self.last_call, self);
+                                    match stream.write(&mut [nb]) {
+                                        Ok(1) => {
+                                            return return_from_clause!(self.last_call, self);
+                                        }
+                                        _ => {
+                                            let stub = MachineError::functor_stub(
+                                                clause_name!("put_byte"),
+                                                2,
+                                            );
+
+                                            let addr = self.heap.to_unifiable(
+                                                HeapCellValue::Stream(stream.clone()),
+                                            );
+
+                                            return Err(self.error_form(
+                                                MachineError::existence_error(
+                                                    self.heap.h(),
+                                                    ExistenceError::Stream(addr),
+                                                ),
+                                                stub,
+                                            ));
+                                        }
+                                    }
                                 }
                             }
                             _ => {
