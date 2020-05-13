@@ -5183,10 +5183,24 @@ impl MachineState {
             }
             &SystemClauseType::CryptoRandomByte => {
                 let arg = self[temp_v!(1)];
-                let mut bytes: Vec<u8> = vec![0];
-                rng().fill(&mut bytes);
+                let mut bytes: [u8; 1] = [0];
 
-                let byte = self.heap.put_constant(Constant::Integer(Rc::new(Integer::from(bytes[0]))));
+                match rng().fill(&mut bytes) {
+                    Ok(()) => {
+                    }
+                    Err(_) => {
+                        // the error payload here is of type 'Unspecified',
+                        // which contains no information whatsoever. So, for now,
+                        // just fail.
+                        self.fail = true;
+                        return Ok(());
+                    }
+                }
+
+                let byte = self.heap.to_unifiable(
+                    HeapCellValue::Integer(Rc::new(Integer::from(bytes[0])))
+                );
+
                 self.unify(arg, byte);
             }
         };
@@ -5196,7 +5210,7 @@ impl MachineState {
 }
 
 
-fn rng() -> &'static SecureRandom {
+fn rng() -> &'static dyn SecureRandom {
     use std::ops::Deref;
 
     lazy_static! {
