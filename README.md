@@ -378,7 +378,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`sockets`](src/prolog/lib/sockets.pl)
   Predicates for opening and accepting TCP connections as streams.
 * [`crypto`](src/prolog/lib/crypto.pl)
-  Cryptographically secure random numbers and hashes.
+  Cryptographically secure random numbers and hashes, and
+  reasoning about elliptic curves.
 
 To read contents of external files, use `phrase_from_file/2` from
 [`library(pio)`](src/prolog/lib/pio.pl) to apply a&nbsp;DCG to
