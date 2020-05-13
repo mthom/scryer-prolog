@@ -39,6 +39,7 @@ use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 use ring::rand::{SecureRandom, SystemRandom};
+use ring::digest;
 
 pub fn get_key() -> KeyEvent {
     let key;
@@ -5202,6 +5203,72 @@ impl MachineState {
                 );
 
                 self.unify(arg, byte);
+            }
+            &SystemClauseType::CryptoDataHash => {
+                let mut bytes: Vec<u8> = Vec::new();
+
+                let stub = MachineError::functor_stub(clause_name!("crypto_data_hash"), 3);
+
+                match self.try_from_list(temp_v!(1), stub) {
+                    Err(e) => return Err(e),
+                    Ok(addrs) => {
+
+                        for addr in addrs {
+                            let addr = self.store(self.deref(addr));
+
+                            match Number::try_from((addr, &self.heap)) {
+                                Ok(Number::Fixnum(n)) => {
+                                    match u8::try_from(n) {
+                                        Ok(b) => {
+                                            bytes.push(b);
+                                        }
+                                        Err(_) => { }
+                                    }
+
+                                    continue;
+                                }
+                                Ok(Number::Integer(n)) => {
+                                    if let Some(b) = n.to_u8() {
+                                       bytes.push(b);
+                                    }
+
+                                    continue;
+                                }
+                                _ => {
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let algorithm = self[temp_v!(3)];
+                let algorithm_str = match self.store(self.deref(algorithm)) {
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                            atom.as_str()
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                let hash = digest::digest(
+                              match algorithm_str {
+                              "sha256" =>     { &digest::SHA256 }
+                              "sha384" =>     { &digest::SHA384 }
+                              "sha512" =>     { &digest::SHA512 }
+                              "sha512_256" => { &digest::SHA512_256 }
+                              _ =>            { unreachable!() }
+                              },
+                              &bytes);
+
+                let ints = hash.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))));
+                let ints_list = Addr::HeapCell(self.heap.to_list(ints));
+
+                self.unify(self[temp_v!(2)], ints_list);
             }
         };
 
