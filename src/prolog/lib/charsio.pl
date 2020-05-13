@@ -146,14 +146,11 @@ char_utf8bytes(Ch, Bytes) :-
   phrase(char_to_utf8(Code), Bytes).
 
 char_to_utf8(Code) --> {Code @< 0x80},     [Code], !.
-char_to_utf8(Code) --> {Code @< 0x800},    encode(0xC0, Code, 6), !.
-char_to_utf8(Code) --> {Code @< 0x10000},  encode(0xE0, Code, 12), !.
-char_to_utf8(Code) --> {Code @< 0x110000}, encode(0xF0, Code, 18), !.
+char_to_utf8(Code) --> {Code @< 0x800},    encode(Code, 0xC0, 2), !.
+char_to_utf8(Code) --> {Code @< 0x10000},  encode(Code, 0xE0, 3), !.
+char_to_utf8(Code) --> {Code @< 0x110000}, encode(Code, 0xF0, 4), !.
 
-encode(Prefix, Code, NumBits) --> { MSB is Prefix \/ (Code >> NumBits) },
-  [MSB], encode(Code, NumBits).
-
-encode(_, 0) --> [], !.
-encode(Code, NumBits) -->
-  { Remaining is NumBits - 6, Byte is 0x80 \/ ((Code >> Remaining) /\ 0x3F) },
-  [Byte], encode(Code, Remaining).
+encode(_, _, 0) --> [], !.
+encode(Code, Prefix, Nb) -->
+  { Nb1 is Nb - 1, Byte is Prefix \/ ((Code >> (6 * Nb1)) /\ 0x3F) },
+  [Byte], encode(Code, 0x80, Nb1).
