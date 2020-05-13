@@ -138,7 +138,8 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
       algorithm(A)
 
-   where A is one of sha256, sha384, sha512, sha512_256, or a variable.
+   where A is one of ripemd160, sha256, sha384, sha512, sha512_256,
+   or a variable.
 
    If A is a variable, then it is unified with the default algorithm,
    which is an algorithm that is considered cryptographically secure
@@ -167,6 +168,7 @@ crypto_data_hash(Data, Hash, Options) :-
         '$crypto_data_hash'(Data, HashBytes, A),
         hex_bytes(Hash, HashBytes).
 
+hash_algorithm(ripemd160).
 hash_algorithm(sha256).
 hash_algorithm(sha512).
 hash_algorithm(sha384).
