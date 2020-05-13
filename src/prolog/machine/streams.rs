@@ -107,7 +107,7 @@ impl Drop for StreamInstance {
     fn drop(&mut self) {
         match self {
             StreamInstance::TcpStream(_, ref mut tcp_stream) => {
-                tcp_stream.shutdown(Shutdown::Both).unwrap();
+                discard_result!(tcp_stream.shutdown(Shutdown::Both));
             }
             _ => {
             }

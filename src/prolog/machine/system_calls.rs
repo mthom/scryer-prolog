@@ -2065,13 +2065,13 @@ impl MachineState {
                         match Number::try_from((addr, &self.heap)) {
                             Ok(Number::Integer(n)) => {
                                 if let Some(nb) = n.to_u8() {
-                                    stream.write(&mut [nb]).unwrap();
+                                    discard_result!(stream.write(&mut [nb]));
                                     return return_from_clause!(self.last_call, self);
                                 }
                             }
                             Ok(Number::Fixnum(n)) => {
                                 if let Ok(nb) = u8::try_from(n) {
-                                    stream.write(&mut [nb]).unwrap();
+                                    discard_result!(stream.write(&mut [nb]));
                                     return return_from_clause!(self.last_call, self);
                                 }
                             }
