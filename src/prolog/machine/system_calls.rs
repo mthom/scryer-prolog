@@ -40,6 +40,7 @@ use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::digest;
+use ripemd160::{Ripemd160, Digest};
 
 pub fn get_key() -> KeyEvent {
     let key;
@@ -5255,18 +5256,23 @@ impl MachineState {
                     }
                 };
 
-                let hash = digest::digest(
-                              match algorithm_str {
-                              "sha256" =>     { &digest::SHA256 }
-                              "sha384" =>     { &digest::SHA384 }
-                              "sha512" =>     { &digest::SHA512 }
-                              "sha512_256" => { &digest::SHA512_256 }
-                              _ =>            { unreachable!() }
-                              },
-                              &bytes);
-
-                let ints = hash.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))));
-                let ints_list = Addr::HeapCell(self.heap.to_list(ints));
+                let ints_list =
+                        if algorithm_str == "ripemd160" {
+                             let mut context = Ripemd160::new();
+                             context.input(&bytes);
+                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        } else {
+                             let ints = digest::digest(
+                                            match algorithm_str {
+                                               "sha256" =>     { &digest::SHA256 }
+                                               "sha384" =>     { &digest::SHA384 }
+                                               "sha512" =>     { &digest::SHA512 }
+                                               "sha512_256" => { &digest::SHA512_256 }
+                                               _ =>            { unreachable!() }
+                                            },
+                                            &bytes);
+                             Addr::HeapCell(self.heap.to_list(ints.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        };
 
                 self.unify(self[temp_v!(2)], ints_list);
             }
