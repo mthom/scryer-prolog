@@ -12,7 +12,8 @@
    using strings leaves little trace of what was processed in the system,
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-:- module(crypto, [hex_bytes/2]).
+:- module(crypto, [hex_bytes/2,
+                   crypto_n_random_bytes/2]).
 
 :- use_module(library(error)).
 :- use_module(library(lists)).
@@ -70,3 +71,10 @@ bytes_hex([B|Bs]) --> [C0,C1],
 char_hexval(C, H) :- nth0(H, "0123456789abcdef", C), !.
 char_hexval(C, H) :- nth0(H, "0123456789ABCDEF", C), !.
 
+
+crypto_n_random_bytes(N, Bs) :-
+        must_be(integer, N),
+        length(Bs, N),
+        maplist(crypto_random_byte, Bs).
+
+crypto_random_byte(B) :- '$crypto_random_byte'(B).

@@ -34,3 +34,4 @@ ref_thread_local = "0.0.0"
 rug = { version = "1.4.0", optional = true }
 rustyline = "6.0.0"
 unicode_reader = "1.0.0"
+ring = "0.16.13"
