@@ -2746,6 +2746,51 @@ impl MachineState {
         *list = result;
     }
 
+
+    pub(super)
+    fn integers_to_bytevec(
+        &self,
+        r: RegType,
+        caller: MachineStub,
+    ) -> Vec<u8> {
+
+        let mut bytes: Vec<u8> = Vec::new();
+
+        match self.try_from_list(r, caller) {
+            Err(_) => { unreachable!() }
+            Ok(addrs) => {
+
+                for addr in addrs {
+                    let addr = self.store(self.deref(addr));
+
+                    match Number::try_from((addr, &self.heap)) {
+                        Ok(Number::Fixnum(n)) => {
+                            match u8::try_from(n) {
+                                Ok(b) => {
+                                    bytes.push(b);
+                                }
+                                Err(_) => { }
+                            }
+
+                            continue;
+                        }
+                        Ok(Number::Integer(n)) => {
+                            if let Some(b) = n.to_u8() {
+                               bytes.push(b);
+                            }
+
+                            continue;
+                        }
+                        _ => {
+                        }
+                    }
+                }
+            }
+        }
+        bytes
+    }
+
+
     pub(super)
     fn try_from_list(
         &self,

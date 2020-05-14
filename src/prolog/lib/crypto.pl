@@ -14,12 +14,13 @@
 
 :- module(crypto, [hex_bytes/2,
                    crypto_n_random_bytes/2,
-                   crypto_data_hash/3,
+                   crypto_data_hash/3,         % +Data, -Hash, +Options
+                   crypto_data_hkdf/4,         % +Data, +Length, -Bytes, +Options
                    crypto_name_curve/2,        % +Name, -Curve
                    crypto_curve_order/2,       % +Curve, -Order
                    crypto_curve_generator/2,   % +Curve, -Generator
                    crypto_curve_scalar_mult/4  % +Curve, +Scalar, +Point, -Result
-                   ]).
+                  ]).
 
 :- use_module(library(error)).
 :- use_module(library(lists)).
@@ -52,9 +53,7 @@ hex_bytes(Hs, Bytes) :-
                 true
             ;   domain_error(hex_encoding, Hs, hex_bytes/2)
             )
-        ;   must_be(list, Bytes),
-            maplist(must_be(integer), Bytes),
-            must_be_bytes(Bytes, hex_bytes/2),
+        ;   must_be_bytes(Bytes, hex_bytes/2),
             phrase(bytes_hex(Bytes), Hs)
         ).
 
@@ -79,6 +78,8 @@ char_hexval(C, H) :- nth0(H, "0123456789ABCDEF", C), !.
 
 
 must_be_bytes(Bytes, Context) :-
+        must_be(list, Bytes),
+        maplist(must_be(integer), Bytes),
         (   member(B, Bytes), \+ between(0, 255, B) ->
             type_error(byte, B, Context)
         ;   true
@@ -86,6 +87,9 @@ must_be_bytes(Bytes, Context) :-
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Cryptographically secure random numbers
+   =======================================
+
    crypto_n_random_bytes(+N, -Bytes) is det
 
    Bytes is unified with a list of N cryptographically secure
@@ -135,10 +139,14 @@ crypto_n_random_bytes(N, Bs) :-
 crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Hashing
+   =======
+
    crypto_data_hash(+Data, -Hash, +Options)
 
-   Where Data is a list of bytes (integers between 0 and 255),
-   and Hash is the computed hash as a list of hexadecimal characters.
+   Where Data is a list of bytes (integers between 0 and 255) or
+   characters, and Hash is the computed hash as a list of hexadecimal
+   characters.
 
    The single supported option is:
 
@@ -153,26 +161,42 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
    Example:
 
-   ?- crypto_data_hash([0'a,0'b,0'c], Hs, [algorithm(sha256)]).
+   ?- crypto_data_hash("abc", Hs, [algorithm(sha256)]).
       Hs = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
    ;  false.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-crypto_data_hash(Data, Hash, Options) :-
-        must_be(list, Data),
-        must_be_bytes(Data, crypto_data_hash/3),
-        must_be(list, Options),
-        (   Options = [algorithm(A)] -> true
-        ;   true
-        ),
-        (   var(A) -> A = sha256
-        ;   true
-        ),
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   SHA256 is the current default for several hash-related predicates.
+   It is deemed sufficiently secure for the foreseeable future.  Yet,
+   application programmers must be aware that the default may change in
+   future versions. The hash predicates all yield the algorithm they
+   used if a Prolog variable is used for the pertaining option.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+crypto_data_hash(Data0, Hash, Options0) :-
+        chars_bytes_(Data0, Data, crypto_data_hash/3),
+        must_be(list, Options0),
+        functor_hash_options(algorithm, A, Options0, _),
         (   hash_algorithm(A) -> true
         ;   domain_error(hash_algorithm, A, crypto_data_hash/3)
         ),
         '$crypto_data_hash'(Data, HashBytes, A),
         hex_bytes(Hash, HashBytes).
+
+
+default_hash(sha256).
+
+functor_hash_options(F, Hash, Options0, [Option|Options]) :-
+        Option =.. [F,Hash],
+        (   select(Option, Options0, Options) ->
+            (   var(Hash) ->
+                default_hash(Hash)
+            ;   must_be(atom, Hash)
+            )
+        ;   Options = Options0,
+            default_hash(Hash)
+        ).
 
 hash_algorithm(ripemd160).
 hash_algorithm(sha256).
@@ -180,6 +204,60 @@ hash_algorithm(sha512).
 hash_algorithm(sha384).
 hash_algorithm(sha512_256).
 
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   crypto_data_hkdf(+Data, +Length, -Bytes, +Options) is det.
+
+   Concentrate possibly dispersed entropy of Data and then expand it
+   to the desired length. Data is a list of bytes or characters.
+
+   Bytes is unified with a list of bytes of length Length, and is
+   suitable as input keying material and initialization vectors to
+   symmetric encryption algorithms.
+
+   Admissible options are:
+
+     - algorithm(+Algorithm)
+       A hashing algorithm as specified to crypto_data_hash/3. The
+       default is a cryptographically secure algorithm. If you
+       specify a variable, then it is unified with the algorithm
+       that was used, which is a cryptographically secure algorithm.
+     - info(+Info)
+       Optional context and application specific information,
+       specified as a list of bytes or characters. The default is [].
+     - salt(+List)
+       Optionally, a list of bytes that are used as salt. The
+       default is all zeroes.
+
+   The `info/1`  option can be  used to  generate multiple keys  from a
+   single  master key,  using for  example values  such as  "key" and
+   "iv", or the name of a file that is to be encrypted.
+
+   See crypto_n_random_bytes/2 to obtain a suitable salt.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+crypto_data_hkdf(Data0, L, Bytes, Options0) :-
+        functor_hash_options(algorithm, Algorithm, Options0, Options),
+        chars_bytes_(Data0, Data, crypto_data_hkdf/4),
+        option(salt(SaltBytes), Options, []),
+        must_be_bytes(SaltBytes, crypto_data_hkdf/4),
+        option(info(Info0), Options, []),
+        chars_bytes_(Info0, Info, crypto_data_hkdf/4),
+        '$crypto_data_hkdf'(Data, SaltBytes, Info, Algorithm, L, Bytes).
+
+option(What, Options, Default) :-
+        (   member(What, Options) -> true
+        ;   What =.. [_,Default]
+        ).
+
+chars_bytes_(Cs, Bytes, Context) :-
+        must_be(list, Cs),
+        (   maplist(integer, Cs) -> Bytes = Cs
+        ;   % use chars_utf8bytes/2 here once it becomes available!
+            maplist(atom_codes, Cs, Css),
+            append(Css, Bytes)
+        ),
+        must_be_bytes(Bytes, Context).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Modular multiplicative inverse.
