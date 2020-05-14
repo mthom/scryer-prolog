@@ -1,8 +1,7 @@
 :- module(charsio, [char_type/2,
-                    char_utf8bytes/2,
+                    chars_utf8bytes/2,
                     get_single_char/1,
                     read_term_from_chars/2,
-                    string_utf8bytes/2,
                     write_term_to_chars/3]).
 
 :- use_module(library(dcgs)).
@@ -156,8 +155,9 @@ encode(Code, Prefix, Nb) -->
   { Nb1 is Nb - 1, Byte is Prefix \/ ((Code >> (6 * Nb1)) /\ 0x3F) },
   [Byte], encode(Code, 0x80, Nb1).
 
-% Encodes a string (list of characters) to a list of UTF-8 bytes.
-string_utf8bytes(Cs, Bs) :-
+% Encodes a list of characters Cs to a list of UTF-8 bytes Bs.
+% TODO: if Cs is variable, decode bytes to chars instead. 
+chars_utf8bytes(Cs, Bs) :-
   must_be(list, Cs),
   maplist(must_be(atom), Cs),
   maplist(char_utf8bytes, Cs, Bss),
