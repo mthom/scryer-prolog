@@ -1,10 +1,13 @@
-:- module(charsio, [char_type/2, get_single_char/1,
+:- module(charsio, [char_type/2,
+                    chars_utf8bytes/2,
+                    get_single_char/1,
                     read_term_from_chars/2,
                     write_term_to_chars/3]).
 
+:- use_module(library(dcgs)).
 :- use_module(library(iso_ext)).
 :- use_module(library(error)).
-:- use_module(library(lists), [append/3]).
+:- use_module(library(lists)).
 
 fabricate_var_name(VarType, VarName, N) :-
     char_code('A', AC),
@@ -135,3 +138,27 @@ write_term_to_chars(Term, Options, Chars) :-
     term_variables(Term, Vars),
     extend_var_list(Vars, VNNames, NewVarNames, numbervars),
     '$write_term_to_chars'(Chars, Term, IgnoreOps, NumberVars, Quoted, NewVarNames, MaxDepth).
+
+% Encodes Ch character to list of Bytes.
+% TODO: if Ch is variable, decode Bytes to Char.
+char_utf8bytes(Ch, Bytes) :-
+  char_code(Ch, Code),
+  phrase(code_to_utf8(Code), Bytes).
+
+code_to_utf8(Code) --> {Code @< 0x80},     [Code], !.
+code_to_utf8(Code) --> {Code @< 0x800},    encode(Code, 0xC0, 2), !.
+code_to_utf8(Code) --> {Code @< 0x10000},  encode(Code, 0xE0, 3), !.
+code_to_utf8(Code) --> {Code @< 0x110000}, encode(Code, 0xF0, 4), !.
+
+encode(_, _, 0) --> !.
+encode(Code, Prefix, Nb) -->
+  { Nb1 is Nb - 1, Byte is Prefix \/ ((Code >> (6 * Nb1)) /\ 0x3F) },
+  [Byte], encode(Code, 0x80, Nb1).
+
+% Encodes a list of characters Cs to a list of UTF-8 bytes Bs.
+% TODO: if Cs is variable, decode bytes to chars instead. 
+chars_utf8bytes(Cs, Bs) :-
+  must_be(list, Cs),
+  maplist(must_be(atom), Cs),
+  maplist(char_utf8bytes, Cs, Bss),
+  append(Bss, Bs).
