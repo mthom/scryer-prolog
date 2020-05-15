@@ -1,14 +1,31 @@
 language: rust
-rust:
-    - stable
-    - beta
-    - nightly
-matrix:
-    allow_failures:
-        - rust: nightly
-    fast_finish: true
+cache: cargo
+os: linux
+dist: xenial
 
-script:
-    - cargo build --verbose --all
-    - cargo test --verbose --all
-    - cargo test --verbose --all --no-default-features --features num
+before_script:
+  - cargo fetch
+
+jobs:
+  allow_failures:
+    env:
+      - CAN_FAIL=true
+  include:
+  - stage: "Stable: Build"
+    rust: stable
+    script: cargo rustc --verbose -- -D warnings
+    name: "Build Stable"
+  - stage: "Stable: Tests"
+    rust: stable
+    script: cargo test --verbose --all
+    name: "Tests Stable"
+  - stage: "Features"
+    rust: stable
+    script: cargo test --verbose --all --no-default-features --features num
+    name: "num Tests"
+    env: CAN_FAIL=true
+  - stage: "Beta: Build"
+  # - #
+    rust: beta
+    script: cargo rustc --verbose -- -D warnings
+    name: "Build Beta"
