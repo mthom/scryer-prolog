@@ -245,7 +245,7 @@ semicolon_compound_selector(';'(G2, G3), G4, B) :-
 ;(G1, G4, B) :-
     ( (  G1 = (_ -> _)
       ;  G1 = (_ , _)
-      ;  G1 = (_ ; _) 
+      ;  G1 = (_ ; _)
       ) ->
       !,
       semicolon_compound_selector(G1, G4, B)
@@ -935,7 +935,7 @@ atom_chars(Atom, List) :-
        ;  ground(List) -> '$atom_chars'(Atom, List)
        ;  throw(error(instantiation_error, atom_chars/2))
        )
-    ;  atom(Atom) -> can_be_chars_or_vars(List, atom_chars/2), '$atom_chars'(Atom, List)
+    ;  atom(Atom) -> '$atom_chars'(Atom, List)
     ;  throw(error(type_error(atom, Atom), atom_chars/2))
     ).
 
@@ -949,7 +949,7 @@ atom_codes(Atom, List) :-
        ;  ground(List), Tail == [] -> '$atom_codes'(Atom, List)
        ;  throw(error(instantiation_error, atom_codes/2))
        )
-    ;  atom(Atom) -> can_be_codes_or_vars(List, atom_codes/2), '$atom_codes'(Atom, List)
+    ;  atom(Atom) -> '$atom_codes'(Atom, List)
     ;  throw(error(type_error(atom, Atom), atom_codes/2))
     ).
 
@@ -1025,45 +1025,6 @@ must_be_number(N, _) :-
 must_be_number(N, PI) :-
     (  nonvar(N) -> throw(error(type_error(number, N), PI))
     ;  throw(error(instantiation_error, PI))
-    ).
-
-can_be_chars_or_vars(Cs, _)  :- var(Cs), !.
-can_be_chars_or_vars(Cs, PI) :-
-    (  string(Cs) ->
-       current_prolog_flag(double_quotes, chars)
-    ;  chars_or_vars(Cs, PI)
-    ).
-
-chars_or_vars([], _).
-chars_or_vars([C|Cs], PI) :-
-    (  nonvar(C) ->
-       (  catch(atom_length(C, 1), _, false) ->
-	  (  nonvar(Cs) -> chars_or_vars(Cs, PI)
-	  ;  false
-	  )
-       ;  throw(error(type_error(character, C), PI))
-       )
-    ;  chars_or_vars(Cs, PI)
-    ).
-
-can_be_codes_or_vars(Cs, _)  :- var(Cs), !.
-can_be_codes_or_vars(Cs, PI) :-
-    (  string(Cs) ->
-       current_prolog_flag(double_quotes, codes)
-    ;  codes_or_vars(Cs, PI)
-    ).
-
-codes_or_vars([], _).
-codes_or_vars([C|Cs], PI) :-
-    (  nonvar(C) ->
-       (  catch(char_code(_, C), _, false) ->
-	  (  nonvar(Cs) -> codes_or_vars(Cs, PI)
-	  ;  false
-	  )
-       ;  integer(C) -> throw(error(representation_error(character_code), PI))
-       ;  throw(error(type_error(integer, C), PI))
-       )
-    ;  codes_or_vars(Cs, PI)
     ).
 
 number_chars(N, Chs) :-
