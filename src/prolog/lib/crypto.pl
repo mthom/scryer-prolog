@@ -12,14 +12,16 @@
    using strings leaves little trace of what was processed in the system,
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-:- module(crypto, [hex_bytes/2,
-                   crypto_n_random_bytes/2,
+:- module(crypto, [hex_bytes/2,                % ?Hex, ?Bytes
+                   crypto_n_random_bytes/2,    % +N, -Bytes
                    crypto_data_hash/3,         % +Data, -Hash, +Options
                    crypto_data_hkdf/4,         % +Data, +Length, -Bytes, +Options
                    crypto_name_curve/2,        % +Name, -Curve
                    crypto_curve_order/2,       % +Curve, -Order
                    crypto_curve_generator/2,   % +Curve, -Generator
-                   crypto_curve_scalar_mult/4  % +Curve, +Scalar, +Point, -Result
+                   crypto_curve_scalar_mult/4, % +Curve, +Scalar, +Point, -Result
+                   crypto_password_hash/2,     % +Password, ?Hash
+                   crypto_password_hash/3      % +Password, -Hash, +Options
                   ]).
 
 :- use_module(library(error)).
@@ -28,6 +30,8 @@
 :- use_module(library(dcgs)).
 :- use_module(library(clpz)).
 :- use_module(library(arithmetic)).
+:- use_module(library(format)).
+:- use_module(library(charsio)).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    hex_bytes(?Hex, ?Bytes) is det.
@@ -253,11 +257,183 @@ option(What, Options, Default) :-
 chars_bytes_(Cs, Bytes, Context) :-
         must_be(list, Cs),
         (   maplist(integer, Cs) -> Bytes = Cs
-        ;   % use chars_utf8bytes/2 here once it becomes available!
-            maplist(atom_codes, Cs, Css),
-            append(Css, Bytes)
+        ;   chars_utf8bytes(Cs, Bytes)
         ),
         must_be_bytes(Bytes, Context).
+
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   The so-called modular crypt format (MCF) is a standard for encoding
+   password hash strings. However, there's no official specification
+   document describing it. Nor is there a central registry of
+   identifiers or rules. This page describes what is known about it:
+
+   https://pythonhosted.org/passlib/modular_crypt_format.html
+
+   As of 2016, the MCF is deprecated in favor of the PHC String Format:
+
+   https://github.com/P-H-C/phc-string-format/blob/master/phc-sf-spec.md
+
+   This is what we are using below. For the time being, it is best to
+   treat these hashes as opaque terms in applications. Please let me
+   know if you need to rely on any specifics of this format.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   crypto_password_hash(+Password, ?Hash) is semidet.
+
+   If Hash is instantiated, the predicate succeeds _iff_ the hash
+   matches the given password. Otherwise, the call is equivalent to
+   crypto_password_hash(Password, Hash, []) and computes a
+   password-based hash using the default options.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+crypto_password_hash(Password0, Hash) :-
+        (   nonvar(Hash) ->
+            chars_bytes_(Password0, Password, crypto_password_hash/2),
+            must_be(list, Hash),
+            dollar_segments(Hash, [[],"pbkdf2-sha512",[t,=|CsIterations],SaltB64,HashB64]),
+            number_chars(Iterations, CsIterations),
+            bytes_base64(SaltBytes, SaltB64),
+            bytes_base64(HashBytes, HashB64),
+            '$crypto_password_hash'(Password, SaltBytes, Iterations, HashBytes)
+        ;   crypto_password_hash(Password0, Hash, [])
+        ).
+
+
+dollar_segments(Ls, Segments) :-
+        (   append(Front, [$|Ds], Ls) ->
+            Segments = [Front|Rest],
+            dollar_segments(Ds, Rest)
+        ;   Segments = [Ls]
+        ).
+
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   crypto_password_hash(+Password, -Hash, +Options) is det.
+
+   Derive Hash based on Password. This predicate is similar to
+   crypto_data_hash/3 in that it derives a hash from given data.
+   However, it is tailored for the specific use case of _passwords_.
+   One essential distinction is that for this use case, the derivation
+   of a hash should be _as slow as possible_ to counteract brute-force
+   attacks over possible passwords.
+
+   Another important distinction is that equal passwords must yield,
+   with very high probability, _different_ hashes. For this reason,
+   cryptographically strong random numbers are automatically added to
+   the password before a hash is derived.
+
+   Hash is unified with a string that contains the computed hash and
+   all parameters that were used, except for the password. Instead of
+   storing passwords, store these hashes. Later, you can verify the
+   validity of a password with crypto_password_hash/2, comparing the
+   then entered password to the stored hash. If you need to export this
+   atom, you should treat it as opaque ASCII data with up to 255 bytes
+   of length. The maximal length may increase in the future.
+
+   Admissible options are:
+
+     - algorithm(+Algorithm)
+       The algorithm to use. Currently, the only available algorithm
+       is =|pbkdf2-sha512|=, which is therefore also the default.
+     - cost(+C)
+       C is an integer, denoting the binary logarithm of the number
+       of _iterations_ used for the derivation of the hash. This
+       means that the number of iterations is set to 2^C. Currently,
+       the default is 17, and thus more than one hundred _thousand_
+       iterations. You should set this option as high as your server
+       and users can tolerate. The default is subject to change and
+       will likely increase in the future or adapt to new algorithms.
+     - salt(+Salt)
+       Use the given list of bytes as salt. By default,
+       cryptographically secure random numbers are generated for this
+       purpose. The default is intended to be secure, and constitutes
+       the typical use case of this predicate.
+
+   Currently, PBKDF2 with SHA-512 is used as the hash derivation
+   function, using 128 bits of salt. All default parameters, including
+   the algorithm, are subject to change, and other algorithms will also
+   become available in the future. Since computed hashes store all
+   parameters that were used during their derivation, such changes will
+   not affect the operation of existing deployments. Note though that
+   new hashes will then be computed with the new default parameters.
+
+   See crypto_data_hkdf/4 for generating keys from Hash.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+crypto_password_hash(Password0, Hash, Options) :-
+        chars_bytes_(Password0, Password, crypto_password_hash/3),
+        must_be(list, Options),
+        option(cost(C), Options, 17),
+        Iterations is 2^C,
+        Algorithm = 'pbkdf2-sha512', % current default and only option
+        option(algorithm(Algorithm), Options, Algorithm),
+        (   member(salt(SaltBytes), Options) ->
+            true
+        ;   crypto_n_random_bytes(16, SaltBytes)
+        ),
+        '$crypto_password_hash'(Password, SaltBytes, Iterations, HashBytes),
+        bytes_base64(HashBytes, HashB64),
+        bytes_base64(SaltBytes, SaltB64),
+        phrase(format_("$pbkdf2-sha512$t=~d$~s$~s", [Iterations,SaltB64,HashB64]), Hash).
+
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Bidirectional Bytes <-> Base64 conversion
+   =========================================
+
+   This implements Base64 conversion *without padding*.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+n_base64(0 , 'A'). n_base64(1 , 'B'). n_base64(2 , 'C'). n_base64(3 , 'D').
+n_base64(4 , 'E'). n_base64(5 , 'F'). n_base64(6 , 'G'). n_base64(7 , 'H').
+n_base64(8 , 'I'). n_base64(9 , 'J'). n_base64(10, 'K'). n_base64(11, 'L').
+n_base64(12, 'M'). n_base64(13, 'N'). n_base64(14, 'O'). n_base64(15, 'P').
+n_base64(16, 'Q'). n_base64(17, 'R'). n_base64(18, 'S'). n_base64(19, 'T').
+n_base64(20, 'U'). n_base64(21, 'V'). n_base64(22, 'W'). n_base64(23, 'X').
+n_base64(24, 'Y'). n_base64(25, 'Z'). n_base64(26, 'a'). n_base64(27, 'b').
+n_base64(28, 'c'). n_base64(29, 'd'). n_base64(30, 'e'). n_base64(31, 'f').
+n_base64(32, 'g'). n_base64(33, 'h'). n_base64(34, 'i'). n_base64(35, 'j').
+n_base64(36, 'k'). n_base64(37, 'l'). n_base64(38, 'm'). n_base64(39, 'n').
+n_base64(40, 'o'). n_base64(41, 'p'). n_base64(42, 'q'). n_base64(43, 'r').
+n_base64(44, 's'). n_base64(45, 't'). n_base64(46, 'u'). n_base64(47, 'v').
+n_base64(48, 'w'). n_base64(49, 'x'). n_base64(50, 'y'). n_base64(51, 'z').
+n_base64(52, '0'). n_base64(53, '1'). n_base64(54, '2'). n_base64(55, '3').
+n_base64(56, '4'). n_base64(57, '5'). n_base64(58, '6'). n_base64(59, '7').
+n_base64(60, '8'). n_base64(61, '9'). n_base64(62, '+'). n_base64(63, '/').
+
+bytes_base64(Ls, Bs) :-
+        (   list(Bs), maplist(atom, Bs) ->
+            maplist(n_base64, Is, Bs),
+            phrase(bytes_base64_(Ls), Is),
+            Ls ins 0..255
+        ;   phrase(bytes_base64_(Ls), Is),
+            Is ins 0..63,
+            maplist(n_base64, Is, Bs)
+        ).
+
+list(Ls) :-
+        nonvar(Ls),
+        (   Ls = [] -> true
+        ;   Ls = [_|Rest],
+            list(Rest)
+        ).
+
+bytes_base64_([])         --> [].
+bytes_base64_([A])        --> [W,X],
+        { A #= W*4 + X//16,
+          X #= 16*_ }.
+bytes_base64_([A,B])      --> [W,X,Y],
+        { A #= W*4 + X//16,
+          B #= (X mod 16)*16 + Y//4,
+          Y #= 4*_ }.
+bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
+        { A #= W*4 + X//16,
+          B #= (X mod 16)*16 + Y//4,
+          C #= (Y mod 4)*64 + Z },
+        bytes_base64_(Ls).
+
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Modular multiplicative inverse.
