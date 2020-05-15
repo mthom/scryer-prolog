@@ -39,6 +39,8 @@ use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 use ring::rand::{SecureRandom, SystemRandom};
+use ring::{digest,hkdf};
+use ripemd160::{Ripemd160, Digest};
 
 pub fn get_key() -> KeyEvent {
     let key;
@@ -5203,6 +5205,96 @@ impl MachineState {
 
                 self.unify(arg, byte);
             }
+            &SystemClauseType::CryptoDataHash => {
+                let stub = MachineError::functor_stub(clause_name!("crypto_data_hash"), 3);
+                let bytes = self.integers_to_bytevec(temp_v!(1), stub);
+
+                let algorithm = self[temp_v!(3)];
+                let algorithm_str = match self.store(self.deref(algorithm)) {
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                            atom.as_str()
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                let ints_list =
+                        if algorithm_str == "ripemd160" {
+                             let mut context = Ripemd160::new();
+                             context.input(&bytes);
+                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        } else {
+                             let ints = digest::digest(
+                                            match algorithm_str {
+                                               "sha256" =>     { &digest::SHA256 }
+                                               "sha384" =>     { &digest::SHA384 }
+                                               "sha512" =>     { &digest::SHA512 }
+                                               "sha512_256" => { &digest::SHA512_256 }
+                                               _ =>            { unreachable!() }
+                                            },
+                                            &bytes);
+                             Addr::HeapCell(self.heap.to_list(ints.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        };
+
+                self.unify(self[temp_v!(2)], ints_list);
+            }
+            &SystemClauseType::CryptoDataHKDF => {
+                let stub1 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 6);
+                let data = self.integers_to_bytevec(temp_v!(1), stub1);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 6);
+                let salt = self.integers_to_bytevec(temp_v!(2), stub2);
+                let stub3 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 6);
+                let info = self.integers_to_bytevec(temp_v!(3), stub3);
+
+                let algorithm = match self.store(self.deref(self[temp_v!(4)])) {
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                            atom.as_str()
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                let length =
+                    match Number::try_from((self[temp_v!(5)], &self.heap)) {
+                        Ok(Number::Fixnum(n)) => {
+                            usize::try_from(n).unwrap()
+                        }
+                        Ok(Number::Integer(n)) => {
+                            n.to_usize().unwrap()
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let ints_list =
+                        {   let digest_alg  =
+                               match algorithm {
+                                  "sha256" =>     { hkdf::HKDF_SHA256 }
+                                  "sha384" =>     { hkdf::HKDF_SHA384 }
+                                  "sha512" =>     { hkdf::HKDF_SHA512 }
+                                  _ =>            { unreachable!() }
+                               };
+                             let salt = hkdf::Salt::new(digest_alg, &salt);
+                             let mut bytes : Vec<u8> = Vec::new();
+                             bytes.resize(length, 0);
+                             salt.extract(&data).expand(&[&info[..]], MyKey(length)).unwrap().fill(&mut bytes).unwrap();
+
+                             Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        };
+
+                self.unify(self[temp_v!(6)], ints_list);
+            }
         };
 
         return_from_clause!(self.last_call, self)
@@ -5218,4 +5310,12 @@ fn rng() -> &'static dyn SecureRandom {
     }
 
     RANDOM.deref()
+}
+
+struct MyKey<T: core::fmt::Debug + PartialEq>(T);
+
+impl hkdf::KeyType for MyKey<usize> {
+    fn len(&self) -> usize {
+        self.0
+    }
 }
