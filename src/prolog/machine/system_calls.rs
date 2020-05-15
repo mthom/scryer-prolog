@@ -31,6 +31,7 @@ use std::fs::{File, OpenOptions};
 use std::net::{TcpListener, TcpStream};
 use std::ops::Sub;
 use std::rc::Rc;
+use std::num::NonZeroU32;
 
 use std::time::Duration;
 use cpu_time::ProcessTime;
@@ -39,7 +40,7 @@ use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 use ring::rand::{SecureRandom, SystemRandom};
-use ring::{digest,hkdf};
+use ring::{digest,hkdf,pbkdf2};
 use ripemd160::{Ripemd160, Digest};
 
 pub fn get_key() -> KeyEvent {
@@ -5244,11 +5245,11 @@ impl MachineState {
                 self.unify(self[temp_v!(2)], ints_list);
             }
             &SystemClauseType::CryptoDataHKDF => {
-                let stub1 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 6);
+                let stub1 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 4);
                 let data = self.integers_to_bytevec(temp_v!(1), stub1);
-                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 6);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 4);
                 let salt = self.integers_to_bytevec(temp_v!(2), stub2);
-                let stub3 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 6);
+                let stub3 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 4);
                 let info = self.integers_to_bytevec(temp_v!(3), stub3);
 
                 let algorithm = match self.store(self.deref(self[temp_v!(4)])) {
@@ -5294,6 +5295,36 @@ impl MachineState {
                         };
 
                 self.unify(self[temp_v!(6)], ints_list);
+            }
+            &SystemClauseType::CryptoPasswordHash => {
+                let stub1 = MachineError::functor_stub(clause_name!("crypto_password_hash"), 3);
+                let data = self.integers_to_bytevec(temp_v!(1), stub1);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_password_hash"), 3);
+                let salt = self.integers_to_bytevec(temp_v!(2), stub2);
+
+                let iterations =
+                    match Number::try_from((self[temp_v!(3)], &self.heap)) {
+                        Ok(Number::Fixnum(n)) => {
+                            u64::try_from(n).unwrap()
+                        }
+                        Ok(Number::Integer(n)) => {
+                            n.to_u64().unwrap()
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                let ints_list =
+                        {   let mut bytes = [0u8; digest::SHA512_OUTPUT_LEN];
+                            pbkdf2::derive(pbkdf2::PBKDF2_HMAC_SHA512,
+                                           NonZeroU32::new(iterations as u32).unwrap(), &salt,
+                                           &data, &mut bytes);
+
+                             Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        };
+
+                self.unify(self[temp_v!(4)], ints_list);
             }
         };
 

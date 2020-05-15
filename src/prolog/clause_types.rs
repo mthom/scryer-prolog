@@ -288,7 +288,8 @@ pub enum SystemClauseType {
     ScryerPrologVersion,
     CryptoRandomByte,
     CryptoDataHash,
-    CryptoDataHKDF
+    CryptoDataHKDF,
+    CryptoPasswordHash
 }
 
 impl SystemClauseType {
@@ -474,6 +475,7 @@ impl SystemClauseType {
             &SystemClauseType::CryptoRandomByte => clause_name!("$crypto_random_byte"),
             &SystemClauseType::CryptoDataHash => clause_name!("$crypto_data_hash"),
             &SystemClauseType::CryptoDataHKDF => clause_name!("$crypto_data_hkdf"),
+            &SystemClauseType::CryptoPasswordHash => clause_name!("$crypto_password_hash"),
         }
     }
 
@@ -639,6 +641,7 @@ impl SystemClauseType {
             ("$crypto_random_byte", 1) => Some(SystemClauseType::CryptoRandomByte),
             ("$crypto_data_hash", 3) => Some(SystemClauseType::CryptoDataHash),
             ("$crypto_data_hkdf", 6) => Some(SystemClauseType::CryptoDataHKDF),
+            ("$crypto_password_hash", 4) => Some(SystemClauseType::CryptoPasswordHash),
             _ => None,
         }
     }
