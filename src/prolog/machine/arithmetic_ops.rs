@@ -268,20 +268,10 @@ impl MachineState {
 
     pub(crate)
     fn int_floor_div(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        match n1 / n2 {
-            Ok(result) => {
-                Ok(rnd_i(&result).to_owned())
-            }
-            Err(e) => {
-                let stub = MachineError::functor_stub(clause_name!("(div)"), 2);
-                Err(self.error_form(
-                    MachineError::evaluation_error(
-                        e
-                    ),
-                    stub
-                ))
-            }
-        }
+        let stub = MachineError::functor_stub(clause_name!("(div)"), 2);
+        let modulus = self.modulus(n1.clone(), n2.clone())?;
+
+        self.idiv(try_numeric_result!(self, n1 - modulus, stub)?, n2)
     }
 
     pub(crate)
