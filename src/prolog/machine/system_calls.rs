@@ -40,7 +40,7 @@ use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 use ring::rand::{SecureRandom, SystemRandom};
-use ring::{digest,hkdf,pbkdf2};
+use ring::{digest,hkdf,pbkdf2,aead,error};
 use ripemd160::{Ripemd160, Digest};
 
 pub fn get_key() -> KeyEvent {
@@ -5326,6 +5326,85 @@ impl MachineState {
 
                 self.unify(self[temp_v!(4)], ints_list);
             }
+            &SystemClauseType::CryptoDataEncrypt => {
+                let stub1 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 6);
+                let data = self.integers_to_bytevec(temp_v!(1), stub1);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 6);
+                let key = self.integers_to_bytevec(temp_v!(2), stub2);
+                let stub3 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 6);
+                let iv = self.integers_to_bytevec(temp_v!(3), stub3);
+
+                let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
+                let nonce_sequence = OneNonceSequence::new(aead::Nonce::try_assume_unique_for_key(&iv).unwrap());
+                let mut key: aead::SealingKey<OneNonceSequence> = aead::BoundKey::new(unbound_key, nonce_sequence);
+
+                let mut in_out = data.clone();
+                let tag =
+                     match key.seal_in_place_separate_tag(aead::Aad::empty(), &mut in_out) {
+                        Ok(d) => { d }
+                        _     => { self.fail = true; return Ok(()); }
+                      };
+
+                let tag_list =
+                      Addr::HeapCell(self.heap.to_list(tag.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))));
+
+                let complete_string = {
+                          let buffer = String::from_iter(in_out.iter().map(|b| *b as char));
+                          self.heap.put_complete_string(&buffer)
+                      };
+
+                self.unify(self[temp_v!(4)], tag_list);
+                self.unify(self[temp_v!(5)], complete_string);
+            }
+            &SystemClauseType::CryptoDataDecrypt => {
+                let stub1 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 6);
+                let data = self.integers_to_bytevec(temp_v!(1), stub1);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 6);
+                let key = self.integers_to_bytevec(temp_v!(2), stub2);
+                let stub3 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 6);
+                let iv = self.integers_to_bytevec(temp_v!(3), stub3);
+
+                let encoding = match self.store(self.deref(self[temp_v!(4)])) {
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                            atom.as_str()
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
+                let nonce_sequence = OneNonceSequence::new(aead::Nonce::try_assume_unique_for_key(&iv).unwrap());
+                let mut key: aead::OpeningKey<OneNonceSequence> = aead::BoundKey::new(unbound_key, nonce_sequence);
+
+                let mut in_out = data.clone();
+
+                let complete_string = {
+                          let decrypted_data =
+                                match key.open_in_place(aead::Aad::empty(), &mut in_out) {
+                                   Ok(d) => { d }
+                                   _     => { self.fail = true; return Ok(()); }
+                                 };
+
+                          let buffer = match encoding {
+                                  "octet" => { String::from_iter(decrypted_data.iter().map(|b| *b as char)) }
+                                  "utf8"  => { match String::from_utf8(decrypted_data.to_vec()) {
+                                                  Ok(str) => { str }
+                                                  _ => { self.fail = true; return Ok(()); }
+                                                  }
+                                               }
+                                  _ => { unreachable!() }
+                               };
+
+                          self.heap.put_complete_string(&buffer)
+                      };
+
+                self.unify(self[temp_v!(5)], complete_string);
+            }
         };
 
         return_from_clause!(self.last_call, self)
@@ -5348,5 +5427,19 @@ struct MyKey<T: core::fmt::Debug + PartialEq>(T);
 impl hkdf::KeyType for MyKey<usize> {
     fn len(&self) -> usize {
         self.0
+    }
+}
+
+struct OneNonceSequence(Option<aead::Nonce>);
+
+impl OneNonceSequence {
+    fn new(nonce: aead::Nonce) -> Self {
+        Self(Some(nonce))
+    }
+}
+
+impl aead::NonceSequence for OneNonceSequence {
+    fn advance(&mut self) -> Result<aead::Nonce, error::Unspecified> {
+        self.0.take().ok_or(error::Unspecified)
     }
 }

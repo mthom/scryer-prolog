@@ -275,8 +275,7 @@ cells(Fs0, Args, Tab, Es) -->
         cells(Fs, Args, Tab, [chars(Fs1)|Es]).
 
 n_newlines(0) --> !.
-n_newlines(1) --> !, [newline].
-n_newlines(N0) --> { N0 > 1, N is N0 - 1 }, [newline], n_newlines(N).
+n_newlines(N0) --> { N0 > 0, N is N0 - 1 }, [newline], n_newlines(N).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- phrase(upto_what(Cs, ~), "abc~test", Rest).
@@ -545,7 +544,7 @@ listing(PI) :-
         ;   type_error(predicate_indicator, PI, listing/1)
         ),
         functor(Head, Name, Arity),
-        \+ \+ clause(Head, Body), % only true if there is at least one clause
+        \+ \+ clause(Head, _), % only true if there is at least one clause
         (   clause(Head, Body),
             (   Body == true ->
                 portray_clause(Head)
