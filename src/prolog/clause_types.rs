@@ -289,7 +289,9 @@ pub enum SystemClauseType {
     CryptoRandomByte,
     CryptoDataHash,
     CryptoDataHKDF,
-    CryptoPasswordHash
+    CryptoPasswordHash,
+    CryptoDataEncrypt,
+    CryptoDataDecrypt
 }
 
 impl SystemClauseType {
@@ -476,6 +478,8 @@ impl SystemClauseType {
             &SystemClauseType::CryptoDataHash => clause_name!("$crypto_data_hash"),
             &SystemClauseType::CryptoDataHKDF => clause_name!("$crypto_data_hkdf"),
             &SystemClauseType::CryptoPasswordHash => clause_name!("$crypto_password_hash"),
+            &SystemClauseType::CryptoDataEncrypt => clause_name!("$crypto_data_encrypt"),
+            &SystemClauseType::CryptoDataDecrypt => clause_name!("$crypto_data_decrypt"),
         }
     }
 
@@ -642,6 +646,8 @@ impl SystemClauseType {
             ("$crypto_data_hash", 3) => Some(SystemClauseType::CryptoDataHash),
             ("$crypto_data_hkdf", 6) => Some(SystemClauseType::CryptoDataHKDF),
             ("$crypto_password_hash", 4) => Some(SystemClauseType::CryptoPasswordHash),
+            ("$crypto_data_encrypt", 5) => Some(SystemClauseType::CryptoDataEncrypt),
+            ("$crypto_data_decrypt", 5) => Some(SystemClauseType::CryptoDataDecrypt),
             _ => None,
         }
     }

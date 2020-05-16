@@ -12,17 +12,20 @@
    using strings leaves little trace of what was processed in the system,
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-:- module(crypto, [hex_bytes/2,                % ?Hex, ?Bytes
-                   crypto_n_random_bytes/2,    % +N, -Bytes
-                   crypto_data_hash/3,         % +Data, -Hash, +Options
-                   crypto_data_hkdf/4,         % +Data, +Length, -Bytes, +Options
-                   crypto_name_curve/2,        % +Name, -Curve
-                   crypto_curve_order/2,       % +Curve, -Order
-                   crypto_curve_generator/2,   % +Curve, -Generator
-                   crypto_curve_scalar_mult/4, % +Curve, +Scalar, +Point, -Result
-                   crypto_password_hash/2,     % +Password, ?Hash
-                   crypto_password_hash/3      % +Password, -Hash, +Options
-                  ]).
+:- module(crypto,
+          [hex_bytes/2,                % ?Hex, ?Bytes
+           crypto_n_random_bytes/2,    % +N, -Bytes
+           crypto_data_hash/3,         % +Data, -Hash, +Options
+           crypto_data_hkdf/4,         % +Data, +Length, -Bytes, +Options
+           crypto_password_hash/2,     % +Password, ?Hash
+           crypto_password_hash/3,     % +Password, -Hash, +Options
+           crypto_data_encrypt/6,      % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
+           crypto_data_decrypt/6,      % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
+           crypto_name_curve/2,        % +Name, -Curve
+           crypto_curve_order/2,       % +Curve, -Order
+           crypto_curve_generator/2,   % +Curve, -Generator
+           crypto_curve_scalar_mult/4  % +Curve, +Scalar, +Point, -Result
+          ]).
 
 :- use_module(library(error)).
 :- use_module(library(lists)).
@@ -434,6 +437,165 @@ bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
           C #= (Y mod 4)*64 + Z },
         bytes_base64_(Ls).
 
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   crypto_data_encrypt(+PlainText,
+                       +Algorithm,
+                       +Key,
+                       +IV,
+                       -CipherText,
+                       +Options).
+
+   Encrypt the given PlainText, using the symmetric algorithm
+   Algorithm, key Key, and initialization vector (or nonce) IV, to
+   give CipherText.
+
+   PlainText must be a list of codes or characters, Key and IV must be
+   lists of bytes, and CipherText is created as a list of characters.
+
+   Keys and IVs can be chosen at random (using for example
+   crypto_n_random_bytes/2) or derived from input keying material (IKM)
+   using for example crypto_data_hkdf/4. This input is often a shared
+   secret, such as a negotiated point on an elliptic curve, or the hash
+   that was computed from a password via crypto_password_hash/3 with a
+   freshly generated and specified _salt_.
+
+   Reusing the same combination of Key and IV typically leaks at least
+   _some_ information about the plaintext. For example, identical
+   plaintexts will then correspond to identical ciphertexts. For some
+   algorithms, reusing an IV with the same Key has disastrous results
+   and can cause the loss of all properties that are otherwise
+   guaranteed. Especially in such cases, an IV is also called a
+   _nonce_ (number used once).
+
+   It is safe to store and  transfer the used initialization vector (or
+   nonce) in plain text, but the key _must be kept secret_.
+
+   Currently, the only supported algorithm is 'chacha20-poly1305', a
+   powerful and efficient _authenticated_ encryption scheme, providing
+   secrecy and at the same time reliable protection against undetected
+   _modifications_ of the encrypted data. This is a very good choice
+   for virtually all use cases. It is a stream cipher and can encrypt
+   data of any length up to 256 GB. Further, the encrypted data has
+   exactly the same length as the original, and no padding is used.
+
+   Options:
+
+      - encoding(+Encoding)
+      Encoding to use for PlainText. Default is utf8. The alternative
+      is octet to treat PlainText as raw bytes.
+
+      - tag(-List)
+      For authenticated encryption schemes, List is unified with a
+      list of _bytes_ holding the tag. This tag must be provided for
+      decryption.
+
+   Here is an example encryption and decryption, using the ChaCha20
+   stream cipher with the Poly1305 authenticator. This cipher uses a
+   256-bit key and a 96-bit nonce, i.e., 32 and 12 _bytes_,
+   respectively:
+
+    ?- Algorithm = 'chacha20-poly1305',
+       crypto_n_random_bytes(32, Key),
+       crypto_n_random_bytes(12, IV),
+       crypto_data_encrypt("this text is to be encrypted", Algorithm,
+                   Key, IV, CipherText, [tag(Tag)]),
+       crypto_data_decrypt(CipherText, Algorithm,
+                   Key, IV, RecoveredText, [tag(Tag)]).
+
+   Yielding:
+
+       Algorithm = 'chacha20-poly1305',
+       Key = [113,247,153,134,177,220,13,193,50,150|...],
+       IV = [135,20,149,153,63,35,68,114,247,171|...],
+       CipherText = "\x94\0Ej\x94\®Â\x95\óÑÆXÃn¾ð©b\x1c\ ...",
+       RecoveredText = "this text is to be  ...",
+       Tag = [152,117,152,17,162,75,150,206,144,40|...]
+
+   In this example, we use crypto_n_random_bytes/2 to generate a key
+   and nonce from cryptographically secure random numbers. For
+   repeated applications, you must ensure that a nonce is only used
+   _once_ together with the same key. Note that for _authenticated_
+   encryption schemes, the _tag_ that was computed during encryption
+   is necessary for decryption. It is safe to store and transfer the
+   tag in plain text.
+
+   See also crypto_data_decrypt/6, and hex_bytes/2 for conversion
+   between bytes and hex encoding.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
+        option(encoding(Encoding), Options, utf8),
+        encoding_bytes(Encoding, PlainText0, PlainText),
+        option(tag(Tag), Options, _),
+        (   nonvar(Tag) ->
+            must_be_bytes(Tag, crypto_data_encrypt/6)
+        ;   true
+        ),
+        must_be_bytes(Key, crypto_data_encrypt/6),
+        must_be_bytes(IV, crypto_data_encrypt/6),
+        must_be(atom, Algorithm),
+        (   Algorithm = 'chacha20-poly1305' -> true
+        ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_encrypt/6)
+        ),
+        '$crypto_data_encrypt'(PlainText, Key, IV, Tag, CipherText).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  crypto_data_decrypt(+CipherText,
+                      +Algorithm,
+                      +Key,
+                      +IV,
+                      -PlainText,
+                      +Options).
+
+   Decrypt the given CipherText, using the symmetric algorithm
+   Algorithm, key Key, and initialization vector IV, to give
+   PlainText. CipherText must be a list of bytes or characters, and
+   Key and IV must be lists of bytes. PlainText is created as a list
+   of characters.
+
+   Currently, the only supported algorithm is 'chacha20-poly1305',
+   a very secure, fast and versatile authenticated encryption method.
+
+   Options is a list of:
+
+    - encoding(+Encoding)
+    Encoding to use for PlainText. The default is utf8. The
+    alternative is octet, which is used if the data are raw bytes.
+
+    - tag(+Tag)
+    For authenticated encryption schemes, the tag must be specified as
+    a list of bytes exactly as they were generated upon encryption.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
+        option(tag(Tag), Options, []),
+        must_be_bytes(Tag, crypto_data_decrypt/6),
+        must_be_bytes(Key, crypto_data_decrypt/6),
+        must_be_bytes(IV, crypto_data_decrypt/6),
+        must_be(atom, Algorithm),
+        option(encoding(Encoding), Options, utf8),
+        must_be(list, CipherText0),
+        encoding_bytes(octet, CipherText0, CipherText1),
+        append(CipherText1, Tag, CipherText),
+        (   Algorithm = 'chacha20-poly1305' -> true
+        ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_decrypt/6)
+        ),
+        '$crypto_data_decrypt'(CipherText, Key, IV, Encoding, PlainText).
+
+encoding_bytes(octet, Bs0, Bs) :-
+        (   maplist(integer, Bs0) ->
+            Bs0 = Bs
+        ;   maplist(char_code, Bs0, Bs)
+        ),
+        must_be_bytes(Bs, crypto_encoding).
+encoding_bytes(utf8, Cs, Bs) :-
+        (   maplist(atom, Cs) ->
+            chars_bytes_(Cs, Bs, crypto_encoding)
+        ;   domain_error(encryption_encoding, Cs, crypto)
+        ).
+
+char_code(Char, Code) :- atom_codes(Char, [Code]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Modular multiplicative inverse.
