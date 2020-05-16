@@ -155,16 +155,17 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
    characters, and Hash is the computed hash as a list of hexadecimal
    characters.
 
-   The single supported option is:
+   Options is a list of:
 
-      algorithm(A)
-
-   where A is one of ripemd160, sha256, sha384, sha512, sha512_256,
-   or a variable.
-
-   If A is a variable, then it is unified with the default algorithm,
-   which is an algorithm that is considered cryptographically secure
-   at the time of this writing.
+     - algorithm(+A)
+       where A is one of ripemd160, sha256, sha384, sha512,
+       sha512_256, or a variable. If A is a variable, then it is
+       unified with the default algorithm, which is an algorithm that
+       is considered cryptographically secure at the time of this
+       writing.
+     - encoding(+Encoding)
+       The default encoding is utf8. The alternative is octet,
+       to treat the input as a list of raw bytes.
 
    Example:
 
@@ -182,8 +183,9 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 crypto_data_hash(Data0, Hash, Options0) :-
-        chars_bytes_(Data0, Data, crypto_data_hash/3),
         must_be(list, Options0),
+        option(encoding(Encoding), Options0, utf8),
+        encoding_bytes(Encoding, Data0, Data),
         functor_hash_options(algorithm, A, Options0, _),
         (   hash_algorithm(A) -> true
         ;   domain_error(hash_algorithm, A, crypto_data_hash/3)
@@ -235,6 +237,9 @@ hash_algorithm(sha512_256).
      - salt(+List)
        Optionally, a list of bytes that are used as salt. The
        default is all zeroes.
+     - encoding(+Encoding)
+       The default encoding is utf8. The alternative is octet,
+       to treat the input as a list of raw bytes.
 
    The `info/1`  option can be  used to  generate multiple keys  from a
    single  master key,  using for  example values  such as  "key" and
@@ -245,7 +250,8 @@ hash_algorithm(sha512_256).
 
 crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         functor_hash_options(algorithm, Algorithm, Options0, Options),
-        chars_bytes_(Data0, Data, crypto_data_hkdf/4),
+        option(encoding(Encoding), Options, utf8),
+        encoding_bytes(Encoding, Data0, Data),
         option(salt(SaltBytes), Options, []),
         must_be_bytes(SaltBytes, crypto_data_hkdf/4),
         option(info(Info0), Options, []),
@@ -339,7 +345,7 @@ dollar_segments(Ls, Segments) :-
 
      - algorithm(+Algorithm)
        The algorithm to use. Currently, the only available algorithm
-       is =|pbkdf2-sha512|=, which is therefore also the default.
+       is 'pbkdf2-sha512', which is therefore also the default.
      - cost(+C)
        C is an integer, denoting the binary logarithm of the number
        of _iterations_ used for the derivation of the hash. This
