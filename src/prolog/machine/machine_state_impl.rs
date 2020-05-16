@@ -1959,11 +1959,13 @@ impl MachineState {
                 (Addr::CharCode(n1), v2) | (v2, Addr::CharCode(n1)) => {
                     if let Ok(n2) = Number::try_from((v2, &self.heap)) {
                         if let Some(n2) = n2.to_u32() {
-                            if n1 != n2 {
-                                return true;
+                            if n1 == n2 {
+                                continue;
                             }
                         }
                     }
+
+                    return true;
                 }
                 (a1, a2) => {
                     if let Ok(n1) = Number::try_from((a1, &self.heap)) {

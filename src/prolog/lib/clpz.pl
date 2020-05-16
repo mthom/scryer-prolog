@@ -4676,64 +4676,64 @@ run_propagator(scalar_product_eq(Cs0,Vs0,P0), MState) -->
 
 % X + Y = Z
 run_propagator(pplus(X,Y,Z), MState) -->
-        (   nonvar(X) ->
-            (   X =:= 0 -> kill(MState), Y = Z
-            ;   Y == Z -> kill(MState), X =:= 0
-            ;   nonvar(Y) -> kill(MState), Z is X + Y
-            ;   nonvar(Z) -> kill(MState), Y is Z - X
-            ;   { fd_get(Z, ZD, ZPs),
-                  fd_get(Y, YD, _),
-                  domain_shift(YD, X, Shifted_YD),
-                  domains_intersection(ZD, Shifted_YD, ZD1) },
-                fd_put(Z, ZD1, ZPs),
-                (   { fd_get(Y, YD1, YPs) } ->
-                    O is -X,
-                    { domain_shift(ZD1, O, YD2),
-                      domains_intersection(YD1, YD2, YD3) },
-                    fd_put(Y, YD3, YPs)
-                ;   []
-                )
-            )
-        ;   nonvar(Y) -> run_propagator(pplus(Y,X,Z), MState)
-        ;   nonvar(Z) ->
-            (   X == Y -> kill(MState), { even(Z), X is Z // 2 }
-            ;   { fd_get(X, XD, _),
-                  fd_get(Y, YD, YPs),
-                  domain_negate(XD, XDN),
-                  domain_shift(XDN, Z, YD1),
-                  domains_intersection(YD, YD1, YD2) },
-                fd_put(Y, YD2, YPs),
-                (   { fd_get(X, XD1, XPs) } ->
-                    { domain_negate(YD2, YD2N),
-                      domain_shift(YD2N, Z, XD2),
-                      domains_intersection(XD1, XD2, XD3) },
+         (   nonvar(X) ->
+              (   X =:= 0 -> kill(MState), Y = Z
+              ;   Y == Z -> kill(MState), X =:= 0
+              ;   nonvar(Y) -> kill(MState), Z is X + Y
+              ;   nonvar(Z) -> kill(MState), Y is Z - X
+              ;   { fd_get(Z, ZD, ZPs),
+                    fd_get(Y, YD, _),
+                    domain_shift(YD, X, Shifted_YD),
+                    domains_intersection(ZD, Shifted_YD, ZD1) },
+                  fd_put(Z, ZD1, ZPs),
+                  (   { fd_get(Y, YD1, YPs) } ->
+                      O is -X,
+                      { domain_shift(ZD1, O, YD2),
+                        domains_intersection(YD1, YD2, YD3) },
+                      fd_put(Y, YD3, YPs)
+                  ;   []
+                  )
+              )
+          ;   nonvar(Y) -> run_propagator(pplus(Y,X,Z), MState)
+          ;   nonvar(Z) ->
+              (   X == Y -> kill(MState), { even(Z), X is Z // 2 }
+              ;   { fd_get(X, XD, _),
+                    fd_get(Y, YD, YPs),
+                    domain_negate(XD, XDN),
+                    domain_shift(XDN, Z, YD1),
+                    domains_intersection(YD, YD1, YD2) },
+                  fd_put(Y, YD2, YPs),
+                  (   { fd_get(X, XD1, XPs) } ->
+                      { domain_negate(YD2, YD2N),
+                        domain_shift(YD2N, Z, XD2),
+                        domains_intersection(XD1, XD2, XD3) },
                       fd_put(X, XD3, XPs)
-                ;   []
-                )
-            )
-        ;   (   X == Y -> { kill(MState), 2*X #= Z }
-            ;   X == Z -> kill(MState), Y = 0
-            ;   Y == Z -> kill(MState), X = 0
-            ;   { fd_get(X, XD, XL, XU, XPs),
-                  fd_get(Y, _, YL, YU, _),
-                  fd_get(Z, _, ZL, ZU, _),
-                  NXL cis max(XL, ZL-YU),
-                  NXU cis min(XU, ZU-YL) },
+                  ;   []
+                  )
+              )
+          ;   (   X == Y -> { kill(MState), 2*X #= Z }
+              ;   X == Z -> kill(MState), Y = 0
+              ;   Y == Z -> kill(MState), X = 0
+              ;   { fd_get(X, XD, XL, XU, XPs),
+                    fd_get(Y, _, YL, YU, _),
+                    fd_get(Z, _, ZL, ZU, _),
+                    NXL cis max(XL, ZL-YU),
+                    NXU cis min(XU, ZU-YL) },
                   update_bounds(X, XD, XPs, XL, XU, NXL, NXU),
-                (   { fd_get(Y, YD2, YL2, YU2, YPs2) } ->
-                    { NYL cis max(YL2, ZL-NXU),
-                      NYU cis min(YU2, ZU-NXL) },
-                    update_bounds(Y, YD2, YPs2, YL2, YU2, NYL, NYU)
-                ;   NYL = n(Y), NYU = n(Y)
-                ),
-                (   { fd_get(Z, ZD2, ZL2, ZU2, ZPs2) } ->
-                    { NZL cis max(ZL2,NXL+NYL),
-                      NZU cis min(ZU2,NXU+NYU) },
-                    update_bounds(Z, ZD2, ZPs2, ZL2, ZU2, NZL, NZU)
-                ;   []
-                )
-            )
-        ).
+                  (   { fd_get(Y, YD2, YL2, YU2, YPs2) } ->
+                      { NYL cis max(YL2, ZL-NXU),
+                        NYU cis min(YU2, ZU-NXL) },
+                      update_bounds(Y, YD2, YPs2, YL2, YU2, NYL, NYU)
+                  ;   NYL = n(Y), NYU = n(Y)
+                  ),
+                  (   { fd_get(Z, ZD2, ZL2, ZU2, ZPs2) } ->
+                      { NZL cis max(ZL2,NXL+NYL),
+                        NZU cis min(ZU2,NXU+NYU) },
+                      update_bounds(Z, ZD2, ZPs2, ZL2, ZU2, NZL, NZU)
+                  ;   []
+                  )
+              )
+          ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
