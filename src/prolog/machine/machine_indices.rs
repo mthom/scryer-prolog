@@ -58,7 +58,6 @@ pub enum TermOrderCategory {
 pub enum Addr {
     AttrVar(usize),
     Char(char),
-    CharCode(u32),
     Con(usize),
     CutPoint(usize),
     EmptyList,
@@ -160,7 +159,7 @@ impl Addr {
     #[inline]
     pub fn is_heap_bound(&self) -> bool {
         match self {
-            Addr::Char(_) | Addr::CharCode(_) | Addr::EmptyList |
+            Addr::Char(_) | Addr::EmptyList |
             Addr::CutPoint(_) | Addr::Usize(_) | Addr::Fixnum(_) |
             Addr::Float(_) => {
                 false
@@ -226,7 +225,7 @@ impl Addr {
                     Addr::Char(_) | Addr::EmptyList => {
                         Some(TermOrderCategory::Atom)
                     }
-                    Addr::CharCode(_) | Addr::Fixnum(_) | Addr::Usize(_) => {
+                    Addr::Fixnum(_) | Addr::Usize(_) => {
                         Some(TermOrderCategory::Integer)
                     }
                     Addr::Lis(_) | Addr::PStrLocation(..) | Addr::Str(_) => {
@@ -244,9 +243,6 @@ impl Addr {
         match self {
             &Addr::Char(c) => {
                 Some(Constant::Char(c))
-            }
-            &Addr::CharCode(c) => {
-                Some(Constant::CharCode(c))
             }
             &Addr::Con(h) => {
                 match &machine_st.heap[h] {

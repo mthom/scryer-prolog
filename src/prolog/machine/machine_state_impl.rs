@@ -1411,7 +1411,7 @@ impl MachineState {
                             c
                         }
                     }
-                    Addr::Char(_) | Addr::CharCode(_) | Addr::Con(_) | Addr::CutPoint(_) |
+                    Addr::Char(_) | Addr::Con(_) | Addr::CutPoint(_) |
                     Addr::EmptyList | Addr::Fixnum(_) | Addr::Float(_) | Addr::Usize(_) => {
                         c
                     }
@@ -1956,17 +1956,6 @@ impl MachineState {
                         }
                     }
                 }
-                (Addr::CharCode(n1), v2) | (v2, Addr::CharCode(n1)) => {
-                    if let Ok(n2) = Number::try_from((v2, &self.heap)) {
-                        if let Some(n2) = n2.to_u32() {
-                            if n1 == n2 {
-                                continue;
-                            }
-                        }
-                    }
-
-                    return true;
-                }
                 (a1, a2) => {
                     if let Ok(n1) = Number::try_from((a1, &self.heap)) {
                         if let Ok(n2) = Number::try_from((a2, &self.heap)) {
@@ -2137,42 +2126,6 @@ impl MachineState {
                             }
                         }
                         (
-                            Addr::Con(h),
-                            Addr::CharCode(c),
-                        ) => {
-                            let c = std::char::from_u32(c).unwrap();
-
-                            if let HeapCellValue::Atom(ref n1, _) = &self.heap[h] {
-                                if n1.is_char() {
-                                    if n1.as_str().chars().next() != Some(c) {
-                                        return Some(n1.as_str().chars().next().cmp(&Some(c)));
-                                    }
-                                } else {
-                                    return Some(Ordering::Greater);
-                                }
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        (
-                            Addr::CharCode(c),
-                            Addr::Con(h),
-                        ) => {
-                            let c = std::char::from_u32(c).unwrap();
-
-                            if let HeapCellValue::Atom(ref n1, _) = &self.heap[h] {
-                                if n1.is_char() {
-                                    if n1.as_str().chars().next() != Some(c) {
-                                        return Some(Some(c).cmp(&n1.as_str().chars().next()));
-                                    }
-                                } else {
-                                    return Some(Ordering::Less);
-                                }
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        (
                             Addr::EmptyList,
                             Addr::Con(h),
                         ) => {
@@ -2205,34 +2158,6 @@ impl MachineState {
                             }
                         }
                         (
-                            Addr::CharCode(c1),
-                            Addr::CharCode(c2),
-                        ) => {
-                            if c1 != c2 {
-                                return Some(c1.cmp(&c2));
-                            }
-                        }
-                        (
-                            Addr::Char(c1),
-                            Addr::CharCode(c2),
-                        ) => {
-                            let c2 = std::char::from_u32(c2).unwrap();
-
-                            if c1 != c2 {
-                                return Some(c1.cmp(&c2));
-                            }
-                        }
-                        (
-                            Addr::CharCode(c1),
-                            Addr::Char(c2),
-                        ) => {
-                            let c1 = std::char::from_u32(c1).unwrap();
-
-                            if c1 != c2 {
-                                return Some(c1.cmp(&c2));
-                            }
-                        }
-                        (
                             Addr::Char(c),
                             Addr::EmptyList,
                         ) => {
@@ -2246,30 +2171,6 @@ impl MachineState {
                             Addr::EmptyList,
                             Addr::Char(c),
                         ) => {
-                            return if c == '[' {
-                                Some(Ordering::Greater)
-                            } else {
-                                Some('['.cmp(&c))
-                            };
-                        }
-                        (
-                            Addr::CharCode(c),
-                            Addr::EmptyList,
-                        ) => {
-                            let c = std::char::from_u32(c).unwrap();
-
-                            return if c == '[' {
-                                Some(Ordering::Less)
-                            } else {
-                                Some(c.cmp(&'['))
-                            };
-                        }
-                        (
-                            Addr::EmptyList,
-                            Addr::CharCode(c),
-                        ) => {
-                            let c = std::char::from_u32(c).unwrap();
-
                             return if c == '[' {
                                 Some(Ordering::Greater)
                             } else {
@@ -2443,7 +2344,6 @@ impl MachineState {
 
                 match d {
                     Addr::Char(_) |
-                    Addr::CharCode(_) |
                     Addr::Con(_) |
                     Addr::EmptyList |
                     Addr::Fixnum(_) |
@@ -2471,9 +2371,6 @@ impl MachineState {
                     }
                     _ => {
                         match d {
-                            Addr::CharCode(_) => {
-                                self.p += 1;
-                            }
                             Addr::Char(_) if self.flags.double_quotes.is_codes() => {
                                 self.p += 1;
                             }
@@ -2601,7 +2498,7 @@ impl MachineState {
             Addr::Stream(_) => {
                 self.fail = true;
             }
-            Addr::Char(_) | Addr::CharCode(_) | Addr::Con(_) | Addr::Fixnum(_) |
+            Addr::Char(_) | Addr::Con(_) | Addr::Fixnum(_) |
             Addr::Float(_) | Addr::EmptyList | Addr::Usize(_) => {
                 self.try_functor_unify_components(a1, 0);
             }
@@ -2637,9 +2534,6 @@ impl MachineState {
                             },
                         _ =>
                             match arity {
-                                Addr::CharCode(c) => {
-                                    Some(c as isize)
-                                }
                                 arity => {
                                     return Err(
                                         self.error_form(
@@ -2681,7 +2575,7 @@ impl MachineState {
                 }
 
                 match name {
-                    Addr::Char(_) | Addr::CharCode(_) | Addr::Con(_) | Addr::Fixnum(_) | Addr::Float(_) |
+                    Addr::Char(_) | Addr::Con(_) | Addr::Fixnum(_) | Addr::Float(_) |
                     Addr::EmptyList | Addr::PStrLocation(..) | Addr::Usize(_) if arity == 0 => {
                         self.unify(a1, name);
                     }

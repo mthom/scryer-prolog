@@ -508,8 +508,11 @@ impl MachineState {
         n: &Integer,
         stub: &'static str,
         arity: usize,
-    ) -> Result<u32, MachineStub> {
-        if let Some(c) = n.to_u32() {
+    ) -> Result<char, MachineStub>
+    {
+        let c = n.to_u32().and_then(std::char::from_u32);
+
+        if let Some(c) = c {
             Ok(c)
         } else {
             let stub = MachineError::functor_stub(clause_name!(stub), arity);
@@ -591,9 +594,6 @@ impl MachineState {
             Ok(Term::Constant(_, Constant::Fixnum(n))) => {
                 let addr = self.heap.put_constant(Constant::Fixnum(n));
                 self.unify(nx, addr);
-            }
-            Ok(Term::Constant(_, Constant::CharCode(c))) => {
-                self.unify(nx, Addr::CharCode(c))
             }
             _ => {
                 let err = ParserError::ParseBigInt(0, 0);
@@ -909,7 +909,7 @@ impl MachineState {
 
                 match self.store(self.deref(a1)) {
                     Addr::Char(c) => {
-                        let iter = once(Addr::CharCode(c as u32));
+                        let iter = once(Addr::Fixnum(c as isize));
                         let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
 
                         let a2 = self[temp_v!(2)];
@@ -938,7 +938,7 @@ impl MachineState {
                                     let iter = name
                                         .as_str()
                                         .chars()
-                                        .map(|c| Addr::CharCode(c as u32));
+                                        .map(|c| Addr::Fixnum(c as isize));
 
                                     let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
 
@@ -951,8 +951,8 @@ impl MachineState {
                     }
                     Addr::EmptyList => {
                         let chars = vec![
-                            Addr::CharCode('[' as u32),
-                            Addr::CharCode(']' as u32),
+                            Addr::Fixnum('[' as isize),
+                            Addr::Fixnum(']' as isize),
                         ];
 
                         let list_of_codes = Addr::HeapCell(self.heap.to_list(chars.into_iter()));
@@ -984,7 +984,7 @@ impl MachineState {
                                                         2,
                                                     )?;
 
-                                                    chars.push(std::char::from_u32(c).unwrap());
+                                                    chars.push(c);
                                                 }
                                             }
 
@@ -992,17 +992,9 @@ impl MachineState {
                                         }
                                         Ok(Number::Integer(n)) => {
                                             let c = self.int_to_char_code(&n, "atom_codes", 2)?;
-                                            chars.push(std::char::from_u32(c).unwrap());
+                                            chars.push(c);
 
                                             continue;
-                                        }
-                                        _ => {
-                                        }
-                                    }
-
-                                    match addr {
-                                        Addr::CharCode(c) => {
-                                            chars.push(std::char::from_u32(c).unwrap());
                                         }
                                         _ => {
                                             let stub = MachineError::functor_stub(
@@ -1020,11 +1012,6 @@ impl MachineState {
                                         }
                                     }
                                 }
-
-                                let chars = clause_name!(chars, indices.atom_tbl);
-                                let chars = self.heap.to_unifiable(HeapCellValue::Atom(chars, None));
-
-                                self.unify(addr, chars);
                             }
                         }
                     }
@@ -1429,14 +1416,15 @@ impl MachineState {
                         addr if addr.is_ref() => {
                             addr
                         }
-                        Addr::CharCode(d) => {
-                            Addr::CharCode(d)
-                        }
                         addr => {
                             match Number::try_from((addr, &self.heap)) {
                                 Ok(Number::Integer(n)) => {
-                                    if let Some(c) = n.to_u32().and_then(|c| char::try_from(c).ok()) {
-                                        Addr::CharCode(c as u32)
+                                    let n = n.to_u32().and_then(|n| {
+                                        std::char::from_u32(n).and_then(|_| Some(n))
+                                    });
+
+                                    if let Some(n) = n {
+                                        Addr::Fixnum(n as isize)
                                     } else {
                                         return Err(self.representation_error(
                                             RepFlag::InCharacterCode,
@@ -1446,8 +1434,12 @@ impl MachineState {
                                     }
                                 }
                                 Ok(Number::Fixnum(n)) => {
-                                    if let Some(c) = u32::try_from(n).ok().and_then(|c| char::try_from(c).ok()) {
-                                        Addr::CharCode(c as u32)
+                                    let n = u32::try_from(n).ok().and_then(|n| {
+                                        std::char::from_u32(n).and_then(|_| Some(n))
+                                    });
+
+                                    if let Some(n) = n {
+                                        Addr::Fixnum(n as isize)
                                     } else {
                                         return Err(self.representation_error(
                                             RepFlag::InCharacterCode,
@@ -1474,9 +1466,9 @@ impl MachineState {
                     match result.map_err(|e| e.kind()) {
                         Ok(c) => {
                             if let Some(var) = addr.as_var() {
-                                self.bind(var, Addr::CharCode(c as u32));
+                                self.bind(var, Addr::Fixnum(c as isize));
                                 break;
-                            } else if addr == Addr::CharCode(c as u32) {
+                            } else if addr == Addr::Fixnum(c as isize) {
                                 break;
                             } else {
                                 self.fail = true;
@@ -1561,7 +1553,7 @@ impl MachineState {
                 let codes = string
                     .trim()
                     .chars()
-                    .map(|c| Addr::CharCode(c as u32));
+                    .map(|c| Addr::Fixnum(c as isize));
 
                 let codes_list = Addr::HeapCell(self.heap.to_list(codes));
 
@@ -1630,11 +1622,11 @@ impl MachineState {
                             };
 
                         let a2 = self[temp_v!(2)];
-                        self.unify(Addr::CharCode(c as u32), a2);
+                        self.unify(Addr::Fixnum(c as isize), a2);
                     }
                     Addr::Char(c) => {
                         let a2 = self[temp_v!(2)];
-                        self.unify(Addr::CharCode(c as u32), a2);
+                        self.unify(Addr::Fixnum(c as isize), a2);
                     }
                     addr if addr.is_ref() => {
                         let a2 = self[temp_v!(2)];
@@ -1648,23 +1640,12 @@ impl MachineState {
                                 self.int_to_char_code(&Integer::from(n), "char_code", 2)?
                             }
                             _ => {
-                                match addr {
-                                    Addr::CharCode(c) => {
-                                        c
-                                    }
-                                    _ => {
-                                        self.fail = true;
-                                        return Ok(());
-                                    }
-                                }
+                                self.fail = true;
+                                return Ok(());
                             }
                         };
 
-                        if let Some(c) = std::char::from_u32(c) {
-                            self.unify(Addr::Char(c), addr);
-                        } else {
-                            self.fail = true;
-                        }
+                        self.unify(Addr::Char(c), addr);
                     }
                     _ => {
                         unreachable!();
@@ -1952,10 +1933,6 @@ impl MachineState {
                         let err = MachineError::instantiation_error();
 
                         return Err(self.error_form(err, stub));
-                    }
-                    Addr::CharCode(c) => {
-                        let c = char::try_from(c).unwrap();
-                        write!(&mut stream, "{}", c).unwrap();
                     }
                     addr => {
                         match Number::try_from((addr, &self.heap)) {
@@ -2389,14 +2366,15 @@ impl MachineState {
                         addr if addr.is_ref() => {
                             addr
                         }
-                        Addr::CharCode(d) => {
-                            Addr::CharCode(d)
-                        }
                         addr => {
                             match Number::try_from((addr, &self.heap)) {
                                 Ok(Number::Integer(n)) => {
-                                    if let Some(c) = n.to_u32().and_then(|c| char::try_from(c).ok()) {
-                                        Addr::CharCode(c as u32)
+                                    let n = n.to_u32().and_then(|n| {
+                                        std::char::from_u32(n).and_then(|_| Some(n))
+                                    });
+
+                                    if let Some(n) = n {
+                                        Addr::Fixnum(n as isize)
                                     } else {
                                         return Err(self.representation_error(
                                             RepFlag::InCharacterCode,
@@ -2406,8 +2384,12 @@ impl MachineState {
                                     }
                                 }
                                 Ok(Number::Fixnum(n)) => {
-                                    if let Some(c) = u32::try_from(n).ok().and_then(|c| char::try_from(c).ok()) {
-                                        Addr::CharCode(c as u32)
+                                    let n = u32::try_from(n).ok().and_then(|n| {
+                                        std::char::from_u32(n).and_then(|_| Some(n))
+                                    });
+
+                                    if let Some(n) = n {
+                                        Addr::Fixnum(n as isize)
                                     } else {
                                         return Err(self.representation_error(
                                             RepFlag::InCharacterCode,
@@ -2440,9 +2422,9 @@ impl MachineState {
                     match result {
                         Some(Ok(c)) => {
                             if let Some(var) = addr.as_var() {
-                                self.bind(var, Addr::CharCode(c as u32));
+                                self.bind(var, Addr::Fixnum(c as isize));
                                 break;
-                            } else if addr == Addr::CharCode(c as u32) {
+                            } else if addr == Addr::Fixnum(c as isize) {
                                 break;
                             } else {
                                 self.fail = true;
@@ -4258,8 +4240,11 @@ impl MachineState {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
 
                 match addr {
-                    Addr::CharCode(c) => {
-                        self.fail = match std::char::from_u32(c) {
+                    Addr::Fixnum(n) => {
+                        let n = u32::try_from(n).ok();
+                        let n = n.and_then(std::char::from_u32);
+
+                        self.fail = match n {
                             Some(c) => {
                                 non_quoted_token(once(c))
                             }
@@ -4373,29 +4358,23 @@ impl MachineState {
             &SystemClauseType::SetSeed => {
                 let seed = self.store(self.deref(self[temp_v!(1)]));
 
-                let seed = match seed {
-                    Addr::CharCode(c) => {
-                        Integer::from(c)
-                    }
-                    _ => {
-                        match Number::try_from((seed, &self.heap)) {
-                            Ok(Number::Fixnum(n)) => {
-                                Integer::from(n)
-                            }
-                            Ok(Number::Integer(n)) => {
-                                Integer::from(n.as_ref())
-                            }
-                            Ok(Number::Rational(n))
-                                if n.denom() == &1 => {
-                                    n.numer().clone()
-                                }
-                            _ => {
-                                self.fail = true;
-                                return Ok(());
-                            }
+                let seed =
+                    match Number::try_from((seed, &self.heap)) {
+                        Ok(Number::Fixnum(n)) => {
+                            Integer::from(n)
                         }
-                    }
-                };
+                        Ok(Number::Integer(n)) => {
+                            Integer::from(n.as_ref())
+                        }
+                        Ok(Number::Rational(n))
+                            if n.denom() == &1 => {
+                                n.numer().clone()
+                            }
+                        _ => {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    };
 
                 let mut rand = RANDOM_STATE.borrow_mut();
                 rand.seed(&seed);

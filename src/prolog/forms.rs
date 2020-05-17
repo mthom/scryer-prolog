@@ -12,7 +12,6 @@ use indexmap::IndexMap;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
-use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -649,21 +648,6 @@ impl Into<HeapCellValue> for Number {
 
 
 impl Number {
-    #[inline]
-    pub fn to_u32(&self) -> Option<u32> {
-        match self {
-            &Number::Fixnum(n) => u32::try_from(n).ok(),
-            &Number::Integer(ref n) => n.to_u32(),
-            &Number::Float(_) => None,
-            &Number::Rational(ref r) =>
-                if r.denom() == &1 {
-                    r.numer().to_u32()
-                } else {
-                    None
-                }
-        }
-    }
-
     #[inline]
     pub fn is_positive(&self) -> bool {
         match self {

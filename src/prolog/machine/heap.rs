@@ -216,9 +216,6 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             Constant::Char(c) => {
                 Addr::Char(c)
             }
-            Constant::CharCode(c) => {
-                Addr::CharCode(c)
-            }
             Constant::EmptyList => {
                 Addr::EmptyList
             }

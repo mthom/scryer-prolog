@@ -722,9 +722,6 @@ impl<'a> TryFrom<(Addr, &'a Heap)> for Number {
 
     fn try_from((addr, heap): (Addr, &'a Heap)) -> Result<Number, Self::Error> {
         match addr {
-            Addr::CharCode(c) => {
-                Ok(Number::from(c as isize))
-            }
             Addr::Fixnum(n) => {
                 Ok(Number::from(n))
             }
@@ -755,9 +752,6 @@ impl<'a> TryFrom<&'a HeapCellValue> for Number {
         match value {
             HeapCellValue::Addr(addr) => {
                 match addr {
-                    &Addr::CharCode(c) => {
-                        Ok(Number::from(c as isize))
-                    }
                     &Addr::Fixnum(n) => {
                         Ok(Number::from(n))
                     }

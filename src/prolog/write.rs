@@ -203,7 +203,6 @@ impl fmt::Display for Addr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Addr::Char(c) => write!(f, "Addr::Char({})", c),
-            &Addr::CharCode(c) => write!(f, "Addr::CharCode({})", c),
             &Addr::EmptyList => write!(f, "Addr::EmptyList"),
             &Addr::Fixnum(n) => write!(f, "Addr::Fixnum({})", n),
             &Addr::Float(fl) => write!(f, "Addr::Float({})", fl),

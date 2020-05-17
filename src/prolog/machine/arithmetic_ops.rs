@@ -223,9 +223,6 @@ impl MachineState {
                         }
                     }
                 }
-                &HeapCellValue::Addr(Addr::CharCode(n)) => {
-                    interms.push(Number::Integer(Rc::new(Integer::from(n))));
-                }
                 &HeapCellValue::Addr(Addr::Fixnum(n)) => {
                     interms.push(Number::Fixnum(n));
                 }

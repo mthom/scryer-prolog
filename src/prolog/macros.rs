@@ -150,9 +150,6 @@ macro_rules! from_constant {
             &Constant::Char(c) => {
                 HeapCellValue::Addr(Addr::Char(c))
             }
-            &Constant::CharCode(c) => {
-                HeapCellValue::Addr(Addr::CharCode(c))
-            }
             &Constant::Fixnum(n) => {
                 HeapCellValue::Addr(Addr::Fixnum(n))
             }

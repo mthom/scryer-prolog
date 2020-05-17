@@ -1469,9 +1469,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
                 }
             }
-            &HeapCellValue::Addr(Addr::CharCode(c)) => {
-                self.append_str(&format!("{}", c as u32));
-            }
             &HeapCellValue::Addr(Addr::Char(c)) => {
                 self.print_char(self.quoted, c);
             }
