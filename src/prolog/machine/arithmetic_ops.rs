@@ -781,8 +781,13 @@ impl MachineState {
         match (n1, n2) {
             (Number::Fixnum(n1), Number::Fixnum(n2)) => {
                 if let Ok(n2) = u32::try_from(n2) {
-                    if let Some(result) = n1.checked_shl(n2) {
-                        return Ok(Number::from(result));
+                    if n2 < 63 {
+                        if let Some(result) = n1.checked_shl(n2) {
+                            return Ok(Number::from(result));
+                        }
+                    } else {
+                        let n1 = Integer::from(n1);
+                        return Ok(Number::from(n1 << n2));
                     }
                 }
 

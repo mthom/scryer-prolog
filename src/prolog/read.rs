@@ -42,10 +42,16 @@ pub mod readline {
     }
 
     impl ReadlineStream {
-        pub fn input_stream(pending_input: String) -> Stream {
+        #[inline]
+        pub fn new(pending_input: String) -> Self {
             let mut rl = Editor::<()>::new();
             rl.bind_sequence(KeyPress::Tab, Cmd::Insert(1, "\t".to_string()));
-            Stream::from(ReadlineStream { rl, pending_input: Cursor::new(pending_input) })
+            ReadlineStream { rl, pending_input: Cursor::new(pending_input) }
+        }
+
+        #[inline]
+        pub fn input_stream(pending_input: String) -> Stream {
+            Stream::from(Self::new(pending_input))
         }
 
         fn call_readline(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {

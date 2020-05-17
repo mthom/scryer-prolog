@@ -462,30 +462,33 @@ impl Machine {
         }
 
         wam.compile_scryerrc();
-
-        wam.current_input_stream.options.alias  = Some(clause_name!("user_input"));
-
-        wam.indices.stream_aliases.insert(
-            clause_name!("user_input"),
-            wam.current_input_stream.clone(),
-        );
-
-        wam.indices.streams.insert(
-            wam.current_input_stream.clone()
-        );
-
-        wam.current_output_stream.options.alias = Some(clause_name!("user_output"));
-
-        wam.indices.stream_aliases.insert(
-            clause_name!("user_output"),
-            wam.current_output_stream.clone(),
-        );
-
-        wam.indices.streams.insert(
-            wam.current_output_stream.clone()
-        );
+        wam.configure_streams();
 
         wam
+    }
+
+    pub fn configure_streams(&mut self) {
+        self.current_input_stream.options.alias = Some(clause_name!("user_input"));
+
+        self.indices.stream_aliases.insert(
+            clause_name!("user_input"),
+            self.current_input_stream.clone(),
+        );
+
+        self.indices.streams.insert(
+            self.current_input_stream.clone()
+        );
+
+        self.current_output_stream.options.alias = Some(clause_name!("user_output"));
+
+        self.indices.stream_aliases.insert(
+            clause_name!("user_output"),
+            self.current_output_stream.clone(),
+        );
+
+        self.indices.streams.insert(
+            self.current_output_stream.clone()
+        );
     }
 
     #[inline]
