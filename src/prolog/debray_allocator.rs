@@ -293,7 +293,9 @@ impl<'a> Allocator<'a> for DebrayAllocator {
 
                 (pr, true)
             }
-            r => (r, false),
+            r => {
+                (r, false)
+            }
         };
 
         self.mark_reserved_var(var, lvl, cell, term_loc, target, r, is_new_var);

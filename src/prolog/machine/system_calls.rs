@@ -4272,7 +4272,7 @@ impl MachineState {
                         self.fail = non_quoted_token(once(c));
                     }
                     Addr::Con(h) => {
-	                if let HeapCellValue::Atom(atom, _) = &self.heap[h] {
+	                    if let HeapCellValue::Atom(atom, _) = &self.heap[h] {
                             self.fail = non_quoted_token(atom.as_str().chars());
                         }
                     }
