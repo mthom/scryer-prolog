@@ -140,7 +140,6 @@ write_term_to_chars(Term, Options, Chars) :-
     '$write_term_to_chars'(Chars, Term, IgnoreOps, NumberVars, Quoted, NewVarNames, MaxDepth).
 
 % Encodes Ch character to list of Bytes.
-% TODO: if Ch is variable, decode Bytes to Char.
 char_utf8bytes(Ch, Bytes) :-
   char_code(Ch, Code),
   phrase(code_to_utf8(Code), Bytes).
@@ -155,10 +154,31 @@ encode(Code, Prefix, Nb) -->
   { Nb1 is Nb - 1, Byte is Prefix \/ ((Code >> (6 * Nb1)) /\ 0x3F) },
   [Byte], encode(Code, 0x80, Nb1).
 
-% Encodes a list of characters Cs to a list of UTF-8 bytes Bs.
-% TODO: if Cs is variable, decode bytes to chars instead. 
+% Maps characters and UTF-8 bytes.
+% If Cs is a variable, parses Bs as a list of UTF-8 bytes.
+% Otherwise, transform the list of characters Cs to UTF-8 bytes.
 chars_utf8bytes(Cs, Bs) :-
-  must_be(list, Cs),
-  maplist(must_be(atom), Cs),
-  maplist(char_utf8bytes, Cs, Bss),
-  append(Bss, Bs).
+  var(Cs), must_be(list, Bs) ->
+    once(phrase(decode_utf8(Cs), Bs))
+  ; (must_be(list, Cs),
+     maplist(must_be(atom), Cs),
+     maplist(char_utf8bytes, Cs, Bss),
+     append(Bss, Bs)).
+
+decode_utf8([]) --> [].
+decode_utf8(Chars) --> leading(Nb, Code), continuation(Code, Chars, Nb).
+
+leading(1, Byte) --> [Byte], {Byte /\ 0x80 =:= 0}.
+leading(2, Code) --> [Byte], {Byte /\ 0xE0 =:= 0xC0, Code is Byte - 0xC0}.
+leading(3, Code) --> [Byte], {Byte /\ 0xF0 =:= 0xE0, Code is Byte - 0xE0}.
+leading(4, Code) --> [Byte], {Byte /\ 0xF8 =:= 0xF0, Code is Byte - 0xF0}.
+leading(1, 0xFFFD) --> [_]. % invalid first byte
+
+continuation(Code, [H|T], 1) --> {char_code(H, Code)}, decode_utf8(T).
+continuation(Code, Chars, Nb) --> [Byte],
+  {Nb1 is Nb - 1, Byte /\ 0xC0 =:= 0x80, NextCode is (Code << 6) \/ (Byte - 0x80)},
+  continuation(NextCode, Chars, Nb1).
+
+% invalid continuation byte
+% each remaining continuation byte (if any) will raise 0xFFFD too
+continuation(_, ['\xFFFD\'|T], _) --> [_], decode_utf8(T).
