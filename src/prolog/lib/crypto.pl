@@ -379,7 +379,7 @@ crypto_password_hash(Password0, Hash, Options) :-
         Algorithm = 'pbkdf2-sha512', % current default and only option
         option(algorithm(Algorithm), Options, Algorithm),
         (   member(salt(SaltBytes), Options) ->
-            true
+            must_be_bytes(SaltBytes, crypto_password_hash/2)
         ;   crypto_n_random_bytes(16, SaltBytes)
         ),
         '$crypto_password_hash'(Password, SaltBytes, Iterations, HashBytes),
@@ -600,8 +600,6 @@ encoding_bytes(utf8, Cs, Bs) :-
             chars_bytes_(Cs, Bs, crypto_encoding)
         ;   domain_error(encryption_encoding, Cs, crypto)
         ).
-
-char_code(Char, Code) :- atom_codes(Char, [Code]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Modular multiplicative inverse.
