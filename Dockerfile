@@ -1,33 +1,30 @@
-# Based on https://blog.sedrik.se/posts/my-docker-setup-for-rust/
-FROM ekidd/rust-musl-builder as builder
+# Based on https://hub.docker.com/_/rust?tab=description and https://hub.docker.com/_/rust?tab=description
 
-WORKDIR /home/rust/
+# The first container is for build purposes only.
+FROM rust as builder
 
-# Install external dependencies
-RUN sudo apt-get update
-RUN sudo apt-get -y install m4
+WORKDIR /usr/src/scryer-prolog
 
-# Avoid having to install/build all dependencies by copying
-# the Cargo files and making a dummy src/main.rs and build.rs
+# Using a dummy build.rs and src/main.rs with your Cargo.toml lets Docker cache your Rust dependencies and not rebuild
+# them every time.
 COPY Cargo.toml .
 COPY Cargo.lock .
+RUN mkdir -p src
 RUN echo "fn main() {}" > src/main.rs
 RUN echo "fn main() {}" > build.rs
 RUN cargo build --release
 
 # We need to touch our real main.rs and build.rs files or else
-# docker will use the cached one.
+# docker will use the cached ones.
 COPY . .
-RUN sudo touch src/main.rs
-RUN sudo touch build.rs
+RUN touch src/main.rs
+RUN touch build.rs
 
 RUN cargo build --release
 
-# Size optimization
-# RUN strip target/x86_64-unknown-linux-musl/release/scryer-prolog
+RUN ls ./target/release
 
-# Start building the final image
-FROM scratch
-WORKDIR /home/rust/
-COPY --from=builder /home/rust/target/x86_64-unknown-linux-musl/release/scryer-prolog .
-ENTRYPOINT ["./scryer-prolog"]
+# Finally, copy the scryer-prolog executable to a slimmer container.
+FROM debian:buster-slim
+COPY --from=builder /usr/src/scryer-prolog/target/release/scryer-prolog /usr/local/bin/scryer-prolog
+CMD ["scryer-prolog"]
