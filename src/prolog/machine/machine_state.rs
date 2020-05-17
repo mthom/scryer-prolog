@@ -730,13 +730,16 @@ impl MachineState {
                         if orig_stream.options.eof_action == EOFAction::Reset {
                             if self.fail == false {
                                 continue;
-                            } else {
-                                return Ok(());
                             }
                         }
+
+                        return Ok(());
                     }
 
-                    return Ok(());
+                    let stub = MachineError::functor_stub(clause_name!("read_term"), 3);
+                    let err = MachineError::syntax_error(self.heap.h(), err);
+
+                    return Err(self.error_form(err, stub));
                 }
             }
         }
