@@ -503,7 +503,7 @@ impl MachineState {
         }
     }
 
-    fn int_to_char_code(
+    fn int_to_char(
         &self,
         n: &Integer,
         stub: &'static str,
@@ -973,25 +973,17 @@ impl MachineState {
 
                                     match Number::try_from((addr, &self.heap)) {
                                         Ok(Number::Fixnum(n)) => {
-                                            match u32::try_from(n) {
-                                                Ok(c) => {
-                                                    chars.push(std::char::from_u32(c).unwrap());
-                                                }
-                                                _ => {
-                                                    let c = self.int_to_char_code(
-                                                        &Integer::from(n),
-                                                        "atom_codes",
-                                                        2,
-                                                    )?;
+                                            let c = self.int_to_char(
+                                                &Integer::from(n),
+                                                "atom_codes",
+                                                2,
+                                            )?;
 
-                                                    chars.push(c);
-                                                }
-                                            }
-
+                                            chars.push(c);
                                             continue;
                                         }
                                         Ok(Number::Integer(n)) => {
-                                            let c = self.int_to_char_code(&n, "atom_codes", 2)?;
+                                            let c = self.int_to_char(&n, "atom_codes", 2)?;
                                             chars.push(c);
 
                                             continue;
@@ -1012,6 +1004,12 @@ impl MachineState {
                                         }
                                     }
                                 }
+
+                                let string = self.heap.to_unifiable(
+                                    HeapCellValue::Atom(clause_name!(chars, indices.atom_tbl), None)
+                                );
+
+                                self.bind(addr.as_var().unwrap(), string);
                             }
                         }
                     }
@@ -1634,10 +1632,10 @@ impl MachineState {
 
                         let c = match Number::try_from((a2, &self.heap)) {
                             Ok(Number::Integer(n)) => {
-                                self.int_to_char_code(&n, "char_code", 2)?
+                                self.int_to_char(&n, "char_code", 2)?
                             }
                             Ok(Number::Fixnum(n)) => {
-                                self.int_to_char_code(&Integer::from(n), "char_code", 2)?
+                                self.int_to_char(&Integer::from(n), "char_code", 2)?
                             }
                             _ => {
                                 self.fail = true;
