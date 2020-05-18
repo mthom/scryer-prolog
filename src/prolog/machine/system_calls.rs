@@ -5275,7 +5275,10 @@ impl MachineState {
                              let salt = hkdf::Salt::new(digest_alg, &salt);
                              let mut bytes : Vec<u8> = Vec::new();
                              bytes.resize(length, 0);
-                             salt.extract(&data).expand(&[&info[..]], MyKey(length)).unwrap().fill(&mut bytes).unwrap();
+                             match salt.extract(&data).expand(&[&info[..]], MyKey(length)) {
+                                 Ok(r) => { r.fill(&mut bytes).unwrap(); }
+                                 _ => { self.fail = true; return Ok(()); }
+                             }
 
                              Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
                         };
@@ -5294,7 +5297,10 @@ impl MachineState {
                             u64::try_from(n).unwrap()
                         }
                         Ok(Number::Integer(n)) => {
-                            n.to_u64().unwrap()
+                            match n.to_u64() {
+                                Some(i) => { i }
+                                None => { self.fail = true; return Ok(()); }
+                            }
                         }
                         _ => {
                             unreachable!()
