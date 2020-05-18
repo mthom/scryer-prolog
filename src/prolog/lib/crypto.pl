@@ -250,6 +250,8 @@ hash_algorithm(sha512_256).
 
 crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         functor_hash_options(algorithm, Algorithm, Options0, Options),
+        must_be(integer, L),
+        L >= 0,
         option(encoding(Encoding), Options, utf8),
         encoding_bytes(Encoding, Data0, Data),
         option(salt(SaltBytes), Options, []),
