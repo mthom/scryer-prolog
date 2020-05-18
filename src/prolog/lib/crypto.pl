@@ -184,7 +184,7 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
 crypto_data_hash(Data0, Hash, Options0) :-
         must_be(list, Options0),
-        option(encoding(Encoding), Options0, utf8),
+        encoding_options(Encoding, Options0),
         encoding_bytes(Encoding, Data0, Data),
         functor_hash_options(algorithm, A, Options0, _),
         (   hash_algorithm(A) -> true
@@ -193,6 +193,9 @@ crypto_data_hash(Data0, Hash, Options0) :-
         '$crypto_data_hash'(Data, HashBytes, A),
         hex_bytes(Hash, HashBytes).
 
+encoding_options(Encoding, Options) :-
+        option(encoding(Encoding), Options, utf8),
+        must_be(atom, Encoding).
 
 default_hash(sha256).
 
@@ -252,7 +255,7 @@ crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         functor_hash_options(algorithm, Algorithm, Options0, Options),
         must_be(integer, L),
         L >= 0,
-        option(encoding(Encoding), Options, utf8),
+        encoding_options(Encoding, Options),
         encoding_bytes(Encoding, Data0, Data),
         option(salt(SaltBytes), Options, []),
         must_be_bytes(SaltBytes, crypto_data_hkdf/4),
@@ -537,7 +540,7 @@ bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
-        option(encoding(Encoding), Options, utf8),
+        encoding_options(Encoding, Options),
         encoding_bytes(Encoding, PlainText0, PlainText),
         option(tag(Tag), Options, _),
         (   nonvar(Tag) ->
@@ -586,7 +589,7 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         must_be_bytes(Key, crypto_data_decrypt/6),
         must_be_bytes(IV, crypto_data_decrypt/6),
         must_be(atom, Algorithm),
-        option(encoding(Encoding), Options, utf8),
+        encoding_options(Encoding, Options),
         must_be(list, CipherText0),
         encoding_bytes(octet, CipherText0, CipherText1),
         append(CipherText1, Tag, CipherText),
