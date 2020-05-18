@@ -348,7 +348,9 @@ fn compile_into_module(
     );
 
     match compile_into_module_impl(wam, &mut compiler, module, src, indices) {
-        Ok(()) => EvalSession::EntrySuccess,
+        Ok(()) => {
+            EvalSession::EntrySuccess
+        }
         Err(e) => {
             compiler.drop_expansions(&mut wam.code_repo);
             EvalSession::from(e)

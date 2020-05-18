@@ -1154,10 +1154,19 @@ impl MachineState {
 
                 match pstr {
                     Addr::PStrLocation(h, _) => {
-                        let tail = self.heap[h + 1].as_addr(h + 1);
-                        let target = self[temp_v!(2)];
+                        if let HeapCellValue::PartialString(_, true) = &self.heap[h] {
+                            let tail = self.heap[h + 1].as_addr(h + 1);
+                            let target = self[temp_v!(2)];
 
-                        self.unify(tail, target);
+                            self.unify(tail, target);
+                        } else {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    }
+                    Addr::EmptyList => {
+                        self.fail = true;
+                        return Ok(());
                     }
                     _ => {
                         unreachable!()
