@@ -5285,7 +5285,10 @@ impl MachineState {
                             u64::try_from(n).unwrap()
                         }
                         Ok(Number::Integer(n)) => {
-                            n.to_u64().unwrap()
+                            match n.to_u64() {
+                                Some(i) => { i }
+                                None => { self.fail = true; return Ok(()); }
+                            }
                         }
                         _ => {
                             unreachable!()
