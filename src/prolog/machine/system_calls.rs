@@ -1164,6 +1164,9 @@ impl MachineState {
                             return Ok(());
                         }
                     }
+                    Addr::Lis(h) => {
+                        self.unify(Addr::HeapCell(h + 1), self[temp_v!(2)]);
+                    }
                     Addr::EmptyList => {
                         self.fail = true;
                         return Ok(());
