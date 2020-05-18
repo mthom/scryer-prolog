@@ -259,6 +259,10 @@ crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         '$crypto_data_hkdf'(Data, SaltBytes, Info, Algorithm, L, Bytes).
 
 option(What, Options, Default) :-
+        (   member(V, Options), var(V) ->
+            instantiation_error(option/3)
+        ;   true
+        ),
         (   member(What, Options) -> true
         ;   What =.. [_,Default]
         ).
