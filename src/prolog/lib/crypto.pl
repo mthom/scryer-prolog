@@ -184,8 +184,7 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
 crypto_data_hash(Data0, Hash, Options0) :-
         must_be(list, Options0),
-        encoding_options(Encoding, Options0),
-        encoding_bytes(Encoding, Data0, Data),
+        options_data_bytes(Options0, Data0, Data),
         functor_hash_options(algorithm, A, Options0, _),
         (   hash_algorithm(A) -> true
         ;   domain_error(hash_algorithm, A, crypto_data_hash/3)
@@ -193,9 +192,10 @@ crypto_data_hash(Data0, Hash, Options0) :-
         '$crypto_data_hash'(Data, HashBytes, A),
         hex_bytes(Hash, HashBytes).
 
-encoding_options(Encoding, Options) :-
+options_data_bytes(Options, Data, Bytes) :-
         option(encoding(Encoding), Options, utf8),
-        must_be(atom, Encoding).
+        must_be(atom, Encoding),
+        encoding_bytes(Encoding, Data, Bytes).
 
 default_hash(sha256).
 
@@ -255,8 +255,7 @@ crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         functor_hash_options(algorithm, Algorithm, Options0, Options),
         must_be(integer, L),
         L >= 0,
-        encoding_options(Encoding, Options),
-        encoding_bytes(Encoding, Data0, Data),
+        options_data_bytes(Options, Data0, Data),
         option(salt(SaltBytes), Options, []),
         must_be_bytes(SaltBytes, crypto_data_hkdf/4),
         option(info(Info0), Options, []),
@@ -540,8 +539,7 @@ bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
-        encoding_options(Encoding, Options),
-        encoding_bytes(Encoding, PlainText0, PlainText),
+        options_data_bytes(Options, PlainText0, PlainText),
         option(tag(Tag), Options, _),
         (   nonvar(Tag) ->
             must_be_bytes(Tag, crypto_data_encrypt/6)
