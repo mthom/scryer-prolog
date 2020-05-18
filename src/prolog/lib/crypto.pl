@@ -597,12 +597,14 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         '$crypto_data_decrypt'(CipherText, Key, IV, Encoding, PlainText).
 
 encoding_bytes(octet, Bs0, Bs) :-
+        must_be(list, Bs0),
         (   maplist(integer, Bs0) ->
             Bs0 = Bs
         ;   maplist(char_code, Bs0, Bs)
         ),
         must_be_bytes(Bs, crypto_encoding).
 encoding_bytes(utf8, Cs, Bs) :-
+        must_be(list, Cs),
         (   maplist(atom, Cs) ->
             chars_bytes_(Cs, Bs, crypto_encoding)
         ;   domain_error(encryption_encoding, Cs, crypto)
