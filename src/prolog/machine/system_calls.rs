@@ -5285,11 +5285,12 @@ impl MachineState {
                             usize::try_from(n).unwrap()
                         }
                         Ok(Number::Integer(n)) => {
-                            n.to_usize().unwrap()
+                            match n.to_usize() {
+                                Some(u) => { u }
+                                _ => { self.fail = true; return Ok(()); }
+                            }
                         }
-                        _ => {
-                            unreachable!()
-                        }
+                        _ => { unreachable!() }
                     };
 
                 let ints_list =
