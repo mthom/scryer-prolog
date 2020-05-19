@@ -158,11 +158,11 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
    Options is a list of:
 
      - algorithm(+A)
-       where A is one of ripemd160, sha256, sha384, sha512,
-       sha512_256, or a variable. If A is a variable, then it is
-       unified with the default algorithm, which is an algorithm that
-       is considered cryptographically secure at the time of this
-       writing.
+       where A is one of ripemd160, sha256, sha384, sha512, sha512_256,
+       sha3_224, sha3_256, sha3_384, sha3_512, blake2s256, blake2b512,
+       or a variable. If A is a variable, then it is unified with the
+       default algorithm, which is an algorithm that is considered
+       cryptographically secure at the time of this writing.
      - encoding(+Encoding)
        The default encoding is utf8. The alternative is octet,
        to treat the input as a list of raw bytes.
@@ -215,6 +215,12 @@ hash_algorithm(sha256).
 hash_algorithm(sha512).
 hash_algorithm(sha384).
 hash_algorithm(sha512_256).
+hash_algorithm(sha3_224).
+hash_algorithm(sha3_256).
+hash_algorithm(sha3_384).
+hash_algorithm(sha3_512).
+hash_algorithm(blake2s256).
+hash_algorithm(blake2b512).
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -230,10 +236,9 @@ hash_algorithm(sha512_256).
    Admissible options are:
 
      - algorithm(+Algorithm)
-       A hashing algorithm as specified to crypto_data_hash/3. The
-       default is a cryptographically secure algorithm. If you
-       specify a variable, then it is unified with the algorithm
-       that was used, which is a cryptographically secure algorithm.
+       One of sha256, sha384 or sha512. If you specify a variable,
+       then it is unified with the algorithm that was used, which is a
+       cryptographically secure algorithm by default.
      - info(+Info)
        Optional context and application specific information,
        specified as a list of bytes or characters. The default is [].
@@ -253,6 +258,9 @@ hash_algorithm(sha512_256).
 
 crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         functor_hash_options(algorithm, Algorithm, Options0, Options),
+        (   hkdf_algorithm(Algorithm) -> true
+        ;   domain_error(hkdf_algorithm, Algorithm, crypto_data_hkdf/4)
+        ),
         must_be(integer, L),
         L >= 0,
         options_data_bytes(Options, Data0, Data),
@@ -261,6 +269,10 @@ crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         option(info(Info0), Options, []),
         chars_bytes_(Info0, Info, crypto_data_hkdf/4),
         '$crypto_data_hkdf'(Data, SaltBytes, Info, Algorithm, L, Bytes).
+
+hkdf_algorithm(sha256).
+hkdf_algorithm(sha384).
+hkdf_algorithm(sha512).
 
 option(What, Options, Default) :-
         (   member(V, Options), var(V) ->
@@ -587,7 +599,9 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         must_be_bytes(Key, crypto_data_decrypt/6),
         must_be_bytes(IV, crypto_data_decrypt/6),
         must_be(atom, Algorithm),
-        encoding_options(Encoding, Options),
+        option(encoding(Encoding), Options, utf8),
+        must_be(atom, Encoding),
+        member(Encoding, [utf8,octet]),
         must_be(list, CipherText0),
         encoding_bytes(octet, CipherText0, CipherText1),
         append(CipherText1, Tag, CipherText),
