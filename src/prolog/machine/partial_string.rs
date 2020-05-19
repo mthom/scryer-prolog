@@ -37,8 +37,8 @@ fn scan_for_terminator<Iter: Iterator<Item = char>>(iter: Iter) -> usize {
     let mut terminator_idx = 0;
 
     for c in iter {
-        if c == '\u{0}' {
-            break;
+        if c == '\u{0}' && terminator_idx != 0 {
+            return terminator_idx;
         }
 
         terminator_idx += c.len_utf8();
@@ -98,36 +98,8 @@ impl PartialString {
         }
     }
 
-    #[inline]
-    pub(super)
-    fn empty() -> Self {
-        let mut pstr = PartialString {
-            buf: ptr::null(),
-            len: 0,
-            _marker: PhantomData,
-        };
-
-        unsafe {
-            let layout = alloc::Layout::from_size_align_unchecked(
-                '\u{0}'.len_utf8(),
-                mem::align_of::<u8>(),
-            );
-
-            pstr.buf = alloc::alloc(layout) as *const _;
-            pstr.len = '\u{0}'.len_utf8();
-
-            pstr.write_terminator_at(0);
-        }
-
-        pstr
-    }
-
     unsafe fn append_chars(mut self, src: &str) -> Option<(Self, &str)> {
         let terminator_idx = scan_for_terminator(src.chars());
-
-        if terminator_idx == 0 {
-            return None;
-        }
 
         let layout = alloc::Layout::from_size_align_unchecked(
             terminator_idx + '\u{0}'.len_utf8(),
@@ -145,8 +117,8 @@ impl PartialString {
 
         self.write_terminator_at(terminator_idx);
 
-        Some(if terminator_idx != src.len() {
-            (self, &src[terminator_idx + '\u{0}'.len_utf8() ..])
+        Some(if terminator_idx != src.as_bytes().len() {
+            (self, &src[terminator_idx ..])
         } else {
             (self, "")
         })
@@ -211,9 +183,7 @@ impl PartialString {
 
     #[inline]
     pub fn at_end(&self, end_n: usize) -> bool {
-        unsafe {
-            ptr::read((self.buf as usize + end_n) as *const u8) == 0u8
-        }
+        end_n + 1 == self.len
     }
 
     #[inline]

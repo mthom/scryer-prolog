@@ -606,9 +606,9 @@ dependencies = [
 
 [[package]]
 name = "prolog_parser"
-version = "0.8.58"
+version = "0.8.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e90d34a4268bf5256d4e55f8ec920220aa96dc7ee779441b32f97635cba72aa9"
+checksum = "029a4682cf40923b8eb05c4b943d1d6be73775e7bf80bcb0866b5ef29abb0802"
 dependencies = [
  "lexical",
  "num-rug-adapter",
@@ -740,7 +740,7 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "scryer-prolog"
-version = "0.8.122"
+version = "0.8.123"
 dependencies = [
  "cpu-time",
  "crossterm",

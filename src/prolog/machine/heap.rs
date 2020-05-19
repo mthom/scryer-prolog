@@ -189,6 +189,10 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     #[inline]
     pub(crate)
     fn put_complete_string(&mut self, s: &str) -> Addr {
+        if s.is_empty() {
+            return Addr::EmptyList;
+        }
+
         let addr = self.allocate_pstr(s);
         self.pop();
 
@@ -316,20 +320,7 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     pub(crate)
     fn allocate_pstr(&mut self, src: &str) -> Addr {
         self.write_pstr(src)
-            .unwrap_or_else(|| {
-                let h = self.h();
-
-                self.push(HeapCellValue::PartialString(
-                    PartialString::empty(),
-                    true,
-                ));
-
-                self.push(HeapCellValue::Addr(
-                    Addr::HeapCell(h + 1)
-                ));
-
-                Addr::PStrLocation(h, 0)
-            })
+            .unwrap_or_else(|| Addr::EmptyList)
     }
 
     #[inline]

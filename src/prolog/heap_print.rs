@@ -160,7 +160,7 @@ fn char_to_string(is_quoted: bool, c: char) -> String {
         '\u{d8}' ..= '\u{f6}' => c.to_string(),
         '\u{f8}' ..= '\u{74f}' => c.to_string(),
         '\x20' ..= '\x7e' => c.to_string(),
-        _ => format!("\\x{:x}\\", c as u32),
+        _ => format!("\\{:x}\\", c as u32),
     }
 }
 
