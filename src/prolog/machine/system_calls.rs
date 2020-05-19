@@ -1905,28 +1905,50 @@ impl MachineState {
                     }
                 };
 
-                let complete_string = {
-                    let mut buffer = String::new();
-                    match file.read_to_string(&mut buffer) {
-                        Ok(_size) => {
-                            self.heap.put_complete_string(&buffer)
-                        }
-                        Err(_e) => {
-                            // This case if the data isn't UTF-8 valid.
-                            let mut buffer = Vec::new();
-                            let _ = match file.read_to_end(&mut buffer) {
-                                Ok(size) => size,
-                                Err(_e) => unreachable!()
-                            };
 
-                            let buffer = String::from_iter(
-                                buffer.into_iter().map(|b| b as char)
-                            );
-
-                            self.heap.put_complete_string(&buffer)
+                let type_str = match self.store(self.deref(self[temp_v!(3)])) {
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                            atom.as_str()
+                        } else {
+                            unreachable!()
                         }
                     }
+                    _ => {
+                        unreachable!()
+                    }
                 };
+
+                let complete_string = {
+                    let mut buffer = String::new();
+                    match type_str {
+                        "text" => {  match file.read_to_string(&mut buffer) {
+                                         Ok(_size) => {
+                                             self.heap.put_complete_string(&buffer)
+                                         }
+                                         Err(_e) => {
+                                            // the data isn't valid UTF-8, so we fail.
+                                           self.fail = true;
+                                           return Ok(());
+
+                                         }
+                                     }
+                                  }
+                        "binary" => { let mut buffer = Vec::new();
+                                      let _ = match file.read_to_end(&mut buffer) {
+                                          Ok(size) => size,
+                                          Err(_e) => unreachable!()
+                                      };
+
+                                      let buffer = String::from_iter(
+                                          buffer.into_iter().map(|b| b as char)
+                                      );
+
+                                      self.heap.put_complete_string(&buffer)
+                                    }
+                         _ => { unreachable!() }
+                         }
+                    };
 
                 self.unify(complete_string, a2);
             }
