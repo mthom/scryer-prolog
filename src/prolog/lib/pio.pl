@@ -3,6 +3,7 @@
 
 :- use_module(library(dcgs)).
 :- use_module(library(error)).
+:- use_module(library(lists), [member/2]).
 
 phrase_from_file(NT, File) :-
     phrase_from_file(NT, File, []).
