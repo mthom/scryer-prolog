@@ -533,7 +533,7 @@ impl SystemClauseType {
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
-            ("$file_to_chars", 2) => Some(SystemClauseType::FileToChars),
+            ("$file_to_chars", 3) => Some(SystemClauseType::FileToChars),
             ("$get_byte", 2) => Some(SystemClauseType::GetByte),
             ("$get_char", 2) => Some(SystemClauseType::GetChar),
             ("$get_code", 2) => Some(SystemClauseType::GetCode),
