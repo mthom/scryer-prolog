@@ -5252,7 +5252,7 @@ impl MachineState {
                                                    _ =>            { unreachable!() }
                                                 },
                                                 &bytes);
-                                 Addr::HeapCell(self.heap.to_list(ints.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                                 Addr::HeapCell(self.heap.to_list(ints.as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))))
                                }
                         };
 
@@ -5308,7 +5308,7 @@ impl MachineState {
                                  _ => { self.fail = true; return Ok(()); }
                              }
 
-                             Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                             Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))))
                         };
 
                 self.unify(self[temp_v!(6)], ints_list);
@@ -5341,7 +5341,7 @@ impl MachineState {
                                            NonZeroU32::new(iterations as u32).unwrap(), &salt,
                                            &data, &mut bytes);
 
-                             Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                             Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))))
                         };
 
                 self.unify(self[temp_v!(4)], ints_list);
@@ -5366,7 +5366,7 @@ impl MachineState {
                       };
 
                 let tag_list =
-                      Addr::HeapCell(self.heap.to_list(tag.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))));
+                      Addr::HeapCell(self.heap.to_list(tag.as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))));
 
                 let complete_string = {
                           let buffer = String::from_iter(in_out.iter().map(|b| *b as char));
