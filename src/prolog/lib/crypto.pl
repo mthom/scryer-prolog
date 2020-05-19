@@ -158,9 +158,9 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
    Options is a list of:
 
      - algorithm(+A)
-       where A is one of ripemd160, sha256, sha384, sha512,
-       sha512_256, sha3_224, sha3_256, sha3_384, sha3_512, or a
-       variable. If A is a variable, then it is unified with the
+       where A is one of ripemd160, sha256, sha384, sha512, sha512_256,
+       sha3_224, sha3_256, sha3_384, sha3_512, blake2s256, blake2b512,
+       or a variable. If A is a variable, then it is unified with the
        default algorithm, which is an algorithm that is considered
        cryptographically secure at the time of this writing.
      - encoding(+Encoding)
@@ -219,6 +219,8 @@ hash_algorithm(sha3_224).
 hash_algorithm(sha3_256).
 hash_algorithm(sha3_384).
 hash_algorithm(sha3_512).
+hash_algorithm(blake2s256).
+hash_algorithm(blake2b512).
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

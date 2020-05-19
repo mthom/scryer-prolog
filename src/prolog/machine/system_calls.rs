@@ -43,6 +43,7 @@ use ring::rand::{SecureRandom, SystemRandom};
 use ring::{digest,hkdf,pbkdf2,aead,error};
 use ripemd160::{Ripemd160, Digest};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
+use blake2::{Blake2s, Blake2b};
 
 pub fn get_key() -> KeyEvent {
     let key;
@@ -5234,6 +5235,14 @@ impl MachineState {
                              Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
                         } else if algorithm_str == "sha3_512" {
                              let mut context = Sha3_512::new();
+                             context.input(&bytes);
+                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        } else if algorithm_str == "blake2s256" {
+                             let mut context = Blake2s::new();
+                             context.input(&bytes);
+                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        } else if algorithm_str == "blake2b512" {
+                             let mut context = Blake2b::new();
                              context.input(&bytes);
                              Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
                         } else if algorithm_str == "ripemd160" {
