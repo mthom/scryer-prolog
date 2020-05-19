@@ -5221,45 +5221,39 @@ impl MachineState {
                 };
 
                 let ints_list =
-                        if algorithm_str == "sha3_224" {
-                             let mut context = Sha3_224::new();
-                             context.input(&bytes);
-                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
-                        } else if algorithm_str == "sha3_256" {
-                             let mut context = Sha3_256::new();
-                             context.input(&bytes);
-                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
-                        } else if algorithm_str == "sha3_384" {
-                             let mut context = Sha3_384::new();
-                             context.input(&bytes);
-                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
-                        } else if algorithm_str == "sha3_512" {
-                             let mut context = Sha3_512::new();
-                             context.input(&bytes);
-                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
-                        } else if algorithm_str == "blake2s256" {
-                             let mut context = Blake2s::new();
-                             context.input(&bytes);
-                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
-                        } else if algorithm_str == "blake2b512" {
-                             let mut context = Blake2b::new();
-                             context.input(&bytes);
-                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
-                        } else if algorithm_str == "ripemd160" {
-                             let mut context = Ripemd160::new();
-                             context.input(&bytes);
-                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
-                        } else {
-                             let ints = digest::digest(
-                                            match algorithm_str {
-                                               "sha256" =>     { &digest::SHA256 }
-                                               "sha384" =>     { &digest::SHA384 }
-                                               "sha512" =>     { &digest::SHA512 }
-                                               "sha512_256" => { &digest::SHA512_256 }
-                                               _ =>            { unreachable!() }
-                                            },
-                                            &bytes);
-                             Addr::HeapCell(self.heap.to_list(ints.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        match algorithm_str  {
+                          "sha3_224" =>   { let mut context = Sha3_224::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b)))))) }
+                          "sha3_256" =>   { let mut context = Sha3_256::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b)))))) }
+                          "sha3_384" =>   { let mut context = Sha3_384::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b)))))) }
+                          "sha3_512" =>   { let mut context = Sha3_512::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b)))))) }
+                          "blake2s256" => { let mut context = Blake2s::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b)))))) }
+                          "blake2b512" => { let mut context = Blake2b::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b)))))) }
+                          "ripemd160" =>  { let mut context = Ripemd160::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b)))))) }
+                          _ => { let ints = digest::digest(
+                                                match algorithm_str {
+                                                   "sha256" =>     { &digest::SHA256 }
+                                                   "sha384" =>     { &digest::SHA384 }
+                                                   "sha512" =>     { &digest::SHA512 }
+                                                   "sha512_256" => { &digest::SHA512_256 }
+                                                   _ =>            { unreachable!() }
+                                                },
+                                                &bytes);
+                                 Addr::HeapCell(self.heap.to_list(ints.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                               }
                         };
 
                 self.unify(self[temp_v!(2)], ints_list);
