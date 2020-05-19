@@ -258,6 +258,9 @@ hash_algorithm(blake2b512).
 
 crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         functor_hash_options(algorithm, Algorithm, Options0, Options),
+        (   hkdf_algorithm(Algorithm) -> true
+        ;   domain_error(hkdf_algorithm, Algorithm, crypto_data_hkdf/4)
+        ),
         must_be(integer, L),
         L >= 0,
         options_data_bytes(Options, Data0, Data),
@@ -266,6 +269,10 @@ crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         option(info(Info0), Options, []),
         chars_bytes_(Info0, Info, crypto_data_hkdf/4),
         '$crypto_data_hkdf'(Data, SaltBytes, Info, Algorithm, L, Bytes).
+
+hkdf_algorithm(sha256).
+hkdf_algorithm(sha384).
+hkdf_algorithm(sha512).
 
 option(What, Options, Default) :-
         (   member(V, Options), var(V) ->
