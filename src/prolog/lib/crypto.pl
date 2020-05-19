@@ -159,10 +159,10 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
      - algorithm(+A)
        where A is one of ripemd160, sha256, sha384, sha512,
-       sha512_256, or a variable. If A is a variable, then it is
-       unified with the default algorithm, which is an algorithm that
-       is considered cryptographically secure at the time of this
-       writing.
+       sha512_256, sha3_224, sha3_256, sha3_384, sha3_512, or a
+       variable. If A is a variable, then it is unified with the
+       default algorithm, which is an algorithm that is considered
+       cryptographically secure at the time of this writing.
      - encoding(+Encoding)
        The default encoding is utf8. The alternative is octet,
        to treat the input as a list of raw bytes.
@@ -215,6 +215,10 @@ hash_algorithm(sha256).
 hash_algorithm(sha512).
 hash_algorithm(sha384).
 hash_algorithm(sha512_256).
+hash_algorithm(sha3_224).
+hash_algorithm(sha3_256).
+hash_algorithm(sha3_384).
+hash_algorithm(sha3_512).
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -230,10 +234,9 @@ hash_algorithm(sha512_256).
    Admissible options are:
 
      - algorithm(+Algorithm)
-       A hashing algorithm as specified to crypto_data_hash/3. The
-       default is a cryptographically secure algorithm. If you
-       specify a variable, then it is unified with the algorithm
-       that was used, which is a cryptographically secure algorithm.
+       One of sha256, sha384 or sha512. If you specify a variable,
+       then it is unified with the algorithm that was used, which is a
+       cryptographically secure algorithm by default.
      - info(+Info)
        Optional context and application specific information,
        specified as a list of bytes or characters. The default is [].

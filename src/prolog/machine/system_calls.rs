@@ -42,6 +42,7 @@ use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::{digest,hkdf,pbkdf2,aead,error};
 use ripemd160::{Ripemd160, Digest};
+use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
 pub fn get_key() -> KeyEvent {
     let key;
@@ -5219,7 +5220,23 @@ impl MachineState {
                 };
 
                 let ints_list =
-                        if algorithm_str == "ripemd160" {
+                        if algorithm_str == "sha3_224" {
+                             let mut context = Sha3_224::new();
+                             context.input(&bytes);
+                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        } else if algorithm_str == "sha3_256" {
+                             let mut context = Sha3_256::new();
+                             context.input(&bytes);
+                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        } else if algorithm_str == "sha3_384" {
+                             let mut context = Sha3_384::new();
+                             context.input(&bytes);
+                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        } else if algorithm_str == "sha3_512" {
+                             let mut context = Sha3_512::new();
+                             context.input(&bytes);
+                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        } else if algorithm_str == "ripemd160" {
                              let mut context = Ripemd160::new();
                              context.input(&bytes);
                              Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
@@ -5278,7 +5295,7 @@ impl MachineState {
                                   "sha256" =>     { hkdf::HKDF_SHA256 }
                                   "sha384" =>     { hkdf::HKDF_SHA384 }
                                   "sha512" =>     { hkdf::HKDF_SHA512 }
-                                  _ =>            { unreachable!() }
+                                  _ =>            { self.fail = true; return Ok(()); }
                                };
                              let salt = hkdf::Salt::new(digest_alg, &salt);
                              let mut bytes : Vec<u8> = Vec::new();
