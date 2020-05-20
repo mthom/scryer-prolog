@@ -5461,7 +5461,7 @@ impl MachineState {
                 let stub1 = MachineError::functor_stub(clause_name!("ed25519_keypair_public_key"), 2);
                 let bytes = self.integers_to_bytevec(temp_v!(1), stub1);
 
-                let key_pair = match signature::Ed25519KeyPair::from_pkcs8_maybe_unchecked(&bytes) {
+                let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&bytes) {
                                   Ok(kp) => { kp }
                                   _ => { self.fail = true; return Ok(()); }
                                };
@@ -5479,7 +5479,7 @@ impl MachineState {
                 let stub2 = MachineError::functor_stub(clause_name!("ed25519_sign"), 4);
                 let data = self.integers_to_bytevec(temp_v!(2), stub2);
 
-                let key_pair = match signature::Ed25519KeyPair::from_pkcs8_maybe_unchecked(&key) {
+                let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&key) {
                                   Ok(kp) => { kp }
                                   _ => { self.fail = true; return Ok(()); }
                                };
