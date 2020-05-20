@@ -293,7 +293,8 @@ pub enum SystemClauseType {
     CryptoDataEncrypt,
     CryptoDataDecrypt,
     Ed25519Sign,
-    Ed25519Verify
+    Ed25519Verify,
+    Ed25519NewKeyPair
 }
 
 impl SystemClauseType {
@@ -484,6 +485,7 @@ impl SystemClauseType {
             &SystemClauseType::CryptoDataDecrypt => clause_name!("$crypto_data_decrypt"),
             &SystemClauseType::Ed25519Sign => clause_name!("$ed25519_sign"),
             &SystemClauseType::Ed25519Verify => clause_name!("$ed25519_verify"),
+            &SystemClauseType::Ed25519NewKeyPair => clause_name!("$ed25519_new_keypair")
         }
     }
 
@@ -654,6 +656,7 @@ impl SystemClauseType {
             ("$crypto_data_decrypt", 5) => Some(SystemClauseType::CryptoDataDecrypt),
             ("$ed25519_sign", 3) => Some(SystemClauseType::Ed25519Sign),
             ("$ed25519_verify", 3) => Some(SystemClauseType::Ed25519Verify),
+            ("$ed25519_new_keypair", 1) => Some(SystemClauseType::Ed25519NewKeyPair),
             _ => None,
         }
     }

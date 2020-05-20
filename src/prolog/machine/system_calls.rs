@@ -5448,6 +5448,15 @@ impl MachineState {
 
                 self.unify(self[temp_v!(5)], complete_string);
             }
+            &SystemClauseType::Ed25519NewKeyPair => {
+                let pkcs8_bytes = signature::Ed25519KeyPair::generate_pkcs8(rng()).unwrap();
+                let complete_string = {
+                          let buffer = String::from_iter(pkcs8_bytes.as_ref().iter().map(|b| *b as char));
+                          self.heap.put_complete_string(&buffer)
+                      };
+
+                self.unify(self[temp_v!(1)], complete_string);
+            }
             &SystemClauseType::Ed25519Sign => {
                 let stub1 = MachineError::functor_stub(clause_name!("ed25519_sign"), 4);
                 let key = self.integers_to_bytevec(temp_v!(1), stub1);
