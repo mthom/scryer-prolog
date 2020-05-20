@@ -478,7 +478,7 @@ bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
    Algorithm, key Key, and initialization vector (or nonce) IV, to
    give CipherText.
 
-   PlainText must be a list of codes or characters, Key and IV must be
+   PlainText must be a list of bytes or characters, Key and IV must be
    lists of bytes, and CipherText is created as a list of characters.
 
    Keys and IVs can be chosen at random (using for example
