@@ -155,9 +155,8 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
    crypto_data_hash(+Data, -Hash, +Options)
 
-   Where Data is a list of bytes (integers between 0 and 255) or
-   characters, and Hash is the computed hash as a list of hexadecimal
-   characters.
+   Where Data is a list of characters, and Hash is the computed hash
+   as a list of hexadecimal characters.
 
    Options is a list of:
 
@@ -231,7 +230,7 @@ hash_algorithm(blake2b512).
    crypto_data_hkdf(+Data, +Length, -Bytes, +Options) is det.
 
    Concentrate possibly dispersed entropy of Data and then expand it
-   to the desired length. Data is a list of bytes or characters.
+   to the desired length. Data is a list of characters.
 
    Bytes is unified with a list of bytes of length Length, and is
    suitable as input keying material and initialization vectors to
@@ -245,7 +244,7 @@ hash_algorithm(blake2b512).
        cryptographically secure algorithm by default.
      - info(+Info)
        Optional context and application specific information,
-       specified as a list of bytes or characters. The default is [].
+       specified as a list of characters. The default is [].
      - salt(+List)
        Optionally, a list of bytes that are used as salt. The
        default is all zeroes.
@@ -480,8 +479,8 @@ bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
    Algorithm, key Key, and initialization vector (or nonce) IV, to
    give CipherText.
 
-   PlainText must be a list of bytes or characters, Key and IV must be
-   lists of bytes, and CipherText is created as a list of characters.
+   PlainText must be a list of characters, Key and IV must be lists of
+   bytes, and CipherText is created as a list of characters.
 
    Keys and IVs can be chosen at random (using for example
    crypto_n_random_bytes/2) or derived from input keying material (IKM)
@@ -579,9 +578,9 @@ crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
 
    Decrypt the given CipherText, using the symmetric algorithm
    Algorithm, key Key, and initialization vector IV, to give
-   PlainText. CipherText must be a list of bytes or characters, and
-   Key and IV must be lists of bytes. PlainText is created as a list
-   of characters.
+   PlainText. CipherText must be a list of characters, and Key and IV
+   must be lists of bytes. PlainText is created as a list of
+   characters.
 
    Currently, the only supported algorithm is 'chacha20-poly1305',
    a very secure, fast and versatile authenticated encryption method.
