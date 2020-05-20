@@ -40,7 +40,7 @@ use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 use ring::rand::{SecureRandom, SystemRandom};
-use ring::{digest,hkdf,pbkdf2,aead,error,signature};
+use ring::{digest,hkdf,pbkdf2,aead,signature};
 use ripemd160::{Ripemd160, Digest};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 use blake2::{Blake2s, Blake2b};
@@ -5378,12 +5378,12 @@ impl MachineState {
                 let iv = self.integers_to_bytevec(temp_v!(3), stub3);
 
                 let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
-                let nonce_sequence = OneNonceSequence::new(aead::Nonce::try_assume_unique_for_key(&iv).unwrap());
-                let mut key: aead::SealingKey<OneNonceSequence> = aead::BoundKey::new(unbound_key, nonce_sequence);
+                let nonce = aead::Nonce::try_assume_unique_for_key(&iv).unwrap();
+                let key = aead::LessSafeKey::new(unbound_key);
 
                 let mut in_out = data.clone();
                 let tag =
-                     match key.seal_in_place_separate_tag(aead::Aad::empty(), &mut in_out) {
+                     match key.seal_in_place_separate_tag(nonce, aead::Aad::empty(), &mut in_out) {
                         Ok(d) => { d }
                         _     => { self.fail = true; return Ok(()); }
                       };
@@ -5421,14 +5421,14 @@ impl MachineState {
                 };
 
                 let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
-                let nonce_sequence = OneNonceSequence::new(aead::Nonce::try_assume_unique_for_key(&iv).unwrap());
-                let mut key: aead::OpeningKey<OneNonceSequence> = aead::BoundKey::new(unbound_key, nonce_sequence);
+                let nonce = aead::Nonce::try_assume_unique_for_key(&iv).unwrap();
+                let key = aead::LessSafeKey::new(unbound_key);
 
                 let mut in_out = data.clone();
 
                 let complete_string = {
                           let decrypted_data =
-                                match key.open_in_place(aead::Aad::empty(), &mut in_out) {
+                                match key.open_in_place(nonce, aead::Aad::empty(), &mut in_out) {
                                    Ok(d) => { d }
                                    _     => { self.fail = true; return Ok(()); }
                                  };
@@ -5503,19 +5503,5 @@ struct MyKey<T: core::fmt::Debug + PartialEq>(T);
 impl hkdf::KeyType for MyKey<usize> {
     fn len(&self) -> usize {
         self.0
-    }
-}
-
-struct OneNonceSequence(Option<aead::Nonce>);
-
-impl OneNonceSequence {
-    fn new(nonce: aead::Nonce) -> Self {
-        Self(Some(nonce))
-    }
-}
-
-impl aead::NonceSequence for OneNonceSequence {
-    fn advance(&mut self) -> Result<aead::Nonce, error::Unspecified> {
-        self.0.take().ok_or(error::Unspecified)
     }
 }
