@@ -23,7 +23,7 @@
            crypto_data_decrypt/6,        % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
            ed25519_new_keypair/1,        % -KeyPair
            ed25519_keypair_public_key/2, % +KeyPair, +PublicKey
-           ed25519_sign/4,               % +PrivateKey, +Data, -Signature, +Options
+           ed25519_sign/4,               % +KeyPair, +Data, -Signature, +Options
            ed25519_verify/4,             % +PublicKey, +Data, -Signature, +Options
            crypto_name_curve/2,          % +Name, -Curve
            crypto_curve_order/2,         % +Curve, -Order
