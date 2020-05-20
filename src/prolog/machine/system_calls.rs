@@ -40,7 +40,7 @@ use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 use ring::rand::{SecureRandom, SystemRandom};
-use ring::{digest,hkdf,pbkdf2,aead,signature};
+use ring::{digest,hkdf,pbkdf2,aead,signature::{self,KeyPair}};
 use ripemd160::{Ripemd160, Digest};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 use blake2::{Blake2s, Blake2b};
@@ -5456,6 +5456,22 @@ impl MachineState {
                       };
 
                 self.unify(self[temp_v!(1)], complete_string);
+            }
+            &SystemClauseType::Ed25519KeyPairPublicKey => {
+                let stub1 = MachineError::functor_stub(clause_name!("ed25519_keypair_public_key"), 2);
+                let bytes = self.integers_to_bytevec(temp_v!(1), stub1);
+
+                let key_pair = match signature::Ed25519KeyPair::from_pkcs8_maybe_unchecked(&bytes) {
+                                  Ok(kp) => { kp }
+                                  _ => { self.fail = true; return Ok(()); }
+                               };
+
+                let complete_string = {
+                          let buffer = String::from_iter(key_pair.public_key().as_ref().iter().map(|b| *b as char));
+                          self.heap.put_complete_string(&buffer)
+                      };
+
+                self.unify(self[temp_v!(2)], complete_string);
             }
             &SystemClauseType::Ed25519Sign => {
                 let stub1 = MachineError::functor_stub(clause_name!("ed25519_sign"), 4);

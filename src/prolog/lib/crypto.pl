@@ -13,21 +13,22 @@
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(crypto,
-          [hex_bytes/2,                % ?Hex, ?Bytes
-           crypto_n_random_bytes/2,    % +N, -Bytes
-           crypto_data_hash/3,         % +Data, -Hash, +Options
-           crypto_data_hkdf/4,         % +Data, +Length, -Bytes, +Options
-           crypto_password_hash/2,     % +Password, ?Hash
-           crypto_password_hash/3,     % +Password, -Hash, +Options
-           crypto_data_encrypt/6,      % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
-           crypto_data_decrypt/6,      % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
-           ed25519_new_keypair/1,      % -KeyPair
-           ed25519_sign/4,             % +PrivateKey, +Data, -Signature, +Options
-           ed25519_verify/4,           % +PublicKey, +Data, -Signature, +Options
-           crypto_name_curve/2,        % +Name, -Curve
-           crypto_curve_order/2,       % +Curve, -Order
-           crypto_curve_generator/2,   % +Curve, -Generator
-           crypto_curve_scalar_mult/4  % +Curve, +Scalar, +Point, -Result
+          [hex_bytes/2,                  % ?Hex, ?Bytes
+           crypto_n_random_bytes/2,      % +N, -Bytes
+           crypto_data_hash/3,           % +Data, -Hash, +Options
+           crypto_data_hkdf/4,           % +Data, +Length, -Bytes, +Options
+           crypto_password_hash/2,       % +Password, ?Hash
+           crypto_password_hash/3,       % +Password, -Hash, +Options
+           crypto_data_encrypt/6,        % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
+           crypto_data_decrypt/6,        % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
+           ed25519_new_keypair/1,        % -KeyPair
+           ed25519_keypair_public_key/2, % +KeyPair, +PublicKey
+           ed25519_sign/4,               % +PrivateKey, +Data, -Signature, +Options
+           ed25519_verify/4,             % +PublicKey, +Data, -Signature, +Options
+           crypto_name_curve/2,          % +Name, -Curve
+           crypto_curve_order/2,         % +Curve, -Order
+           crypto_curve_generator/2,     % +Curve, -Generator
+           crypto_curve_scalar_mult/4    % +Curve, +Scalar, +Point, -Result
           ]).
 
 :- use_module(library(error)).
@@ -662,6 +663,10 @@ encoding_bytes(utf8, Cs, Bs) :-
 
 ed25519_new_keypair(Pair) :-
         '$ed25519_new_keypair'(Pair).
+
+ed25519_keypair_public_key(Pair0, PublicKey) :-
+        encoding_bytes(octet, Pair0, Pair),
+        '$ed25519_keypair_public_key'(Pair, PublicKey).
 
 ed25519_sign(Key0, Data0, Signature, Options) :-
         options_data_bytes(Options, Data0, Data),
