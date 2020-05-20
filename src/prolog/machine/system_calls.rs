@@ -40,7 +40,7 @@ use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 use ring::rand::{SecureRandom, SystemRandom};
-use ring::{digest,hkdf,pbkdf2,aead,error};
+use ring::{digest,hkdf,pbkdf2,aead,error,signature};
 use ripemd160::{Ripemd160, Digest};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 use blake2::{Blake2s, Blake2b};
@@ -5447,6 +5447,39 @@ impl MachineState {
                       };
 
                 self.unify(self[temp_v!(5)], complete_string);
+            }
+            &SystemClauseType::CryptoEd25519Sign => {
+                let stub1 = MachineError::functor_stub(clause_name!("crypto_ed25519_sign"), 4);
+                let key = self.integers_to_bytevec(temp_v!(1), stub1);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_ed25519_sign"), 4);
+                let data = self.integers_to_bytevec(temp_v!(2), stub2);
+
+                let key_pair = match signature::Ed25519KeyPair::from_pkcs8_maybe_unchecked(&key) {
+                                  Ok(kp) => { kp }
+                                  _ => { self.fail = true; return Ok(()); }
+                               };
+
+                let sig = key_pair.sign(&data);
+
+                let sig_list =
+                      Addr::HeapCell(self.heap.to_list(sig.as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))));
+
+                self.unify(self[temp_v!(3)], sig_list);
+            }
+            &SystemClauseType::CryptoEd25519Verify => {
+                let stub1 = MachineError::functor_stub(clause_name!("crypto_ed25519_verify"), 4);
+                let key = self.integers_to_bytevec(temp_v!(1), stub1);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_ed25519_verify"), 4);
+                let data = self.integers_to_bytevec(temp_v!(2), stub2);
+                let stub3 = MachineError::functor_stub(clause_name!("crypto_ed25519_verify"), 4);
+                let signature = self.integers_to_bytevec(temp_v!(3), stub3);
+
+                let peer_public_key =
+                    signature::UnparsedPublicKey::new(&signature::ED25519, &key);
+                match peer_public_key.verify(&data, &signature) {
+                    Ok(_) => { }
+                    _ => { self.fail = true; return Ok(()); }
+                }
             }
         };
 
