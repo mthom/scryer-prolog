@@ -380,6 +380,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`crypto`](src/prolog/lib/crypto.pl)
   Cryptographically secure random numbers and hashes, HMAC-based
   key derivation (HKDF), password-based key derivation (PBKDF2),
+  public key signatures and signature verification with Ed25519,
   authenticated encryption, and reasoning about elliptic curves.
 
 To read contents of external files, use `phrase_from_file/2` from
