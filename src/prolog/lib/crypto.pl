@@ -640,6 +640,7 @@ encoding_bytes(utf8, Cs, Bs) :-
    - ed25519_keypair_public_key(+Pair, -PublicKey)
      PublicKey is the public key of the given key pair. The public key
      can be used for signature verification, and can be shared freely.
+     The public key is represented as a list of characters.
 
    - ed25519_sign(+Key, +Data, -Signature, +Options)
      Key and Data must be lists of characters. Key is a private key or
