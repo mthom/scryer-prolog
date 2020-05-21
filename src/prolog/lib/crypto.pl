@@ -9,22 +9,30 @@
    and strings have the advantage that the atom table remains unmodified.
 
    Especially for cryptographic applications, it as an advantage that
-   using strings leaves little trace of what was processed in the system,
+   using strings leaves little trace of what was processed in the system.
+
+   For predicates that accept an encoding/1 option to specify the encoding
+   of the input data, if encoding(octet) is used, then the input can also
+   be specified as a list of bytes, i.e., integers between 0 and 255.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(crypto,
-          [hex_bytes/2,                % ?Hex, ?Bytes
-           crypto_n_random_bytes/2,    % +N, -Bytes
-           crypto_data_hash/3,         % +Data, -Hash, +Options
-           crypto_data_hkdf/4,         % +Data, +Length, -Bytes, +Options
-           crypto_password_hash/2,     % +Password, ?Hash
-           crypto_password_hash/3,     % +Password, -Hash, +Options
-           crypto_data_encrypt/6,      % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
-           crypto_data_decrypt/6,      % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
-           crypto_name_curve/2,        % +Name, -Curve
-           crypto_curve_order/2,       % +Curve, -Order
-           crypto_curve_generator/2,   % +Curve, -Generator
-           crypto_curve_scalar_mult/4  % +Curve, +Scalar, +Point, -Result
+          [hex_bytes/2,                  % ?Hex, ?Bytes
+           crypto_n_random_bytes/2,      % +N, -Bytes
+           crypto_data_hash/3,           % +Data, -Hash, +Options
+           crypto_data_hkdf/4,           % +Data, +Length, -Bytes, +Options
+           crypto_password_hash/2,       % +Password, ?Hash
+           crypto_password_hash/3,       % +Password, -Hash, +Options
+           crypto_data_encrypt/6,        % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
+           crypto_data_decrypt/6,        % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
+           ed25519_new_keypair/1,        % -KeyPair
+           ed25519_keypair_public_key/2, % +KeyPair, +PublicKey
+           ed25519_sign/4,               % +KeyPair, +Data, -Signature, +Options
+           ed25519_verify/4,             % +PublicKey, +Data, +Signature, +Options
+           crypto_name_curve/2,          % +Name, -Curve
+           crypto_curve_order/2,         % +Curve, -Order
+           crypto_curve_generator/2,     % +Curve, -Generator
+           crypto_curve_scalar_mult/4    % +Curve, +Scalar, +Point, -Result
           ]).
 
 :- use_module(library(error)).
@@ -151,9 +159,8 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
    crypto_data_hash(+Data, -Hash, +Options)
 
-   Where Data is a list of bytes (integers between 0 and 255) or
-   characters, and Hash is the computed hash as a list of hexadecimal
-   characters.
+   Where Data is a list of characters, and Hash is the computed hash
+   as a list of hexadecimal characters.
 
    Options is a list of:
 
@@ -227,7 +234,7 @@ hash_algorithm(blake2b512).
    crypto_data_hkdf(+Data, +Length, -Bytes, +Options) is det.
 
    Concentrate possibly dispersed entropy of Data and then expand it
-   to the desired length. Data is a list of bytes or characters.
+   to the desired length. Data is a list of characters.
 
    Bytes is unified with a list of bytes of length Length, and is
    suitable as input keying material and initialization vectors to
@@ -241,7 +248,7 @@ hash_algorithm(blake2b512).
        cryptographically secure algorithm by default.
      - info(+Info)
        Optional context and application specific information,
-       specified as a list of bytes or characters. The default is [].
+       specified as a list of characters. The default is [].
      - salt(+List)
        Optionally, a list of bytes that are used as salt. The
        default is all zeroes.
@@ -476,8 +483,8 @@ bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
    Algorithm, key Key, and initialization vector (or nonce) IV, to
    give CipherText.
 
-   PlainText must be a list of codes or characters, Key and IV must be
-   lists of bytes, and CipherText is created as a list of characters.
+   PlainText must be a list of characters, Key and IV must be lists of
+   bytes, and CipherText is created as a list of characters.
 
    Keys and IVs can be chosen at random (using for example
    crypto_n_random_bytes/2) or derived from input keying material (IKM)
@@ -575,9 +582,9 @@ crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
 
    Decrypt the given CipherText, using the symmetric algorithm
    Algorithm, key Key, and initialization vector IV, to give
-   PlainText. CipherText must be a list of bytes or characters, and
-   Key and IV must be lists of bytes. PlainText is created as a list
-   of characters.
+   PlainText. CipherText must be a list of characters, and Key and IV
+   must be lists of bytes. PlainText is created as a list of
+   characters.
 
    Currently, the only supported algorithm is 'chacha20-poly1305',
    a very secure, fast and versatile authenticated encryption method.
@@ -623,6 +630,58 @@ encoding_bytes(utf8, Cs, Bs) :-
             chars_bytes_(Cs, Bs, crypto_encoding)
         ;   domain_error(encryption_encoding, Cs, crypto)
         ).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Digital signatures with Ed25519
+   ===============================
+
+   - ed25519_new_keypair(-Pair)
+     Yields a new Ed25519 key pair Pair, a list of characters. The
+     pair contains the private key and must be kept absolutely secret.
+     Pair can be used for signing. Its public key can be obtained
+     with ed25519_keypair_public_key/2.
+
+   - ed25519_keypair_public_key(+Pair, -PublicKey)
+     PublicKey is the public key of the given key pair. The public key
+     can be used for signature verification, and can be shared freely.
+     The public key is represented as a list of characters.
+
+   - ed25519_sign(+Key, +Data, -Signature, +Options)
+     Key and Data must be lists of characters. Key is a key pair in
+     PKCS#8 v2 format as generated by ed25519_new_keypair/1. Sign Data
+     with Key, yielding Signature as a list of hexadecimal characters.
+
+   - ed25519_verify(+Key, +Data, +Signature, +Options)
+     Key and Data must be lists of characters. Key is a public key.
+     Succeeds if Data was signed with the private key corresponding to
+     Key, where Signature is a list of hexadecimal characters as
+     generated by ed25519_sign/4. Fails otherwise.
+
+   Currently, the only option for signing and verifying is:
+
+     - encoding(+Encoding)
+       The default encoding of Data is utf8. The alternative is octet,
+       which treats Data as a list of raw bytes.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+ed25519_new_keypair(Pair) :-
+        '$ed25519_new_keypair'(Pair).
+
+ed25519_keypair_public_key(Pair0, PublicKey) :-
+        encoding_bytes(octet, Pair0, Pair),
+        '$ed25519_keypair_public_key'(Pair, PublicKey).
+
+ed25519_sign(Key0, Data0, Signature, Options) :-
+        options_data_bytes(Options, Data0, Data),
+        encoding_bytes(octet, Key0, Key),
+        '$ed25519_sign'(Key, Data, Signature0),
+        hex_bytes(Signature, Signature0).
+
+ed25519_verify(Key0, Data0, Signature0, Options) :-
+        options_data_bytes(Options, Data0, Data),
+        encoding_bytes(octet, Key0, Key),
+        hex_bytes(Signature0, Signature),
+        '$ed25519_verify'(Key, Data, Signature).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Modular multiplicative inverse.
