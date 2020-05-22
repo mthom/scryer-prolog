@@ -2153,6 +2153,37 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::PutBytes => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "$put_bytes", 2)?;
+
+                let stub = MachineError::functor_stub(clause_name!("$put_bytes"), 2);
+                let bytes = self.integers_to_bytevec(temp_v!(2), stub);
+
+                match stream.write(&bytes) {
+                    Ok(_) => {
+                        return return_from_clause!(self.last_call, self);
+                    }
+                    _ => {
+                        let stub = MachineError::functor_stub(
+                            clause_name!("$put_bytes"),
+                            2,
+                        );
+
+                        let addr = self.heap.to_unifiable(
+                            HeapCellValue::Stream(stream.clone()),
+                        );
+
+                        return Err(self.error_form(
+                            MachineError::existence_error(
+                                self.heap.h(),
+                                ExistenceError::Stream(addr),
+                            ),
+                            stub,
+                        ));
+                    }
+                }
+            }
             &SystemClauseType::GetByte => {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "get_byte", 2)?;
