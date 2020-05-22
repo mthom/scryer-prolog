@@ -130,23 +130,31 @@ producing a faster executable.
 
 ### Docker Install (All Platforms)
 
-To automatically download, install, and run Scryer Prolog via Docker,
-simply run:
+First, install [Docker](https://docs.docker.com/get-docker/) on Linux,
+Windows, or Mac.
+
+Once Docker is installed, you can automatically download, install, and
+run Scryer Prolog in a single command:
 ```
-$> docker run -it mthom/scryer-prolog
+$> docker run -it mjt128/scryer-prolog
 ```
 
-To be able to load your program files, bind mount your programs folder
-as a Docker volume:
+To consult your Prolog files, bind mount your programs folder as a
+[Docker volume](https://docs.docker.com/storage/volumes/):
 
 ```
-$> docker run -v /home/user/prolog:/mnt -it mthom/scryer-prolog
-?- consult('mnt/program.pl').
+$> docker run -v /home/user/prolog:/mnt -it mjt128/scryer-prolog
+?- consult('/mnt/program.pl').
 true.
 ```
 
-[Docker](https://hub.docker.com/editions/community/docker-ce-desktop-windows)
-is currently the only way to run scryer-prolog on Windows.
+This works on Windows too:
+
+```
+$> docker run -v C:\Users\user\Documents\prolog:/mnt -it mjt128/scryer-prolog
+?- consult('/mnt/program.pl').
+true.
+```
 
 ## Tutorial
 

@@ -1,4 +1,4 @@
-# Based on https://hub.docker.com/_/rust?tab=description and https://hub.docker.com/_/rust?tab=description
+# Based on https://hub.docker.com/_/rust?tab=description and https://blog.sedrik.se/posts/my-docker-setup-for-rust/
 
 # The first container is for build purposes only.
 FROM rust as builder
