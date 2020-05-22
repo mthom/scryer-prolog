@@ -2166,17 +2166,18 @@ impl MachineState {
                 )?;
 
                 if stream.past_end_of_stream() {
+                    self.eof_action(
+                        self[temp_v!(2)],
+                        &mut stream,
+                        clause_name!("get_byte"),
+                        2,
+                    )?;
+
                     if EOFAction::Reset != stream.options.eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
                         return Ok(());
                     }
-                }
-
-                if stream.at_end_of_stream() {
-                    stream.set_past_end_of_stream();
-                    self.unify(self[temp_v!(2)], Addr::Fixnum(-1));
-                    return return_from_clause!(self.last_call, self);
                 }
 
                 let addr =
@@ -2238,18 +2239,9 @@ impl MachineState {
                             }
                         }
                         _ => {
-                            self.eof_action(
-                                self[temp_v!(2)],
-                                &mut stream,
-                                clause_name!("get_byte"),
-                                2,
-                            )?;
-
-                            if EOFAction::Reset != stream.options.eof_action {
-                                return return_from_clause!(self.last_call, self);
-                            } else if self.fail {
-                                return Ok(());
-                            }
+                            stream.set_past_end_of_stream();
+                            self.unify(self[temp_v!(2)], Addr::Fixnum(-1));
+                            return return_from_clause!(self.last_call, self);
                         }
                     }
                 }
