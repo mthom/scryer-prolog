@@ -353,7 +353,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`format`](src/prolog/lib/format.pl)
   The nonterminal `format_//2` is used to describe formatted output,
   arranging arguments according to a given format&nbsp;string.
-  The predicates `format/2`, `portray_clause/1` and `listing/1`
+  The predicates `format/[2,3]`, `portray_clause/1` and `listing/1`
   provide formatted *impure* output.
 * [`assoc`](src/prolog/lib/assoc.pl)
   providing `empty_assoc/1`, `get_assoc/3`, `put_assoc/4` etc.
