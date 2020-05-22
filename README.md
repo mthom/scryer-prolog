@@ -133,8 +133,8 @@ producing a faster executable.
 First, install [Docker](https://docs.docker.com/get-docker/) on Linux,
 Windows, or Mac.
 
-Once Docker is installed, you can automatically download, install, and
-run Scryer Prolog in a single command:
+Once Docker is installed, you can download and run Scryer Prolog with a single
+command:
 ```
 $> docker run -it mjt128/scryer-prolog
 ```
