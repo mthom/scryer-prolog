@@ -688,9 +688,14 @@ impl MachineState {
                 return Err(self.open_past_eos_error(stream.clone(), caller, arity));
             }
             EOFAction::EOFCode => {
-                let end_of_stream = self.heap.to_unifiable(
-                    HeapCellValue::Atom(clause_name!("end_of_file"), None)
-                );
+                let end_of_stream =
+                    if stream.options.stream_type == StreamType::Binary {
+                        Addr::Fixnum(-1)
+                    } else {
+                        self.heap.to_unifiable(
+                            HeapCellValue::Atom(clause_name!("end_of_file"), None)
+                        )
+                    };
 
                 stream.set_past_end_of_stream();
                 Ok(self.unify(result, end_of_stream))
