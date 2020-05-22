@@ -40,8 +40,10 @@ use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 use ring::rand::{SecureRandom, SystemRandom};
-use ring::{digest,hkdf,pbkdf2,aead,error};
+use ring::{digest,hkdf,pbkdf2,aead,signature::{self,KeyPair}};
 use ripemd160::{Ripemd160, Digest};
+use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
+use blake2::{Blake2s, Blake2b};
 
 pub fn get_key() -> KeyEvent {
     let key;
@@ -1110,6 +1112,11 @@ impl MachineState {
 
                 let h = self.heap.h();
 
+                if atom.as_str().is_empty() {
+                    self.fail = true;
+                    return Ok(());
+                }
+
                 let pstr = self.heap.allocate_pstr(atom.as_str());
                 let pstr_tail = self.heap[h + 1].as_addr(h + 1);
 
@@ -1154,10 +1161,22 @@ impl MachineState {
 
                 match pstr {
                     Addr::PStrLocation(h, _) => {
-                        let tail = self.heap[h + 1].as_addr(h + 1);
-                        let target = self[temp_v!(2)];
+                        if let HeapCellValue::PartialString(_, true) = &self.heap[h] {
+                            let tail = self.heap[h + 1].as_addr(h + 1);
+                            let target = self[temp_v!(2)];
 
-                        self.unify(tail, target);
+                            self.unify(tail, target);
+                        } else {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    }
+                    Addr::Lis(h) => {
+                        self.unify(Addr::HeapCell(h + 1), self[temp_v!(2)]);
+                    }
+                    Addr::EmptyList => {
+                        self.fail = true;
+                        return Ok(());
                     }
                     _ => {
                         unreachable!()
@@ -1888,28 +1907,50 @@ impl MachineState {
                     }
                 };
 
-                let complete_string = {
-                    let mut buffer = String::new();
-                    match file.read_to_string(&mut buffer) {
-                        Ok(_size) => {
-                            self.heap.put_complete_string(&buffer)
-                        }
-                        Err(_e) => {
-                            // This case if the data isn't UTF-8 valid.
-                            let mut buffer = Vec::new();
-                            let _ = match file.read_to_end(&mut buffer) {
-                                Ok(size) => size,
-                                Err(_e) => unreachable!()
-                            };
 
-                            let buffer = String::from_iter(
-                                buffer.into_iter().map(|b| b as char)
-                            );
-
-                            self.heap.put_complete_string(&buffer)
+                let type_str = match self.store(self.deref(self[temp_v!(3)])) {
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                            atom.as_str()
+                        } else {
+                            unreachable!()
                         }
                     }
+                    _ => {
+                        unreachable!()
+                    }
                 };
+
+                let complete_string = {
+                    let mut buffer = String::new();
+                    match type_str {
+                        "text" => {  match file.read_to_string(&mut buffer) {
+                                         Ok(_size) => {
+                                             self.heap.put_complete_string(&buffer)
+                                         }
+                                         Err(_e) => {
+                                            // the data isn't valid UTF-8, so we fail.
+                                           self.fail = true;
+                                           return Ok(());
+
+                                         }
+                                     }
+                                  }
+                        "binary" => { let mut buffer = Vec::new();
+                                      let _ = match file.read_to_end(&mut buffer) {
+                                          Ok(size) => size,
+                                          Err(_e) => unreachable!()
+                                      };
+
+                                      let buffer = String::from_iter(
+                                          buffer.into_iter().map(|b| b as char)
+                                      );
+
+                                      self.heap.put_complete_string(&buffer)
+                                    }
+                         _ => { unreachable!() }
+                         }
+                    };
 
                 self.unify(complete_string, a2);
             }
@@ -2112,6 +2153,37 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::PutBytes => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "$put_bytes", 2)?;
+
+                let stub = MachineError::functor_stub(clause_name!("$put_bytes"), 2);
+                let bytes = self.integers_to_bytevec(temp_v!(2), stub);
+
+                match stream.write(&bytes) {
+                    Ok(_) => {
+                        return return_from_clause!(self.last_call, self);
+                    }
+                    _ => {
+                        let stub = MachineError::functor_stub(
+                            clause_name!("$put_bytes"),
+                            2,
+                        );
+
+                        let addr = self.heap.to_unifiable(
+                            HeapCellValue::Stream(stream.clone()),
+                        );
+
+                        return Err(self.error_form(
+                            MachineError::existence_error(
+                                self.heap.h(),
+                                ExistenceError::Stream(addr),
+                            ),
+                            stub,
+                        ));
+                    }
+                }
+            }
             &SystemClauseType::GetByte => {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "get_byte", 2)?;
@@ -2125,17 +2197,18 @@ impl MachineState {
                 )?;
 
                 if stream.past_end_of_stream() {
+                    self.eof_action(
+                        self[temp_v!(2)],
+                        &mut stream,
+                        clause_name!("get_byte"),
+                        2,
+                    )?;
+
                     if EOFAction::Reset != stream.options.eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
                         return Ok(());
                     }
-                }
-
-                if stream.at_end_of_stream() {
-                    stream.set_past_end_of_stream();
-                    self.unify(self[temp_v!(2)], Addr::Fixnum(-1));
-                    return return_from_clause!(self.last_call, self);
                 }
 
                 let addr =
@@ -2197,18 +2270,9 @@ impl MachineState {
                             }
                         }
                         _ => {
-                            self.eof_action(
-                                self[temp_v!(2)],
-                                &mut stream,
-                                clause_name!("get_byte"),
-                                2,
-                            )?;
-
-                            if EOFAction::Reset != stream.options.eof_action {
-                                return return_from_clause!(self.last_call, self);
-                            } else if self.fail {
-                                return Ok(());
-                            }
+                            stream.set_past_end_of_stream();
+                            self.unify(self[temp_v!(2)], Addr::Fixnum(-1));
+                            return return_from_clause!(self.last_call, self);
                         }
                     }
                 }
@@ -5202,21 +5266,39 @@ impl MachineState {
                 };
 
                 let ints_list =
-                        if algorithm_str == "ripemd160" {
-                             let mut context = Ripemd160::new();
-                             context.input(&bytes);
-                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
-                        } else {
-                             let ints = digest::digest(
-                                            match algorithm_str {
-                                               "sha256" =>     { &digest::SHA256 }
-                                               "sha384" =>     { &digest::SHA384 }
-                                               "sha512" =>     { &digest::SHA512 }
-                                               "sha512_256" => { &digest::SHA512_256 }
-                                               _ =>            { unreachable!() }
-                                            },
-                                            &bytes);
-                             Addr::HeapCell(self.heap.to_list(ints.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                        match algorithm_str  {
+                          "sha3_224" =>   { let mut context = Sha3_224::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
+                          "sha3_256" =>   { let mut context = Sha3_256::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
+                          "sha3_384" =>   { let mut context = Sha3_384::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
+                          "sha3_512" =>   { let mut context = Sha3_512::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
+                          "blake2s256" => { let mut context = Blake2s::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
+                          "blake2b512" => { let mut context = Blake2b::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
+                          "ripemd160" =>  { let mut context = Ripemd160::new();
+                                            context.input(&bytes);
+                                            Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
+                          _ => { let ints = digest::digest(
+                                                match algorithm_str {
+                                                   "sha256" =>     { &digest::SHA256 }
+                                                   "sha384" =>     { &digest::SHA384 }
+                                                   "sha512" =>     { &digest::SHA512 }
+                                                   "sha512_256" => { &digest::SHA512_256 }
+                                                   _ =>            { unreachable!() }
+                                                },
+                                                &bytes);
+                                 Addr::HeapCell(self.heap.to_list(ints.as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))))
+                               }
                         };
 
                 self.unify(self[temp_v!(2)], ints_list);
@@ -5248,11 +5330,12 @@ impl MachineState {
                             usize::try_from(n).unwrap()
                         }
                         Ok(Number::Integer(n)) => {
-                            n.to_usize().unwrap()
+                            match n.to_usize() {
+                                Some(u) => { u }
+                                _ => { self.fail = true; return Ok(()); }
+                            }
                         }
-                        _ => {
-                            unreachable!()
-                        }
+                        _ => { unreachable!() }
                     };
 
                 let ints_list =
@@ -5261,14 +5344,17 @@ impl MachineState {
                                   "sha256" =>     { hkdf::HKDF_SHA256 }
                                   "sha384" =>     { hkdf::HKDF_SHA384 }
                                   "sha512" =>     { hkdf::HKDF_SHA512 }
-                                  _ =>            { unreachable!() }
+                                  _ =>            { self.fail = true; return Ok(()); }
                                };
                              let salt = hkdf::Salt::new(digest_alg, &salt);
                              let mut bytes : Vec<u8> = Vec::new();
                              bytes.resize(length, 0);
-                             salt.extract(&data).expand(&[&info[..]], MyKey(length)).unwrap().fill(&mut bytes).unwrap();
+                             match salt.extract(&data).expand(&[&info[..]], MyKey(length)) {
+                                 Ok(r) => { r.fill(&mut bytes).unwrap(); }
+                                 _ => { self.fail = true; return Ok(()); }
+                             }
 
-                             Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                             Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))))
                         };
 
                 self.unify(self[temp_v!(6)], ints_list);
@@ -5285,7 +5371,10 @@ impl MachineState {
                             u64::try_from(n).unwrap()
                         }
                         Ok(Number::Integer(n)) => {
-                            n.to_u64().unwrap()
+                            match n.to_u64() {
+                                Some(i) => { i }
+                                None => { self.fail = true; return Ok(()); }
+                            }
                         }
                         _ => {
                             unreachable!()
@@ -5298,7 +5387,7 @@ impl MachineState {
                                            NonZeroU32::new(iterations as u32).unwrap(), &salt,
                                            &data, &mut bytes);
 
-                             Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))))
+                             Addr::HeapCell(self.heap.to_list(bytes.iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))))
                         };
 
                 self.unify(self[temp_v!(4)], ints_list);
@@ -5312,18 +5401,18 @@ impl MachineState {
                 let iv = self.integers_to_bytevec(temp_v!(3), stub3);
 
                 let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
-                let nonce_sequence = OneNonceSequence::new(aead::Nonce::try_assume_unique_for_key(&iv).unwrap());
-                let mut key: aead::SealingKey<OneNonceSequence> = aead::BoundKey::new(unbound_key, nonce_sequence);
+                let nonce = aead::Nonce::try_assume_unique_for_key(&iv).unwrap();
+                let key = aead::LessSafeKey::new(unbound_key);
 
                 let mut in_out = data.clone();
                 let tag =
-                     match key.seal_in_place_separate_tag(aead::Aad::empty(), &mut in_out) {
+                     match key.seal_in_place_separate_tag(nonce, aead::Aad::empty(), &mut in_out) {
                         Ok(d) => { d }
                         _     => { self.fail = true; return Ok(()); }
                       };
 
                 let tag_list =
-                      Addr::HeapCell(self.heap.to_list(tag.as_ref().iter().map(|b| HeapCellValue::Integer(Rc::new(Integer::from(*b))))));
+                      Addr::HeapCell(self.heap.to_list(tag.as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))));
 
                 let complete_string = {
                           let buffer = String::from_iter(in_out.iter().map(|b| *b as char));
@@ -5355,14 +5444,14 @@ impl MachineState {
                 };
 
                 let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
-                let nonce_sequence = OneNonceSequence::new(aead::Nonce::try_assume_unique_for_key(&iv).unwrap());
-                let mut key: aead::OpeningKey<OneNonceSequence> = aead::BoundKey::new(unbound_key, nonce_sequence);
+                let nonce = aead::Nonce::try_assume_unique_for_key(&iv).unwrap();
+                let key = aead::LessSafeKey::new(unbound_key);
 
                 let mut in_out = data.clone();
 
                 let complete_string = {
                           let decrypted_data =
-                                match key.open_in_place(aead::Aad::empty(), &mut in_out) {
+                                match key.open_in_place(nonce, aead::Aad::empty(), &mut in_out) {
                                    Ok(d) => { d }
                                    _     => { self.fail = true; return Ok(()); }
                                  };
@@ -5381,6 +5470,63 @@ impl MachineState {
                       };
 
                 self.unify(self[temp_v!(5)], complete_string);
+            }
+            &SystemClauseType::Ed25519NewKeyPair => {
+                let pkcs8_bytes = signature::Ed25519KeyPair::generate_pkcs8(rng()).unwrap();
+                let complete_string = {
+                          let buffer = String::from_iter(pkcs8_bytes.as_ref().iter().map(|b| *b as char));
+                          self.heap.put_complete_string(&buffer)
+                      };
+
+                self.unify(self[temp_v!(1)], complete_string);
+            }
+            &SystemClauseType::Ed25519KeyPairPublicKey => {
+                let stub1 = MachineError::functor_stub(clause_name!("ed25519_keypair_public_key"), 2);
+                let bytes = self.integers_to_bytevec(temp_v!(1), stub1);
+
+                let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&bytes) {
+                                  Ok(kp) => { kp }
+                                  _ => { self.fail = true; return Ok(()); }
+                               };
+
+                let complete_string = {
+                          let buffer = String::from_iter(key_pair.public_key().as_ref().iter().map(|b| *b as char));
+                          self.heap.put_complete_string(&buffer)
+                      };
+
+                self.unify(self[temp_v!(2)], complete_string);
+            }
+            &SystemClauseType::Ed25519Sign => {
+                let stub1 = MachineError::functor_stub(clause_name!("ed25519_sign"), 4);
+                let key = self.integers_to_bytevec(temp_v!(1), stub1);
+                let stub2 = MachineError::functor_stub(clause_name!("ed25519_sign"), 4);
+                let data = self.integers_to_bytevec(temp_v!(2), stub2);
+
+                let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&key) {
+                                  Ok(kp) => { kp }
+                                  _ => { self.fail = true; return Ok(()); }
+                               };
+
+                let sig = key_pair.sign(&data);
+
+                let sig_list =
+                      Addr::HeapCell(self.heap.to_list(sig.as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))));
+
+                self.unify(self[temp_v!(3)], sig_list);
+            }
+            &SystemClauseType::Ed25519Verify => {
+                let stub1 = MachineError::functor_stub(clause_name!("ed25519_verify"), 4);
+                let key = self.integers_to_bytevec(temp_v!(1), stub1);
+                let stub2 = MachineError::functor_stub(clause_name!("ed25519_verify"), 4);
+                let data = self.integers_to_bytevec(temp_v!(2), stub2);
+                let stub3 = MachineError::functor_stub(clause_name!("ed25519_verify"), 4);
+                let signature = self.integers_to_bytevec(temp_v!(3), stub3);
+
+                let peer_public_key = signature::UnparsedPublicKey::new(&signature::ED25519, &key);
+                match peer_public_key.verify(&data, &signature) {
+                    Ok(_) => { }
+                    _ => { self.fail = true; return Ok(()); }
+                }
             }
         };
 
@@ -5404,19 +5550,5 @@ struct MyKey<T: core::fmt::Debug + PartialEq>(T);
 impl hkdf::KeyType for MyKey<usize> {
     fn len(&self) -> usize {
         self.0
-    }
-}
-
-struct OneNonceSequence(Option<aead::Nonce>);
-
-impl OneNonceSequence {
-    fn new(nonce: aead::Nonce) -> Self {
-        Self(Some(nonce))
-    }
-}
-
-impl aead::NonceSequence for OneNonceSequence {
-    fn advance(&mut self) -> Result<aead::Nonce, error::Unspecified> {
-        self.0.take().ok_or(error::Unspecified)
     }
 }

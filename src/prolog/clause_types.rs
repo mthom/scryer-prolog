@@ -229,6 +229,7 @@ pub enum SystemClauseType {
     PeekCode,
     PointsToContinuationResetMarker,
     PutByte,
+    PutBytes,
     PutChar,
     PutCode,
     REPL(REPLCodePtr),
@@ -291,7 +292,11 @@ pub enum SystemClauseType {
     CryptoDataHKDF,
     CryptoPasswordHash,
     CryptoDataEncrypt,
-    CryptoDataDecrypt
+    CryptoDataDecrypt,
+    Ed25519Sign,
+    Ed25519Verify,
+    Ed25519NewKeyPair,
+    Ed25519KeyPairPublicKey
 }
 
 impl SystemClauseType {
@@ -411,6 +416,9 @@ impl SystemClauseType {
             &SystemClauseType::PutByte => {
                 clause_name!("$put_byte")
             }
+            &SystemClauseType::PutBytes => {
+                clause_name!("$put_bytes")
+            }
             &SystemClauseType::PutChar => {
                 clause_name!("$put_char")
             }
@@ -480,6 +488,10 @@ impl SystemClauseType {
             &SystemClauseType::CryptoPasswordHash => clause_name!("$crypto_password_hash"),
             &SystemClauseType::CryptoDataEncrypt => clause_name!("$crypto_data_encrypt"),
             &SystemClauseType::CryptoDataDecrypt => clause_name!("$crypto_data_decrypt"),
+            &SystemClauseType::Ed25519Sign => clause_name!("$ed25519_sign"),
+            &SystemClauseType::Ed25519Verify => clause_name!("$ed25519_verify"),
+            &SystemClauseType::Ed25519NewKeyPair => clause_name!("$ed25519_new_keypair"),
+            &SystemClauseType::Ed25519KeyPairPublicKey => clause_name!("$ed25519_keypair_public_key")
         }
     }
 
@@ -533,7 +545,7 @@ impl SystemClauseType {
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
-            ("$file_to_chars", 2) => Some(SystemClauseType::FileToChars),
+            ("$file_to_chars", 3) => Some(SystemClauseType::FileToChars),
             ("$get_byte", 2) => Some(SystemClauseType::GetByte),
             ("$get_char", 2) => Some(SystemClauseType::GetChar),
             ("$get_code", 2) => Some(SystemClauseType::GetCode),
@@ -543,6 +555,9 @@ impl SystemClauseType {
             }
             ("$put_byte", 2) => {
                 Some(SystemClauseType::PutByte)
+            }
+            ("$put_bytes", 2) => {
+                Some(SystemClauseType::PutBytes)
             }
             ("$put_char", 2) => {
                 Some(SystemClauseType::PutChar)
@@ -648,6 +663,10 @@ impl SystemClauseType {
             ("$crypto_password_hash", 4) => Some(SystemClauseType::CryptoPasswordHash),
             ("$crypto_data_encrypt", 5) => Some(SystemClauseType::CryptoDataEncrypt),
             ("$crypto_data_decrypt", 5) => Some(SystemClauseType::CryptoDataDecrypt),
+            ("$ed25519_sign", 3) => Some(SystemClauseType::Ed25519Sign),
+            ("$ed25519_verify", 3) => Some(SystemClauseType::Ed25519Verify),
+            ("$ed25519_new_keypair", 1) => Some(SystemClauseType::Ed25519NewKeyPair),
+            ("$ed25519_keypair_public_key", 2) => Some(SystemClauseType::Ed25519KeyPairPublicKey),
             _ => None,
         }
     }

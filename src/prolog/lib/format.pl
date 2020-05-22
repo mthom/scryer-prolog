@@ -49,6 +49,10 @@
    The predicate format/2 is like format_//2, except that it outputs
    the text on the terminal instead of describing it declaratively.
 
+   format/3, used as format(Stream, FormatString, Arguments), outputs
+   the described string to the given Stream. If Stream is a binary
+   stream, then the code of each emitted character must be in 0..255.
+
    If at all possible, format_//2 should be used, to stress pure parts
    that enable easy testing etc. If necessary, you can emit the list Ls
    with maplist(write, Ls).
@@ -68,6 +72,7 @@
 
 :- module(format, [format_//2,
                    format/2,
+                   format/3,
                    portray_clause/1,
                    listing/1
                   ]).
@@ -358,6 +363,26 @@ digits(uppercase, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ").
 format(Fs, Args) :-
         phrase(format_(Fs, Args), Cs),
         maplist(write, Cs).
+
+format(Stream, Fs, Args) :-
+        phrase(format_(Fs, Args), Cs),
+        (   stream_property(Stream, type(binary)) ->
+            % maplist(char_code, Cs, Bytes) is currently a lot slower
+            % than first converting Cs to an atom, and then to codes.
+            % In the future, we can ideally avoid creating an atom here,
+            % since an atom leaves traces in the system.
+            atom_chars(A, Cs),
+            atom_codes(A, Bytes),
+            (   member(NonByte, Bytes), NonByte > 255 ->
+                char_code(Char, NonByte),
+                throw(error(representation_error(Char), format/3))
+            ;   true
+            ),
+            % For binary streams, we use a specialised internal predicate
+            % that uses only a single "write" operation for efficiency.
+            '$put_bytes'(Stream, Bytes)
+        ;   maplist(put_char(Stream), Cs)
+        ).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- phrase(cells("hello", [], 0, []), Cs).

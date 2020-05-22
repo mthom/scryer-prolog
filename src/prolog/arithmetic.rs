@@ -474,7 +474,12 @@ impl Neg for Number {
 
     fn neg(self) -> Self::Output {
         match self {
-            Number::Fixnum(n) => Number::Fixnum(-n),
+            Number::Fixnum(n) =>
+                if let Some(n) = n.checked_neg() {
+                    Number::Fixnum(n)
+                } else {
+                    Number::from(-Integer::from(n))
+                }
             Number::Integer(n) => Number::Integer(Rc::new(-Integer::from(&*n))),
             Number::Float(OrderedFloat(f)) => Number::Float(OrderedFloat(-f)),
             Number::Rational(r) => Number::Rational(Rc::new(-Rational::from(&*r))),

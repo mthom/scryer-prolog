@@ -92,6 +92,10 @@ fn is_partial_string<'a>(
         Term::Constant(_, Constant::EmptyList) => {
             return Some((string, None));
         }
+        Term::Constant(_, Constant::String(tail)) => {
+            string += &tail;
+            return Some((string, None));
+        }
         _ => {
             return None;
         }

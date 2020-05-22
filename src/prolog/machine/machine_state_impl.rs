@@ -1492,9 +1492,13 @@ impl MachineState {
             &QueryInstruction::PutPartialString(_, ref string, reg, has_tail) => {
                 let pstr_addr =
                     if has_tail {
-                        let pstr_addr = self.heap.allocate_pstr(&string);
-                        self.heap.pop(); // the tail will be added by the next instruction.
-                        pstr_addr
+                        if !string.is_empty() {
+                            let pstr_addr = self.heap.allocate_pstr(&string);
+                            self.heap.pop(); // the tail will be added by the next instruction.
+                            pstr_addr
+                        } else {
+                            Addr::EmptyList
+                        }
                     } else {
                         self.heap.put_complete_string(&string)
                     };

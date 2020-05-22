@@ -9,22 +9,30 @@
    and strings have the advantage that the atom table remains unmodified.
 
    Especially for cryptographic applications, it as an advantage that
-   using strings leaves little trace of what was processed in the system,
+   using strings leaves little trace of what was processed in the system.
+
+   For predicates that accept an encoding/1 option to specify the encoding
+   of the input data, if encoding(octet) is used, then the input can also
+   be specified as a list of bytes, i.e., integers between 0 and 255.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(crypto,
-          [hex_bytes/2,                % ?Hex, ?Bytes
-           crypto_n_random_bytes/2,    % +N, -Bytes
-           crypto_data_hash/3,         % +Data, -Hash, +Options
-           crypto_data_hkdf/4,         % +Data, +Length, -Bytes, +Options
-           crypto_password_hash/2,     % +Password, ?Hash
-           crypto_password_hash/3,     % +Password, -Hash, +Options
-           crypto_data_encrypt/6,      % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
-           crypto_data_decrypt/6,      % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
-           crypto_name_curve/2,        % +Name, -Curve
-           crypto_curve_order/2,       % +Curve, -Order
-           crypto_curve_generator/2,   % +Curve, -Generator
-           crypto_curve_scalar_mult/4  % +Curve, +Scalar, +Point, -Result
+          [hex_bytes/2,                  % ?Hex, ?Bytes
+           crypto_n_random_bytes/2,      % +N, -Bytes
+           crypto_data_hash/3,           % +Data, -Hash, +Options
+           crypto_data_hkdf/4,           % +Data, +Length, -Bytes, +Options
+           crypto_password_hash/2,       % +Password, ?Hash
+           crypto_password_hash/3,       % +Password, -Hash, +Options
+           crypto_data_encrypt/6,        % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
+           crypto_data_decrypt/6,        % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
+           ed25519_new_keypair/1,        % -KeyPair
+           ed25519_keypair_public_key/2, % +KeyPair, +PublicKey
+           ed25519_sign/4,               % +KeyPair, +Data, -Signature, +Options
+           ed25519_verify/4,             % +PublicKey, +Data, +Signature, +Options
+           crypto_name_curve/2,          % +Name, -Curve
+           crypto_curve_order/2,         % +Curve, -Order
+           crypto_curve_generator/2,     % +Curve, -Generator
+           crypto_curve_scalar_mult/4    % +Curve, +Scalar, +Point, -Result
           ]).
 
 :- use_module(library(error)).
@@ -151,18 +159,17 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
    crypto_data_hash(+Data, -Hash, +Options)
 
-   Where Data is a list of bytes (integers between 0 and 255) or
-   characters, and Hash is the computed hash as a list of hexadecimal
-   characters.
+   Where Data is a list of characters, and Hash is the computed hash
+   as a list of hexadecimal characters.
 
    Options is a list of:
 
      - algorithm(+A)
-       where A is one of ripemd160, sha256, sha384, sha512,
-       sha512_256, or a variable. If A is a variable, then it is
-       unified with the default algorithm, which is an algorithm that
-       is considered cryptographically secure at the time of this
-       writing.
+       where A is one of ripemd160, sha256, sha384, sha512, sha512_256,
+       sha3_224, sha3_256, sha3_384, sha3_512, blake2s256, blake2b512,
+       or a variable. If A is a variable, then it is unified with the
+       default algorithm, which is an algorithm that is considered
+       cryptographically secure at the time of this writing.
      - encoding(+Encoding)
        The default encoding is utf8. The alternative is octet,
        to treat the input as a list of raw bytes.
@@ -184,8 +191,7 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
 crypto_data_hash(Data0, Hash, Options0) :-
         must_be(list, Options0),
-        option(encoding(Encoding), Options0, utf8),
-        encoding_bytes(Encoding, Data0, Data),
+        options_data_bytes(Options0, Data0, Data),
         functor_hash_options(algorithm, A, Options0, _),
         (   hash_algorithm(A) -> true
         ;   domain_error(hash_algorithm, A, crypto_data_hash/3)
@@ -193,6 +199,10 @@ crypto_data_hash(Data0, Hash, Options0) :-
         '$crypto_data_hash'(Data, HashBytes, A),
         hex_bytes(Hash, HashBytes).
 
+options_data_bytes(Options, Data, Bytes) :-
+        option(encoding(Encoding), Options, utf8),
+        must_be(atom, Encoding),
+        encoding_bytes(Encoding, Data, Bytes).
 
 default_hash(sha256).
 
@@ -212,13 +222,19 @@ hash_algorithm(sha256).
 hash_algorithm(sha512).
 hash_algorithm(sha384).
 hash_algorithm(sha512_256).
+hash_algorithm(sha3_224).
+hash_algorithm(sha3_256).
+hash_algorithm(sha3_384).
+hash_algorithm(sha3_512).
+hash_algorithm(blake2s256).
+hash_algorithm(blake2b512).
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    crypto_data_hkdf(+Data, +Length, -Bytes, +Options) is det.
 
    Concentrate possibly dispersed entropy of Data and then expand it
-   to the desired length. Data is a list of bytes or characters.
+   to the desired length. Data is a list of characters.
 
    Bytes is unified with a list of bytes of length Length, and is
    suitable as input keying material and initialization vectors to
@@ -227,13 +243,12 @@ hash_algorithm(sha512_256).
    Admissible options are:
 
      - algorithm(+Algorithm)
-       A hashing algorithm as specified to crypto_data_hash/3. The
-       default is a cryptographically secure algorithm. If you
-       specify a variable, then it is unified with the algorithm
-       that was used, which is a cryptographically secure algorithm.
+       One of sha256, sha384 or sha512. If you specify a variable,
+       then it is unified with the algorithm that was used, which is a
+       cryptographically secure algorithm by default.
      - info(+Info)
        Optional context and application specific information,
-       specified as a list of bytes or characters. The default is [].
+       specified as a list of characters. The default is [].
      - salt(+List)
        Optionally, a list of bytes that are used as salt. The
        default is all zeroes.
@@ -250,15 +265,27 @@ hash_algorithm(sha512_256).
 
 crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         functor_hash_options(algorithm, Algorithm, Options0, Options),
-        option(encoding(Encoding), Options, utf8),
-        encoding_bytes(Encoding, Data0, Data),
+        (   hkdf_algorithm(Algorithm) -> true
+        ;   domain_error(hkdf_algorithm, Algorithm, crypto_data_hkdf/4)
+        ),
+        must_be(integer, L),
+        L >= 0,
+        options_data_bytes(Options, Data0, Data),
         option(salt(SaltBytes), Options, []),
         must_be_bytes(SaltBytes, crypto_data_hkdf/4),
         option(info(Info0), Options, []),
         chars_bytes_(Info0, Info, crypto_data_hkdf/4),
         '$crypto_data_hkdf'(Data, SaltBytes, Info, Algorithm, L, Bytes).
 
+hkdf_algorithm(sha256).
+hkdf_algorithm(sha384).
+hkdf_algorithm(sha512).
+
 option(What, Options, Default) :-
+        (   member(V, Options), var(V) ->
+            instantiation_error(option/3)
+        ;   true
+        ),
         (   member(What, Options) -> true
         ;   What =.. [_,Default]
         ).
@@ -379,7 +406,7 @@ crypto_password_hash(Password0, Hash, Options) :-
         Algorithm = 'pbkdf2-sha512', % current default and only option
         option(algorithm(Algorithm), Options, Algorithm),
         (   member(salt(SaltBytes), Options) ->
-            true
+            must_be_bytes(SaltBytes, crypto_password_hash/2)
         ;   crypto_n_random_bytes(16, SaltBytes)
         ),
         '$crypto_password_hash'(Password, SaltBytes, Iterations, HashBytes),
@@ -456,8 +483,8 @@ bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
    Algorithm, key Key, and initialization vector (or nonce) IV, to
    give CipherText.
 
-   PlainText must be a list of codes or characters, Key and IV must be
-   lists of bytes, and CipherText is created as a list of characters.
+   PlainText must be a list of characters, Key and IV must be lists of
+   bytes, and CipherText is created as a list of characters.
 
    Keys and IVs can be chosen at random (using for example
    crypto_n_random_bytes/2) or derived from input keying material (IKM)
@@ -531,8 +558,7 @@ bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
-        option(encoding(Encoding), Options, utf8),
-        encoding_bytes(Encoding, PlainText0, PlainText),
+        options_data_bytes(Options, PlainText0, PlainText),
         option(tag(Tag), Options, _),
         (   nonvar(Tag) ->
             must_be_bytes(Tag, crypto_data_encrypt/6)
@@ -556,9 +582,9 @@ crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
 
    Decrypt the given CipherText, using the symmetric algorithm
    Algorithm, key Key, and initialization vector IV, to give
-   PlainText. CipherText must be a list of bytes or characters, and
-   Key and IV must be lists of bytes. PlainText is created as a list
-   of characters.
+   PlainText. CipherText must be a list of characters, and Key and IV
+   must be lists of bytes. PlainText is created as a list of
+   characters.
 
    Currently, the only supported algorithm is 'chacha20-poly1305',
    a very secure, fast and versatile authenticated encryption method.
@@ -581,6 +607,8 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         must_be_bytes(IV, crypto_data_decrypt/6),
         must_be(atom, Algorithm),
         option(encoding(Encoding), Options, utf8),
+        must_be(atom, Encoding),
+        member(Encoding, [utf8,octet]),
         must_be(list, CipherText0),
         encoding_bytes(octet, CipherText0, CipherText1),
         append(CipherText1, Tag, CipherText),
@@ -590,18 +618,70 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         '$crypto_data_decrypt'(CipherText, Key, IV, Encoding, PlainText).
 
 encoding_bytes(octet, Bs0, Bs) :-
+        must_be(list, Bs0),
         (   maplist(integer, Bs0) ->
             Bs0 = Bs
         ;   maplist(char_code, Bs0, Bs)
         ),
         must_be_bytes(Bs, crypto_encoding).
 encoding_bytes(utf8, Cs, Bs) :-
+        must_be(list, Cs),
         (   maplist(atom, Cs) ->
             chars_bytes_(Cs, Bs, crypto_encoding)
         ;   domain_error(encryption_encoding, Cs, crypto)
         ).
 
-char_code(Char, Code) :- atom_codes(Char, [Code]).
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Digital signatures with Ed25519
+   ===============================
+
+   - ed25519_new_keypair(-Pair)
+     Yields a new Ed25519 key pair Pair, a list of characters. The
+     pair contains the private key and must be kept absolutely secret.
+     Pair can be used for signing. Its public key can be obtained
+     with ed25519_keypair_public_key/2.
+
+   - ed25519_keypair_public_key(+Pair, -PublicKey)
+     PublicKey is the public key of the given key pair. The public key
+     can be used for signature verification, and can be shared freely.
+     The public key is represented as a list of characters.
+
+   - ed25519_sign(+Key, +Data, -Signature, +Options)
+     Key and Data must be lists of characters. Key is a key pair in
+     PKCS#8 v2 format as generated by ed25519_new_keypair/1. Sign Data
+     with Key, yielding Signature as a list of hexadecimal characters.
+
+   - ed25519_verify(+Key, +Data, +Signature, +Options)
+     Key and Data must be lists of characters. Key is a public key.
+     Succeeds if Data was signed with the private key corresponding to
+     Key, where Signature is a list of hexadecimal characters as
+     generated by ed25519_sign/4. Fails otherwise.
+
+   Currently, the only option for signing and verifying is:
+
+     - encoding(+Encoding)
+       The default encoding of Data is utf8. The alternative is octet,
+       which treats Data as a list of raw bytes.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+ed25519_new_keypair(Pair) :-
+        '$ed25519_new_keypair'(Pair).
+
+ed25519_keypair_public_key(Pair0, PublicKey) :-
+        encoding_bytes(octet, Pair0, Pair),
+        '$ed25519_keypair_public_key'(Pair, PublicKey).
+
+ed25519_sign(Key0, Data0, Signature, Options) :-
+        options_data_bytes(Options, Data0, Data),
+        encoding_bytes(octet, Key0, Key),
+        '$ed25519_sign'(Key, Data, Signature0),
+        hex_bytes(Signature, Signature0).
+
+ed25519_verify(Key0, Data0, Signature0, Options) :-
+        options_data_bytes(Options, Data0, Data),
+        encoding_bytes(octet, Key0, Key),
+        hex_bytes(Signature0, Signature),
+        '$ed25519_verify'(Key, Data, Signature).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Modular multiplicative inverse.

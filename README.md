@@ -93,8 +93,6 @@ strings.
 
 ## Installing Scryer Prolog
 
-### Native Install (Unix Only)
-
 First, install the latest stable version of
 [Rust](https://www.rust-lang.org/en-US/install.html) using your
 preferred method. Scryer tends to use features from newer Rust
@@ -127,26 +125,6 @@ $> cargo run [--release]
 
 The optional `--release` flag will perform various optimizations,
 producing a faster executable.
-
-### Docker Install (All Platforms)
-
-To automatically download, install, and run Scryer Prolog via Docker,
-simply run:
-```
-$> docker run -it mthom/scryer-prolog
-```
-
-To be able to load your program files, bind mount your programs folder
-as a Docker volume:
-
-```
-$> docker run -v /home/user/prolog:/mnt -it mthom/scryer-prolog
-?- consult('mnt/program.pl').
-true.
-```
-
-[Docker](https://hub.docker.com/editions/community/docker-ce-desktop-windows)
-is currently the only way to run scryer-prolog on Windows.
 
 ## Tutorial
 
@@ -375,7 +353,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`format`](src/prolog/lib/format.pl)
   The nonterminal `format_//2` is used to describe formatted output,
   arranging arguments according to a given format&nbsp;string.
-  The predicates `format/2`, `portray_clause/1` and `listing/1`
+  The predicates `format/[2,3]`, `portray_clause/1` and `listing/1`
   provide formatted *impure* output.
 * [`assoc`](src/prolog/lib/assoc.pl)
   providing `empty_assoc/1`, `get_assoc/3`, `put_assoc/4` etc.
@@ -402,6 +380,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`crypto`](src/prolog/lib/crypto.pl)
   Cryptographically secure random numbers and hashes, HMAC-based
   key derivation (HKDF), password-based key derivation (PBKDF2),
+  public key signatures and signature verification with Ed25519,
   authenticated encryption, and reasoning about elliptic curves.
 
 To read contents of external files, use `phrase_from_file/2` from
