@@ -52,7 +52,7 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
                      findall/3, findall/4, flush_output/0,
                      flush_output/1, get_byte/1, get_byte/2,
                      get_char/1, get_char/2, get_code/1, get_code/2,
-                     halt/0, max_arity/1, number_chars/2,
+                     halt/0, halt/1, max_arity/1, number_chars/2,
                      number_codes/2, once/1, op/3, open/3, open/4,
                      peek_byte/1, peek_byte/2, peek_char/1,
                      peek_char/2, peek_code/1, peek_code/2,
@@ -912,7 +912,14 @@ op(Priority, OpSpec, Op) :-
     ;  throw(error(type_error(list, Op), op/3)) % 8.14.3.3 f)
     ).
 
-halt :- '$halt'.
+
+halt :- halt(0).
+
+halt(N) :-
+        (   -2^31 =< N, N =< 2^31 - 1 ->
+            '$halt'(N)
+        ;   throw(error(domain_error(exit_code, N), halt/1))
+        ).
 
 atom_length(Atom, Length) :-
     (  var(Atom)  -> throw(error(instantiation_error, atom_length/2)) % 8.16.1.3 a)

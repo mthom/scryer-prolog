@@ -580,7 +580,7 @@ impl SystemClauseType {
             ("$get_lh_from_offset_diff", 3) => Some(SystemClauseType::GetLiftedHeapFromOffsetDiff),
             ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
             ("$get_scc_cleaner", 1) => Some(SystemClauseType::GetSCCCleaner),
-            ("$halt", 0) => Some(SystemClauseType::Halt),
+            ("$halt", 1) => Some(SystemClauseType::Halt),
             ("$head_is_dynamic", 1) => Some(SystemClauseType::HeadIsDynamic),
             ("$install_scc_cleaner", 2) => Some(SystemClauseType::InstallSCCCleaner),
             ("$install_inference_counter", 3) => Some(SystemClauseType::InstallInferenceCounter),
