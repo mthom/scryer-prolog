@@ -2,11 +2,14 @@
 name = "scryer-prolog"
 version = "0.8.123"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
-build = "build.rs"
-repository = "https://github.com/mthom/scryer-prolog"
-description = "A modern Prolog implementation written mostly in Rust."
-license = "BSD-3-Clause"
 edition = "2018"
+description = "A modern Prolog implementation written mostly in Rust."
+readme = "README.md"
+repository = "https://github.com/mthom/scryer-prolog"
+license = "BSD-3-Clause"
+keywords = ["prolog", "prolog-interpreter", "prolog-implementation"]
+categories = ["command-line-utilities"]
+build = "build.rs"
 
 [build-dependencies]
 indexmap = "1.0.2"
