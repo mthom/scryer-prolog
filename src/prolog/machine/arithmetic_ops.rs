@@ -143,7 +143,7 @@ impl MachineState {
 
     pub(crate)
     fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, MachineStub> {
-        let caller = MachineError::functor_stub(clause_name!("(is)"), 2);
+        let caller = MachineError::functor_stub(clause_name!("is"), 2);
         let mut interms: Vec<Number> = Vec::with_capacity(64);
 
         for addr in self.post_order_iter(self[r]) {
@@ -157,7 +157,7 @@ impl MachineState {
                         "-" => interms.push(try_numeric_result!(self, a1 - a2, caller)?),
                         "*" => interms.push(try_numeric_result!(self, a1 * a2, caller)?),
                         "/" => interms.push(self.div(a1, a2)?),
-                        "**" => interms.push(self.pow(a1, a2, "(is)")?),
+                        "**" => interms.push(self.pow(a1, a2, "is")?),
                         "^" => interms.push(self.int_pow(a1, a2)?),
                         "max" => interms.push(self.max(a1, a2)?),
                         "min" => interms.push(self.min(a1, a2)?),
@@ -189,7 +189,16 @@ impl MachineState {
                         "atan2" => interms.push(Number::Float(OrderedFloat(self.atan2(a1, a2)?))),
                         "gcd" => interms.push(self.gcd(a1, a2)?),
                         _ => {
-                            return Err(self.error_form(MachineError::instantiation_error(), caller))
+                            let evaluable_stub = MachineError::functor_stub(name.clone(), 2);
+
+                            return Err(self.error_form(
+                                MachineError::type_error(
+                                    self.heap.h(),
+                                    ValidType::Evaluable,
+                                    evaluable_stub,
+                                ),
+                                caller,
+                            ));
                         }
                     }
                 }
@@ -217,7 +226,16 @@ impl MachineState {
                         "\\" => interms.push(self.bitwise_complement(a1)?),
                         "sign" => interms.push(self.sign(a1)),
                         _ => {
-                            return Err(self.error_form(MachineError::instantiation_error(), caller));
+                            let evaluable_stub = MachineError::functor_stub(name.clone(), 1);
+
+                            return Err(self.error_form(
+                                MachineError::type_error(
+                                    self.heap.h(),
+                                    ValidType::Evaluable,
+                                    evaluable_stub,
+                                ),
+                                caller,
+                            ));
                         }
                     }
                 }
@@ -239,11 +257,29 @@ impl MachineState {
                 &HeapCellValue::Atom(ref name, _) if name.as_str() == "pi" => {
                     interms.push(Number::Float(OrderedFloat(f64::consts::PI)))
                 }
+                &HeapCellValue::NamedStr(arity, ref name, _) => {
+                    let evaluable_stub = MachineError::functor_stub(name.clone(), arity);
+
+                    return Err(self.error_form(
+                        MachineError::type_error(
+                            self.heap.h(),
+                            ValidType::Evaluable,
+                            evaluable_stub,
+                        ),
+                        caller,
+                    ));
+                }
+                &HeapCellValue::Addr(addr) if addr.is_ref() => {
+                    return Err(self.error_form(
+                        MachineError::instantiation_error(),
+                        caller,
+                    ));
+                }
                 val => {
                     return Err(self.type_error(
                         ValidType::Number,
                         val.context_free_clone(),
-                        clause_name!("(is)"),
+                        clause_name!("is"),
                         2,
                     ));
                 }
@@ -377,7 +413,7 @@ impl MachineState {
 
     pub(crate)
     fn atan2(&self, n1: Number, n2: Number) -> Result<f64, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("is"), 2);
 
         if n1.is_zero() && n2.is_zero() {
             Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub))
@@ -392,7 +428,7 @@ impl MachineState {
     pub(crate)
     fn int_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
         if n1.is_zero() && n2.is_negative() {
-            let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+            let stub = MachineError::functor_stub(clause_name!("is"), 2);
             return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
         }
 
@@ -487,7 +523,7 @@ impl MachineState {
                 let f2 = self.float(n2)?;
 
                 if n1.is_negative() && f2 != f2.floor() {
-                    let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+                    let stub = MachineError::functor_stub(clause_name!("is"), 2);
                     return Err(
                         self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub)
                     );
@@ -580,7 +616,7 @@ impl MachineState {
     where
         FloatFn: Fn(f64) -> f64,
     {
-        let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("is"), 2);
 
         let f1 = try_numeric_result!(self, result_f(&n1, rnd_f), stub)?;
         let f1 = result_f(&Number::Float(OrderedFloat(f(f1))), rnd_f);
@@ -640,7 +676,7 @@ impl MachineState {
     pub(crate)
     fn sqrt(&self, n1: Number) -> Result<f64, MachineStub> {
         if n1.is_negative() {
-            let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+            let stub = MachineError::functor_stub(clause_name!("is"), 2);
             return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
         }
 
@@ -650,7 +686,7 @@ impl MachineState {
     #[inline]
     pub(crate)
     fn float(&self, n: Number) -> Result<f64, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("is"), 2);
         try_numeric_result!(self, result_f(&n, rnd_f), stub)
     }
 
@@ -678,7 +714,7 @@ impl MachineState {
 
     pub(crate)
     fn round(&self, n: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("is"), 2);
 
         let result = n + Number::Float(OrderedFloat(0.5f64));
         let result = try_numeric_result!(self, result, stub)?;

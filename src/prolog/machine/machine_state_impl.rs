@@ -953,7 +953,7 @@ impl MachineState {
 
     pub(super)
     fn execute_arith_instr(&mut self, instr: &ArithmeticInstruction) {
-        let stub = MachineError::functor_stub(clause_name!("(is)"), 2);
+        let stub = MachineError::functor_stub(clause_name!("is"), 2);
 
         match instr {
             &ArithmeticInstruction::Add(ref a1, ref a2, t) => {
