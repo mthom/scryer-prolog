@@ -3647,7 +3647,15 @@ impl MachineState {
                 self.fail = true;
             }
             &SystemClauseType::Halt => {
-                std::process::exit(0);
+                let code = self.store(self.deref(self[temp_v!(1)]));
+
+                let code = match Number::try_from((code, &self.heap)) {
+                    Ok(Number::Fixnum(n)) => n as i32,
+                    Ok(Number::Integer(n)) => n.to_i32().unwrap(),
+                    _ => { unreachable!() }
+                };
+
+                std::process::exit(code);
             }
             &SystemClauseType::InstallSCCCleaner => {
                 let addr = self[temp_v!(1)];
