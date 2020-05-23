@@ -93,6 +93,8 @@ strings.
 
 ## Installing Scryer Prolog
 
+### Native Install (Unix Only)
+
 First, install the latest stable version of
 [Rust](https://www.rust-lang.org/en-US/install.html) using your
 preferred method. Scryer tends to use features from newer Rust
@@ -125,6 +127,34 @@ $> cargo run [--release]
 
 The optional `--release` flag will perform various optimizations,
 producing a faster executable.
+
+### Docker Install (All Platforms)
+
+First, install [Docker](https://docs.docker.com/get-docker/) on Linux,
+Windows, or Mac.
+
+Once Docker is installed, you can download and run Scryer Prolog with a single
+command:
+```
+$> docker run -it mjt128/scryer-prolog
+```
+
+To consult your Prolog files, bind mount your programs folder as a
+[Docker volume](https://docs.docker.com/storage/volumes/):
+
+```
+$> docker run -v /home/user/prolog:/mnt -it mjt128/scryer-prolog
+?- consult('/mnt/program.pl').
+true.
+```
+
+This works on Windows too:
+
+```
+$> docker run -v C:\Users\user\Documents\prolog:/mnt -it mjt128/scryer-prolog
+?- consult('/mnt/program.pl').
+true.
+```
 
 ## Tutorial
 
