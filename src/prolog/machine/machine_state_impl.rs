@@ -1597,7 +1597,8 @@ impl MachineState {
         );
     }
 
-    pub(super) fn handle_internal_call_n(&mut self, arity: usize) {
+    pub(super)
+    fn handle_internal_call_n(&mut self, arity: usize) {
         let arity = arity + 1;
         let pred = self.registers[1];
 
@@ -1613,7 +1614,8 @@ impl MachineState {
         self.fail = true;
     }
 
-    pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey> {
+    pub(super)
+    fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey> {
         let addr = self.store(self.deref(self.registers[arity]));
 
         let (name, narity) = match addr {
@@ -1623,7 +1625,7 @@ impl MachineState {
                 if let HeapCellValue::NamedStr(narity, name, _) = result {
                     let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
 
-                    if narity + arity > 63 {
+                    if narity + arity > MAX_ARITY {
                         let representation_error = self.error_form(
                             MachineError::representation_error(RepFlag::MaxArity),
                             stub,
@@ -2853,7 +2855,8 @@ impl MachineState {
         }
     }
 
-    pub(super) fn copy_term(&mut self, attr_var_policy: AttrVarPolicy) {
+    pub(super)
+    fn copy_term(&mut self, attr_var_policy: AttrVarPolicy) {
         let old_h = self.heap.h();
 
         let a1 = self[temp_v!(1)];
@@ -2865,7 +2868,8 @@ impl MachineState {
     }
 
     // returns true on failure.
-    pub(super) fn structural_eq_test(&self) -> bool {
+    pub(super)
+    fn structural_eq_test(&self) -> bool {
         let a1 = self[temp_v!(1)];
         let a2 = self[temp_v!(2)];
 
@@ -3158,7 +3162,8 @@ impl MachineState {
         self.last_call = false;
     }
 
-    pub(super) fn execute_ctrl_instr(
+    pub(super)
+    fn execute_ctrl_instr(
         &mut self,
         indices: &mut IndexStore,
         code_repo: &CodeRepo,

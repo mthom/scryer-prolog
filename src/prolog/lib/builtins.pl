@@ -69,7 +69,7 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
 
 % the maximum arity flag. needs to be replaced with
 % current_prolog_flag(max_arity, MAX_ARITY).
-max_arity(255).
+max_arity(1023).
 
 % unify.
 X = X.
