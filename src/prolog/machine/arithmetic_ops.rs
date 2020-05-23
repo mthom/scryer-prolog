@@ -398,7 +398,7 @@ impl MachineState {
 
         match (n1, n2) {
             (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                if n1 != 1 && n2 < -1 {
+                if !(n1 == 1 || n1 == 0 || n1 == -1) && n2 < 0 {
                     let n = Number::from(n1);
                     let stub = MachineError::functor_stub(clause_name!("^"), 2);
 
@@ -424,7 +424,7 @@ impl MachineState {
                 }
             }
             (Number::Fixnum(n1), Number::Integer(n2)) => {
-                if n1 != 1 && &*n2 < &-1 {
+                if (n1 == 1 || n1 == 0 || n1 == -1) && &*n2 < &0 {
                     let n = Number::from(n1);
                     let stub = MachineError::functor_stub(clause_name!("^"), 2);
 
@@ -442,7 +442,7 @@ impl MachineState {
                 }
             }
             (Number::Integer(n1), Number::Fixnum(n2)) => {
-                if &*n1 != &1 && n2 < -1 {
+                if !(&*n1 == &1 || &*n1 == &0 || &*n1 == &-1) && n2 < 0 {
                     let n = Number::Integer(n1);
                     let stub = MachineError::functor_stub(clause_name!("^"), 2);
 
@@ -460,7 +460,7 @@ impl MachineState {
                 }
             }
             (Number::Integer(n1), Number::Integer(n2)) => {
-                if &*n1 != &1 && &*n2 < &-1 {
+                if !(&*n1 == &1 || &*n1 == &0 || &*n1 == &-1) && &*n2 < &0 {
                     let n = Number::Integer(n1);
                     let stub = MachineError::functor_stub(clause_name!("^"), 2);
 
