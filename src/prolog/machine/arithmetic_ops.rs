@@ -269,6 +269,18 @@ impl MachineState {
                         caller,
                     ));
                 }
+                &HeapCellValue::Atom(ref name, _) => {
+                    let evaluable_stub = MachineError::functor_stub(name.clone(), 0);
+
+                    return Err(self.error_form(
+                        MachineError::type_error(
+                            self.heap.h(),
+                            ValidType::Evaluable,
+                            evaluable_stub,
+                        ),
+                        caller,
+                    ));
+                }
                 &HeapCellValue::Addr(addr) if addr.is_ref() => {
                     return Err(self.error_form(
                         MachineError::instantiation_error(),
