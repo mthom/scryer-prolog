@@ -43,6 +43,21 @@ impl TypeError for Addr {
     }
 }
 
+impl TypeError for HeapCellValue {
+    fn type_error(self, _: usize, valid_type: ValidType) -> MachineError {
+        let stub = functor!(
+            "type_error",
+            [atom(valid_type.as_str()), value(self)]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Received
+        }
+    }
+}
+
 impl TypeError for MachineStub {
     fn type_error(self, h: usize, valid_type: ValidType) -> MachineError {
         let stub = functor!(
@@ -502,7 +517,7 @@ pub enum ValidType {
     InCharacter,
     Integer,
     List,
-    //    Number,
+    Number,
     Pair,
     //    PredicateIndicator,
     //    Variable
@@ -525,7 +540,7 @@ impl ValidType {
             ValidType::InCharacter => "in_character",
             ValidType::Integer => "integer",
             ValidType::List => "list",
-            //            ValidType::Number => "number",
+            ValidType::Number => "number",
             ValidType::Pair => "pair",
             //            ValidType::PredicateIndicator => "predicate_indicator",
             //            ValidType::Variable => "variable"

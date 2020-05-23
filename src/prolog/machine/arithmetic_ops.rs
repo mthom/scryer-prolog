@@ -143,12 +143,10 @@ impl MachineState {
 
     pub(crate)
     fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, MachineStub> {
-        let a = self[r].clone();
-
         let caller = MachineError::functor_stub(clause_name!("(is)"), 2);
         let mut interms: Vec<Number> = Vec::with_capacity(64);
 
-        for addr in self.post_order_iter(a) {
+        for addr in self.post_order_iter(self[r]) {
             match self.heap.index_addr(&addr).as_ref() {
                 &HeapCellValue::NamedStr(2, ref name, _) => {
                     let a2 = interms.pop().unwrap();
@@ -241,10 +239,12 @@ impl MachineState {
                 &HeapCellValue::Atom(ref name, _) if name.as_str() == "pi" => {
                     interms.push(Number::Float(OrderedFloat(f64::consts::PI)))
                 }
-                _ => {
-                    return Err(self.error_form(
-                        MachineError::instantiation_error(),
-                        caller,
+                val => {
+                    return Err(self.type_error(
+                        ValidType::Number,
+                        val.context_free_clone(),
+                        clause_name!("(is)"),
+                        2,
                     ));
                 }
             }

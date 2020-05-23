@@ -121,6 +121,9 @@ macro_rules! functor_term {
     (atom($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
         HeapCellValue::Atom(clause_name!($e), None)
     );
+    (value($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
+        $e
+    );
     (string($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => ({
         let len: usize = $aux_lens.iter().sum();
         let h = len + $arity + 1 + $addendum.h() + $h;
