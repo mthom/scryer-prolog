@@ -571,34 +571,7 @@ impl MachineState {
             return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
         }
 
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                if let Ok(n2) = u32::try_from(n2) {
-                    if let Some(result) = n1.checked_pow(n2) {
-                        return Ok(Number::from(result));
-                    }
-                }
-
-                let n1 = Integer::from(n1);
-                let n2 = Integer::from(n2);
-
-                Ok(Number::from(binary_pow(n1, &n2)))
-            }
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                let n1 = Integer::from(n1);
-                Ok(Number::from(binary_pow(n1, n2.as_ref())))
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => {
-                let n2 = Integer::from(n2);
-                Ok(Number::from(binary_pow(n1.as_ref().clone(), &n2)))
-            }
-            (Number::Integer(n1), Number::Integer(n2)) => {
-                Ok(Number::from(binary_pow(n1.as_ref().clone(), &*n2)))
-            }
-            (n1, n2) => {
-                self.float_pow(n1, n2)
-            }
-        }
+        self.float_pow(n1, n2)
     }
 
     #[inline]
