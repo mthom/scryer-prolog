@@ -5,6 +5,8 @@ source industrial strength production environment that is also a
 testbed for bleeding edge research in logic and constraint
 programming, which is itself written in a high-level language.
 
+![Scryer Logo: Cryer](logo/scryer.png)
+
 ## Phase 1
 
 Produce an implementation of the Warren Abstract Machine in Rust, done
