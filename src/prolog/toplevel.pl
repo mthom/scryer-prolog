@@ -238,7 +238,11 @@ write_eqs_and_read_input(B, VarList) :-
     charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
     '$get_b_value'(B0),
     gather_query_vars(VarList, OrigVars),
-    gather_equations(NewVarList, OrigVars, Goals, AttrGoals),
+    gather_equations(NewVarList, OrigVars, Equations),
+    append(Equations, AttrGoals, Goals),
+    term_variables(Equations, EqVars0),
+    append([EqVars0, AttrVars, AttrGoalVars], Vars1),
+    charsio:extend_var_list(Vars1, VarList, NewVarList0, fabricated),
     (   bb_get('$first_answer', true) ->
         write('   '),
         bb_put('$first_answer', false)
@@ -248,13 +252,13 @@ write_eqs_and_read_input(B, VarList) :-
        (  Goals == [] ->
 	      write('true.'), nl
        ;  thread_goals(Goals, ThreadedGoals, (',')),
-	      write_eq(ThreadedGoals, NewVarList, 20),
+	      write_eq(ThreadedGoals, NewVarList0, 20),
 	      write('.'),
 	      nl
        )
     ;  thread_goals(Goals, ThreadedGoals, (',')),
-       write_eq(ThreadedGoals, NewVarList, 20),
-       read_input(ThreadedGoals, NewVarList)
+       write_eq(ThreadedGoals, NewVarList0, 20),
+       read_input(ThreadedGoals, NewVarList0)
     ).
 
 read_input(ThreadedGoals, NewVarList) :-
@@ -303,35 +307,30 @@ is_a_different_variable([_ = Binding | Pairs], Value) :-
 eq_member(X, [Y|_])  :- X == Y, !.
 eq_member(X, [_|Ys]) :- eq_member(X, Ys).
 
-gather_equations([], _, Goals, Goals).
-gather_equations([Var = Value | Pairs], OrigVarList, Goals, Goals1) :-
-    (  var(Value) ->
-       (  eq_member(Value, OrigVarList),
-          (  Pairs == [], NewPairs = []
-          ;  ( select((OtherVar = OtherValue), Pairs, NewPairs),
-               Value == OtherValue, Var \== OtherVar
-             )
-          )  ->
-             Goals = [Var = Value | Goals0],
-             gather_equations(NewPairs, OrigVarList, Goals0, Goals1)
-       ;  gather_equations(Pairs, OrigVarList, Goals, Goals1)
-       )
-    ;  Goals = [Var = Value | Goals0],
-       gather_equations(Pairs, OrigVarList, Goals0, Goals1)
+select_all([], _, _, [], []).
+select_all([OtherVar = OtherValue | Pairs], Var, Value, Vars, NewPairs) :-
+    (  OtherValue == Value ->
+       Vars = [OtherVar = OtherValue | Vars0],
+       select_all(Pairs, Var, Value, Vars0, NewPairs)
+    ;
+       NewPairs = [OtherVar = OtherValue | NewPairs0],
+       select_all(Pairs, Var, Value, Vars, NewPairs0)
     ).
 
-/*
-gather_equations([], MasterList, Goals, Goals).
-gather_equations([Var = Value | Pairs], MasterList, Goals, Goals1) :-
-    (  (  nonvar(Value)
-       ;  select((Var = _), MasterList, MasterPairs),
-          is_a_different_variable(MasterPairs, Value)
-       ) ->
+gather_equations([], _, []).
+gather_equations([Var = Value | Pairs], OrigVarList, Goals) :-
+    (  var(Value) ->
+       (  eq_member(Value, OrigVarList),
+          select_all(Pairs, Var, Value, [_ | VarEqs], NewPairs) ->
+          append([Var = Value | VarEqs], Goals0, Goals),
+          gather_equations(NewPairs, OrigVarList, Goals0)
+       ;
+          gather_equations(Pairs, OrigVarList, Goals)
+       )
+    ;
        Goals = [Var = Value | Goals0],
-       gather_equations(Pairs, MasterList, Goals0, Goals1)
-    ;  gather_equations(Pairs, MasterList, Goals, Goals1)
+       gather_equations(Pairs, OrigVarList, Goals0)
     ).
-*/
 
 print_exception(E) :-
     (  E == error('$interrupt_thrown', repl) -> nl % print the
@@ -476,4 +475,3 @@ thread_goals(Goals0, Goals1, Functor) :-
        )
     ;  Goals1 = Goals0
     ).
-
