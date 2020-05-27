@@ -240,9 +240,7 @@ write_eqs_and_read_input(B, VarList) :-
     gather_query_vars(VarList, OrigVars),
     gather_equations(NewVarList, OrigVars, Equations),
     append(Equations, AttrGoals, Goals),
-    term_variables(Equations, EqVars0),
-    append([EqVars0, AttrVars, AttrGoalVars], Vars1),
-    charsio:extend_var_list(Vars1, VarList, NewVarList0, fabricated),
+    charsio:extend_var_list(AttrGoalVars, VarList, NewVarList0, fabricated),
     (   bb_get('$first_answer', true) ->
         write('   '),
         bb_put('$first_answer', false)
