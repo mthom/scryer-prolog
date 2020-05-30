@@ -234,13 +234,15 @@ write_eqs_and_read_input(B, VarList) :-
     '$term_attributed_variables'(VarList, AttrVars),
     copy_term(AttrVars, AttrVars, AttrGoals),
     term_variables(AttrGoals, AttrGoalVars),
-    append([Vars0, AttrVars, AttrGoalVars], Vars),
+    append([Vars0, AttrGoalVars, AttrVars], Vars),
     charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
     '$get_b_value'(B0),
     gather_query_vars(VarList, OrigVars),
     gather_equations(NewVarList, OrigVars, Equations),
     append(Equations, AttrGoals, Goals),
-    charsio:extend_var_list(AttrGoalVars, VarList, NewVarList0, fabricated),
+    term_variables(Equations, EquationVars),
+    append([AttrGoalVars, EquationVars], Vars1),
+    charsio:extend_var_list(Vars1, VarList, NewVarList0, fabricated),
     (   bb_get('$first_answer', true) ->
         write('   '),
         bb_put('$first_answer', false)
@@ -293,7 +295,8 @@ gather_query_vars([_ = Var | Vars], QueryVars) :-
     (  var(Var) ->
        QueryVars = [Var | QueryVars0],
        gather_query_vars(Vars, QueryVars0)
-    ;  gather_query_vars(Vars, QueryVars)
+    ;
+       gather_query_vars(Vars, QueryVars)
     ).
 gather_query_vars([], []).
 
