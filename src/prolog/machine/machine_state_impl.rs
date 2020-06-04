@@ -689,7 +689,7 @@ impl MachineState {
             &mut HeapPtr::PStrChar(h, ref mut n) |
             &mut HeapPtr::PStrLocation(h, ref mut n) => {
                 match &self.heap[h] {
-                    HeapCellValue::PartialString(ref pstr, _) => {
+                    &HeapCellValue::PartialString(ref pstr, _) => {
                         for c in pstr.range_from(*n ..).take(rhs) {
                             *n += c.len_utf8();
                         }
@@ -697,7 +697,6 @@ impl MachineState {
                         self.s = HeapPtr::PStrLocation(h, *n);
                     }
                     _ => {
-                        unreachable!()
                     }
                 }
             }
