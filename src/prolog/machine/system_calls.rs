@@ -830,19 +830,10 @@ impl MachineState {
                     }
                     Addr::Con(h) if self.heap.atom_at(h) => {
 	                    if let HeapCellValue::Atom(name, _) = self.heap.clone(h) {
-                            let iter = name.as_str().chars().map(|c| Addr::Char(c));
-                            let list_of_chars = Addr::HeapCell(self.heap.to_list(iter));
-
+                            let s  = self.heap.put_complete_string(name.as_str());
                             let a2 = self[temp_v!(2)];
 
-                            match self.store(self.deref(a2)) {
-                                Addr::PStrLocation(..) => {
-                                    self.fail = true;
-                                }
-                                a2 => {
-                                    self.unify(a2, list_of_chars);
-                                }
-                            }
+                            self.unify(s, a2);
                         } else {
                             unreachable!()
                         }
