@@ -185,20 +185,14 @@ impl MachineState {
             }
             Addr::Con(h) if max_steps > 0 => {
                 if let HeapCellValue::PartialString(..) = &self.heap[h] {
-                    if !self.flags.double_quotes.is_atom() {
-                        Addr::PStrLocation(h, 0)
-                    } else {
-                        return CycleSearchResult::NotList;
-                    }
+                    Addr::PStrLocation(h, 0)
                 } else {
                     return CycleSearchResult::NotList;
                 }
             }
             Addr::Con(h) => {
                 if let HeapCellValue::PartialString(..) = &self.heap[h] {
-                    if !self.flags.double_quotes.is_atom() {
-                        return CycleSearchResult::UntouchedList(h);
-                    }
+                    return CycleSearchResult::UntouchedList(h);
                 }
 
                 return CycleSearchResult::NotList;
@@ -236,11 +230,7 @@ impl MachineState {
             }
             Addr::Con(h) => {
                 if let HeapCellValue::PartialString(..) = &self.heap[h] {
-                    if !self.flags.double_quotes.is_atom() {
-                        Addr::PStrLocation(h, 0)
-                    } else {
-                        return CycleSearchResult::NotList;
-                    }
+                    Addr::PStrLocation(h, 0)
                 } else {
                     return CycleSearchResult::NotList;
                 }
@@ -846,10 +836,9 @@ impl MachineState {
                             let a2 = self[temp_v!(2)];
 
                             match self.store(self.deref(a2)) {
-                                Addr::PStrLocation(..)
-                                    if !self.flags.double_quotes.is_chars() => {
-                                        self.fail = true;
-                                    }
+                                Addr::PStrLocation(..) => {
+                                    self.fail = true;
+                                }
                                 a2 => {
                                     self.unify(a2, list_of_chars);
                                 }
@@ -918,35 +907,17 @@ impl MachineState {
                         self.unify(a2, list_of_codes);
                     }
                     Addr::Con(h) if self.heap.atom_at(h) => {
-	                if let HeapCellValue::Atom(name, _) = self.heap.clone(h) {
-                            let a2 = self[temp_v!(2)];
+	                    if let HeapCellValue::Atom(name, _) = self.heap.clone(h) {
+                            let a2 = self.store(self.deref(self[temp_v!(2)]));
 
-                            match self.store(self.deref(a2)) {
-                                a2 @ Addr::PStrLocation(..) => {
-                                    if !self.flags.double_quotes.is_codes() {
-                                        self.fail = true;
-                                    } else {
-                                        let iter = name
-                                            .as_str()
-                                            .chars()
-                                            .map(|c| Addr::Char(c));
+                            let iter = name
+                                .as_str()
+                                .chars()
+                                .map(|c| Addr::Fixnum(c as isize));
 
-                                        let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
+                            let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
 
-                                        self.unify(a2, list_of_codes);
-                                    }
-                                }
-                                a2 => {
-                                    let iter = name
-                                        .as_str()
-                                        .chars()
-                                        .map(|c| Addr::Fixnum(c as isize));
-
-                                    let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
-
-                                    self.unify(a2, list_of_codes);
-                                }
-                            }
+                            self.unify(a2, list_of_codes);
                         } else {
                             unreachable!()
                         }

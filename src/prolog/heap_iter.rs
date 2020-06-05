@@ -93,21 +93,19 @@ impl<'a> HCPreOrderIterator<'a> {
             }
             Addr::Con(h) => {
                 if let &HeapCellValue::PartialString(ref pstr, has_tail) = &self.machine_st.heap[h] {
-                    if !self.machine_st.flags.double_quotes.is_atom() {
-                        return if let Some(c) = pstr.range_from(0 ..).next() {
-                            self.state_stack.push(Addr::PStrLocation(h, c.len_utf8()));
-                            self.state_stack.push(Addr::Char(c));
+                    if let Some(c) = pstr.range_from(0 ..).next() {
+                        self.state_stack.push(Addr::PStrLocation(h, c.len_utf8()));
+                        self.state_stack.push(Addr::Char(c));
 
-                            Addr::PStrLocation(h, 0)
-                        } else if has_tail {
-                            self.follow(Addr::HeapCell(h + 1))
-                        } else {
-                            Addr::EmptyList
-                        };
+                        Addr::PStrLocation(h, 0)
+                    } else if has_tail {
+                        self.follow(Addr::HeapCell(h + 1))
+                    } else {
+                        Addr::EmptyList
                     }
+                } else {
+                    Addr::Con(h)
                 }
-
-                Addr::Con(h)
             }
             da => {
                 da

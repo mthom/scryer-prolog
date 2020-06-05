@@ -1173,7 +1173,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let at_cdr = self.at_cdr(",");
 
         if !at_cdr && Addr::EmptyList == end_addr {
-            if self.machine_st.flags.double_quotes.is_chars() && !self.ignore_ops {
+            if !self.ignore_ops {
                 self.print_proper_string(buf, max_depth);
                 return;
             }
@@ -1190,18 +1190,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let mut byte_len = 0;
 
-        let char_printer = |printer: &mut Self, c| {
-            if printer.machine_st.flags.double_quotes.is_codes() {
-                let s = (c as u32).to_string();
-
-                push_space_if_amb!(printer, &s, {
-                    printer.append_str(&s);
-                });
-            } else {
-                printer.print_char(printer.quoted, c);
-            }
-        };
-
         if self.ignore_ops {
             let mut char_count = 0;
 
@@ -1209,7 +1197,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.append_str("'.'");
                 self.push_char('(');
 
-                char_printer(self, c);
+                self.print_char(self.quoted, c);
                 self.push_char(',');
 
                 char_count += 1;
@@ -1235,7 +1223,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             };
 
             for c in buf_iter {
-                char_printer(self, c);
+                self.print_char(self.quoted, c);
                 self.push_char(',');
 
                 byte_len += c.len_utf8();

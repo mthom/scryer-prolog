@@ -818,7 +818,7 @@ impl MachineState {
 
                         self.bind(addr.as_var().unwrap(), pstr_addr);
                     }
-                    Addr::Lis(l) if !self.flags.double_quotes.is_atom() => {
+                    Addr::Lis(l) => {
                         let h = self.heap.h();
 
                         let pstr_addr =
@@ -920,7 +920,7 @@ impl MachineState {
                     self.fail = true;
                 }
             }
-            Addr::Lis(l) if !self.flags.double_quotes.is_atom() => {
+            Addr::Lis(l) => {
                 let addr = self.heap.put_constant(c.clone());
                 self.unify(Addr::Lis(l), addr);
             }
@@ -1404,11 +1404,7 @@ impl MachineState {
                         v
                     }
                     Addr::PStrLocation(..) => {
-                        if !self.flags.double_quotes.is_atom() {
-                            l
-                        } else {
-                            c
-                        }
+                        l
                     }
                     Addr::Char(_) | Addr::Con(_) | Addr::CutPoint(_) |
                     Addr::EmptyList | Addr::Fixnum(_) | Addr::Float(_) | Addr::Usize(_) => {
@@ -1884,11 +1880,10 @@ impl MachineState {
                         unreachable!()
                     }
                 }
-                (Addr::PStrLocation(..), Addr::Lis(_))
-              | (Addr::Lis(_), Addr::PStrLocation(..))
-                    if !self.flags.double_quotes.is_atom() => {
-                        continue;
-                    }
+                (Addr::PStrLocation(..), Addr::Lis(_)) |
+                (Addr::Lis(_), Addr::PStrLocation(..)) => {
+                    continue;
+                }
                 (pstr1 @ Addr::PStrLocation(..), pstr2 @ Addr::PStrLocation(..)) => {
                     let mut i1 = self.heap_pstr_iter(pstr1);
                     let mut i2 = self.heap_pstr_iter(pstr2);
@@ -2248,7 +2243,7 @@ impl MachineState {
                         (
                             Addr::PStrLocation(..),
                             Addr::Lis(_),
-                        ) if !self.flags.double_quotes.is_atom() => {
+                        ) => {
                         }
                         (
                             Addr::Lis(_),
@@ -2277,7 +2272,7 @@ impl MachineState {
                         (
                             Addr::PStrLocation(..),
                             Addr::Str(s),
-                        ) if !self.flags.double_quotes.is_atom() => {
+                        ) => {
                             if let &HeapCellValue::NamedStr(a1, ref n1, _) = &self.heap[s] {
                                 if a1 != 2 || n1.as_str() != "." {
                                     return Some(a1.cmp(&2).then_with(|| n1.as_str().cmp(".")));
@@ -2289,7 +2284,7 @@ impl MachineState {
                         (
                             Addr::Str(s),
                             Addr::PStrLocation(..),
-                        ) if !self.flags.double_quotes.is_atom() => {
+                        ) => {
                             if let &HeapCellValue::NamedStr(a1, ref n1, _) = &self.heap[s] {
                                 if a1 != 2 || n1.as_str() != "." {
                                     return Some(2.cmp(&a1).then_with(|| ".".cmp(n1.as_str())));
@@ -2375,14 +2370,7 @@ impl MachineState {
                         }
                     }
                     _ => {
-                        match d {
-                            Addr::Char(_) if self.flags.double_quotes.is_codes() => {
-                                self.p += 1;
-                            }
-                            _ => {
-                                self.fail = true;
-                            }
-                        }
+                        self.fail = true;
                     }
                 }
             }
@@ -2888,7 +2876,7 @@ impl MachineState {
                 | (
                     HeapCellValue::Addr(Addr::PStrLocation(..)),
                     HeapCellValue::Addr(Addr::Lis(_)),
-                ) if !self.flags.double_quotes.is_atom() => {
+                ) => {
                 }
                 (
                     HeapCellValue::NamedStr(ar1, n1, _),
