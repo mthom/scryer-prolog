@@ -158,7 +158,7 @@ element_gluevar(glue(_,V), N, N) --> [V].
 
 cells([], Args, Tab, Es) -->
         (   { Args == [] } -> cell(Tab, Tab, Es)
-        ;   { domain_error(no_remaining_arguments, Args, format_//2) }
+        ;   { domain_error(empty_list, Args, format_//2) }
         ).
 cells([~,~|Fs], Args, Tab, Es) --> !,
         cells(Fs, Args, Tab, [chars("~")|Es]).
