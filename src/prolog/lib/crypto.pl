@@ -718,6 +718,7 @@ crypto_curve_generator(curve(_,_,_,_,G,_,_,_), G).
 crypto_curve_order(curve(_,_,_,_,_,Order,_,_), Order).
 
 crypto_curve_scalar_mult(Curve, Scalar, point(X,Y), point(RX, RY)) :-
+        must_be(integer, Scalar),
         must_be_on_curve(Curve, point(X,Y)),
         curve_name(Curve, Name),
         curve_field_length(Curve, L0),
