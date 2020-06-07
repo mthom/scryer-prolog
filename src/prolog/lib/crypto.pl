@@ -689,7 +689,7 @@ ed25519_verify(Key0, Data0, Signature0, Options) :-
 
    Sample use: Establishing a shared secret S, using ECDH key exchange.
 
-    ?- crypto_name_curve(Name, C),
+    ?- crypto_name_curve(secp256k1, C),
        crypto_curve_generator(C, Generator),
        PrivateKey = 10,
        crypto_curve_scalar_mult(C, PrivateKey, Generator, PublicKey),
