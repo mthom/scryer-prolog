@@ -45,6 +45,10 @@ use ripemd160::{Ripemd160, Digest};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 use blake2::{Blake2s, Blake2b};
 
+use openssl::ec::{EcGroup, EcPoint};
+use openssl::bn::{BigNum, BigNumContext};
+use openssl::nid::Nid;
+
 pub fn get_key() -> KeyEvent {
     let key;
     enable_raw_mode().expect("failed to enable raw mode");
@@ -5440,6 +5444,55 @@ impl MachineState {
                       };
 
                 self.unify(self[temp_v!(5)], complete_string);
+            }
+            &SystemClauseType::CryptoCurveScalarMult => {
+                let curve = match self.store(self.deref(self[temp_v!(1)])) {
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                            atom.as_str()
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                };
+                let curve_id = match curve {
+                                  "secp112r1" => { Nid::SECP112R1 }
+                                  "secp256k1" => { Nid::SECP256K1 }
+                                  _ => { unreachable!() }
+                               };
+
+                let scalar =
+                    match Number::try_from((self[temp_v!(2)], &self.heap)) {
+                        Ok(Number::Fixnum(n)) => {
+                            Integer::from(n)
+                        }
+                        Ok(Number::Integer(n)) => {
+                            Integer::from(&*n.clone())
+                        }
+                        _ => { unreachable!() }
+                    };
+
+                let stub = MachineError::functor_stub(clause_name!("crypto_curve_scalar_mult"), 5);
+                let qbytes = self.integers_to_bytevec(temp_v!(3), stub);
+
+                let mut bnctx = BigNumContext::new().unwrap();
+                let group = EcGroup::from_curve_name(curve_id).unwrap();
+                let mut point = EcPoint::from_bytes(&group, &qbytes, &mut bnctx).unwrap();
+                let scalar_bn = BigNum::from_dec_str(&scalar.to_string()).unwrap();
+                let mut result = EcPoint::new(&group).unwrap();
+                result.mul(&group, &mut point, &scalar_bn, &mut bnctx).ok();
+
+                let mut rx = BigNum::new().unwrap();
+                let mut ry = BigNum::new().unwrap();
+                result.affine_coordinates_gfp(&group, &mut rx, &mut ry, &mut bnctx).ok();
+                let sx = self.heap.put_complete_string(&rx.to_dec_str().unwrap().to_string());
+                let sy = self.heap.put_complete_string(&ry.to_dec_str().unwrap().to_string());
+
+                self.unify(self[temp_v!(4)], sx);
+                self.unify(self[temp_v!(5)], sy);
             }
             &SystemClauseType::Ed25519NewKeyPair => {
                 let pkcs8_bytes = signature::Ed25519KeyPair::generate_pkcs8(rng()).unwrap();

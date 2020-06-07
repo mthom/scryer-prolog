@@ -684,51 +684,12 @@ ed25519_verify(Key0, Data0, Signature0, Options) :-
         '$ed25519_verify'(Key, Data, Signature).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Modular multiplicative inverse.
-
-   Compute Y = X^(-1) mod p, using the extended Euclidean algorithm.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-multiplicative_inverse_modulo_p(X, P, Y) :-
-        eea(X, P, _, _, Y),
-        R #= X*Y mod P,
-        zcompare(C, 1, R),
-        must_be_one(C, X, P, Y).
-
-must_be_one(=, _, _, _).
-must_be_one(>, X, P, Y) :- throw(multiplicative_inverse_modulo_p(X,P,Y)).
-must_be_one(<, X, P, Y) :- throw(multiplicative_inverse_modulo_p(X,P,Y)).
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Extended Euclidean algorithm.
-
-   Computes the GCD and the Bézout coefficients S and T.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-eea(I, J, G, S, T) :-
-        State0 = state(1,0,0,1),
-        eea_loop(I, J, State0, G, S, T).
-
-eea_loop(I, J, State0, G, S, T) :-
-        zcompare(C, 0, J),
-        eea_(C, I, J, State0, G, S, T).
-
-eea_(=, I, _, state(_,_,U,V), I, U, V).
-eea_(<, I0, J0, state(S0,T0,U0,V0), I, U, V) :-
-        Q #= I0 // J0,
-        R #= I0 mod J0,
-        S1 #= U0 - (Q*S0),
-        T1 #= V0 - (Q*T0),
-        eea_loop(J0, R, state(S1,T1,S0,T0), I, U, V).
-
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Operations on Elliptic Curves
    =============================
 
    Sample use: Establishing a shared secret S, using ECDH key exchange.
 
-    ?- crypto_name_curve(Name, C),
+    ?- crypto_name_curve(secp256k1, C),
        crypto_curve_generator(C, Generator),
        PrivateKey = 10,
        crypto_curve_scalar_mult(C, PrivateKey, Generator, PublicKey),
@@ -742,89 +703,37 @@ eea_(<, I0, J0, state(S0,T0,U0,V0), I, U, V) :-
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    An elliptic curve over a prime field F_p is represented as:
 
-   curve(P,A,B,point(X,Y),Order,Cofactor).
+   curve(Name,P,A,B,point(X,Y),Order,FieldLength,Cofactor).
 
    First, we define suitable accessors.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-curve_p(curve(P,_,_,_,_,_), P).
-curve_a(curve(_,A,_,_,_,_), A).
-curve_b(curve(_,_,B,_,_,_), B).
+curve_name(curve(Name,_,_,_,_,_,_,_), Name).
+curve_p(curve(_,P,_,_,_,_,_,_), P).
+curve_a(curve(_,_,A,_,_,_,_,_), A).
+curve_b(curve(_,_,_,B,_,_,_,_), B).
+curve_field_length(curve(_,_,_,_,_,_,FieldLength,_), FieldLength).
 
-crypto_curve_order(curve(_,_,_,_,Order,_), Order).
-crypto_curve_generator(curve(_,_,_,G,_,_), G).
+crypto_curve_generator(curve(_,_,_,_,G,_,_,_), G).
+crypto_curve_order(curve(_,_,_,_,_,Order,_,_), Order).
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Scalar point multiplication.
-
-   R = k*Q.
-
-   The Montgomery ladder method is used to mitigate side-channel
-   attacks such as timing attacks, since the number of multiplications
-   and additions is independent of the private key K. This method does
-   not even reveal the key's Hamming weight (number of 1s).
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-crypto_curve_scalar_mult(Curve, K, Q, R) :-
-        msb(K, Upper),
-        scalar_multiplication(Curve, K, Upper, ml(null,Q)-R),
-        must_be_on_curve(Curve, R).
-
-scalar_multiplication(Curve, K, I, R0-R) :-
-        zcompare(C, -1, I),
-        scalar_mult_(C, Curve, K, I, R0-R).
-
-scalar_mult_(=, _, _, _, ml(R,_)-R).
-scalar_mult_(<, Curve, K, I0, ML0-R) :-
-        BitSet #= K /\ (1 << I0),
-        zcompare(C, 0, BitSet),
-        montgomery_step(C, Curve, ML0, ML1),
-        I1 #= I0 - 1,
-        scalar_multiplication(Curve, K, I1, ML1-R).
-
-montgomery_step(=, Curve, ml(R0,S0), ml(R,S)) :-
-        curve_points_addition(Curve, R0, S0, S),
-        curve_point_double(Curve, R0, R).
-montgomery_step(<, Curve, ml(R0,S0), ml(R,S)) :-
-        curve_points_addition(Curve, R0, S0, R),
-        curve_point_double(Curve, S0, S).
+crypto_curve_scalar_mult(Curve, Scalar, point(X,Y), point(RX, RY)) :-
+        must_be(integer, Scalar),
+        must_be_on_curve(Curve, point(X,Y)),
+        curve_name(Curve, Name),
+        curve_field_length(Curve, L0),
+        L #= 2*L0, % for hex encoding
+        phrase(format_("04~|~`0t~16r~*+~`0t~16r~*+", [X,L,Y,L]), Hex),
+        hex_bytes(Hex, Bytes),
+        '$crypto_curve_scalar_mult'(Name, Scalar, Bytes, SX, SY),
+        number_chars(RX, SX),
+        number_chars(RY, SY).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Doubling a point: R = A + A.
+?- crypto_name_curve(secp256k1, Curve),
+   crypto_curve_generator(Curve, G),
+   crypto_curve_scalar_mult(Curve, 2, G, R).
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-curve_point_double(_, null, null).
-curve_point_double(Curve, point(AX,AY), R) :-
-        curve_p(Curve, P),
-        curve_a(Curve, A),
-        Numerator #= (3*AX^2 + A) mod P,
-        Denom0 #= 2*AY mod P,
-        multiplicative_inverse_modulo_p(Denom0, P, Denom),
-        S #= (Numerator*Denom) mod P,
-        R = point(RX,RY),
-        RX #= (S^2 - 2*AX) mod P,
-        RY #= (S*(AX - RX) - AY) mod P,
-        must_be_on_curve(Curve, R).
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Adding two points.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-curve_points_addition(Curve, P, Q, R) :-
-        curve_points_addition_(P, Curve, Q, R).
-
-curve_points_addition_(null, _, P, P).
-curve_points_addition_(P, _, null, P).
-curve_points_addition_(point(AX,AY), Curve, point(BX,BY), R) :-
-        curve_p(Curve, P),
-        Numerator #= (AY - BY) mod P,
-        Denom0 #= (AX - BX) mod P,
-        multiplicative_inverse_modulo_p(Denom0, P, Denom),
-        S #= (Numerator * Denom) mod P,
-        R = point(RX,RY),
-        RX #= (S^2 - AX - BX) mod P,
-        RY #= (S*(AX - RX) - AY) mod P,
-        must_be_on_curve(Curve, R).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Validation.
@@ -838,7 +747,7 @@ curve_contains_point(Curve, point(QX,QY)) :-
 
 must_be_on_curve(Curve, P) :-
         \+ curve_contains_point(Curve, P),
-        throw(not_on_curve(P)).
+        domain_error(point_on_curve, P, crypto_elliptic_curves).
 must_be_on_curve(Curve, P) :- curve_contains_point(Curve, P).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -855,21 +764,38 @@ must_be_on_curve(Curve, P) :- curve_contains_point(Curve, P).
                      -text -no_seed -name secp256k1
 
    You must remove the leading "04:" from the generator.
+
+   The field length depends on the order of the curve and can be computed
+   with order_field_length/2.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+order_field_length(Order, L) :-
+        fitting_exponent(Order, 0, E),
+        L #= (E + 7) // 8.
+
+fitting_exponent(N, E0, E) :-
+        (   2^E0 #>= N -> E #= E0
+        ;   E1 #= E0 + 1,
+            fitting_exponent(N, E1, E)
+        ).
+
 crypto_name_curve(secp112r1,
-                  curve(0x00db7c2abf62e35e668076bead208b,
+                  curve(secp112r1,
+                        0x00db7c2abf62e35e668076bead208b,
                         0x00db7c2abf62e35e668076bead2088,
                         0x659ef8ba043916eede8911702b22,
                         point(0x09487239995a5ee76b55f9c2f098,
                               0xa89ce5af8724c0a23e0e0ff77500),
                         0x00db7c2abf62e35e7628dfac6561c5,
+                        14,
                         1)).
 crypto_name_curve(secp256k1,
-                  curve(0x00fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f,
+                  curve(secp256k1,
+                        0x00fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f,
                         0x0,
                         0x7,
                         point(0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
                               0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8),
                         0x00fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141,
+                        32,
                         1)).
