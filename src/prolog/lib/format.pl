@@ -172,9 +172,11 @@ cells([~,a|Fs], [Arg|Args], Tab, Es) --> !,
         { atom_chars(Arg, Chars) },
         cells(Fs, Args, Tab, [chars(Chars)|Es]).
 cells([~|Fs0], Args0, Tab, Es) -->
-        { numeric_argument(Fs0, Num, [d|Fs], Args0, [Arg|Args]) },
+        { numeric_argument(Fs0, Num, [d|Fs], Args0, [Arg0|Args]) },
         !,
-        { format_number_chars(Arg, Cs0) },
+        { Arg is Arg0, % evaluate compound expression
+          must_be(integer, Arg),
+          number_chars(Arg, Cs0) },
         (   { Num =:= 0 } -> { Cs = Cs0 }
         ;   { length(Cs0, L),
               (   L =< Num ->
