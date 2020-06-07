@@ -6,7 +6,16 @@
                     current_hostname/1]).
 
 :- use_module(library(error)).
+:- use_module(library(lists)).
 
+parse_socket_options_(tls(TLS), tls-TLS) :-
+    must_be(boolean, TLS), !.
+parse_socket_options_(Option, OptionPair) :-
+    builtins:parse_stream_options_(Option, OptionPair).
+
+parse_socket_options(Options, OptionValues, Stub) :-
+    DefaultOptions = [alias-[], eof_action-eof_code, reposition-false, tls-false, type-text],
+    builtins:parse_options_list(Options, parse_socket_options_, DefaultOptions, OptionValues, Stub).
 
 socket_client_open(Addr, Stream, Options) :-
     (  var(Addr) ->
@@ -23,10 +32,10 @@ socket_client_open(Addr, Stream, Options) :-
     ;
        throw(error(type_error(socket_address, Addr), socket_client_open/3))
     ),
-    builtins:parse_stream_options(Options,
-                                  [Alias, EOFAction, Reposition, Type],
-                                  socket_client_open/3),
-    '$socket_client_open'(Address, Port, Stream, Alias, EOFAction, Reposition, Type).
+    parse_socket_options(Options,
+                         [Alias, EOFAction, Reposition, TLS, Type],
+                         socket_client_open/3),
+    '$socket_client_open'(Address, Port, Stream, Alias, EOFAction, Reposition, Type, TLS).
 
 
 socket_server_open(Addr, ServerSocket) :-
