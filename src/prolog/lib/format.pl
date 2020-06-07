@@ -158,7 +158,7 @@ element_gluevar(glue(_,V), N, N) --> [V].
 
 cells([], Args, Tab, Es) -->
         (   { Args == [] } -> cell(Tab, Tab, Es)
-        ;   { domain_error(no_remaining_arguments, Args, format_//2) }
+        ;   { domain_error(empty_list, Args, format_//2) }
         ).
 cells([~,~|Fs], Args, Tab, Es) --> !,
         cells(Fs, Args, Tab, [chars("~")|Es]).
@@ -172,9 +172,11 @@ cells([~,a|Fs], [Arg|Args], Tab, Es) --> !,
         { atom_chars(Arg, Chars) },
         cells(Fs, Args, Tab, [chars(Chars)|Es]).
 cells([~|Fs0], Args0, Tab, Es) -->
-        { numeric_argument(Fs0, Num, [d|Fs], Args0, [Arg|Args]) },
+        { numeric_argument(Fs0, Num, [d|Fs], Args0, [Arg0|Args]) },
         !,
-        { number_chars(Arg, Cs0) },
+        { Arg is Arg0, % evaluate compound expression
+          must_be(integer, Arg),
+          number_chars(Arg, Cs0) },
         (   { Num =:= 0 } -> { Cs = Cs0 }
         ;   { length(Cs0, L),
               (   L =< Num ->
@@ -216,12 +218,12 @@ cells([~|Fs0], Args0, Tab, Es) -->
 cells([~,s|Fs], [Arg|Args], Tab, Es) --> !,
         cells(Fs, Args, Tab, [chars(Arg)|Es]).
 cells([~,f|Fs], [Arg|Args], Tab, Es) --> !,
-        { number_chars(Arg, Chars) },
+        { format_number_chars(Arg, Chars) },
         cells(Fs, Args, Tab, [chars(Chars)|Es]).
 cells([~|Fs0], Args0, Tab, Es) -->
         { numeric_argument(Fs0, Num, [f|Fs], Args0, [Arg|Args]) },
         !,
-        { number_chars(Arg, Cs0),
+        { format_number_chars(Arg, Cs0),
           phrase(upto_what(Bs, .), Cs0, Cs),
           (   Num =:= 0 -> Chars = Bs
           ;   (   Cs = ['.'|Rest] ->
@@ -279,6 +281,10 @@ cells(Fs0, Args, Tab, Es) -->
           Fs1 = [_|_] },
         cells(Fs, Args, Tab, [chars(Fs1)|Es]).
 
+format_number_chars(N0, Chars) :-
+        N is N0, % evaluate compound expression
+        number_chars(N, Chars).
+
 n_newlines(0) --> !.
 n_newlines(N0) --> { N0 > 0, N is N0 - 1 }, [newline], n_newlines(N).
 
@@ -327,7 +333,8 @@ pow10(D, N0-Pow0, N-Pow) :-
         N is N0 + D*10^Pow0,
         Pow is Pow0 + 1.
 
-integer_to_radix(I, R, Which, Cs) :-
+integer_to_radix(I0, R, Which, Cs) :-
+        I is I0, % evaluate compound expression
         must_be(integer, I),
         must_be(integer, R),
         (   \+ between(2, 36, R) ->
