@@ -41,3 +41,4 @@ ring = "0.16.13"
 ripemd160 = "0.8.0"
 sha3 = "0.8.2"
 blake2 = "0.8.1"
+openssl = { version = "0.10.29", features = ["vendored"] }
