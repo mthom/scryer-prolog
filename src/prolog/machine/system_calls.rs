@@ -4536,7 +4536,10 @@ impl MachineState {
                                 match tls {
                                   "false" => { Stream::from_tcp_stream(socket_addr, tcp_stream) }
                                   "true" => { let connector = TlsConnector::new().unwrap();
-                                              let stream = connector.connect(socket_atom.as_str(), tcp_stream).unwrap();
+                                              let stream = match connector.connect(socket_atom.as_str(), tcp_stream) {
+                                                    Ok(tls_stream) => { tls_stream }
+                                                    Err(_) => { return Err(self.open_permission_error(addr, "socket_client_open", 3)); }
+                                                   };
 
                                               Stream::from_tls_stream(socket_addr, stream)
                                             }
