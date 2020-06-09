@@ -27,7 +27,8 @@
 
        - integer
        - atom
-       - list.
+       - list
+       - boolean
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 must_be(Type, Term) :-
@@ -45,12 +46,15 @@ must_be_(integer, Term) :- check_(integer, integer, Term).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
 must_be_(list, Term)    :- check_(ilist, list, Term).
 must_be_(type, Term)    :- check_(type, type, Term).
+must_be_(boolean, Term) :- check_(boolean, boolean, Term).
 
 check_(Pred, Type, Term) :-
         (   var(Term) -> instantiation_error(must_be/2)
         ;   call(Pred, Term) -> true
         ;   type_error(Type, Term, must_be/2)
         ).
+
+boolean(B) :- ( B == true ; B == false ).
 
 ilist(V) :- var(V), instantiation_error(must_be/2).
 ilist([]).
@@ -61,6 +65,7 @@ type(integer).
 type(atom).
 type(list).
 type(var).
+type(boolean).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    can_be(Type, Term)
@@ -86,6 +91,7 @@ can_be(Type, Term) :-
 can_(integer, Term) :- integer(Term).
 can_(atom, Term)    :- atom(Term).
 can_(list, Term)    :- list_or_partial_list(Term).
+can_(boolean, Term) :- boolean(Term).
 
 list_or_partial_list(Var) :- var(Var).
 list_or_partial_list([]).

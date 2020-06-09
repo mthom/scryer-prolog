@@ -49,6 +49,8 @@ use openssl::ec::{EcGroup, EcPoint};
 use openssl::bn::{BigNum, BigNumContext};
 use openssl::nid::Nid;
 
+use native_tls::TlsConnector;
+
 pub fn get_key() -> KeyEvent {
     let key;
     enable_raw_mode().expect("failed to enable raw mode");
@@ -4517,7 +4519,30 @@ impl MachineState {
                         Ok(tcp_stream) => {
                             let socket_addr = clause_name!(socket_addr, indices.atom_tbl.clone());
 
-                            let mut stream = Stream::from_tcp_stream(socket_addr, tcp_stream);
+
+                            let mut stream =
+                              { let tls = match self.store(self.deref(self[temp_v!(8)])) {
+                                    Addr::Con(h) if self.heap.atom_at(h) => {
+                                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                                            atom.as_str()
+                                        } else {
+                                            unreachable!()
+                                        }
+                                    }
+                                    _ => {
+                                        unreachable!()
+                                    }
+                                };
+                                match tls {
+                                  "false" => { Stream::from_tcp_stream(socket_addr, tcp_stream) }
+                                  "true" => { let connector = TlsConnector::new().unwrap();
+                                              let stream = connector.connect(socket_atom.as_str(), tcp_stream).unwrap();
+
+                                              Stream::from_tls_stream(socket_addr, stream)
+                                            }
+                                   _ => { unreachable!() }
+                                }
+                              };
                             stream.options = options;
 
                             if let Some(ref alias) = &stream.options.alias {

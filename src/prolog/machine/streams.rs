@@ -17,6 +17,8 @@ use std::net::{Shutdown, TcpStream};
 use std::ops::DerefMut;
 use std::rc::Rc;
 
+use native_tls::TlsStream;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StreamType {
     Binary,
@@ -101,6 +103,7 @@ pub enum StreamInstance {
     ReadlineStream(ReadlineStream),
     Stdout,
     TcpStream(ClauseName, TcpStream),
+    TlsStream(ClauseName, TlsStream<TcpStream>)
 }
 
 impl Drop for StreamInstance {
@@ -108,6 +111,9 @@ impl Drop for StreamInstance {
         match self {
             StreamInstance::TcpStream(_, ref mut tcp_stream) => {
                 discard_result!(tcp_stream.shutdown(Shutdown::Both));
+            }
+            StreamInstance::TlsStream(_, ref mut tls_stream) => {
+                discard_result!(tls_stream.shutdown());
             }
             _ => {
             }
@@ -131,6 +137,8 @@ impl fmt::Debug for StreamInstance {
             &StreamInstance::Stdout => write!(fmt, "Stdout"),
             &StreamInstance::TcpStream(_, ref tcp_stream) =>
                 write!(fmt, "TcpStream({:?})", tcp_stream),
+            &StreamInstance::TlsStream(_, ref tls_stream) =>
+                write!(fmt, "TlsStream({:?})", tls_stream),
         }
     }
 }
@@ -410,7 +418,8 @@ impl Stream {
             StreamInstance::InputFile(..) => {
                 "read"
             }
-            StreamInstance::TcpStream(..) => {
+            StreamInstance::TcpStream(..) |
+            StreamInstance::TlsStream(..) => {
                 "read_append"
             }
             StreamInstance::OutputFile(_, _, true) => {
@@ -447,6 +456,12 @@ impl Stream {
         tcp_stream.set_write_timeout(None).unwrap();
 
         Stream::from_inst(StreamInstance::TcpStream(address, tcp_stream))
+    }
+
+    #[inline]
+    pub(crate)
+    fn from_tls_stream(address: ClauseName, tls_stream: TlsStream<TcpStream>) -> Self {
+        Stream::from_inst(StreamInstance::TlsStream(address, tls_stream))
     }
 
     #[inline]
@@ -510,6 +525,7 @@ impl Stream {
         match self.stream_inst.0.borrow().1 {
             // StreamInstance::Stdin |
             StreamInstance::TcpStream(..) |
+            StreamInstance::TlsStream(..) |
             StreamInstance::Bytes(_) |
             StreamInstance::ReadlineStream(_) |
             StreamInstance::DynReadSource(_) |
@@ -528,6 +544,7 @@ impl Stream {
         match self.stream_inst.0.borrow().1 {
             StreamInstance::Stdout
           | StreamInstance::TcpStream(..)
+          | StreamInstance::TlsStream(..)
           | StreamInstance::Bytes(_)
           | StreamInstance::OutputFile(..) => {
                 true
@@ -1036,6 +1053,9 @@ impl Read for Stream {
             StreamInstance::TcpStream(_, ref mut tcp_stream) => {
                 tcp_stream.read(buf)
             }
+            StreamInstance::TlsStream(_, ref mut tls_stream) => {
+                tls_stream.read(buf)
+            }
             StreamInstance::ReadlineStream(ref mut rl_stream) => {
                 rl_stream.read(buf)
             }
@@ -1069,6 +1089,9 @@ impl Write for Stream {
             StreamInstance::TcpStream(_, ref mut tcp_stream) => {
                 tcp_stream.write(buf)
             }
+            StreamInstance::TlsStream(_, ref mut tls_stream) => {
+                tls_stream.write(buf)
+            }
             StreamInstance::Bytes(ref mut cursor) => {
                 cursor.write(buf)
             }
@@ -1092,6 +1115,9 @@ impl Write for Stream {
             }
             StreamInstance::TcpStream(_, ref mut tcp_stream) => {
                 tcp_stream.flush()
+            }
+            StreamInstance::TlsStream(_, ref mut tls_stream) => {
+                tls_stream.flush()
             }
             StreamInstance::Bytes(ref mut cursor) => {
                 cursor.flush()
