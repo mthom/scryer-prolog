@@ -400,9 +400,11 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`arithmetic`](src/prolog/lib/arithmetic.pl)
   Arithmetic predicates such as `lsb/2`, `msb/2` and
   `number_to_rational/2`.
-* [`time`](src/prolog/lib/time.pl)
-  `time/1` reports the CPU&nbsp;time of a goal. It is useful
-  for measuring the performance of your code.
+* [`time`](src/prolog/lib/time.pl) Predicates for reasoning about
+  time, including `time/1` to measure the CPU&nbsp;time of a goal,
+  `current_time/1` to obtain the current system time, the nonterminal
+  `format_time//2` to describe strings with dates and times, and
+  `sleep/1` to slow down a computation.
 * [`cont`](src/prolog/lib/cont.pl)
   Provides *delimited continuations* via `reset/3` and `shift/1`.
 * [`random`](src/prolog/lib/random.pl)
