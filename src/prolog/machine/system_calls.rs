@@ -33,8 +33,9 @@ use std::ops::Sub;
 use std::rc::Rc;
 use std::num::NonZeroU32;
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use cpu_time::ProcessTime;
+use chrono::{offset::Local,DateTime};
 
 use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
@@ -3136,6 +3137,21 @@ impl MachineState {
                 let addr = self.heap.put_constant(Constant::Float(OrderedFloat(a2)));
 
                 self.unify(a1, addr);
+            }
+            &SystemClauseType::CurrentTime => {
+                let system_time = SystemTime::now();
+                let datetime: DateTime<Local> = system_time.into();
+
+                let mut fstr = "[".to_string();
+                let specifiers = vec!["d","m","Y","y","H","M","S","b","B","a","A","w","u","U","W","j","D","x","v"];
+                for spec in specifiers {
+                    fstr.push_str(&format!("'{}'=\"%{}\", ", spec, spec).to_string());
+                }
+                fstr.push_str("finis].");
+                let str = { let s = datetime.format(&fstr).to_string();
+                            self.heap.put_complete_string(&s)
+                          };
+                self.unify(self[temp_v!(1)], str);
             }
             &SystemClauseType::OpDeclaration => {
                 let priority = self[temp_v!(1)];
