@@ -4172,3 +4172,5 @@ test_bimetatrans_ruleml :-
           (writeq(E),
            nl,
            false)).
+
+:- initialization(test_bimetatrans_ruleml).

@@ -51,7 +51,8 @@
 parse_ruleml(AssertItem, QueryItem, XML) :-
     (  ( var(AssertItem) ; var(QueryItem) ), var(XML) ->
        throw(error(instantiation_error, parse_ruleml/2))
-    ;  phrase(ruleml_top_level_items(AssertItem, QueryItem), XML)
+    ;  phrase(ruleml_top_level_items(AssertItem, QueryItem), XML),
+       !
     ).
 
 
@@ -97,8 +98,7 @@ parse_header -->
 
 ruleml_top_level_items(AssertItem, QueryItems) -->
     (  ruleml_assert(AssertItem),
-       ruleml_query_items(QueryItems),
-       !
+       ruleml_query_items(QueryItems)
     ;  { AssertItem = [] },
        ruleml_query_items(QueryItems)
     ).
@@ -179,12 +179,10 @@ ruleml_assert(Items) -->
     (  { var(Items) } ->
        list_ws("<Assert mapClosure=\"universal\">"),
        ruleml_assert_items(Items),
-       !,
        list_ws("</Assert>")
     ;  "<Assert mapClosure=\"universal\">",
        { Items \== [] },
        ruleml_assert_items(Items),
-       !,
        "</Assert>"
     ).
 
@@ -206,7 +204,6 @@ ruleml_assert(Items) -->
 
 ruleml_assert_items([Item | Items]) -->
     ruleml_assert_item(Item),
-    !,
     ruleml_assert_items(Items).
 ruleml_assert_items([]) --> [].
 
@@ -214,7 +211,6 @@ ruleml_assert_items([]) --> [].
 ruleml_query_items(Items) -->
     (  { var(Items) } ->
        ruleml_query_item(Item),
-       !,
        (  { var(Item) } ->
           ruleml_query_items(Items)
        ;  { Items = [Item | Items0] },
@@ -222,7 +218,6 @@ ruleml_query_items(Items) -->
        )
     ;  { Items = [Item | Items0] },
        ruleml_query_item(Item),
-       !,
        ruleml_query_items(Items0)
     ).
 ruleml_query_items([]) --> [].
@@ -279,7 +274,7 @@ space(' ') --> " ".
 
 decimal_point('.') --> ".".
 
-sign('-') --> "-", !.
+sign('-') --> "-".
 sign('+') --> "+".
 
 double_quote('"') --> "\"".
@@ -332,7 +327,6 @@ ruleml_condition(Item) -->
 
 ruleml_item_conjunction([Item | Items]) -->
     ruleml_condition(Item),
-    !,
     ruleml_item_conjunction(Items).
 ruleml_item_conjunction([]) --> [].
 
@@ -404,7 +398,6 @@ ruleml_conjunction_of_items(Items) -->
 
 ruleml_item_disjunction([Item | Items]) -->
     ruleml_condition(Item),
-    !,
     ruleml_item_disjunction(Items).
 ruleml_item_disjunction([]) --> [].
 
@@ -549,7 +542,6 @@ ruleml_naf(Item) -->
 
 ruleml_atoms([Item|Items]) -->
     ruleml_atom(Item),
-    !,
     ruleml_atoms(Items).
 ruleml_atoms([]) --> [].
 
@@ -829,9 +821,9 @@ ruleml_data(Name) -->
  */
 
 ruleml_data_contents(number, Cs) -->
-    ruleml_number(Cs), !.
+    ruleml_number(Cs).
 ruleml_data_contents(symbol, Cs) -->
-    ruleml_symbol(Cs), !.
+    ruleml_symbol(Cs).
 ruleml_data_contents(string, Cs) -->
     ruleml_string(Cs).
 
@@ -1195,8 +1187,7 @@ fold_semicolons(List, Output) :-
  * complicated by Scryer's current lack of multi-argument indexing.
  */
 
-fold_list([Item], _, Item) :-
-    !.
+fold_list([Item], _, Item).
 fold_list([Item|Items], F, Form) :-
     Form =.. [F, Item, Fs],
     fold_list(Items, F, Fs).
