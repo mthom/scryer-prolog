@@ -84,16 +84,8 @@ parse_header -->
  * The two arguments are (un)instantiated depending on the direction
  * in which parse_ruleml/2 operates. In either direction, once
  * ruleml_query_item(QueryItems) or ruleml_assert(AssertItem)
- * succeeds:
- *
- * 1) AssertItem/QueryItems is a fully ground list of terms,
- * corresponding to an Assert/Query performative of the RuleML/XML KB.
- *
- * 2) It would not be meaningful to backtrack after the last success,
- * thus undoing its effects; that is because we have already refuted
- * the possibility of there being further items for the grammar to
- * consume. Hence we see that the cut (!) does not restrict the
- * generality of the grammar.
+ * succeeds, AssertItem and QueryItems are ground lists of terms,
+ * corresponding to Assert/Query performative(s) of the RuleML/XML KB.
  */
 
 ruleml_top_level_items(AssertItem, QueryItems) -->
@@ -169,10 +161,6 @@ ruleml_top_level_items(AssertItem, QueryItems) -->
  * outset of ruleml_assert//1 will cause it to fail, meaning that
  * an empty <Assert></Assert> element is never emitted to the output
  * RuleML/xmL.
- *
- * The two cuts are green cuts, meaning they do not change the meaning
- * or output of the program, they simply prevent needless
- * backtracking.
  */
 
 ruleml_assert(Items) -->
@@ -644,7 +632,6 @@ ruleml_expr(Item) -->
        (  list_ws("<repo>"),
           ruleml_item(RepoItem),
           list_ws("</repo>"),
-          !,
           { fold_commas(Args, ArgsCommas) },
           { Item =.. [Name, (ArgsCommas | RepoItem)] }
        ;  { Item =.. [Name | Args] }
@@ -815,9 +802,6 @@ ruleml_data(Name) -->
  * converting from lists of characters (here denoted as Cs) to the
  * named data type in ISO Prolog. The type information is given
  * in the first argument.
- *
- * Grammatically, ruleml_data_contents//3 is a disjoint union of its
- * subgrammars, justifying the cut at the end of the first two rules.
  */
 
 ruleml_data_contents(number, Cs) -->
