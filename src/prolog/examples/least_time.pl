@@ -11,11 +11,12 @@
  */
 
 :- module(least_time, [find_min_time/2,
-		       write_time_nl/1]).
+		               write_time_nl/1]).
 
 
 :- use_module(library(dcgs)).
 :- use_module(library(format)).
+:- use_module(library(lists)).
 :- use_module(library(reif)).
 
 
@@ -32,10 +33,10 @@ valid_time([H1,H2,M1,M2], T) :-
     memberd_t(M2, [0,1,2,3,4,5,6,7,8,9], TM2),
     (  maplist(=(true), [TH1, TH2, TM1, TM2]) ->
        (  H1 =:= 2 ->
-	  (  H2 =< 3 ->
-	     T = true
-	  ;  T = false
-	  )
+	      (  H2 =< 3 ->
+	         T = true
+	      ;  T = false
+	      )
        ;  T = true
        )
     ;  T = false
@@ -49,15 +50,7 @@ permuted_times(Time, PermutedTimes) :-
 
 find_min_time(Time, Min) :-
     valid_time(Time, true),
-    permuted_times(Time, PermutedTimes),
-    find_min_time_(PermutedTimes, Time, Min).
-
-find_min_time_([], Min, Min).
-find_min_time_([Time|Times], MinSoFar, Min) :-
-    (  Time @< MinSoFar ->
-       find_min_time_(Times, Time, Min)
-    ;  find_min_time_(Times, MinSoFar, Min)
-    ).
+    permuted_times(Time, [Min|_]).
 
 
 write_time_nl(Time) :-
