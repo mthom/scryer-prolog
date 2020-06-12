@@ -184,6 +184,7 @@ pub enum SystemClauseType {
     FlushOutput,
     GetByte,
     GetChar,
+    GetNChars,
     GetCode,
     GetSingleChar,
     ResetAttrVarState,
@@ -353,6 +354,7 @@ impl SystemClauseType {
             &SystemClauseType::FlushOutput => clause_name!("$flush_output"),
             &SystemClauseType::GetByte => clause_name!("$get_byte"),
             &SystemClauseType::GetChar => clause_name!("$get_char"),
+            &SystemClauseType::GetNChars => clause_name!("$get_n_chars"),
             &SystemClauseType::GetCode => clause_name!("$get_code"),
             &SystemClauseType::GetSingleChar => clause_name!("$get_single_char"),
             &SystemClauseType::ResetAttrVarState => clause_name!("$reset_attr_var_state"),
@@ -549,6 +551,7 @@ impl SystemClauseType {
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
             ("$get_byte", 2) => Some(SystemClauseType::GetByte),
             ("$get_char", 2) => Some(SystemClauseType::GetChar),
+            ("$get_n_chars", 3) => Some(SystemClauseType::GetNChars),
             ("$get_code", 2) => Some(SystemClauseType::GetCode),
             ("$get_single_char", 1) => Some(SystemClauseType::GetSingleChar),
             ("$points_to_cont_reset_marker", 1) => {
