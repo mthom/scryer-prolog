@@ -274,6 +274,9 @@ only the standard predicate&nbsp;`(=)/2` is used.
 Definite clause grammars as provided by `library(dcgs)` are ideally
 suited for reasoning about strings.
 
+Partial strings were first proposed by Ulrich Neumerkel in issue
+[#95](https://github.com/mthom/scryer-prolog/issues/95).
+
 ### Tabling (SLG resolution)
 
 One of the foremost attractions of Prolog is that logical consequences
