@@ -2277,18 +2277,11 @@ impl MachineState {
                 let mut string = String::new();
 
                 if stream.options.stream_type == StreamType::Binary {
-                    let mut mstream = stream.clone();
-                    for _ in 0..num {
-                        let mut b = [0u8; 1];
-
-                        match mstream.read(&mut b) {
-                            Ok(1) => {
-                                string.push(b[0] as char);
-                            }
-                            _ => {
-                                break;
-                            }
-                        }
+                    let mut buf = vec![];
+                    let mut chunk = stream.take(num as u64);
+                    chunk.read_to_end(&mut buf).ok();
+                    for c in buf {
+                        string.push(c as char);
                     }
                 } else {
                     let mut iter = self.open_parsing_stream(stream.clone(),
