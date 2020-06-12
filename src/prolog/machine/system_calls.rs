@@ -1079,19 +1079,18 @@ impl MachineState {
                     }
                 };
 
-                let h = self.heap.h();
-
                 if atom.as_str().is_empty() {
                     self.fail = true;
                     return Ok(());
                 }
 
                 let pstr = self.heap.allocate_pstr(atom.as_str());
-                let pstr_tail = self.heap[h + 1].as_addr(h + 1);
-
                 self.unify(self[temp_v!(2)], pstr);
 
                 if !self.fail {
+                    let h = self.heap.h();
+                    let pstr_tail = self.heap[h - 1].as_addr(h - 1);
+
                     self.unify(self[temp_v!(3)], pstr_tail);
                 }
             }
