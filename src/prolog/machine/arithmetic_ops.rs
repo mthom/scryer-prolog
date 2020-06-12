@@ -472,7 +472,7 @@ impl MachineState {
                 }
             }
             (Number::Fixnum(n1), Number::Integer(n2)) => {
-                if (n1 == 1 || n1 == 0 || n1 == -1) && &*n2 < &0 {
+                if !(n1 == 1 || n1 == 0 || n1 == -1) && &*n2 < &0 {
                     let n = Number::from(n1);
                     let stub = MachineError::functor_stub(clause_name!("^"), 2);
 
