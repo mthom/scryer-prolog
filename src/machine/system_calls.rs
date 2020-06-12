@@ -2274,45 +2274,42 @@ impl MachineState {
                         _ => { unreachable!() }
                     };
 
-                let chars = {
-                   let mut str = String::new();
+                let mut string = String::new();
 
-                   if stream.options.stream_type == StreamType::Binary {
-                        let mut mstream = stream.clone();
-                        for _ in 0..num {
-                            let mut b = [0u8; 1];
+                if stream.options.stream_type == StreamType::Binary {
+                    let mut mstream = stream.clone();
+                    for _ in 0..num {
+                        let mut b = [0u8; 1];
 
-                            match mstream.read(&mut b) {
-                                Ok(1) => {
-                                    str.push(b[0] as char);
-                                }
-                                _ => {
-                                    break;
-                                }
+                        match mstream.read(&mut b) {
+                            Ok(1) => {
+                                string.push(b[0] as char);
+                            }
+                            _ => {
+                                break;
                             }
                         }
-                    } else {
-                        let mut iter = self.open_parsing_stream(stream.clone(),
-                                                                "get_n_chars",
-                                                                2,
-                                                                )?;
-
-                        for _ in 0..num {
-                             let result = iter.next();
-
-                             match result {
-                                 Some(Ok(c)) => {
-                                    str.push(c);
-                                 }
-                                 _ => { break;
-                                 }
-                              }
-                         }
                     }
-                    str
+                } else {
+                    let mut iter = self.open_parsing_stream(stream.clone(),
+                                                            "get_n_chars",
+                                                            2,
+                                                            )?;
+
+                    for _ in 0..num {
+                         let result = iter.next();
+
+                         match result {
+                             Some(Ok(c)) => {
+                                string.push(c);
+                             }
+                             _ => { break;
+                             }
+                          }
+                     }
                 };
-                let str = self.heap.put_complete_string(&chars);
-                self.unify(self[temp_v!(3)], str);
+                let string = self.heap.put_complete_string(&string);
+                self.unify(self[temp_v!(3)], string);
             }
             &SystemClauseType::GetCode => {
                 let mut stream =
