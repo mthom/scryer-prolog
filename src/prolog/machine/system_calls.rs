@@ -27,7 +27,7 @@ use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::io::{ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
-use std::fs::{File, OpenOptions};
+use std::fs::{OpenOptions};
 use std::net::{TcpListener, TcpStream};
 use std::ops::Sub;
 use std::rc::Rc;
@@ -1818,109 +1818,6 @@ impl MachineState {
                         self.fail = true
                     }
                 };
-            }
-            &SystemClauseType::FileToChars => {
-                // TODO: Replace this with stream.
-                let a1 = self.store(self.deref(self[temp_v!(1)]));
-                let a2 = self.store(self.deref(self[temp_v!(2)]));
-
-                let file_name = match a1 {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(name, _) = &self.heap[h] {
-                            name.clone()
-                        }
-                        else {
-                            unreachable!()
-                        }
-                    }
-                    Addr::Char(c) => {
-                        clause_name!(c.to_string(), indices.atom_tbl.clone())
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
-
-                let name = clause_name!("$file_to_chars");
-                let mut file = match File::open(file_name.as_str()) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        let arity = 2;
-                        let stub = MachineError::functor_stub(name.clone(), arity);
-                        let h = self.heap.h();
-
-                        let err = match e.kind() {
-                            ErrorKind::NotFound => {
-                                MachineError::existence_error(
-                                    h,
-                                    ExistenceError::ModuleSource(
-                                        ModuleSource::File(file_name)
-                                    ),
-                                )
-                            }
-                            ErrorKind::PermissionDenied => {
-                                let source_sink = self.store(self.deref(a1));
-
-                                MachineError::permission_error(
-                                    h,
-                                    Permission::Access,
-                                    "source_sink",
-                                    source_sink
-                                )
-                            }
-                            _ => unreachable!()  // Not nice.
-                        };
-
-                        return Err(self.error_form(err, stub));
-                    }
-                };
-
-
-                let type_str = match self.store(self.deref(self[temp_v!(3)])) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                            atom.as_str()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
-
-                let complete_string = {
-                    let mut buffer = String::new();
-                    match type_str {
-                        "text" => {  match file.read_to_string(&mut buffer) {
-                                         Ok(_size) => {
-                                             self.heap.put_complete_string(&buffer)
-                                         }
-                                         Err(_e) => {
-                                            // the data isn't valid UTF-8, so we fail.
-                                           self.fail = true;
-                                           return Ok(());
-
-                                         }
-                                     }
-                                  }
-                        "binary" => { let mut buffer = Vec::new();
-                                      let _ = match file.read_to_end(&mut buffer) {
-                                          Ok(size) => size,
-                                          Err(_e) => unreachable!()
-                                      };
-
-                                      let buffer = String::from_iter(
-                                          buffer.into_iter().map(|b| b as char)
-                                      );
-
-                                      self.heap.put_complete_string(&buffer)
-                                    }
-                         _ => { unreachable!() }
-                         }
-                    };
-
-                self.unify(complete_string, a2);
             }
             &SystemClauseType::PutCode => {
                 let mut stream =

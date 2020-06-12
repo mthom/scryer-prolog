@@ -180,7 +180,6 @@ pub enum SystemClauseType {
     ExpandTerm,
     FetchGlobalVar,
     FetchGlobalVarWithOffset,
-    FileToChars,
     FirstStream,
     FlushOutput,
     GetByte,
@@ -350,7 +349,6 @@ impl SystemClauseType {
             &SystemClauseType::FetchGlobalVarWithOffset => {
                 clause_name!("$fetch_global_var_with_offset")
             }
-            &SystemClauseType::FileToChars => clause_name!("$file_to_chars"),
             &SystemClauseType::FirstStream => clause_name!("$first_stream"),
             &SystemClauseType::FlushOutput => clause_name!("$flush_output"),
             &SystemClauseType::GetByte => clause_name!("$get_byte"),
@@ -549,7 +547,6 @@ impl SystemClauseType {
             ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
-            ("$file_to_chars", 3) => Some(SystemClauseType::FileToChars),
             ("$get_byte", 2) => Some(SystemClauseType::GetByte),
             ("$get_char", 2) => Some(SystemClauseType::GetChar),
             ("$get_code", 2) => Some(SystemClauseType::GetCode),
