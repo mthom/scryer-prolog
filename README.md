@@ -378,6 +378,14 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   write `integer_si(X)` to ensure soundness of your programs.
   "si" stands for *sufficiently instantiated*, and also for
   *sound&nbsp;inference*.
+* [`pio`](src/prolog/lib/pio.pl)
+  `phrase_from_file/2` applies a DCG nonterminal to the contents of a
+  file, reading lazily only as much as is needed. Due to the compact
+  internal string representation, also extremely large files can be
+  efficiently processed with Scryer&nbsp;Prolog in this way.
+* [`charsio`](src/prolog/lib/charsio.pl) Various predicates that are
+  useful for parsing and reasoning about characters, notably
+  `char_type/2` to classify characters according to their type.
 * [`error`](src/prolog/lib/error.pl)
   `must_be/2` and `can_be/2` complement the type checks provided
   by `library(si)`, and are especially useful for Prolog library
@@ -421,12 +429,6 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   key derivation (HKDF), password-based key derivation (PBKDF2),
   public key signatures and signature verification with Ed25519,
   authenticated encryption, and reasoning about elliptic curves.
-
-To read contents of external files, use `phrase_from_file/2` from
-[`library(pio)`](src/prolog/lib/pio.pl) to apply a&nbsp;DCG to
-file&nbsp;contents. The predicates in
-[`library(charsio)`](src/prolog/lib/charsio.pl) are also useful for
-parsing.
 
 To use predicates provided by the `lists` library, write:
 
