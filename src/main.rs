@@ -1,3 +1,6 @@
+extern crate blake2;
+extern crate chrono;
+extern crate cpu_time;
 extern crate crossterm;
 extern crate divrem;
 #[macro_use]
@@ -8,19 +11,45 @@ extern crate indexmap;
 #[macro_use]
 extern crate lazy_static;
 extern crate libc;
+extern crate native_tls;
 extern crate nix;
+extern crate openssl;
+extern crate ordered_float;
 #[macro_use]
 extern crate prolog_parser;
 #[macro_use]
 extern crate ref_thread_local;
+extern crate ring;
+extern crate ripemd160;
+extern crate rug;
+extern crate rustyline;
+extern crate sha3;
+extern crate unicode_reader;
 
-use nix::sys::signal;
+use crate::nix::sys::signal;
 
-mod prolog;
+#[macro_use]
+mod macros;
+mod allocator;
+mod arithmetic;
+mod codegen;
+mod clause_types;
+mod debray_allocator;
+mod fixtures;
+mod forms;
+mod heap_iter;
+mod heap_print;
+mod indexing;
+mod instructions;
+mod iterators;
+mod machine;
+mod read;
+mod targets;
+mod write;
 
-use crate::prolog::machine::*;
-use crate::prolog::machine::streams::*;
-use crate::prolog::read::*;
+use machine::*;
+use machine::streams::*;
+use read::*;
 
 use std::sync::atomic::Ordering;
 

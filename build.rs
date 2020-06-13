@@ -1,6 +1,6 @@
 extern crate indexmap;
 
-use indexmap::IndexSet;
+use crate::indexmap::IndexSet;
 
 use std::env;
 use std::fs::{File, copy, read_dir};
@@ -15,7 +15,7 @@ fn main()
     let mut libraries = File::create(&dest_path).unwrap();
     let mut library_index = IndexSet::new();
 
-    let paths = read_dir("./src/prolog/lib").unwrap();
+    let paths = read_dir("./src/lib").unwrap();
 
     for item in paths {
         let item = item.unwrap().path();
