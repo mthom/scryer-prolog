@@ -1,6 +1,6 @@
-:- module(bimetatrans_ruleml_tests, [test_bimetatrans_ruleml/0]).
+:- module(bimetatran_tests, [test_bimetatrans/0]).
 
-:- use_module('bimetatrans_ruleml').
+:- use_module('bimetatrans').
 
 :- use_module(library(dcgs)).
 :- use_module(library(iso_ext)).
@@ -4114,7 +4114,7 @@ test(53,
      </Assert>").
 
 
-test_bimetatrans_ruleml :-
+test_bimetatrans :-
     catch((test_1,
            test_2,
            test_3,
@@ -4173,4 +4173,4 @@ test_bimetatrans_ruleml :-
            nl,
            false)).
 
-:- initialization(test_bimetatrans_ruleml).
+:- initialization(test_bimetatrans).

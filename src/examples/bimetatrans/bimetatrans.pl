@@ -1,4 +1,4 @@
-:- module(bimetatrans_ruleml, [parse_ruleml/3]).
+:- module(bimetatrans, [parse_ruleml/3]).
 
 :- use_module(library(dcgs)).
 :- use_module(library(iso_ext)).
