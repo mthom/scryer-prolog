@@ -473,3 +473,17 @@ local_member(X, Xs) :- member(X, Xs).
 
 The user listing can also be terminated by placing `end_of_file.` at
 the end of the stream.
+
+### Configuration file
+
+At startup, Scryer Prolog consults the file `~/.scryerrc`, if the file
+exists. This file is useful to automatically load libraries and define
+predicates that you need often.
+
+For example, a sensible starting point for `~/.scryerrc` is:
+
+```
+:- use_module(library(lists)).
+:- use_module(library(dcgs)).
+:- use_module(library(reif)).
+```
