@@ -74,6 +74,7 @@
                    format/2,
                    format/3,
                    portray_clause/1,
+                   portray_clause/2,
                    listing/1
                   ]).
 
@@ -465,8 +466,12 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 portray_clause(Term) :-
+        current_output(Out),
+        portray_clause(Out, Term).
+
+portray_clause(Stream, Term) :-
         phrase(portray_clause_(Term), Ls),
-        maplist(write, Ls).
+        maplist(put_char(Stream), Ls).
 
 portray_clause_(Term) -->
         { term_variables(Term, Vs),
