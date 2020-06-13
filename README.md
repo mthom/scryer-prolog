@@ -292,7 +292,7 @@ even if one exists.
 Scryer Prolog supports an alternative execution strategy which is
 called *tabling* and also known as tabled&nbsp;execution and
 SLG&nbsp;resolution. To enable tabled execution for a predicate, use
-[`library(tabling)`](src/prolog/lib/tabling.pl) and add a `(table)/1`
+[`library(tabling)`](src/lib/tabling.pl) and add a `(table)/1`
 directive for the desired predicate indicator. For example, if we
 write:
 
@@ -317,14 +317,14 @@ Scryer Prolog provides excellent support for Constraint Logic
 Programming&nbsp;(CLP), which is the amalgamation of
 Logic&nbsp;Programming&nbsp;(LP) and Constraints.
 
-In addition to built-in support for [`dif/2`](src/prolog/lib/dif.pl),
-[`freeze/2`](src/prolog/lib/freeze.pl),
-[CLP(B)](src/prolog/lib/clpb.pl) and [CLP(ℤ)](src/prolog/lib/clpz.pl),
+In addition to built-in support for [`dif/2`](src/lib/dif.pl),
+[`freeze/2`](src/lib/freeze.pl),
+[CLP(B)](src/lib/clpb.pl) and [CLP(ℤ)](src/lib/clpz.pl),
 Scryer provides a convenient way to implement new user-defined
 constraints: *Attributed variables* are available via
-[`library(atts)`](src/prolog/lib/atts.pl) as in SICStus&nbsp;Prolog,
+[`library(atts)`](src/lib/atts.pl) as in SICStus&nbsp;Prolog,
 which is one of the most sophisticated and fastest constraint systems
-in existence. In [`library(iso_ext)`](src/prolog/lib/iso_ext.pl),
+in existence. In [`library(iso_ext)`](src/lib/iso_ext.pl),
 Scryer provides predicates for backtrackable (`bb_b_put/2`) and
 non-backtrackable (`bb_put/2`) global variables, which are needed to
 implement certain types of constraint&nbsp;solvers.
@@ -337,7 +337,7 @@ learning and developing portable CLP&nbsp;applications.
 Scryer has a simple predicate-based module system. It provides a
 way to separate units of code into distinct namespaces, for both
 predicates and operators. See the files
-[`src/prolog/lib/*.pl`](src/prolog/lib) for
+[`src/lib/*.pl`](src/lib) for
 examples.
 
 At the time of this writing, many predicates reside in their own
@@ -345,31 +345,31 @@ modules that need to be imported before they can be used.
 The modules that ship with Scryer&nbsp;Prolog are also called
 *library*&nbsp;modules or *libraries*, and include:
 
-* [`lists`](src/prolog/lib/lists.pl)
+* [`lists`](src/lib/lists.pl)
   providing `length/2`, `member/2`, `select/3`, `append/[2,3]`,
   `foldl/[4,5]`, `maplist/[2-9]`, `same_length/2`, `transpose/2` etc.
-* [`dcgs`](src/prolog/lib/dcgs.pl)
+* [`dcgs`](src/lib/dcgs.pl)
   Definite Clause Grammars (DCGs), a built-in grammar mechanism
   that uses the operator `(-->)/2` to define grammar rules,
   and the predicates `phrase/[2,3]` to invoke them.
-* [`dif`](src/prolog/lib/dif.pl)
+* [`dif`](src/lib/dif.pl)
   The predicate `dif/2` provides declarative disequality:
   It is true if and only if its arguments are different, and
   delays the test until a sound decision can be made.
-* [`reif`](src/prolog/lib/reif.pl)
+* [`reif`](src/lib/reif.pl)
   providing `if_/3`, `tfilter/3` and related predicates
   as described in *Indexing&nbsp;dif/2*.
-* [`clpz`](src/prolog/lib/clpz.pl)
+* [`clpz`](src/lib/clpz.pl)
   CLP(ℤ): Constraint Logic Programming over Integers,
   providing declarative integer arithmetic via `(#=)/2`, `(#\=)/2`,
   `(#>=)/2` etc., and various global constraints and
   enumeration predicates for solving combinatorial tasks.
-* [`pairs`](src/prolog/lib/pairs.pl)
+* [`pairs`](src/lib/pairs.pl)
   By convention, *pairs* are Prolog terms with
   principal&nbsp;functor `(-)/2`, written as `Key-Value`.
   This library provides `pairs_keys_values/3`,
   `pairs_keys/2`, and other predicates to reason about pairs.
-* [`si`](src/prolog/lib/si.pl)
+* [`si`](src/lib/si.pl)
   The predicates `atom_si/1`, `integer_si/1`, `atomic_si/1`
   and `list_si/1` implement sound type checks. They raise
   instantiation errors if no decision can be made.
@@ -378,53 +378,53 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   write `integer_si(X)` to ensure soundness of your programs.
   "si" stands for *sufficiently instantiated*, and also for
   *sound&nbsp;inference*.
-* [`pio`](src/prolog/lib/pio.pl)
+* [`pio`](src/lib/pio.pl)
   `phrase_from_file/2` applies a DCG nonterminal to the contents of a
   file, reading lazily only as much as is needed. Due to the compact
   internal string representation, also extremely large files can be
   efficiently processed with Scryer&nbsp;Prolog in this way.
-* [`charsio`](src/prolog/lib/charsio.pl) Various predicates that are
+* [`charsio`](src/lib/charsio.pl) Various predicates that are
   useful for parsing and reasoning about characters, notably
   `char_type/2` to classify characters according to their type.
-* [`error`](src/prolog/lib/error.pl)
+* [`error`](src/lib/error.pl)
   `must_be/2` and `can_be/2` complement the type checks provided
   by `library(si)`, and are especially useful for Prolog library
   authors.
-* [`tabling`](src/prolog/lib/tabling.pl)
+* [`tabling`](src/lib/tabling.pl)
   The operator `(table)/1` is used in directives that prepare
   predicates for tabled execution (SLG&nbsp;resolution).
-* [`format`](src/prolog/lib/format.pl)
+* [`format`](src/lib/format.pl)
   The nonterminal `format_//2` is used to describe formatted output,
   arranging arguments according to a given format&nbsp;string.
   The predicates `format/[2,3]`, `portray_clause/1` and `listing/1`
   provide formatted *impure* output.
-* [`assoc`](src/prolog/lib/assoc.pl)
+* [`assoc`](src/lib/assoc.pl)
   providing `empty_assoc/1`, `get_assoc/3`, `put_assoc/4` etc.
   to manage elements in AVL&nbsp;trees which ensure
   *O*(log(*N*))&nbsp;access.
-* [`ordsets`](src/prolog/lib/ordsets.pl)
+* [`ordsets`](src/lib/ordsets.pl)
   represents ordered sets as lists.
-* [`clpb`](src/prolog/lib/clpb.pl)
+* [`clpb`](src/lib/clpb.pl)
   CLP(B): Constraint Logic Programming over Boolean variables,
   a BDD-based SAT&nbsp;solver provided via the predicates
   `sat/1`, `taut/2`, `labeling/1` etc.
-* [`arithmetic`](src/prolog/lib/arithmetic.pl)
+* [`arithmetic`](src/lib/arithmetic.pl)
   Arithmetic predicates such as `lsb/2`, `msb/2` and
   `number_to_rational/2`.
-* [`time`](src/prolog/lib/time.pl) Predicates for reasoning about
+* [`time`](src/lib/time.pl) Predicates for reasoning about
   time, including `time/1` to measure the CPU&nbsp;time of a goal,
   `current_time/1` to obtain the current system time, the nonterminal
   `format_time//2` to describe strings with dates and times, and
   `sleep/1` to slow down a computation.
-* [`cont`](src/prolog/lib/cont.pl)
+* [`cont`](src/lib/cont.pl)
   Provides *delimited continuations* via `reset/3` and `shift/1`.
-* [`random`](src/prolog/lib/random.pl)
+* [`random`](src/lib/random.pl)
   Probabilistic predicates and random number generators.
-* [`sockets`](src/prolog/lib/sockets.pl)
+* [`sockets`](src/lib/sockets.pl)
   Predicates for opening and accepting TCP connections as streams.
   TLS negotiation is performed via the option `tls(true)` in
   `socket_client_open/3`, yielding secure encrypted connections.
-* [`crypto`](src/prolog/lib/crypto.pl)
+* [`crypto`](src/lib/crypto.pl)
   Cryptographically secure random numbers and hashes, HMAC-based
   key derivation (HKDF), password-based key derivation (PBKDF2),
   public key signatures and signature verification with Ed25519,
