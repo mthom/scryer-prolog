@@ -460,7 +460,7 @@ portray_clause(Term) :-
 
 portray_clause(Stream, Term) :-
         phrase(portray_clause_(Term), Ls),
-        maplist(put_char(Stream), Ls).
+        format(Stream, "~s", [Ls]).
 
 portray_clause_(Term) -->
         { term_variables(Term, Vs),
