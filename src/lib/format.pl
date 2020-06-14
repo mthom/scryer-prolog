@@ -375,20 +375,9 @@ format(Fs, Args) :-
 format(Stream, Fs, Args) :-
         phrase(format_(Fs, Args), Cs),
         (   stream_property(Stream, type(binary)) ->
-            % maplist(char_code, Cs, Bytes) is currently a lot slower
-            % than first converting Cs to an atom, and then to codes.
-            % In the future, we can ideally avoid creating an atom here,
-            % since an atom leaves traces in the system.
-            atom_chars(A, Cs),
-            atom_codes(A, Bytes),
-            (   member(NonByte, Bytes), NonByte > 255 ->
-                char_code(Char, NonByte),
-                throw(error(representation_error(Char), format/3))
-            ;   true
-            ),
             % For binary streams, we use a specialised internal predicate
             % that uses only a single "write" operation for efficiency.
-            '$put_bytes'(Stream, Bytes)
+            '$put_bytes'(Stream, Cs)
         ;   maplist(put_char(Stream), Cs)
         ).
 
