@@ -2256,6 +2256,54 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::GetNChars => {
+                let stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_n_chars", 3)?;
+
+                let num =
+                    match Number::try_from((self[temp_v!(2)], &self.heap)) {
+                        Ok(Number::Fixnum(n)) => {
+                            usize::try_from(n).unwrap()
+                        }
+                        Ok(Number::Integer(n)) => {
+                            match n.to_usize() {
+                                Some(u) => { u }
+                                _ => { self.fail = true; return Ok(()); }
+                            }
+                        }
+                        _ => { unreachable!() }
+                    };
+
+                let mut string = String::new();
+
+                if stream.options.stream_type == StreamType::Binary {
+                    let mut buf = vec![];
+                    let mut chunk = stream.take(num as u64);
+                    chunk.read_to_end(&mut buf).ok();
+                    for c in buf {
+                        string.push(c as char);
+                    }
+                } else {
+                    let mut iter = self.open_parsing_stream(stream.clone(),
+                                                            "get_n_chars",
+                                                            2,
+                                                            )?;
+
+                    for _ in 0..num {
+                         let result = iter.next();
+
+                         match result {
+                             Some(Ok(c)) => {
+                                string.push(c);
+                             }
+                             _ => { break;
+                             }
+                          }
+                     }
+                };
+                let string = self.heap.put_complete_string(&string);
+                self.unify(self[temp_v!(3)], string);
+            }
             &SystemClauseType::GetCode => {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "get_code", 2)?;
