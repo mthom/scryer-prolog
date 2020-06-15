@@ -26,11 +26,11 @@
  * an equivalent Prolog/'$V' term and back to RuleML/xmL. It has the
  * modes
  *
- * +AssertItem, +QueryItems, ?XML    (Prolog->RuleML)
- * ?AssertItem, ?QueryItems, +XML    (RuleML->Prolog)
+ * +AssertItems, +QueryItems, ?XML    (Prolog->RuleML)
+ * ?AssertItems, ?QueryItems, +XML    (RuleML->Prolog)
  *
  * The modes constrain the inputs to fit one of two patterns, the
- * first where AssertItem and QueryItem are instantiated and XML is
+ * first where AssertItems and QueryItems are instantiated and XML is
  * possibly a variable, and conversely for the second. Instantiated
  * inputs are expected to be ground, meaning they should not contain
  * free variables.
@@ -38,9 +38,9 @@
  * parse_ruleml/3 is meant to subsume an invertible function in the
  * sense that the top-level query
  *
- * ?- parse_ruleml(AssertItem, QueryItems, XML0),    % Prolog->RuleML
- *    parse_ruleml(AssertItem0, QueryItems0, XML),   % RuleML->Prolog
- *    AssertItem0 == AssertItem,                     % Test for expected round-trip results.
+ * ?- parse_ruleml(AssertItems, QueryItems, XML0),    % Prolog->RuleML
+ *    parse_ruleml(AssertItems0, QueryItems0, XML),   % RuleML->Prolog
+ *    AssertItems0 == AssertItems,                     % Test for expected round-trip results.
  *    QueryItems0 == QueryItems,
  *    XML0 == XML.
  *
@@ -48,10 +48,10 @@
  * not 0-appended are instantiated and therefore ground.
  */
 
-parse_ruleml(AssertItem, QueryItem, XML) :-
-    (  ( var(AssertItem) ; var(QueryItem) ), var(XML) ->
+parse_ruleml(AssertItems, QueryItems, XML) :-
+    (  ( var(AssertItems) ; var(QueryItems) ), var(XML) ->
        throw(error(instantiation_error, parse_ruleml/2))
-    ;  phrase(ruleml_top_level_items(AssertItem, QueryItem), XML),
+    ;  phrase(ruleml_top_level_items(AssertItems, QueryItems), XML),
        !
     ).
 
@@ -83,15 +83,15 @@ parse_header -->
  *
  * The two arguments are (un)instantiated depending on the direction
  * in which parse_ruleml/2 operates. In either direction, once
- * ruleml_query_item(QueryItems) or ruleml_assert(AssertItem)
- * succeeds, AssertItem and QueryItems are ground lists of terms,
+ * ruleml_query_item(QueryItems) or ruleml_assert(AssertItems)
+ * succeeds, AssertItems and QueryItems are ground lists of terms,
  * corresponding to Assert/Query performative(s) of the RuleML/XML KB.
  */
 
-ruleml_top_level_items(AssertItem, QueryItems) -->
-    (  ruleml_assert(AssertItem),
+ruleml_top_level_items(AssertItems, QueryItems) -->
+    (  ruleml_assert(AssertItems),
        ruleml_query_items(QueryItems)
-    ;  { AssertItem = [] },
+    ;  { AssertItems = [] },
        ruleml_query_items(QueryItems)
     ).
 
