@@ -1928,6 +1928,58 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::PutChars => {
+                let mut stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "$put_chars", 2)?;
+
+                let mut bytes = Vec::new();
+                let string = self.heap_pstr_iter(self[temp_v!(2)]).to_string();
+
+                if stream.options.stream_type == StreamType::Binary {
+                    for c in string.chars() {
+                        if c as u32 > 255 {
+
+                            let stub = MachineError::functor_stub(clause_name!("$put_chars"), 2);
+
+                            let err = MachineError::type_error(
+                                self.heap.h(),
+                                ValidType::Byte,
+                                Addr::Char(c),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+
+                        bytes.push(c as u8);
+                    }
+                } else {
+                    bytes = string.into_bytes();
+                }
+
+                match stream.write(&bytes) {
+                    Ok(_) => {
+                        return return_from_clause!(self.last_call, self);
+                    }
+                    _ => {
+                        let stub = MachineError::functor_stub(
+                            clause_name!("$put_chars"),
+                            2,
+                        );
+
+                        let addr = self.heap.to_unifiable(
+                            HeapCellValue::Stream(stream.clone()),
+                        );
+
+                        return Err(self.error_form(
+                            MachineError::existence_error(
+                                self.heap.h(),
+                                ExistenceError::Stream(addr),
+                            ),
+                            stub,
+                        ));
+                    }
+                }
+            }
             &SystemClauseType::PutByte => {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "put_byte", 2)?;
@@ -2015,53 +2067,6 @@ impl MachineState {
                         );
 
                         return Err(self.error_form(err, stub));
-                    }
-                }
-            }
-            &SystemClauseType::PutBytes => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "$put_bytes", 2)?;
-
-                let mut iter = self.heap_pstr_iter(self[temp_v!(2)]);
-                let mut bytes = Vec::new();
-                for c in iter.to_string().chars() {
-                    if c as u32 > 255 {
-
-                        let stub = MachineError::functor_stub(clause_name!("$put_bytes"), 2);
-
-                        let err = MachineError::type_error(
-                            self.heap.h(),
-                            ValidType::Byte,
-                            Addr::Char(c),
-                        );
-
-                        return Err(self.error_form(err, stub));
-                    }
-
-                    bytes.push(c as u8);
-                }
-
-                match stream.write(&bytes) {
-                    Ok(_) => {
-                        return return_from_clause!(self.last_call, self);
-                    }
-                    _ => {
-                        let stub = MachineError::functor_stub(
-                            clause_name!("$put_bytes"),
-                            2,
-                        );
-
-                        let addr = self.heap.to_unifiable(
-                            HeapCellValue::Stream(stream.clone()),
-                        );
-
-                        return Err(self.error_form(
-                            MachineError::existence_error(
-                                self.heap.h(),
-                                ExistenceError::Stream(addr),
-                            ),
-                            stub,
-                        ));
                     }
                 }
             }

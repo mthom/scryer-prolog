@@ -3,7 +3,7 @@
    Part of Scryer Prolog.
 
    This library provides the nonterminal format_//2 to describe
-   formatted strings. format/2 is provided for impure output.
+   formatted strings. format/[2,3] are provided for impure output.
 
    Usage:
    ======
@@ -369,17 +369,15 @@ digits(uppercase, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ").
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 format(Fs, Args) :-
-        phrase(format_(Fs, Args), Cs),
-        maplist(write, Cs).
+        current_output(Stream),
+        format(Stream, Fs, Args).
 
 format(Stream, Fs, Args) :-
         phrase(format_(Fs, Args), Cs),
-        (   stream_property(Stream, type(binary)) ->
-            % For binary streams, we use a specialised internal predicate
-            % that uses only a single "write" operation for efficiency.
-            '$put_bytes'(Stream, Cs)
-        ;   maplist(put_char(Stream), Cs)
-        ).
+        % we use a specialised internal predicate that uses only a
+        % single "write" operation for efficiency. It is equivalent to
+        % maplist(put_char(Stream), Cs). It also works for binary streams.
+        '$put_chars'(Stream, Cs).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- phrase(cells("hello", [], 0, []), Cs).
