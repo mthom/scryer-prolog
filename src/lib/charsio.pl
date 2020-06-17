@@ -1,6 +1,7 @@
 :- module(charsio, [char_type/2,
                     chars_utf8bytes/2,
                     get_single_char/1,
+                    read_line_to_chars/3,
                     read_term_from_chars/2,
                     write_term_to_chars/3]).
 
@@ -182,3 +183,14 @@ continuation(Code, Chars, Nb) --> [Byte],
 % invalid continuation byte
 % each remaining continuation byte (if any) will raise 0xFFFD too
 continuation(_, ['\xFFFD\'|T], _) --> [_], decode_utf8(T).
+
+
+read_line_to_chars(Stream, Cs0, Cs) :-
+        '$get_n_chars'(Stream, 1, Char), % this also works for binary streams
+        (   Char == [] -> Cs0 = Cs
+        ;   Char = [C],
+            Cs0 = [C|Rest],
+            (   C == '\n' -> Rest = Cs
+            ;   read_line_to_chars(Stream, Rest, Cs)
+            )
+        ).

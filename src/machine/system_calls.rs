@@ -2022,8 +2022,24 @@ impl MachineState {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "$put_bytes", 2)?;
 
-                let stub = MachineError::functor_stub(clause_name!("$put_bytes"), 2);
-                let bytes = self.integers_to_bytevec(temp_v!(2), stub);
+                let mut iter = self.heap_pstr_iter(self[temp_v!(2)]);
+                let mut bytes = Vec::new();
+                for c in iter.to_string().chars() {
+                    if c as u32 > 255 {
+
+                        let stub = MachineError::functor_stub(clause_name!("$put_bytes"), 2);
+
+                        let err = MachineError::type_error(
+                            self.heap.h(),
+                            ValidType::Byte,
+                            Addr::Char(c),
+                        );
+
+                        return Err(self.error_form(err, stub));
+                    }
+
+                    bytes.push(c as u8);
+                }
 
                 match stream.write(&bytes) {
                     Ok(_) => {
