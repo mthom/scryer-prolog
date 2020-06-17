@@ -66,7 +66,7 @@
 % p_trie_arity_univ(+Term,-FunctorData,-ArgumentsList).
 p_trie_arity_univ(Term,functor_data(Name,Arity),Arguments) :-
   (  var(Term) ->
-     Name = var,
+     Name = Term,
      Arity = 0,
      Arguments = []
   ;  Term =.. [Name|Arguments],

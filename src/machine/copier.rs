@@ -104,7 +104,7 @@ impl<T: CopierTarget> CopyTermState<T> {
     fn copy_partial_string(&mut self, addr: usize, n: usize) {
         if let &HeapCellValue::Addr(Addr::PStrLocation(h, _)) = &self.target[addr] {
             if h >= self.old_h {
-                *self.value_at_scan() = HeapCellValue::Addr(Addr::PStrLocation(h, 0));
+                *self.value_at_scan() = HeapCellValue::Addr(Addr::PStrLocation(h, n));
                 self.scan += 1;
 
                 return;
@@ -114,14 +114,14 @@ impl<T: CopierTarget> CopyTermState<T> {
         let threshold = self.target.threshold();
 
         *self.value_at_scan() =
-            HeapCellValue::Addr(Addr::PStrLocation(threshold, 0));
+            HeapCellValue::Addr(Addr::PStrLocation(threshold, n));
 
         self.scan += 1;
 
         let (pstr, has_tail) =
             match &self.target[addr] {
                 &HeapCellValue::PartialString(ref pstr, has_tail) => {
-                    (pstr.clone_from_offset(n), has_tail)
+                    (pstr.clone_from_offset(0), has_tail)
                 }
                 _ => {
                     unreachable!()
@@ -130,7 +130,7 @@ impl<T: CopierTarget> CopyTermState<T> {
 
         self.target.push(HeapCellValue::PartialString(pstr, has_tail));
 
-        let replacement = HeapCellValue::Addr(Addr::PStrLocation(threshold, 0));
+        let replacement = HeapCellValue::Addr(Addr::PStrLocation(threshold, n));
 
         let trail_item = mem::replace(
             &mut self.target[addr],
