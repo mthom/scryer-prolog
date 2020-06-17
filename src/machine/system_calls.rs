@@ -1905,7 +1905,6 @@ impl MachineState {
                                         }
                                     }
                                     _ => {
-                                        unreachable!()
                                     }
                                 }
                             }
