@@ -66,6 +66,9 @@ impl Machine {
                     }
                 }
             }
+            Addr::Fixnum(arity) => {
+                usize::try_from(arity).unwrap()
+            }
             Addr::Usize(n) => {
                 n
             }
@@ -98,6 +101,18 @@ impl Machine {
     }
 
     fn make_undefined(&mut self, name: ClauseName, arity: usize) {
+        let module_name = name.owning_module();
+
+        match self.indices.modules.get(&module_name) {
+            Some(ref module) => {
+                if let Some(idx) = module.code_dir.get(&(name.clone(), arity)) {
+                    set_code_index!(idx, IndexPtr::DynamicUndefined, module_name);
+                }
+            }
+            None => {
+            }
+        }
+
         if let Some(idx) = self.indices.code_dir.get(&(name, arity)) {
             set_code_index!(idx, IndexPtr::DynamicUndefined, clause_name!("user"));
         }
@@ -258,7 +273,12 @@ impl Machine {
                         unreachable!()
                     }
                 }
-            _ => unreachable!(),
+            Addr::Fixnum(arity) => {
+                usize::try_from(arity).unwrap()
+            }
+            _ => {
+                unreachable!()
+            }
         };
 
         let (mut name, arity) = self.get_predicate_key(temp_v!(1), temp_v!(2));
