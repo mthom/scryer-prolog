@@ -424,6 +424,9 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   Probabilistic predicates and random number generators.
 * [`http/http_open`](src/lib/http/http_open.pl) Open a stream to
   read answers from web&nbsp;servers. HTTPS is also supported.
+* [`sgml`](src/lib/sgml.pl)
+  `load_html/3` represents HTML&nbsp;documents as Prolog&nbsp;terms
+  for convenient and efficient reasoning.
 * [`sockets`](src/lib/sockets.pl)
   Predicates for opening and accepting TCP connections as streams.
   TLS negotiation is performed via the option `tls(true)` in

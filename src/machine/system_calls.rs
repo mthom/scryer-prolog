@@ -52,6 +52,8 @@ use crate::openssl::nid::Nid;
 
 use crate::native_tls::TlsConnector;
 
+extern crate select;
+
 pub fn get_key() -> KeyEvent {
     let key;
     enable_raw_mode().expect("failed to enable raw mode");
@@ -5559,9 +5561,67 @@ impl MachineState {
                     _ => { self.fail = true; return Ok(()); }
                 }
             }
+            &SystemClauseType::LoadHTML => {
+                let string = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                let doc = select::document::Document::from_read(string.as_bytes()).unwrap();
+                let result = self.html_node_to_term(indices, doc.nth(0).unwrap());
+
+                self.unify(self[temp_v!(2)], result);
+            }
         };
 
         return_from_clause!(self.last_call, self)
+    }
+
+    pub(super)
+    fn html_node_to_term(
+        &mut self,
+        indices: &mut IndexStore,
+        node: select::node::Node,
+    ) -> Addr {
+        match node.name() {
+            None => { let string = String::from(node.text());
+                      self.heap.put_complete_string(&string)
+            }
+            Some(name) => {
+                let mut avec = Vec::new();
+                for attr in node.attrs() {
+                    let chars = clause_name!(String::from(attr.0), indices.atom_tbl);
+                    let name  = self.heap.to_unifiable(
+                        HeapCellValue::Atom(chars, None)
+                    );
+
+                    let value = self.heap.put_complete_string(&String::from(attr.1));
+
+                    avec.push(HeapCellValue::Addr(Addr::HeapCell(self.heap.h())));
+
+                    self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), None));
+                    self.heap.push(HeapCellValue::Addr(name));
+                    self.heap.push(HeapCellValue::Addr(value));
+                }
+                let attrs = Addr::HeapCell(self.heap.to_list(avec.into_iter()));
+
+                let mut cvec = Vec::new();
+                for child in node.children() {
+                    cvec.push(self.html_node_to_term(indices, child));
+                }
+                let children = Addr::HeapCell(self.heap.to_list(cvec.into_iter()));
+
+                let chars = clause_name!(String::from(name), indices.atom_tbl);
+                let tag  = self.heap.to_unifiable(
+                    HeapCellValue::Atom(chars, None)
+                );
+
+                let result = Addr::HeapCell(self.heap.h());
+
+                self.heap.push(HeapCellValue::NamedStr(3, clause_name!("element"), None));
+                self.heap.push(HeapCellValue::Addr(tag));
+                self.heap.push(HeapCellValue::Addr(attrs));
+                self.heap.push(HeapCellValue::Addr(children));
+
+                result
+            }
+        }
     }
 }
 
