@@ -420,6 +420,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   Provides *delimited continuations* via `reset/3` and `shift/1`.
 * [`random`](src/lib/random.pl)
   Probabilistic predicates and random number generators.
+* [`http/http_open`](src/lib/http/http_open.pl) Open a stream to
+  read answers from web&nbsp;servers. HTTPS is also supported.
 * [`sockets`](src/lib/sockets.pl)
   Predicates for opening and accepting TCP connections as streams.
   TLS negotiation is performed via the option `tls(true)` in
