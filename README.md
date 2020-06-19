@@ -418,6 +418,9 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   `current_time/1` to obtain the current system time, the nonterminal
   `format_time//2` to describe strings with dates and times, and
   `sleep/1` to slow down a computation.
+* [`files`](src/lib/files.pl)
+  Predicates for reasoning about files and directories, such as
+  `directory_files/2`, `file_exists/1` and `file_size/2`.
 * [`cont`](src/lib/cont.pl)
   Provides *delimited continuations* via `reset/3` and `shift/1`.
 * [`random`](src/lib/random.pl)

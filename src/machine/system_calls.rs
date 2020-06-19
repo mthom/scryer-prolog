@@ -23,11 +23,11 @@ use crate::indexmap::IndexSet;
 use crate::ref_thread_local::RefThreadLocal;
 
 use std::cmp;
+use std::fs;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::io::{ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
-use std::fs::{OpenOptions};
 use std::net::{TcpListener, TcpStream};
 use std::ops::Sub;
 use std::rc::Rc;
@@ -819,6 +819,55 @@ impl MachineState {
                         );
 
                         return Err(self.error_form(err, stub));
+                    }
+                }
+            }
+            &SystemClauseType::DirectoryFiles => {
+                let dir = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                let path = std::path::Path::new(&dir);
+                let mut files = Vec::new();
+
+                if let Ok(entries) = fs::read_dir(path) {
+                    for entry in entries {
+                        if let Ok(entry) = entry {
+                            let name = entry.file_name().into_string().unwrap();
+                            files.push(self.heap.put_complete_string(&name));
+                        }
+                    }
+                }
+
+                let files_list = Addr::HeapCell(self.heap.to_list(files.into_iter()));
+                self.unify(self[temp_v!(2)], files_list);
+            }
+            &SystemClauseType::FileSize => {
+                let file = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                let len = Integer::from(fs::metadata(&file).unwrap().len());
+
+                let len = self.heap.to_unifiable(HeapCellValue::Integer(Rc::new(len)));
+
+                self.unify(self[temp_v!(2)], len);
+            }
+            &SystemClauseType::FileExists => {
+                let file = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                if !std::path::Path::new(&file).exists() || !fs::metadata(&file).unwrap().is_file() {
+                    self.fail = true;
+                    return Ok(());
+                }
+            }
+            &SystemClauseType::DirectoryExists => {
+                let directory = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                if !std::path::Path::new(&directory).exists() || !fs::metadata(&directory).unwrap().is_dir() {
+                    self.fail = true;
+                    return Ok(());
+                }
+            }
+            &SystemClauseType::MakeDirectory => {
+                let directory = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+
+                match fs::create_dir(directory) {
+                    Ok(_) => { }
+                    _ => { self.fail = true;
+                           return Ok(());
                     }
                 }
             }
@@ -3256,7 +3305,7 @@ impl MachineState {
                 let mode =
                     atom_from!(self, indices, self.store(self.deref(self[temp_v!(2)])));
 
-                let mut open_options = OpenOptions::new();
+                let mut open_options = fs::OpenOptions::new();
 
                 let (is_input_file, in_append_mode) =
                     match mode.as_str() {
