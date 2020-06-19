@@ -387,8 +387,11 @@ consult(Item) :-
 
 use_module(Module) :-
     (  nonvar(Module) ->
-       (  Module = library(Filename) -> '$use_module'(Filename)
-       ;  atom(Module) -> '$use_module_from_file'(Module)
+       (  Module = library(Filename) ->
+          write_term_to_chars(Filename, [], FilenameString),
+          '$use_module'(FilenameString)
+       ;  atom(Module) ->
+          '$use_module_from_file'(Module)
        ;  throw(error(invalid_module_specifier, use_module/1))
        )
     ;  throw(error(instantiation_error, use_module/1))
@@ -399,7 +402,8 @@ use_module(Module, QualifiedExports) :-
        (  list_si(QualifiedExports) ->
 	      maplist('$module_export'(use_module/2), QualifiedExports) ->
 	          (  Module = library(Filename) ->
-	             '$use_qualified_module'(Filename, QualifiedExports)
+                 write_term_to_chars(Filename, [], FilenameString),
+	             '$use_qualified_module'(FilenameString, QualifiedExports)
 	          ;  atom(Module) ->
 	             '$use_qualified_module_from_file'(Module, QualifiedExports)
 	          ;  throw(error(invalid_module_specifier, use_module/2))

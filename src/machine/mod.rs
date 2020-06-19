@@ -666,21 +666,27 @@ impl Machine {
 	    Ok(exports)
     }
 
-    fn use_module<ToSource>(&mut self, to_src: ToSource)
-	where ToSource: Fn(ClauseName) -> ModuleSource
+    fn use_module(&mut self, to_src: impl Fn(ClauseName) -> ModuleSource)
     {
 	    // the term expander will overwrite the cached query, so save it here.
 	    let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
 
 	    let module_spec = self.machine_st[temp_v!(1)].clone();
-	    let name = {
+	    let (name, is_path) = {
             let addr = self.machine_st.store(self.machine_st.deref(module_spec));
 
             match self.machine_st.heap.index_addr(&addr).as_ref() {
                 HeapCellValue::Atom(name, _) =>
-                    name.clone(),
+                    (name.clone(), name.as_str().contains('/')),
                 HeapCellValue::Addr(Addr::Char(c)) =>
-                    clause_name!(c.to_string(), self.indices.atom_tbl),
+                    (clause_name!(c.to_string(), self.indices.atom_tbl), false),
+                HeapCellValue::Addr(addr @ Addr::PStrLocation(..)) => {
+                    let mut heap_pstr_iter = self.machine_st.heap_pstr_iter(*addr);
+                    let filename = heap_pstr_iter.to_string();
+                    let is_path = filename.contains('/');
+
+                    (clause_name!(filename, self.indices.atom_tbl), is_path)
+                }
 	            _ =>
                     unreachable!(),
             }
@@ -688,14 +694,18 @@ impl Machine {
 
 	    let load_result = match to_src(name) {
 	        ModuleSource::Library(name) =>
-                if let Some(module) = self.indices.take_module(name.clone()) {
-                    self.indices.remove_module(clause_name!("user"), &module);
-                    self.indices.modules.insert(name.clone(), module);
+                if is_path {
+                    load_library(self, name, false)
+                } else {
+                    if let Some(module) = self.indices.take_module(name.clone()) {
+                        self.indices.remove_module(clause_name!("user"), &module);
+                        self.indices.modules.insert(name.clone(), module);
 
-		            Ok(name)
-		        } else {
-		            load_library(self, name, false)
-		        },
+		                Ok(name)
+		            } else {
+		                load_library(self, name, false)
+		            }
+                }
 	        ModuleSource::File(name) =>
                 load_module_from_file(self, PathBuf::from(name.as_str()), false)
 	    };
@@ -717,21 +727,27 @@ impl Machine {
 	    }
     }
 
-    fn use_qualified_module<ToSource>(&mut self, to_src: ToSource)
-	where ToSource: Fn(ClauseName) -> ModuleSource
+    fn use_qualified_module(&mut self, to_src: impl Fn(ClauseName) -> ModuleSource)
     {
 	    // the term expander will overwrite the cached query, so save it here.
 	    let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
 
 	    let module_spec = self.machine_st[temp_v!(1)].clone();
-	    let name = {
+	    let (name, is_path) = {
             let addr = self.machine_st.store(self.machine_st.deref(module_spec));
 
             match self.machine_st.heap.index_addr(&addr).as_ref() {
                 HeapCellValue::Atom(name, _) =>
-                    name.clone(),
+                    (name.clone(), name.as_str().contains('/')),
                 HeapCellValue::Addr(Addr::Char(c)) =>
-                    clause_name!(c.to_string(), self.indices.atom_tbl),
+                    (clause_name!(c.to_string(), self.indices.atom_tbl), false),
+                HeapCellValue::Addr(addr @ Addr::PStrLocation(..)) => {
+                    let mut heap_pstr_iter = self.machine_st.heap_pstr_iter(*addr);
+                    let filename = heap_pstr_iter.to_string();
+                    let is_path = filename.contains('/');
+
+                    (clause_name!(filename, self.indices.atom_tbl), is_path)
+                }
 	            _ =>
                     unreachable!(),
             }
@@ -747,14 +763,18 @@ impl Machine {
 
 	    let load_result = match to_src(name) {
 	        ModuleSource::Library(name) =>
-                if let Some(module) = self.indices.take_module(name.clone()) {
-                    self.indices.remove_module(clause_name!("user"), &module);
-                    self.indices.modules.insert(name.clone(), module);
+                if is_path {
+                    load_library(self, name, false)
+                } else {
+                    if let Some(module) = self.indices.take_module(name.clone()) {
+                        self.indices.remove_module(clause_name!("user"), &module);
+                        self.indices.modules.insert(name.clone(), module);
 
-		            Ok(name)
-		        } else {
-		            load_library(self, name, false)
-		        },
+		                Ok(name)
+		            } else {
+		                load_library(self, name, false)
+		            }
+                },
 	        ModuleSource::File(name) =>
                 load_module_from_file(self, PathBuf::from(name.as_str()), false)
 	    };

@@ -340,16 +340,39 @@ fn setup_module_decl(
     }
 }
 
-fn setup_use_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleSource, ParserError> {
+fn read_library_path(term: Term, atom_tbl: TabledData<Atom>) -> Option<ClauseName> {
+    match term {
+        Term::Constant(_, Constant::Atom(atom, _)) => {
+            Some(atom.defrock_brackets())
+        }
+        _ => {
+            let mut atoms = vec![];
+
+            for term in unfold_by_str(term, "/") {
+                match term {
+                    Term::Constant(_, Constant::Atom(atom, _)) => {
+                        atoms.push(atom.as_str().to_owned());
+                    }
+                    _ => {
+                        return None;
+                    }
+                }
+            }
+
+            Some(clause_name!(atoms.join("/"), atom_tbl))
+        }
+    }
+}
+
+fn setup_use_module_decl(
+    mut terms: Vec<Box<Term>>,
+    atom_tbl: TabledData<Atom>,
+) -> Result<ModuleSource, ParserError> {
     match *terms.pop().unwrap() {
         Term::Clause(_, ref name, ref mut terms, None)
             if name.as_str() == "library" && terms.len() == 1 =>
         {
-            terms
-                .pop()
-                .unwrap()
-                .to_constant()
-                .and_then(|c| c.to_atom())
+            read_library_path(*terms.pop().unwrap(), atom_tbl)
                 .map(|c| ModuleSource::Library(c))
                 .ok_or(ParserError::InvalidUseModuleDecl)
         }
@@ -396,11 +419,7 @@ fn setup_qualified_import(
         Term::Clause(_, ref name, ref mut terms, None)
             if name.as_str() == "library" && terms.len() == 1 =>
         {
-            terms
-                .pop()
-                .unwrap()
-                .to_constant()
-                .and_then(|c| c.to_atom())
+            read_library_path(*terms.pop().unwrap(), atom_tbl.clone())
                 .map(|c| ModuleSource::Library(c))
                 .ok_or(ParserError::InvalidUseModuleDecl)
         }
@@ -685,7 +704,7 @@ fn setup_declaration<'a, 'b, 'c>(
                     }
                 }
 		        ("use_module", 1) => {
-		            Ok(Declaration::UseModule(setup_use_module_decl(terms)?))
+		            Ok(Declaration::UseModule(setup_use_module_decl(terms, indices.atom_tbl())?))
                 }
 		        ("use_module", 2) => {
 		            let (name, exports) = setup_qualified_import(terms, indices.atom_tbl())?;
