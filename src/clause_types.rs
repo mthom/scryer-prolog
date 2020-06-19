@@ -229,8 +229,8 @@ pub enum SystemClauseType {
     PeekCode,
     PointsToContinuationResetMarker,
     PutByte,
-    PutBytes,
     PutChar,
+    PutChars,
     PutCode,
     REPL(REPLCodePtr),
     ReadQueryTerm,
@@ -419,11 +419,11 @@ impl SystemClauseType {
             &SystemClauseType::PutByte => {
                 clause_name!("$put_byte")
             }
-            &SystemClauseType::PutBytes => {
-                clause_name!("$put_bytes")
-            }
             &SystemClauseType::PutChar => {
                 clause_name!("$put_char")
+            }
+            &SystemClauseType::PutChars => {
+                clause_name!("$put_chars")
             }
             &SystemClauseType::PutCode => {
                 clause_name!("$put_code")
@@ -560,11 +560,11 @@ impl SystemClauseType {
             ("$put_byte", 2) => {
                 Some(SystemClauseType::PutByte)
             }
-            ("$put_bytes", 2) => {
-                Some(SystemClauseType::PutBytes)
-            }
             ("$put_char", 2) => {
                 Some(SystemClauseType::PutChar)
+            }
+            ("$put_chars", 2) => {
+                Some(SystemClauseType::PutChars)
             }
             ("$put_code", 2) => {
                 Some(SystemClauseType::PutCode)
