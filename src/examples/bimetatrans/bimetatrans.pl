@@ -35,12 +35,18 @@
  * inputs are expected to be ground, meaning they should not contain
  * free variables.
  *
+ * A RuleML/XML document is assumed to contain an optional Assert
+ * element (with zero or more children) and zero or more Query
+ * elements. The children of the Assert element are the Items of
+ * AssertItems, while the Items of QueryItems each correspond to a
+ * single Query element.
+ *
  * parse_ruleml/3 is meant to subsume an invertible function in the
  * sense that the top-level query
  *
  * ?- parse_ruleml(AssertItems, QueryItems, XML0),    % Prolog->RuleML
  *    parse_ruleml(AssertItems0, QueryItems0, XML),   % RuleML->Prolog
- *    AssertItems0 == AssertItems,                     % Test for expected round-trip results.
+ *    AssertItems0 == AssertItems,                    % Test for expected round-trip results.
  *    QueryItems0 == QueryItems,
  *    XML0 == XML.
  *
