@@ -575,7 +575,7 @@ impl DomainErrorType {
 // from 7.12.2 f) of 13211-1:1995
 #[derive(Debug, Clone, Copy)]
 pub enum RepFlag {
-    //    Character,
+    Character,
     CharacterCode,
     InCharacterCode,
     MaxArity,
@@ -586,7 +586,7 @@ pub enum RepFlag {
 impl RepFlag {
     pub fn as_str(self) -> &'static str {
         match self {
-            //            RepFlag::Character => "character",
+            RepFlag::Character => "character",
             RepFlag::CharacterCode => "character_code",
             RepFlag::InCharacterCode => "in_character_code",
             RepFlag::MaxArity => "max_arity",

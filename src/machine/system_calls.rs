@@ -830,8 +830,16 @@ impl MachineState {
                 if let Ok(entries) = fs::read_dir(path) {
                     for entry in entries {
                         if let Ok(entry) = entry {
-                            let name = entry.file_name().into_string().unwrap();
-                            files.push(self.heap.put_complete_string(&name));
+                            match entry.file_name().into_string() {
+                                Ok(name) => { files.push(self.heap.put_complete_string(&name)); }
+                                _ => {
+                                    let stub = MachineError::functor_stub(clause_name!("directory_files"), 2);
+                                    let err = MachineError::representation_error(RepFlag::Character);
+                                    let err = self.error_form(err, stub);
+
+                                    return Err(err);
+                                }
+                            }
                         }
                     }
                 }
