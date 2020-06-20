@@ -29,6 +29,7 @@
 :- use_module(library(format)).
 :- use_module(library(charsio)).
 :- use_module(library(dcgs)).
+:- use_module(library(lists), [member/2]).
 
 http_open(Address, Stream, Options) :-
         must_be(list, Options),
