@@ -426,7 +426,11 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   read answers from web&nbsp;servers. HTTPS is also supported.
 * [`sgml`](src/lib/sgml.pl)
   `load_html/3` represents HTML&nbsp;documents as Prolog&nbsp;terms
-  for convenient and efficient reasoning.
+  for convenient and efficient reasoning. See also `library(xpath)`.
+* [`xpath`](src/lib/xpath.pl)
+  The predicate `xpath/3` is used for convenient reasoning about
+  HTML and XML&nbsp;documents, inspired by the XPath language. This
+  library is often used together with `library(sgml)`.
 * [`sockets`](src/lib/sockets.pl)
   Predicates for opening and accepting TCP connections as streams.
   TLS negotiation is performed via the option `tls(true)` in

@@ -21,6 +21,11 @@
 
    Currently, Options are ignored. In the future, more options may be
    provided to control parsing.
+
+   Use http_open/3 from library(http/http_open) to read answers from
+   web servers via streams.
+
+   library(xpath) provides convenient reasoning about parsed documents.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(sgml, [load_html/3]).
