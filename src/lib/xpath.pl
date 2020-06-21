@@ -26,7 +26,6 @@
 
       :- use_module(library(http/http_open)).
       :- use_module(library(sgml)).
-      :- use_module(library(format)).
       :- use_module(library(lists)).
       :- use_module(library(xpath)).
 
