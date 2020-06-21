@@ -299,7 +299,8 @@ pub enum SystemClauseType {
     Ed25519Verify,
     Ed25519NewKeyPair,
     Ed25519KeyPairPublicKey,
-    LoadHTML
+    LoadHTML,
+    LoadXML,
 }
 
 impl SystemClauseType {
@@ -498,6 +499,7 @@ impl SystemClauseType {
             &SystemClauseType::Ed25519NewKeyPair => clause_name!("$ed25519_new_keypair"),
             &SystemClauseType::Ed25519KeyPairPublicKey => clause_name!("$ed25519_keypair_public_key"),
             &SystemClauseType::LoadHTML => clause_name!("$load_html"),
+            &SystemClauseType::LoadXML => clause_name!("$load_xml"),
         }
     }
 
@@ -676,6 +678,7 @@ impl SystemClauseType {
             ("$ed25519_new_keypair", 1) => Some(SystemClauseType::Ed25519NewKeyPair),
             ("$ed25519_keypair_public_key", 2) => Some(SystemClauseType::Ed25519KeyPairPublicKey),
             ("$load_html", 3) => Some(SystemClauseType::LoadHTML),
+            ("$load_xml", 3) => Some(SystemClauseType::LoadXML),
             _ => None,
         }
     }
