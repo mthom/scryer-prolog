@@ -425,8 +425,9 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`http/http_open`](src/lib/http/http_open.pl) Open a stream to
   read answers from web&nbsp;servers. HTTPS is also supported.
 * [`sgml`](src/lib/sgml.pl)
-  `load_html/3` represents HTML&nbsp;documents as Prolog&nbsp;terms
-  for convenient and efficient reasoning. See also `library(xpath)`.
+  `load_html/3` and `load_xml/3` represent HTML and XML&nbsp;documents
+  as Prolog&nbsp;terms for convenient and efficient reasoning. Use
+  `library(xpath)` to extract information from parsed documents.
 * [`xpath`](src/lib/xpath.pl)
   The predicate `xpath/3` is used for convenient reasoning about
   HTML and XML&nbsp;documents, inspired by the XPath language. This

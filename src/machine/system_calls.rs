@@ -53,6 +53,7 @@ use crate::openssl::nid::Nid;
 use crate::native_tls::TlsConnector;
 
 extern crate select;
+use roxmltree;
 
 pub fn get_key() -> KeyEvent {
     let key;
@@ -5568,9 +5569,69 @@ impl MachineState {
 
                 self.unify(self[temp_v!(2)], result);
             }
+            &SystemClauseType::LoadXML => {
+                let string = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                match roxmltree::Document::parse(&string) {
+                    Ok(doc) => { let result = self.xml_node_to_term(indices, doc.root_element());
+                                 self.unify(self[temp_v!(2)], result);
+                    }
+                    _ => { self.fail = true;
+                           return Ok(());
+                    }
+                }
+            }
         };
 
         return_from_clause!(self.last_call, self)
+    }
+
+    pub(super)
+    fn xml_node_to_term(
+        &mut self,
+        indices: &mut IndexStore,
+        node: roxmltree::Node,
+    ) -> Addr {
+        if node.has_children() {
+            let mut avec = Vec::new();
+            for attr in node.attributes() {
+                let chars = clause_name!(String::from(attr.name()), indices.atom_tbl);
+                let name  = self.heap.to_unifiable(
+                    HeapCellValue::Atom(chars, None)
+                );
+
+                let value = self.heap.put_complete_string(&attr.value());
+
+                avec.push(HeapCellValue::Addr(Addr::HeapCell(self.heap.h())));
+
+                self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), None));
+                self.heap.push(HeapCellValue::Addr(name));
+                self.heap.push(HeapCellValue::Addr(value));
+            }
+            let attrs = Addr::HeapCell(self.heap.to_list(avec.into_iter()));
+
+            let mut cvec = Vec::new();
+            for child in node.children() {
+                cvec.push(self.xml_node_to_term(indices, child));
+            }
+            let children = Addr::HeapCell(self.heap.to_list(cvec.into_iter()));
+
+            let chars = clause_name!(String::from(node.tag_name().name()), indices.atom_tbl);
+            let tag  = self.heap.to_unifiable(
+                HeapCellValue::Atom(chars, None)
+            );
+
+            let result = Addr::HeapCell(self.heap.h());
+
+            self.heap.push(HeapCellValue::NamedStr(3, clause_name!("element"), None));
+            self.heap.push(HeapCellValue::Addr(tag));
+            self.heap.push(HeapCellValue::Addr(attrs));
+            self.heap.push(HeapCellValue::Addr(children));
+
+            result
+        } else {
+            let string = String::from(node.text().unwrap());
+            self.heap.put_complete_string(&string)
+        }
     }
 
     pub(super)
