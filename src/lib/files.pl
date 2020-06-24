@@ -15,7 +15,7 @@
    -) File names are mostly ephemeral, so it is good for efficiency
       that they can quickly allocated transiently on the heap, leaving the
       atom table mostly unaffected. Indexing is almost never needed
-      for file names.
+      for file names. If needed, it should be added to the engine.
    -) The previous point is also good for security, since the system
       leaves little trace of which files were even accessed.
    -) Scryer Prolog represents lists of characters extremely compactly.
