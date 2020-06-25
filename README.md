@@ -428,6 +428,9 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   `load_html/3` and `load_xml/3` represent HTML and XML&nbsp;documents
   as Prolog&nbsp;terms for convenient and efficient reasoning. Use
   `library(xpath)` to extract information from parsed documents.
+* [`csv`](src/lib/csv.pl)
+  `parse_csv//1` and `parse_csv//2` can be used with [`phrase_from_file/2`](src/lib/pio.pl)
+  or [`phrase/2`](src/lib/dcgs.pl) to parse csv
 * [`xpath`](src/lib/xpath.pl)
   The predicate `xpath/3` is used for convenient reasoning about
   HTML and XML&nbsp;documents, inspired by the XPath language. This
