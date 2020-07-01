@@ -212,17 +212,6 @@ impl SubModuleUser for IndexStore {
     }
 }
 
-#[inline]
-fn current_dir() -> std::path::PathBuf {
-    let mut path_buf = std::path::PathBuf::from(PROJECT_DIR);
-
-    // file!() always produces a path relative to PROJECT_DIR.
-    path_buf = path_buf.join(std::path::PathBuf::from(file!()));
-
-    path_buf.pop();
-    path_buf
-}
-
 include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
 static TOPLEVEL: &str = include_str!("../toplevel.pl");
@@ -230,12 +219,7 @@ static TOPLEVEL: &str = include_str!("../toplevel.pl");
 impl Machine {
     fn compile_special_forms(&mut self)
     {
-        let current_dir = current_dir();
-
-        let verify_attrs_src = ListingSource::from_file_and_path(
-            clause_name!("attributed_variables.pl"),
-            current_dir.clone(),
-        );
+        let verify_attrs_src = ListingSource::User;
 
         match compile_special_form(
             self,
@@ -250,10 +234,7 @@ impl Machine {
                 panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS"),
         }
 
-        let project_attrs_src = ListingSource::from_file_and_path(
-            clause_name!("project_attributes.pl"),
-            current_dir,
-        );
+        let project_attrs_src = ListingSource::User;
 
         match compile_special_form(
             self,
@@ -273,13 +254,7 @@ impl Machine {
     {
         self.toplevel_idx = self.code_repo.code.len();
 
-        let mut current_dir = current_dir();
-        current_dir.pop();
-
-        let top_lvl_src = ListingSource::from_file_and_path(
-            clause_name!("toplevel.pl"),
-            current_dir,
-        );
+        let top_lvl_src = ListingSource::User;
 
         compile_user_module(
             self,
@@ -371,6 +346,8 @@ impl Machine {
 
     pub fn new(current_input_stream: Stream, current_output_stream: Stream) -> Self
     {
+        use crate::ref_thread_local::RefThreadLocal;
+
         let mut wam = Machine {
             machine_st: MachineState::new(),
             inner_heap: Heap::new(),
@@ -383,78 +360,59 @@ impl Machine {
         };
 
         let atom_tbl = wam.indices.atom_tbl.clone();
-        let mut lib_path = current_dir();
-
-        lib_path.pop();
-        lib_path.push("lib");
 
         wam.indices.add_term_and_goal_expansion_indices();
 
         compile_listing(
             &mut wam,
-            Stream::from(BUILTINS),
+            Stream::from(LIBRARIES.borrow()["builtins"]),
             default_index_store!(atom_tbl.clone()),
             true,
-            ListingSource::from_file_and_path(
-                clause_name!("builtins.pl"),
-                lib_path.clone(),
-            ),
+            ListingSource::User,
         );
 
         wam.compile_special_forms();
 
-        compile_user_module(&mut wam,
-                            Stream::from(ERROR),
-                            true,
-                            ListingSource::from_file_and_path(
-                                clause_name!("error"),
-                                lib_path.clone(),
-                            )
+        compile_user_module(
+            &mut wam,
+            Stream::from(LIBRARIES.borrow()["error"]),
+            true,
+            ListingSource::User,
         );
 
-        compile_user_module(&mut wam,
-                            Stream::from(PAIRS),
-                            true,
-                            ListingSource::from_file_and_path(
-                                clause_name!("pairs"),
-                                lib_path.clone(),
-                            )
+        compile_user_module(
+            &mut wam,
+            Stream::from(LIBRARIES.borrow()["pairs"]),
+            true,
+            ListingSource::User,
         );
 
-        compile_user_module(&mut wam,
-                            Stream::from(LISTS),
-                            true,
-                            ListingSource::from_file_and_path(
-                                clause_name!("lists"),
-                                lib_path.clone(),
-                            ),
+        compile_user_module(
+            &mut wam,
+            Stream::from(LIBRARIES.borrow()["lists"]),
+            true,
+            ListingSource::User,
         );
 
-        compile_user_module(&mut wam,
-                            Stream::from(ISO_EXT),
-                            true,
-                            ListingSource::from_file_and_path(
-                                clause_name!("iso_ext"),
-                                lib_path.clone(),
-                            )
+        compile_user_module(
+            &mut wam,
+            Stream::from(LIBRARIES.borrow()["iso_ext"]),
+            true,
+            ListingSource::User,
         );
 
-        compile_user_module(&mut wam,
-                            Stream::from(SI),
-                            true,
-                            ListingSource::from_file_and_path(
-                                clause_name!("si"),
-                                lib_path.clone(),
-                            )
+        compile_user_module(
+            &mut wam,
+            Stream::from(LIBRARIES.borrow()["si"]),
+            true,
+            ListingSource::User,
         );
 
-        compile_user_module(&mut wam,
-                            Stream::from(CHARSIO),
-                            true,
-                            ListingSource::from_file_and_path(
-                                clause_name!("si"),
-                                lib_path.clone(),
-                            )
+        compile_user_module(
+            &mut wam,
+            Stream::from(LIBRARIES.borrow()["charsio"]),
+            true,
+            ListingSource::User,
         );
 
         if wam.compile_top_level().is_err() {
@@ -681,8 +639,15 @@ impl Machine {
                     name.clone(),
                 HeapCellValue::Addr(Addr::Char(c)) =>
                     clause_name!(c.to_string(), self.indices.atom_tbl),
-	            _ =>
-                    unreachable!(),
+                HeapCellValue::Addr(addr @ Addr::PStrLocation(..)) => {
+                    let mut heap_pstr_iter =
+                        self.machine_st.heap_pstr_iter(*addr);
+                    clause_name!(
+                        heap_pstr_iter.to_string(),
+                        self.indices.atom_tbl
+                    )
+                }
+                _ => unreachable!(),
             }
 	    };
 

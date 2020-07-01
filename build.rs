@@ -1,60 +1,55 @@
 extern crate indexmap;
 
-use crate::indexmap::IndexSet;
-
 use std::env;
-use std::fs::{File, copy, read_dir};
+use std::fs;
+use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-fn main()
-{
+fn find_prolog_files(libraries: &mut File, prefix: &str, current_dir: &Path) {
+    let entries = match current_dir.read_dir() {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+    for entry in entries.filter_map(Result::ok).map(|e| e.path()) {
+        if entry.is_dir() {
+            if let Some(file_name) = entry.file_name() {
+                let new_prefix =
+                    prefix.to_owned() + file_name.to_str().unwrap() + "/";
+                find_prolog_files(libraries, &new_prefix, &entry);
+            }
+        } else if entry.is_file() {
+            let ext = std::ffi::OsStr::new("pl");
+            if entry.extension() == Some(ext) {
+                let contain =
+                    String::from_utf8(fs::read(&entry).unwrap()).unwrap();
+                let name = entry.file_stem().unwrap().to_str().unwrap();
+                let line = format!(
+                    "        m.insert(\"{}\",\n{:?});\n",
+                    prefix.to_owned() + name,
+                    contain
+                );
+
+                libraries.write_all(line.as_bytes()).unwrap();
+            }
+        }
+    }
+}
+
+fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("libraries.rs");
 
     let mut libraries = File::create(&dest_path).unwrap();
-    let mut library_index = IndexSet::new();
+    let lib_path = Path::new("src/lib");
 
-    let paths = read_dir("./src/lib").unwrap();
-
-    for item in paths {
-        let item = item.unwrap().path();
-
-        if let Some(file_name) = item.file_name() {
-            if let Some(ext) = item.extension() {
-                if ext == "pl" {
-                    let file_stem = item.file_stem().unwrap();
-                    let file_str  = file_stem.to_string_lossy().to_uppercase();
-                    let dest = Path::new(&out_dir).join(file_name);
-
-                    match copy(&item, dest) {
-                        Ok(_) => {},
-                        Err(e) => panic!("die: {:?}", e)
-                    };
-
-                    let include_line = format!("static {}: &str = include_str!(\"{}.pl\");\n",
-                                               file_str, file_stem.to_string_lossy());
-
-                    libraries.write_all(include_line.as_bytes()).unwrap();
-                    library_index.insert(file_stem.to_string_lossy().to_string());
-                }
-            }
-        }
-    }
-
-    libraries.write_all(b"\nref_thread_local! {
+    libraries
+        .write_all(
+            b"ref_thread_local! {
     pub static managed LIBRARIES: IndexMap<&'static str, &'static str> = {
-        let mut m = IndexMap::new();\n").unwrap();
-
-    for item in library_index {
-        let line = format!("\n        m.insert(\"{}\", {});", item, item.to_uppercase());
-        libraries.write_all(line.as_bytes()).unwrap();
-    }
-
-    libraries.write_all(b"\n\n        m\n    };
-}\n").unwrap();
-
-    libraries.write_all(b"\npub static PROJECT_DIR: &'static str = \"").unwrap();
-    libraries.write_all(env::var("CARGO_MANIFEST_DIR").unwrap().as_bytes()).unwrap();
-    libraries.write_all(b"\";\n").unwrap();
+        let mut m = IndexMap::new();\n",
+        )
+        .unwrap();
+    find_prolog_files(&mut libraries, "", &lib_path);
+    libraries.write_all(b"\n        m\n    };\n}\n").unwrap();
 }

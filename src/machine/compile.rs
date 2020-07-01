@@ -602,12 +602,7 @@ fn load_library(
 ) -> Result<ClauseName, SessionError> {
     match LIBRARIES.borrow().get(name.as_str()) {
         Some(code) => {
-            let mut lib_path = current_dir();
-
-            lib_path.pop();
-            lib_path.push("lib");
-
-            let listing_src = ListingSource::from_file_and_path(name, lib_path);
+            let listing_src = ListingSource::User;
 
             load_module(
                 wam,

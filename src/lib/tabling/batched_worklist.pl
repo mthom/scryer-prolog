@@ -45,8 +45,8 @@
 	    wkl_worklist_work_done/1			% +WorkList
 	  ]).
 
-:- use_module(global_worklist).
-:- use_module(double_linked_list).
+:- use_module(library('tabling/global_worklist')).
+:- use_module(library('tabling/double_linked_list')).
 
 :- use_module(library(atts)).
 :- use_module(library(lists)).
