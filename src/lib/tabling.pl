@@ -8,12 +8,12 @@
 	    op(1150, fx, table)
 	  ]).
 
-:- use_module(library('tabling/double_linked_list')).
-:- use_module(library('tabling/table_data_structure')).
-:- use_module(library('tabling/batched_worklist')).
-:- use_module(library('tabling/wrapper')).
-:- use_module(library('tabling/global_worklist')).
-:- use_module(library('tabling/table_link_manager')).
+:- use_module(library(tabling/double_linked_list)).
+:- use_module(library(tabling/table_data_structure)).
+:- use_module(library(tabling/batched_worklist)).
+:- use_module(library(tabling/wrapper)).
+:- use_module(library(tabling/global_worklist)).
+:- use_module(library(tabling/table_link_manager)).
 
 :- use_module(library(cont)).
 :- use_module(library(lists)).

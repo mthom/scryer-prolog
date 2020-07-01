@@ -15,8 +15,8 @@
 	    get_nb_identifiers/3                % +Table, -NbWorklistID, -NbAnswerTreeID
 	  ]).
 
-:- use_module(library('tabling/table_link_manager')).
-:- use_module(library('tabling/trie')).
+:- use_module(library(tabling/table_link_manager)).
+:- use_module(library(tabling/trie)).
 
 /*  Part of SWI-Prolog
 
@@ -53,7 +53,7 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-:- use_module(library('tabling/batched_worklist')).
+:- use_module(library(tabling/batched_worklist)).
 
 :- use_module(library(atts)).
 :- use_module(library(gensym)).
