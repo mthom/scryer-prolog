@@ -600,44 +600,30 @@ fn load_library(
     name: ClauseName,
     suppress_warnings: bool,
 ) -> Result<ClauseName, SessionError> {
-    let mut lib_path = current_dir();
+    match LIBRARIES.borrow().get(name.as_str()) {
+        Some(code) => {
+            let mut lib_path = current_dir();
 
-    lib_path.pop();
-    lib_path.push("lib");
+            lib_path.pop();
+            lib_path.push("lib");
 
-    let (stream, listing_src) =
-        match LIBRARIES.borrow().get(name.as_str()) {
-            Some(code) => {
-                let listing_src = ListingSource::from_file_and_path(name, lib_path);
-                (Stream::from(*code), listing_src)
-            }
-            None => {
-                // assume that name is a path.
-                lib_path.push(name.as_str());
-                lib_path.set_extension("pl");
+            let listing_src = ListingSource::from_file_and_path(name, lib_path);
 
-                let file =
-                    match File::open(&lib_path) {
-                        Ok(file) => {
-                            file
-                        }
-                        Err(_) => {
-                            let err = ExistenceError::ModuleSource(ModuleSource::Library(name));
-                            return Err(SessionError::ExistenceError(err));
-                        }
-                    };
+            load_module(
+                wam,
+                Stream::from(*code),
+                suppress_warnings,
+                &listing_src,
+            )
+        }
+        None => {
+            let err = ExistenceError::ModuleSource(ModuleSource::Library(
+                name.clone()
+            ));
 
-                let listing_src = ListingSource::from_file_and_path(name.clone(), lib_path);
-                (Stream::from_file_as_input(name, file), listing_src)
-            }
-        };
-
-    load_module(
-        wam,
-        stream,
-        suppress_warnings,
-        &listing_src,
-    )
+            Err(SessionError::ExistenceError(err))
+        }
+    }
 }
 
 impl ListingCompiler {
