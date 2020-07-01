@@ -452,7 +452,7 @@ impl Machine {
                             Stream::from(CHARSIO),
                             true,
                             ListingSource::from_file_and_path(
-                                clause_name!("charsio"),
+                                clause_name!("si"),
                                 lib_path.clone(),
                             )
         );
