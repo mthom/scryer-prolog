@@ -43,16 +43,25 @@ Table of Contents
 
  */
 
+%:- use_module(library(debug)).
+:- use_module(library(assoc), [assoc_to_list/2, del_assoc/4, empty_assoc/1, put_assoc/4]).
+:- use_module(library(atts), [call_residue_vars/2]).
+:- use_module(library(charsio), [char_type/2]).
 :- use_module(library(clpz)).
 :- use_module(library(dcgs)).
-
-:- use_module(library(lists), [append/3, list_to_set /2, maplist/2, member/2, select/3]).
-:- use_module(library(assoc), [assoc_to_list/2, del_assoc/4, empty_assoc/1, put_assoc/4]).
-:- use_module(library(format), [format/2, format_/2, portray_clause/1]).
+:- use_module(library(format), [format/2, portray_clause/1]).
+:- use_module(library(lists), [append/3, list_to_set/2, maplist/2, member/2, select/3]).
 :- use_module(library(pio), [phrase_from_file/2]).
 
+:- dynamic(combo/5).
 :- dynamic(func/3).
 :- dynamic(def/2).
+
+retractall(What) :-
+    (   \+ \+ retract(What) ->
+        retractall(What)
+    ;   true
+    ).
 
 /*
 An entry point.
@@ -116,24 +125,30 @@ atoms, and list literals to Prolog lists.
 
 */
 
-joy_parse([J|Js]) --> {write("blanks")},blanks, joy_term(J), blanks, joy_parse(Js).
+joy_parse([J|Js]) --> blanks, joy_term(J), blanks, joy_parse(Js).
 joy_parse([]) --> [].
 
-joy_term(J) --> {write("list")},"[", !, joy_parse(X), "]".
-% joy_term(X) --> {write("int")},N, { number_chars(N, I) }, !.
-joy_term(true) --> "true", !.
-joy_term(false) --> "false", !.
-joy_term(X) --> {write("symbol")}, symbol(S).
+joy_term(int(I)) --> integer(Ds), !, { number_chars(I, Ds) }.
+joy_term(list(J)) --> "[", !, joy_parse(J), "]".
+joy_term(bool(true)) --> "true", !.
+joy_term(bool(false)) --> "false", !.
+joy_term(symbol(S)) --> symbol(S).
 
-symbol(C) --> chars(Chars), !, {write("got char"),C = Chars}.
+symbol(A) --> chars(Cs), !, { atom_chars(A, Cs) }.
 
-chars([Ch|Rest]) --> {write("X"),portray_clause(Ch)}, char(Ch), {write("Y"),portray_clause(Ch)}, chars(Rest).
-chars([Ch])      --> {write("Z"),portray_clause(Ch)}, char(Ch).
-
-char(Ch) --> [Ch], {format("Ch = |~w|~n", [Ch]), Ch \== '[', Ch \== ']', format("Ch is not or ~n", []), format("Ch is graphic~n", [])}.
-
-blanks --> [C], { format("is whitespace~n", []), C == ' ', format("is not whitespace~n", [])}, (blanks | call(eos)), !.
+blanks --> [C], { char_type(C, whitespace) }, (blanks | call(eos)), !.
 blanks --> [].
+
+integer([D|Ds]) --> digit(D), integer(Ds).
+integer([D]) --> digit(D).
+
+digit(D) --> [D], { char_type(D, decimal_digit) }.
+
+chars([C|Cs]) --> char(C), chars(Cs).
+chars([C]) --> char(C).
+
+char(C) --> [C], { C \== '[', C \== ']', char_type(C, ascii_graphic) }.
+
 
 /* Here is an example of Joy code:
 
@@ -253,8 +268,7 @@ thun(symbol(Unknown), _, _, _) :-
     \+ def(Unknown, _),
     \+ func(Unknown, _, _),
     \+ combo(Unknown, _, _, _, _),
-    write("Unknown: "),
-    writeln(Unknown),
+    format("Unknown: ~q\n", [Unknown]),
     fail.
 
 /*
@@ -268,6 +282,14 @@ thun(symbol(Unknown), _, _, _) :-
 
 */
 
+is_list(X) :- var(X), !, false.
+is_list([]).
+is_list([_|Ls]) :- is_list(Ls).
+
+flatten([]) --> [], !.
+flatten([A|T]) --> { \+ is_list(A) }, [A], !, flatten(T).
+flatten([A|T]) --> flatten(A), flatten(T).
+
 func(words, S, [Words|S]) :- words(Words).
 
 func(swap, [A, B|S],  [B, A|S]).
@@ -276,7 +298,7 @@ func(pop,     [_|S],        S ).
 
 func(cons,   [list(A),      B |S], [list([B|A])|S]).
 func(concat, [list(A), list(B)|S],     [list(C)|S]) :- append(B, A, C).
-func(flatten,   [list(A)|S],   [list(B)|S]) :- flatten(A, B).
+func(flatten,   [list(A)|S],   [list(B)|S]) :- phrase(flatten(B), A).
 func(swaack,    [list(R)|S],   [list(S)|R]).
 func(stack,              S ,   [list(S)|S]).
 func(clear,              _ ,            []).
@@ -781,7 +803,7 @@ reggy(FreePool, References, ValueMap)
 encode_list(List, FP, FP, Addr) --> [],
     {addr(list(List))=Addr}.
 
-get_reggy([], _, _) :- writeln('Out of Registers'), fail.
+get_reggy([], _, _) :- format("Out of Registers\n", []), fail.
 get_reggy([Reg|FreePool], Reg, FreePool).
 
 get_reg(Reg, reggy(FreePool0, References, V), reggy(FreePool, [Reg|References], V)) --> [],
@@ -866,7 +888,7 @@ func_compile(pop, E, [A|S], So, FP0, FP) --> !,
     free_reg(A, FP0, FP1),
     thun_compile(E, S, So, FP1, FP).
 
-func_compile(cons, E, [List, Item|S], So, FP0, FP) --> !,
+func_compile(cons, E, [_List, _Item|S], So, FP0, FP) --> !,
     % allocate a cons cell
     % https://mitpress.mit.edu/sites/default/files/sicp/full-text/book/book-Z-H-33.html#%_sec_5.3
     thun_compile(E, S, So, FP0, FP).
