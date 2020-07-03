@@ -340,7 +340,10 @@ fn setup_module_decl(
     }
 }
 
-fn read_library_path(term: Term, atom_tbl: TabledData<Atom>) -> Option<ClauseName> {
+fn read_library_path(
+    term: Term,
+    atom_tbl: TabledData<Atom>,
+) -> Option<ClauseName> {
     match term {
         Term::Constant(_, Constant::Atom(atom, _)) => {
             Some(atom.defrock_brackets())
@@ -353,9 +356,7 @@ fn read_library_path(term: Term, atom_tbl: TabledData<Atom>) -> Option<ClauseNam
                     Term::Constant(_, Constant::Atom(atom, _)) => {
                         atoms.push(atom.as_str().to_owned());
                     }
-                    _ => {
-                        return None;
-                    }
+                    _ => return None,
                 }
             }
 
@@ -364,10 +365,7 @@ fn read_library_path(term: Term, atom_tbl: TabledData<Atom>) -> Option<ClauseNam
     }
 }
 
-fn setup_use_module_decl(
-    mut terms: Vec<Box<Term>>,
-    atom_tbl: TabledData<Atom>,
-) -> Result<ModuleSource, ParserError> {
+fn setup_use_module_decl(mut terms: Vec<Box<Term>>, atom_tbl: TabledData<Atom>) -> Result<ModuleSource, ParserError> {
     match *terms.pop().unwrap() {
         Term::Clause(_, ref name, ref mut terms, None)
             if name.as_str() == "library" && terms.len() == 1 =>

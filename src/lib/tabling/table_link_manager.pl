@@ -47,7 +47,7 @@
 :- use_module(library(iso_ext)).
 :- use_module(library(terms)).
 
-:- use_module(trie).
+:- use_module(library(tabling/trie)).
 
 :- attribute trie_table_link/1.
 
