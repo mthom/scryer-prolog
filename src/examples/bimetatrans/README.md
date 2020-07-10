@@ -49,9 +49,9 @@ Loading BiMetaTrans from the Scryer REPL:
 ?- use_module('src/examples/bimetatrans/bimetatrans').
 ```
 
-Using `write/1` to print the string to standard output (`write/1` is used
-because it does not print strings with escape characters (ie. `\"` for
-double quote)):
+Using `write/1` to print the string to standard output, capturing the
+`Prolog->RuleML` direction (`write/1` is used because it does not
+print strings with escape characters, ie., `\"` for double quote):
 
 ```
 ?- parse_ruleml([people('Alex',male),people('Alex',female),people('Siri',female)], [], XML),
@@ -65,8 +65,8 @@ BiMetaTrans is always Ruleml/xmL). `\` is used to continue ISO Prolog
 strings to the next line but is never stored to the string by the
 Prolog reader.
 
-Performing the inverse translation of the previous example, in
-RuleML/Xml:
+Performing the inverse translation of the previous example
+(`RuleML->Prolog`), in RuleML/Xml:
 
 ```
 ?- parse_ruleml(AssertItems, QueryItems,
@@ -90,8 +90,9 @@ RuleML/Xml:
    AssertItems = [people('Alex',male),people('Alex',female),people('Siri',female)], QueryItems = [].
 ```
 
-Non-empty AssertItems and QueryItems lists generated to RuleML/xmL
-simultaneously:
+Double quote characters within strings must be escaped as in
+`\"`. Non-empty AssertItems and QueryItems lists generated to
+RuleML/xmL simultaneously:
 
 ```
 ?- parse_ruleml([a(item), b(item), c(item)], [(?- p, q, r(1), s(-2.222342432), t("attached")), (?- u, v('$V'(q)))], XML),
