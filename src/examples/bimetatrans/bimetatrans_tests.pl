@@ -1385,11 +1385,7 @@ test(46,
 
 %% Try a more substantial test case.
 test(47,
-     [(mtow('$V'(kg)) :- aircraftType('$V'(type)), aircraftChar('$V'(type), '$V'(kg), '$V'(wingspan), '$V'(appSpeed))),
-      (mtowPreceding('$V'(kg)) :- precedingAircraftType('$V'(type)), aircraftChar('$V'(type), '$V'(kg), '$V'(wingspan), '$V'(appSpeed))),
-      (wingspan('$V'(feet)) :-aircraftType('$V'(type)), aircraftChar('$V'(type), '$V'(kg), '$V'(feet), '$V'(appSpeed))),
-      (wingspanPreceding('$V'(feet)) :- precedingAircraftType('$V'(type)), aircraftChar('$V'(type), '$V'(kg), '$V'(feet), '$V'(appSpeed))),
-      (runwayOneOrientation('$V'(runOneOr)) :- airportChar('$V'(code), '$V'(runOneOr), '$V'(runTwoOr), '$V'(runThreeOr), '$V'(runFourOr), '$V'(runOneName), '$V'(runTwoName), '$V'(runThreeName), '$V'(runFourName), '$V'(distanceBetweenRunways), '$V'(rules)), airportName('$V'(code))),
+     [(runwayOneOrientation('$V'(runOneOr)) :- airportChar('$V'(code), '$V'(runOneOr), '$V'(runTwoOr), '$V'(runThreeOr), '$V'(runFourOr), '$V'(runOneName), '$V'(runTwoName), '$V'(runThreeName), '$V'(runFourName), '$V'(distanceBetweenRunways), '$V'(rules)), airportName('$V'(code))),
       (runwayTwoOrientation('$V'(runTwoOr)) :- airportChar('$V'(code), '$V'(runOneOr), '$V'(runTwoOr), '$V'(runThreeOr), '$V'(runFourOr), '$V'(runOneName), '$V'(runTwoName), '$V'(runThreeName), '$V'(runFourName), '$V'(distanceBetweenRunways), '$V'(rules)), airportName('$V'(code))),
       (runwayThreeOrientation('$V'(runThreeOr)) :- airportChar('$V'(code), '$V'(runOneOr), '$V'(runTwoOr), '$V'(runThreeOr), '$V'(runFourOr), '$V'(runOneName), '$V'(runTwoName), '$V'(runThreeName), '$V'(runFourName), '$V'(distanceBetweenRunways), '$V'(rules)), airportName('$V'(code))),
       (runwayFourOrientation('$V'(runFourOr)) :- airportChar('$V'(code), '$V'(runOneOr), '$V'(runTwoOr), '$V'(runThreeOr), '$V'(runFourOr), '$V'(runOneName), '$V'(runTwoName), '$V'(runThreeName), '$V'(runFourName), '$V'(distanceBetweenRunways), '$V'(rules)), airportName('$V'(code))),
@@ -1401,378 +1397,281 @@ test(47,
      [],
      "<Assert mapClosure=\"universal\">\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>mtow</Rel>\
-                                <Var>kg</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>aircraftType</Rel>\
-                                        <Var>type</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>aircraftChar</Rel>\
-                                        <Var>type</Var>\
-                                        <Var>kg</Var>\
-                                        <Var>wingspan</Var>\
-                                        <Var>appSpeed</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>runwayOneOrientation</Rel>\
+                    <Var>runOneOr</Var>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>airportChar</Rel>\
+                        <Var>code</Var>\
+                        <Var>runOneOr</Var>\
+                        <Var>runTwoOr</Var>\
+                        <Var>runThreeOr</Var>\
+                        <Var>runFourOr</Var>\
+                        <Var>runOneName</Var>\
+                        <Var>runTwoName</Var>\
+                        <Var>runThreeName</Var>\
+                        <Var>runFourName</Var>\
+                        <Var>distanceBetweenRunways</Var>\
+                        <Var>rules</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>airportName</Rel>\
+                        <Var>code</Var>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>mtowPreceding</Rel>\
-                                <Var>kg</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>precedingAircraftType</Rel>\
-                                        <Var>type</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>aircraftChar</Rel>\
-                                        <Var>type</Var>\
-                                        <Var>kg</Var>\
-                                        <Var>wingspan</Var>\
-                                        <Var>appSpeed</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>runwayTwoOrientation</Rel>\
+                    <Var>runTwoOr</Var>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>airportChar</Rel>\
+                        <Var>code</Var>\
+                        <Var>runOneOr</Var>\
+                        <Var>runTwoOr</Var>\
+                        <Var>runThreeOr</Var>\
+                        <Var>runFourOr</Var>\
+                        <Var>runOneName</Var>\
+                        <Var>runTwoName</Var>\
+                        <Var>runThreeName</Var>\
+                        <Var>runFourName</Var>\
+                        <Var>distanceBetweenRunways</Var>\
+                        <Var>rules</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>airportName</Rel>\
+                        <Var>code</Var>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>wingspan</Rel>\
-                                <Var>feet</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>aircraftType</Rel>\
-                                        <Var>type</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>aircraftChar</Rel>\
-                                        <Var>type</Var>\
-                                        <Var>kg</Var>\
-                                        <Var>feet</Var>\
-                                        <Var>appSpeed</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>runwayThreeOrientation</Rel>\
+                    <Var>runThreeOr</Var>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>airportChar</Rel>\
+                        <Var>code</Var>\
+                        <Var>runOneOr</Var>\
+                        <Var>runTwoOr</Var>\
+                        <Var>runThreeOr</Var>\
+                        <Var>runFourOr</Var>\
+                        <Var>runOneName</Var>\
+                        <Var>runTwoName</Var>\
+                        <Var>runThreeName</Var>\
+                        <Var>runFourName</Var>\
+                        <Var>distanceBetweenRunways</Var>\
+                        <Var>rules</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>airportName</Rel>\
+                        <Var>code</Var>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>wingspanPreceding</Rel>\
-                                <Var>feet</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>precedingAircraftType</Rel>\
-                                        <Var>type</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>aircraftChar</Rel>\
-                                        <Var>type</Var>\
-                                        <Var>kg</Var>\
-                                        <Var>feet</Var>\
-                                        <Var>appSpeed</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>runwayFourOrientation</Rel>\
+                    <Var>runFourOr</Var>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>airportChar</Rel>\
+                        <Var>code</Var>\
+                        <Var>runOneOr</Var>\
+                        <Var>runTwoOr</Var>\
+                        <Var>runThreeOr</Var>\
+                        <Var>runFourOr</Var>\
+                        <Var>runOneName</Var>\
+                        <Var>runTwoName</Var>\
+                        <Var>runThreeName</Var>\
+                        <Var>runFourName</Var>\
+                        <Var>distanceBetweenRunways</Var>\
+                        <Var>rules</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>airportName</Rel>\
+                        <Var>code</Var>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>runwayOneOrientation</Rel>\
-                                <Var>runOneOr</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>airportChar</Rel>\
-                                        <Var>code</Var>\
-                                        <Var>runOneOr</Var>\
-                                        <Var>runTwoOr</Var>\
-                                        <Var>runThreeOr</Var>\
-                                        <Var>runFourOr</Var>\
-                                        <Var>runOneName</Var>\
-                                        <Var>runTwoName</Var>\
-                                        <Var>runThreeName</Var>\
-                                        <Var>runFourName</Var>\
-                                        <Var>distanceBetweenRunways</Var>\
-                                        <Var>rules</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>airportName</Rel>\
-                                        <Var>code</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>runwayOneName</Rel>\
+                    <Var>runOneName</Var>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>airportChar</Rel>\
+                        <Var>code</Var>\
+                        <Var>runOneOr</Var>\
+                        <Var>runTwoOr</Var>\
+                        <Var>runThreeOr</Var>\
+                        <Var>runFourOr</Var>\
+                        <Var>runOneName</Var>\
+                        <Var>runTwoName</Var>\
+                        <Var>runThreeName</Var>\
+                        <Var>runFourName</Var>\
+                        <Var>distanceBetweenRunways</Var>\
+                        <Var>rules</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>airportName</Rel>\
+                        <Var>code</Var>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>runwayTwoOrientation</Rel>\
-                                <Var>runTwoOr</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>airportChar</Rel>\
-                                        <Var>code</Var>\
-                                        <Var>runOneOr</Var>\
-                                        <Var>runTwoOr</Var>\
-                                        <Var>runThreeOr</Var>\
-                                        <Var>runFourOr</Var>\
-                                        <Var>runOneName</Var>\
-                                        <Var>runTwoName</Var>\
-                                        <Var>runThreeName</Var>\
-                                        <Var>runFourName</Var>\
-                                        <Var>distanceBetweenRunways</Var>\
-                                        <Var>rules</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>airportName</Rel>\
-                                        <Var>code</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>runwayTwoName</Rel>\
+                    <Var>runTwoName</Var>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>airportChar</Rel>\
+                        <Var>code</Var>\
+                        <Var>runOneOr</Var>\
+                        <Var>runTwoOr</Var>\
+                        <Var>runThreeOr</Var>\
+                        <Var>runFourOr</Var>\
+                        <Var>runOneName</Var>\
+                        <Var>runTwoName</Var>\
+                        <Var>runThreeName</Var>\
+                        <Var>runFourName</Var>\
+                        <Var>distanceBetweenRunways</Var>\
+                        <Var>rules</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>airportName</Rel>\
+                        <Var>code</Var>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>runwayThreeOrientation</Rel>\
-                                <Var>runThreeOr</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>airportChar</Rel>\
-                                        <Var>code</Var>\
-                                        <Var>runOneOr</Var>\
-                                        <Var>runTwoOr</Var>\
-                                        <Var>runThreeOr</Var>\
-                                        <Var>runFourOr</Var>\
-                                        <Var>runOneName</Var>\
-                                        <Var>runTwoName</Var>\
-                                        <Var>runThreeName</Var>\
-                                        <Var>runFourName</Var>\
-                                        <Var>distanceBetweenRunways</Var>\
-                                        <Var>rules</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>airportName</Rel>\
-                                        <Var>code</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>runwayThreeName</Rel>\
+                    <Var>runThreeName</Var>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>airportChar</Rel>\
+                        <Var>code</Var>\
+                        <Var>runOneOr</Var>\
+                        <Var>runTwoOr</Var>\
+                        <Var>runThreeOr</Var>\
+                        <Var>runFourOr</Var>\
+                        <Var>runOneName</Var>\
+                        <Var>runTwoName</Var>\
+                        <Var>runThreeName</Var>\
+                        <Var>runFourName</Var>\
+                        <Var>distanceBetweenRunways</Var>\
+                        <Var>rules</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>airportName</Rel>\
+                        <Var>code</Var>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>runwayFourOrientation</Rel>\
-                                <Var>runFourOr</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>airportChar</Rel>\
-                                        <Var>code</Var>\
-                                        <Var>runOneOr</Var>\
-                                        <Var>runTwoOr</Var>\
-                                        <Var>runThreeOr</Var>\
-                                        <Var>runFourOr</Var>\
-                                        <Var>runOneName</Var>\
-                                        <Var>runTwoName</Var>\
-                                        <Var>runThreeName</Var>\
-                                        <Var>runFourName</Var>\
-                                        <Var>distanceBetweenRunways</Var>\
-                                        <Var>rules</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>airportName</Rel>\
-                                        <Var>code</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>runwayFourName</Rel>\
+                    <Var>runFourName</Var>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>airportChar</Rel>\
+                        <Var>code</Var>\
+                        <Var>runOneOr</Var>\
+                        <Var>runTwoOr</Var>\
+                        <Var>runThreeOr</Var>\
+                        <Var>runFourOr</Var>\
+                        <Var>runOneName</Var>\
+                        <Var>runTwoName</Var>\
+                        <Var>runThreeName</Var>\
+                        <Var>runFourName</Var>\
+                        <Var>distanceBetweenRunways</Var>\
+                        <Var>rules</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>airportName</Rel>\
+                        <Var>code</Var>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>runwayOneName</Rel>\
-                                <Var>runOneName</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>airportChar</Rel>\
-                                        <Var>code</Var>\
-                                        <Var>runOneOr</Var>\
-                                        <Var>runTwoOr</Var>\
-                                        <Var>runThreeOr</Var>\
-                                        <Var>runFourOr</Var>\
-                                        <Var>runOneName</Var>\
-                                        <Var>runTwoName</Var>\
-                                        <Var>runThreeName</Var>\
-                                        <Var>runFourName</Var>\
-                                        <Var>distanceBetweenRunways</Var>\
-                                        <Var>rules</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>airportName</Rel>\
-                                        <Var>code</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>distanceBetweenRunways</Rel>\
+                    <Var>distanceBetweenRunways</Var>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>airportChar</Rel>\
+                        <Var>code</Var>\
+                        <Var>runOneOr</Var>\
+                        <Var>runTwoOr</Var>\
+                        <Var>runThreeOr</Var>\
+                        <Var>runFourOr</Var>\
+                        <Var>runOneName</Var>\
+                        <Var>runTwoName</Var>\
+                        <Var>runThreeName</Var>\
+                        <Var>runFourName</Var>\
+                        <Var>distanceBetweenRunways</Var>\
+                        <Var>rules</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>airportName</Rel>\
+                        <Var>code</Var>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
-        <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>runwayTwoName</Rel>\
-                                <Var>runTwoName</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>airportChar</Rel>\
-                                        <Var>code</Var>\
-                                        <Var>runOneOr</Var>\
-                                        <Var>runTwoOr</Var>\
-                                        <Var>runThreeOr</Var>\
-                                        <Var>runFourOr</Var>\
-                                        <Var>runOneName</Var>\
-                                        <Var>runTwoName</Var>\
-                                        <Var>runThreeName</Var>\
-                                        <Var>runFourName</Var>\
-                                        <Var>distanceBetweenRunways</Var>\
-                                        <Var>rules</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>airportName</Rel>\
-                                        <Var>code</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
-        </Implies>\
-        <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>runwayThreeName</Rel>\
-                                <Var>runThreeName</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>airportChar</Rel>\
-                                        <Var>code</Var>\
-                                        <Var>runOneOr</Var>\
-                                        <Var>runTwoOr</Var>\
-                                        <Var>runThreeOr</Var>\
-                                        <Var>runFourOr</Var>\
-                                        <Var>runOneName</Var>\
-                                        <Var>runTwoName</Var>\
-                                        <Var>runThreeName</Var>\
-                                        <Var>runFourName</Var>\
-                                        <Var>distanceBetweenRunways</Var>\
-                                        <Var>rules</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>airportName</Rel>\
-                                        <Var>code</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
-        </Implies>\
-        <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>runwayFourName</Rel>\
-                                <Var>runFourName</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>airportChar</Rel>\
-                                        <Var>code</Var>\
-                                        <Var>runOneOr</Var>\
-                                        <Var>runTwoOr</Var>\
-                                        <Var>runThreeOr</Var>\
-                                        <Var>runFourOr</Var>\
-                                        <Var>runOneName</Var>\
-                                        <Var>runTwoName</Var>\
-                                        <Var>runThreeName</Var>\
-                                        <Var>runFourName</Var>\
-                                        <Var>distanceBetweenRunways</Var>\
-                                        <Var>rules</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>airportName</Rel>\
-                                        <Var>code</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
-        </Implies>\
-        <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>distanceBetweenRunways</Rel>\
-                                <Var>distanceBetweenRunways</Var>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>airportChar</Rel>\
-                                        <Var>code</Var>\
-                                        <Var>runOneOr</Var>\
-                                        <Var>runTwoOr</Var>\
-                                        <Var>runThreeOr</Var>\
-                                        <Var>runFourOr</Var>\
-                                        <Var>runOneName</Var>\
-                                        <Var>runTwoName</Var>\
-                                        <Var>runThreeName</Var>\
-                                        <Var>runFourName</Var>\
-                                        <Var>distanceBetweenRunways</Var>\
-                                        <Var>rules</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>airportName</Rel>\
-                                        <Var>code</Var>\
-                                </Atom>\
-                        </And>\
-                </if>\
-        </Implies>\
-     </Assert>").
+    </Assert>").
 
 test(48,
-     [(icaoCategory(light) :- mtow('$V'(kg)), lessThanOrEqual('$V'(kg), 7000.0)),
-      (icaoCategory(medium):- mtow('$V'(kg)), lessThan('$V'(kg), 136000.0), greaterThan('$V'(kg), 7000.0)),
-      (icaoCategory(heavy) :- aircraftType('$V'(model)), notEqual('$V'(model),'A388'), notEqual('$V'(model),'A38F'), mtow('$V'(kg)), greaterThanOrEqual('$V'(kg), 136000.0)),
-      (icaoCategory(super) :- aircraftType('A388')),
-      (icaoCategory(super) :- aircraftType('A38F')),
-      %(icaoCategory(super) :- aircraftType('A225')),
-
-
+     [(icaoCategory('$V'(aircraft), light) :- aircraftChar(['$V'(aircraft), '$V'(kg) | '$V'(rest)]), lessThanOrEqual('$V'(kg), 7000.0)),
+      (icaoCategory('$V'(aircraft), medium):- aircraftChar(['$V'(aircraft), '$V'(kg) | '$V'(rest)]), lessThan('$V'(kg), 136000.0), greaterThan('$V'(kg), 7000.0)),
+      (icaoCategory('$V'(aircraft), heavy) :- aircraftChar(['$V'(aircraft), '$V'(kg) | '$V'(rest)]), greaterThanOrEqual('$V'(kg), 136000.0), \+ icaoCategory('$V'(aircraft), super)),
       (icaoCategoryPreceding(light) :- mtowPreceding('$V'(kgPreceding)), lessThanOrEqual('$V'(kgPreceding), 7000.0)),
       (icaoCategoryPreceding(medium) :-  mtowPreceding('$V'(kgPreceding)), lessThan('$V'(kgPreceding), 136000.0), greaterThan('$V'(kgPreceding), 7000.0)),
       (icaoCategoryPreceding(heavy) :- precedingAircraftType('$V'(modelPreceding)), notEqual('$V'(modelPreceding),'A388'), notEqual('$V'(modelPreceding),'A38F'), notEqual('$V'(modelPreceding),'A225'), mtowPreceding('$V'(kgPreceding)), greaterThanOrEqual('$V'(kgPreceding), 136000.0)),
@@ -1794,439 +1693,425 @@ test(48,
      [],
      "<Assert mapClosure=\"universal\">\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoCategory</Rel>\
-                                <Data iso:type=\"symbol\">light</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>mtow</Rel>\
-                                        <Var>kg</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>lessThanOrEqual</Rel>\
-                                        <Var>kg</Var>\
-                                        <Data iso:type=\"number\">7000.0</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoCategory</Rel>\
+                    <Var>aircraft</Var>\
+                    <Data iso:type=\"symbol\">light</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>aircraftChar</Rel>\
+                        <Plex>\
+                            <Var>aircraft</Var>\
+                            <Var>kg</Var>\
+                            <repo>\
+                                <Var>rest</Var>\
+                            </repo>\
+                        </Plex>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>lessThanOrEqual</Rel>\
+                        <Var>kg</Var>\
+                        <Data iso:type=\"number\">7000.0</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoCategory</Rel>\
-                                <Data iso:type=\"symbol\">medium</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>mtow</Rel>\
-                                        <Var>kg</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>lessThan</Rel>\
-                                        <Var>kg</Var>\
-                                        <Data iso:type=\"number\">136000.0</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>greaterThan</Rel>\
-                                        <Var>kg</Var>\
-                                        <Data iso:type=\"number\">7000.0</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoCategory</Rel>\
+                    <Var>aircraft</Var>\
+                    <Data iso:type=\"symbol\">medium</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>aircraftChar</Rel>\
+                        <Plex>\
+                            <Var>aircraft</Var>\
+                            <Var>kg</Var>\
+                            <repo>\
+                                <Var>rest</Var>\
+                            </repo>\
+                        </Plex>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>lessThan</Rel>\
+                        <Var>kg</Var>\
+                        <Data iso:type=\"number\">136000.0</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>greaterThan</Rel>\
+                        <Var>kg</Var>\
+                        <Data iso:type=\"number\">7000.0</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoCategory</Rel>\
+                    <Var>aircraft</Var>\
+                    <Data iso:type=\"symbol\">heavy</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>aircraftChar</Rel>\
+                        <Plex>\
+                            <Var>aircraft</Var>\
+                            <Var>kg</Var>\
+                            <repo>\
+                                <Var>rest</Var>\
+                            </repo>\
+                        </Plex>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>greaterThanOrEqual</Rel>\
+                        <Var>kg</Var>\
+                        <Data iso:type=\"number\">136000.0</Data>\
+                    </Atom>\
+                    <Naf>\
                         <Atom>\
-                                <Rel>icaoCategory</Rel>\
-                                <Data iso:type=\"symbol\">heavy</Data>\
+                            <Rel>icaoCategory</Rel>\
+                            <Var>aircraft</Var>\
+                            <Data iso:type=\"symbol\">super</Data>\
                         </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>aircraftType</Rel>\
-                                        <Var>model</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>notEqual</Rel>\
-                                        <Var>model</Var>\
-                                        <Ind>A388</Ind>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>notEqual</Rel>\
-                                        <Var>model</Var>\
-                                        <Ind>A38F</Ind>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>mtow</Rel>\
-                                        <Var>kg</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>greaterThanOrEqual</Rel>\
-                                        <Var>kg</Var>\
-                                        <Data iso:type=\"number\">136000.0</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+                    </Naf>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoCategory</Rel>\
-                                <Data iso:type=\"symbol\">super</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <Atom>\
-                                <Rel>aircraftType</Rel>\
-                                <Ind>A388</Ind>\
-                        </Atom>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoCategoryPreceding</Rel>\
+                    <Data iso:type=\"symbol\">light</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>mtowPreceding</Rel>\
+                        <Var>kgPreceding</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>lessThanOrEqual</Rel>\
+                        <Var>kgPreceding</Var>\
+                        <Data iso:type=\"number\">7000.0</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoCategory</Rel>\
-                                <Data iso:type=\"symbol\">super</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <Atom>\
-                                <Rel>aircraftType</Rel>\
-                                <Ind>A38F</Ind>\
-                        </Atom>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoCategoryPreceding</Rel>\
+                    <Data iso:type=\"symbol\">medium</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>mtowPreceding</Rel>\
+                        <Var>kgPreceding</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>lessThan</Rel>\
+                        <Var>kgPreceding</Var>\
+                        <Data iso:type=\"number\">136000.0</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>greaterThan</Rel>\
+                        <Var>kgPreceding</Var>\
+                        <Data iso:type=\"number\">7000.0</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoCategoryPreceding</Rel>\
-                                <Data iso:type=\"symbol\">light</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>mtowPreceding</Rel>\
-                                        <Var>kgPreceding</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>lessThanOrEqual</Rel>\
-                                        <Var>kgPreceding</Var>\
-                                        <Data iso:type=\"number\">7000.0</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoCategoryPreceding</Rel>\
+                    <Data iso:type=\"symbol\">heavy</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>precedingAircraftType</Rel>\
+                        <Var>modelPreceding</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>notEqual</Rel>\
+                        <Var>modelPreceding</Var>\
+                        <Ind>A388</Ind>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>notEqual</Rel>\
+                        <Var>modelPreceding</Var>\
+                        <Ind>A38F</Ind>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>notEqual</Rel>\
+                        <Var>modelPreceding</Var>\
+                        <Ind>A225</Ind>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>mtowPreceding</Rel>\
+                        <Var>kgPreceding</Var>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>greaterThanOrEqual</Rel>\
+                        <Var>kgPreceding</Var>\
+                        <Data iso:type=\"number\">136000.0</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoCategoryPreceding</Rel>\
-                                <Data iso:type=\"symbol\">medium</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>mtowPreceding</Rel>\
-                                        <Var>kgPreceding</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>lessThan</Rel>\
-                                        <Var>kgPreceding</Var>\
-                                        <Data iso:type=\"number\">136000.0</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>greaterThan</Rel>\
-                                        <Var>kgPreceding</Var>\
-                                        <Data iso:type=\"number\">7000.0</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoCategoryPreceding</Rel>\
+                    <Data iso:type=\"symbol\">super</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <Atom>\
+                    <Rel>precedingAircraftType</Rel>\
+                    <Ind>A388</Ind>\
+                </Atom>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoCategoryPreceding</Rel>\
-                                <Data iso:type=\"symbol\">heavy</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>precedingAircraftType</Rel>\
-                                        <Var>modelPreceding</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>notEqual</Rel>\
-                                        <Var>modelPreceding</Var>\
-                                        <Ind>A388</Ind>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>notEqual</Rel>\
-                                        <Var>modelPreceding</Var>\
-                                        <Ind>A38F</Ind>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>notEqual</Rel>\
-                                        <Var>modelPreceding</Var>\
-                                        <Ind>A225</Ind>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>mtowPreceding</Rel>\
-                                        <Var>kgPreceding</Var>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>greaterThanOrEqual</Rel>\
-                                        <Var>kgPreceding</Var>\
-                                        <Data iso:type=\"number\">136000.0</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoCategoryPreceding</Rel>\
+                    <Data iso:type=\"symbol\">super</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <Atom>\
+                    <Rel>precedingAircraftType</Rel>\
+                    <Ind>A38F</Ind>\
+                </Atom>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoCategoryPreceding</Rel>\
-                                <Data iso:type=\"symbol\">super</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <Atom>\
-                                <Rel>precedingAircraftType</Rel>\
-                                <Ind>A388</Ind>\
-                        </Atom>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"number\">4</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>icaoCategory</Rel>\
+                        <Data iso:type=\"symbol\">heavy</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>icaoCategoryPreceding</Rel>\
+                        <Data iso:type=\"symbol\">heavy</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoCategoryPreceding</Rel>\
-                                <Data iso:type=\"symbol\">super</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <Atom>\
-                                <Rel>precedingAircraftType</Rel>\
-                                <Ind>A38F</Ind>\
-                        </Atom>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"number\">5</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>icaoCategory</Rel>\
+                        <Data iso:type=\"symbol\">medium</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>icaoCategoryPreceding</Rel>\
+                        <Data iso:type=\"symbol\">heavy</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"number\">4</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>icaoCategory</Rel>\
-                                        <Data iso:type=\"symbol\">heavy</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>icaoCategoryPreceding</Rel>\
-                                        <Data iso:type=\"symbol\">heavy</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"number\">6</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>icaoCategory</Rel>\
+                        <Data iso:type=\"symbol\">light</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>icaoCategoryPreceding</Rel>\
+                        <Data iso:type=\"symbol\">heavy</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"number\">5</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>icaoCategory</Rel>\
-                                        <Data iso:type=\"symbol\">medium</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>icaoCategoryPreceding</Rel>\
-                                        <Data iso:type=\"symbol\">heavy</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"number\">5</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>icaoCategory</Rel>\
+                        <Data iso:type=\"symbol\">light</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>icaoCategoryPreceding</Rel>\
+                        <Data iso:type=\"symbol\">medium</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"number\">6</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>icaoCategory</Rel>\
-                                        <Data iso:type=\"symbol\">light</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>icaoCategoryPreceding</Rel>\
-                                        <Data iso:type=\"symbol\">heavy</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"symbol\">mrs</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <Atom>\
+                    <Rel>icaoCategoryPreceding</Rel>\
+                    <Data iso:type=\"symbol\">light</Data>\
+                </Atom>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"number\">5</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>icaoCategory</Rel>\
-                                        <Data iso:type=\"symbol\">light</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>icaoCategoryPreceding</Rel>\
-                                        <Data iso:type=\"symbol\">medium</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"symbol\">mrs</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>icaoCategory</Rel>\
+                        <Data iso:type=\"symbol\">medium</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>icaoCategoryPreceding</Rel>\
+                        <Data iso:type=\"symbol\">medium</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"symbol\">mrs</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <Atom>\
-                                <Rel>icaoCategoryPreceding</Rel>\
-                                <Data iso:type=\"symbol\">light</Data>\
-                        </Atom>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"symbol\">mrs</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>icaoCategory</Rel>\
+                        <Data iso:type=\"symbol\">heavy</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>icaoCategoryPreceding</Rel>\
+                        <Data iso:type=\"symbol\">medium</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"symbol\">mrs</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>icaoCategory</Rel>\
-                                        <Data iso:type=\"symbol\">medium</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>icaoCategoryPreceding</Rel>\
-                                        <Data iso:type=\"symbol\">medium</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"symbol\">mrs</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <Atom>\
+                    <Rel>icaoCategory</Rel>\
+                    <Data iso:type=\"symbol\">super</Data>\
+                </Atom>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"symbol\">mrs</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>icaoCategory</Rel>\
-                                        <Data iso:type=\"symbol\">heavy</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>icaoCategoryPreceding</Rel>\
-                                        <Data iso:type=\"symbol\">medium</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"number\">6</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>icaoCategory</Rel>\
+                        <Data iso:type=\"symbol\">heavy</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>icaoCategoryPreceding</Rel>\
+                        <Data iso:type=\"symbol\">super</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"symbol\">mrs</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <Atom>\
-                                <Rel>icaoCategory</Rel>\
-                                <Data iso:type=\"symbol\">super</Data>\
-                        </Atom>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"number\">7</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>icaoCategory</Rel>\
+                        <Data iso:type=\"symbol\">medium</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>icaoCategoryPreceding</Rel>\
+                        <Data iso:type=\"symbol\">super</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
         <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"number\">6</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>icaoCategory</Rel>\
-                                        <Data iso:type=\"symbol\">heavy</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>icaoCategoryPreceding</Rel>\
-                                        <Data iso:type=\"symbol\">super</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
+            <then>\
+                <Atom>\
+                    <Rel>icaoSeparationMiles</Rel>\
+                    <Data iso:type=\"number\">8</Data>\
+                </Atom>\
+            </then>\
+            <if>\
+                <And>\
+                    <Atom>\
+                        <Rel>icaoCategory</Rel>\
+                        <Data iso:type=\"symbol\">light</Data>\
+                    </Atom>\
+                    <Atom>\
+                        <Rel>icaoCategoryPreceding</Rel>\
+                        <Data iso:type=\"symbol\">super</Data>\
+                    </Atom>\
+                </And>\
+            </if>\
         </Implies>\
-        <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"number\">7</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>icaoCategory</Rel>\
-                                        <Data iso:type=\"symbol\">medium</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>icaoCategoryPreceding</Rel>\
-                                        <Data iso:type=\"symbol\">super</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
-        </Implies>\
-        <Implies>\
-                <then>\
-                        <Atom>\
-                                <Rel>icaoSeparationMiles</Rel>\
-                                <Data iso:type=\"number\">8</Data>\
-                        </Atom>\
-                </then>\
-                <if>\
-                        <And>\
-                                <Atom>\
-                                        <Rel>icaoCategory</Rel>\
-                                        <Data iso:type=\"symbol\">light</Data>\
-                                </Atom>\
-                                <Atom>\
-                                        <Rel>icaoCategoryPreceding</Rel>\
-                                        <Data iso:type=\"symbol\">super</Data>\
-                                </Atom>\
-                        </And>\
-                </if>\
-        </Implies>\
-     </Assert>").
+    </Assert>").
 
 test(49,
      [(aircraftChar('A500',3175.144,44.0,97.5)),
