@@ -19,8 +19,8 @@
  * all indentation stripped out. "Indented XML" contains indentation
  * and newlines, and is usually formatted for human readers.
  *
- * parse_ruleml/3 is the sole public predicate of BiMetaTrans(RuleML,
- * Prolog), a bidirectional translator capable of parsing well-formed
+ * parse_ruleml/3 is the sole public predicate of BiMetaTrans(Prolog,
+ * RuleML), a bidirectional translator capable of parsing well-formed
  * RuleML/XML (valid w.r.t. a proposed anchor schema nafhornlogeq
  * defining a sublanguage of the existing anchor schema naffologeq) to
  * an equivalent Prolog/'$V' term and back to RuleML/xmL. It has the
