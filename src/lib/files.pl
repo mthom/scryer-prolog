@@ -57,13 +57,7 @@
 
 list_of_chars(Cs) :-
         must_be(list, Cs),
-        (   ground(Cs) ->
-            (   member(C, Cs), \+ atom_length(C, 1) ->
-                type_error(char, C, files_and_directories)
-            ;   true
-            )
-        ;   instantiation_error(s)
-        ).
+        maplist(must_be(character), Cs).
 
 directory_files(Directory, Files) :-
         list_of_chars(Directory),
