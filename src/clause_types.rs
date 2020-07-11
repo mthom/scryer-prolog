@@ -306,6 +306,9 @@ pub enum SystemClauseType {
     Ed25519KeyPairPublicKey,
     LoadHTML,
     LoadXML,
+    GetEnv,
+    SetEnv,
+    UnsetEnv,
 }
 
 impl SystemClauseType {
@@ -510,6 +513,9 @@ impl SystemClauseType {
             &SystemClauseType::Ed25519KeyPairPublicKey => clause_name!("$ed25519_keypair_public_key"),
             &SystemClauseType::LoadHTML => clause_name!("$load_html"),
             &SystemClauseType::LoadXML => clause_name!("$load_xml"),
+            &SystemClauseType::GetEnv => clause_name!("$getenv"),
+            &SystemClauseType::SetEnv => clause_name!("$setenv"),
+            &SystemClauseType::UnsetEnv => clause_name!("$unsetenv"),
         }
     }
 
@@ -694,6 +700,9 @@ impl SystemClauseType {
             ("$ed25519_keypair_public_key", 2) => Some(SystemClauseType::Ed25519KeyPairPublicKey),
             ("$load_html", 3) => Some(SystemClauseType::LoadHTML),
             ("$load_xml", 3) => Some(SystemClauseType::LoadXML),
+            ("$getenv", 2) => Some(SystemClauseType::GetEnv),
+            ("$setenv", 2) => Some(SystemClauseType::SetEnv),
+            ("$unsetenv", 1) => Some(SystemClauseType::UnsetEnv),
             _ => None,
         }
     }

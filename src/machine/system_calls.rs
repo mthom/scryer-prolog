@@ -32,6 +32,7 @@ use std::net::{TcpListener, TcpStream};
 use std::ops::Sub;
 use std::rc::Rc;
 use std::num::NonZeroU32;
+use std::env;
 
 use std::time::{Duration, SystemTime};
 use crate::cpu_time::ProcessTime;
@@ -5636,6 +5637,28 @@ impl MachineState {
                            return Ok(());
                     }
                 }
+            }
+            &SystemClauseType::GetEnv => {
+                let key = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                match env::var(key) {
+                    Ok(value) => {
+                        let cstr = self.heap.put_complete_string(&value);
+                        self.unify(self[temp_v!(2)], cstr);
+                    }
+                    _ => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                }
+            }
+            &SystemClauseType::SetEnv => {
+                let key = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                let value = self.heap_pstr_iter(self[temp_v!(2)]).to_string();
+                env::set_var(key, value);
+            }
+            &SystemClauseType::UnsetEnv => {
+                let key = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                env::remove_var(key);
             }
         };
 
