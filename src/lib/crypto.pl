@@ -76,13 +76,13 @@ hex_bytes([]) --> [].
 hex_bytes([H1,H2|Hs]) --> [Byte],
         { char_hexval(H1, High),
           char_hexval(H2, Low),
-          Byte is High*16 + Low },
+          Byte #= High*16 + Low },
         hex_bytes(Hs).
 
 bytes_hex([]) --> [].
 bytes_hex([B|Bs]) --> [C0,C1],
-        { High is B>>4,
-          Low is B /\ 0xf,
+        { High #= B>>4,
+          Low #= B /\ 0xf,
           char_hexval(C0, High),
           char_hexval(C1, Low)
         },
@@ -97,6 +97,16 @@ must_be_bytes(Bytes, Context) :-
         maplist(must_be(integer), Bytes),
         (   member(B, Bytes), \+ between(0, 255, B) ->
             type_error(byte, B, Context)
+        ;   true
+        ).
+
+
+must_be_byte_chars(Chars, Context) :-
+        must_be(list, Chars),
+        (   member(Char, Chars),
+            char_code(Char, Code),
+            \+ between(0, 255, Code) ->
+            domain_error(byte_char, Char, Context)
         ;   true
         ).
 
@@ -191,18 +201,18 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 
 crypto_data_hash(Data0, Hash, Options0) :-
         must_be(list, Options0),
-        options_data_bytes(Options0, Data0, Data),
+        options_data_chars(Options0, Data0, Data, Encoding),
         functor_hash_options(algorithm, A, Options0, _),
         (   hash_algorithm(A) -> true
         ;   domain_error(hash_algorithm, A, crypto_data_hash/3)
         ),
-        '$crypto_data_hash'(Data, HashBytes, A),
+        '$crypto_data_hash'(Data, Encoding, HashBytes, A),
         hex_bytes(Hash, HashBytes).
 
-options_data_bytes(Options, Data, Bytes) :-
+options_data_chars(Options, Data, Chars, Encoding) :-
         option(encoding(Encoding), Options, utf8),
         must_be(atom, Encoding),
-        encoding_bytes(Encoding, Data, Bytes).
+        encoding_chars(Encoding, Data, Chars).
 
 default_hash(sha256).
 
@@ -270,12 +280,12 @@ crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         ),
         must_be(integer, L),
         L >= 0,
-        options_data_bytes(Options, Data0, Data),
+        options_data_chars(Options, Data0, Data, Encoding),
         option(salt(SaltBytes), Options, []),
         must_be_bytes(SaltBytes, crypto_data_hkdf/4),
         option(info(Info0), Options, []),
         chars_bytes_(Info0, Info, crypto_data_hkdf/4),
-        '$crypto_data_hkdf'(Data, SaltBytes, Info, Algorithm, L, Bytes).
+        '$crypto_data_hkdf'(Data, Encoding, SaltBytes, Info, Algorithm, L, Bytes).
 
 hkdf_algorithm(sha256).
 hkdf_algorithm(sha384).
@@ -558,7 +568,7 @@ bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
-        options_data_bytes(Options, PlainText0, PlainText),
+        options_data_chars(Options, PlainText0, PlainText, Encoding),
         option(tag(Tag), Options, _),
         (   nonvar(Tag) ->
             must_be_bytes(Tag, crypto_data_encrypt/6)
@@ -570,7 +580,7 @@ crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
         (   Algorithm = 'chacha20-poly1305' -> true
         ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_encrypt/6)
         ),
-        '$crypto_data_encrypt'(PlainText, Key, IV, Tag, CipherText).
+        '$crypto_data_encrypt'(PlainText, Encoding, Key, IV, Tag, CipherText).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   crypto_data_decrypt(+CipherText,
@@ -610,26 +620,25 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         must_be(atom, Encoding),
         member(Encoding, [utf8,octet]),
         must_be(list, CipherText0),
-        encoding_bytes(octet, CipherText0, CipherText1),
-        append(CipherText1, Tag, CipherText),
+        encoding_chars(octet, CipherText0, CipherText1),
+        maplist(char_code, TagChars, Tag),
+        append(CipherText1, TagChars, CipherText),
         (   Algorithm = 'chacha20-poly1305' -> true
         ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_decrypt/6)
         ),
-        '$crypto_data_decrypt'(CipherText, Key, IV, Encoding, PlainText).
+        '$crypto_data_decrypt'(CipherText, octet, Key, IV, Encoding, PlainText).
 
-encoding_bytes(octet, Bs0, Bs) :-
-        must_be(list, Bs0),
-        (   maplist(integer, Bs0) ->
-            Bs0 = Bs
-        ;   maplist(char_code, Bs0, Bs)
+
+encoding_chars(octet, Bs, Cs) :-
+        must_be(list, Bs),
+        (   maplist(integer, Bs) ->
+            maplist(char_code, Cs, Bs)
+        ;   Bs = Cs
         ),
-        must_be_bytes(Bs, crypto_encoding).
-encoding_bytes(utf8, Cs, Bs) :-
+        must_be_byte_chars(Cs, crypto_encoding).
+encoding_chars(utf8, Cs, Cs) :-
         must_be(list, Cs),
-        (   maplist(atom, Cs) ->
-            chars_bytes_(Cs, Bs, crypto_encoding)
-        ;   domain_error(encryption_encoding, Cs, crypto)
-        ).
+        maplist(must_be(character), Cs).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Digital signatures with Ed25519
@@ -667,21 +676,21 @@ encoding_bytes(utf8, Cs, Bs) :-
 ed25519_new_keypair(Pair) :-
         '$ed25519_new_keypair'(Pair).
 
-ed25519_keypair_public_key(Pair0, PublicKey) :-
-        encoding_bytes(octet, Pair0, Pair),
-        '$ed25519_keypair_public_key'(Pair, PublicKey).
+ed25519_keypair_public_key(Pair, PublicKey) :-
+        must_be_byte_chars(Pair, ed25519_keypair_public_key),
+        '$ed25519_keypair_public_key'(Pair, octet, PublicKey).
 
-ed25519_sign(Key0, Data0, Signature, Options) :-
-        options_data_bytes(Options, Data0, Data),
-        encoding_bytes(octet, Key0, Key),
-        '$ed25519_sign'(Key, Data, Signature0),
+ed25519_sign(Key, Data0, Signature, Options) :-
+        must_be_byte_chars(Key, ed25519_sign),
+        options_data_chars(Options, Data0, Data, Encoding),
+        '$ed25519_sign'(Key, octet, Data, Encoding, Signature0),
         hex_bytes(Signature, Signature0).
 
-ed25519_verify(Key0, Data0, Signature0, Options) :-
-        options_data_bytes(Options, Data0, Data),
-        encoding_bytes(octet, Key0, Key),
+ed25519_verify(Key, Data0, Signature0, Options) :-
+        must_be_byte_chars(Key, ed25519_verify),
+        options_data_chars(Options, Data0, Data, Encoding),
         hex_bytes(Signature0, Signature),
-        '$ed25519_verify'(Key, Data, Signature).
+        '$ed25519_verify'(Key, octet, Data, Encoding, Signature).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Operations on Elliptic Curves
