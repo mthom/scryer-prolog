@@ -442,6 +442,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   Predicates for opening and accepting TCP connections as streams.
   TLS negotiation is performed via the option `tls(true)` in
   `socket_client_open/3`, yielding secure encrypted connections.
+* [`os`](src/lib/os.pl)
+  Predicates for reasoning about environment&nbsp;variables.
 * [`crypto`](src/lib/crypto.pl)
   Cryptographically secure random numbers and hashes, HMAC-based
   key derivation (HKDF), password-based key derivation (PBKDF2),
