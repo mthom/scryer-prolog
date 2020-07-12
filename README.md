@@ -445,10 +445,11 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`os`](src/lib/os.pl)
   Predicates for reasoning about environment&nbsp;variables.
 * [`crypto`](src/lib/crypto.pl)
-  Cryptographically secure random numbers and hashes, HMAC-based
-  key derivation (HKDF), password-based key derivation (PBKDF2),
-  public key signatures and signature verification with Ed25519,
-  authenticated encryption, and reasoning about elliptic curves.
+  Cryptographically secure random numbers and hashes, HMAC-based key
+  derivation&nbsp;(HKDF), password-based key derivation&nbsp;(PBKDF2),
+  public key signatures and signature verification with&nbsp;Ed25519,
+  authenticated symmetric encryption with ChaCha20-Poly1305, and
+  reasoning about elliptic curves.
 
 To use predicates provided by the `lists` library, write:
 
