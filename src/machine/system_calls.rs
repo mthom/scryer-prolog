@@ -880,6 +880,44 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::DeleteFile => {
+                let file = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+
+                match fs::remove_file(file) {
+                    Ok(_) => { }
+                    _ => { self.fail = true;
+                           return Ok(());
+                    }
+                }
+            }
+            &SystemClauseType::WorkingDirectory => {
+                if let Ok(dir) = env::current_dir() {
+                    let current =
+                        match dir.to_str() {
+                            Some(d) => { d }
+                            _ => { let stub = MachineError::functor_stub(clause_name!("working_directory"), 2);
+                                   let err = MachineError::representation_error(RepFlag::Character);
+                                   let err = self.error_form(err, stub);
+
+                                   return Err(err);
+                            }
+                        };
+                    let chars = self.heap.put_complete_string(current);
+                    self.unify(self[temp_v!(1)], chars);
+
+                    let next = self.heap_pstr_iter(self[temp_v!(2)]).to_string();
+
+                    match env::set_current_dir(std::path::Path::new(&next)) {
+                        Ok(_) => { }
+                        _ => { self.fail = true;
+                               return Ok(());
+                        }
+                    }
+                } else {
+                    self.fail = true;
+                    return Ok(());
+                }
+            }
             &SystemClauseType::AtEndOfExpansion => {
                 if self.cp == LocalCodePtr::TopLevel(0, 0) {
                     self.at_end_of_expansion = true;

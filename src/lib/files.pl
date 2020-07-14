@@ -50,7 +50,9 @@
                   file_size/2,
                   file_exists/1,
                   directory_exists/1,
-                  make_directory/1]).
+                  delete_file/1,
+                  make_directory/1,
+                  working_directory/2]).
 
 :- use_module(library(error)).
 :- use_module(library(lists)).
@@ -80,3 +82,12 @@ directory_exists(Directory) :-
 make_directory(Directory) :-
         list_of_chars(Directory),
         '$make_directory'(Directory).
+
+delete_file(File) :-
+        list_of_chars(File),
+        '$delete_file'(File).
+
+working_directory(Dir0, Dir) :-
+        can_be(list, Dir0),
+        can_be(list, Dir),
+        '$working_directory'(Dir0, Dir).
