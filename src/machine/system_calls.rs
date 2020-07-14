@@ -880,6 +880,16 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::DeleteFile => {
+                let file = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+
+                match fs::remove_file(file) {
+                    Ok(_) => { }
+                    _ => { self.fail = true;
+                           return Ok(());
+                    }
+                }
+            }
             &SystemClauseType::AtEndOfExpansion => {
                 if self.cp == LocalCodePtr::TopLevel(0, 0) {
                     self.at_end_of_expansion = true;

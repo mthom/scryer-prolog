@@ -176,6 +176,7 @@ pub enum SystemClauseType {
     FileExists,
     DirectoryExists,
     MakeDirectory,
+    DeleteFile,
     DeleteAttribute,
     DeleteHeadAttribute,
     DynamicModuleResolution(usize),
@@ -341,6 +342,7 @@ impl SystemClauseType {
             &SystemClauseType::FileExists => clause_name!("$file_exists"),
             &SystemClauseType::DirectoryExists => clause_name!("$directory_exists"),
             &SystemClauseType::MakeDirectory => clause_name!("$make_directory"),
+            &SystemClauseType::DeleteFile => clause_name!("$delete_file"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
             &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
             &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
@@ -675,6 +677,7 @@ impl SystemClauseType {
             ("$file_exists", 1) => Some(SystemClauseType::FileExists),
             ("$directory_exists", 1) => Some(SystemClauseType::DirectoryExists),
             ("$make_directory", 1) => Some(SystemClauseType::MakeDirectory),
+            ("$delete_file", 1) => Some(SystemClauseType::DeleteFile),
             ("$use_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),
             ("$use_module_from_file", 1) =>
                     Some(SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile)),
