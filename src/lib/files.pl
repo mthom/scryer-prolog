@@ -52,7 +52,8 @@
                   directory_exists/1,
                   delete_file/1,
                   make_directory/1,
-                  working_directory/2]).
+                  working_directory/2,
+                  path_canonical/2]).
 
 :- use_module(library(error)).
 :- use_module(library(lists)).
@@ -87,7 +88,34 @@ delete_file(File) :-
         list_of_chars(File),
         '$delete_file'(File).
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Dir0 is the current working directory, and the working directory
+   is changed to Dir.
+
+   Use working_directory(Ds, Ds) to determine the current working directory,
+   and leave it as is.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
 working_directory(Dir0, Dir) :-
         can_be(list, Dir0),
         can_be(list, Dir),
         '$working_directory'(Dir0, Dir).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   True iff Cs is the canonical, absolute path of Ps.
+
+   All intermediate components are normalized, and all symbolic links
+   are resolved.
+
+   The predicate fails in the following situations, though not
+   necessarily *only* in these cases:
+
+      1. Ps is a path that does not exist.
+      2. A non-final component in Ps is not a directory.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+path_canonical(Ps, Cs) :-
+        must_be(list, Ps),
+        maplist(must_be(character), Ps),
+        can_be(list, Cs),
+        '$path_canonical'(Ps, Cs).

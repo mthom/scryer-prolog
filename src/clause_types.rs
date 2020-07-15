@@ -178,6 +178,7 @@ pub enum SystemClauseType {
     MakeDirectory,
     DeleteFile,
     WorkingDirectory,
+    PathCanonical,
     DeleteAttribute,
     DeleteHeadAttribute,
     DynamicModuleResolution(usize),
@@ -345,6 +346,7 @@ impl SystemClauseType {
             &SystemClauseType::MakeDirectory => clause_name!("$make_directory"),
             &SystemClauseType::DeleteFile => clause_name!("$delete_file"),
             &SystemClauseType::WorkingDirectory => clause_name!("$working_directory"),
+            &SystemClauseType::PathCanonical => clause_name!("$path_canonical"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
             &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
             &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
@@ -681,6 +683,7 @@ impl SystemClauseType {
             ("$make_directory", 1) => Some(SystemClauseType::MakeDirectory),
             ("$delete_file", 1) => Some(SystemClauseType::DeleteFile),
             ("$working_directory", 2) => Some(SystemClauseType::WorkingDirectory),
+            ("$path_canonical", 2) => Some(SystemClauseType::PathCanonical),
             ("$use_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),
             ("$use_module_from_file", 1) =>
                     Some(SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile)),

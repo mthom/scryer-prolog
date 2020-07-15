@@ -918,6 +918,31 @@ impl MachineState {
                     return Ok(());
                 }
             }
+            &SystemClauseType::PathCanonical => {
+                let path = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+
+                match fs::canonicalize(path) {
+                    Ok(canonical) => {
+                        let cs =
+                            match canonical.to_str() {
+                                Some(s) => { s }
+                                _ => {
+                                    let stub = MachineError::functor_stub(clause_name!("path_canonical"), 2);
+                                    let err = MachineError::representation_error(RepFlag::Character);
+                                    let err = self.error_form(err, stub);
+
+                                    return Err(err);
+                                }
+                            };
+                        let chars = self.heap.put_complete_string(cs);
+                        self.unify(self[temp_v!(2)], chars);
+                    }
+                    _ => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                }
+            }
             &SystemClauseType::AtEndOfExpansion => {
                 if self.cp == LocalCodePtr::TopLevel(0, 0) {
                     self.at_end_of_expansion = true;
