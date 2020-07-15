@@ -63,7 +63,7 @@
 
 option(W, O) :-
   ( member(W, O) -> true
-  ; throw(not_found_error(W, O))).
+  ; throw(error(unknown_opt_error(W, O), option/2)).
 
 
 option_extends([], Opt, Opt).
