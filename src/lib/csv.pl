@@ -57,13 +57,15 @@
   write_csv/3
 ]).
 
+:- use_module(library(format)).
 :- use_module(library(dcgs)).
+:- use_module(library(iso_ext)).
 :- use_module(library(lists)).
 
 
 option(W, O) :-
   ( member(W, O) -> true
-  ; throw(error(unknown_opt_error(W, O), option/2)).
+  ; throw(error(domain_error(csv_option, W), option/2))).
 
 
 option_extends([], Opt, Opt).
@@ -92,51 +94,54 @@ ensure_escaped([X | Y], Field) :-
   escaped_field([X | Y], Field).
 
 
-write_field(Field, Opt) :-
-( Field \== [] ->
-  ensure_escaped(Field, Field0),
-  write(Field0)
+write_field(Out, Field, Opt) :-
+  ( Field \== [] ->
+    ensure_escaped(Field, Field0),
+    format(Out, "~w", [Field0])
   ; option(null_value(Null_Value), Opt),
     ( Null_Value == empty -> true
-    ; write(Null_Value))).
+    ; format(Out, "~w", [Null_Value]))).
 
 
-write_row([Field], Opt) :-
-  write_field(Field, Opt).
-write_row([Field, X | Y], Opt) :-
-  write_field(Field, Opt),
+write_row(Out, [Field], Opt) :-
+  write_field(Out, Field, Opt).
+write_row(Out, [Field, X | Y], Opt) :-
+  write_field(Out, Field, Opt),
   option(token_separator(Tk_Sep), Opt),
-  write(Tk_Sep),
-  write_row([X | Y], Opt).
+  format(Out, "~w", [Tk_Sep]),
+  write_row(Out, [X | Y], Opt).
 
 
-write_rows([Row], Opt) :-
-  write_row(Row, Opt).
-write_rows([Row, X | Y], Opt) :-
+write_rows(Out, [Row], Opt) :-
+  write_row(Out, Row, Opt).
+write_rows(Out, [Row, X | Y], Opt) :-
   option(line_separator(Line_Sep), Opt),
-  write_row(Row, Opt),
-  write(Line_Sep),
-  write_rows([X | Y], Opt).
+  write_row(Out, Row, Opt),
+  format(Out, "~w", [Line_Sep]),
+  write_rows(Out, [X | Y], Opt).
 
 
-write_csv(File_Name, frame(Header, Rows), Opt) :-
+write_csv_(Out, frame(Header, Rows), Opt) :-
+  option(with_header(With_Header), Opt),
+  ( With_Header == true -> 
+    write_row(Out, Header, Opt),
+    option(line_separator(Line_Sep), Opt),
+    format(Out, "~w", [Line_Sep])
+  ; true),
+  write_rows(Out, Rows, Opt).
+
+
+write_csv(File_Name, Frm, Opt) :-
   option_extends(Opt, [
     null_value(empty),
     token_separator(','),
     with_header(true),
     line_separator('\n')
   ], Opt0),
-  open(File_Name, write, Out),
-  set_output(Out),
-  option(with_header(With_Header), Opt0),
-  ( With_Header == true -> 
-    write_row(Header, Opt0),
-    option(line_separator(Line_Sep), Opt0),
-    write(Line_Sep)
-  ; true),
-  write_rows(Rows, Opt0),
-  close(Out),
-  set_output(user_output).
+  setup_call_cleanup(
+    open(File_Name, write, Out),
+    write_csv_(Out, Frm, Opt0),
+    close(Out)).
 write_csv(File_Name, Frm) :-
   write_csv(File_Name, Frm, []).
 
