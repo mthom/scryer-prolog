@@ -943,6 +943,22 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::FileModificationTime => {
+                let file = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+
+                if let Ok(md) = fs::metadata(file) {
+                    if let Ok(time) = md.modified() {
+                        let chars = self.systemtime_to_timestamp(time);
+                        self.unify(self[temp_v!(2)], chars);
+                    } else {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                } else {
+                    self.fail = true;
+                    return Ok(());
+                }
+            }
             &SystemClauseType::AtEndOfExpansion => {
                 if self.cp == LocalCodePtr::TopLevel(0, 0) {
                     self.at_end_of_expansion = true;
@@ -3227,18 +3243,7 @@ impl MachineState {
                 self.unify(a1, addr);
             }
             &SystemClauseType::CurrentTime => {
-                let system_time = SystemTime::now();
-                let datetime: DateTime<Local> = system_time.into();
-
-                let mut fstr = "[".to_string();
-                let specifiers = vec!["d","m","Y","y","H","M","S","b","B","a","A","w","u","U","W","j","D","x","v"];
-                for spec in specifiers {
-                    fstr.push_str(&format!("'{}'=\"%{}\", ", spec, spec).to_string());
-                }
-                fstr.push_str("finis].");
-                let str = { let s = datetime.format(&fstr).to_string();
-                            self.heap.put_complete_string(&s)
-                          };
+                let str = self.systemtime_to_timestamp(SystemTime::now());
                 self.unify(self[temp_v!(1)], str);
             }
             &SystemClauseType::OpDeclaration => {
@@ -5716,6 +5721,23 @@ impl MachineState {
         };
 
         return_from_clause!(self.last_call, self)
+    }
+
+    pub(super)
+    fn systemtime_to_timestamp(
+        &mut self,
+        system_time: SystemTime
+    ) -> Addr {
+        let datetime: DateTime<Local> = system_time.into();
+
+        let mut fstr = "[".to_string();
+        let specifiers = vec!["d","m","Y","y","H","M","S","b","B","a","A","w","u","U","W","j","D","x","v"];
+        for spec in specifiers {
+            fstr.push_str(&format!("'{}'=\"%{}\", ", spec, spec).to_string());
+        }
+        fstr.push_str("finis].");
+        let s = datetime.format(&fstr).to_string();
+        self.heap.put_complete_string(&s)
     }
 
     pub(super)
