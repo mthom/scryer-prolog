@@ -125,6 +125,8 @@ path_canonical(Ps, Cs) :-
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    T is the modification time of File.
    T is a time stamp, suitable for use in format_time//2 in library(time).
+
+   For two time stamps A and B, if A precedes B, then A @< B holds.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 file_modification_time(File, T) :-

@@ -5731,7 +5731,7 @@ impl MachineState {
         let datetime: DateTime<Local> = system_time.into();
 
         let mut fstr = "[".to_string();
-        let specifiers = vec!["d","m","Y","y","H","M","S","b","B","a","A","w","u","U","W","j","D","x","v"];
+        let specifiers = vec!["Y","m","d","H","M","S","y","b","B","a","A","w","u","U","W","j","D","x","v"];
         for spec in specifiers {
             fstr.push_str(&format!("'{}'=\"%{}\", ", spec, spec).to_string());
         }
