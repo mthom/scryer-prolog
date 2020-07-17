@@ -2461,22 +2461,29 @@ impl MachineState {
     fn try_functor_fabricate_struct(
         &mut self,
         name: ClauseName,
-        arity: isize,
+        arity: usize,
         spec: Option<SharedOpDesc>,
         op_dir: &OpDir,
         r: Ref,
     ) {
-        let spec = fetch_atom_op_spec(name.clone(), spec, op_dir);
+        let spec = spec.and_then(|spec| {
+            if spec.arity() != arity {
+                fetch_op_spec(name.clone(), arity, op_dir)
+            } else {
+                Some(spec)
+            }
+        });
 
         let f_a = if name.as_str() == "." && arity == 2 {
             Addr::Lis(self.heap.h())
         } else {
-            self.heap.to_unifiable(HeapCellValue::NamedStr(arity as usize, name, spec))
+            self.heap.to_unifiable(HeapCellValue::NamedStr(arity, name, spec))
         };
 
-        for _ in 0..arity {
-            let h = self.heap.h();
-            self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+        let h = self.heap.h();
+
+        for i in 0 .. arity {
+            self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h + i)));
         }
 
         self.bind(r, f_a);
@@ -2497,7 +2504,13 @@ impl MachineState {
             }
             Addr::Str(o) => match self.heap.clone(o) {
                 HeapCellValue::NamedStr(arity, name, spec) => {
-                    let spec = fetch_op_spec(name.clone(), arity, spec, &indices.op_dir);
+                    let spec = fetch_op_spec_from_existing(
+                        name.clone(),
+                        arity,
+                        spec,
+                        &indices.op_dir,
+                    );
+
                     self.try_functor_compound_case(name, arity, spec)
                 }
                 _ => {
@@ -2505,7 +2518,13 @@ impl MachineState {
                 }
             },
             Addr::Lis(_) | Addr::PStrLocation(..) => {
-                let spec = fetch_op_spec(clause_name!("."), 2, None, &indices.op_dir);
+                let spec = fetch_op_spec_from_existing(
+                    clause_name!("."),
+                    2,
+                    None,
+                    &indices.op_dir,
+                );
+
                 self.try_functor_compound_case(clause_name!("."), 2, spec)
             }
             Addr::AttrVar(..) | Addr::HeapCell(_) | Addr::StackCell(..) => {
@@ -2576,7 +2595,7 @@ impl MachineState {
                         if let HeapCellValue::Atom(name, spec) = self.heap.clone(h) {
                             self.try_functor_fabricate_struct(
                                 name,
-                                arity,
+                                arity as usize,
                                 spec,
                                 &indices.op_dir,
                                 a1.as_var().unwrap(),
@@ -2596,7 +2615,7 @@ impl MachineState {
                     Addr::Char(c) => {
                         self.try_functor_fabricate_struct(
                             clause_name!(c.to_string(), indices.atom_tbl),
-                            arity,
+                            arity as usize,
                             None,
                             &indices.op_dir,
                             a1.as_var().unwrap(),

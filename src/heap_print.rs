@@ -1408,7 +1408,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         match self.machine_st.heap.index_addr(&addr).as_ref() {
             &HeapCellValue::NamedStr(arity, ref name, ref spec) => {
-                let spec = fetch_op_spec(name.clone(), arity, spec.clone(), self.op_dir);
+                let spec = fetch_op_spec_from_existing(name.clone(), arity, spec.clone(), self.op_dir);
 
                 if let Some(spec) = spec {
                     self.handle_op_as_struct(

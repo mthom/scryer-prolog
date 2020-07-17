@@ -3895,9 +3895,13 @@ impl MachineState {
                         }
                     },
                     Addr::Con(h) if self.heap.atom_at(h) => {
-	                if let &HeapCellValue::Atom(ref name, ref spec) = &self.heap[h] {
+	                    if let &HeapCellValue::Atom(ref name, ref spec) = &self.heap[h] {
                             let module = name.owning_module();
-                            let spec = fetch_atom_op_spec(name.clone(), spec.clone(), &indices.op_dir);
+                            let spec = fetch_atom_op_spec(
+                                name.clone(),
+                                spec.clone(),
+                                &indices.op_dir,
+                            );
 
                             indices.predicate_exists(name.clone(), module, 0, spec)
                         } else {

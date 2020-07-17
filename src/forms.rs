@@ -505,11 +505,11 @@ pub fn fetch_atom_op_spec(
     spec: Option<SharedOpDesc>,
     op_dir: &OpDir,
 ) -> Option<SharedOpDesc> {
-    fetch_op_spec(name.clone(), 1, spec.clone(), op_dir)
-        .or_else(|| fetch_op_spec(name, 2, spec, op_dir))
+    fetch_op_spec_from_existing(name.clone(), 1, spec.clone(), op_dir)
+        .or_else(|| fetch_op_spec_from_existing(name, 2, spec, op_dir))
 }
 
-pub fn fetch_op_spec(
+pub fn fetch_op_spec_from_existing(
     name: ClauseName,
     arity: usize,
     spec: Option<SharedOpDesc>,
@@ -524,7 +524,15 @@ pub fn fetch_op_spec(
         }
     }
 
-    spec.or_else(|| match arity {
+    spec.or_else(|| fetch_op_spec(name, arity, op_dir))
+}
+
+pub fn fetch_op_spec(
+    name: ClauseName,
+    arity: usize,
+    op_dir: &OpDir,
+) -> Option<SharedOpDesc> {
+    match arity {
         2 => op_dir
             .get(&(name, Fixity::In))
             .and_then(|OpDirValue(spec, _)| {
@@ -542,7 +550,7 @@ pub fn fetch_op_spec(
             }
 
             op_dir
-                .get(&(name.clone(), Fixity::Post))
+                .get(&(name, Fixity::Post))
                 .and_then(|OpDirValue(spec, _)| {
                     if spec.prec() > 0 {
                         Some(spec.clone())
@@ -551,8 +559,10 @@ pub fn fetch_op_spec(
                     }
                 })
         }
-        _ => None,
-    })
+        _ => {
+            None
+        }
+    }
 }
 
 pub type ModuleDir = IndexMap<ClauseName, Module>;

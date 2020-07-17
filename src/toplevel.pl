@@ -157,9 +157,12 @@ needs_bracketing(Value, Op) :-
 	       current_op(FPrec, _, F)),
 	      _,
 	      false),
-    (  EqPrec < FPrec -> true
-    ;  '$quoted_token'(F) -> true
-    ;  atom_length(F, 1), graphic_token_char(F) -> true
+    (  EqPrec < FPrec ->
+       true
+    ;  '$quoted_token'(F) ->
+       true
+    ;  FPrec > 0, F == Value, graphic_token_char(F) ->
+       true
     ;  EqPrec == FPrec,
        memberchk(EqSpec, [fx,xfx,yfx])
     ).
