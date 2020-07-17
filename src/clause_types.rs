@@ -179,7 +179,7 @@ pub enum SystemClauseType {
     DeleteFile,
     WorkingDirectory,
     PathCanonical,
-    FileModificationTime,
+    FileTime,
     DeleteAttribute,
     DeleteHeadAttribute,
     DynamicModuleResolution(usize),
@@ -348,7 +348,7 @@ impl SystemClauseType {
             &SystemClauseType::DeleteFile => clause_name!("$delete_file"),
             &SystemClauseType::WorkingDirectory => clause_name!("$working_directory"),
             &SystemClauseType::PathCanonical => clause_name!("$path_canonical"),
-            &SystemClauseType::FileModificationTime => clause_name!("$file_modification_time"),
+            &SystemClauseType::FileTime => clause_name!("$file_time"),
             &SystemClauseType::REPL(REPLCodePtr::CompileBatch) => clause_name!("$compile_batch"),
             &SystemClauseType::REPL(REPLCodePtr::UseModule) => clause_name!("$use_module"),
             &SystemClauseType::REPL(REPLCodePtr::UseQualifiedModule) => {
@@ -686,7 +686,7 @@ impl SystemClauseType {
             ("$delete_file", 1) => Some(SystemClauseType::DeleteFile),
             ("$working_directory", 2) => Some(SystemClauseType::WorkingDirectory),
             ("$path_canonical", 2) => Some(SystemClauseType::PathCanonical),
-            ("$file_modification_time", 2) => Some(SystemClauseType::FileModificationTime),
+            ("$file_time", 3) => Some(SystemClauseType::FileTime),
             ("$use_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),
             ("$use_module_from_file", 1) =>
                     Some(SystemClauseType::REPL(REPLCodePtr::UseModuleFromFile)),

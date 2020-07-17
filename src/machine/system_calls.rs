@@ -943,13 +943,32 @@ impl MachineState {
                     }
                 }
             }
-            &SystemClauseType::FileModificationTime => {
+            &SystemClauseType::FileTime => {
                 let file = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
 
+                let which = match self.store(self.deref(self[temp_v!(2)])) {
+                    Addr::Con(h) if self.heap.atom_at(h) => {
+                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                            atom.as_str()
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
                 if let Ok(md) = fs::metadata(file) {
-                    if let Ok(time) = md.modified() {
+                    if let Ok(time) =
+                        match which {
+                            "modification" => { md.modified() }
+                            "access" => { md.accessed() }
+                            "creation" => { md.created() }
+                            _ => { unreachable!() }
+                        } {
                         let chars = self.systemtime_to_timestamp(time);
-                        self.unify(self[temp_v!(2)], chars);
+                        self.unify(self[temp_v!(3)], chars);
                     } else {
                         self.fail = true;
                         return Ok(());
