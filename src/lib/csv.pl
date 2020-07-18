@@ -1,9 +1,12 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   Predicates for parsing CSV data
 
-  Only two options are provided with default values :
-  - token_separator(',') 
-  - skip_header(false)
+
+  Read csv files
+
+  Only two options with default values :
+  - token_separator(',')
+  - with_header(true)
 
   Examples
 
@@ -16,7 +19,7 @@
 
   * with some options:
 
-  ?- phrase(parse_csv(Data, [skip_header(true),token_separator(';')]), "col1;col2;col3,col4\none;2;;three").
+  ?- phrase(parse_csv(Data, [with_header(false), token_separator(';')]), "one;2;;three").
     Data = frame([],[["one",2,[],"three"]]).
 
   * parsing a csv file:
@@ -24,20 +27,45 @@
   ?- use_module(library(csv)).
   ?- use_module(library(pio)).
   ?- phrase_from_file(parse_csv(frame(Header, Rows)), './test.csv').
+
+
+  Write csv files
+
+  Four options with default values :
+  - line_separator('\n')
+  - token_separator(',')
+  - with_header(true)
+  - null_value(empty)
+
+  Examples
+
+  * writing a csv file:
+
+  ?- use_module(library(csv)).
+  ?- write_csv('./test.csv', frame(["col1","col2","col3","col4"], [["one",2,[],"three"]])).
+
+  * with some options
+
+  ?- use_module(library(csv)).
+  ?- write_csv('./test.csv', frame(["col1","col2","col3","col4"], [["one",2,[],"three"]]), [with_header(false), line_separator('\r\n'), token_separator(';'), null_value('\\N')]).
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(csv, [
   parse_csv//1,
-  parse_csv//2
+  parse_csv//2,
+  write_csv/2,
+  write_csv/3
 ]).
 
+:- use_module(library(format)).
 :- use_module(library(dcgs)).
+:- use_module(library(iso_ext)).
 :- use_module(library(lists)).
 
 
 option(W, O) :-
   ( member(W, O) -> true
-  ; throw(not_found_error(W, O))).
+  ; throw(error(domain_error(csv_option, W), option/2))).
 
 
 option_extends([], Opt, Opt).
@@ -48,6 +76,77 @@ option_extends([X | Y], Opt0, Opt) :-
     option_extends(Y, [X | R], Opt)
   ; option_extends(Y, [X | Opt0], Opt) ).
 
+
+%% -- write --
+
+
+escaped_field([], []).
+escaped_field(['"' | Y], ['"', '"' | R]) :-
+  escaped_field(Y, R).
+escaped_field([X | Y], [X | R]) :-
+  X \== '"',
+  escaped_field(Y, R).
+
+
+ensure_escaped(Field, Field) :-
+  (atom(Field); integer(Field); float(Field)).
+ensure_escaped([X | Y], Field) :-
+  escaped_field([X | Y], Field).
+
+
+write_field(Out, Field, Opt) :-
+  ( Field \== [] ->
+    ensure_escaped(Field, Field0),
+    format(Out, "~w", [Field0])
+  ; option(null_value(Null_Value), Opt),
+    ( Null_Value == empty -> true
+    ; format(Out, "~w", [Null_Value]))).
+
+
+write_row(Out, [Field], Opt) :-
+  write_field(Out, Field, Opt).
+write_row(Out, [Field, X | Y], Opt) :-
+  write_field(Out, Field, Opt),
+  option(token_separator(Tk_Sep), Opt),
+  format(Out, "~w", [Tk_Sep]),
+  write_row(Out, [X | Y], Opt).
+
+
+write_rows(Out, [Row], Opt) :-
+  write_row(Out, Row, Opt).
+write_rows(Out, [Row, X | Y], Opt) :-
+  option(line_separator(Line_Sep), Opt),
+  write_row(Out, Row, Opt),
+  format(Out, "~w", [Line_Sep]),
+  write_rows(Out, [X | Y], Opt).
+
+
+write_csv_(Out, frame(Header, Rows), Opt) :-
+  option(with_header(With_Header), Opt),
+  ( With_Header == true -> 
+    write_row(Out, Header, Opt),
+    option(line_separator(Line_Sep), Opt),
+    format(Out, "~w", [Line_Sep])
+  ; true),
+  write_rows(Out, Rows, Opt).
+
+
+write_csv(File_Name, Frm, Opt) :-
+  option_extends(Opt, [
+    null_value(empty),
+    token_separator(','),
+    with_header(true),
+    line_separator('\n')
+  ], Opt0),
+  setup_call_cleanup(
+    open(File_Name, write, Out),
+    write_csv_(Out, Frm, Opt0),
+    close(Out)).
+write_csv(File_Name, Frm) :-
+  write_csv(File_Name, Frm, []).
+
+
+%% -- read --
 
 
 tokens([], Opt), [Tk_Sep] -->
@@ -124,17 +223,16 @@ rows(R, Opt) -->
 
 parse_csv(frame(Header, Rows), Opt) --> 
   { option_extends(Opt, [
-      skip_header(false),
+      with_header(true),
       token_separator(',')
     ], Opt0)
   },
-  ( { member(skip_header(false), Opt0) } ->
+  ( { option(with_header(With_Header), Opt0),
+      With_Header == true } ->
     row(Header, Opt0),
     { Header \== [[]] },
     end_token
-  ; row(_, Opt0),
-    end_token,
-    { Header = [] }),
+  ; { Header = [] }),
   rows(Rows, Opt0).
 parse_csv(R) -->
   parse_csv(R, []).
