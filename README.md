@@ -271,8 +271,10 @@ the above example, posting <tt>Ls0&nbsp;=&nbsp;[a,b,c|Ls]</tt> yields
 the exact same internal representation, and has the advantage that
 only the standard predicate&nbsp;`(=)/2` is used.
 
-Definite clause grammars as provided by `library(dcgs)` are ideally
-suited for reasoning about strings.
+Definite clause grammars as provided by
+[`library(dcgs)`](src/lib/lists.pl), and the predicates from
+[`library(lists)`](src/lib/lists.pl), are ideally suited for reasoning
+about strings.
 
 Partial strings were first proposed by Ulrich Neumerkel in issue
 [#95](https://github.com/mthom/scryer-prolog/issues/95).
@@ -389,9 +391,9 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   useful for parsing and reasoning about characters, notably
   `char_type/2` to classify characters according to their type.
 * [`error`](src/lib/error.pl)
-  `must_be/2` and `can_be/2` complement the type checks provided
-  by `library(si)`, and are especially useful for Prolog library
-  authors.
+  `must_be/2` and `can_be/2` complement the type checks provided by
+  [`library(si)`](src/lib/si.pl), and are especially useful for
+  Prolog library authors.
 * [`tabling`](src/lib/tabling.pl)
   The operator `(table)/1` is used in directives that prepare
   predicates for tabled execution (SLG&nbsp;resolution).
@@ -430,20 +432,25 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`sgml`](src/lib/sgml.pl)
   `load_html/3` and `load_xml/3` represent HTML and XML&nbsp;documents
   as Prolog&nbsp;terms for convenient and efficient reasoning. Use
-  `library(xpath)` to extract information from parsed documents.
+  [`library(xpath)`](src/lib/iso_ext.pl) to extract information from
+  parsed documents.
 * [`csv`](src/lib/csv.pl)
   `parse_csv//1` and `parse_csv//2` can be used with [`phrase_from_file/2`](src/lib/pio.pl)
   or [`phrase/2`](src/lib/dcgs.pl) to parse csv
 * [`xpath`](src/lib/xpath.pl)
-  The predicate `xpath/3` is used for convenient reasoning about
-  HTML and XML&nbsp;documents, inspired by the XPath language. This
-  library is often used together with `library(sgml)`.
+  The predicate `xpath/3` is used for convenient reasoning about HTML
+  and XML&nbsp;documents, inspired by the XPath language. This library
+  is often used together with [`library(sgml)`](src/lib/sgml.pl).
 * [`sockets`](src/lib/sockets.pl)
   Predicates for opening and accepting TCP connections as streams.
   TLS negotiation is performed via the option `tls(true)` in
   `socket_client_open/3`, yielding secure encrypted connections.
 * [`os`](src/lib/os.pl)
   Predicates for reasoning about environment&nbsp;variables.
+* [`iso_ext`](src/lib/iso_ext.pl)
+  Conforming extensions to and candidates for inclusion in the Prolog
+  ISO&nbsp;standard, such as `setup_call_cleanup/3` and
+  `call_with_inference_limit/3`.
 * [`crypto`](src/lib/crypto.pl)
   Cryptographically secure random numbers and hashes, HMAC-based key
   derivation&nbsp;(HKDF), password-based key derivation&nbsp;(PBKDF2),
