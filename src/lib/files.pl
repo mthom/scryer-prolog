@@ -54,7 +54,9 @@
                   make_directory/1,
                   working_directory/2,
                   path_canonical/2,
-                  file_modification_time/2]).
+                  file_modification_time/2,
+                  file_creation_time/2,
+                  file_access_time/2]).
 
 :- use_module(library(error)).
 :- use_module(library(lists)).
@@ -123,12 +125,21 @@ path_canonical(Ps, Cs) :-
         '$path_canonical'(Ps, Cs).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   T is the modification time of File.
+   T is, respectively, the modification, access or creation time of File.
    T is a time stamp, suitable for use in format_time//2 in library(time).
 
    For two time stamps A and B, if A precedes B, then A @< B holds.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 file_modification_time(File, T) :-
-        '$file_modification_time'(File, T0),
+        file_time_(File, modification, T).
+
+file_access_time(File, T) :-
+        file_time_(File, access, T).
+
+file_creation_time(File, T) :-
+        file_time_(File, creation, T).
+
+file_time_(File, Which, T) :-
+        '$file_time'(File, Which, T0),
         read_term_from_chars(T0, T).
