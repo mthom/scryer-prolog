@@ -870,6 +870,10 @@ impl MachineState {
                     return Ok(());
                 }
             }
+            &SystemClauseType::DirectorySeparator => {
+                let addr = self.heap.put_constant(Constant::Char(std::path::MAIN_SEPARATOR));
+                self.unify(self[temp_v!(1)], addr);
+            }
             &SystemClauseType::MakeDirectory => {
                 let directory = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
 
