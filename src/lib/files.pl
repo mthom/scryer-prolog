@@ -54,6 +54,7 @@
                   make_directory/1,
                   working_directory/2,
                   path_canonical/2,
+                  path_segments/2,
                   file_modification_time/2,
                   file_creation_time/2,
                   file_access_time/2]).
@@ -143,3 +144,57 @@ file_creation_time(File, T) :-
 file_time_(File, Which, T) :-
         '$file_time'(File, Which, T0),
         read_term_from_chars(T0, T).
+
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   path_segments(Ps, Segments): True iff Segments are the segments of Ps.
+
+   Segments is the list of components of the path Ps that are
+   separated by the platform-specific directory separator. Each
+   segment is a list of characters.
+
+   At least one of the arguments must be instantiated.
+
+   Examples:
+
+      ?- path_segments("/hello/there", Segments).
+         Segments = [[],"hello","there"]
+      ;  false.
+
+      ?- path_segments(Path, ["hello","there"]).
+         Path = "hello/there"
+      ;  false.
+
+
+   To obtain the platform-specific directory separator, you can use:
+
+      ?- path_segments(Separator, ["",""]).
+         Separator = "/"
+      ;  false.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+path_segments(Path, Segments) :-
+        '$directory_separator'(Sep),
+        (   var(Path) ->
+            must_be(list, Segments),
+            maplist(list_of_chars, Segments),
+            append_with_separator(Segments, Sep, Path)
+        ;   list_of_chars(Path),
+            path_to_segments(Path, Sep, Segments)
+        ).
+
+append_with_separator([], _, []).
+append_with_separator([Segment|Segments], Sep, Path) :-
+        append_with_separator_(Segments, Segment, Sep, Path).
+
+append_with_separator_([], Segment, _, Segment).
+append_with_separator_([Segment|Segments], Prev, Sep, Path) :-
+        append(Prev, [Sep|Rest], Path),
+        append_with_separator_(Segments, Segment, Sep, Rest).
+
+path_to_segments(Path, Sep, Segments) :-
+        (   append(Front, [Sep|Ps], Path) ->
+            Segments = [Front|Rest],
+            path_to_segments(Ps, Sep, Rest)
+        ;   Segments = [Path]
+        ).
