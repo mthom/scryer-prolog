@@ -426,60 +426,16 @@ crypto_password_hash(Password0, Hash, Options) :-
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Bidirectional Bytes <-> Base64 conversion
-   =========================================
-
-   This implements Base64 conversion *without padding*.
+   Bidirectional Bytes <-> Base64 conversion *without padding*.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-n_base64(0 , 'A'). n_base64(1 , 'B'). n_base64(2 , 'C'). n_base64(3 , 'D').
-n_base64(4 , 'E'). n_base64(5 , 'F'). n_base64(6 , 'G'). n_base64(7 , 'H').
-n_base64(8 , 'I'). n_base64(9 , 'J'). n_base64(10, 'K'). n_base64(11, 'L').
-n_base64(12, 'M'). n_base64(13, 'N'). n_base64(14, 'O'). n_base64(15, 'P').
-n_base64(16, 'Q'). n_base64(17, 'R'). n_base64(18, 'S'). n_base64(19, 'T').
-n_base64(20, 'U'). n_base64(21, 'V'). n_base64(22, 'W'). n_base64(23, 'X').
-n_base64(24, 'Y'). n_base64(25, 'Z'). n_base64(26, 'a'). n_base64(27, 'b').
-n_base64(28, 'c'). n_base64(29, 'd'). n_base64(30, 'e'). n_base64(31, 'f').
-n_base64(32, 'g'). n_base64(33, 'h'). n_base64(34, 'i'). n_base64(35, 'j').
-n_base64(36, 'k'). n_base64(37, 'l'). n_base64(38, 'm'). n_base64(39, 'n').
-n_base64(40, 'o'). n_base64(41, 'p'). n_base64(42, 'q'). n_base64(43, 'r').
-n_base64(44, 's'). n_base64(45, 't'). n_base64(46, 'u'). n_base64(47, 'v').
-n_base64(48, 'w'). n_base64(49, 'x'). n_base64(50, 'y'). n_base64(51, 'z').
-n_base64(52, '0'). n_base64(53, '1'). n_base64(54, '2'). n_base64(55, '3').
-n_base64(56, '4'). n_base64(57, '5'). n_base64(58, '6'). n_base64(59, '7').
-n_base64(60, '8'). n_base64(61, '9'). n_base64(62, '+'). n_base64(63, '/').
-
-bytes_base64(Ls, Bs) :-
-        (   list(Bs), maplist(atom, Bs) ->
-            maplist(n_base64, Is, Bs),
-            phrase(bytes_base64_(Ls), Is),
-            Ls ins 0..255
-        ;   phrase(bytes_base64_(Ls), Is),
-            Is ins 0..63,
-            maplist(n_base64, Is, Bs)
+bytes_base64(Bytes, Base64) :-
+        (   var(Bytes) ->
+            chars_base64(Chars, Base64, [padding(false)]),
+            maplist(char_code, Chars, Bytes)
+        ;   maplist(char_code, Chars, Bytes),
+            chars_base64(Chars, Base64, [padding(false)])
         ).
-
-list(Ls) :-
-        nonvar(Ls),
-        (   Ls = [] -> true
-        ;   Ls = [_|Rest],
-            list(Rest)
-        ).
-
-bytes_base64_([])         --> [].
-bytes_base64_([A])        --> [W,X],
-        { A #= W*4 + X//16,
-          X #= 16*_ }.
-bytes_base64_([A,B])      --> [W,X,Y],
-        { A #= W*4 + X//16,
-          B #= (X mod 16)*16 + Y//4,
-          Y #= 4*_ }.
-bytes_base64_([A,B,C|Ls]) --> [W,X,Y,Z],
-        { A #= W*4 + X//16,
-          B #= (X mod 16)*16 + Y//4,
-          C #= (Y mod 4)*64 + Z },
-        bytes_base64_(Ls).
-
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    crypto_data_encrypt(+PlainText,
