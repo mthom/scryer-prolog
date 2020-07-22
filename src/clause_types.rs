@@ -314,6 +314,7 @@ pub enum SystemClauseType {
     GetEnv,
     SetEnv,
     UnsetEnv,
+    CharsBase64,
 }
 
 impl SystemClauseType {
@@ -526,6 +527,7 @@ impl SystemClauseType {
             &SystemClauseType::GetEnv => clause_name!("$getenv"),
             &SystemClauseType::SetEnv => clause_name!("$setenv"),
             &SystemClauseType::UnsetEnv => clause_name!("$unsetenv"),
+            &SystemClauseType::CharsBase64 => clause_name!("$chars_base64"),
         }
     }
 
@@ -718,6 +720,7 @@ impl SystemClauseType {
             ("$getenv", 2) => Some(SystemClauseType::GetEnv),
             ("$setenv", 2) => Some(SystemClauseType::SetEnv),
             ("$unsetenv", 1) => Some(SystemClauseType::UnsetEnv),
+            ("$chars_base64", 4) => Some(SystemClauseType::CharsBase64),
             _ => None,
         }
     }
