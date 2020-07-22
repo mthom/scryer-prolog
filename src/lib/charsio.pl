@@ -200,6 +200,8 @@ read_line_to_chars(Stream, Cs0, Cs) :-
    Relation between a list of characters Cs and its Base64 encoding Bs,
    also a list of characters.
 
+   At least one of the arguments must be instantiated.
+
    Options are:
 
       - padding(Boolean)
@@ -226,6 +228,10 @@ chars_base64(Cs, Bs, Options) :-
             )
         ),
         must_be(boolean, Padding),
+        must_be(atom, Charset),
+        (   member(Charset, [standard,url]) -> true
+        ;   domain_error(charset, Charset, chars_base64/3)
+        ),
         (   var(Cs) ->
             must_be(list, Bs),
             maplist(must_be(character), Bs),
