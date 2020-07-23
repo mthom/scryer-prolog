@@ -387,9 +387,10 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   file, reading lazily only as much as is needed. Due to the compact
   internal string representation, also extremely large files can be
   efficiently processed with Scryer&nbsp;Prolog in this way.
-* [`charsio`](src/lib/charsio.pl) Various predicates that are
-  useful for parsing and reasoning about characters, notably
-  `char_type/2` to classify characters according to their type.
+* [`charsio`](src/lib/charsio.pl) Various predicates that are useful
+  for parsing and reasoning about characters, notably `char_type/2` to
+  classify characters according to their type, and conversion
+  predicates for different encodings of strings.
 * [`error`](src/lib/error.pl)
   `must_be/2` and `can_be/2` complement the type checks provided by
   [`library(si)`](src/lib/si.pl), and are especially useful for

@@ -55,6 +55,7 @@ use crate::native_tls::TlsConnector;
 
 extern crate select;
 use roxmltree;
+use base64;
 
 pub fn get_key() -> KeyEvent {
     let key;
@@ -5744,6 +5745,81 @@ impl MachineState {
             &SystemClauseType::UnsetEnv => {
                 let key = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
                 env::remove_var(key);
+            }
+            &SystemClauseType::CharsBase64 => {
+                let mut options = vec![];
+
+                for i in 3..5 {
+                    match self.store(self.deref(self[temp_v!(i)])) {
+                        Addr::Con(h) if self.heap.atom_at(h) => {
+                            if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
+                                options.push(atom.as_str());
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+                }
+
+                let config =
+                    if options[0] == "true" {
+                        if options[1] == "standard" {
+                            base64::STANDARD
+                        } else {
+                            base64::URL_SAFE
+                        }
+                    } else {
+                        if options[1] == "standard" {
+                            base64::STANDARD_NO_PAD
+                        } else {
+                            base64::URL_SAFE_NO_PAD
+                        }
+                    };
+
+                if self.store(self.deref(self[temp_v!(1)])).is_ref() {
+                    let b64 = self.heap_pstr_iter(self[temp_v!(2)]).to_string();
+                    let bytes = base64::decode_config(b64, config);
+
+                    match bytes {
+                        Ok(bs) => {
+                            let mut string = String::new();
+                            for c in bs {
+                                string.push(c as char);
+                            }
+                            let cstr = self.heap.put_complete_string(&string);
+                            self.unify(self[temp_v!(1)], cstr);
+                        }
+                        _ => {
+                            self.fail = true;
+                            return Ok(());
+                        }
+                    }
+                } else {
+                    let mut bytes = vec![];
+                    for c in self.heap_pstr_iter(self[temp_v!(1)]).to_string().chars() {
+                        if c as u32 > 255 {
+
+                            let stub = MachineError::functor_stub(clause_name!("chars_base64"), 3);
+
+                            let err = MachineError::type_error(
+                                self.heap.h(),
+                                ValidType::Byte,
+                                Addr::Char(c),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+
+                        bytes.push(c as u8);
+                    }
+                    let b64 = base64::encode_config(bytes, config);
+
+                    let cstr = self.heap.put_complete_string(&b64);
+                    self.unify(self[temp_v!(2)], cstr);
+                }
             }
         };
 

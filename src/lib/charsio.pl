@@ -3,7 +3,8 @@
                     get_single_char/1,
                     read_line_to_chars/3,
                     read_term_from_chars/2,
-                    write_term_to_chars/3]).
+                    write_term_to_chars/3,
+                    chars_base64/3]).
 
 :- use_module(library(dcgs)).
 :- use_module(library(iso_ext)).
@@ -193,4 +194,49 @@ read_line_to_chars(Stream, Cs0, Cs) :-
             (   C == '\n' -> Rest = Cs
             ;   read_line_to_chars(Stream, Rest, Cs)
             )
+        ).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Relation between a list of characters Cs and its Base64 encoding Bs,
+   also a list of characters.
+
+   At least one of the arguments must be instantiated.
+
+   Options are:
+
+      - padding(Boolean)
+        Whether to use padding: true (the default) or false.
+      - charset(C)
+        Either 'standard' (RFC 4648 §4, the default) or 'url' (RFC 4648 §5).
+
+   Example:
+
+      ?- chars_base64("hello", Bs, []).
+         Bs = "aGVsbG8="
+      ;  false.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+chars_base64(Cs, Bs, Options) :-
+        must_be(list, Options),
+        (   member(O, Options), var(O) ->
+            instantiation_error(chars_base64/3)
+        ;   (   member(padding(Padding), Options) -> true
+            ;   Padding = true
+            ),
+            (   member(charset(Charset), Options) -> true
+            ;   Charset = standard
+            )
+        ),
+        must_be(boolean, Padding),
+        must_be(atom, Charset),
+        (   member(Charset, [standard,url]) -> true
+        ;   domain_error(charset, Charset, chars_base64/3)
+        ),
+        (   var(Cs) ->
+            must_be(list, Bs),
+            maplist(must_be(character), Bs),
+            '$chars_base64'(Cs, Bs, Padding, Charset)
+        ;   must_be(list, Cs),
+            maplist(must_be(character), Cs),
+            '$chars_base64'(Cs, Bs, Padding, Charset)
         ).
