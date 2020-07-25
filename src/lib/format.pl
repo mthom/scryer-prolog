@@ -377,7 +377,8 @@ format(Stream, Fs, Args) :-
         % we use a specialised internal predicate that uses only a
         % single "write" operation for efficiency. It is equivalent to
         % maplist(put_char(Stream), Cs). It also works for binary streams.
-        '$put_chars'(Stream, Cs).
+        '$put_chars'(Stream, Cs),
+        flush_output(Stream).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- phrase(cells("hello", [], 0, []), Cs).
