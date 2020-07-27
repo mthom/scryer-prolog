@@ -272,9 +272,8 @@ impl Addr {
             &Addr::Float(f) => {
                 Some(Constant::Float(f))
             }
-            &Addr::PStrLocation(h, n) => {
-                let mut heap_pstr_iter =
-                    machine_st.heap_pstr_iter(Addr::PStrLocation(h, n));
+            addr @ &Addr::PStrLocation(..) | addr @ &Addr::Lis(_) => {
+                let mut heap_pstr_iter = machine_st.heap_pstr_iter(*addr);
 
                 let buf = heap_pstr_iter.to_string();
                 let end_addr = heap_pstr_iter.focus();
