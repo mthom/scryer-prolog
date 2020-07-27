@@ -123,10 +123,6 @@ impl CodeOffsets {
                     code.push(Self::add_index(code.is_empty(), index));
                 }
             }
-            &Constant::String(_) => {
-                let is_initial_index = self.lists.is_empty();
-                self.lists.push(Self::add_index(is_initial_index, index));
-            }
             &Constant::Usize(n) => {
                 let code = self.constants
                     .entry(Constant::Integer(Rc::new(Integer::from(n))))
@@ -158,7 +154,7 @@ impl CodeOffsets {
                 let is_initial_index = code.is_empty();
                 code.push(Self::add_index(is_initial_index, index));
             }
-            &Term::Cons(..) => {
+            &Term::Cons(..) | &Term::Constant(_, Constant::String(_)) => {
                 let is_initial_index = self.lists.is_empty();
                 self.lists.push(Self::add_index(is_initial_index, index));
             }
@@ -172,7 +168,8 @@ impl CodeOffsets {
                 let is_initial_index = code.is_empty();
                 code.push(Self::add_index(is_initial_index, index));
             }
-            _ => {}
+            _ => {
+            }
         };
     }
 
