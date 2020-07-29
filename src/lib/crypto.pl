@@ -29,6 +29,8 @@
            ed25519_keypair_public_key/2, % +KeyPair, +PublicKey
            ed25519_sign/4,               % +KeyPair, +Data, -Signature, +Options
            ed25519_verify/4,             % +PublicKey, +Data, +Signature, +Options
+           curve25519_generator/1,       % -Generator
+           curve25519_scalar_mult/3,     % +Scalar, +Point, -Result
            crypto_name_curve/2,          % +Name, -Curve
            crypto_curve_order/2,         % +Curve, -Order
            crypto_curve_generator/2,     % +Curve, -Generator
@@ -43,6 +45,7 @@
 :- use_module(library(arithmetic)).
 :- use_module(library(format)).
 :- use_module(library(charsio)).
+:- use_module(library(si)).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    hex_bytes(?Hex, ?Bytes) is det.
@@ -649,6 +652,62 @@ ed25519_verify(Key, Data0, Signature0, Options) :-
         '$ed25519_verify'(Key, octet, Data, Encoding, Signature).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   X25519: ECDH key exchange over Curve25519
+   =========================================
+
+   Points on Curve25519 are represented as lists of characters that denote
+   the u-coordinate of the Montgomery curve.
+
+   - curve25519_generator(-Gs)
+     Gs is the generator point of Curve25519.
+
+   - curve25519_scalar_mult(+Scalar, +Ps, -Rs)
+     Scalar must be an integer between 0 and 2^256-1,
+     or a list of 32 bytes, and Ps must be a point on the curve.
+     Computes the point Rs = Scalar*Ps as mandated by X25519.
+
+   Alice and Bob can use this to establish a shared secret as follows,
+   where Gs is the generator point of Curve25519:
+
+     1. Alice creates a random integer a and sends As = a*Gs to Bob.
+     2. Bob creates a random integer b and sends Bs = b*Gs to Alice.
+     3. Alice computes Rs = a*Bs.
+     4. Bob computes Rs = b*As.
+     5. Alice and Bob use crypto_data_hkdf/4 on Rs with suitable
+        (same) parameters to obtain lists of bytes that can be used as
+        keys and initialization vectors for symmetric encryption.
+
+   If a and b are kept secret, this method is considered very secure.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+curve25519_generator(Gs) :-
+        length(Gs0, 32),
+        Gs0 = [9|Zs],
+        maplist(=(0), Zs),
+        maplist(char_code, Gs, Gs0).
+
+curve25519_scalar_mult(Scalar, Point, Result) :-
+        (   integer_si(Scalar) ->
+            Scalar #>= 0,
+            Scalar #< 2^256,
+            length(ScalarBytes, 32),
+            bytes_integer(ScalarBytes, Scalar)
+        ;   ScalarBytes = Scalar,
+            must_be_bytes(ScalarBytes, curve25519_scalar_mult/3),
+            length(ScalarBytes, 32)
+        ),
+        maplist(char_code, Point, PointBytes),
+        '$curve25519_scalar_mult'(ScalarBytes, PointBytes, Result).
+
+bytes_integer(Bs, N) :-
+        foldl(pow, Bs, 0-0, N-_).
+
+pow(B, N0-I0, N-I) :-
+        B in 0..255,
+        N #= N0 + B*256^I0,
+        I #= I0 + 1.
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Operations on Elliptic Curves
    =============================
 
@@ -663,6 +722,7 @@ ed25519_verify(Key, Data0, Signature0, Options) :-
        crypto_curve_scalar_mult(C, Random, PublicKey, S),
        crypto_curve_scalar_mult(C, PrivateKey, R, S).
 
+   For better security, new code should use Curve25519 instead.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

@@ -51,6 +51,8 @@ use crate::openssl::ec::{EcGroup, EcPoint};
 use crate::openssl::bn::{BigNum, BigNumContext};
 use crate::openssl::nid::Nid;
 
+use sodiumoxide::crypto::scalarmult::curve25519::*;
+
 use crate::native_tls::TlsConnector;
 
 extern crate select;
@@ -5705,6 +5707,24 @@ impl MachineState {
                     Ok(_) => { }
                     _ => { self.fail = true; return Ok(()); }
                 }
+            }
+            &SystemClauseType::Curve25519ScalarMult => {
+                let stub1 = MachineError::functor_stub(clause_name!("curve25519_scalar_mult"), 3);
+                let scalar_bytes = self.integers_to_bytevec(temp_v!(1), stub1);
+                let scalar = Scalar(<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap());
+
+                let stub2 = MachineError::functor_stub(clause_name!("curve25519_scalar_mult"), 3);
+                let point_bytes = self.integers_to_bytevec(temp_v!(2), stub2);
+                let point = GroupElement(<[u8; 32]>::try_from(&point_bytes[..]).unwrap());
+
+                let result = scalarmult(&scalar, &point).unwrap();
+
+                let mut string = String::new();
+                for c in result[..].iter() {
+                    string.push(*c as char);
+                }
+                let cstr = self.heap.put_complete_string(&string);
+                self.unify(self[temp_v!(3)], cstr);
             }
             &SystemClauseType::LoadHTML => {
                 let string = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
