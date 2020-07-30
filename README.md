@@ -456,8 +456,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   Cryptographically secure random numbers and hashes, HMAC-based key
   derivation&nbsp;(HKDF), password-based key derivation&nbsp;(PBKDF2),
   public key signatures and signature verification with&nbsp;Ed25519,
-  authenticated symmetric encryption with ChaCha20-Poly1305, and
-  reasoning about elliptic curves.
+  ECDH key&nbsp;exchange over Curve25519 (X25519), authenticated symmetric
+  encryption with ChaCha20-Poly1305, and reasoning about elliptic curves.
 
 To use predicates provided by the `lists` library, write:
 
