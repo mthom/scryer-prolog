@@ -67,7 +67,10 @@ pub mod readline {
                         }
                     }
 
-                    *self.pending_input.get_mut() += "\n";
+                    if self.pending_input.get_ref().chars().last() != Some('\n')
+                    {
+                        *self.pending_input.get_mut() += "\n";
+                    }
                     self.pending_input.read(buf)
                 }
                 Err(ReadlineError::Eof) => {
