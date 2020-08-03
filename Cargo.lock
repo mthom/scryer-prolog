@@ -503,6 +503,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99e85c08494b21a9054e7fe1374a732aeadaff3980b6990b94bfd3a70f690005"
 
 [[package]]
+name = "libsodium-sys"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a685b64f837b339074115f2e7f7b431ac73681d08d75b389db7498b8892b8a58"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -894,9 +905,9 @@ dependencies = [
 
 [[package]]
 name = "prolog_parser"
-version = "0.8.63"
+version = "0.8.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fa8dbe0881bcc9a247db279802701d87bbe9d4c6604bb0e5cad3dd3314f241d"
+checksum = "fdcfe8260335a150812e36b171ff985ce88f02de16c05f4a13fe4f10e8c247f8"
 dependencies = [
  "lexical",
  "num-rug-adapter",
@@ -1250,6 +1261,7 @@ dependencies = [
  "rustyline",
  "select",
  "sha3",
+ "sodiumoxide",
  "unicode_reader",
 ]
 
@@ -1389,6 +1401,17 @@ name = "smallvec"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7cb5678e1615754284ec264d9bb5b4c27d2018577fd90ac0ceb578591ed5ee4"
+
+[[package]]
+name = "sodiumoxide"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7038b67c941e23501573cb7242ffb08709abe9b11eb74bceff875bbda024a6a8"
+dependencies = [
+ "libc",
+ "libsodium-sys",
+ "serde",
+]
 
 [[package]]
 name = "spin"

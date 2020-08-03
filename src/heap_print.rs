@@ -1298,6 +1298,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     !iter.immediate_leaf_has_property(|addr, heap| {
                         match heap.index_addr(&addr).as_ref() {
                             &HeapCellValue::Integer(ref n) => &**n >= &0,
+                            &HeapCellValue::Addr(Addr::Fixnum(n)) => n >= 0,
                             &HeapCellValue::Addr(Addr::Float(f)) => f >= OrderedFloat(0f64),
                             &HeapCellValue::Rational(ref r) => &**r >= &0,
                             _ => false

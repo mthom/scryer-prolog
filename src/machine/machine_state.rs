@@ -636,11 +636,10 @@ impl MachineState {
         }
 
         let mut orig_stream = stream.clone();
-        let mut stream = self.open_parsing_stream(stream, "read_term", 3)?;
 
         loop {
             match self.read(
-                &mut stream,
+                stream.clone(),
                 indices.atom_tbl.clone(),
                 &indices.op_dir,
             ) {
@@ -1337,14 +1336,8 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Read => {
-                let mut stream = machine_st.open_parsing_stream(
-                    current_input_stream.clone(),
-                    "read",
-                    1,
-                )?;
-
                 match machine_st.read(
-                    &mut stream,
+                    current_input_stream.clone(),
                     indices.atom_tbl.clone(),
                     &indices.op_dir,
                 ) {

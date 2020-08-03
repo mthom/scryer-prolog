@@ -165,7 +165,7 @@ impl<'a> TermStream<'a> {
 
     #[inline]
     pub fn eof(&mut self) -> Result<bool, ParserError> {
-	self.parser.devour_whitespace()?; // eliminate dangling comments before checking for EOF.
+	    self.parser.devour_whitespace()?; // eliminate dangling comments before checking for EOF.
         Ok(self.stack.is_empty() && self.parser.eof()?)
     }
 
