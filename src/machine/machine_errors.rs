@@ -840,5 +840,4 @@ impl From<ParserError> for EvalSession {
     fn from(err: ParserError) -> Self {
         EvalSession::from(SessionError::ParserError(err))
     }
-
 }

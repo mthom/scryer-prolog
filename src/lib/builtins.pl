@@ -24,6 +24,8 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
 :- op(400, yfx, [div, //, rdiv, <<, >>, mod, rem]).
 :- op(200, fy, [+, -, \]).
 
+:- op(1200, xfx, -->).
+
 % arithmetic comparison operators.
 :- op(700, xfx, [>, <, =\=, =:=, >=, =<]).
 

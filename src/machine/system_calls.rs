@@ -2470,10 +2470,11 @@ impl MachineState {
                         string.push(c as char);
                     }
                 } else {
-                    let mut iter = self.open_parsing_stream(stream.clone(),
-                                                            "get_n_chars",
-                                                            2,
-                                                            )?;
+                    let mut iter = self.open_parsing_stream(
+                        stream.clone(),
+                        "get_n_chars",
+                        2,
+                    )?;
 
                     for _ in 0..num {
                          let result = iter.next();
@@ -4475,16 +4476,10 @@ impl MachineState {
                 let mut heap_pstr_iter = self.heap_pstr_iter(self[temp_v!(1)]);
                 let chars = heap_pstr_iter.to_string();
 
-                let mut stream = self.open_parsing_stream(
-                    Stream::from(chars),
-                    "read_term_from_chars",
-                    2,
-                )?;
-
                 if let Addr::EmptyList = heap_pstr_iter.focus() {
                     let term_write_result =
                         match self.read(
-                            &mut stream,
+                            Stream::from(chars),
                             indices.atom_tbl.clone(),
                             &indices.op_dir,
                         ) {

@@ -67,10 +67,10 @@ pub mod readline {
                         }
                     }
 
-                    if self.pending_input.get_ref().chars().last() != Some('\n')
-                    {
+                    if self.pending_input.get_ref().chars().last() != Some('\n') {
                         *self.pending_input.get_mut() += "\n";
                     }
+
                     self.pending_input.read(buf)
                 }
                 Err(ReadlineError::Eof) => {
@@ -160,12 +160,23 @@ pub mod readline {
 impl MachineState {
     pub fn read(
         &mut self,
-        inner: &mut PrologStream,
+        mut inner: Stream,
         atom_tbl: TabledData<Atom>,
         op_dir: &OpDir,
     ) -> Result<TermWriteResult, ParserError> {
-        let mut parser = Parser::new(inner, atom_tbl, self.flags);
-        let term = parser.read_term(composite_op!(op_dir))?;
+        let mut stream = parsing_stream(inner.clone())?;
+
+        let term = {
+            let mut parser = Parser::new(&mut stream, atom_tbl, self.flags);
+            parser.read_term(composite_op!(op_dir))?
+        };
+
+        // 'pausing' the stream saves the pending top buffer
+        // created by the parsing stream, which was created in this
+        // scope and is about to be destroyed in it.
+
+        let buf = stream.take_buf();
+        inner.pause_stream(buf)?;
 
         Ok(write_term_to_heap(&term, self))
     }
