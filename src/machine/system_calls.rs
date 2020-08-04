@@ -1029,20 +1029,24 @@ impl MachineState {
 
                         match iter.focus() {
                             Addr::EmptyList => {
-                                let chars = clause_name!(string, indices.atom_tbl);
-                                let atom  = self.heap.to_unifiable(
-                                    HeapCellValue::Atom(chars, None)
-                                );
+                                if &string == "[]" {
+                                    self.unify(addr, Addr::EmptyList);
+                                } else {
+                                    let chars = clause_name!(string, indices.atom_tbl);
+                                    let atom  = self.heap.to_unifiable(
+                                        HeapCellValue::Atom(chars, None)
+                                    );
 
-                                self.unify(addr, atom);
+                                    self.unify(addr, atom);
+                                }
                             }
                             focus => {
-                                let stub = MachineError::functor_stub(
-                                    clause_name!("atom_chars"),
-                                    2,
-                                );
-
                                 if let Addr::Lis(l) = focus {
+                                    let stub = MachineError::functor_stub(
+                                        clause_name!("atom_chars"),
+                                        2,
+                                    );
+
                                     let err = MachineError::type_error(
                                         self.heap.h(),
                                         ValidType::Character,
