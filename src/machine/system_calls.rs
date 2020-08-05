@@ -5388,7 +5388,8 @@ impl MachineState {
                 self.unify(arg, byte);
             }
             &SystemClauseType::CryptoDataHash => {
-                let bytes = self.string_encoding_bytes(1, 2);
+                let encoding = self.atom_argument_to_string(2);
+                let bytes = self.string_encoding_bytes(1, &encoding);
 
                 let algorithm_str = match self.store(self.deref(self[temp_v!(4)])) {
                     Addr::Con(h) if self.heap.atom_at(h) => {
@@ -5442,7 +5443,8 @@ impl MachineState {
                 self.unify(self[temp_v!(3)], ints_list);
             }
             &SystemClauseType::CryptoDataHKDF => {
-                let data = self.string_encoding_bytes(1, 2);
+                let encoding = self.atom_argument_to_string(2);
+                let data = self.string_encoding_bytes(1, &encoding);
                 let stub1 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 4);
                 let salt = self.integers_to_bytevec(temp_v!(3), stub1);
                 let stub2 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 4);
@@ -5530,11 +5532,13 @@ impl MachineState {
                 self.unify(self[temp_v!(4)], ints_list);
             }
             &SystemClauseType::CryptoDataEncrypt => {
-                let data = self.string_encoding_bytes(1, 2);
-                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 6);
-                let key = self.integers_to_bytevec(temp_v!(3), stub2);
-                let stub3 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 6);
-                let iv = self.integers_to_bytevec(temp_v!(4), stub3);
+                let encoding = self.atom_argument_to_string(3);
+                let data = self.string_encoding_bytes(1, &encoding);
+                let aad = self.string_encoding_bytes(2, &encoding);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 7);
+                let key = self.integers_to_bytevec(temp_v!(4), stub2);
+                let stub3 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 7);
+                let iv = self.integers_to_bytevec(temp_v!(5), stub3);
 
                 let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
                 let nonce = aead::Nonce::try_assume_unique_for_key(&iv).unwrap();
@@ -5542,7 +5546,7 @@ impl MachineState {
 
                 let mut in_out = data.clone();
                 let tag =
-                     match key.seal_in_place_separate_tag(nonce, aead::Aad::empty(), &mut in_out) {
+                     match key.seal_in_place_separate_tag(nonce, aead::Aad::from(aad), &mut in_out) {
                         Ok(d) => { d }
                         _     => { self.fail = true; return Ok(()); }
                       };
@@ -5555,28 +5559,17 @@ impl MachineState {
                           self.heap.put_complete_string(&buffer)
                       };
 
-                self.unify(self[temp_v!(5)], tag_list);
-                self.unify(self[temp_v!(6)], complete_string);
+                self.unify(self[temp_v!(6)], tag_list);
+                self.unify(self[temp_v!(7)], complete_string);
             }
             &SystemClauseType::CryptoDataDecrypt => {
-                let data = self.string_encoding_bytes(1, 2);
-                let stub1 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 6);
+                let data = self.string_encoding_bytes(1, "octet");
+                let encoding = self.atom_argument_to_string(5);
+                let aad = self.string_encoding_bytes(2, &encoding);
+                let stub1 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 7);
                 let key = self.integers_to_bytevec(temp_v!(3), stub1);
-                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 6);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 7);
                 let iv = self.integers_to_bytevec(temp_v!(4), stub2);
-
-                let encoding = match self.store(self.deref(self[temp_v!(5)])) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                            atom.as_str()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
 
                 let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
                 let nonce = aead::Nonce::try_assume_unique_for_key(&iv).unwrap();
@@ -5586,12 +5579,12 @@ impl MachineState {
 
                 let complete_string = {
                           let decrypted_data =
-                                match key.open_in_place(nonce, aead::Aad::empty(), &mut in_out) {
+                                match key.open_in_place(nonce, aead::Aad::from(aad), &mut in_out) {
                                    Ok(d) => { d }
                                    _     => { self.fail = true; return Ok(()); }
                                  };
 
-                          let buffer = match encoding {
+                          let buffer = match encoding.as_str() {
                                   "octet" => { String::from_iter(decrypted_data.iter().map(|b| *b as char)) }
                                   "utf8"  => { match String::from_utf8(decrypted_data.to_vec()) {
                                                   Ok(str) => { str }
@@ -5665,7 +5658,8 @@ impl MachineState {
                 self.unify(self[temp_v!(1)], complete_string);
             }
             &SystemClauseType::Ed25519KeyPairPublicKey => {
-                let bytes = self.string_encoding_bytes(1, 2);
+                let encoding = self.atom_argument_to_string(2);
+                let bytes = self.string_encoding_bytes(1, &encoding);
 
                 let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&bytes) {
                                   Ok(kp) => { kp }
@@ -5680,8 +5674,9 @@ impl MachineState {
                 self.unify(self[temp_v!(3)], complete_string);
             }
             &SystemClauseType::Ed25519Sign => {
-                let key = self.string_encoding_bytes(1, 2);
-                let data = self.string_encoding_bytes(3, 4);
+                let key = self.string_encoding_bytes(1, "octet");
+                let encoding = self.atom_argument_to_string(4);
+                let data = self.string_encoding_bytes(3, &encoding);
 
                 let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&key) {
                                   Ok(kp) => { kp }
@@ -5696,8 +5691,9 @@ impl MachineState {
                 self.unify(self[temp_v!(5)], sig_list);
             }
             &SystemClauseType::Ed25519Verify => {
-                let key = self.string_encoding_bytes(1, 2);
-                let data = self.string_encoding_bytes(3, 4);
+                let key = self.string_encoding_bytes(1, "octet");
+                let encoding = self.atom_argument_to_string(4);
+                let data = self.string_encoding_bytes(3, &encoding);
                 let stub = MachineError::functor_stub(clause_name!("ed25519_verify"), 5);
                 let signature = self.integers_to_bytevec(temp_v!(5), stub);
 
@@ -5863,17 +5859,14 @@ impl MachineState {
     }
 
     pub(super)
-    fn string_encoding_bytes(
+    fn atom_argument_to_string(
         &mut self,
-        data_arg: usize,
-        encoding_arg: usize,
-    ) -> Vec<u8> {
-        let data = self.heap_pstr_iter(self[temp_v!(data_arg)]).to_string();
-
-        let encoding_str = match self.store(self.deref(self[temp_v!(encoding_arg)])) {
+        atom_arg: usize,
+    ) -> String {
+        match self.store(self.deref(self[temp_v!(atom_arg)])) {
             Addr::Con(h) if self.heap.atom_at(h) => {
                 if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                    atom.as_str()
+                    atom.as_str().to_string()
                 } else {
                     unreachable!()
                 }
@@ -5881,9 +5874,18 @@ impl MachineState {
             _ => {
                 unreachable!()
             }
-        };
+        }
+    }
 
-        match encoding_str {
+    pub(super)
+    fn string_encoding_bytes(
+        &mut self,
+        data_arg: usize,
+        encoding: &str,
+    ) -> Vec<u8> {
+        let data = self.heap_pstr_iter(self[temp_v!(data_arg)]).to_string();
+
+        match encoding {
             "utf8" => { data.into_bytes() }
             "octet" => {
                 let mut buf = vec![];

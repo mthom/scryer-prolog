@@ -492,6 +492,12 @@ bytes_base64(Bytes, Base64) :-
       list of _bytes_ holding the tag. This tag must be provided for
       decryption.
 
+      - aad(+Data)
+      Data is additional authenticated data (AAD), a list of
+      characters. It is authenticated in that it influences the tag,
+      but it is not encrypted. The encoding/1 option also specifies
+      the encoding of Data.
+
    Here is an example encryption and decryption, using the ChaCha20
    stream cipher with the Poly1305 authenticator. This cipher uses a
    256-bit key and a 96-bit nonce, i.e., 32 and 12 _bytes_,
@@ -533,13 +539,15 @@ crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
             must_be_bytes(Tag, crypto_data_encrypt/6)
         ;   true
         ),
+        option(aad(AAD0), Options, []),
+        encoding_chars(Encoding, AAD0, AAD),
         must_be_bytes(Key, crypto_data_encrypt/6),
         must_be_bytes(IV, crypto_data_encrypt/6),
         must_be(atom, Algorithm),
         (   Algorithm = 'chacha20-poly1305' -> true
         ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_encrypt/6)
         ),
-        '$crypto_data_encrypt'(PlainText, Encoding, Key, IV, Tag, CipherText).
+        '$crypto_data_encrypt'(PlainText, AAD, Encoding, Key, IV, Tag, CipherText).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   crypto_data_decrypt(+CipherText,
@@ -567,6 +575,10 @@ crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
     - tag(+Tag)
     For authenticated encryption schemes, the tag must be specified as
     a list of bytes exactly as they were generated upon encryption.
+
+    - aad(+Data)
+    Any additional authenticated data (AAD) must be specified. The
+    encoding/1 option also specifies the encoding of Data.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
@@ -576,6 +588,8 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         must_be_bytes(IV, crypto_data_decrypt/6),
         must_be(atom, Algorithm),
         option(encoding(Encoding), Options, utf8),
+        option(aad(AAD0), Options, []),
+        encoding_chars(Encoding, AAD0, AAD),
         must_be(atom, Encoding),
         member(Encoding, [utf8,octet]),
         must_be(list, CipherText0),
@@ -585,7 +599,7 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         (   Algorithm = 'chacha20-poly1305' -> true
         ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_decrypt/6)
         ),
-        '$crypto_data_decrypt'(CipherText, octet, Key, IV, Encoding, PlainText).
+        '$crypto_data_decrypt'(CipherText, AAD, Key, IV, Encoding, PlainText).
 
 
 encoding_chars(octet, Bs, Cs) :-

@@ -710,7 +710,7 @@ impl SystemClauseType {
             ("$crypto_data_hash", 4) => Some(SystemClauseType::CryptoDataHash),
             ("$crypto_data_hkdf", 7) => Some(SystemClauseType::CryptoDataHKDF),
             ("$crypto_password_hash", 4) => Some(SystemClauseType::CryptoPasswordHash),
-            ("$crypto_data_encrypt", 6) => Some(SystemClauseType::CryptoDataEncrypt),
+            ("$crypto_data_encrypt", 7) => Some(SystemClauseType::CryptoDataEncrypt),
             ("$crypto_data_decrypt", 6) => Some(SystemClauseType::CryptoDataDecrypt),
             ("$crypto_curve_scalar_mult", 5) => Some(SystemClauseType::CryptoCurveScalarMult),
             ("$ed25519_sign", 5) => Some(SystemClauseType::Ed25519Sign),
