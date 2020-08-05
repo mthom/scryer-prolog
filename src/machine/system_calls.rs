@@ -5713,10 +5713,7 @@ impl MachineState {
 
                 let result = scalarmult(&scalar, &point).unwrap();
 
-                let mut string = String::new();
-                for c in result[..].iter() {
-                    string.push(*c as char);
-                }
+                let string = String::from_iter(result[..].iter().map(|b| *b as char));
                 let cstr = self.heap.put_complete_string(&string);
                 self.unify(self[temp_v!(3)], cstr);
             }
@@ -5761,32 +5758,18 @@ impl MachineState {
                 env::remove_var(key);
             }
             &SystemClauseType::CharsBase64 => {
-                let mut options = vec![];
-
-                for i in 3..5 {
-                    match self.store(self.deref(self[temp_v!(i)])) {
-                        Addr::Con(h) if self.heap.atom_at(h) => {
-                            if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                                options.push(atom.as_str());
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    };
-                }
+                let padding = self.atom_argument_to_string(3);
+                let charset = self.atom_argument_to_string(4);
 
                 let config =
-                    if options[0] == "true" {
-                        if options[1] == "standard" {
+                    if padding == "true" {
+                        if charset == "standard" {
                             base64::STANDARD
                         } else {
                             base64::URL_SAFE
                         }
                     } else {
-                        if options[1] == "standard" {
+                        if charset == "standard" {
                             base64::STANDARD_NO_PAD
                         } else {
                             base64::URL_SAFE_NO_PAD
@@ -5799,10 +5782,7 @@ impl MachineState {
 
                     match bytes {
                         Ok(bs) => {
-                            let mut string = String::new();
-                            for c in bs {
-                                string.push(c as char);
-                            }
+                            let string = String::from_iter(bs.iter().map(|b| *b as char));
                             let cstr = self.heap.put_complete_string(&string);
                             self.unify(self[temp_v!(1)], cstr);
                         }

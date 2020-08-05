@@ -282,7 +282,7 @@ crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         ;   domain_error(hkdf_algorithm, Algorithm, crypto_data_hkdf/4)
         ),
         must_be(integer, L),
-        L >= 0,
+        L #>= 0,
         options_data_chars(Options, Data0, Data, Encoding),
         option(salt(SaltBytes), Options, []),
         must_be_bytes(SaltBytes, crypto_data_hkdf/4),
@@ -415,7 +415,7 @@ crypto_password_hash(Password0, Hash, Options) :-
         chars_bytes_(Password0, Password, crypto_password_hash/3),
         must_be(list, Options),
         option(cost(C), Options, 17),
-        Iterations is 2^C,
+        Iterations #= 2^C,
         Algorithm = 'pbkdf2-sha512', % current default and only option
         option(algorithm(Algorithm), Options, Algorithm),
         (   member(salt(SaltBytes), Options) ->
@@ -702,8 +702,6 @@ curve25519_generator(Gs) :-
 
 curve25519_scalar_mult(Scalar, Point, Result) :-
         (   integer_si(Scalar) ->
-            Scalar #>= 0,
-            Scalar #< 2^256,
             length(ScalarBytes, 32),
             bytes_integer(ScalarBytes, Scalar)
         ;   ScalarBytes = Scalar,
