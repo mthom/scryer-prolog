@@ -5658,8 +5658,7 @@ impl MachineState {
                 self.unify(self[temp_v!(1)], complete_string);
             }
             &SystemClauseType::Ed25519KeyPairPublicKey => {
-                let encoding = self.atom_argument_to_string(2);
-                let bytes = self.string_encoding_bytes(1, &encoding);
+                let bytes = self.string_encoding_bytes(1, "octet");
 
                 let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&bytes) {
                                   Ok(kp) => { kp }
@@ -5671,12 +5670,12 @@ impl MachineState {
                           self.heap.put_complete_string(&buffer)
                       };
 
-                self.unify(self[temp_v!(3)], complete_string);
+                self.unify(self[temp_v!(2)], complete_string);
             }
             &SystemClauseType::Ed25519Sign => {
                 let key = self.string_encoding_bytes(1, "octet");
-                let encoding = self.atom_argument_to_string(4);
-                let data = self.string_encoding_bytes(3, &encoding);
+                let encoding = self.atom_argument_to_string(3);
+                let data = self.string_encoding_bytes(2, &encoding);
 
                 let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&key) {
                                   Ok(kp) => { kp }
@@ -5688,14 +5687,14 @@ impl MachineState {
                 let sig_list =
                       Addr::HeapCell(self.heap.to_list(sig.as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))));
 
-                self.unify(self[temp_v!(5)], sig_list);
+                self.unify(self[temp_v!(4)], sig_list);
             }
             &SystemClauseType::Ed25519Verify => {
                 let key = self.string_encoding_bytes(1, "octet");
-                let encoding = self.atom_argument_to_string(4);
-                let data = self.string_encoding_bytes(3, &encoding);
+                let encoding = self.atom_argument_to_string(3);
+                let data = self.string_encoding_bytes(2, &encoding);
                 let stub = MachineError::functor_stub(clause_name!("ed25519_verify"), 5);
-                let signature = self.integers_to_bytevec(temp_v!(5), stub);
+                let signature = self.integers_to_bytevec(temp_v!(4), stub);
 
                 let peer_public_key = signature::UnparsedPublicKey::new(&signature::ED25519, &key);
                 match peer_public_key.verify(&data, &signature) {

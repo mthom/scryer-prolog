@@ -651,19 +651,19 @@ ed25519_new_keypair(Pair) :-
 
 ed25519_keypair_public_key(Pair, PublicKey) :-
         must_be_byte_chars(Pair, ed25519_keypair_public_key),
-        '$ed25519_keypair_public_key'(Pair, octet, PublicKey).
+        '$ed25519_keypair_public_key'(Pair, PublicKey).
 
 ed25519_sign(Key, Data0, Signature, Options) :-
         must_be_byte_chars(Key, ed25519_sign),
         options_data_chars(Options, Data0, Data, Encoding),
-        '$ed25519_sign'(Key, octet, Data, Encoding, Signature0),
+        '$ed25519_sign'(Key, Data, Encoding, Signature0),
         hex_bytes(Signature, Signature0).
 
 ed25519_verify(Key, Data0, Signature0, Options) :-
         must_be_byte_chars(Key, ed25519_verify),
         options_data_chars(Options, Data0, Data, Encoding),
         hex_bytes(Signature0, Signature),
-        '$ed25519_verify'(Key, octet, Data, Encoding, Signature).
+        '$ed25519_verify'(Key, Data, Encoding, Signature).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    X25519: ECDH key exchange over Curve25519
