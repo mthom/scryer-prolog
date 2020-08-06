@@ -1675,6 +1675,12 @@ impl MachineState {
                         Ok(Number::Integer(n)) => {
                             n.to_string()
                         }
+                        Ok(Number::Rational(r)) => {
+                            // n has already been confirmed as an integer, and
+                            // internally, Rational is assumed reduced, so its denominator
+                            // must be 1.
+                            r.numer().to_string()
+                        }
                         _ => {
                             unreachable!()
                         }
@@ -5502,15 +5508,20 @@ impl MachineState {
                 let stub2 = MachineError::functor_stub(clause_name!("crypto_password_hash"), 3);
                 let salt = self.integers_to_bytevec(temp_v!(2), stub2);
 
+                let iterations = self.store(self.deref(self[temp_v!(3)]));
+
                 let iterations =
-                    match Number::try_from((self[temp_v!(3)], &self.heap)) {
+                    match Number::try_from((iterations, &self.heap)) {
                         Ok(Number::Fixnum(n)) => {
                             u64::try_from(n).unwrap()
                         }
                         Ok(Number::Integer(n)) => {
                             match n.to_u64() {
                                 Some(i) => { i }
-                                None => { self.fail = true; return Ok(()); }
+                                None => {
+                                    self.fail = true;
+                                    return Ok(());
+                                }
                             }
                         }
                         _ => {
