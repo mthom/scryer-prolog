@@ -592,7 +592,6 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         encoding_chars(Encoding, AAD0, AAD),
         must_be(atom, Encoding),
         member(Encoding, [utf8,octet]),
-        must_be(list, CipherText0),
         encoding_chars(octet, CipherText0, CipherText1),
         maplist(char_code, TagChars, Tag),
         append(CipherText1, TagChars, CipherText),
