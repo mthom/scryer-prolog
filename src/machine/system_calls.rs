@@ -1706,6 +1706,12 @@ impl MachineState {
                         Ok(Number::Integer(n)) => {
                             n.to_string()
                         }
+                        Ok(Number::Rational(r)) => {
+                            // n has already been confirmed as an integer, and
+                            // internally, Rational is assumed reduced, so its
+                            // denominator must be 1.
+                            r.numer().to_string()
+                        }
                         _ => {
                             unreachable!()
                         }
@@ -3766,6 +3772,12 @@ impl MachineState {
                 let code = match Number::try_from((code, &self.heap)) {
                     Ok(Number::Fixnum(n)) => n as i32,
                     Ok(Number::Integer(n)) => n.to_i32().unwrap(),
+                    Ok(Number::Rational(r)) => {
+                        // n has already been confirmed as an integer, and
+                        // internally, Rational is assumed reduced, so its
+                        // denominator must be 1.
+                        r.numer().to_i32().unwrap()
+                    }
                     _ => { unreachable!() }
                 };
 
