@@ -5447,8 +5447,10 @@ impl MachineState {
 
                 let algorithm = self.atom_argument_to_string(5);
 
+                let length = self.store(self.deref(self[temp_v!(6)]));
+
                 let length =
-                    match Number::try_from((self[temp_v!(6)], &self.heap)) {
+                    match Number::try_from((length, &self.heap)) {
                         Ok(Number::Fixnum(n)) => {
                             usize::try_from(n).unwrap()
                         }
@@ -5596,8 +5598,10 @@ impl MachineState {
                                   _ => { unreachable!() }
                                };
 
+                let scalar = self.store(self.deref(self[temp_v!(2)]));
+
                 let scalar =
-                    match Number::try_from((self[temp_v!(2)], &self.heap)) {
+                    match Number::try_from((scalar, &self.heap)) {
                         Ok(Number::Fixnum(n)) => {
                             Integer::from(n)
                         }
