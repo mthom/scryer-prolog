@@ -6,7 +6,7 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 
-use std::cmp::{min, Ordering};
+use std::cmp::Ordering;
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
@@ -110,7 +110,7 @@ fn parser_top_to_bytes(mut buf: Vec<io::Result<char>>) -> io::Result<Vec<u8>> {
 
 /* all these streams are closed automatically when the instance is
  * dropped. */
-pub enum StreamInstance {
+enum StreamInstance {
     Bytes(Cursor<Vec<u8>>),
     InputFile(ClauseName, File),
     OutputFile(ClauseName, File, bool), // File, append.
@@ -129,16 +129,20 @@ impl StreamInstance {
             StreamInstance::PausedPrologStream(ref mut put_back, ref mut stream) => {
                 let mut index = 0;
 
-                while index < min(buf.len(), put_back.len()) {
-                    let b = put_back.pop().unwrap();
-                    buf[index] = b;
-                    index += 1;
+                while index < buf.len() {
+                    if let Some(b) = put_back.pop() {
+                        buf[index] = b;
+                        index += 1;
+                    } else {
+                        break;
+                    }
                 }
 
                 if index == buf.len() {
                     Ok(buf.len())
                 } else {
                     stream.read(&mut buf[index ..])
+                          .map(|bytes_read| bytes_read + index)
                 }
             }
             StreamInstance::InputFile(_, ref mut file) => {
