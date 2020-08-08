@@ -918,6 +918,7 @@ op(Priority, OpSpec, Op) :-
 halt :- halt(0).
 
 halt(N) :-
+        must_be_number(N, halt/1),
         (   -2^31 =< N, N =< 2^31 - 1 ->
             '$halt'(N)
         ;   throw(error(domain_error(exit_code, N), halt/1))
