@@ -25,6 +25,7 @@
            crypto_password_hash/3,       % +Password, -Hash, +Options
            crypto_data_encrypt/6,        % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
            crypto_data_decrypt/6,        % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
+           ed25519_seed_keypair/2,       % +Seed, -KeyPair
            ed25519_new_keypair/1,        % -KeyPair
            ed25519_keypair_public_key/2, % +KeyPair, +PublicKey
            ed25519_sign/4,               % +KeyPair, +Data, -Signature, +Options
@@ -628,6 +629,10 @@ encoding_chars(utf8, Cs, Cs) :-
      Pair can be used for signing. Its public key can be obtained
      with ed25519_keypair_public_key/2.
 
+   - ed25519_seed_keypair(+Seed, -Pair)
+     Like ed25519_new_keypair, except that Pair is obtained
+     deterministically from Seed, a list of 32 bytes.
+
    - ed25519_keypair_public_key(+Pair, -PublicKey)
      PublicKey is the public key of the given key pair. The public key
      can be used for signature verification, and can be shared freely.
@@ -651,8 +656,14 @@ encoding_chars(utf8, Cs, Cs) :-
        which treats Data as a list of raw bytes.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+ed25519_seed_keypair(Seed, Keypair) :-
+        must_be_bytes(Seed, ed25519_seed_keypair/2),
+        length(Seed, 32),
+        '$ed25519_seed_keypair'(Seed, Keypair).
+
 ed25519_new_keypair(Pair) :-
-        '$ed25519_new_keypair'(Pair).
+        crypto_n_random_bytes(32, Seed),
+        ed25519_seed_keypair(Seed, Pair).
 
 ed25519_keypair_public_key(Pair, PublicKey) :-
         must_be_byte_chars(Pair, ed25519_keypair_public_key),

@@ -5642,14 +5642,18 @@ impl MachineState {
                 self.unify(self[temp_v!(4)], sx);
                 self.unify(self[temp_v!(5)], sy);
             }
-            &SystemClauseType::Ed25519NewKeyPair => {
-                let pkcs8_bytes = signature::Ed25519KeyPair::generate_pkcs8(rng()).unwrap();
+            &SystemClauseType::Ed25519SeedKeyPair => {
+                let stub = MachineError::functor_stub(clause_name!("curve25519_seed_keypair"), 2);
+                let seed_bytes = self.integers_to_bytevec(temp_v!(1), stub);
+
+                let seed = <[u8;32]>::try_from(&seed_bytes[..]).unwrap();
+                let pkcs8_bytes = signature::Ed25519KeyPair::seed_to_pkcs8(&seed).unwrap();
                 let complete_string = {
                           let buffer = String::from_iter(pkcs8_bytes.as_ref().iter().map(|b| *b as char));
                           self.heap.put_complete_string(&buffer)
                       };
 
-                self.unify(self[temp_v!(1)], complete_string);
+                self.unify(self[temp_v!(2)], complete_string);
             }
             &SystemClauseType::Ed25519KeyPairPublicKey => {
                 let bytes = self.string_encoding_bytes(1, "octet");
