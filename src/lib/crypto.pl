@@ -547,7 +547,12 @@ crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
         (   Algorithm = 'chacha20-poly1305' -> true
         ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_encrypt/6)
         ),
+        algorithm_key_iv(Algorithm, Key, IV),
         '$crypto_data_encrypt'(PlainText, AAD, Encoding, Key, IV, Tag, CipherText).
+
+algorithm_key_iv('chacha20-poly1305', Key, IV) :-
+        length(Key, 32),
+        length(IV, 12).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   crypto_data_decrypt(+CipherText,
@@ -592,13 +597,13 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         encoding_chars(Encoding, AAD0, AAD),
         must_be(atom, Encoding),
         member(Encoding, [utf8,octet]),
-        must_be(list, CipherText0),
         encoding_chars(octet, CipherText0, CipherText1),
         maplist(char_code, TagChars, Tag),
         append(CipherText1, TagChars, CipherText),
         (   Algorithm = 'chacha20-poly1305' -> true
         ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_decrypt/6)
         ),
+        algorithm_key_iv(Algorithm, Key, IV),
         '$crypto_data_decrypt'(CipherText, AAD, Key, IV, Encoding, PlainText).
 
 

@@ -5397,21 +5397,10 @@ impl MachineState {
                 let encoding = self.atom_argument_to_string(2);
                 let bytes = self.string_encoding_bytes(1, &encoding);
 
-                let algorithm_str = match self.store(self.deref(self[temp_v!(4)])) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                            atom.as_str()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
+                let algorithm = self.atom_argument_to_string(4);
 
                 let ints_list =
-                        match algorithm_str  {
+                        match algorithm.as_str()  {
                           "sha3_224" =>   { let mut context = Sha3_224::new();
                                             context.input(&bytes);
                                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
@@ -5434,7 +5423,7 @@ impl MachineState {
                                             context.input(&bytes);
                                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
                           _ => { let ints = digest::digest(
-                                                match algorithm_str {
+                                                match algorithm.as_str() {
                                                    "sha256" =>     { &digest::SHA256 }
                                                    "sha384" =>     { &digest::SHA384 }
                                                    "sha512" =>     { &digest::SHA512 }
@@ -5456,21 +5445,12 @@ impl MachineState {
                 let stub2 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 4);
                 let info = self.integers_to_bytevec(temp_v!(4), stub2);
 
-                let algorithm = match self.store(self.deref(self[temp_v!(5)])) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                            atom.as_str()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
+                let algorithm = self.atom_argument_to_string(5);
+
+                let length = self.store(self.deref(self[temp_v!(6)]));
 
                 let length =
-                    match Number::try_from((self[temp_v!(6)], &self.heap)) {
+                    match Number::try_from((length, &self.heap)) {
                         Ok(Number::Fixnum(n)) => {
                             usize::try_from(n).unwrap()
                         }
@@ -5485,7 +5465,7 @@ impl MachineState {
 
                 let ints_list =
                         {   let digest_alg  =
-                               match algorithm {
+                               match algorithm.as_str() {
                                   "sha256" =>     { hkdf::HKDF_SHA256 }
                                   "sha384" =>     { hkdf::HKDF_SHA384 }
                                   "sha512" =>     { hkdf::HKDF_SHA512 }
@@ -5611,26 +5591,17 @@ impl MachineState {
                 self.unify(self[temp_v!(6)], complete_string);
             }
             &SystemClauseType::CryptoCurveScalarMult => {
-                let curve = match self.store(self.deref(self[temp_v!(1)])) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                            atom.as_str()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
-                let curve_id = match curve {
+                let curve = self.atom_argument_to_string(1);
+                let curve_id = match curve.as_str() {
                                   "secp112r1" => { Nid::SECP112R1 }
                                   "secp256k1" => { Nid::SECP256K1 }
                                   _ => { unreachable!() }
                                };
 
+                let scalar = self.store(self.deref(self[temp_v!(2)]));
+
                 let scalar =
-                    match Number::try_from((self[temp_v!(2)], &self.heap)) {
+                    match Number::try_from((scalar, &self.heap)) {
                         Ok(Number::Fixnum(n)) => {
                             Integer::from(n)
                         }
