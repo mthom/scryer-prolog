@@ -282,7 +282,7 @@ crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         ;   domain_error(hkdf_algorithm, Algorithm, crypto_data_hkdf/4)
         ),
         must_be(integer, L),
-        L >= 0,
+        L #>= 0,
         options_data_chars(Options, Data0, Data, Encoding),
         option(salt(SaltBytes), Options, []),
         must_be_bytes(SaltBytes, crypto_data_hkdf/4),
@@ -415,7 +415,7 @@ crypto_password_hash(Password0, Hash, Options) :-
         chars_bytes_(Password0, Password, crypto_password_hash/3),
         must_be(list, Options),
         option(cost(C), Options, 17),
-        Iterations is 2^C,
+        Iterations #= 2^C,
         Algorithm = 'pbkdf2-sha512', % current default and only option
         option(algorithm(Algorithm), Options, Algorithm),
         (   member(salt(SaltBytes), Options) ->
@@ -492,6 +492,12 @@ bytes_base64(Bytes, Base64) :-
       list of _bytes_ holding the tag. This tag must be provided for
       decryption.
 
+      - aad(+Data)
+      Data is additional authenticated data (AAD), a list of
+      characters. It is authenticated in that it influences the tag,
+      but it is not encrypted. The encoding/1 option also specifies
+      the encoding of Data.
+
    Here is an example encryption and decryption, using the ChaCha20
    stream cipher with the Poly1305 authenticator. This cipher uses a
    256-bit key and a 96-bit nonce, i.e., 32 and 12 _bytes_,
@@ -533,13 +539,20 @@ crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
             must_be_bytes(Tag, crypto_data_encrypt/6)
         ;   true
         ),
+        option(aad(AAD0), Options, []),
+        encoding_chars(Encoding, AAD0, AAD),
         must_be_bytes(Key, crypto_data_encrypt/6),
         must_be_bytes(IV, crypto_data_encrypt/6),
         must_be(atom, Algorithm),
         (   Algorithm = 'chacha20-poly1305' -> true
         ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_encrypt/6)
         ),
-        '$crypto_data_encrypt'(PlainText, Encoding, Key, IV, Tag, CipherText).
+        algorithm_key_iv(Algorithm, Key, IV),
+        '$crypto_data_encrypt'(PlainText, AAD, Encoding, Key, IV, Tag, CipherText).
+
+algorithm_key_iv('chacha20-poly1305', Key, IV) :-
+        length(Key, 32),
+        length(IV, 12).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   crypto_data_decrypt(+CipherText,
@@ -567,6 +580,10 @@ crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
     - tag(+Tag)
     For authenticated encryption schemes, the tag must be specified as
     a list of bytes exactly as they were generated upon encryption.
+
+    - aad(+Data)
+    Any additional authenticated data (AAD) must be specified. The
+    encoding/1 option also specifies the encoding of Data.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
@@ -576,16 +593,18 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         must_be_bytes(IV, crypto_data_decrypt/6),
         must_be(atom, Algorithm),
         option(encoding(Encoding), Options, utf8),
+        option(aad(AAD0), Options, []),
+        encoding_chars(Encoding, AAD0, AAD),
         must_be(atom, Encoding),
         member(Encoding, [utf8,octet]),
-        must_be(list, CipherText0),
         encoding_chars(octet, CipherText0, CipherText1),
         maplist(char_code, TagChars, Tag),
         append(CipherText1, TagChars, CipherText),
         (   Algorithm = 'chacha20-poly1305' -> true
         ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_decrypt/6)
         ),
-        '$crypto_data_decrypt'(CipherText, octet, Key, IV, Encoding, PlainText).
+        algorithm_key_iv(Algorithm, Key, IV),
+        '$crypto_data_decrypt'(CipherText, AAD, Key, IV, Encoding, PlainText).
 
 
 encoding_chars(octet, Bs, Cs) :-
@@ -637,19 +656,19 @@ ed25519_new_keypair(Pair) :-
 
 ed25519_keypair_public_key(Pair, PublicKey) :-
         must_be_byte_chars(Pair, ed25519_keypair_public_key),
-        '$ed25519_keypair_public_key'(Pair, octet, PublicKey).
+        '$ed25519_keypair_public_key'(Pair, PublicKey).
 
 ed25519_sign(Key, Data0, Signature, Options) :-
         must_be_byte_chars(Key, ed25519_sign),
         options_data_chars(Options, Data0, Data, Encoding),
-        '$ed25519_sign'(Key, octet, Data, Encoding, Signature0),
+        '$ed25519_sign'(Key, Data, Encoding, Signature0),
         hex_bytes(Signature, Signature0).
 
 ed25519_verify(Key, Data0, Signature0, Options) :-
         must_be_byte_chars(Key, ed25519_verify),
         options_data_chars(Options, Data0, Data, Encoding),
         hex_bytes(Signature0, Signature),
-        '$ed25519_verify'(Key, octet, Data, Encoding, Signature).
+        '$ed25519_verify'(Key, Data, Encoding, Signature).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    X25519: ECDH key exchange over Curve25519
@@ -688,8 +707,6 @@ curve25519_generator(Gs) :-
 
 curve25519_scalar_mult(Scalar, Point, Result) :-
         (   integer_si(Scalar) ->
-            Scalar #>= 0,
-            Scalar #< 2^256,
             length(ScalarBytes, 32),
             bytes_integer(ScalarBytes, Scalar)
         ;   ScalarBytes = Scalar,
