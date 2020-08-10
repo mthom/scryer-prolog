@@ -4924,7 +4924,7 @@ run_propagator(ptzdiv(X,Y,Z), MState) -->
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% % Z = X mod Y
 
-run_propagator(pmod(X,Y,Z), MState) -->
+run_propagator(pmod_(X,Y,Z), MState) -->
         (   nonvar(X) ->
             (   nonvar(Y) -> kill(MState), Y =\= 0, Z is X mod Y
             ;   true
@@ -5014,6 +5014,117 @@ run_propagator(pmod(X,Y,Z), MState) -->
             ),
             fd_put(Z, ZD3, ZPs)
             % TODO: propagate more
+        ).
+
+run_propagator(pmod(X,Y,Z), MState) -->
+        (   Y == 0 -> { false }
+        ;   Y == Z -> { false }
+        % ;   nonvar(Y), Z == X -> true
+        ;   X == Y -> kill(MState), Z = 0
+        ;   true
+        ),
+        (   nonvar(X), nonvar(Y) ->
+            kill(MState),
+            Z is X mod Y
+        ;   nonvar(Y), nonvar(Z) ->
+            (   Y > 0 -> Z >= 0, Z < Y
+            ;   Y < 0 -> Z =< 0, Z > Y
+            )
+            % kill(MState),
+            % queue_goal(X #= Z + Y * _) % Add a variable to be efficient.
+        ;   nonvar(Z), nonvar(X) ->
+            (   Z > 0 ->
+                (   X < 0 -> true
+                ;   X >= Z
+                )
+            ;   Z < 0 ->
+                (   X > 0 -> true
+                ;   X =< Z
+                )
+            ;   Z =:= 0 % Multiple solutions so do nothing special.
+            ),
+            (   Z > 0 -> queue_goal(Y #> 0)
+            ;   Z < 0 -> queue_goal(Y #< 0)
+            ;   true
+            )
+        ;   run_propagator(pmodz(X,Y,Z), MState),
+            run_propagator(pmody(X,Y,Z), MState),
+            run_propagator(pmodx(X,Y,Z), MState),
+            true
+        ).
+
+run_propagator(pmodz(X,Y,Z), MState) -->
+        (   nonvar(Z) -> true % Nothing to do.
+        ;   nonvar(X) ->
+            (   X =:= 0 -> kill(MState), Z = X
+            ;   X > 0 -> queue_goal(Z #=< X)
+            ;   X < 0 -> queue_goal(Z #>= X)
+            ),
+            (   { fd_get(Y, _, n(YL), n(YU), _), YL > 0 } ->
+                { ZMax is YU - 1 },
+                queue_goal(Z in 0..ZMax)
+            ;   { fd_get(Y, _, n(YL), n(YU), _), YU < 0 } ->
+                { ZMin is YL + 1 },
+                queue_goal(Z in ZMin..0)
+            ;   true
+            )
+        ;   nonvar(Y) ->
+            (   abs(Y) =:= 1 -> kill(MState), Z = 0
+            ;   Y < 0 ->
+                { ZMin is Y + 1 },
+                queue_goal(Z in ZMin..0)
+            ;   Y > 0 ->
+                { ZMax is Y - 1 },
+                queue_goal(Z in 0..ZMax)
+            ),
+            (   { fd_get(X, _, n(XL), n(XU), _), XL >= 0 } ->
+                queue_goal(Z #=< XU)
+            ;   { fd_get(X, _, n(XL), n(XU), _), XU =< 0 } ->
+                queue_goal(Z #>= XL)
+            ;   true
+            )
+        ;   (   { fd_get(X, _, n(XL), n(XU), _), XL >= 0 } ->
+                queue_goal(Z #=< XU)
+            ;   { fd_get(X, _, n(XL), n(XU), _), XU =< 0 } ->
+                queue_goal(Z #>= XL)
+            ;   true
+            ),
+            (   { fd_get(Y, _, n(YL), n(YU), _), YL > 0 } ->
+                { ZMax is YU - 1 },
+                queue_goal(Z in 0..ZMax)
+            ;   { fd_get(Y, _, n(YL), n(YU), _), YU < 0 } ->
+                { ZMin is YL + 1 },
+                queue_goal(Z in ZMin..0)
+            ;   true
+            )
+        ).
+
+run_propagator(pmody(X,Y,Z), MState) -->
+        (   nonvar(Y) -> true % Nothing to do.
+        % ;   nonvar(X) -> true
+        ;   nonvar(Z) ->
+            (   Z > 0 -> queue_goal(Y #> Z)
+            ;   Z < 0 -> queue_goal(Y #< Z)
+            ;   Z =:= 0 -> kill(MState), queue_goal(X / Y #= _)
+            )
+        ;   (   { fd_get(Z, _, n(ZL), _, _), ZL > 0 } ->
+                queue_goal(Y #> ZL)
+            ;   { fd_get(Z, _, _, n(ZU), _), ZU < 0 } ->
+                queue_goal(Y #< ZU)
+            ;   true
+            )
+        ).
+
+run_propagator(pmodx(X,Y,Z), MState) -->
+        (   nonvar(X) -> true % Nothing to do.
+        % ;   nonvar(Y) -> true
+        /*
+        ;   nonvar(Z) ->
+            (   Z =:= 0 -> kill(MState), queue_goal(X / Y #= _)
+            ;   true
+            )
+        % */
+        ;   true
         ).
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
