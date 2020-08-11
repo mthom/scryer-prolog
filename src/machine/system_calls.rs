@@ -5877,7 +5877,10 @@ impl MachineState {
         indices: &mut IndexStore,
         node: roxmltree::Node,
     ) -> Addr {
-        if node.has_children() {
+        if node.is_text() {
+            let string = String::from(node.text().unwrap());
+            self.heap.put_complete_string(&string)
+        } else {
             let mut avec = Vec::new();
             for attr in node.attributes() {
                 let chars = clause_name!(String::from(attr.name()), indices.atom_tbl);
@@ -5914,9 +5917,6 @@ impl MachineState {
             self.heap.push(HeapCellValue::Addr(children));
 
             result
-        } else {
-            let string = String::from(node.text().unwrap());
-            self.heap.put_complete_string(&string)
         }
     }
 
