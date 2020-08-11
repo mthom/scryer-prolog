@@ -1558,9 +1558,10 @@ sats([]) --> [].
 sats([A|As]) --> [clpb:sat(A)], sats(As).
 
 booleans([]) --> [].
-booleans([B|Bs]) --> boolean(B), { del_clpb(B) }, booleans(Bs).
+booleans([B|Bs]) --> boolean(B), booleans(Bs).
 
 boolean(Var) -->
+        { del_clpb(Var) },
         (   { get_attr(Var, clpb_omit_boolean, true) } -> []
         ;   [clpb:sat(Var =:= Var)]
         ).
