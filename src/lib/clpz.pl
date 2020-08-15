@@ -4940,8 +4940,8 @@ run_propagator(pmod(X,Y,Z), MState) -->
             ),
             (   { fd_get(X, _, n(XL), _, _) } ->
                 (   (XL - Z) mod Y =\= 0 ->
-                    { XMin is Z + Y * ((XL - Z) div Y + 1) }
-                ;   { XMin is XL }
+                    XMin is Z + Y * ((XL - Z) div Y + 1)
+                ;   XMin is XL
                 ),
                 { fd_get(X, XD0, XPs),
                   domain_remove_smaller_than(XD0, XMin, XD2),
@@ -4950,7 +4950,7 @@ run_propagator(pmod(X,Y,Z), MState) -->
             ;   true
             ),
             (   { fd_get(X, _, _, n(XU), _) } ->
-                { XMax is Z + Y * ((XU - Z) div Y) },
+                XMax is Z + Y * ((XU - Z) div Y),
                 { fd_get(X, XD1, XPs),
                   domain_remove_greater_than(XD1, XMax, XD3),
                   fd_put(X, XD3, XPs) }
@@ -5013,14 +5013,14 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                     )
                 ),
                 (   { fd_get(Y, _, n(YL), n(YU), _), YL > 0 } ->
-                    { ZMax is YU - 1 },
+                    ZMax is YU - 1,
                     { fd_get(Z, ZD1, ZPs),
                       domain_remove_smaller_than(ZD1, 0, ZD3),
                       domain_remove_greater_than(ZD3, ZMax, ZD5),
                       fd_put(Z, ZD5, ZPs) }
                     % queue_goal(Z in 0..ZMax)
                 ;   { fd_get(Y, _, n(YL), n(YU), _), YU < 0 } ->
-                    { ZMin is YL + 1 },
+                    ZMin is YL + 1,
                     { fd_get(Z, ZD1, ZPs),
                       domain_remove_greater_than(ZD1, 0, ZD3),
                       domain_remove_smaller_than(ZD3, ZMin, ZD5),
@@ -5035,7 +5035,7 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                 (   { fd_get(X, _, n(XL), n(XU), _), XU =< 0, Y < XL } ->
                     kill(MState),
                     queue_goal(Z = X)
-                ;   { ZMin is Y + 1 },
+                ;   ZMin is Y + 1,
                     { fd_get(Z, ZD1, ZPs),
                       domain_remove_greater_than(ZD1, 0, ZD3),
                       domain_remove_smaller_than(ZD3, ZMin, ZD5),
@@ -5046,7 +5046,7 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                 (   { fd_get(X, _, n(XL), n(XU), _), XL >= 0, Y > XU } ->
                     kill(MState),
                     queue_goal(Z = X)
-                ;   { ZMax is Y - 1 },
+                ;   ZMax is Y - 1,
                     { fd_get(Z, ZD1, ZPs),
                       domain_remove_smaller_than(ZD1, 0, ZD3),
                       domain_remove_greater_than(ZD3, ZMax, ZD5),
@@ -5075,22 +5075,22 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                 ;   true
                 ),
                 (   { fd_get(Y, _, n(YL), n(YU), _), YL > 0 } ->
-                    { ZMax is YU - 1 },
+                    ZMax is YU - 1,
                     { fd_get(Z, ZD1, ZPs),
                       domain_remove_smaller_than(ZD1, 0, ZD3),
                       domain_remove_greater_than(ZD3, ZMax, ZD5),
                       fd_put(Z, ZD5, ZPs) }
                     % queue_goal(Z in 0..ZMax)
                 ;   { fd_get(Y, _, n(YL), n(YU), _), YU < 0 } ->
-                    { ZMin is YL + 1 },
+                    ZMin is YL + 1,
                     { fd_get(Z, ZD1, ZPs),
                       domain_remove_greater_than(ZD1, 0, ZD3),
                       domain_remove_smaller_than(ZD3, ZMin, ZD5),
                       fd_put(Z, ZD5, ZPs) }
                     % queue_goal(Z in ZMin..0)
                 ;   { fd_get(Y, _, n(YL), n(YU), _) } ->
-                    { ZMin is YL + 1,
-                      ZMax is YU - 1 },
+                    ZMin is YL + 1,
+                    ZMax is YU - 1,
                     { fd_get(Z, ZD1, ZPs),
                       domain_remove_greater_than(ZD1, ZMax, ZD3),
                       domain_remove_smaller_than(ZD3, ZMin, ZD5),
