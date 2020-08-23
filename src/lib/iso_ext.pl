@@ -7,7 +7,9 @@
                     call_with_inference_limit/3, forall/2,
                     partial_string/1, partial_string/3,
                     partial_string_tail/2, setup_call_cleanup/3,
-                    variant/2]).
+                    call_nth/2, variant/2]).
+
+:- use_module(library(error), [can_be/2,domain_error/3]).
 
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
@@ -161,3 +163,35 @@ partial_string_tail(String, Tail) :-
        '$partial_string_tail'(String, Tail)
     ;  throw(error(type_error(partial_string, String), partial_string_tail/2))
     ).
+
+:- dynamic(i_call_nth_nesting/2).
+:- dynamic(i_call_nth_counter/1).
+
+call_nth(Goal, N) :-
+    can_be(integer, N),
+    (   integer(N), N =< 0,
+        domain_error(positive_integer, N, call_nth/2)
+    ;   true
+    ),
+    setup_call_cleanup(call_nth_nesting(ID),
+                       (   Goal,
+                           retract(i_call_nth_nesting(ID,N0)),
+                           N1 is N0 + 1,
+                           asserta(i_call_nth_nesting(ID,N1)),
+                           (   integer(N) ->
+                               N = N1,
+                               !
+                           ;   N = N1
+                           )
+                       ),
+                       (   retract(i_call_nth_nesting(ID,_)),
+                           retract(i_call_nth_counter(ID))
+                       )).
+
+call_nth_nesting(ID) :-
+    (   i_call_nth_counter(ID0) ->
+        ID is ID0 + 1
+    ;   ID = 0
+    ),
+    asserta(i_call_nth_nesting(ID, 0)),
+    asserta(i_call_nth_counter(ID)).
