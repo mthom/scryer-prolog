@@ -450,7 +450,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   Predicates for reasoning about environment&nbsp;variables.
 * [`iso_ext`](src/lib/iso_ext.pl)
   Conforming extensions to and candidates for inclusion in the Prolog
-  ISO&nbsp;standard, such as `setup_call_cleanup/3` and
+  ISO&nbsp;standard, such as `setup_call_cleanup/3`, `call_nth/2` and
   `call_with_inference_limit/3`.
 * [`crypto`](src/lib/crypto.pl)
   Cryptographically secure random numbers and hashes, HMAC-based key
