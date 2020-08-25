@@ -272,7 +272,7 @@ the exact same internal representation, and has the advantage that
 only the standard predicate&nbsp;`(=)/2` is used.
 
 Definite clause grammars as provided by
-[`library(dcgs)`](src/lib/lists.pl), and the predicates from
+[`library(dcgs)`](src/lib/dcgs.pl), and the predicates from
 [`library(lists)`](src/lib/lists.pl), are ideally suited for reasoning
 about strings.
 
