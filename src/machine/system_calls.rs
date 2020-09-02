@@ -2137,7 +2137,7 @@ impl MachineState {
                     bytes = string.into_bytes();
                 }
 
-                match stream.write(&bytes) {
+                match stream.write_all(&bytes) {
                     Ok(_) => {
                         return return_from_clause!(self.last_call, self);
                     }
