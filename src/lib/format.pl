@@ -87,7 +87,8 @@
 format_(Fs, Args) -->
         { must_be(list, Fs),
           must_be(list, Args),
-          phrase(cells(Fs,Args,0,[]), Cells) },
+          unique_variable_names(Args, VNs),
+          phrase(cells(Fs,Args,0,[],VNs), Cells) },
         format_cells(Cells).
 
 format_cells([]) --> [].
@@ -157,22 +158,22 @@ element_gluevar(glue(_,V), N, N) --> [V].
    consume whitespace in the sense of format strings.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-cells([], Args, Tab, Es) -->
+cells([], Args, Tab, Es, _) -->
         (   { Args == [] } -> cell(Tab, Tab, Es)
         ;   { domain_error(empty_list, Args, format_//2) }
         ).
-cells([~,~|Fs], Args, Tab, Es) --> !,
-        cells(Fs, Args, Tab, [chars("~")|Es]).
-cells([~,w|Fs], [Arg|Args], Tab, Es) --> !,
-        { write_term_to_chars(Arg, [], Chars) },
-        cells(Fs, Args, Tab, [chars(Chars)|Es]).
-cells([~,q|Fs], [Arg|Args], Tab, Es) --> !,
-        { write_term_to_chars(Arg, [quoted(true)], Chars) },
-        cells(Fs, Args, Tab, [chars(Chars)|Es]).
-cells([~,a|Fs], [Arg|Args], Tab, Es) --> !,
+cells([~,~|Fs], Args, Tab, Es, VNs) --> !,
+        cells(Fs, Args, Tab, [chars("~")|Es], VNs).
+cells([~,w|Fs], [Arg|Args], Tab, Es, VNs) --> !,
+        { write_term_to_chars(Arg, [variable_names(VNs)], Chars) },
+        cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+cells([~,q|Fs], [Arg|Args], Tab, Es, VNs) --> !,
+        { write_term_to_chars(Arg, [quoted(true),variable_names(VNs)], Chars) },
+        cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+cells([~,a|Fs], [Arg|Args], Tab, Es, VNs) --> !,
         { atom_chars(Arg, Chars) },
-        cells(Fs, Args, Tab, [chars(Chars)|Es]).
-cells([~|Fs0], Args0, Tab, Es) -->
+        cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, [d|Fs], Args0, [Arg0|Args]) },
         !,
         { Arg is Arg0, % evaluate compound expression
@@ -191,8 +192,8 @@ cells([~|Fs0], Args0, Tab, Es) -->
                   phrase((list(Bs),".",list(Ds)), Cs)
               ) }
         ),
-        cells(Fs, Args, Tab, [chars(Cs)|Es]).
-cells([~|Fs0], Args0, Tab, Es) -->
+        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['D'|Fs], Args0, [Arg|Args]) },
         !,
         { number_chars(Num, NCs),
@@ -203,25 +204,25 @@ cells([~|Fs0], Args0, Tab, Es) -->
           phrase(groups_of_three(Bs1), Bs2),
           reverse(Bs2, Bs),
           append(Bs, Ds, Cs) },
-        cells(Fs, Args, Tab, [chars(Cs)|Es]).
-cells([~,i|Fs], [_|Args], Tab, Es) --> !,
-        cells(Fs, Args, Tab, Es).
-cells([~,n|Fs], Args, Tab, Es) --> !,
+        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+cells([~,i|Fs], [_|Args], Tab, Es, VNs) --> !,
+        cells(Fs, Args, Tab, Es, VNs).
+cells([~,n|Fs], Args, Tab, Es, VNs) --> !,
         cell(Tab, Tab, Es),
         n_newlines(1),
-        cells(Fs, Args, 0, []).
-cells([~|Fs0], Args0, Tab, Es) -->
+        cells(Fs, Args, 0, [], VNs).
+cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, [n|Fs], Args0, Args) },
         !,
         cell(Tab, Tab, Es),
         n_newlines(Num),
-        cells(Fs, Args, 0, []).
-cells([~,s|Fs], [Arg|Args], Tab, Es) --> !,
-        cells(Fs, Args, Tab, [chars(Arg)|Es]).
-cells([~,f|Fs], [Arg|Args], Tab, Es) --> !,
+        cells(Fs, Args, 0, [], VNs).
+cells([~,s|Fs], [Arg|Args], Tab, Es, VNs) --> !,
+        cells(Fs, Args, Tab, [chars(Arg)|Es], VNs).
+cells([~,f|Fs], [Arg|Args], Tab, Es, VNs) --> !,
         { format_number_chars(Arg, Chars) },
-        cells(Fs, Args, Tab, [chars(Chars)|Es]).
-cells([~|Fs0], Args0, Tab, Es) -->
+        cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, [f|Fs], Args0, [Arg|Args]) },
         !,
         { format_number_chars(Arg, Cs0),
@@ -248,39 +249,39 @@ cells([~|Fs0], Args0, Tab, Es) -->
               ),
               append(Bs, ['.'|Ds], Chars)
           ) },
-        cells(Fs, Args, Tab, [chars(Chars)|Es]).
-cells([~|Fs0], Args0, Tab, Es) -->
+        cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, [r|Fs], Args0, [Arg|Args]) },
         !,
         { integer_to_radix(Arg, Num, lowercase, Cs) },
-        cells(Fs, Args, Tab, [chars(Cs)|Es]).
-cells([~|Fs0], Args0, Tab, Es) -->
+        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['R'|Fs], Args0, [Arg|Args]) },
         !,
         { integer_to_radix(Arg, Num, uppercase, Cs) },
-        cells(Fs, Args, Tab, [chars(Cs)|Es]).
-cells([~,'`',Char,t|Fs], Args, Tab, Es) --> !,
-        cells(Fs, Args, Tab, [glue(Char,_)|Es]).
-cells([~,t|Fs], Args, Tab, Es) --> !,
-        cells(Fs, Args, Tab, [glue(' ',_)|Es]).
-cells([~|Fs0], Args0, Tab, Es) -->
+        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+cells([~,'`',Char,t|Fs], Args, Tab, Es, VNs) --> !,
+        cells(Fs, Args, Tab, [glue(Char,_)|Es], VNs).
+cells([~,t|Fs], Args, Tab, Es, VNs) --> !,
+        cells(Fs, Args, Tab, [glue(' ',_)|Es], VNs).
+cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['|'|Fs], Args0, Args) },
         !,
         cell(Tab, Num, Es),
-        cells(Fs, Args, Num, []).
-cells([~|Fs0], Args0, Tab0, Es) -->
+        cells(Fs, Args, Num, [], VNs).
+cells([~|Fs0], Args0, Tab0, Es, VNs) -->
         { numeric_argument(Fs0, Num, [+|Fs], Args0, Args) },
         !,
         { Tab is Tab0 + Num },
         cell(Tab0, Tab, Es),
-        cells(Fs, Args, Tab, []).
-cells([~,C|_], _, _, _) -->
+        cells(Fs, Args, Tab, [], VNs).
+cells([~,C|_], _, _, _, _) -->
         { atom_chars(A, [~,C]),
           domain_error(format_string, A, format_//2) }.
-cells(Fs0, Args, Tab, Es) -->
+cells(Fs0, Args, Tab, Es, VNs) -->
         { phrase(upto_what(Fs1, ~), Fs0, Fs),
           Fs1 = [_|_] },
-        cells(Fs, Args, Tab, [chars(Fs1)|Es]).
+        cells(Fs, Args, Tab, [chars(Fs1)|Es], VNs).
 
 format_number_chars(N0, Chars) :-
         N is N0, % evaluate compound expression
@@ -390,14 +391,14 @@ format(Stream, Fs, Args) :-
 
 ?- phrase(cells("~`at~50|", [], 0, []), Cs),
    phrase(format_cells(Cs), Ls).
-?- phrase(cells("~ta~t~tb~tc~21|", [], 0, []), Cs).
-Cs = [cell(0,21,[glue(' ',_38),chars([a]),glue(' ',_62),glue(' ',_67),chars([b]),glue(' ',_91),chars([c])])].
-?- phrase(cells("~ta~t~4|", [], 0, []), Cs).
-Cs = [cell(0,4,[glue(' ',_38),chars([a]),glue(' ',_62)])].
+?- phrase(format:cells("~ta~t~tb~tc~21|", [], 0, [], []), Cs).
+Cs = [cell(0,21,[glue(' ',_A),chars("a"),glue(' ',_B),glue(' ',_C),chars("b"),glue(' ',_D),chars("c ...")])]
+?- phrase(format:cells("~ta~t~4|", [], 0, [], []), Cs).
+Cs = [cell(0,4,[glue(' ',_A),chars("a"),glue(' ',_B)])]
 
-?- phrase(format_cell(cell(0,1,[glue(a,_94)])), Ls).
+?- phrase(format:format_cell(cell(0,1,[glue(a,_94)])), Ls).
 
-?- phrase(format_cell(cell(0,50,[chars("hello")])), Ls).
+?- phrase(format:format_cell(cell(0,50,[chars("hello")])), Ls).
 
 ?- phrase(format_("~`at~50|~n", []), Ls).
 ?- phrase(format_("hello~n~tthere~6|", []), Ls).
@@ -462,9 +463,12 @@ portray_clause(Stream, Term) :-
         format(Stream, "~s", [Ls]).
 
 portray_clause_(Term) -->
-        { term_variables(Term, Vs),
-          foldl(var_name, Vs, VNs, 0, _) },
+        { unique_variable_names(Term, VNs) },
         portray_(Term, VNs), ".\n".
+
+unique_variable_names(Term, VNs) :-
+        term_variables(Term, Vs),
+        foldl(var_name, Vs, VNs, 0, _).
 
 var_name(V, Name=V, Num0, Num) :-
         charsio:fabricate_var_name(numbervars, Name, Num0),
