@@ -375,6 +375,113 @@ impl MachineState {
         Ok(())
     }
 
+    fn stream_from_file_spec(
+        &self,
+        file_spec: ClauseName,
+        indices: &mut IndexStore,
+        options: &StreamOptions,
+    ) -> Result<Stream, MachineStub> {
+        if file_spec.as_str().is_empty() {
+            let stub = MachineError::functor_stub(clause_name!("open"), 4);
+            let err = MachineError::domain_error(
+                DomainErrorType::SourceSink,
+                self[temp_v!(1)],
+            );
+
+            return Err(self.error_form(err, stub));
+        }
+
+        // 8.11.5.3l)
+        if let Some(ref alias) = &options.alias {
+            if indices.stream_aliases.contains_key(alias) {
+                return Err(self.occupied_alias_permission_error(
+                    alias.clone(),
+                    "open",
+                    4,
+                ));
+            }
+        }
+
+        let mode =
+            atom_from!(self, indices, self.store(self.deref(self[temp_v!(2)])));
+
+        let mut open_options = fs::OpenOptions::new();
+
+        let (is_input_file, in_append_mode) =
+            match mode.as_str() {
+                "read" => {
+                    open_options.read(true).write(false).create(false);
+                    (true, false)
+                }
+                "write" => {
+                    open_options.read(false).write(true).truncate(true).create(true);
+                    (false, false)
+                }
+                "append" => {
+                    open_options.read(false).write(true).create(true).append(true);
+                    (false, true)
+                }
+                _ => {
+                    let stub = MachineError::functor_stub(clause_name!("open"), 4);
+                    let err  = MachineError::domain_error(
+                        DomainErrorType::IOMode,
+                        self[temp_v!(2)],
+                    );
+
+                    // 8.11.5.3h)
+                    return Err(self.error_form(err, stub));
+                }
+            };
+
+        let file =
+            match open_options.open(file_spec.as_str()) {
+                Ok(file) => {
+                    file
+                }
+                Err(err) => {
+                    match err.kind() {
+                        ErrorKind::NotFound => {
+                            // 8.11.5.3j)
+                            let stub = MachineError::functor_stub(
+                                clause_name!("open"),
+                                4,
+                            );
+
+                            let err = MachineError::existence_error(
+                                self.heap.h(),
+                                ExistenceError::SourceSink(self[temp_v!(1)]),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+                        ErrorKind::PermissionDenied => {
+                            // 8.11.5.3k)
+                            return Err(self.open_permission_error(self[temp_v!(1)], "open", 4));
+                        }
+                        _ => {
+                            let stub = MachineError::functor_stub(
+                                clause_name!("open"),
+                                4,
+                            );
+
+                            let err = MachineError::syntax_error(
+                                self.heap.h(),
+                                ParserError::IO(err),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+                    }
+                }
+            };            
+
+        Ok(if is_input_file {
+            Stream::from_file_as_input(file_spec, file)
+        } else {
+            Stream::from_file_as_output(file_spec, file, in_append_mode)
+        })
+    }
+
     #[inline]
     fn install_new_block(&mut self, r: RegType) -> usize {
         self.block = self.b;
@@ -3368,12 +3475,12 @@ impl MachineState {
                 let options =
                     self.to_stream_options(alias, eof_action, reposition, stream_type);
 
-                let file_spec =
+                let mut stream =
                     match self.store(self.deref(self[temp_v!(1)])) {
                         Addr::Con(h) if self.heap.atom_at(h) => {
                             match &self.heap[h] {
                                 &HeapCellValue::Atom(ref atom, _) => {
-                                    atom.clone()
+                                    self.stream_from_file_spec(atom.clone(), indices, &options)?
                                 }
                                 _ => {
                                     unreachable!()
@@ -3386,108 +3493,23 @@ impl MachineState {
                                     let mut heap_pstr_iter =
                                         self.heap_pstr_iter(Addr::PStrLocation(h, n));
 
-                                    clause_name!(
-                                        heap_pstr_iter.to_string(),
-                                        indices.atom_tbl.clone()
-                                    )
+                                    let file_spec = 
+                                        clause_name!(
+                                            heap_pstr_iter.to_string(),
+                                            indices.atom_tbl.clone()
+                                        );
+
+                                    self.stream_from_file_spec(file_spec, indices, &options)?
                                 }
                                 _ => {
-                                    clause_name!("")
+                                    self.stream_from_file_spec(clause_name!(""), indices, &options)?
                                 }
                             }
                         }
                         _ => {
-                            clause_name!("")
+                            self.stream_from_file_spec(clause_name!(""), indices, &options)?
                         }
                     };
-
-                if file_spec.as_str().is_empty() {
-                    let stub = MachineError::functor_stub(clause_name!("open"), 4);
-                    let err = MachineError::domain_error(
-                        DomainErrorType::SourceSink,
-                        self[temp_v!(1)],
-                    );
-
-                    return Err(self.error_form(err, stub));
-                }
-
-                // 8.11.5.3l)
-                if let Some(ref alias) = &options.alias {
-                    if indices.stream_aliases.contains_key(alias) {
-                        return Err(self.occupied_alias_permission_error(
-                            alias.clone(),
-                            "open",
-                            4,
-                        ));
-                    }
-                }
-
-                let mode =
-                    atom_from!(self, indices, self.store(self.deref(self[temp_v!(2)])));
-
-                let mut open_options = fs::OpenOptions::new();
-
-                let (is_input_file, in_append_mode) =
-                    match mode.as_str() {
-                        "read" => {
-                            open_options.read(true).write(false).create(false);
-                            (true, false)
-                        }
-                        "write" => {
-                            open_options.read(false).write(true).truncate(true).create(true);
-                            (false, false)
-                        }
-                        "append" => {
-                            open_options.read(false).write(true).create(true).append(true);
-                            (false, true)
-                        }
-                        _ => {
-                            let stub = MachineError::functor_stub(clause_name!("open"), 4);
-                            let err  = MachineError::domain_error(
-                                DomainErrorType::IOMode,
-                                self[temp_v!(2)],
-                            );
-
-                            // 8.11.5.3h)
-                            return Err(self.error_form(err, stub));
-                        }
-                    };
-
-                let file =
-                    match open_options.open(file_spec.as_str()).map_err(|e| e.kind()) {
-                        Ok(file) => {
-                            file
-                        }
-                        Err(ErrorKind::NotFound) => {
-                            // 8.11.5.3j)
-                            let stub = MachineError::functor_stub(
-                                clause_name!("open"),
-                                4,
-                            );
-
-                            let err = MachineError::existence_error(
-                                self.heap.h(),
-                                ExistenceError::SourceSink(self[temp_v!(1)]),
-                            );
-
-                            return Err(self.error_form(err, stub));
-                        }
-                        Err(ErrorKind::PermissionDenied) => {
-                            // 8.11.5.3k)
-                            return Err(self.open_permission_error(self[temp_v!(1)], "open", 4));
-                        }
-                        Err(_) => {
-                            // for now, just fail. expand to meaningful error messages later.
-                            self.fail = true;
-                            return Ok(());
-                        }
-                    };
-
-                let mut stream = if is_input_file {
-                    Stream::from_file_as_input(file_spec, file)
-                } else {
-                    Stream::from_file_as_output(file_spec, file, in_append_mode)
-                };
 
                 stream.options = options;
 
