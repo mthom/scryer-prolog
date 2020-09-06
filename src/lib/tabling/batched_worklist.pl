@@ -161,6 +161,8 @@ wkl_p_swap_answer_continuation(Worklist,InnerAnswerClusterPointer,SuspensionClus
   wkl_p_update_righmost_inner_answer_cluster_pointer(Worklist,InnerAnswerClusterPointer).
 
 % Update the pointer if the answer cluster it points to is no longer the rightmost inner answer cluster.
+% Strangely, this predicate was intentionally named "wkl_p_update_righmost_inner_answer_cluster_pointer"
+% in the original library.
 wkl_p_update_righmost_inner_answer_cluster_pointer(Worklist,InnerAnswerClusterPointer) :-
   ( wkl_p_answer_cluster_currently_moved_completely(Worklist,InnerAnswerClusterPointer) ->
     wkl_p_find_new_rightmost_inner_answer_cluster_pointer(Worklist,InnerAnswerClusterPointer,NewRiacPointer),
