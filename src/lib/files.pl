@@ -73,6 +73,7 @@ directory_files(Directory, Files) :-
         '$directory_files'(Directory, Files).
 
 file_size(File, Size) :-
+        file_must_exist(File, file_size/2),
         list_of_chars(File),
         can_be(integer, Size),
         '$file_size'(File, Size).
@@ -90,8 +91,14 @@ make_directory(Directory) :-
         '$make_directory'(Directory).
 
 delete_file(File) :-
+        file_must_exist(File, delete_file/1),
         list_of_chars(File),
         '$delete_file'(File).
+
+file_must_exist(File, Context) :-
+        (   file_exists(File) -> true
+        ;   throw(error(existence_error(file, File), Context))
+        ).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Dir0 is the current working directory, and the working directory
@@ -142,6 +149,7 @@ file_creation_time(File, T) :-
         file_time_(File, creation, T).
 
 file_time_(File, Which, T) :-
+        file_must_exist(File, file_time_/3),
         '$file_time'(File, Which, T0),
         read_term_from_chars(T0, T).
 
