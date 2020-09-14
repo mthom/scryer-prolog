@@ -272,7 +272,7 @@ the exact same internal representation, and has the advantage that
 only the standard predicate&nbsp;`(=)/2` is used.
 
 Definite clause grammars as provided by
-[`library(dcgs)`](src/lib/lists.pl), and the predicates from
+[`library(dcgs)`](src/lib/dcgs.pl), and the predicates from
 [`library(lists)`](src/lib/lists.pl), are ideally suited for reasoning
 about strings.
 
@@ -450,14 +450,14 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   Predicates for reasoning about environment&nbsp;variables.
 * [`iso_ext`](src/lib/iso_ext.pl)
   Conforming extensions to and candidates for inclusion in the Prolog
-  ISO&nbsp;standard, such as `setup_call_cleanup/3` and
+  ISO&nbsp;standard, such as `setup_call_cleanup/3`, `call_nth/2` and
   `call_with_inference_limit/3`.
 * [`crypto`](src/lib/crypto.pl)
   Cryptographically secure random numbers and hashes, HMAC-based key
   derivation&nbsp;(HKDF), password-based key derivation&nbsp;(PBKDF2),
   public key signatures and signature verification with&nbsp;Ed25519,
-  authenticated symmetric encryption with ChaCha20-Poly1305, and
-  reasoning about elliptic curves.
+  ECDH key&nbsp;exchange over Curve25519 (X25519), authenticated symmetric
+  encryption with ChaCha20-Poly1305, and reasoning about elliptic curves.
 
 To use predicates provided by the `lists` library, write:
 

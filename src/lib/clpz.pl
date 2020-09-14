@@ -4925,96 +4925,228 @@ run_propagator(ptzdiv(X,Y,Z), MState) -->
 %% % Z = X mod Y
 
 run_propagator(pmod(X,Y,Z), MState) -->
-        (   nonvar(X) ->
-            (   nonvar(Y) -> kill(MState), Y =\= 0, Z is X mod Y
+        (   Y == 0 -> { false }
+        ;   Y == Z -> { false }
+        % ;   nonvar(Y), Z == X -> true
+        ;   X == Y -> kill(MState), queue_goal(Z = 0)
+        ;   true
+        ),
+        (   nonvar(X), nonvar(Y) ->
+            kill(MState),
+            Z is X mod Y
+        ;   nonvar(Y), nonvar(Z) ->
+            (   Y > 0 -> Z >= 0, Z < Y
+            ;   Y < 0 -> Z =< 0, Z > Y
+            ),
+            (   { fd_get(X, _, n(XL), _, _) } ->
+                (   (XL - Z) mod Y =\= 0 ->
+                    XMin is Z + Y * ((XL - Z) div Y + 1)
+                ;   XMin is XL
+                ),
+                { fd_get(X, XD0, XPs),
+                  domain_remove_smaller_than(XD0, XMin, XD2) },
+                  fd_put(X, XD2, XPs)
+                % queue_goal(X #>= XMin)
+            ;   true
+            ),
+            (   { fd_get(X, _, _, n(XU), _) } ->
+                XMax is Z + Y * ((XU - Z) div Y),
+                { fd_get(X, XD1, XPs),
+                  domain_remove_greater_than(XD1, XMax, XD3) },
+                  fd_put(X, XD3, XPs)
+                % queue_goal(X #=< XMax)
             ;   true
             )
-        ;   nonvar(Y) ->
-            Y =\= 0,
-            (   abs(Y) =:= 1 -> kill(MState), Z = 0
-            ;   var(Z) ->
-                YP is abs(Y) - 1,
-                (   Y > 0, { fd_get(X, _, n(XL), n(XU), _) } ->
-                    (   XL >= 0, XU < Y ->
-                        kill(MState), Z = X, ZL = XL, ZU = XU
-                    ;   ZL = 0, ZU = YP
-                    )
-                ;   Y > 0 -> ZL = 0, ZU = YP
-                ;   YN is -YP, ZL = YN, ZU = 0
-                ),
-                (   { fd_get(Z, ZD, ZPs) } ->
-                    { domains_intersection(ZD, from_to(n(ZL), n(ZU)), ZD1),
-                      domain_infimum(ZD1, n(ZMin)),
-                      domain_supremum(ZD1, n(ZMax)) },
-                    fd_put(Z, ZD1, ZPs)
-                ;   ZMin = Z, ZMax = Z
-                ),
-                (   { fd_get(X, XD, XPs), domain_infimum(XD, n(XMin)) } ->
-                    Z1 is XMin mod Y,
-                    (   { between(ZMin, ZMax, Z1) } -> true
-                    ;   Y > 0 ->
-                        Next is ((XMin - ZMin + Y - 1) div Y)*Y + ZMin,
-                        { domain_remove_smaller_than(XD, Next, XD1) },
-                        fd_put(X, XD1, XPs)
-                    ;   neq_num(X, XMin)
-                    )
-                ;   true
-                ),
-                (   { fd_get(X, XD2, XPs2), domain_supremum(XD2, n(XMax)) } ->
-                    Z2 is XMax mod Y,
-                    (   { between(ZMin, ZMax, Z2) } -> true
-                    ;   Y > 0 ->
-                        Prev is ((XMax - ZMin) div Y)*Y + ZMax,
-                        { domain_remove_greater_than(XD2, Prev, XD3) },
-                        fd_put(X, XD3, XPs2)
-                    ;   neq_num(X, XMax)
-                    )
-                ;   true
+            % kill(MState),
+            % queue_goal(X #= Z + Y * _) % Add a variable to be efficient.
+        ;   nonvar(Z), nonvar(X) ->
+            (   Z > 0 ->
+                (   X < 0 -> true
+                ;   X >= Z
                 )
-            ;   { fd_get(X, XD, XPs) },
-                % if possible, propagate at the boundaries
-                (   { domain_infimum(XD, n(Min)) } ->
-                    (   Min mod Y =:= Z -> true
-                    ;   Y > 0 ->
-                        Next is ((Min - Z + Y - 1) div Y)*Y + Z,
-                        { domain_remove_smaller_than(XD, Next, XD1) },
-                        fd_put(X, XD1, XPs)
-                    ;   neq_num(X, Min)
+            ;   Z < 0 ->
+                (   X > 0 -> true
+                ;   X =< Z
+                )
+            ;   Z =:= 0 % Multiple solutions so do nothing special.
+            ),
+            (   Z > 0 ->
+                { fd_get(Y, YD, YPs),
+                  YMin is Z + 1,
+                  domain_remove_smaller_than(YD, YMin, YD1) },
+                  fd_put(Y, YD1, YPs)
+                % queue_goal(Y #> Z)
+            ;   Z < 0 ->
+                { fd_get(Y, YD, YPs),
+                  YMax is Z - 1,
+                  domain_remove_greater_than(YD, YMax, YD1) },
+                  fd_put(Y, YD1, YPs)
+                % queue_goal(Y #< Z)
+            ;   true
+            )
+        ;   run_propagator(pmodz(X,Y,Z), MState),
+            run_propagator(pmody(X,Y,Z), MState),
+            true
+        ).
+
+run_propagator(pmodz(X,Y,Z), MState) -->
+        (   nonvar(Z) -> true % Nothing to do.
+        ;   nonvar(X) ->
+            (   X =:= 0 -> kill(MState), queue_goal(Z = X)
+            ;   (   X > 0 ->
+                    (   { fd_get(Y, _, n(YL), _, _), YL > X } ->
+                        kill(MState),
+                        queue_goal(Z = X)
+                    ;   { fd_get(Z, ZD0, ZPs),
+                          domain_remove_greater_than(ZD0, X, ZD2) },
+                          fd_put(Z, ZD2, ZPs)
+                        % queue_goal(Z #=< X)
                     )
-                ;   true
+                ;   X < 0 ->
+                    (   { fd_get(Y, _, _, n(YU), _), YU < X } ->
+                        kill(MState),
+                        queue_goal(Z = X)
+                    ;   { fd_get(Z, ZD0, ZPs),
+                          domain_remove_smaller_than(ZD0, X, ZD2) },
+                          fd_put(Z, ZD2, ZPs)
+                        % queue_goal(Z #>= X)
+                    )
                 ),
-                (   { fd_get(X, XD2, XPs2) } ->
-                    (   { domain_supremum(XD2, n(Max)) } ->
-                        (   Max mod Y =:= Z -> true
-                        ;   Y > 0 ->
-                            Prev is ((Max - Z) div Y)*Y + Z,
-                            { domain_remove_greater_than(XD2, Prev, XD3) },
-                            fd_put(X, XD3, XPs2)
-                        ;   neq_num(X, Max)
-                        )
-                    ;   true
-                    )
+                (   { fd_get(Y, _, n(YL), n(YU), _), YL > 0 } ->
+                    ZMax is YU - 1,
+                    { fd_get(Z, ZD1, ZPs),
+                      domain_remove_smaller_than(ZD1, 0, ZD3),
+                      domain_remove_greater_than(ZD3, ZMax, ZD5) },
+                      fd_put(Z, ZD5, ZPs)
+                    % queue_goal(Z in 0..ZMax)
+                ;   { fd_get(Y, _, n(YL), n(YU), _), YU < 0 } ->
+                    ZMin is YL + 1,
+                    { fd_get(Z, ZD1, ZPs),
+                      domain_remove_greater_than(ZD1, 0, ZD3),
+                      domain_remove_smaller_than(ZD3, ZMin, ZD5) },
+                      fd_put(Z, ZD5, ZPs)
+                    % queue_goal(Z in ZMin..0)
                 ;   true
                 )
             )
-        ;   X == Y -> kill(MState), Z = 0
-        ;   { fd_get(X, XD, XPs),
-              fd_get(Y, YD, _),
-              fd_get(Z, ZD, ZPs) },
-            (   { domain_infimum(XD, n(XMin)), XMin >= 0,
-                  domain_infimum(YD, n(YMin)), YMin > 0 } ->
-                { domain_remove_smaller_than(ZD, 0, ZD1) }
-            ;   ZD1 = ZD
-            ),
-            (   { domain_supremum(YD, n(YMax)), YMax > 0 } ->
-                { Max is YMax - 1, Min is -Max,
-                  domain_remove_smaller_than(ZD1, Min, ZD2),
-                  domain_remove_greater_than(ZD2, Max, ZD3) }
-            ;   ZD3 = ZD1
-            ),
-            fd_put(Z, ZD3, ZPs)
-            % TODO: propagate more
+        ;   nonvar(Y) ->
+            (   abs(Y) =:= 1 -> kill(MState), queue_goal(Z = 0)
+            ;   Y < 0 ->
+                (   { fd_get(X, _, n(XL), n(XU), _), XU =< 0, Y < XL } ->
+                    kill(MState),
+                    queue_goal(Z = X)
+                ;   ZMin is Y + 1,
+                    { fd_get(Z, ZD1, ZPs),
+                      domain_remove_greater_than(ZD1, 0, ZD3),
+                      domain_remove_smaller_than(ZD3, ZMin, ZD5) },
+                      fd_put(Z, ZD5, ZPs)
+                    % queue_goal(Z in ZMin..0)
+                )
+            ;   Y > 0 ->
+                (   { fd_get(X, _, n(XL), n(XU), _), XL >= 0, Y > XU } ->
+                    kill(MState),
+                    queue_goal(Z = X)
+                ;   ZMax is Y - 1,
+                    { fd_get(Z, ZD1, ZPs),
+                      domain_remove_smaller_than(ZD1, 0, ZD3),
+                      domain_remove_greater_than(ZD3, ZMax, ZD5) },
+                      fd_put(Z, ZD5, ZPs)
+                    % queue_goal(Z in 0..ZMax)
+                )
+            )
+        ;   (   { fd_get(X, _, n(XL), n(XU), _), XL >= 0,
+                  fd_get(Y, _, n(YL), _, _), XU < YL } ->
+                kill(MState),
+                queue_goal(Z = X)
+            ;   { fd_get(X, _, n(XL), n(XU), _), XU =< 0,
+                  fd_get(Y, _, _, n(YU), _), XL > YU } ->
+                kill(MState),
+                queue_goal(Z = X)
+            ;   (   { fd_get(X, _, n(XL), n(XU), _), XL >= 0 } ->
+                    { fd_get(Z, ZD0, ZPs),
+                      domain_remove_greater_than(ZD0, XU, ZD2) },
+                      fd_put(Z, ZD2, ZPs)
+                    % queue_goal(Z #=< XU)
+                ;   { fd_get(X, _, n(XL), n(XU), _), XU =< 0 } ->
+                    { fd_get(Z, ZD0, ZPs),
+                      domain_remove_smaller_than(ZD0, XL, ZD2) },
+                      fd_put(Z, ZD2, ZPs)
+                    % queue_goal(Z #>= XL)
+                ;   true
+                ),
+                (   { fd_get(Y, _, n(YL), n(YU), _), YL > 0 } ->
+                    ZMax is YU - 1,
+                    { fd_get(Z, ZD1, ZPs),
+                      domain_remove_smaller_than(ZD1, 0, ZD3),
+                      domain_remove_greater_than(ZD3, ZMax, ZD5) },
+                      fd_put(Z, ZD5, ZPs)
+                    % queue_goal(Z in 0..ZMax)
+                ;   { fd_get(Y, _, n(YL), n(YU), _), YU < 0 } ->
+                    ZMin is YL + 1,
+                    { fd_get(Z, ZD1, ZPs),
+                      domain_remove_greater_than(ZD1, 0, ZD3),
+                      domain_remove_smaller_than(ZD3, ZMin, ZD5) },
+                      fd_put(Z, ZD5, ZPs)
+                    % queue_goal(Z in ZMin..0)
+                ;   { fd_get(Y, _, n(YL), n(YU), _) } ->
+                    ZMin is YL + 1,
+                    ZMax is YU - 1,
+                    { fd_get(Z, ZD1, ZPs),
+                      domain_remove_greater_than(ZD1, ZMax, ZD3),
+                      domain_remove_smaller_than(ZD3, ZMin, ZD5) },
+                      fd_put(Z, ZD5, ZPs)
+                    % queue_goal(Z in ZMin..ZMax)
+                %/* This doesn't work very well.
+                ;   { fd_get(Y, _, _, n(YU), _), YU > 0 } ->
+                    { fd_get(Z, ZD1, ZPs),
+                      ZMax is YU - 1,
+                      domain_remove_greater_than(ZD1, ZMax, ZD3) },
+                      fd_put(Z, ZD3, ZPs)
+                    % queue_goal(Z #< YU)
+                ;   { fd_get(Y, _, n(YL), _, _), YL < 0 } ->
+                    { fd_get(Z, ZD1, ZPs),
+                      ZMin is YL + 1,
+                      domain_remove_smaller_than(ZD1, ZMin, ZD3) },
+                      fd_put(Z, ZD3, ZPs)
+                    % queue_goal(Z #> YL)
+                % * /
+                ;   true
+                )
+            )
         ).
+
+run_propagator(pmody(X,Y,Z), MState) -->
+        (   nonvar(Y) -> true % Nothing to do.
+        % ;   nonvar(X) -> true
+        ;   nonvar(Z) ->
+            (   Z > 0 -> % queue_goal(Y #> Z)
+                { fd_get(Y, YD, YPs),
+                  YMin is Z + 1,
+                  domain_remove_smaller_than(YD, YMin, YD1) },
+                  fd_put(Y, YD1, YPs)
+            ;   Z < 0 -> % queue_goal(Y #< Z)
+                { fd_get(Y, YD, YPs),
+                  YMax is Z - 1,
+                  domain_remove_greater_than(YD, YMax, YD1) },
+                  fd_put(Y, YD1, YPs)
+            ;   Z =:= 0 -> kill(MState), queue_goal(X / Y #= _)
+            )
+        ;   (   { fd_get(Z, _, n(ZL), _, _), ZL > 0 } ->
+                { fd_get(Y, YD, YPs),
+                  YMin is ZL + 1,
+                  domain_remove_smaller_than(YD, YMin, YD1) },
+                  fd_put(Y, YD1, YPs)
+                % queue_goal(Y #> ZL)
+            ;   { fd_get(Z, _, _, n(ZU), _), ZU < 0 } ->
+                { fd_get(Y, YD, YPs),
+                  YMax is ZU - 1,
+                  domain_remove_greater_than(YD, YMax, YD1) },
+                  fd_put(Y, YD1, YPs)
+                % queue_goal(Y #< ZU)
+            ;   true
+            )
+        ).
+
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% % Z = X rem Y

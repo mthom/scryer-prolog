@@ -272,18 +272,6 @@ impl Addr {
             &Addr::Float(f) => {
                 Some(Constant::Float(f))
             }
-            addr @ &Addr::PStrLocation(..) | addr @ &Addr::Lis(_) => {
-                let mut heap_pstr_iter = machine_st.heap_pstr_iter(*addr);
-
-                let buf = heap_pstr_iter.to_string();
-                let end_addr = heap_pstr_iter.focus();
-
-                if end_addr == Addr::EmptyList {
-                    Some(Constant::String(Rc::new(buf)))
-                } else {
-                    None
-                }
-            }
             &Addr::Usize(n) => {
                 Some(Constant::Usize(n))
             }

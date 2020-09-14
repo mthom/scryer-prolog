@@ -842,9 +842,8 @@ verify_attributes(Var, Other, Gs) :-
             (   integer(Other) ->
                 (   between(0, 1, Other) ->
                     root_get_formula_bdd(Root, Sat, BDD0),
-                    bdd_restriction(BDD0, I, Other, BDD),
                     root_put_formula_bdd(Root, Sat, BDD),
-                    Gs = [satisfiable_bdd(BDD)]
+                    Gs = [bdd_restriction(BDD0,I,Other,BDD),satisfiable_bdd(BDD)]
                 ;   no_truth_value(Other)
                 )
             ;   atom(Other) ->
@@ -1558,9 +1557,10 @@ sats([]) --> [].
 sats([A|As]) --> [clpb:sat(A)], sats(As).
 
 booleans([]) --> [].
-booleans([B|Bs]) --> boolean(B), { del_clpb(B) }, booleans(Bs).
+booleans([B|Bs]) --> boolean(B), booleans(Bs).
 
 boolean(Var) -->
+        { del_clpb(Var) },
         (   { get_attr(Var, clpb_omit_boolean, true) } -> []
         ;   [clpb:sat(Var =:= Var)]
         ).

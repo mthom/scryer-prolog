@@ -108,28 +108,28 @@ read_and_match :-
     '$read_query_term'(_, Term, _, _, VarList),
     instruction_match(Term, VarList).
 
+
 % make compile_batch, a system routine, callable.
 compile_batch :- '$compile_batch'.
 
 instruction_match(Term, VarList) :-
     (  var(Term) ->
        throw(error(instantiation_error, repl/0))
-    ;
-    Term = [Item] -> !,
-                     (  atom(Item) ->
-	                    (  Item == user ->
-	                       catch(compile_batch, E, print_exception_with_check(E))
-	                    ;  consult(Item)
-	                    )
-                     ;
-	                 catch(throw(error(type_error(atom, Item), repl/0)),
-		                   E,
-		                   print_exception_with_check(E))
-                     )
-    ;
-    Term = end_of_file -> halt
-    ;
-    submit_query_and_print_results(Term, VarList)
+    ;  Term = [Item] ->
+       !,
+       (  atom(Item) ->
+	      (  Item == user ->
+	         catch(compile_batch, E, print_exception_with_check(E))
+	      ;  consult(Item)
+	      )
+       ;
+	   catch(throw(error(type_error(atom, Item), repl/0)),
+		     E,
+		     print_exception_with_check(E))
+       )
+    ;  Term = end_of_file ->
+       halt
+    ;  submit_query_and_print_results(Term, VarList)
     ).
 
 :- use_module(library(iso_ext)).
@@ -159,9 +159,9 @@ needs_bracketing(Value, Op) :-
 	      false),
     (  EqPrec < FPrec ->
        true
-    ;  '$quoted_token'(F) ->
-       true
     ;  FPrec > 0, F == Value, graphic_token_char(F) ->
+       true
+    ;  F \== '.', '$quoted_token'(F) ->
        true
     ;  EqPrec == FPrec,
        memberchk(EqSpec, [fx,xfx,yfx])

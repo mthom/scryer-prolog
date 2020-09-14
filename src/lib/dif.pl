@@ -38,15 +38,20 @@ verify_attributes(Var, Value, Goals) :-
 % Probably the world's worst dif/2 implementation. I'm open to
 % suggestions for improvement.
 
-dif(X, Y) :- X \== Y,
-             (   term_variables(X, XVars), term_variables(Y, YVars),
-	         dif_set_variables(XVars, X, Y),
-		 dif_set_variables(YVars, X, Y)
-	     ).
+dif(X, Y) :-
+    X \== Y,
+    (   X \= Y -> true
+    ;   (   term_variables(X, XVars), term_variables(Y, YVars),
+            dif_set_variables(XVars, X, Y),
+            dif_set_variables(YVars, X, Y)
+        )
+    ).
 
 gather_dif_goals([]) --> [].
 gather_dif_goals([(X \== Y) | Goals]) -->
-    [dif(X, Y)],
+    (   { X \= Y } -> []
+    ;   [dif(X, Y)]
+    ),
     gather_dif_goals(Goals).
 
 attribute_goals(X) -->

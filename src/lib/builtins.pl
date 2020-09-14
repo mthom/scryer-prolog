@@ -24,6 +24,8 @@ user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
 :- op(400, yfx, [div, //, rdiv, <<, >>, mod, rem]).
 :- op(200, fy, [+, -, \]).
 
+:- op(1200, xfx, -->).
+
 % arithmetic comparison operators.
 :- op(700, xfx, [>, <, =\=, =:=, >=, =<]).
 
@@ -189,81 +191,129 @@ set_prolog_flag(Flag, _) :-
 
 fail :- '$fail'.
 
+
 \+ G :- call(G), !, false.
 \+ _.
+
 
 X \= X :- !, false.
 _ \= _.
 
+
 once(G) :- call(G), !.
+
 
 repeat.
 repeat :- repeat.
 
-','(G1, G2) :- '$get_b_value'(B), '$call_with_default_policy'(comma_errors(G1, G2, B)).
 
-:- non_counted_backtracking comma_errors/3.
-comma_errors(G1, G2, B) :- var(G1), throw(error(instantiation_error, (',')/2)).
-comma_errors(G1, G2, B) :- '$call_with_default_policy'(','(G1, G2, B)).
+','(G1, G2) :-
+    '$get_b_value'(B),
+    (  '$call_with_default_policy'(var(G1)) ->
+       throw(error(instantiation_error, (',')/2))
+    ;  '$call_with_default_policy'(','(G1, G2, B))
+    ).
+
+
+';'(G1, G2) :-
+    '$get_b_value'(B),
+    (  '$call_with_default_policy'(var(G1)) ->
+       throw(error(instantiation_error, (';')/2))
+    ;  '$call_with_default_policy'(';'(G1, G2, B))
+    ).
+
+
+G1 -> G2 :-
+    '$get_b_value'(B),
+    (  '$call_with_default_policy'(var(G1)) ->
+       throw(error(instantiation_error, (->)/2))
+    ;  '$call_with_default_policy'(->(G1, G2, B))
+    ).
+
+
+call_or_cut(G, B, ErrorPI) :-
+    (  '$call_with_default_policy'(var(G)) ->
+       throw(error(instantiation_error, ErrorPI))
+    ;  '$call_with_default_policy'(call_or_cut(G, B))
+    ).
+
+
+call_or_cut(!, B) :-
+    '$set_cp_by_default'(B).
+call_or_cut((G1, G2), B) :-
+    !,
+    '$call_with_default_policy'(','(G1, G2, B)).
+call_or_cut((G1 ; G2), B) :-
+    !,
+    '$call_with_default_policy'(';'(G1, G2, B)).
+call_or_cut((G1 -> G2), B) :-
+    !,
+    '$call_with_default_policy'(->(G1, G2, B)).
+call_or_cut(G, _) :-
+    '$call_with_default_policy'(G).
+
 
 :- non_counted_backtracking (',')/3.
-','(!, CF, B) :- compound(CF),
-		 '$call_with_default_policy'(CF = ','(G1, G2)),
-		 '$set_cp'(B),
-		 '$call_with_default_policy'(comma_errors(G1, G2, B)).
-','(!, Atom, B) :- Atom == !, '$set_cp'(B).
-','(!, G, B)  :- '$set_cp'(B), call(G).
-','(G, CF, B) :- compound(CF),
-		 '$call_with_default_policy'(CF = ','(G1, G2)),
-		 !,
-		 call(G),
-		 '$call_with_default_policy'(comma_errors(G1, G2, B)).
-','(G, Atom, B) :- Atom == !, !, call(G), '$set_cp'(B).
-','(G1, G2, _)  :- call(G1), call(G2).
+','((G1, G2), G3, B) :-
+    !,
+    '$call_with_default_policy'(','(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+','((G1; G2), G3, B) :-
+    !,
+    '$call_with_default_policy'(';'(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+','((G1 -> G2), G3, B) :-
+    !,
+    '$call_with_default_policy'(->(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+','(G1, G2, B) :-
+    '$call_with_default_policy'(call_or_cut(G1, B, (',')/2)),
+    '$call_with_default_policy'(call_or_cut(G2, B, (',')/2)).
 
-;(G1, G2) :- '$get_b_value'(B), ;(G1, G2, B).
-
-:- non_counted_backtracking semicolon_compound_selector/3.
-semicolon_compound_selector(->(G2, G3), G4, B) :-
-    (  call(G2) ->
-       call(G3)
-    ;  '$set_cp'(B),
-       call(G4)
-    ).
-semicolon_compound_selector(','(G2, G3), G4, B) :-
-    (  ','(G2, G3, B)
-    ;  '$set_cp'(B),
-       call(G4)
-    ).
-semicolon_compound_selector(';'(G2, G3), G4, B) :-
-    (  ';'(G2, G3, B)
-    ;  '$set_cp'(B),
-       call(G4)
-    ).
 
 :- non_counted_backtracking (;)/3.
-;(G1, G4, B) :-
-    ( (  G1 = (_ -> _)
-      ;  G1 = (_ , _)
-      ;  G1 = (_ ; _)
-      ) ->
-      !,
-      semicolon_compound_selector(G1, G4, B)
+';'((G1, G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(','(G1, G2, B))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
     ).
-;(G1, G2, B) :-
-    G1 == !, !, '$set_cp'(B), call(G2).
-;(G1, G2, B) :-
-    G2 == !, !, call(G1), '$set_cp'(B).
-;(G, _, _) :-
-    call(G).
-;(_, G, _) :-
-    call(G).
+';'((G1; G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(';'(G1, G2, B))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+';'((G1 -> G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
+       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+';'(G1, G2, B) :-
+    (  '$call_with_default_policy'(call_or_cut(G1, B, (;)/2))
+    ;  '$call_with_default_policy'(call_or_cut(G2, B, (;)/2))
+    ).
 
-G1 -> G2 :- '$get_b_value'(B), '$call_with_default_policy'(->(G1, G2, B)).
 
 :- non_counted_backtracking (->)/3.
-->(G1, G2, B) :- G2 == !, call(G1), '$set_cp'(B).
-->(G1, G2, B) :- call(G1), '$set_cp'(B), call(G2).
+->((G1, G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(','(G1, G2, B)) ->
+       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
+    ).
+->((G1 ; G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(';'(G1, G2, B)) ->
+       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
+    ).
+->((G1 -> G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(->(G1, G2, B)) ->
+       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
+    ).
+->(G1, G2, B) :-
+    (   '$call_with_default_policy'(call_or_cut(G1, B, (->)/2))
+    ->  '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+    ).
 
 % univ.
 
@@ -916,6 +966,7 @@ op(Priority, OpSpec, Op) :-
 halt :- halt(0).
 
 halt(N) :-
+        must_be_number(N, halt/1),
         (   -2^31 =< N, N =< 2^31 - 1 ->
             '$halt'(N)
         ;   throw(error(domain_error(exit_code, N), halt/1))

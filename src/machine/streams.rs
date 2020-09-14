@@ -11,8 +11,10 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
+use std::io;
 use std::io::{stdout, Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::hash::{Hash, Hasher};
+use std::mem;
 use std::net::{Shutdown, TcpStream};
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -92,18 +94,85 @@ impl EOFAction {
     }
 }
 
+fn parser_top_to_bytes(mut buf: Vec<io::Result<char>>) -> io::Result<Vec<u8>> {
+    let mut str_buf = String::new();
+
+    while let Some(c) = buf.pop() {
+        str_buf.push(c?);
+    }
+
+    unsafe {
+        let array = str_buf.as_bytes_mut();
+        array.reverse();
+        Ok(Vec::from(array))
+    }
+}
+
 /* all these streams are closed automatically when the instance is
  * dropped. */
-pub enum StreamInstance {
+enum StreamInstance {
     Bytes(Cursor<Vec<u8>>),
-    DynReadSource(Box<dyn Read>),
     InputFile(ClauseName, File),
     OutputFile(ClauseName, File, bool), // File, append.
     Null,
+    PausedPrologStream(Vec<u8>, Box<StreamInstance>),
     ReadlineStream(ReadlineStream),
+    StaticStr(Cursor<&'static str>),
     Stdout,
     TcpStream(ClauseName, TcpStream),
     TlsStream(ClauseName, TlsStream<TcpStream>)
+}
+
+impl StreamInstance {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            StreamInstance::PausedPrologStream(ref mut put_back, ref mut stream) => {
+                let mut index = 0;
+
+                while index < buf.len() {
+                    if let Some(b) = put_back.pop() {
+                        buf[index] = b;
+                        index += 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                if index == buf.len() {
+                    Ok(buf.len())
+                } else {
+                    stream.read(&mut buf[index ..])
+                          .map(|bytes_read| bytes_read + index)
+                }
+            }
+            StreamInstance::InputFile(_, ref mut file) => {
+                file.read(buf)
+            }
+            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
+                tcp_stream.read(buf)
+            }
+            StreamInstance::TlsStream(_, ref mut tls_stream) => {
+                tls_stream.read(buf)
+            }
+            StreamInstance::ReadlineStream(ref mut rl_stream) => {
+                rl_stream.read(buf)
+            }
+            StreamInstance::StaticStr(ref mut src) => {
+                src.read(buf)
+            }
+            StreamInstance::Bytes(ref mut cursor) => {
+                cursor.read(buf)
+            }
+            StreamInstance::OutputFile(..) |
+            StreamInstance::Stdout |
+            StreamInstance::Null => {
+                Err(std::io::Error::new(
+                    ErrorKind::PermissionDenied,
+                    StreamError::ReadFromOutputStream,
+                ))
+            }
+        }
+    }
 }
 
 impl Drop for StreamInstance {
@@ -126,15 +195,20 @@ impl fmt::Debug for StreamInstance {
         match self {
             &StreamInstance::Bytes(ref bytes) =>
                 write!(fmt, "Bytes({:?})", bytes),
-            &StreamInstance::DynReadSource(_) =>
-                write!(fmt, "DynReadSource(_)"),  // Hacky solution.
-            &StreamInstance::InputFile(_, ref file) => write!(fmt, "InputFile({:?})", file),
-            &StreamInstance::OutputFile(_, ref file, _) => write!(fmt, "OutputFile({:?})", file),
-            &StreamInstance::Null => write!(fmt, "Null"),
+            &StreamInstance::StaticStr(_) =>
+                write!(fmt, "StaticStr(_)"),  // Hacky solution.
+            &StreamInstance::InputFile(_, ref file) =>
+                write!(fmt, "InputFile({:?})", file),
+            &StreamInstance::OutputFile(_, ref file, _) =>
+                write!(fmt, "OutputFile({:?})", file),
+            &StreamInstance::Null =>
+                write!(fmt, "Null"),
+            &StreamInstance::PausedPrologStream(ref put_back, ref stream) =>
+                write!(fmt, "PausedPrologStream({:?}, {:?})", put_back, stream),
             &StreamInstance::ReadlineStream(ref readline_stream) =>
                 write!(fmt, "ReadlineStream({:?})", readline_stream),
-            // &StreamInstance::Stdin => write!(fmt, "Stdin"),
-            &StreamInstance::Stdout => write!(fmt, "Stdout"),
+            &StreamInstance::Stdout =>
+                write!(fmt, "Stdout"),
             &StreamInstance::TcpStream(_, ref tcp_stream) =>
                 write!(fmt, "TcpStream({:?})", tcp_stream),
             &StreamInstance::TlsStream(_, ref tls_stream) =>
@@ -282,7 +356,7 @@ impl From<ReadlineStream> for Stream {
 
 impl From<&'static str> for Stream {
     fn from(src: &'static str) -> Stream {
-        Stream::from_inst(StreamInstance::DynReadSource(Box::new(src.as_bytes())))
+        Stream::from_inst(StreamInstance::StaticStr(Cursor::new(src)))
     }
 }
 
@@ -413,8 +487,9 @@ impl Stream {
     fn mode(&self) -> &'static str {
         match self.stream_inst.0.borrow().1 {
             StreamInstance::Bytes(_) |
+            StreamInstance::PausedPrologStream(..) |
             StreamInstance::ReadlineStream(_) |
-            StreamInstance::DynReadSource(_) |
+            StreamInstance::StaticStr(_) |
             StreamInstance::InputFile(..) => {
                 "read"
             }
@@ -493,7 +568,6 @@ impl Stream {
     pub(crate)
     fn is_stdin(&self) -> bool {
         match self.stream_inst.0.borrow().1 {
-            //StreamInstance::Stdin |
             StreamInstance::ReadlineStream(_) => {
                 true
             }
@@ -523,12 +597,12 @@ impl Stream {
     pub(crate)
     fn is_input_stream(&self) -> bool {
         match self.stream_inst.0.borrow().1 {
-            // StreamInstance::Stdin |
             StreamInstance::TcpStream(..) |
             StreamInstance::TlsStream(..) |
             StreamInstance::Bytes(_) |
+            StreamInstance::PausedPrologStream(..) |
             StreamInstance::ReadlineStream(_) |
-            StreamInstance::DynReadSource(_) |
+            StreamInstance::StaticStr(_) |
             StreamInstance::InputFile(..) => {
                 true
             }
@@ -555,27 +629,49 @@ impl Stream {
         }
     }
 
+    fn unpause_stream(&mut self) {
+        let stream_inst =
+            match self.stream_inst.0.borrow_mut().1 {
+                StreamInstance::PausedPrologStream(ref put_back, ref mut stream_inst)
+                    if put_back.is_empty() => {
+                        mem::replace(&mut **stream_inst, StreamInstance::Null)
+                    }
+                _ => {
+                    return;
+                }
+            };
+
+        self.stream_inst.0.borrow_mut().1 = stream_inst;
+    }
+
     // returns true on success.
     #[inline]
     pub(super)
     fn reset(&mut self) -> bool {
         self.stream_inst.0.borrow_mut().0 = false;
 
-        match self.stream_inst.0.borrow_mut().1 {
-            StreamInstance::Bytes(ref mut cursor) => {
-                cursor.set_position(0);
-                true
+        loop {
+            match self.stream_inst.0.borrow_mut().1 {
+                StreamInstance::Bytes(ref mut cursor) => {
+                    cursor.set_position(0);
+                    return true;
+                }
+                StreamInstance::InputFile(_, ref mut file) => {
+                    file.seek(SeekFrom::Start(0)).unwrap();
+                    return true;
+                }
+                StreamInstance::PausedPrologStream(ref mut put_back, _) => {
+                    put_back.clear();
+                }
+                StreamInstance::ReadlineStream(_) => {
+                    return true;
+                }
+                _ => {
+                    return false;
+                }
             }
-            StreamInstance::InputFile(_, ref mut file) => {
-                file.seek(SeekFrom::Start(0)).unwrap();
-                true
-            }
-            StreamInstance::ReadlineStream(_) => {
-                true
-            }
-            _ => {
-                false
-            }
+
+            self.unpause_stream();
         }
     }
 
@@ -686,6 +782,34 @@ impl Stream {
                 ))
             }
         }
+    }
+
+    #[inline]
+    pub(crate)
+    fn pause_stream(&mut self, buf: Vec<io::Result<char>>) -> io::Result<()> {
+        match self.stream_inst.0.borrow_mut().1 {
+            StreamInstance::PausedPrologStream(ref mut inner_buf, _) => {
+                inner_buf.extend(parser_top_to_bytes(buf)?.into_iter());
+                return Ok(());
+            }
+            _ => {
+            }
+        }
+
+        if !buf.is_empty() {
+            let stream_inst = mem::replace(
+                &mut self.stream_inst.0.borrow_mut().1,
+                StreamInstance::Null,
+            );
+
+            self.stream_inst.0.borrow_mut().1 =
+                StreamInstance::PausedPrologStream(
+                    parser_top_to_bytes(buf)?,
+                    Box::new(stream_inst),
+                );
+        }
+
+        Ok(())
     }
 }
 
@@ -883,7 +1007,7 @@ impl MachineState {
         stub_name: &'static str,
         stub_arity: usize,
     ) -> Result<PrologStream, MachineStub> {
-        match parsing_stream(stream.clone()) {
+        match parsing_stream(stream) {
             Ok(parsing_stream) => {
                 Ok(parsing_stream)
             }
@@ -1045,38 +1169,11 @@ impl MachineState {
 }
 
 impl Read for Stream {
+    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self.stream_inst.0.borrow_mut().1 {
-            StreamInstance::InputFile(_, ref mut file) => {
-                file.read(buf)
-            }
-            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
-                tcp_stream.read(buf)
-            }
-            StreamInstance::TlsStream(_, ref mut tls_stream) => {
-                tls_stream.read(buf)
-            }
-            StreamInstance::ReadlineStream(ref mut rl_stream) => {
-                rl_stream.read(buf)
-            }
-            StreamInstance::DynReadSource(ref mut src) => {
-                src.read(buf)
-            }
-            StreamInstance::Bytes(ref mut cursor) => {
-                cursor.read(buf)
-            }
-/*
-            StreamInstance::Stdin => {
-                stdin().read(buf)
-            }
-*/
-            StreamInstance::OutputFile(..) | StreamInstance::Stdout | StreamInstance::Null => {
-                Err(std::io::Error::new(
-                    ErrorKind::PermissionDenied,
-                    StreamError::ReadFromOutputStream,
-                ))
-            }
-        }
+        let bytes_read = self.stream_inst.0.borrow_mut().1.read(buf)?;
+        self.unpause_stream();
+        Ok(bytes_read)
     }
 }
 
@@ -1098,8 +1195,11 @@ impl Write for Stream {
             StreamInstance::Stdout => {
                 stdout().write(buf)
             }
-            StreamInstance::DynReadSource(_) | StreamInstance::ReadlineStream(_) |
-            StreamInstance::InputFile(..) | StreamInstance::Null => {
+            StreamInstance::PausedPrologStream(..) |
+            StreamInstance::StaticStr(_) |
+            StreamInstance::ReadlineStream(_) |
+            StreamInstance::InputFile(..) |
+            StreamInstance::Null => {
                 Err(std::io::Error::new(
                     ErrorKind::PermissionDenied,
                     StreamError::WriteToInputStream,
@@ -1125,8 +1225,11 @@ impl Write for Stream {
             StreamInstance::Stdout => {
                 stdout().flush()
             }
-            StreamInstance::DynReadSource(_) | StreamInstance::ReadlineStream(_) |
-            StreamInstance::InputFile(..) | StreamInstance::Null => {
+            StreamInstance::PausedPrologStream(..) |
+            StreamInstance::StaticStr(_) |
+            StreamInstance::ReadlineStream(_) |
+            StreamInstance::InputFile(..) |
+            StreamInstance::Null => {
                 Err(std::io::Error::new(
                     ErrorKind::PermissionDenied,
                     StreamError::FlushToInputStream,

@@ -51,6 +51,8 @@ use crate::openssl::ec::{EcGroup, EcPoint};
 use crate::openssl::bn::{BigNum, BigNumContext};
 use crate::openssl::nid::Nid;
 
+use sodiumoxide::crypto::scalarmult::curve25519::*;
+
 use crate::native_tls::TlsConnector;
 
 extern crate select;
@@ -371,6 +373,113 @@ impl MachineState {
         }
 
         Ok(())
+    }
+
+    fn stream_from_file_spec(
+        &self,
+        file_spec: ClauseName,
+        indices: &mut IndexStore,
+        options: &StreamOptions,
+    ) -> Result<Stream, MachineStub> {
+        if file_spec.as_str().is_empty() {
+            let stub = MachineError::functor_stub(clause_name!("open"), 4);
+            let err = MachineError::domain_error(
+                DomainErrorType::SourceSink,
+                self[temp_v!(1)],
+            );
+
+            return Err(self.error_form(err, stub));
+        }
+
+        // 8.11.5.3l)
+        if let Some(ref alias) = &options.alias {
+            if indices.stream_aliases.contains_key(alias) {
+                return Err(self.occupied_alias_permission_error(
+                    alias.clone(),
+                    "open",
+                    4,
+                ));
+            }
+        }
+
+        let mode =
+            atom_from!(self, indices, self.store(self.deref(self[temp_v!(2)])));
+
+        let mut open_options = fs::OpenOptions::new();
+
+        let (is_input_file, in_append_mode) =
+            match mode.as_str() {
+                "read" => {
+                    open_options.read(true).write(false).create(false);
+                    (true, false)
+                }
+                "write" => {
+                    open_options.read(false).write(true).truncate(true).create(true);
+                    (false, false)
+                }
+                "append" => {
+                    open_options.read(false).write(true).create(true).append(true);
+                    (false, true)
+                }
+                _ => {
+                    let stub = MachineError::functor_stub(clause_name!("open"), 4);
+                    let err  = MachineError::domain_error(
+                        DomainErrorType::IOMode,
+                        self[temp_v!(2)],
+                    );
+
+                    // 8.11.5.3h)
+                    return Err(self.error_form(err, stub));
+                }
+            };
+
+        let file =
+            match open_options.open(file_spec.as_str()) {
+                Ok(file) => {
+                    file
+                }
+                Err(err) => {
+                    match err.kind() {
+                        ErrorKind::NotFound => {
+                            // 8.11.5.3j)
+                            let stub = MachineError::functor_stub(
+                                clause_name!("open"),
+                                4,
+                            );
+
+                            let err = MachineError::existence_error(
+                                self.heap.h(),
+                                ExistenceError::SourceSink(self[temp_v!(1)]),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+                        ErrorKind::PermissionDenied => {
+                            // 8.11.5.3k)
+                            return Err(self.open_permission_error(self[temp_v!(1)], "open", 4));
+                        }
+                        _ => {
+                            let stub = MachineError::functor_stub(
+                                clause_name!("open"),
+                                4,
+                            );
+
+                            let err = MachineError::syntax_error(
+                                self.heap.h(),
+                                ParserError::IO(err),
+                            );
+
+                            return Err(self.error_form(err, stub));
+                        }
+                    }
+                }
+            };            
+
+        Ok(if is_input_file {
+            Stream::from_file_as_input(file_spec, file)
+        } else {
+            Stream::from_file_as_output(file_spec, file, in_append_mode)
+        })
     }
 
     #[inline]
@@ -1027,20 +1136,24 @@ impl MachineState {
 
                         match iter.focus() {
                             Addr::EmptyList => {
-                                let chars = clause_name!(string, indices.atom_tbl);
-                                let atom  = self.heap.to_unifiable(
-                                    HeapCellValue::Atom(chars, None)
-                                );
+                                if &string == "[]" {
+                                    self.unify(addr, Addr::EmptyList);
+                                } else {
+                                    let chars = clause_name!(string, indices.atom_tbl);
+                                    let atom  = self.heap.to_unifiable(
+                                        HeapCellValue::Atom(chars, None)
+                                    );
 
-                                self.unify(addr, atom);
+                                    self.unify(addr, atom);
+                                }
                             }
                             focus => {
-                                let stub = MachineError::functor_stub(
-                                    clause_name!("atom_chars"),
-                                    2,
-                                );
-
                                 if let Addr::Lis(l) = focus {
+                                    let stub = MachineError::functor_stub(
+                                        clause_name!("atom_chars"),
+                                        2,
+                                    );
+
                                     let err = MachineError::type_error(
                                         self.heap.h(),
                                         ValidType::Character,
@@ -1669,6 +1782,12 @@ impl MachineState {
                         Ok(Number::Integer(n)) => {
                             n.to_string()
                         }
+                        Ok(Number::Rational(r)) => {
+                            // n has already been confirmed as an integer, and
+                            // internally, Rational is assumed reduced, so its denominator
+                            // must be 1.
+                            r.numer().to_string()
+                        }
                         _ => {
                             unreachable!()
                         }
@@ -1693,6 +1812,12 @@ impl MachineState {
                         }
                         Ok(Number::Integer(n)) => {
                             n.to_string()
+                        }
+                        Ok(Number::Rational(r)) => {
+                            // n has already been confirmed as an integer, and
+                            // internally, Rational is assumed reduced, so its
+                            // denominator must be 1.
+                            r.numer().to_string()
                         }
                         _ => {
                             unreachable!()
@@ -2119,7 +2244,7 @@ impl MachineState {
                     bytes = string.into_bytes();
                 }
 
-                match stream.write(&bytes) {
+                match stream.write_all(&bytes) {
                     Ok(_) => {
                         return return_from_clause!(self.last_call, self);
                     }
@@ -2468,10 +2593,11 @@ impl MachineState {
                         string.push(c as char);
                     }
                 } else {
-                    let mut iter = self.open_parsing_stream(stream.clone(),
-                                                            "get_n_chars",
-                                                            2,
-                                                            )?;
+                    let mut iter = self.open_parsing_stream(
+                        stream.clone(),
+                        "get_n_chars",
+                        2,
+                    )?;
 
                     for _ in 0..num {
                          let result = iter.next();
@@ -3349,12 +3475,12 @@ impl MachineState {
                 let options =
                     self.to_stream_options(alias, eof_action, reposition, stream_type);
 
-                let file_spec =
+                let mut stream =
                     match self.store(self.deref(self[temp_v!(1)])) {
                         Addr::Con(h) if self.heap.atom_at(h) => {
                             match &self.heap[h] {
                                 &HeapCellValue::Atom(ref atom, _) => {
-                                    atom.clone()
+                                    self.stream_from_file_spec(atom.clone(), indices, &options)?
                                 }
                                 _ => {
                                     unreachable!()
@@ -3367,108 +3493,23 @@ impl MachineState {
                                     let mut heap_pstr_iter =
                                         self.heap_pstr_iter(Addr::PStrLocation(h, n));
 
-                                    clause_name!(
-                                        heap_pstr_iter.to_string(),
-                                        indices.atom_tbl.clone()
-                                    )
+                                    let file_spec = 
+                                        clause_name!(
+                                            heap_pstr_iter.to_string(),
+                                            indices.atom_tbl.clone()
+                                        );
+
+                                    self.stream_from_file_spec(file_spec, indices, &options)?
                                 }
                                 _ => {
-                                    clause_name!("")
+                                    self.stream_from_file_spec(clause_name!(""), indices, &options)?
                                 }
                             }
                         }
                         _ => {
-                            clause_name!("")
+                            self.stream_from_file_spec(clause_name!(""), indices, &options)?
                         }
                     };
-
-                if file_spec.as_str().is_empty() {
-                    let stub = MachineError::functor_stub(clause_name!("open"), 4);
-                    let err = MachineError::domain_error(
-                        DomainErrorType::SourceSink,
-                        self[temp_v!(1)],
-                    );
-
-                    return Err(self.error_form(err, stub));
-                }
-
-                // 8.11.5.3l)
-                if let Some(ref alias) = &options.alias {
-                    if indices.stream_aliases.contains_key(alias) {
-                        return Err(self.occupied_alias_permission_error(
-                            alias.clone(),
-                            "open",
-                            4,
-                        ));
-                    }
-                }
-
-                let mode =
-                    atom_from!(self, indices, self.store(self.deref(self[temp_v!(2)])));
-
-                let mut open_options = fs::OpenOptions::new();
-
-                let (is_input_file, in_append_mode) =
-                    match mode.as_str() {
-                        "read" => {
-                            open_options.read(true).write(false).create(false);
-                            (true, false)
-                        }
-                        "write" => {
-                            open_options.read(false).write(true).truncate(true).create(true);
-                            (false, false)
-                        }
-                        "append" => {
-                            open_options.read(false).write(true).create(true).append(true);
-                            (false, true)
-                        }
-                        _ => {
-                            let stub = MachineError::functor_stub(clause_name!("open"), 4);
-                            let err  = MachineError::domain_error(
-                                DomainErrorType::IOMode,
-                                self[temp_v!(2)],
-                            );
-
-                            // 8.11.5.3h)
-                            return Err(self.error_form(err, stub));
-                        }
-                    };
-
-                let file =
-                    match open_options.open(file_spec.as_str()).map_err(|e| e.kind()) {
-                        Ok(file) => {
-                            file
-                        }
-                        Err(ErrorKind::NotFound) => {
-                            // 8.11.5.3j)
-                            let stub = MachineError::functor_stub(
-                                clause_name!("open"),
-                                4,
-                            );
-
-                            let err = MachineError::existence_error(
-                                self.heap.h(),
-                                ExistenceError::SourceSink(self[temp_v!(1)]),
-                            );
-
-                            return Err(self.error_form(err, stub));
-                        }
-                        Err(ErrorKind::PermissionDenied) => {
-                            // 8.11.5.3k)
-                            return Err(self.open_permission_error(self[temp_v!(1)], "open", 4));
-                        }
-                        Err(_) => {
-                            // for now, just fail. expand to meaningful error messages later.
-                            self.fail = true;
-                            return Ok(());
-                        }
-                    };
-
-                let mut stream = if is_input_file {
-                    Stream::from_file_as_input(file_spec, file)
-                } else {
-                    Stream::from_file_as_output(file_spec, file, in_append_mode)
-                };
 
                 stream.options = options;
 
@@ -3753,6 +3794,12 @@ impl MachineState {
                 let code = match Number::try_from((code, &self.heap)) {
                     Ok(Number::Fixnum(n)) => n as i32,
                     Ok(Number::Integer(n)) => n.to_i32().unwrap(),
+                    Ok(Number::Rational(r)) => {
+                        // n has already been confirmed as an integer, and
+                        // internally, Rational is assumed reduced, so its
+                        // denominator must be 1.
+                        r.numer().to_i32().unwrap()
+                    }
                     _ => { unreachable!() }
                 };
 
@@ -4473,16 +4520,10 @@ impl MachineState {
                 let mut heap_pstr_iter = self.heap_pstr_iter(self[temp_v!(1)]);
                 let chars = heap_pstr_iter.to_string();
 
-                let mut stream = self.open_parsing_stream(
-                    Stream::from(chars),
-                    "read_term_from_chars",
-                    2,
-                )?;
-
                 if let Addr::EmptyList = heap_pstr_iter.focus() {
                     let term_write_result =
                         match self.read(
-                            &mut stream,
+                            Stream::from(chars),
                             indices.atom_tbl.clone(),
                             &indices.op_dir,
                         ) {
@@ -5387,23 +5428,13 @@ impl MachineState {
                 self.unify(arg, byte);
             }
             &SystemClauseType::CryptoDataHash => {
-                let bytes = self.string_encoding_bytes(1, 2);
+                let encoding = self.atom_argument_to_string(2);
+                let bytes = self.string_encoding_bytes(1, &encoding);
 
-                let algorithm_str = match self.store(self.deref(self[temp_v!(4)])) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                            atom.as_str()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
+                let algorithm = self.atom_argument_to_string(4);
 
                 let ints_list =
-                        match algorithm_str  {
+                        match algorithm.as_str()  {
                           "sha3_224" =>   { let mut context = Sha3_224::new();
                                             context.input(&bytes);
                                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
@@ -5426,7 +5457,7 @@ impl MachineState {
                                             context.input(&bytes);
                                             Addr::HeapCell(self.heap.to_list(context.result().as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize))))) }
                           _ => { let ints = digest::digest(
-                                                match algorithm_str {
+                                                match algorithm.as_str() {
                                                    "sha256" =>     { &digest::SHA256 }
                                                    "sha384" =>     { &digest::SHA384 }
                                                    "sha512" =>     { &digest::SHA512 }
@@ -5441,27 +5472,19 @@ impl MachineState {
                 self.unify(self[temp_v!(3)], ints_list);
             }
             &SystemClauseType::CryptoDataHKDF => {
-                let data = self.string_encoding_bytes(1, 2);
+                let encoding = self.atom_argument_to_string(2);
+                let data = self.string_encoding_bytes(1, &encoding);
                 let stub1 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 4);
                 let salt = self.integers_to_bytevec(temp_v!(3), stub1);
                 let stub2 = MachineError::functor_stub(clause_name!("crypto_data_hkdf"), 4);
                 let info = self.integers_to_bytevec(temp_v!(4), stub2);
 
-                let algorithm = match self.store(self.deref(self[temp_v!(5)])) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                            atom.as_str()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
+                let algorithm = self.atom_argument_to_string(5);
+
+                let length = self.store(self.deref(self[temp_v!(6)]));
 
                 let length =
-                    match Number::try_from((self[temp_v!(6)], &self.heap)) {
+                    match Number::try_from((length, &self.heap)) {
                         Ok(Number::Fixnum(n)) => {
                             usize::try_from(n).unwrap()
                         }
@@ -5476,7 +5499,7 @@ impl MachineState {
 
                 let ints_list =
                         {   let digest_alg  =
-                               match algorithm {
+                               match algorithm.as_str() {
                                   "sha256" =>     { hkdf::HKDF_SHA256 }
                                   "sha384" =>     { hkdf::HKDF_SHA384 }
                                   "sha512" =>     { hkdf::HKDF_SHA512 }
@@ -5501,15 +5524,20 @@ impl MachineState {
                 let stub2 = MachineError::functor_stub(clause_name!("crypto_password_hash"), 3);
                 let salt = self.integers_to_bytevec(temp_v!(2), stub2);
 
+                let iterations = self.store(self.deref(self[temp_v!(3)]));
+
                 let iterations =
-                    match Number::try_from((self[temp_v!(3)], &self.heap)) {
+                    match Number::try_from((iterations, &self.heap)) {
                         Ok(Number::Fixnum(n)) => {
                             u64::try_from(n).unwrap()
                         }
                         Ok(Number::Integer(n)) => {
                             match n.to_u64() {
                                 Some(i) => { i }
-                                None => { self.fail = true; return Ok(()); }
+                                None => {
+                                    self.fail = true;
+                                    return Ok(());
+                                }
                             }
                         }
                         _ => {
@@ -5529,11 +5557,13 @@ impl MachineState {
                 self.unify(self[temp_v!(4)], ints_list);
             }
             &SystemClauseType::CryptoDataEncrypt => {
-                let data = self.string_encoding_bytes(1, 2);
-                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 6);
-                let key = self.integers_to_bytevec(temp_v!(3), stub2);
-                let stub3 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 6);
-                let iv = self.integers_to_bytevec(temp_v!(4), stub3);
+                let encoding = self.atom_argument_to_string(3);
+                let data = self.string_encoding_bytes(1, &encoding);
+                let aad = self.string_encoding_bytes(2, &encoding);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 7);
+                let key = self.integers_to_bytevec(temp_v!(4), stub2);
+                let stub3 = MachineError::functor_stub(clause_name!("crypto_data_encrypt"), 7);
+                let iv = self.integers_to_bytevec(temp_v!(5), stub3);
 
                 let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
                 let nonce = aead::Nonce::try_assume_unique_for_key(&iv).unwrap();
@@ -5541,7 +5571,7 @@ impl MachineState {
 
                 let mut in_out = data.clone();
                 let tag =
-                     match key.seal_in_place_separate_tag(nonce, aead::Aad::empty(), &mut in_out) {
+                     match key.seal_in_place_separate_tag(nonce, aead::Aad::from(aad), &mut in_out) {
                         Ok(d) => { d }
                         _     => { self.fail = true; return Ok(()); }
                       };
@@ -5554,28 +5584,17 @@ impl MachineState {
                           self.heap.put_complete_string(&buffer)
                       };
 
-                self.unify(self[temp_v!(5)], tag_list);
-                self.unify(self[temp_v!(6)], complete_string);
+                self.unify(self[temp_v!(6)], tag_list);
+                self.unify(self[temp_v!(7)], complete_string);
             }
             &SystemClauseType::CryptoDataDecrypt => {
-                let data = self.string_encoding_bytes(1, 2);
-                let stub1 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 6);
+                let data = self.string_encoding_bytes(1, "octet");
+                let encoding = self.atom_argument_to_string(5);
+                let aad = self.string_encoding_bytes(2, &encoding);
+                let stub1 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 7);
                 let key = self.integers_to_bytevec(temp_v!(3), stub1);
-                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 6);
+                let stub2 = MachineError::functor_stub(clause_name!("crypto_data_decrypt"), 7);
                 let iv = self.integers_to_bytevec(temp_v!(4), stub2);
-
-                let encoding = match self.store(self.deref(self[temp_v!(5)])) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                            atom.as_str()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
 
                 let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
                 let nonce = aead::Nonce::try_assume_unique_for_key(&iv).unwrap();
@@ -5585,12 +5604,12 @@ impl MachineState {
 
                 let complete_string = {
                           let decrypted_data =
-                                match key.open_in_place(nonce, aead::Aad::empty(), &mut in_out) {
+                                match key.open_in_place(nonce, aead::Aad::from(aad), &mut in_out) {
                                    Ok(d) => { d }
                                    _     => { self.fail = true; return Ok(()); }
                                  };
 
-                          let buffer = match encoding {
+                          let buffer = match encoding.as_str() {
                                   "octet" => { String::from_iter(decrypted_data.iter().map(|b| *b as char)) }
                                   "utf8"  => { match String::from_utf8(decrypted_data.to_vec()) {
                                                   Ok(str) => { str }
@@ -5606,26 +5625,17 @@ impl MachineState {
                 self.unify(self[temp_v!(6)], complete_string);
             }
             &SystemClauseType::CryptoCurveScalarMult => {
-                let curve = match self.store(self.deref(self[temp_v!(1)])) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                            atom.as_str()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
-                let curve_id = match curve {
+                let curve = self.atom_argument_to_string(1);
+                let curve_id = match curve.as_str() {
                                   "secp112r1" => { Nid::SECP112R1 }
                                   "secp256k1" => { Nid::SECP256K1 }
                                   _ => { unreachable!() }
                                };
 
+                let scalar = self.store(self.deref(self[temp_v!(2)]));
+
                 let scalar =
-                    match Number::try_from((self[temp_v!(2)], &self.heap)) {
+                    match Number::try_from((scalar, &self.heap)) {
                         Ok(Number::Fixnum(n)) => {
                             Integer::from(n)
                         }
@@ -5664,7 +5674,7 @@ impl MachineState {
                 self.unify(self[temp_v!(1)], complete_string);
             }
             &SystemClauseType::Ed25519KeyPairPublicKey => {
-                let bytes = self.string_encoding_bytes(1, 2);
+                let bytes = self.string_encoding_bytes(1, "octet");
 
                 let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&bytes) {
                                   Ok(kp) => { kp }
@@ -5676,11 +5686,12 @@ impl MachineState {
                           self.heap.put_complete_string(&buffer)
                       };
 
-                self.unify(self[temp_v!(3)], complete_string);
+                self.unify(self[temp_v!(2)], complete_string);
             }
             &SystemClauseType::Ed25519Sign => {
-                let key = self.string_encoding_bytes(1, 2);
-                let data = self.string_encoding_bytes(3, 4);
+                let key = self.string_encoding_bytes(1, "octet");
+                let encoding = self.atom_argument_to_string(3);
+                let data = self.string_encoding_bytes(2, &encoding);
 
                 let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&key) {
                                   Ok(kp) => { kp }
@@ -5692,19 +5703,35 @@ impl MachineState {
                 let sig_list =
                       Addr::HeapCell(self.heap.to_list(sig.as_ref().iter().map(|b| HeapCellValue::from(Addr::Fixnum(*b as isize)))));
 
-                self.unify(self[temp_v!(5)], sig_list);
+                self.unify(self[temp_v!(4)], sig_list);
             }
             &SystemClauseType::Ed25519Verify => {
-                let key = self.string_encoding_bytes(1, 2);
-                let data = self.string_encoding_bytes(3, 4);
+                let key = self.string_encoding_bytes(1, "octet");
+                let encoding = self.atom_argument_to_string(3);
+                let data = self.string_encoding_bytes(2, &encoding);
                 let stub = MachineError::functor_stub(clause_name!("ed25519_verify"), 5);
-                let signature = self.integers_to_bytevec(temp_v!(5), stub);
+                let signature = self.integers_to_bytevec(temp_v!(4), stub);
 
                 let peer_public_key = signature::UnparsedPublicKey::new(&signature::ED25519, &key);
                 match peer_public_key.verify(&data, &signature) {
                     Ok(_) => { }
                     _ => { self.fail = true; return Ok(()); }
                 }
+            }
+            &SystemClauseType::Curve25519ScalarMult => {
+                let stub1 = MachineError::functor_stub(clause_name!("curve25519_scalar_mult"), 3);
+                let scalar_bytes = self.integers_to_bytevec(temp_v!(1), stub1);
+                let scalar = Scalar(<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap());
+
+                let stub2 = MachineError::functor_stub(clause_name!("curve25519_scalar_mult"), 3);
+                let point_bytes = self.integers_to_bytevec(temp_v!(2), stub2);
+                let point = GroupElement(<[u8; 32]>::try_from(&point_bytes[..]).unwrap());
+
+                let result = scalarmult(&scalar, &point).unwrap();
+
+                let string = String::from_iter(result[..].iter().map(|b| *b as char));
+                let cstr = self.heap.put_complete_string(&string);
+                self.unify(self[temp_v!(3)], cstr);
             }
             &SystemClauseType::LoadHTML => {
                 let string = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
@@ -5747,32 +5774,18 @@ impl MachineState {
                 env::remove_var(key);
             }
             &SystemClauseType::CharsBase64 => {
-                let mut options = vec![];
-
-                for i in 3..5 {
-                    match self.store(self.deref(self[temp_v!(i)])) {
-                        Addr::Con(h) if self.heap.atom_at(h) => {
-                            if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                                options.push(atom.as_str());
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    };
-                }
+                let padding = self.atom_argument_to_string(3);
+                let charset = self.atom_argument_to_string(4);
 
                 let config =
-                    if options[0] == "true" {
-                        if options[1] == "standard" {
+                    if padding == "true" {
+                        if charset == "standard" {
                             base64::STANDARD
                         } else {
                             base64::URL_SAFE
                         }
                     } else {
-                        if options[1] == "standard" {
+                        if charset == "standard" {
                             base64::STANDARD_NO_PAD
                         } else {
                             base64::URL_SAFE_NO_PAD
@@ -5785,10 +5798,7 @@ impl MachineState {
 
                     match bytes {
                         Ok(bs) => {
-                            let mut string = String::new();
-                            for c in bs {
-                                string.push(c as char);
-                            }
+                            let string = String::from_iter(bs.iter().map(|b| *b as char));
                             let cstr = self.heap.put_complete_string(&string);
                             self.unify(self[temp_v!(1)], cstr);
                         }
@@ -5844,17 +5854,14 @@ impl MachineState {
     }
 
     pub(super)
-    fn string_encoding_bytes(
+    fn atom_argument_to_string(
         &mut self,
-        data_arg: usize,
-        encoding_arg: usize,
-    ) -> Vec<u8> {
-        let data = self.heap_pstr_iter(self[temp_v!(data_arg)]).to_string();
-
-        let encoding_str = match self.store(self.deref(self[temp_v!(encoding_arg)])) {
+        atom_arg: usize,
+    ) -> String {
+        match self.store(self.deref(self[temp_v!(atom_arg)])) {
             Addr::Con(h) if self.heap.atom_at(h) => {
                 if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                    atom.as_str()
+                    atom.as_str().to_string()
                 } else {
                     unreachable!()
                 }
@@ -5862,9 +5869,18 @@ impl MachineState {
             _ => {
                 unreachable!()
             }
-        };
+        }
+    }
 
-        match encoding_str {
+    pub(super)
+    fn string_encoding_bytes(
+        &mut self,
+        data_arg: usize,
+        encoding: &str,
+    ) -> Vec<u8> {
+        let data = self.heap_pstr_iter(self[temp_v!(data_arg)]).to_string();
+
+        match encoding {
             "utf8" => { data.into_bytes() }
             "octet" => {
                 let mut buf = vec![];
@@ -5883,7 +5899,10 @@ impl MachineState {
         indices: &mut IndexStore,
         node: roxmltree::Node,
     ) -> Addr {
-        if node.has_children() {
+        if node.is_text() {
+            let string = String::from(node.text().unwrap());
+            self.heap.put_complete_string(&string)
+        } else {
             let mut avec = Vec::new();
             for attr in node.attributes() {
                 let chars = clause_name!(String::from(attr.name()), indices.atom_tbl);
@@ -5920,9 +5939,6 @@ impl MachineState {
             self.heap.push(HeapCellValue::Addr(children));
 
             result
-        } else {
-            let string = String::from(node.text().unwrap());
-            self.heap.put_complete_string(&string)
         }
     }
 
