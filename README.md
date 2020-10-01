@@ -516,3 +516,35 @@ For example, a sensible starting point for `~/.scryerrc` is:
 :- use_module(library(dcgs)).
 :- use_module(library(reif)).
 ```
+
+### Development environment
+
+To write and edit Prolog programs, we recommend
+[GNU&nbsp;Emacs](https://www.gnu.org/software/emacs/) with the
+[Prolog&nbsp;mode](https://bruda.ca/emacs/prolog_mode_for_emacs)
+maintained by Stefan Bruda.
+
+Use [ediprolog](https://www.metalevel.at/ediprolog/) to consult
+Prolog&nbsp;code and evaluate Prolog queries in arbitrary
+Emacs&nbsp;buffers.
+
+Emacs definitions that show Prolog terms as trees are currently being
+developed and discussed in
+issue&nbsp;[#697](https://github.com/mthom/scryer-prolog/issues/697),
+and we welcome your comments.
+
+To *debug* Prolog code, we recommend the predicates from
+[**`library(debug)`**](src/lib/debug.pl), most notably:
+
+- `(*)/1` to *"generalize&nbsp;away"* a Prolog goal. Use it to debug
+  unexpected failures by generalizing your definitions until they
+  succeed. Simply place&nbsp;`*` in front of a goal to generalize it away.
+- `($)/1` to emit a *trace* of the execution, showing when a goal
+  is invoked, and when it has succeeded. Place&nbsp;`$` in front of a goal
+  to emit this information for that goal.
+
+This way of debugging Prolog code has several major benefits, such as:
+It stays close to the actual Prolog code under consideration, it does
+not need additional tools and formalisms for its application, and
+further, it encourages declarative reasoning that can in principle
+also be performed automatically.
