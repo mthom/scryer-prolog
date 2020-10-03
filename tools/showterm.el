@@ -42,14 +42,12 @@
 (defvar showterm-pixel-width 500
   "Width of the drawn term in pixels.")
 
-(defun showterm (arg)
-  (interactive "p")
+(defun showterm (from to)
+  (interactive "r")
   (unless (use-region-p)
-    (error "no region"))
-  (let* ((from (region-beginning))
-         (to (region-end))
-         (str (buffer-substring-no-properties from to))
-         op-declarations)
+    (error "No region"))
+  (let ((str (buffer-substring-no-properties from to))
+        op-declarations)
     (save-excursion
       ;; rudimentary support for op/3 directives.
       (goto-char (point-min))
