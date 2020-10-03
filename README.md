@@ -528,10 +528,8 @@ Use [ediprolog](https://www.metalevel.at/ediprolog/) to consult
 Prolog&nbsp;code and evaluate Prolog queries in arbitrary
 Emacs&nbsp;buffers.
 
-Emacs definitions that show Prolog terms as trees are currently being
-developed and discussed in
-issue&nbsp;[#697](https://github.com/mthom/scryer-prolog/issues/697),
-and we welcome your comments.
+Emacs definitions that show Prolog terms as trees are available
+in&nbsp;[tools](tools).
 
 To *debug* Prolog code, we recommend the predicates from
 [**`library(debug)`**](src/lib/debug.pl), most notably:
