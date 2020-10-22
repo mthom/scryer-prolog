@@ -21,7 +21,10 @@ extern crate prolog_parser;
 extern crate ref_thread_local;
 extern crate ring;
 extern crate ripemd160;
+#[cfg(feature = "rug")]
 extern crate rug;
+#[cfg(feature = "num-rug-adapter")]
+extern crate num_rug_adapter as rug;
 extern crate rustyline;
 extern crate sha3;
 extern crate unicode_reader;
