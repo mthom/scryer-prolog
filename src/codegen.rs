@@ -474,6 +474,23 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                     code.push(fail!());
                 }
             },
+            &InlinedClauseType::IsNumber(..) => match terms[0].as_ref() {
+                &Term::Constant(_, Constant::Float(_)) |
+                &Term::Constant(_, Constant::Rational(_)) |
+                &Term::Constant(_, Constant::Integer(_)) |
+                &Term::Constant(_, Constant::Fixnum(_)) |
+                &Term::Constant(_, Constant::Usize(_)) => {
+                    code.push(succeed!());
+                }
+                &Term::Var(ref vr, ref name) => {
+                    self.marker.reset_arg(1);
+                    let r = self.mark_non_callable(name.clone(), 1, term_loc, vr, code);
+                    code.push(is_number!(r));
+                }
+                _ => {
+                    code.push(fail!());
+                }
+            },
             &InlinedClauseType::IsNonVar(..) => match terms[0].as_ref() {
                 &Term::AnonVar => {
                     code.push(fail!());
@@ -489,7 +506,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             },
             &InlinedClauseType::IsInteger(..) => match terms[0].as_ref() {
                 &Term::Constant(_, Constant::Integer(_)) |
-                &Term::Constant(_, Constant::Fixnum(_)) => {
+                &Term::Constant(_, Constant::Fixnum(_)) |
+                &Term::Constant(_, Constant::Usize(_)) => {
                     code.push(succeed!());
                 }
                 &Term::Var(ref vr, ref name) => {

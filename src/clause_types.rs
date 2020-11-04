@@ -74,6 +74,7 @@ pub enum InlinedClauseType {
     IsAtomic(RegType),
     IsCompound(RegType),
     IsInteger(RegType),
+    IsNumber(RegType),
     IsRational(RegType),
     IsFloat(RegType),
     IsNonVar(RegType),
@@ -103,6 +104,7 @@ ref_thread_local! {
         m.insert(("atomic", 1), ClauseType::Inlined(InlinedClauseType::IsAtomic(r1)));
         m.insert(("compound", 1), ClauseType::Inlined(InlinedClauseType::IsCompound(r1)));
         m.insert(("integer", 1), ClauseType::Inlined(InlinedClauseType::IsInteger(r1)));
+        m.insert(("number", 1), ClauseType::Inlined(InlinedClauseType::IsNumber(r1)));
         m.insert(("rational", 1), ClauseType::Inlined(InlinedClauseType::IsRational(r1)));
         m.insert(("float", 1), ClauseType::Inlined(InlinedClauseType::IsFloat(r1)));
         m.insert(("nonvar", 1), ClauseType::Inlined(InlinedClauseType::IsNonVar(r1)));
@@ -136,6 +138,7 @@ impl InlinedClauseType {
             &InlinedClauseType::IsAtom(..) => "atom",
             &InlinedClauseType::IsAtomic(..) => "atomic",
             &InlinedClauseType::IsCompound(..) => "compound",
+            &InlinedClauseType::IsNumber(..) => "number",
             &InlinedClauseType::IsInteger(..) => "integer",
             &InlinedClauseType::IsRational(..) => "rational",
             &InlinedClauseType::IsFloat(..) => "float",

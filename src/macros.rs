@@ -219,6 +219,12 @@ macro_rules! is_rational {
     };
 }
 
+macro_rules! is_number {
+    ($r:expr) => {
+        call_clause!(ClauseType::Inlined(InlinedClauseType::IsNumber($r)), 1, 0)
+    };
+}
+
 macro_rules! is_nonvar {
     ($r:expr) => {
         call_clause!(ClauseType::Inlined(InlinedClauseType::IsNonVar($r)), 1, 0)

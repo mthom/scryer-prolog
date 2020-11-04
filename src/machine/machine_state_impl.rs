@@ -2390,6 +2390,29 @@ impl MachineState {
                     _ => self.fail = true,
                 };
             }
+            &InlinedClauseType::IsNumber(r1) => {
+                match self.store(self.deref(self[r1])) {
+                    Addr::Float(_) => self.p += 1,
+                    d => match Number::try_from((d, &self.heap)) {
+                        Ok(Number::Fixnum(_)) => {
+                            self.p += 1;
+                        }
+                        Ok(Number::Integer(_)) => {
+                            self.p += 1;
+                        }
+                        Ok(Number::Rational(n)) => {
+                            if n.denom() == &1 {
+                                self.p += 1;
+                            } else {
+                                self.fail = true;
+                            }
+                        }
+                        _ => {
+                            self.fail = true;
+                        }
+                    }
+                }
+            }
             &InlinedClauseType::IsRational(r1) => {
                 let d = self.store(self.deref(self[r1]));
 
