@@ -99,7 +99,11 @@
                  fd_inf/2,
                  fd_sup/2,
                  fd_size/2,
-                 fd_dom/2
+                 fd_dom/2,
+
+                 % for use in predicates from library(reif)
+                 (#=)/3,
+                 (#<)/3
 
                  % called from goal_expansion
                  % clpz_equal/2,
@@ -7739,6 +7743,21 @@ scalar_plusterm([CV|CVs], T) :-
 plusterm_(CV, T0, T0+T) :- coeff_var_term(CV, T).
 
 coeff_var_term(C-V, T) :- ( C =:= 1 -> T = ?(V) ; T = C * ?(V) ).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Reified predicates for use with predicates from library(reif).
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+#=(X, Y, T) :-
+        X #= Y #<==> B,
+        zo_t(B, T).
+
+#<(X, Y, T) :-
+        X #< Y #<==> B,
+        zo_t(B, T).
+
+zo_t(0, false).
+zo_t(1, true).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Generated predicates
