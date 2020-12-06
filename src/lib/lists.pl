@@ -202,12 +202,15 @@ nth0_search(N0, N, [_|Es], E) :-
         nth0_search(N1, N, Es, E).
 
 
-max_list([Max], Max).
 max_list([N|Ns], Max) :-
-    max_list(Ns, Maxs),!,
-    Max is max(N, Maxs).
+    foldl(max_list_, Ns, N, Max).
 
-min_list([Min], Min).
+max_list_(N, Max0, Max) :-
+    Max is max(N, Max0).
+
 min_list([N|Ns], Min) :-
-    min_list(Ns, Mins),!,
-    Min is min(N, Mins).
+    foldl(min_list_, Ns, N, Min).
+
+min_list_(N, Min0, Min) :-
+    Min is min(N, Min0).
+
