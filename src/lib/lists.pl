@@ -2,7 +2,7 @@
 		  memberchk/2, reverse/2, length/2, maplist/2,
 		  maplist/3, maplist/4, maplist/5, maplist/6,
 		  maplist/7, maplist/8, maplist/9, same_length/2, nth0/3,
-		  sum_list/2, transpose/2, list_to_set/2, max_list/2, min_list/2]).
+		  sum_list/2, transpose/2, list_to_set/2, list_max/2, list_min/2]).
 
 
 :- use_module(library(error)).
@@ -202,15 +202,14 @@ nth0_search(N0, N, [_|Es], E) :-
         nth0_search(N1, N, Es, E).
 
 
-max_list([N|Ns], Max) :-
-    foldl(max_list_, Ns, N, Max).
+list_max([N|Ns], Max) :-
+    foldl(list_max_, Ns, N, Max).
 
-max_list_(N, Max0, Max) :-
+list_max_(N, Max0, Max) :-
     Max is max(N, Max0).
 
-min_list([N|Ns], Min) :-
-    foldl(min_list_, Ns, N, Min).
+list_min([N|Ns], Min) :-
+    foldl(list_min_, Ns, N, Min).
 
-min_list_(N, Min0, Min) :-
+list_min_(N, Min0, Min) :-
     Min is min(N, Min0).
-
