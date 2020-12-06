@@ -17,10 +17,12 @@ pub type PrologStream = ParsingStream<Stream>;
 pub mod readline {
     use crate::machine::streams::Stream;
     use crate::rustyline::error::ReadlineError;
-    use crate::rustyline::{Cmd, Editor, KeyPress};
+    use crate::rustyline::{Cmd, Editor, KeyEvent};
     use std::io::{Cursor, Error, ErrorKind, Read};
 
     static mut PROMPT: bool = false;
+
+    const HISTORY_FILE: &'static str = ".scryer_history";
 
     pub fn set_prompt(value: bool) {
         unsafe {
@@ -45,7 +47,16 @@ pub mod readline {
         #[inline]
         pub fn new(pending_input: String) -> Self {
             let mut rl = Editor::<()>::new();
-            rl.bind_sequence(KeyPress::Tab, Cmd::Insert(1, "\t".to_string()));
+            if let Some(mut path) = dirs::home_dir() {
+                path.push(HISTORY_FILE);
+                if path.exists() {
+                    if rl.load_history(&path).is_err() {
+                        println!("Warning: loading history failed");
+                    }
+                }
+            }
+            
+            rl.bind_sequence(KeyEvent::from('\t'), Cmd::Insert(1, "\t".to_string()));
             ReadlineStream { rl, pending_input: Cursor::new(pending_input) }
         }
 
@@ -63,6 +74,7 @@ pub mod readline {
                     unsafe {
                         if PROMPT {
                             self.rl.history_mut().add(self.pending_input.get_ref());
+                            self.save_history();
                             PROMPT = false;
                         }
                     }
@@ -78,6 +90,21 @@ pub mod readline {
                 }
                 Err(e) => {
                     Err(Error::new(ErrorKind::InvalidInput, e))
+                }
+            }
+        }
+
+        fn save_history(&mut self) {
+            if let Some(mut path) = dirs::home_dir() {
+                path.push(HISTORY_FILE);
+                if path.exists() {
+                    if self.rl.append_history(&path).is_err() {
+                        println!("Warning: couldn't append history (existing file)");
+                    }
+                } else {
+                    if self.rl.save_history(&path).is_err() {
+                        println!("Warning: couldn't save history (new file)");
+                    }
                 }
             }
         }
