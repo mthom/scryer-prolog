@@ -47,7 +47,7 @@ pub mod readline {
         #[inline]
         pub fn new(pending_input: String) -> Self {
             let mut rl = Editor::<()>::new();
-            if let Some(mut path) = dirs::home_dir() {
+            if let Some(mut path) = dirs_next::home_dir() {
                 path.push(HISTORY_FILE);
                 if path.exists() {
                     if rl.load_history(&path).is_err() {
@@ -55,7 +55,7 @@ pub mod readline {
                     }
                 }
             }
-            
+
             rl.bind_sequence(KeyEvent::from('\t'), Cmd::Insert(1, "\t".to_string()));
             ReadlineStream { rl, pending_input: Cursor::new(pending_input) }
         }
@@ -95,7 +95,7 @@ pub mod readline {
         }
 
         fn save_history(&mut self) {
-            if let Some(mut path) = dirs::home_dir() {
+            if let Some(mut path) = dirs_next::home_dir() {
                 path.push(HISTORY_FILE);
                 if path.exists() {
                     if self.rl.append_history(&path).is_err() {
