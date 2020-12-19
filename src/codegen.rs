@@ -857,16 +857,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         Ok(code)
     }
 
-    fn split_predicate(clauses: &Vec<PredicateClause>, optimal_index: Option<usize>) -> Vec<(usize, usize)> {
+    fn split_predicate(clauses: &Vec<PredicateClause>, optimal_index: usize) -> Vec<(usize, usize)> {
         let mut subseqs = Vec::new();
         let mut left_index = 0;
 
-        if let Some(optimal_i) = optimal_index {
+        if clauses.first().unwrap().args().is_some() {
             for (right_index, clause) in clauses.iter().enumerate() {
-                if clause.args().is_none() {
-                    continue;
-                }
-                if let Some(arg) = clause.args().unwrap().iter().nth(optimal_i) {
+                // Can unwrap safely.
+                if let Some(arg) = clause.args().unwrap().iter().nth(optimal_index) {
                     match **arg {
                         Term::Var(..) | Term::AnonVar => {
                             if left_index < right_index {
@@ -908,7 +906,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
     fn compile_pred_subseq<'b: 'a>(
         &mut self,
         clauses: &'b [PredicateClause],
-        optimal_index: Option<usize>,
+        optimal_index: usize,
     ) -> Result<Code, ParserError> {
         let mut code_body = Vec::new();
         let mut code_offsets = CodeOffsets::new();
@@ -933,18 +931,16 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 code_body.push(Line::Choice(choice));
             }
 
-            if let Some(optimal_i) = optimal_index {
-                let arg = match clause.args() {
-                    Some(args) => match args.iter().nth(optimal_i) {
-                        Some(term) => Some(term),
-                        None => None,
-                    },
+            let arg = match clause.args() {
+                Some(args) => match args.iter().nth(optimal_index) {
+                    Some(term) => Some(term),
                     None => None,
-                };
-                if let Some(arg) = arg {
-                    let index = code_body.len();
-                    code_offsets.index_term(arg, index);
-                }
+                },
+                None => None,
+            };
+            if let Some(arg) = arg {
+                let index = code_body.len();
+                code_offsets.index_term(arg, index);
             }
 
             code_body.append(&mut clause_code);
@@ -952,9 +948,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
 
         let mut code = Vec::new();
 
-        if let Some(optimal_i) = optimal_index {
-            code_offsets.add_indices(&mut code, code_body, optimal_i + 1);
-        }
+        code_offsets.add_indices(&mut code, code_body, optimal_index + 1);
+
         Ok(code)
     }
 
@@ -993,12 +988,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 }
             }
         }
-        match optimal_index {
-            // No good index or no argument, default to 0.
-            // TODO: Why?
-            None => optimal_index = Some(0),
-            Some(_) => (),
-        }
+        let optimal_index = match optimal_index {
+            Some(optimal_index) => optimal_index,
+            None => 0,  // Default to first argument indexing.
+        };
         let split_pred = Self::split_predicate(&clauses, optimal_index);
         let multi_seq = split_pred.len() > 1;
 

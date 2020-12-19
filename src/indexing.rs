@@ -143,8 +143,8 @@ impl CodeOffsets {
         }
     }
 
-    pub fn index_term(&mut self, first_arg: &Term, index: usize) {
-        match first_arg {
+    pub fn index_term(&mut self, optimal_arg: &Term, index: usize) {
+        match optimal_arg {
             &Term::Clause(_, ref name, ref terms, _) => {
                 let code = self
                     .structures
