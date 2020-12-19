@@ -143,6 +143,7 @@ impl IndexedChoiceInstruction {
     }
 }
 
+/// A `Line` is an instruction (cf. page 98 of wambook).
 #[derive(Debug)]
 pub enum Line {
     Arithmetic(ArithmeticInstruction),
@@ -424,11 +425,13 @@ impl ControlInstruction {
     }
 }
 
+/// `IndexingInstruction` cf. page 110 of wambook.
 #[derive(Debug)]
 pub enum IndexingInstruction {
-    SwitchOnTerm(usize, usize, usize, usize),
-    SwitchOnConstant(usize, IndexMap<Constant, usize>),
-    SwitchOnStructure(usize, IndexMap<(ClauseName, usize), usize>),
+    // The first index is the optimal argument being indexed.
+    SwitchOnTerm(usize, usize, usize, usize, usize),
+    SwitchOnConstant(usize, usize, IndexMap<Constant, usize>),
+    SwitchOnStructure(usize, usize, IndexMap<(ClauseName, usize), usize>),
 }
 
 impl From<IndexingInstruction> for Line {
@@ -440,25 +443,26 @@ impl From<IndexingInstruction> for Line {
 impl IndexingInstruction {
     pub fn to_functor(&self) -> MachineStub {
         match self {
-            &IndexingInstruction::SwitchOnTerm(vars, constants, lists, structures) => {
+            &IndexingInstruction::SwitchOnTerm(arg, vars, constants, lists, structures) => {
                 functor!(
                     "switch_on_term",
-                    [integer(vars),
+                    [integer(arg),
+                     integer(vars),
                      integer(constants),
                      integer(lists),
                      integer(structures)]
                 )
             }
-            &IndexingInstruction::SwitchOnConstant(constants, _) => {
+            &IndexingInstruction::SwitchOnConstant(arg, constants, _) => {
                 functor!(
                     "switch_on_constant",
-                    [integer(constants)]
+                    [integer(arg), integer(constants)]
                 )
             }
-            &IndexingInstruction::SwitchOnStructure(structures, _) => {
+            &IndexingInstruction::SwitchOnStructure(arg, structures, _) => {
                 functor!(
                     "switch_on_structure",
-                    [integer(structures)]
+                    [integer(arg), integer(structures)]
                 )
             }
         }

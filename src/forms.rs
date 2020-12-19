@@ -339,6 +339,19 @@ impl PredicateClause {
         }
     }
 
+    // TODO: add this to `Term` in `prolog_parser` like `first_arg`.
+    pub fn args(&self) -> Option<&[Box<Term>]> {
+        match *self {
+            PredicateClause::Fact(ref term, ..) => {
+                match term {
+                    Term::Clause(_, _, args, _) => Some(&args),
+                    _ => None,
+                }
+            },
+            PredicateClause::Rule(ref rule, ..) => Some(&rule.head.1),
+        }
+    }
+
     pub fn arity(&self) -> usize {
         match self {
             &PredicateClause::Fact(ref term, ..) => {

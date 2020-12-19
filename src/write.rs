@@ -276,13 +276,13 @@ impl fmt::Display for ChoiceInstruction {
 impl fmt::Display for IndexingInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &IndexingInstruction::SwitchOnTerm(v, c, l, s) => {
-                write!(f, "switch_on_term {}, {}, {}, {}", v, c, l, s)
+            &IndexingInstruction::SwitchOnTerm(a, v, c, l, s) => {
+                write!(f, "switch_on_term {}, {}, {}, {}, {}", a, v, c, l, s)
             }
-            &IndexingInstruction::SwitchOnConstant(num_cs, _) => {
+            &IndexingInstruction::SwitchOnConstant(_, num_cs, _) => {
                 write!(f, "switch_on_constant {}", num_cs)
             }
-            &IndexingInstruction::SwitchOnStructure(num_ss, _) => {
+            &IndexingInstruction::SwitchOnStructure(_, num_ss, _) => {
                 write!(f, "switch_on_structure {}", num_ss)
             }
         }

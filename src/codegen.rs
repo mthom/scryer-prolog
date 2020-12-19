@@ -857,21 +857,28 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         Ok(code)
     }
 
-    fn split_predicate(clauses: &Vec<PredicateClause>) -> Vec<(usize, usize)> {
+    fn split_predicate(clauses: &Vec<PredicateClause>, optimal_index: Option<usize>) -> Vec<(usize, usize)> {
         let mut subseqs = Vec::new();
         let mut left_index = 0;
 
-        for (right_index, clause) in clauses.iter().enumerate() {
-            match clause.first_arg() {
-                Some(&Term::Var(_, _)) | Some(&Term::AnonVar) => {
-                    if left_index < right_index {
-                        subseqs.push((left_index, right_index));
-                    }
-
-                    subseqs.push((right_index, right_index + 1));
-                    left_index = right_index + 1;
+        if let Some(optimal_i) = optimal_index {
+            for (right_index, clause) in clauses.iter().enumerate() {
+                if clause.args().is_none() {
+                    continue;
                 }
-                _ => {}
+                if let Some(arg) = clause.args().unwrap().iter().nth(optimal_i) {
+                    match **arg {
+                        Term::Var(..) | Term::AnonVar => {
+                            if left_index < right_index {
+                                subseqs.push((left_index, right_index));
+                            }
+
+                            subseqs.push((right_index, right_index + 1));
+                            left_index = right_index + 1;
+                        }
+                        _ => (),
+                    }
+                }
             }
         }
 
@@ -901,6 +908,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
     fn compile_pred_subseq<'b: 'a>(
         &mut self,
         clauses: &'b [PredicateClause],
+        optimal_index: Option<usize>,
     ) -> Result<Code, ParserError> {
         let mut code_body = Vec::new();
         let mut code_offsets = CodeOffsets::new();
@@ -910,9 +918,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         for (i, clause) in clauses.iter().enumerate() {
             self.marker.reset();
 
-            let mut clause_code = match clause {
-                &PredicateClause::Fact(ref fact, ..) => self.compile_fact(fact),
-                &PredicateClause::Rule(ref rule, ..) => self.compile_rule(rule)?,
+            let mut clause_code = match *clause {
+                PredicateClause::Fact(ref fact, ..) => self.compile_fact(fact),
+                PredicateClause::Rule(ref rule, ..) => self.compile_rule(rule)?,
             };
 
             if num_clauses > 1 {
@@ -925,17 +933,28 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 code_body.push(Line::Choice(choice));
             }
 
-            clause.first_arg().map(|arg| {
-                let index = code_body.len();
-                code_offsets.index_term(arg, index);
-            });
+            if let Some(optimal_i) = optimal_index {
+                let arg = match clause.args() {
+                    Some(args) => match args.iter().nth(optimal_i) {
+                        Some(term) => Some(term),
+                        None => None,
+                    },
+                    None => None,
+                };
+                if let Some(arg) = arg {
+                    let index = code_body.len();
+                    code_offsets.index_term(arg, index);
+                }
+            }
 
             code_body.append(&mut clause_code);
         }
 
         let mut code = Vec::new();
 
-        code_offsets.add_indices(&mut code, code_body);
+        if let Some(optimal_i) = optimal_index {
+            code_offsets.add_indices(&mut code, code_body, optimal_i + 1);
+        }
         Ok(code)
     }
 
@@ -944,11 +963,48 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         clauses: &'b Vec<PredicateClause>,
     ) -> Result<Code, ParserError> {
         let mut code = Vec::new();
-        let split_pred = Self::split_predicate(&clauses);
+        let mut optimal_index = None;
+        let has_args = match clauses.first() {
+            Some(clause) => match clause.args() {
+                Some(args) => !args.is_empty(),
+                None => false,
+            },
+            None => false,
+        };
+        if has_args {
+            for clause in clauses.iter() {
+                let args = clause.args().unwrap();
+                for (i, arg) in args.iter().enumerate() {
+                    if let Some(optimal_index) = optimal_index {
+                        if i >= optimal_index {
+                            break;
+                        }
+                    }
+                    match **arg {
+                        Term::AnonVar | Term::Var(..) => (),
+                        _ => {
+                            match optimal_index {
+                                Some(ref mut optimal_i) => *optimal_i = i,
+                                None => optimal_index = Some(i),
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        match optimal_index {
+            // No good index or no argument, default to 0.
+            // TODO: Why?
+            None => optimal_index = Some(0),
+            Some(_) => (),
+        }
+        let split_pred = Self::split_predicate(&clauses, optimal_index);
         let multi_seq = split_pred.len() > 1;
 
         for (l, r) in split_pred {
-            let mut code_segment = self.compile_pred_subseq(&clauses[l..r])?;
+            let mut code_segment =
+                self.compile_pred_subseq(&clauses[l..r], optimal_index)?;
 
             if multi_seq {
                 let choice = match l {
