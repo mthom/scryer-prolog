@@ -153,7 +153,7 @@ true.
 This works on Windows too:
 
 ```
-$> docker run -v C:\Users\user\Documents\prolog:/mnt -it mjt128/scryer-prolog
+$> docker run -v //c/users/user/documents/prolog://mnt -it mjt128/scryer-prolog
 ?- consult('/mnt/program.pl').
 true.
 ```
