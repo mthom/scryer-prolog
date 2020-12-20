@@ -1,4 +1,4 @@
-:- module(http_server, [http_listen/2, sample_handler/2, sample_body_handler/2, parse_request/5]).
+:- module(http_server, [http_listen/2]).
 
 :- use_module(library(sockets)).
 :- use_module(library(dcgs)).
@@ -42,16 +42,15 @@ accept_loop(Socket, Handlers) :-
                                 ;true
                         ),
                         format("~w ~s\n", [Method, Path]),
-                        call_handler(Path, HeadersKV, RequestBody, Handlers, Response),
-                        http_response(StatusCode, ResponseBody, RequestHeaders) = Response,
-                        format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
-                        forall(member(RequestHeaderKey-RequestHeaderValue, RequestHeaders), format(Stream, "~s: ~s\r\n", [RequestHeaderKey, RequestHeaderValue])),
-                        format(Stream, "\r\n~s", [ResponseBody])
+                        ( call_handler(Path, HeadersKV, RequestBody, Handlers, Response) ->
+                            send_response(Stream, Response)
+                        ;   format(Stream, "HTTP/1.0 500 Internal Server Error\r\n\r\n", [])
+                        )
                     );(
                         format(Stream, "HTTP/1.0 400 Bad Request\r\n\r\n", []) % bad format
                     )
             ),
-            close(Stream)
+            ! % Remove
         ), close(Stream)),
     accept_loop(Socket, Handlers).
 
@@ -62,13 +61,43 @@ call_handler(Path, Headers, _, Handlers, Response) :-
     call(Handler, Request, Response).
 
 call_handler(Path, Headers, Body, Handlers, Response) :-
-    chars_utf8bytes(CharBody, Body),
     member(post(Dcg, Handler), Handlers),
     phrase(Dcg, Path),!,
-    Request = http_request(Headers, CharBody),
+    build_response(Body, ResponseBody),
+    Request = http_request(Headers, ResponseBody),
     call(Handler, Request, Response).
 
 call_handler(_, _, _, http_response(404, "Not found")).
+
+build_response(ByteBody, text(TextBody)) :-
+    chars_utf8bytes(TextBody, ByteBody).
+build_response(ByteBody, binary(ByteBody)).
+
+send_response(Stream, http_response(StatusCode, text(TextResponse), Headers)) :-
+    format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
+    overwrite_header("Content-Type"-"text/plain", Headers, Headers0),
+    overwrite_header("Connection"-"Close", Headers0, Headers1),
+    write_headers(Stream, Headers1),
+    format(Stream, "\r\n~s", [TextResponse]).
+
+send_response(Stream, http_response(StatusCode, binary(BinaryResponse), Headers)) :-
+    format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
+    overwrite_header("Connection"-"Close", Headers, Headers0),
+    write_headers(Stream, Headers0),
+    format(Stream, "\r\n", []),
+    put_bytes(Stream, BinaryResponse).
+
+write_headers(Stream, Headers) :-
+    forall(member(Key-Value, Headers), format(Stream, "~s: ~s\r\n", [Key, Value])).
+
+overwrite_header(Key-Value, [], [Key-Value]).
+overwrite_header(Key-Value, [Header|Headers], HeadersOut) :-
+    Header = Key0-_,
+    Key0 \= Key,
+    overwrite_header(Key-Value, Headers, HeadersOut).
+overwrite_header(Key-Value, [Header|Headers], [NewHeader|Headers]) :-
+    Header = Key-_,
+    NewHeader = Key-Value.
 
 parse_request(http_version(Major, Minor), Method, Path) -->
     method(Method),
@@ -139,8 +168,7 @@ get_bytes(Stream, Length, Acc, Res) :-
     get_bytes(Stream, Length - 1, [B|Acc], Res)
   ); reverse(Acc, Res)).
 
-sample_handler(http_request(Headers, _), Response) :-
-    member("User-Agent"-UserAgent, Headers),
-    Response = http_response(200, UserAgent, ["Content-Type"-"text/plain", "Connection"-"Close"]).
-
-sample_body_handler(http_request(Headers, Body), http_response(200, Body, ["Content-Type"-"application/json"])).
+put_bytes(_, []).
+put_bytes(Stream, [Byte|Bytes]) :-
+    put_byte(Stream, Byte),
+    put_bytes(Stream, Bytes).
