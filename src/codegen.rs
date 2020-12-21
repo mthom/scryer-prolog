@@ -1,3 +1,4 @@
+/// Code generation to WAM-like instructions.
 use crate::prolog_parser::ast::*;
 
 use crate::allocator::*;
@@ -857,7 +858,45 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         Ok(code)
     }
 
-    fn split_predicate(clauses: &Vec<PredicateClause>, optimal_index: usize) -> Vec<(usize, usize)> {
+    fn find_optimal_index(clauses: &[PredicateClause]) -> usize {
+        let mut optimal_index = None;
+        let has_args = match clauses.first() {
+            Some(clause) => match clause.args() {
+                Some(args) => !args.is_empty(),
+                None => false,
+            },
+            None => false,
+        };
+        if !has_args {
+            return 0;
+        }
+        for clause in clauses.iter() {
+            let args = clause.args().unwrap();
+            for (i, arg) in args.iter().enumerate() {
+                if let Some(optimal_index) = optimal_index {
+                    if i >= optimal_index {
+                        break;
+                    }
+                }
+                match **arg {
+                    Term::AnonVar | Term::Var(..) => (),
+                    _ => {
+                        match optimal_index {
+                            Some(ref mut optimal_i) => *optimal_i = i,
+                            None => optimal_index = Some(i),
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        match optimal_index {
+            Some(optimal_index) => optimal_index,
+            None => 0,  // Default to first argument indexing.
+        }
+    }
+
+    fn split_predicate(clauses: &[PredicateClause], optimal_index: usize) -> Vec<(usize, usize)> {
         let mut subseqs = Vec::new();
         let mut left_index = 0;
 
@@ -947,7 +986,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         }
 
         let mut code = Vec::new();
-
         code_offsets.add_indices(&mut code, code_body, optimal_index + 1);
 
         Ok(code)
@@ -958,40 +996,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         clauses: &'b Vec<PredicateClause>,
     ) -> Result<Code, ParserError> {
         let mut code = Vec::new();
-        let mut optimal_index = None;
-        let has_args = match clauses.first() {
-            Some(clause) => match clause.args() {
-                Some(args) => !args.is_empty(),
-                None => false,
-            },
-            None => false,
-        };
-        if has_args {
-            for clause in clauses.iter() {
-                let args = clause.args().unwrap();
-                for (i, arg) in args.iter().enumerate() {
-                    if let Some(optimal_index) = optimal_index {
-                        if i >= optimal_index {
-                            break;
-                        }
-                    }
-                    match **arg {
-                        Term::AnonVar | Term::Var(..) => (),
-                        _ => {
-                            match optimal_index {
-                                Some(ref mut optimal_i) => *optimal_i = i,
-                                None => optimal_index = Some(i),
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        let optimal_index = match optimal_index {
-            Some(optimal_index) => optimal_index,
-            None => 0,  // Default to first argument indexing.
-        };
+        let optimal_index = Self::find_optimal_index(&clauses);
         let split_pred = Self::split_predicate(&clauses, optimal_index);
         let multi_seq = split_pred.len() > 1;
 
