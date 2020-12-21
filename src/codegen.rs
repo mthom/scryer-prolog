@@ -858,7 +858,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         Ok(code)
     }
 
-    fn find_optimal_index(clauses: &[PredicateClause]) -> usize {
+    /// Returns the index of the first instantiated argument.
+    fn first_instantiated_index(clauses: &[PredicateClause]) -> Option<usize> {
         let mut optimal_index = None;
         let has_args = match clauses.first() {
             Some(clause) => match clause.args() {
@@ -868,7 +869,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             None => false,
         };
         if !has_args {
-            return 0;
+            return optimal_index;
         }
         for clause in clauses.iter() {
             let args = clause.args().unwrap();
@@ -890,10 +891,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 }
             }
         }
-        match optimal_index {
-            Some(optimal_index) => optimal_index,
-            None => 0,  // Default to first argument indexing.
-        }
+
+        optimal_index
     }
 
     fn split_predicate(clauses: &[PredicateClause], optimal_index: usize) -> Vec<(usize, usize)> {
@@ -996,7 +995,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         clauses: &'b Vec<PredicateClause>,
     ) -> Result<Code, ParserError> {
         let mut code = Vec::new();
-        let optimal_index = Self::find_optimal_index(&clauses);
+        let optimal_index = match Self::first_instantiated_index(&clauses) {
+            Some(index) => index,
+            None => 0, // Default to first argument indexing.
+        };
         let split_pred = Self::split_predicate(&clauses, optimal_index);
         let multi_seq = split_pred.len() > 1;
 
