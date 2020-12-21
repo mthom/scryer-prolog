@@ -226,6 +226,37 @@ arithmetic operators with the usual precedences,
 
 New operators can be defined using the `op` declaration.
 
+### First instantiated argument indexing
+
+Scryer Prolog indexes on the leftmost argument that is not a variable
+in all clauses of a predicate's&nbsp;definition. We call this strategy
+first *instantiated* argument indexing.
+
+A key motivation for first instantiated argument indexing is to enable
+indexing for meta-predicates such as `maplist/N` and `foldl/N`, where
+the first argument is a goal or partial goal that is a variable in the
+definition of these predicates and therefore cannot be used for
+indexing.
+
+For example, a natural definiton of `maplist/2` reads:
+
+```
+maplist(_, []).
+maplist(Goal, [L|Ls]) :-
+        call(Goal, L),
+        maplist(Goal, Ls).
+```
+
+In this case, first instantianted argument indexing automatically uses
+the *second* argument for indexing, and thus prevents choicepoints for
+calls with lists of fixed lengths (and deterministic goals).
+Conveniently, no auxiliary predicates with reorderd arguments are
+needed to benefit from indexing in such cases.
+
+Conventional first argument&nbsp;indexing naturally arises as a
+special case of this strategy, if the first argument is instantiated
+in any clause of a predicate's definition.
+
 ### Strings and partial strings
 
 In Scryer Prolog, the default value of the Prolog flag `double_quotes`
