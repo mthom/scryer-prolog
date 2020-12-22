@@ -158,7 +158,7 @@ element_gluevar(glue(_,V), N, N) --> [V].
    consume whitespace in the sense of format strings.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-cells([], Args, Tab, Es, _) -->
+cells([], Args, Tab, Es, _) --> !,
         (   { Args == [] } -> cell(Tab, Tab, Es)
         ;   { domain_error(empty_list, Args, format_//2) }
         ).
@@ -404,32 +404,28 @@ Cs = [cell(0,4,[glue(' ',_A),chars("a"),glue(' ',_B)])]
 ?- phrase(format_("hello~n~tthere~6|", []), Ls).
 
 ?- format("~ta~t~4|", []).
- a     true
-;  false.
+ a     true.
 
 ?- format("~ta~tb~tc~10|", []).
-  a  b   c   true
-;  false.
+  a  b   c   true.
 
 ?- format("~tabc~3|", []).
 
 ?- format("~ta~t~4|", []).
 
 ?- format("~ta~t~tb~tc~20|", []).
-    a        b     c   true
-;  false.
+    a        b     c   true.
 
 ?- format("~2f~n", [3]).
 3.00
-   true
+   true.
 
 ?- format("~20f", [0.1]).
-0.10000000000000000000   true % this should use higher accuracy!
-;  false.
+0.10000000000000000000   true.
 
 ?- X is atan(2), format("~7f~n", [X]).
 1.1071487
-   X = 1.1071487177940906
+   X = 1.1071487177940906.
 
 ?- format("~`at~50|~n", []).
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -438,10 +434,10 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ?- format("~t~N", []).
 
 ?- format("~q", [.]).
-'.'   true
+'.'   true.
 
 ?- format("~12r", [300]).
-210   true
+210   true.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -537,7 +533,7 @@ a :-
    b,
    c,
    d.
-   true
+   true.
 
 
 ?- portray_clause([a,b,c,d]).
