@@ -332,10 +332,16 @@ pub enum PredicateClause {
 }
 
 impl PredicateClause {
-    pub fn first_arg(&self) -> Option<&Term> {
-        match self {
-            &PredicateClause::Fact(ref term, ..) => term.first_arg(),
-            &PredicateClause::Rule(ref rule, ..) => rule.head.1.first().map(|bt| bt.as_ref()),
+    // TODO: add this to `Term` in `prolog_parser` like `first_arg`.
+    pub fn args(&self) -> Option<&[Box<Term>]> {
+        match *self {
+            PredicateClause::Fact(ref term, ..) => {
+                match term {
+                    Term::Clause(_, _, args, _) => Some(&args),
+                    _ => None,
+                }
+            },
+            PredicateClause::Rule(ref rule, ..) => Some(&rule.head.1),
         }
     }
 
