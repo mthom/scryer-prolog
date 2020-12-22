@@ -7,8 +7,7 @@
    Example:
 
        ?- getenv("LANG", Ls).
-          Ls = "en_US.UTF-8"
-       ;  false.
+          Ls = "en_US.UTF-8".
 
    Public domain code.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */

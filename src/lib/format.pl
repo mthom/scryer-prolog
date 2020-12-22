@@ -64,8 +64,7 @@
    Example:
 
    ?- phrase(format_("~s~n~`.t~w!~12|", ["hello",there]), Cs).
-   %@    Cs = "hello\n......there!"
-   %@ ;  false.
+   %@    Cs = "hello\n......there!".
 
    I place this code in the public domain. Use it in any way you want.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */

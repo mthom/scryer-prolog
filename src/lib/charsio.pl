@@ -212,8 +212,7 @@ read_line_to_chars(Stream, Cs0, Cs) :-
    Example:
 
       ?- chars_base64("hello", Bs, []).
-         Bs = "aGVsbG8="
-      ;  false.
+         Bs = "aGVsbG8=".
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 chars_base64(Cs, Bs, Options) :-
