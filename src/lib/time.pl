@@ -34,8 +34,7 @@
    Example:
 
      ?- current_time(T), phrase(format_time("%d.%m.%Y (%H:%M:%S)", T), Cs).
-        T = [...], Cs = "11.06.2020 (00:24:32)"
-     ;  false.
+        T = [...], Cs = "11.06.2020 (00:24:32)".
 
    sleep(S) sleeps for S seconds (a floating point number).
 
@@ -107,15 +106,14 @@ report_time(T0) :-
    false.
 
 :- time(use_module(library(clpz))).
-   % CPU time: 2.762 seconds
-   true
-;  false.
+   % CPU time: 0.000 seconds
+   % CPU time: 0.001 seconds
+   true.
 
 :- time(use_module(library(lists))).
    % CPU time: 0.000 seconds
-   true
-;  % CPU time: 0.001 seconds
-   false.
+   % CPU time: 0.001 seconds
+   true.
 
 ?- time(member(X, [a,b,c])).
    % CPU time: 0.000 seconds
