@@ -17,8 +17,7 @@
    Example:
 
        ?- http_open("https://github.com/mthom/scryer-prolog", S, []).
-       %@    S = '$stream'(0x7f86f94a6cd0)
-       %@ ;  false.
+       %@    S = '$stream'(0x7fcfc9e00f00).
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
