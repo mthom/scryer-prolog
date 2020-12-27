@@ -9,7 +9,6 @@
 :- use_module(library(iso_ext)).
 
 % TODO
-% - Query Params
 % - Cookies?
 % - HTTP Error Codes
 % - Improve code quality
@@ -132,8 +131,14 @@ default(Var, Default, Out) :-
     ;   Var = Out  
     ).
 
+header([]) --> [].
+header([Key-Value|Headers]) -->
+    format_("~s: ~s\r\n", [Key, Value]),
+    header(Headers).
+
 write_headers(Stream, Headers) :-
-    forall(member(Key-Value, Headers), format(Stream, "~s: ~s\r\n", [Key, Value])).
+    phrase(header(Headers), Cs),
+    format(Stream, "~s", [Cs]).
 
 overwrite_header(Key-Value, [], [Key-Value]).
 overwrite_header(Key-Value, [Header|Headers], [Header|HeadersOut]) :-
