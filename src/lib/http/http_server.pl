@@ -1,4 +1,59 @@
-:- module(http_server, [http_listen/2, http_headers/2, http_status_code/2, http_body/2, http_redirect/2, http_query/3]).
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Written in December 2020 by Adrián Arroyo (adrian.arroyocalle@gmail.com)
+   Part of Scryer Prolog
+
+   This library provides an starting point to build HTTP server based applications.
+   It currently implements a subset of HTTP/1.0. It is recommended to put a reverse
+   proxy like nginx in front of this server to have access to more advanced features
+   (gzip compression, HTTPS, ...)
+
+   Usage
+   ==========
+   The main predicate of the library is http_listen/2, which needs a port number
+    (usually 80) and a list of handlers. A handler is a compund term with the functor
+   as one HTTP method (in lowercase) and followed by a Route Match and a predicate
+   which will handle the call.
+
+   text_handler(Request, Response) :-
+    http_status_code(Response, 200),
+    http_body(Response, text("Welcome to Scryer Prolog!")).
+
+   parameter_handler(User, Request, Response) :-
+    http_body(Response, text(User)).
+
+   http_listen(7890, [
+        get(echo, text_handler),           % GET /echo
+        post(user/User, parameter_handler(User)) % POST /user/<User>
+   ]).
+
+   Every handler predicate will have at least 2-arity, with Request and Response.
+   Although you can work directly with http_request and http_response terms, it is
+   recommeded to use the helper predicates, which are easier to understand and cleaner:
+   - http_headers(Response/Request, Headers)
+   - http_status_code(Responde, StatusCode)
+   - http_body(Response/Request, text(Body))
+   - http_body(Response/Request, binary(Body))
+   - http_body(Response, file(Filename))
+   - http_redirect(Response, Url)
+   - http_query(Request, QueryName, QueryValue)
+
+   Some things that are still missing:
+   - Read forms
+   - HTTP Basic Auth
+   - Keep-Alive support
+
+   I place this code in the public domain. Use it in any way you want.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+:- module(http_server, [
+    http_listen/2,
+    http_headers/2,
+    http_status_code/2,
+    http_body/2,
+    http_redirect/2,
+    http_query/3,
+    path//1
+]).
 
 :- use_module(library(sockets)).
 :- use_module(library(dcgs)).
@@ -18,6 +73,8 @@
 % - HTML
 % - Remove !
 % - URL Encode
+% - Forms
+% - HTTP Auth
 
 :- dynamic(http_handler/3).
 
@@ -101,10 +158,26 @@ http_redirect(http_response(307, text("Moved Temporarily"), ["Location"-Uri]), U
 
 http_query(http_request(_, _, Queries), Key, Value) :- member(Key-Value, Queries).
 
-path([Part|Pattern]) -->
+path(Pattern) -->
+    {
+        Pattern =.. Parts,
+        length(Parts, 3),
+        nth0(1, Parts, Pattern0),
+        nth0(2, Parts, PartAtom),
+        (var(PartAtom) -> Part = PartAtom; atom_chars(PartAtom, Part))
+    },
+    path(Pattern0),
     "/",
-    string_without("/", Part),
-    path(Pattern).
+    string_without("/", Part).
+
+path(Pattern) -->
+    {
+        Pattern =.. Parts,
+        Parts = [PartAtom],
+        (var(PartAtom) -> Part = PartAtom; atom_chars(PartAtom, Part))
+    },
+    "/",
+    string_without("/", Part).
 
 path([]) --> [].
 
@@ -114,8 +187,11 @@ send_response(Stream, http_response(StatusCode0, file(Filename), Headers)) :-
     overwrite_header("Connection"-"Close", Headers0, Headers1),
     write_headers(Stream, Headers1),
     format(Stream, "\r\n", []),
-    open(Filename, read, FileStream, [type(binary)]),
-    pipe_bytes(FileStream, Stream).
+    setup_call_cleanup(
+        open(Filename, read, FileStream, [type(binary)]),
+        pipe_bytes(FileStream, Stream),
+        close(FileStream)
+    ).
 
 send_response(Stream, http_response(StatusCode0, text(TextResponse), Headers)) :-
     default(StatusCode0, 200, StatusCode),
