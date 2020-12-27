@@ -16,8 +16,6 @@
 % - Keep-Alive
 % - Case insensitive headers
 % - HTML
-% - Response from file
-% - Remove forall
 % - Remove !
 % - URL Encode
 
@@ -109,6 +107,15 @@ path([Part|Pattern]) -->
     path(Pattern).
 
 path([]) --> [].
+
+send_response(Stream, http_response(StatusCode0, file(Filename), Headers)) :-
+    default(StatusCode0, 200, StatusCode),
+    format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
+    overwrite_header("Connection"-"Close", Headers0, Headers1),
+    write_headers(Stream, Headers1),
+    format(Stream, "\r\n", []),
+    open(Filename, read, FileStream, [type(binary)]),
+    pipe_bytes(FileStream, Stream).
 
 send_response(Stream, http_response(StatusCode0, text(TextResponse), Headers)) :-
     default(StatusCode0, 200, StatusCode),
@@ -242,3 +249,13 @@ put_bytes(_, []).
 put_bytes(Stream, [Byte|Bytes]) :-
     put_byte(Stream, Byte),
     put_bytes(Stream, Bytes).
+
+pipe_bytes(StreamIn, StreamOut) :-
+    get_byte(StreamIn, Byte),
+    (
+        Byte =\= -1 ->
+        (
+            put_byte(StreamOut, Byte),
+            pipe_bytes(StreamIn, StreamOut)
+        )
+    ;   true).
