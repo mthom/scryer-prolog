@@ -1,4 +1,4 @@
-:- module(http_server, [http_listen/2]).
+:- module(http_server, [http_listen/2, http_headers/2, http_status_code/2, http_body/2, http_redirect/2]).
 
 :- use_module(library(sockets)).
 :- use_module(library(dcgs)).
@@ -9,27 +9,35 @@
 :- use_module(library(iso_ext)).
 
 % TODO
-% - Parse body
-% - Improve route matching
-% - Long-running socket_server_accept
+% - Query Params
 % - Cookies?
 % - HTTP Error Codes
-% - Redirections
 % - Improve code quality
-% - Binary
 % - Comments
-% - Test Suite
 % - Keep-Alive
 % - Case insensitive headers
+% - HTML
+% - Response from file
+
+:- dynamic(http_handler/3).
 
 http_listen(Port, Handlers) :-
     must_be(integer, Port),
     must_be(list, Handlers),
     once(socket_server_open(Port, Socket)),
+    register_handlers(Handlers),
     format("Listening at port ~d\n", [Port]),
-    accept_loop(Socket, Handlers).
+    accept_loop(Socket).
 
-accept_loop(Socket, Handlers) :-
+register_handlers([]).
+register_handlers([get(Path, Handler)|Handlers]) :-
+    asserta(http_handler(get, Path, Handler)),
+    register_handlers(Handlers).
+register_handlers([post(Path, Handler)|Handlers]) :-
+    asserta(http_handler(post, Path, Handler)),
+    register_handlers(Handlers).
+
+accept_loop(Socket) :-
     setup_call_cleanup(socket_server_accept(Socket, Client, Stream, [type(binary)]),
         (
             read_header_lines(Stream, Lines),
@@ -38,13 +46,21 @@ accept_loop(Socket, Handlers) :-
                 (phrase(parse_request(Version, Method, Path), Request), maplist(map_parse_header, Headers, HeadersKV)) -> (
                         (
                             member("Content-Length"-ContentLength, HeadersKV) ->
-                                (number_chars(ContentLengthN, ContentLength), get_bytes(Stream, ContentLengthN, RequestBody))
+                                (number_chars(ContentLengthN, ContentLength), get_bytes(Stream, ContentLengthN, Body))
                                 ;true
                         ),
                         format("~w ~s\n", [Method, Path]),
-                        ( call_handler(Path, HeadersKV, RequestBody, Handlers, Response) ->
-                            send_response(Stream, Response)
-                        ;   format(Stream, "HTTP/1.0 500 Internal Server Error\r\n\r\n", [])
+                        (
+                            (http_handler(Method, Pattern, Handler), phrase(path(Pattern), Path)) ->
+                            (
+                                HttpRequest = http_request(HeadersKV, binary(Body)),
+                                HttpResponse = http_response(_, _, _),
+                                (call(Handler, HttpRequest, HttpResponse) ->
+                                    send_response(Stream, HttpResponse)
+                                ;   format(Stream, "HTTP/1.0 500 Internal Server Error\r\n\r\n")
+                                )
+                            )
+                        ;   format(Stream, "HTTP/1.0 404 Not Found\r\n\r\n", [])
                         )
                     );(
                         format(Stream, "HTTP/1.0 400 Bad Request\r\n\r\n", []) % bad format
@@ -52,46 +68,55 @@ accept_loop(Socket, Handlers) :-
             ),
             ! % Remove
         ), close(Stream)),
-    accept_loop(Socket, Handlers).
+    accept_loop(Socket).
 
-call_handler(Path, Headers, _, Handlers, Response) :-
-    member(get(Dcg, Handler), Handlers),
-    phrase(Dcg, Path),!,
-    Request = http_request(Headers, _),
-    call(Handler, Request, Response).
+% Helper and recommended predicates
 
-call_handler(Path, Headers, Body, Handlers, Response) :-
-    member(post(Dcg, Handler), Handlers),
-    phrase(Dcg, Path),!,
-    build_response(Body, ResponseBody),
-    Request = http_request(Headers, ResponseBody),
-    call(Handler, Request, Response).
+% http_header(Response, HEaderName, Value)
+http_headers(http_request(Headers, _), Headers).
+http_headers(http_response(_, _, Headers), Headers).
 
-call_handler(_, _, _, http_response(404, "Not found")).
+http_body(http_request(_, binary(ByteBody)), text(TextBody)) :- chars_utf8bytes(TextBody, ByteBody).
+http_body(http_request(_, Body), Body).
+http_body(http_response(_, Body, _), Body).
 
-build_response(ByteBody, text(TextBody)) :-
-    chars_utf8bytes(TextBody, ByteBody).
-build_response(ByteBody, binary(ByteBody)).
+http_status_code(http_response(StatusCode, _, _), StatusCode).
 
-send_response(Stream, http_response(StatusCode, text(TextResponse), Headers)) :-
+http_redirect(http_response(307, text("Moved Temporarily"), ["Location"-Uri]), Uri).
+
+path([Part|Pattern]) -->
+    "/",
+    string_without("/", Part),
+    path(Pattern).
+
+path([]) --> [].
+
+send_response(Stream, http_response(StatusCode0, text(TextResponse), Headers)) :-
+    default(StatusCode0, 200, StatusCode),
     format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
     overwrite_header("Content-Type"-"text/plain", Headers, Headers0),
     overwrite_header("Connection"-"Close", Headers0, Headers1),
     write_headers(Stream, Headers1),
     format(Stream, "\r\n~s", [TextResponse]).
 
-send_response(Stream, http_response(StatusCode, binary(BinaryResponse), Headers)) :-
+send_response(Stream, http_response(StatusCode0, binary(BinaryResponse), Headers)) :-
+    default(StatusCode0, 200, StatusCode),
     format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
     overwrite_header("Connection"-"Close", Headers, Headers0),
     write_headers(Stream, Headers0),
     format(Stream, "\r\n", []),
     put_bytes(Stream, BinaryResponse).
 
+default(Var, Default, Out) :-
+    (var(Var) -> Out = Default
+    ;   Var = Out  
+    ).
+
 write_headers(Stream, Headers) :-
     forall(member(Key-Value, Headers), format(Stream, "~s: ~s\r\n", [Key, Value])).
 
 overwrite_header(Key-Value, [], [Key-Value]).
-overwrite_header(Key-Value, [Header|Headers], HeadersOut) :-
+overwrite_header(Key-Value, [Header|Headers], [Header|HeadersOut]) :-
     Header = Key0-_,
     Key0 \= Key,
     overwrite_header(Key-Value, Headers, HeadersOut).
