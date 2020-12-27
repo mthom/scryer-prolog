@@ -1,4 +1,4 @@
-:- module(http_server, [http_listen/2, http_headers/2, http_status_code/2, http_body/2, http_redirect/2]).
+:- module(http_server, [http_listen/2, http_headers/2, http_status_code/2, http_body/2, http_redirect/2, http_query/3]).
 
 :- use_module(library(sockets)).
 :- use_module(library(dcgs)).
@@ -18,6 +18,9 @@
 % - Case insensitive headers
 % - HTML
 % - Response from file
+% - Remove forall
+% - Remove !
+% - URL Encode
 
 :- dynamic(http_handler/3).
 
@@ -36,6 +39,21 @@ register_handlers([get(Path, Handler)|Handlers]) :-
 register_handlers([post(Path, Handler)|Handlers]) :-
     asserta(http_handler(post, Path, Handler)),
     register_handlers(Handlers).
+register_handlers([put(Path, Handler)|Handlers]) :-
+    asserta(http_handler(put, Path, Handler)),
+    register_handlers(Handlers).
+register_handlers([patch(Path, Handler)|Handlers]) :-
+    asserta(http_handler(patch, Path, Handler)),
+    register_handlers(Handlers).
+register_handlers([head(Path, Handler)|Handlers]) :-
+    asserta(http_handler(head, Path, Handler)),
+    register_handlers(Handlers).
+register_handlers([delete(Path, Handler)|Handlers]) :-
+    asserta(http_handler(delete, Path, Handler)),
+    register_handlers(Handlers).
+register_handlers([options(Path, Handler)|Handlers]) :-
+    asserta(http_handler(options, Path, Handler)),
+    register_handlers(Handlers).
 
 accept_loop(Socket) :-
     setup_call_cleanup(socket_server_accept(Socket, Client, Stream, [type(binary)]),
@@ -43,7 +61,7 @@ accept_loop(Socket) :-
             read_header_lines(Stream, Lines),
             [Request|Headers] = Lines,
             (
-                (phrase(parse_request(Version, Method, Path), Request), maplist(map_parse_header, Headers, HeadersKV)) -> (
+                (phrase(parse_request(Version, Method, Path, Queries), Request), maplist(map_parse_header, Headers, HeadersKV)) -> (
                         (
                             member("Content-Length"-ContentLength, HeadersKV) ->
                                 (number_chars(ContentLengthN, ContentLength), get_bytes(Stream, ContentLengthN, Body))
@@ -53,7 +71,7 @@ accept_loop(Socket) :-
                         (
                             (http_handler(Method, Pattern, Handler), phrase(path(Pattern), Path)) ->
                             (
-                                HttpRequest = http_request(HeadersKV, binary(Body)),
+                                HttpRequest = http_request(HeadersKV, binary(Body), Queries),
                                 HttpResponse = http_response(_, _, _),
                                 (call(Handler, HttpRequest, HttpResponse) ->
                                     send_response(Stream, HttpResponse)
@@ -73,16 +91,18 @@ accept_loop(Socket) :-
 % Helper and recommended predicates
 
 % http_header(Response, HEaderName, Value)
-http_headers(http_request(Headers, _), Headers).
+http_headers(http_request(Headers, _, _), Headers).
 http_headers(http_response(_, _, Headers), Headers).
 
-http_body(http_request(_, binary(ByteBody)), text(TextBody)) :- chars_utf8bytes(TextBody, ByteBody).
-http_body(http_request(_, Body), Body).
+http_body(http_request(_, binary(ByteBody), _), text(TextBody)) :- chars_utf8bytes(TextBody, ByteBody).
+http_body(http_request(_, Body, _), Body).
 http_body(http_response(_, Body, _), Body).
 
 http_status_code(http_response(StatusCode, _, _), StatusCode).
 
 http_redirect(http_response(307, text("Moved Temporarily"), ["Location"-Uri]), Uri).
+
+http_query(http_request(_, _, Queries), Key, Value) :- member(Key-Value, Queries).
 
 path([Part|Pattern]) -->
     "/",
@@ -124,16 +144,36 @@ overwrite_header(Key-Value, [Header|Headers], [NewHeader|Headers]) :-
     Header = Key-_,
     NewHeader = Key-Value.
 
-parse_request(http_version(Major, Minor), Method, Path) -->
+parse_request(http_version(Major, Minor), Method, Path, Queries) -->
     method(Method),
     " ",
-    string_without(" ", Path),
+    parse_path(Path, Queries),
     " ",
     "HTTP/",
     natural(Major),
     ".",
     natural(Minor),
     "\r\n".
+
+parse_path(Path, Queries) -->
+    string_without("?", Path),
+    "?",
+    parse_queries(Queries).
+
+parse_path(Path, []) -->
+    string_without(" ", Path).
+
+parse_queries([Key-Value|Queries]) -->
+    string_without("=", Key),
+    "=",
+    string_without("&", Value),
+    "&",
+    parse_queries(Queries).
+
+parse_queries([Key-Value]) -->
+    string_without("=", Key),
+    "=",
+    string_without(" ", Value).
 
 map_parse_header(Header, HeaderKV) :-
     phrase(parse_header(HeaderKV), Header).
