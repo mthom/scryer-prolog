@@ -41,6 +41,8 @@
    - Read forms
    - HTTP Basic Auth
    - Keep-Alive support
+   - Session handling via cookies
+   - HTML Templating
 
    I place this code in the public domain. Use it in any way you want.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -51,8 +53,7 @@
     http_status_code/2,
     http_body/2,
     http_redirect/2,
-    http_query/3,
-    path//1
+    http_query/3
 ]).
 
 :- use_module(library(sockets)).
@@ -62,22 +63,20 @@
 :- use_module(library(charsio)).
 :- use_module(library(lists)).
 :- use_module(library(iso_ext)).
+:- use_module(library(time)).
 
 % TODO
-% - Cookies?
 % - HTTP Error Codes
 % - Improve code quality
 % - Comments
-% - Keep-Alive
-% - Case insensitive headers
-% - HTML
 % - Remove !
 % - URL Encode
-% - Forms
-% - HTTP Auth
 
+% The route matching system needs a dynamic predicate to re-use the vars 
+% defined in the patterns
 :- dynamic(http_handler/3).
 
+% Server initialization
 http_listen(Port, Handlers) :-
     must_be(integer, Port),
     must_be(list, Handlers),
@@ -86,29 +85,14 @@ http_listen(Port, Handlers) :-
     format("Listening at port ~d\n", [Port]),
     accept_loop(Socket).
 
+% Register handlers
 register_handlers([]).
-register_handlers([get(Path, Handler)|Handlers]) :-
-    asserta(http_handler(get, Path, Handler)),
-    register_handlers(Handlers).
-register_handlers([post(Path, Handler)|Handlers]) :-
-    asserta(http_handler(post, Path, Handler)),
-    register_handlers(Handlers).
-register_handlers([put(Path, Handler)|Handlers]) :-
-    asserta(http_handler(put, Path, Handler)),
-    register_handlers(Handlers).
-register_handlers([patch(Path, Handler)|Handlers]) :-
-    asserta(http_handler(patch, Path, Handler)),
-    register_handlers(Handlers).
-register_handlers([head(Path, Handler)|Handlers]) :-
-    asserta(http_handler(head, Path, Handler)),
-    register_handlers(Handlers).
-register_handlers([delete(Path, Handler)|Handlers]) :-
-    asserta(http_handler(delete, Path, Handler)),
-    register_handlers(Handlers).
-register_handlers([options(Path, Handler)|Handlers]) :-
-    asserta(http_handler(options, Path, Handler)),
+register_handlers([Handler|Handlers]) :-
+    Handler =.. [Method, Path, Closure],
+    asserta(http_handler(Method, Path, Closure)),
     register_handlers(Handlers).
 
+% Server loop
 accept_loop(Socket) :-
     setup_call_cleanup(socket_server_accept(Socket, Client, Stream, [type(binary)]),
         (
@@ -117,11 +101,13 @@ accept_loop(Socket) :-
             (
                 (phrase(parse_request(Version, Method, Path, Queries), Request), maplist(map_parse_header, Headers, HeadersKV)) -> (
                         (
-                            member("Content-Length"-ContentLength, HeadersKV) ->
+                            member("content-length"-ContentLength, HeadersKV) ->
                                 (number_chars(ContentLengthN, ContentLength), get_bytes(Stream, ContentLengthN, Body))
                                 ;true
                         ),
-                        format("~w ~s\n", [Method, Path]),
+                        current_time(Time),
+                        phrase(format_time("%Y-%m-%d (%H:%M:%S)", Time), TimeString),
+                        format("~s ~w ~s\n", [TimeString, Method, Path]),
                         (
                             (http_handler(Method, Pattern, Handler), phrase(path(Pattern), Path)) ->
                             (
@@ -144,7 +130,6 @@ accept_loop(Socket) :-
 
 % Helper and recommended predicates
 
-% http_header(Response, HEaderName, Value)
 http_headers(http_request(Headers, _, _), Headers).
 http_headers(http_response(_, _, Headers), Headers).
 
@@ -158,6 +143,7 @@ http_redirect(http_response(307, text("Moved Temporarily"), ["Location"-Uri]), U
 
 http_query(http_request(_, _, Queries), Key, Value) :- member(Key-Value, Queries).
 
+% Route matching
 path(Pattern) -->
     {
         Pattern =.. Parts,
@@ -181,11 +167,12 @@ path(Pattern) -->
 
 path([]) --> [].
 
+% Send responses
 send_response(Stream, http_response(StatusCode0, file(Filename), Headers)) :-
     default(StatusCode0, 200, StatusCode),
     format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
-    overwrite_header("Connection"-"Close", Headers0, Headers1),
-    write_headers(Stream, Headers1),
+    overwrite_header("connection"-"Close", Headers, Headers0),
+    write_headers(Stream, Headers0),
     format(Stream, "\r\n", []),
     setup_call_cleanup(
         open(Filename, read, FileStream, [type(binary)]),
@@ -196,15 +183,15 @@ send_response(Stream, http_response(StatusCode0, file(Filename), Headers)) :-
 send_response(Stream, http_response(StatusCode0, text(TextResponse), Headers)) :-
     default(StatusCode0, 200, StatusCode),
     format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
-    overwrite_header("Content-Type"-"text/plain", Headers, Headers0),
-    overwrite_header("Connection"-"Close", Headers0, Headers1),
+    overwrite_header("content-type"-"text/plain", Headers, Headers0),
+    overwrite_header("connection"-"Close", Headers0, Headers1),
     write_headers(Stream, Headers1),
     format(Stream, "\r\n~s", [TextResponse]).
 
 send_response(Stream, http_response(StatusCode0, binary(BinaryResponse), Headers)) :-
     default(StatusCode0, 200, StatusCode),
     format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
-    overwrite_header("Connection"-"Close", Headers, Headers0),
+    overwrite_header("connection"-"Close", Headers, Headers0),
     write_headers(Stream, Headers0),
     format(Stream, "\r\n", []),
     put_bytes(Stream, BinaryResponse).
@@ -267,7 +254,10 @@ map_parse_header(Header, HeaderKV) :-
     phrase(parse_header(HeaderKV), Header).
 
 parse_header(Key-Value) -->
-    string_without(":", Key),
+    string_without(":", Key0),
+    {
+        chars_lower(Key0, Key)
+    },
     ": ",
     string_without("\r", Value),
     "\r\n".
@@ -335,3 +325,15 @@ pipe_bytes(StreamIn, StreamOut) :-
             pipe_bytes(StreamIn, StreamOut)
         )
     ;   true).
+
+% WARNING: This only works for ASCII chars. This code can be modified to support
+% Latin1 characters also but a completely different approach is needed for other
+% languages. Since HTTP internals are ASCII, this is fine for this usecase.
+chars_lower(Chars, Lower) :-
+    maplist(char_lower, Chars, Lower).
+char_lower(Char, Lower) :-
+    char_code(Char, Code),
+    ((Code >= 65,Code =< 90) ->
+        LowerCode is Code + 32,
+        char_code(Lower, LowerCode)
+    ;   Char = Lower).
