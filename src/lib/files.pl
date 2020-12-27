@@ -166,19 +166,16 @@ file_time_(File, Which, T) :-
    Examples:
 
       ?- path_segments("/hello/there", Segments).
-         Segments = [[],"hello","there"]
-      ;  false.
+         Segments = [[],"hello","there"].
 
       ?- path_segments(Path, ["hello","there"]).
-         Path = "hello/there"
-      ;  false.
+         Path = "hello/there".
 
 
    To obtain the platform-specific directory separator, you can use:
 
       ?- path_segments(Separator, ["",""]).
-         Separator = "/"
-      ;  false.
+         Separator = "/".
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 path_segments(Path, Segments) :-

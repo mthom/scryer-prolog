@@ -21,7 +21,7 @@ num = ["num-rug-adapter", "prolog_parser/num"]
 [dependencies]
 cpu-time = "1.0.0"
 crossterm = "0.16.0"
-dirs = "2.0.2"
+dirs-next = "2.0.0"
 divrem = "0.1.0"
 downcast = "0.10.0"
 git-version = "0.3.4"

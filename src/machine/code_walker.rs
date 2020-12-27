@@ -2,30 +2,57 @@ use crate::instructions::*;
 
 use std::collections::VecDeque;
 
-fn scan_for_trust_me(code: &Code, jmp_offsets: &mut VecDeque<usize>, after_idx: &mut usize) {
-    for (idx, instr) in code[*after_idx..].iter().enumerate() {
-        match instr {
-            &Line::Choice(ChoiceInstruction::TrustMe)
-          | &Line::IndexedChoice(IndexedChoiceInstruction::Trust(..)) => {
-                *after_idx += idx;
-                return;
+fn scan_for_trust_me(
+    code: &Code,
+    jmp_offsets: &mut VecDeque<usize>,
+    before_idx: usize,
+    after_idx: &mut usize,
+) {
+    // record the location of the line after the TrustMe capping the
+    // choice instruction sequence to after_idx.
+    loop {
+        match &code[*after_idx] {
+            &Line::Choice(ChoiceInstruction::DefaultRetryMeElse(offset)) |
+            &Line::Choice(ChoiceInstruction::RetryMeElse(offset)) |
+            &Line::IndexedChoice(IndexedChoiceInstruction::Retry(offset)) => {
+                *after_idx += offset;
             }
-            &Line::Control(ControlInstruction::JmpBy(_, offset, ..)) => {
-                jmp_offsets.push_back(*after_idx + idx + offset)
+            &Line::Choice(ChoiceInstruction::DefaultTrustMe) |
+            &Line::Choice(ChoiceInstruction::TrustMe) |
+            &Line::IndexedChoice(IndexedChoiceInstruction::Trust(..)) => {
+                break;
             }
-            _ => {}
+            _ => {
+                *after_idx += 1;
+            }
         }
     }
+
+    // search the code in the range for JmpBy instructions and record their
+    // offsets for future scanning.
+    for (idx, instr) in code[before_idx .. *after_idx].iter().enumerate() {
+        match instr {
+            &Line::Control(ControlInstruction::JmpBy(_, offset, ..)) => {
+                jmp_offsets.push_back(before_idx + idx + offset)
+            }
+            _ => {
+            }
+        }
+    }
+
+    *after_idx += 1;
 }
 
 fn capture_next_range(code: &Code, queue: &mut VecDeque<usize>, last_idx: &mut usize) {
     loop {
         match &code[*last_idx] {
-            &Line::Choice(ChoiceInstruction::TryMeElse(..))
-          | &Line::IndexedChoice(IndexedChoiceInstruction::Try(..)) => {
-                    *last_idx += 1;
-                    scan_for_trust_me(code, queue, last_idx);
-                }
+            &Line::Choice(ChoiceInstruction::TryMeElse(offset)) |
+            &Line::IndexedChoice(IndexedChoiceInstruction::Try(offset)) => {
+                let before_idx = *last_idx;
+                *last_idx += offset;
+
+                scan_for_trust_me(code, queue, before_idx, last_idx);
+            }
             &Line::Control(ControlInstruction::JmpBy(_, offset, _, false)) => {
                 queue.push_back(*last_idx + offset);
                 *last_idx += 1;
@@ -34,8 +61,8 @@ fn capture_next_range(code: &Code, queue: &mut VecDeque<usize>, last_idx: &mut u
                 queue.push_back(*last_idx + offset);
                 break;
             }
-            &Line::Control(ControlInstruction::Proceed)
-          | &Line::Control(ControlInstruction::CallClause(_, _, _, true, _)) =>
+            &Line::Control(ControlInstruction::Proceed) |
+            &Line::Control(ControlInstruction::CallClause(_, _, _, true, _)) =>
                 break,
             _ =>
                 *last_idx += 1,

@@ -281,7 +281,7 @@ impl Machine {
     }
 
     fn compile_scryerrc(&mut self) {
-        let mut path = match dirs::home_dir() {
+        let mut path = match dirs_next::home_dir() {
             Some(path) => path,
             None => return,
         };

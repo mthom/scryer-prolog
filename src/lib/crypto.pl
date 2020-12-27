@@ -58,8 +58,7 @@
    Example:
 
    ?- hex_bytes("501ACE", Bs).
-      Bs = [80,26,206]
-   ;  false.
+      Bs = [80,26,206].
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 
@@ -146,7 +145,7 @@ must_be_byte_chars(Chars, Context) :-
    ?- crypto_n_random_bytes(32, Bs),
       bytes_integer(Bs, I).
       Bs = [146,166,162,210,242,7,25,132,64,94|...],
-      I = 337420085690608915485...(56 digits omitted)
+      I = 337420085690608915485...(56 digits omitted).
 
    The above relation also works in the other direction, letting you
    translate an integer _to_ a list of bytes. In addition, you can
@@ -155,7 +154,7 @@ must_be_byte_chars(Chars, Context) :-
 
    ?- crypto_n_random_bytes(12, Bs),
       hex_bytes(Hex, Bs).
-      Bs = [34,25,50,72,58,63,50,172,32,46|...], Hex = "221932483a3f32ac202 ..."
+      Bs = [34,25,50,72,58,63,50,172,32,46|...], Hex = "221932483a3f32ac202 ...".
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 
@@ -190,8 +189,7 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
    Example:
 
    ?- crypto_data_hash("abc", Hs, [algorithm(sha256)]).
-      Hs = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-   ;  false.
+      Hs = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

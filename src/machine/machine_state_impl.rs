@@ -1392,8 +1392,8 @@ impl MachineState {
     pub(super)
     fn execute_indexing_instr(&mut self, instr: &IndexingInstruction) {
         match instr {
-            &IndexingInstruction::SwitchOnTerm(v, c, l, s) => {
-                let addr = self[temp_v!(1)];
+            &IndexingInstruction::SwitchOnTerm(arg, v, c, l, s) => {
+                let addr = self[temp_v!(arg)];
                 let addr = self.store(self.deref(addr));
 
                 let offset = match addr {
@@ -1423,8 +1423,8 @@ impl MachineState {
                     o => self.p += o,
                 };
             }
-            &IndexingInstruction::SwitchOnConstant(_, ref hm) => {
-                let addr = self[temp_v!(1)];
+            &IndexingInstruction::SwitchOnConstant(arg, _, ref hm) => {
+                let addr = self[temp_v!(arg)];
                 let addr = self.store(self.deref(addr));
 
                 let offset =
@@ -1445,8 +1445,8 @@ impl MachineState {
                     o => self.p += o,
                 };
             }
-            &IndexingInstruction::SwitchOnStructure(_, ref hm) => {
-                let a1 = self.registers[1];
+            &IndexingInstruction::SwitchOnStructure(arg, _, ref hm) => {
+                let a1 = self.registers[arg];
                 let addr = self.store(self.deref(a1));
 
                 let offset = match addr {

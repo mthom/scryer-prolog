@@ -143,8 +143,8 @@ impl CodeOffsets {
         }
     }
 
-    pub fn index_term(&mut self, first_arg: &Term, index: usize) {
-        match first_arg {
+    pub fn index_term(&mut self, optimal_arg: &Term, index: usize) {
+        match optimal_arg {
             &Term::Clause(_, ref name, ref terms, _) => {
                 let code = self
                     .structures
@@ -237,12 +237,17 @@ impl CodeOffsets {
     fn switch_on_constant(
         con_ind: IndexMap<Constant, ThirdLevelIndex>,
         prelude: &mut CodeDeque,
+        optimal_index: usize,
     ) -> IntIndex {
         let con_ind = Self::second_level_index(con_ind, prelude);
 
         if con_ind.len() > 1 {
             let index = Self::flatten_index(con_ind, prelude.len());
-            let instr = IndexingInstruction::SwitchOnConstant(index.len(), index);
+            let instr = IndexingInstruction::SwitchOnConstant(
+                optimal_index,
+                index.len(),
+                index
+            );
 
             prelude.push_front(Line::from(instr));
 
@@ -259,12 +264,17 @@ impl CodeOffsets {
     fn switch_on_structure(
         str_ind: IndexMap<(ClauseName, usize), ThirdLevelIndex>,
         prelude: &mut CodeDeque,
+        optimal_index: usize,
     ) -> IntIndex {
         let str_ind = Self::second_level_index(str_ind, prelude);
 
         if str_ind.len() > 1 {
             let index = Self::flatten_index(str_ind, prelude.len());
-            let instr = IndexingInstruction::SwitchOnStructure(index.len(), index);
+            let instr = IndexingInstruction::SwitchOnStructure(
+                optimal_index,
+                index.len(),
+                index
+            );
 
             prelude.push_front(Line::from(instr));
 
@@ -325,7 +335,7 @@ impl CodeOffsets {
         }
     }
 
-    pub fn add_indices(self, code: &mut Code, mut code_body: Code) {
+    pub fn add_indices(self, code: &mut Code, mut code_body: Code, optimal_index: usize) {
         if self.no_indices() {
             *code = code_body;
             return;
@@ -334,8 +344,10 @@ impl CodeOffsets {
         let mut prelude = VecDeque::new();
 
         let lst_loc = Self::switch_on_list(self.lists, &mut prelude);
-        let str_loc = Self::switch_on_structure(self.structures, &mut prelude);
-        let con_loc = Self::switch_on_constant(self.constants, &mut prelude);
+        let str_loc =
+            Self::switch_on_structure(self.structures, &mut prelude, optimal_index);
+        let con_loc =
+            Self::switch_on_constant(self.constants, &mut prelude, optimal_index);
 
         let prelude_length = prelude.len();
 
@@ -355,8 +367,13 @@ impl CodeOffsets {
         let con_loc = Self::switch_on_con_offset_from(con_loc, prelude.len());
         let lst_loc = Self::switch_on_lst_offset_from(lst_loc, prelude.len());
 
-        let switch_instr =
-            IndexingInstruction::SwitchOnTerm(prelude.len() + 1, con_loc, lst_loc, str_loc);
+        let switch_instr = IndexingInstruction::SwitchOnTerm(
+            optimal_index,
+            prelude.len() + 1,
+            con_loc,
+            lst_loc,
+            str_loc
+        );
 
         prelude.push_front(Line::from(switch_instr));
 
