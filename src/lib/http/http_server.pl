@@ -53,7 +53,8 @@
     http_status_code/2,
     http_body/2,
     http_redirect/2,
-    http_query/3
+    http_query/3,
+    urldecode//1
 ]).
 
 :- use_module(library(sockets)).
@@ -64,6 +65,7 @@
 :- use_module(library(lists)).
 :- use_module(library(iso_ext)).
 :- use_module(library(time)).
+:- use_module(library(crypto)).
 
 % TODO
 % - HTTP Error Codes
@@ -72,28 +74,16 @@
 % - Remove !
 % - URL Encode
 
-% The route matching system needs a dynamic predicate to re-use the vars 
-% defined in the patterns
-:- dynamic(http_handler/3).
-
 % Server initialization
 http_listen(Port, Handlers) :-
     must_be(integer, Port),
     must_be(list, Handlers),
     once(socket_server_open(Port, Socket)),
-    register_handlers(Handlers),
     format("Listening at port ~d\n", [Port]),
-    accept_loop(Socket).
-
-% Register handlers
-register_handlers([]).
-register_handlers([Handler|Handlers]) :-
-    Handler =.. [Method, Path, Closure],
-    asserta(http_handler(Method, Path, Closure)),
-    register_handlers(Handlers).
+    accept_loop(Socket, Handlers).
 
 % Server loop
-accept_loop(Socket) :-
+accept_loop(Socket, Handlers) :-
     setup_call_cleanup(socket_server_accept(Socket, Client, Stream, [type(binary)]),
         (
             read_header_lines(Stream, Lines),
@@ -109,7 +99,7 @@ accept_loop(Socket) :-
                         phrase(format_time("%Y-%m-%d (%H:%M:%S)", Time), TimeString),
                         format("~s ~w ~s\n", [TimeString, Method, Path]),
                         (
-                            (http_handler(Method, Pattern, Handler), phrase(path(Pattern), Path)) ->
+                            match_handler(Handlers, Method, Path, Handler) ->
                             (
                                 HttpRequest = http_request(HeadersKV, binary(Body), Queries),
                                 HttpResponse = http_response(_, _, _),
@@ -126,7 +116,13 @@ accept_loop(Socket) :-
             ),
             ! % Remove
         ), close(Stream)),
-    accept_loop(Socket).
+    accept_loop(Socket, Handlers).
+
+match_handler(Handlers, Method, Path, Handler) :-
+    member(H, Handlers),
+    copy_term(H, H1),
+    H1 =.. [Method, Pattern, Handler],
+    phrase(path(Pattern), Path).
 
 % Helper and recommended predicates
 
@@ -239,16 +235,28 @@ parse_path(Path, []) -->
     string_without(" ", Path).
 
 parse_queries([Key-Value|Queries]) -->
-    string_without("=", Key),
+    string_without("=", Key0),
+    {
+        phrase(urldecode(Key), Key0)
+    },
     "=",
-    string_without("&", Value),
+    string_without("&", Value0),
+    {
+        phrase(urldecode(Value), Value0)
+    },
     "&",
     parse_queries(Queries).
 
 parse_queries([Key-Value]) -->
-    string_without("=", Key),
+    string_without("=", Key0),
+    {
+        phrase(urldecode(Key), Key0)
+    },
     "=",
-    string_without(" ", Value).
+    string_without(" ", Value0),
+    {
+        phrase(urldecode(Value), Value0)  
+    }.
 
 map_parse_header(Header, HeaderKV) :-
     phrase(parse_header(HeaderKV), Header).
@@ -337,3 +345,68 @@ char_lower(Char, Lower) :-
         LowerCode is Code + 32,
         char_code(Lower, LowerCode)
     ;   Char = Lower).
+
+% Decodes a UTF-8 URL Encoded string: RFC-1738
+urldecode([Char|Chars]) -->
+    [Char],
+    {
+        Char \= '%'
+    },
+    urldecode(Chars).
+urldecode([Char|Chars]) -->
+    "%",
+    [A],
+    [B],
+    {
+        hex_bytes([A,B], Bytes),
+        Bytes = [FirstByte|_],
+        FirstByte < 128,
+        chars_utf8bytes(Chars0, Bytes),
+        Chars0 = [Char]
+    },
+    urldecode(Chars).
+urldecode([Char|Chars]) -->
+    "%",
+    [A, B],
+    "%",
+    [C, D],
+    {
+        hex_bytes([A,B,C,D], Bytes),
+        Bytes = [FirstByte|_],
+        FirstByte < 224,
+        chars_utf8bytes(Chars0, Bytes),
+        Chars0 = [Char]
+    },
+    urldecode(Chars).
+urldecode([Char|Chars]) -->
+    "%",
+    [A, B],
+    "%",
+    [C, D],
+    "%",
+    [E, F],
+    {
+        hex_bytes([A,B,C,D,E,F], Bytes),
+        Bytes = [FirstByte|_],
+        FirstByte < 240,
+        chars_utf8bytes(Chars0, Bytes),
+        Chars0 = [Char]
+    },
+    urldecode(Chars).
+urldecode([Char|Chars]) -->
+    "%",
+    [A, B],
+    "%",
+    [C, D],
+    "%",
+    [E, F],
+    "%",
+    [H, I],
+    {
+        hex_bytes([A,B,C,D,E,F,H,I], Bytes),
+        chars_utf8bytes(Chars0, Bytes),
+        Chars0 = [Char]
+    },
+    urldecode(Chars).
+
+urldecode([]) --> [].
