@@ -49,6 +49,7 @@
 :- use_module(library(error)).
 :- use_module(library(dcgs)).
 :- use_module(library(lists)).
+:- use_module(library(statistics)).
 :- use_module(library(charsio), [read_term_from_chars/2]).
 
 current_time(T) :-
@@ -80,10 +81,8 @@ sleep(T) :-
     ).
 
 
-% '$cpu_now' can be replaced by statistics/2 once that is implemented.
-
 time(Goal) :-
-        '$cpu_now'(T0),
+        statistics(cputime, T0),
         setup_call_cleanup(true,
                            (   Goal,
                                report_time(T0)
@@ -91,7 +90,7 @@ time(Goal) :-
                            report_time(T0)).
 
 report_time(T0) :-
-        '$cpu_now'(T),
+        statistics(cputime, T),
         Time is T - T0,
         (   bb_get('$first_answer', true) ->
             format("   % CPU time: ~3f seconds~n", [Time])

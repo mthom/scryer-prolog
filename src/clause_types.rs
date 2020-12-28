@@ -274,6 +274,7 @@ pub enum SystemClauseType {
     InstallNewBlock,
     Maybe,
     CpuNow,
+    Inferences,
     CurrentTime,
     QuotedToken,
     ReadTermFromChars,
@@ -429,6 +430,7 @@ impl SystemClauseType {
             &SystemClauseType::LiftedHeapLength => clause_name!("$lh_length"),
             &SystemClauseType::Maybe => clause_name!("maybe"),
             &SystemClauseType::CpuNow => clause_name!("$cpu_now"),
+            &SystemClauseType::Inferences => clause_name!("$inferences"),
             &SystemClauseType::CurrentTime => clause_name!("$current_time"),
             &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
                 clause_name!("$module_asserta")
@@ -628,6 +630,7 @@ impl SystemClauseType {
             ("$lh_length", 1) => Some(SystemClauseType::LiftedHeapLength),
             ("$maybe", 0) => Some(SystemClauseType::Maybe),
             ("$cpu_now", 1) => Some(SystemClauseType::CpuNow),
+            ("$inferences", 1) => Some(SystemClauseType::Inferences),
             ("$current_time", 1) => Some(SystemClauseType::CurrentTime),
             ("$module_exists", 1) => Some(SystemClauseType::ModuleExists),
             ("$module_of", 2) => Some(SystemClauseType::ModuleOf),

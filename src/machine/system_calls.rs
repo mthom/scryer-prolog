@@ -3392,6 +3392,12 @@ impl MachineState {
 
                 self.unify(a1, addr);
             }
+            &SystemClauseType::Inferences => {
+                let a1 = self[temp_v!(1)];
+                let addr = self.heap.put_constant(Constant::Integer(Rc::new(self.inferences.clone())));
+
+                self.unify(a1, addr);
+            }
             &SystemClauseType::CurrentTime => {
                 let str = self.systemtime_to_timestamp(SystemTime::now());
                 self.unify(self[temp_v!(1)], str);

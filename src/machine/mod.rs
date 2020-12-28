@@ -868,6 +868,7 @@ impl MachineState {
         current_input_stream: &mut Stream,
         current_output_stream: &mut Stream,
     ) {
+        self.inferences += 1;
         match instr {
             &Line::Arithmetic(ref arith_instr) => {
                 self.execute_arith_instr(arith_instr)

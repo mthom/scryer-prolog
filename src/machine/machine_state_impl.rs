@@ -63,7 +63,8 @@ impl MachineState {
             last_call: false,
             heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default(),
-            at_end_of_expansion: false
+            at_end_of_expansion: false,
+            inferences: Integer::from(0),
         }
     }
 
@@ -93,7 +94,8 @@ impl MachineState {
             last_call: false,
             heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default(),
-            at_end_of_expansion: false
+            at_end_of_expansion: false,
+            inferences: Integer::from(0),
         }
     }
 

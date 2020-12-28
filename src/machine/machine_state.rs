@@ -609,7 +609,8 @@ pub struct MachineState {
     pub(super) last_call: bool,
     pub(crate) heap_locs: HeapVarDict,
     pub(crate) flags: MachineFlags,
-    pub(crate) at_end_of_expansion: bool
+    pub(crate) at_end_of_expansion: bool,
+    pub(crate) inferences: Integer,
 }
 
 impl MachineState {
