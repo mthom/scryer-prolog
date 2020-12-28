@@ -54,7 +54,7 @@
     http_body/2,
     http_redirect/2,
     http_query/3,
-    urldecode//1
+    url_decode//1
 ]).
 
 :- use_module(library(sockets)).
@@ -67,13 +67,6 @@
 :- use_module(library(time)).
 :- use_module(library(crypto)).
 
-% TODO
-% - HTTP Error Codes
-% - Improve code quality
-% - Comments
-% - Remove !
-% - URL Encode
-
 % Server initialization
 http_listen(Port, Handlers) :-
     must_be(integer, Port),
@@ -84,12 +77,12 @@ http_listen(Port, Handlers) :-
 
 % Server loop
 accept_loop(Socket, Handlers) :-
-    setup_call_cleanup(socket_server_accept(Socket, Client, Stream, [type(binary)]),
+    setup_call_cleanup(socket_server_accept(Socket, _Client, Stream, [type(binary)]),
         (
             read_header_lines(Stream, Lines),
             [Request|Headers] = Lines,
             (
-                (phrase(parse_request(Version, Method, Path, Queries), Request), maplist(map_parse_header, Headers, HeadersKV)) -> (
+                (phrase(parse_request(_Version, Method, Path, Queries), Request), maplist(map_parse_header, Headers, HeadersKV)) -> (
                         (
                             member("content-length"-ContentLength, HeadersKV) ->
                                 (number_chars(ContentLengthN, ContentLength), get_bytes(Stream, ContentLengthN, Body))
@@ -237,12 +230,12 @@ parse_path(Path, []) -->
 parse_queries([Key-Value|Queries]) -->
     string_without("=", Key0),
     {
-        phrase(urldecode(Key), Key0)
+        phrase(url_decode(Key), Key0)
     },
     "=",
     string_without("&", Value0),
     {
-        phrase(urldecode(Value), Value0)
+        phrase(url_decode(Value), Value0)
     },
     "&",
     parse_queries(Queries).
@@ -250,12 +243,12 @@ parse_queries([Key-Value|Queries]) -->
 parse_queries([Key-Value]) -->
     string_without("=", Key0),
     {
-        phrase(urldecode(Key), Key0)
+        phrase(url_decode(Key), Key0)
     },
     "=",
     string_without(" ", Value0),
     {
-        phrase(urldecode(Value), Value0)  
+        phrase(url_decode(Value), Value0)  
     }.
 
 map_parse_header(Header, HeaderKV) :-
@@ -347,13 +340,13 @@ char_lower(Char, Lower) :-
     ;   Char = Lower).
 
 % Decodes a UTF-8 URL Encoded string: RFC-1738
-urldecode([Char|Chars]) -->
+url_decode([Char|Chars]) -->
     [Char],
     {
         Char \= '%'
     },
-    urldecode(Chars).
-urldecode([Char|Chars]) -->
+    url_decode(Chars).
+url_decode([Char|Chars]) -->
     "%",
     [A],
     [B],
@@ -364,8 +357,8 @@ urldecode([Char|Chars]) -->
         chars_utf8bytes(Chars0, Bytes),
         Chars0 = [Char]
     },
-    urldecode(Chars).
-urldecode([Char|Chars]) -->
+    url_decode(Chars).
+url_decode([Char|Chars]) -->
     "%",
     [A, B],
     "%",
@@ -377,8 +370,8 @@ urldecode([Char|Chars]) -->
         chars_utf8bytes(Chars0, Bytes),
         Chars0 = [Char]
     },
-    urldecode(Chars).
-urldecode([Char|Chars]) -->
+    url_decode(Chars).
+url_decode([Char|Chars]) -->
     "%",
     [A, B],
     "%",
@@ -392,8 +385,8 @@ urldecode([Char|Chars]) -->
         chars_utf8bytes(Chars0, Bytes),
         Chars0 = [Char]
     },
-    urldecode(Chars).
-urldecode([Char|Chars]) -->
+    url_decode(Chars).
+url_decode([Char|Chars]) -->
     "%",
     [A, B],
     "%",
@@ -407,6 +400,6 @@ urldecode([Char|Chars]) -->
         chars_utf8bytes(Chars0, Bytes),
         Chars0 = [Char]
     },
-    urldecode(Chars).
+    url_decode(Chars).
 
-urldecode([]) --> [].
+url_decode([]) --> [].
