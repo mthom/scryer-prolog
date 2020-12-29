@@ -13,8 +13,7 @@
       %@     c -- c2;
       %@     c2 [label = "b", style=filled, fontname="courier bold", fillcolor=lightcyan];
       %@ }
-      %@    true
-      %@ ;  ...
+      %@    true.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- use_module(library(clpz)).
