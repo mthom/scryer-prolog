@@ -7763,11 +7763,10 @@ zo_t(1, true).
    Generated predicates
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-generated_clauses(Cs) :-
-        make_parse_clpz(Cs1),
-        make_parse_reified(Cs2),
-        make_matches(Cs3),
-        append([Cs1,Cs2,Cs3], Cs).
+term_expansion(make_parse_clpz, Clauses)    :- make_parse_clpz(Clauses).
+term_expansion(make_parse_reified, Clauses) :- make_parse_reified(Clauses).
+term_expansion(make_matches, Clauses)       :- make_matches(Clauses).
 
-:- initialization((generated_clauses(Cs),
-                   maplist(assertz, Cs))).
+make_parse_clpz.
+make_parse_reified.
+make_matches.
