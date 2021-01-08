@@ -1220,6 +1220,8 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
             }
         }
 
+        machine_st.inferences += 1;
+
         Ok(())
     }
 
@@ -1249,6 +1251,8 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 machine_st.execute_at_index(arity, LocalCodePtr::InSituDirEntry(p));
             }
         }
+
+        machine_st.inferences += 1;
 
         Ok(())
     }
