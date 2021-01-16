@@ -20,7 +20,7 @@ jobs:
       - name: Build
         uses: actions-rs/cargo@v1
         with:
-          command: build
+          command: rustc
           args: --verbose -- -D warnings
       - name: Test
         uses: actions-rs/cargo@v1
