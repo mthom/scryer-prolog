@@ -3130,9 +3130,14 @@ impl MachineState {
     ) {
 	    let interrupted = INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
 
-	    if INTERRUPT.compare_and_swap(interrupted, false, std::sync::atomic::Ordering::Relaxed) {
-            self.throw_interrupt_exception();
-	        return;
+	    match INTERRUPT.compare_exchange(interrupted, false, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed) {
+            Ok(interruption) => {
+                if interruption {
+                    self.throw_interrupt_exception();
+                    return;
+                }
+            },
+            Err(_) => unreachable!()
 	    }
 
         let mut default_call_policy: Box<dyn CallPolicy> = Box::new(DefaultCallPolicy {});
