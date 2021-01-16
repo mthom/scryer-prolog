@@ -6,7 +6,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, windows-2019, macos-11.0]
+        os: [ubuntu-20.04, macos-11.0]
         rust-version: [stable, beta]
     steps:
       - name: Checkout sources
