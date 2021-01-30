@@ -246,10 +246,6 @@ impl Stack {
         }
     }
 
-    pub fn take(&mut self) -> Self {
-        Stack { buf: self.buf.take(), _marker: PhantomData }
-    }
-
     #[inline]
     pub fn truncate(&mut self, b: usize) {
         if b == 0 {

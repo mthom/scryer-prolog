@@ -195,7 +195,7 @@ impl MachineState {
 
         let term = {
             let mut parser = Parser::new(&mut stream, atom_tbl, self.flags);
-            parser.read_term(composite_op!(op_dir))?
+            parser.read_term(&CompositeOpDir::new(op_dir, None))?
         };
 
         // 'pausing' the stream saves the pending top buffer

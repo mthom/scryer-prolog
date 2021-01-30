@@ -23,9 +23,9 @@ bb_put(Key, _) :- throw(error(type_error(atom, Key), bb_put/2)).
 
 bb_b_put(Key, NewValue) :-
     (  '$bb_get_with_offset'(Key, OldValue, OldOffset) ->
-       call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
+       call_cleanup((iso_ext:store_global_var_with_offset(Key, NewValue) ; false),
                     reset_global_var_at_offset(Key, OldValue, OldOffset))
-    ;  call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
+    ;  call_cleanup((iso_ext:store_global_var_with_offset(Key, NewValue) ; false),
                     reset_global_var_at_key(Key))
     ).
 
@@ -45,10 +45,15 @@ reset_global_var_at_offset(Key, Value, Offset) :- '$reset_global_var_at_offset'(
 bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
 bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).
 
+
+:- meta_predicate call_cleanup(:, :).
+
 call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
 
 % setup_call_cleanup.
+
+:- meta_predicate setup_call_cleanup(:, :, :).
 
 setup_call_cleanup(S, G, C) :-
     '$get_b_value'(B),
@@ -116,6 +121,8 @@ handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :- !.
 handle_ile(B, E, _) :-
     '$remove_call_policy_check'(B),
     '$call_with_default_policy'(throw(E)).
+
+:- meta_predicate call_with_inference_limit(:, ?, ?).
 
 call_with_inference_limit(G, L, R) :-
     '$get_current_block'(Bb),

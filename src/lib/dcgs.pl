@@ -5,13 +5,21 @@
 
 :- use_module(library(error)).
 :- use_module(library(lists), [append/3]).
+:- use_module(library(loader), [strip_module/3]).
+
+:- meta_predicate phrase(2, ?).
+
+:- meta_predicate phrase(2, ?, ?).
 
 phrase(GRBody, S0) :-
     phrase(GRBody, S0, []).
 
+
 phrase(GRBody, S0, S) :-
     (  var(GRBody) -> throw(error(instantiation_error, phrase/3))
-    ;  dcg_constr(GRBody) -> phrase_(GRBody, S0, S)
+    ;  strip_module(GRBody, _, GRBody0),
+       dcg_constr(GRBody0) ->
+       phrase_(GRBody0, S0, S)
     ;  functor(GRBody, _, _) -> call(GRBody, S0, S)
     ;  throw(error(type_error(callable, GRBody), phrase/3))
     ).

@@ -11,6 +11,7 @@ fn find_prolog_files(libraries: &mut File, prefix: &str, current_dir: &Path) {
         Ok(entries) => entries,
         Err(_) => return,
     };
+
     for entry in entries.filter_map(Result::ok).map(|e| e.path()) {
         if entry.is_dir() {
             if let Some(file_name) = entry.file_name() {
@@ -24,6 +25,7 @@ fn find_prolog_files(libraries: &mut File, prefix: &str, current_dir: &Path) {
                 let contain =
                     String::from_utf8(fs::read(&entry).unwrap()).unwrap();
                 let name = entry.file_stem().unwrap().to_str().unwrap();
+
                 let line = format!(
                     "        m.insert(\"{}\",\n{:?});\n",
                     prefix.to_owned() + name,

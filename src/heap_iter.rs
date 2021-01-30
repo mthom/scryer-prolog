@@ -45,10 +45,13 @@ impl<'a> HCPreOrderIterator<'a> {
           | HeapCellValue::Integer(_) | HeapCellValue::Rational(_) => {
                 Addr::Con(h)
             }
+            HeapCellValue::LoadStatePayload(_) => {
+                Addr::LoadStatePayload(h)
+            }
             HeapCellValue::Stream(_) => {
                 Addr::Stream(h)
             }
-            &HeapCellValue::TcpListener(_) => {
+            HeapCellValue::TcpListener(_) => {
                 Addr::TcpListener(h)
             }
         }
@@ -175,13 +178,17 @@ impl<'a> Iterator for HCPostOrderIterator<'a> {
                     }
                     &HeapCellValue::Addr(Addr::PStrLocation(h, n)) => {
                         match &self.machine_st.heap[h] {
-                            &HeapCellValue::PartialString(ref pstr, _) => {
+                            &HeapCellValue::PartialString(..) => {// ref pstr, _) => {
+                                /*
                                 let c = pstr.range_from(n ..).next().unwrap();
                                 let next_n = n + c.len_utf8();
 
                                 if !pstr.at_end(next_n) {
-                                    self.parent_stack.push((2, Addr::PStrLocation(h, next_n)));
-                                }
+                                */
+                                // self.parent_stack.push((2, Addr::PStrLocation(h, next_n)));
+                                // }
+
+                                self.parent_stack.push((2, Addr::PStrLocation(h, n)));
                             }
                             _ => {
                                 unreachable!()

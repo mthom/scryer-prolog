@@ -2,6 +2,7 @@ use crate::prolog_parser::ast::*;
 
 use crate::clause_types::*;
 use crate::forms::*;
+use crate::indexing::IndexingCodePtr;
 use crate::machine::heap::*;
 use crate::machine::machine_errors::MachineStub;
 use crate::machine::machine_indices::*;
@@ -9,7 +10,8 @@ use crate::rug::Integer;
 
 use crate::indexmap::IndexMap;
 
-use std::collections::VecDeque;
+use slice_deque::SliceDeque;
+
 use std::rc::Rc;
 
 fn reg_type_into_functor(r: RegType) -> MachineStub {
@@ -48,9 +50,9 @@ impl ArithmeticTerm {
 #[derive(Debug)]
 pub enum ChoiceInstruction {
     DefaultRetryMeElse(usize),
-    DefaultTrustMe,
+    DefaultTrustMe(usize),
     RetryMeElse(usize),
-    TrustMe,
+    TrustMe(usize),
     TryMeElse(usize),
 }
 
@@ -63,14 +65,14 @@ impl ChoiceInstruction {
             &ChoiceInstruction::RetryMeElse(offset) => {
                 functor!("retry_me_else", [integer(offset)])
             }
-            &ChoiceInstruction::TrustMe => {
-                functor!("trust_me")
+            &ChoiceInstruction::TrustMe(offset) => {
+                functor!("trust_me", [integer(offset)])
             }
             &ChoiceInstruction::DefaultRetryMeElse(offset) => {
                 functor!("default_retry_me_else", [integer(offset)])
             }
-            &ChoiceInstruction::DefaultTrustMe => {
-                functor!("default_trust_me")
+            &ChoiceInstruction::DefaultTrustMe(offset) => {
+                functor!("default_trust_me", [integer(offset)])
             }
         }
     }
@@ -106,17 +108,11 @@ impl CutInstruction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum IndexedChoiceInstruction {
     Retry(usize),
     Trust(usize),
     Try(usize),
-}
-
-impl From<IndexedChoiceInstruction> for Line {
-    fn from(i: IndexedChoiceInstruction) -> Self {
-        Line::IndexedChoice(i)
-    }
 }
 
 impl IndexedChoiceInstruction {
@@ -145,18 +141,39 @@ impl IndexedChoiceInstruction {
 
 /// A `Line` is an instruction (cf. page 98 of wambook).
 #[derive(Debug)]
+pub enum IndexingLine {
+    Indexing(IndexingInstruction),
+    IndexedChoice(SliceDeque<IndexedChoiceInstruction>),
+}
+
+impl From<IndexingInstruction> for IndexingLine {
+    #[inline]
+    fn from(instr: IndexingInstruction) -> Self {
+        IndexingLine::Indexing(instr)
+    }
+}
+
+impl From<SliceDeque<IndexedChoiceInstruction>> for IndexingLine {
+    #[inline]
+    fn from(instrs: SliceDeque<IndexedChoiceInstruction>) -> Self {
+        IndexingLine::IndexedChoice(instrs)
+    }
+}
+
+#[derive(Debug)]
 pub enum Line {
     Arithmetic(ArithmeticInstruction),
     Choice(ChoiceInstruction),
     Control(ControlInstruction),
     Cut(CutInstruction),
     Fact(FactInstruction),
-    Indexing(IndexingInstruction),
+    IndexingCode(Vec<IndexingLine>),
     IndexedChoice(IndexedChoiceInstruction),
     Query(QueryInstruction),
 }
 
 impl Line {
+    #[inline]
     pub fn is_head_instr(&self) -> bool {
         match self {
             &Line::Cut(_) => true,
@@ -166,16 +183,64 @@ impl Line {
         }
     }
 
-    pub fn to_functor(&self, h: usize) -> MachineStub {
+    pub fn enqueue_functors(&self, mut h: usize, functors: &mut Vec<MachineStub>) {
         match self {
-            &Line::Arithmetic(ref arith_instr) => arith_instr.to_functor(h),
-            &Line::Choice(ref choice_instr) => choice_instr.to_functor(),
-            &Line::Control(ref control_instr) => control_instr.to_functor(),
-            &Line::Cut(ref cut_instr) => cut_instr.to_functor(h),
-            &Line::Fact(ref fact_instr) => fact_instr.to_functor(h),
-            &Line::Indexing(ref indexing_instr) => indexing_instr.to_functor(),
-            &Line::IndexedChoice(ref indexed_choice_instr) => indexed_choice_instr.to_functor(),
-            &Line::Query(ref query_instr) => query_instr.to_functor(h),
+            &Line::Arithmetic(ref arith_instr) =>
+                functors.push(arith_instr.to_functor(h)),
+            &Line::Choice(ref choice_instr) =>
+                functors.push(choice_instr.to_functor()),
+            &Line::Control(ref control_instr) =>
+                functors.push(control_instr.to_functor()),
+            &Line::Cut(ref cut_instr) =>
+                functors.push(cut_instr.to_functor(h)),
+            &Line::Fact(ref fact_instr) =>
+                functors.push(fact_instr.to_functor(h)),
+            &Line::IndexingCode(ref indexing_instrs) => {
+                for indexing_instr in indexing_instrs {
+                    match indexing_instr {
+                        IndexingLine::Indexing(indexing_instr) => {
+                            let section = indexing_instr.to_functor(h);
+                            h += section.len();
+                            functors.push(section);
+                        }
+                        IndexingLine::IndexedChoice(indexed_choice_instrs) => {
+                            for indexed_choice_instr in indexed_choice_instrs {
+                                let section = indexed_choice_instr.to_functor();
+                                h += section.len();
+                                functors.push(section);
+                            }
+                        }
+                    }
+                }
+            }
+            &Line::IndexedChoice(ref indexed_choice_instr) =>
+                functors.push(indexed_choice_instr.to_functor()),
+            &Line::Query(ref query_instr) =>
+                functors.push(query_instr.to_functor(h)),
+        }
+    }
+}
+
+#[inline]
+pub fn to_indexing_line_mut(line: &mut Line) -> Option<&mut Vec<IndexingLine>> {
+    match line {
+        Line::IndexingCode(ref mut indexing_code) => {
+            Some(indexing_code)
+        }
+        _ => {
+            None
+        }
+    }
+}
+
+#[inline]
+pub fn to_indexing_line(line: &Line) -> Option<&Vec<IndexingLine>> {
+    match line {
+        Line::IndexingCode(ref indexing_code) => {
+            Some(indexing_code)
+        }
+        _ => {
+            None
         }
     }
 }
@@ -386,6 +451,9 @@ pub enum ControlInstruction {
     CallClause(ClauseType, usize, usize, bool, bool),
     Deallocate,
     JmpBy(usize, usize, usize, bool), // arity, global_offset, perm_vars after threshold, last call.
+    RevJmpBy(usize), // notice the lack of context change as in
+                     // JmpBy. RevJmpBy is used only to patch extensible
+                     // predicates together.
     Proceed,
 }
 
@@ -418,6 +486,9 @@ impl ControlInstruction {
             &ControlInstruction::JmpBy(_, offset, ..) => {
                 functor!("jmp_by", [integer(offset)])
             }
+            &ControlInstruction::RevJmpBy(offset) => {
+                functor!("rev_jmp_by", [integer(offset)])
+            }
             &ControlInstruction::Proceed => {
                 functor!("proceed")
             }
@@ -429,40 +500,94 @@ impl ControlInstruction {
 #[derive(Debug)]
 pub enum IndexingInstruction {
     // The first index is the optimal argument being indexed.
-    SwitchOnTerm(usize, usize, usize, usize, usize),
-    SwitchOnConstant(usize, usize, IndexMap<Constant, usize>),
-    SwitchOnStructure(usize, usize, IndexMap<(ClauseName, usize), usize>),
-}
-
-impl From<IndexingInstruction> for Line {
-    fn from(i: IndexingInstruction) -> Self {
-        Line::Indexing(i)
-    }
+    SwitchOnTerm(usize, usize, IndexingCodePtr, IndexingCodePtr, IndexingCodePtr),
+    SwitchOnConstant(IndexMap<Constant, IndexingCodePtr>),
+    SwitchOnStructure(IndexMap<(ClauseName, usize), IndexingCodePtr>),
 }
 
 impl IndexingInstruction {
-    pub fn to_functor(&self) -> MachineStub {
+    pub fn to_functor(&self, mut h: usize) -> MachineStub {
         match self {
             &IndexingInstruction::SwitchOnTerm(arg, vars, constants, lists, structures) => {
                 functor!(
                     "switch_on_term",
                     [integer(arg),
                      integer(vars),
-                     integer(constants),
-                     integer(lists),
-                     integer(structures)]
+                     indexing_code_ptr(h, constants),
+                     indexing_code_ptr(h, lists),
+                     indexing_code_ptr(h, structures)]
                 )
             }
-            &IndexingInstruction::SwitchOnConstant(arg, constants, _) => {
+            &IndexingInstruction::SwitchOnConstant(ref constants) => {
+                let mut key_value_list_stub = vec![];
+                let orig_h = h;
+
+                h += 2; // skip the 2-cell "switch_on_constant" functor.
+
+                for (c, ptr) in constants.iter() {
+                    let key_value_pair = functor!(
+                        ":",
+                        SharedOpDesc::new(600, XFY),
+                        [constant(c),
+                         indexing_code_ptr(h + 3, *ptr)]
+                    );
+
+                    key_value_list_stub.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
+                    key_value_list_stub.push(HeapCellValue::Addr(Addr::Str(h + 3)));
+                    key_value_list_stub.push(HeapCellValue::Addr(
+                        Addr::HeapCell(h + 3 + key_value_pair.len())
+                    ));
+
+                    h += key_value_pair.len() + 3;
+                    key_value_list_stub.extend(key_value_pair.into_iter());
+                }
+
+                key_value_list_stub.push(HeapCellValue::Addr(Addr::EmptyList));
+
                 functor!(
                     "switch_on_constant",
-                    [integer(arg), integer(constants)]
+                    [aux(orig_h, 0)],
+                    [key_value_list_stub]
                 )
             }
-            &IndexingInstruction::SwitchOnStructure(arg, structures, _) => {
+            &IndexingInstruction::SwitchOnStructure(ref structures) => {
+                let mut key_value_list_stub = vec![];
+                let orig_h = h;
+
+                h += 2; // skip the 2-cell "switch_on_constant" functor.
+
+                for ((name, arity), ptr) in structures.iter() {
+                    let predicate_indicator_stub = functor!(
+                        "/",
+                        SharedOpDesc::new(400, YFX),
+                        [clause_name(name.clone()),
+                         integer(*arity)]
+                    );
+
+                    let key_value_pair = functor!(
+                        ":",
+                        SharedOpDesc::new(600, XFY),
+                        [aux(h + 3, 0),
+                         indexing_code_ptr(h + 3, *ptr)],
+                        [predicate_indicator_stub]
+                    );
+
+                    key_value_list_stub.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
+                    key_value_list_stub.push(HeapCellValue::Addr(Addr::Str(h + 3)));
+                    key_value_list_stub.push(HeapCellValue::Addr(
+                        Addr::HeapCell(h + 3 + key_value_pair.len())
+                    ));
+
+                    h += key_value_pair.len() + 3;
+                    key_value_list_stub.extend(key_value_pair.into_iter());
+                }
+
+                key_value_list_stub.push(HeapCellValue::Addr(Addr::EmptyList));
+
                 functor!(
                     "switch_on_structure",
-                    [integer(arg), integer(structures)]
+                    [aux(orig_h, 0)],
+                    [key_value_list_stub]
                 )
             }
         }
@@ -710,8 +835,4 @@ impl QueryInstruction {
 
 pub type CompiledFact = Vec<FactInstruction>;
 
-pub type ThirdLevelIndex = Vec<IndexedChoiceInstruction>;
-
 pub type Code = Vec<Line>;
-
-pub type CodeDeque = VecDeque<Line>;

@@ -402,6 +402,7 @@ pub fn requires_space(atom: &str, op: &str) -> bool {
     }
 }
 
+/*
 fn reverse_heap_locs<'a>(machine_st: &'a MachineState) -> ReverseHeapVarDict {
     machine_st
         .heap_locs
@@ -414,6 +415,7 @@ fn reverse_heap_locs<'a>(machine_st: &'a MachineState) -> ReverseHeapVarDict {
         })
         .collect()
 }
+*/
 
 fn non_quoted_graphic_token<Iter: Iterator<Item = char>>(mut iter: Iter, c: char) -> bool {
     if c == '/' {
@@ -503,7 +505,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             max_depth: 0,
         }
     }
-
+/*
     pub fn from_heap_locs(
         machine_st: &'a MachineState,
         op_dir: &'a OpDir,
@@ -520,17 +522,20 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         printer
     }
-
+*/
+/*
     pub fn drop_toplevel_spec(&mut self) {
         self.toplevel_spec = None;
     }
-
+*/
+/*
     #[inline]
     pub fn see_all_locs(&mut self) {
         for key in self.heap_locs.keys().cloned() {
             self.printed_vars.insert(key);
         }
     }
+*/
 
     #[inline]
     fn ambiguity_check(&self, atom: &str) -> bool {
@@ -1024,7 +1029,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
     fn print_rational(&mut self, r: &Rational, add_brackets: bool) {
         match self.op_dir.get(&(clause_name!("rdiv"), Fixity::In)) {
-            Some(OpDirValue(ref spec, _)) => {
+            Some(OpDirValue(ref spec)) => {
                 if add_brackets {
                     self.state_stack.push(TokenOrRedirect::Close);
                 }

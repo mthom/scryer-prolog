@@ -13,9 +13,15 @@ iterate([Var|VarBindings], [Value|ValueBindings], [ListOfGoalLists | ListsCubed]
     iterate(VarBindings, ValueBindings, ListsCubed).
 iterate([], [], []).
 
+/*
 gather_modules(Attrs, []) :- var(Attrs), !.
 gather_modules([Attr|Attrs], [Module|Modules]) :-
     '$module_of'(Module, Attr),  % write the owning module of Attr to Module.
+    gather_modules(Attrs, Modules).
+*/
+
+gather_modules(Attrs, []) :- var(Attrs), !.
+gather_modules([Module:_|Attrs], [Module|Modules]) :-
     gather_modules(Attrs, Modules).
 
 call_verify_attributes(Attrs, _, _, []) :-
@@ -24,7 +30,7 @@ call_verify_attributes([], _, _, []).
 call_verify_attributes([Attr|Attrs], Var, Value, ListOfGoalLists) :-
     gather_modules([Attr|Attrs], Modules0),
     sort(Modules0, Modules),
-    verify_attrs(Modules, Var, Value, ListOfGoalLists).
+    verify_attrs(Modules, Var, Value, ListOfGoalLists). % verify_attrs(Modules, Var, Value, ListOfGoalLists).
 
 verify_attrs([Module|Modules], Var, Value, [Goals|ListOfGoalLists]) :-
     catch(Module:verify_attributes(Var, Value, Goals),
@@ -32,6 +38,15 @@ verify_attrs([Module|Modules], Var, Value, [Goals|ListOfGoalLists]) :-
           Goals = []),
     verify_attrs(Modules, Var, Value, ListOfGoalLists).
 verify_attrs([], _, _, []).
+
+/*
+verify_attrs([Module|Modules], Var, Value, [Goals|ListOfGoalLists]) :-
+    catch(Module:verify_attributes(Var, Value, Goals),
+          error(evaluation_error((Module:verify_attributes)/3), verify_attributes/3),
+          Goals = []),
+    verify_attrs(Modules, Var, Value, ListOfGoalLists).
+verify_attrs([], _, _, []).
+*/
 
 call_goals([ListOfGoalLists | ListsCubed]) :-
     call_goals_0(ListOfGoalLists),

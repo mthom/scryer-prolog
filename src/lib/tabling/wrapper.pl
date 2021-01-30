@@ -75,7 +75,7 @@ wrappers(Name/Arity) -->
 	  atom_concat(Name, ' tabled', WrapName),
 	  Head =.. [Name|Args],
 	  WrappedHead =.. [WrapName|Args],
-	  '$module_of'(Module, Name) %prolog_load_context(module, Module)
+	  prolog_load_context(module, Module)
 	},
 	[ (   Head :-
 		 start_tabling(Module:Head, WrappedHead)
@@ -109,10 +109,10 @@ rename_term(Name, WrapName) :-
 
 
 user:term_expansion(Term0, Clauses) :-
-        nonvar(Term0),
+    nonvar(Term0),
 	Term0 = (:- table Preds),
 	phrase(wrappers(Preds), Clauses).
 user:term_expansion(Clause, NewClause) :-
-        nonvar(Clause),
-	'$module_of'(Module, Clause),
+    nonvar(Clause),
+    prolog_load_context(module, Module),
 	rename(Clause, NewClause, Module).

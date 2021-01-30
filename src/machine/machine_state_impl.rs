@@ -4,6 +4,7 @@ use crate::prolog_parser::tabled_rc::*;
 use crate::clause_types::*;
 use crate::forms::*;
 use crate::heap_iter::*;
+use crate::indexing::*;
 use crate::instructions::*;
 use crate::machine::INTERRUPT;
 use crate::machine::attributed_variables::*;
@@ -13,6 +14,7 @@ use crate::machine::heap::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
+use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::ordered_float::*;
@@ -24,22 +26,11 @@ use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
-macro_rules! try_or_fail {
-    ($s:ident, $e:expr) => {{
-        match $e {
-            Ok(val) => val,
-            Err(msg) => {
-                $s.throw_exception(msg);
-                return;
-            }
-        }
-    }};
-}
-
 impl MachineState {
     pub(crate)
     fn new() -> Self {
         MachineState {
+            atom_tbl: TabledData::new(Rc::new("".to_owned())),
             s: HeapPtr::default(),
             p: CodePtr::default(),
             b: 0,
@@ -60,36 +51,6 @@ impl MachineState {
             ball: Ball::new(),
             lifted_heap: Heap::new(),
             interms: vec![Number::default(); 256],
-            last_call: false,
-            heap_locs: HeapVarDict::new(),
-            flags: MachineFlags::default(),
-            at_end_of_expansion: false
-        }
-    }
-
-    pub(crate)
-    fn with_small_heap() -> Self {
-        MachineState {
-            s: HeapPtr::default(),
-            p: CodePtr::default(),
-            b: 0,
-            b0: 0,
-            e: 0,
-            num_of_args: 0,
-            cp: LocalCodePtr::default(),
-            attr_var_init: AttrVarInitializer::new(0, 0),
-            fail: false,
-            heap: Heap::new(),
-            mode: MachineMode::Write,
-            stack: Stack::new(),
-            registers: vec![Addr::HeapCell(0); MAX_ARITY + 1], // self.registers[0] is never used.
-            trail: vec![],
-            tr: 0,
-            hb: 0,
-            block: 0,
-            ball: Ball::new(),
-            lifted_heap: Heap::new(),
-            interms: vec![Number::default(); 0],
             last_call: false,
             heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default(),
@@ -1390,85 +1351,130 @@ impl MachineState {
     }
 
     pub(super)
-    fn execute_indexing_instr(&mut self, instr: &IndexingInstruction) {
-        match instr {
-            &IndexingInstruction::SwitchOnTerm(arg, v, c, l, s) => {
-                let addr = self[temp_v!(arg)];
-                let addr = self.store(self.deref(addr));
+    fn execute_indexing_instr(
+        &mut self,
+        indexing_lines: &Vec<IndexingLine>,
+        call_policy: &mut Box<dyn CallPolicy>,
+    ) {
+        let mut index = 0;
+        let addr =
+            match &indexing_lines[0] {
+                &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(arg, ..)) => {
+                    self.store(self.deref(self[temp_v!(arg)]))
+                }
+                _ => {
+                    unreachable!()
+                }
+            };
 
-                let offset = match addr {
-                    Addr::Stream(_) | Addr::TcpListener(_) => {
-                        0
-                    }
-                    Addr::HeapCell(_) | Addr::StackCell(..) | Addr::AttrVar(..) => {
-                        v
-                    }
-                    Addr::PStrLocation(..) => {
-                        l
-                    }
-                    Addr::Char(_) | Addr::Con(_) | Addr::CutPoint(_) |
-                    Addr::EmptyList | Addr::Fixnum(_) | Addr::Float(_) | Addr::Usize(_) => {
-                        c
-                    }
-                    Addr::Lis(_) => {
-                        l
-                    }
-                    Addr::Str(_) => {
-                        s
-                    }
-                };
-
-                match offset {
-                    0 => self.fail = true,
-                    o => self.p += o,
-                };
-            }
-            &IndexingInstruction::SwitchOnConstant(arg, _, ref hm) => {
-                let addr = self[temp_v!(arg)];
-                let addr = self.store(self.deref(addr));
-
-                let offset =
-                    match addr.as_constant_index(&self) {
-                        Some(c) => {
-                            match hm.get(&c) {
-                                Some(offset) => *offset,
-                                _ => 0,
-                            }
+        loop {
+            match &indexing_lines[index] {
+                &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, c, l, s)) => {
+                    let offset = match addr {
+                        Addr::LoadStatePayload(_) | Addr::Stream(_) | Addr::TcpListener(_) => {
+                            IndexingCodePtr::Fail
                         }
-                        None => {
-                            0
+                        Addr::HeapCell(_) | Addr::StackCell(..) | Addr::AttrVar(..) => {
+                            IndexingCodePtr::External(v)
+                        }
+                        Addr::PStrLocation(..) => {
+                            l
+                        }
+                        Addr::Char(_) | Addr::Con(_) | Addr::CutPoint(_) |
+                        Addr::EmptyList | Addr::Fixnum(_) | Addr::Float(_) | Addr::Usize(_) => {
+                            c
+                        }
+                        Addr::Lis(_) => {
+                            l
+                        }
+                        Addr::Str(_) => {
+                            s
                         }
                     };
 
-                match offset {
-                    0 => self.fail = true,
-                    o => self.p += o,
-                };
-            }
-            &IndexingInstruction::SwitchOnStructure(arg, _, ref hm) => {
-                let a1 = self.registers[arg];
-                let addr = self.store(self.deref(a1));
-
-                let offset = match addr {
-                    Addr::Str(s) => {
-                        if let &HeapCellValue::NamedStr(arity, ref name, _) = &self.heap[s] {
-                            match hm.get(&(name.clone(), arity)) {
-                                Some(offset) => *offset,
-                                _ => 0,
+                    match offset {
+                        IndexingCodePtr::Fail => {
+                            self.fail = true;
+                            break;
+                        }
+                        IndexingCodePtr::External(o) => {
+                            self.p += o;
+                            break;
+                        }
+                        IndexingCodePtr::Internal(o) => {
+                            index += o;
+                        }
+                    };
+                }
+                &IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref hm)) => {
+                    let offset =
+                        match addr.as_constant_index(&self) {
+                            Some(c) => {
+                                match hm.get(&c) {
+                                    Some(offset) => *offset,
+                                    _ => IndexingCodePtr::Fail,
+                                }
                             }
-                        } else {
-                            0
+                            None => {
+                                IndexingCodePtr::Fail
+                            }
+                        };
+
+                    match offset {
+                        IndexingCodePtr::Fail => {
+                            self.fail = true;
+                            break;
+                        }
+                        IndexingCodePtr::External(o) => {
+                            self.p += o;
+                            break;
+                        }
+                        IndexingCodePtr::Internal(o) => {
+                            index += o;
+                        }
+                    };
+                }
+                &IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref hm)) => {
+                    let offset = match addr {
+                        Addr::Str(s) => {
+                            if let &HeapCellValue::NamedStr(arity, ref name, _) = &self.heap[s] {
+                                match hm.get(&(name.clone(), arity)) {
+                                    Some(offset) => *offset,
+                                    _ => IndexingCodePtr::Fail
+                                }
+                            } else {
+                                IndexingCodePtr::Fail
+                            }
+                        }
+                        _ => {
+                            IndexingCodePtr::Fail
+                        }
+                    };
+
+                    match offset {
+                        IndexingCodePtr::Fail => {
+                            self.fail = true;
+                            break;
+                        }
+                        IndexingCodePtr::External(o) => {
+                            self.p += o;
+                            break;
+                        }
+                        IndexingCodePtr::Internal(o) => {
+                            index += o;
                         }
                     }
-                    _ => {
-                        0
+                }
+                &IndexingLine::IndexedChoice(ref instrs) => {
+                    if let LocalCodePtr::DirEntry(p) = self.p.local() {
+                        self.p = CodePtr::Local(LocalCodePtr::IndexingBuf(p, index, 0));
+                    } else {
+                        unreachable!()
                     }
-                };
 
-                match offset {
-                    0 => self.fail = true,
-                    o => self.p += o,
-                };
+                    self.execute_indexed_choice_instr(instrs.first().unwrap(), call_policy);
+                    break;
+                }
             }
         };
     }
@@ -1679,23 +1685,38 @@ impl MachineState {
         Some((name, arity + narity - 1))
     }
 
-    pub(super) fn unwind_stack(&mut self) {
+    pub(super)
+    fn unwind_stack(&mut self) {
         self.b = self.block;
         self.fail = true;
     }
 
-    pub(crate) fn is_cyclic_term(&self, addr: Addr) -> bool {
+    pub(crate)
+    fn is_cyclic_term(&self, addr: Addr) -> bool {
         let mut seen = IndexSet::new();
         let mut fail = false;
         let mut iter = self.pre_order_iter(addr);
 
+        let is_composite = |addr: &Addr| {
+            match *addr {
+                Addr::Str(_) | Addr::Lis(_) | Addr::PStrLocation(..) => {
+                    true
+                }
+                _ => {
+                    false
+                }
+            }
+        };
+
         loop {
             if let Some(addr) = iter.stack().last() {
-                if !seen.contains(addr) {
-                    seen.insert(*addr);
-                } else {
-                    fail = true;
-                    break;
+                if is_composite(addr) {
+                    if !seen.contains(addr) {
+                        seen.insert(*addr);
+                    } else {
+                        fail = true;
+                        break;
+                    }
                 }
             }
 
@@ -2513,7 +2534,7 @@ impl MachineState {
     }
 
     pub(super)
-    fn try_functor(&mut self, indices: &IndexStore) -> CallResult {
+    fn try_functor(&mut self, op_dir: &OpDir) -> CallResult {
         let stub = MachineError::functor_stub(clause_name!("functor"), 3);
         let a1 = self.store(self.deref(self[temp_v!(1)]));
 
@@ -2531,7 +2552,7 @@ impl MachineState {
                         name.clone(),
                         arity,
                         spec,
-                        &indices.op_dir,
+                        &op_dir,
                     );
 
                     self.try_functor_compound_case(name, arity, spec)
@@ -2545,7 +2566,7 @@ impl MachineState {
                     clause_name!("."),
                     2,
                     None,
-                    &indices.op_dir,
+                    &op_dir,
                 );
 
                 self.try_functor_compound_case(clause_name!("."), 2, spec)
@@ -2620,7 +2641,7 @@ impl MachineState {
                                 name,
                                 arity as usize,
                                 spec,
-                                &indices.op_dir,
+                                &op_dir,
                                 a1.as_var().unwrap(),
                             );
                         } else {
@@ -2637,10 +2658,10 @@ impl MachineState {
                     }
                     Addr::Char(c) => {
                         self.try_functor_fabricate_struct(
-                            clause_name!(c.to_string(), indices.atom_tbl),
+                            clause_name!(c.to_string(), self.atom_tbl),
                             arity as usize,
                             None,
-                            &indices.op_dir,
+                            &op_dir,
                             a1.as_var().unwrap(),
                         );
                     }
@@ -3156,16 +3177,23 @@ impl MachineState {
                 call_policy.call_builtin(
                     self,
                     ct,
-                    indices,
+                    &indices.code_dir,
+                    &indices.op_dir,
                     current_input_stream,
                     current_output_stream,
                 )
             ),
             &ClauseType::CallN => try_or_fail!(
                 self,
-                call_policy.call_n(self, arity, indices, current_input_stream, current_output_stream)
+                call_policy.call_n(
+                    self,
+                    arity,
+                    &indices.code_dir,
+                    &indices.op_dir,
+                    current_input_stream,
+                    current_output_stream,
+                )
             ),
-            &ClauseType::Hook(ref hook) => try_or_fail!(self, call_policy.compile_hook(self, hook)),
             &ClauseType::Inlined(ref ct) => {
                 self.execute_inlined(ct);
 
@@ -3176,7 +3204,7 @@ impl MachineState {
             &ClauseType::Named(ref name, _, ref idx) | &ClauseType::Op(ref name, _, ref idx) => {
                 try_or_fail!(
                     self,
-                    call_policy.context_call(self, name.clone(), arity, idx.clone(), indices)
+                    call_policy.context_call(self, name.clone(), arity, idx)
                 )
             }
             &ClauseType::System(ref ct) => try_or_fail!(
@@ -3234,6 +3262,9 @@ impl MachineState {
                 self.b0 = self.b;
                 self.p += offset;
             }
+            &ControlInstruction::RevJmpBy(offset) => {
+                self.p -= offset;
+            }
             &ControlInstruction::Proceed => {
                 self.p = CodePtr::Local(self.cp);
             }
@@ -3272,7 +3303,7 @@ impl MachineState {
                 }
 
                 self.hb = self.heap.h();
-                self.p += offset;
+                self.p = CodePtr::Local(dir_entry!(self.p.local().abs_loc() + offset));
             }
             &IndexedChoiceInstruction::Retry(l) => {
                 try_or_fail!(self, call_policy.retry(self, l));
@@ -3283,7 +3314,8 @@ impl MachineState {
         };
     }
 
-    pub(super) fn execute_choice_instr(
+    pub(super)
+    fn execute_choice_instr(
         &mut self,
         instr: &ChoiceInstruction,
         call_policy: &mut Box<dyn CallPolicy>,
@@ -3320,14 +3352,14 @@ impl MachineState {
                 let mut call_policy = DefaultCallPolicy {};
                 try_or_fail!(self, call_policy.retry_me_else(self, offset))
             }
-            &ChoiceInstruction::DefaultTrustMe => {
+            &ChoiceInstruction::DefaultTrustMe(_) => {
                 let mut call_policy = DefaultCallPolicy {};
                 try_or_fail!(self, call_policy.trust_me(self))
             }
             &ChoiceInstruction::RetryMeElse(offset) => {
                 try_or_fail!(self, call_policy.retry_me_else(self, offset))
             }
-            &ChoiceInstruction::TrustMe => {
+            &ChoiceInstruction::TrustMe(_) => {
                 try_or_fail!(self, call_policy.trust_me(self))
             }
         }
@@ -3373,31 +3405,5 @@ impl MachineState {
                 }
             }
         }
-    }
-
-    pub fn reset(&mut self) {
-        self.stack.drop_in_place();
-
-        self.hb = 0;
-        self.e = 0;
-        self.b = 0;
-        self.b0 = 0;
-        self.s = HeapPtr::default();
-        self.tr = 0;
-        self.p = CodePtr::default();
-        self.cp = LocalCodePtr::default();
-        self.attr_var_init.reset();
-        self.num_of_args = 0;
-
-        self.fail = false;
-        self.trail.clear();
-        self.heap.clear();
-        self.mode = MachineMode::Write;
-        self.registers = vec![Addr::HeapCell(0); MAX_ARITY + 1]; // self.registers[0] is never used.
-        self.block = 0;
-
-        self.ball.reset();
-        self.heap_locs.clear();
-        self.lifted_heap.clear();
     }
 }
