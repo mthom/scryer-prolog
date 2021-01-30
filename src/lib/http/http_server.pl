@@ -33,12 +33,13 @@
    - http_status_code(Responde, StatusCode)
    - http_body(Response/Request, text(Body))
    - http_body(Response/Request, binary(Body))
+   - http_body(Request, form(Form))
    - http_body(Response, file(Filename))
    - http_redirect(Response, Url)
    - http_query(Request, QueryName, QueryValue)
 
    Some things that are still missing:
-   - Read forms
+   - Read forms in multipart format
    - HTTP Basic Auth
    - Keep-Alive support
    - Session handling via cookies
@@ -111,11 +112,22 @@ accept_loop(Socket, Handlers) :-
         ), close(Stream)),
     accept_loop(Socket, Handlers).
 
+match_handler(Handlers, Method, "/", Handler) :-
+    member(H, Handlers),
+    H =.. [Method, /, Handler].
 match_handler(Handlers, Method, Path, Handler) :-
     member(H, Handlers),
     copy_term(H, H1),
     H1 =.. [Method, Pattern, Handler],
+    \+ var(Pattern),
     phrase(path(Pattern), Path).
+match_handler(Handlers, Method, Path, Handler) :-
+    member(H, Handlers),
+    copy_term(H, H1),
+    H1 =.. [Method, Var, Handler],
+    var(Var),
+    Var = Path.
+
 
 % Helper and recommended predicates
 
@@ -123,6 +135,10 @@ http_headers(http_request(Headers, _, _), Headers).
 http_headers(http_response(_, _, Headers), Headers).
 
 http_body(http_request(_, binary(ByteBody), _), text(TextBody)) :- chars_utf8bytes(TextBody, ByteBody).
+http_body(http_request(Headers, binary(ByteBody), _), form(FormBody)) :- 
+    member("content-type"-"application/x-www-form-urlencoded", Headers),
+    chars_utf8bytes(TextBody, ByteBody),
+    phrase(parse_queries(FormBody), TextBody).
 http_body(http_request(_, Body, _), Body).
 http_body(http_response(_, Body, _), Body).
 
