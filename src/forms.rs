@@ -228,7 +228,13 @@ impl PredicateClause {
                     _ => None,
                 }
             },
-            PredicateClause::Rule(ref rule, ..) => Some(&rule.head.1),
+            PredicateClause::Rule(ref rule, ..) => {
+                if rule.head.1.is_empty() {
+                    None
+                } else {
+                    Some(&rule.head.1)
+                }
+            }
         }
     }
 
