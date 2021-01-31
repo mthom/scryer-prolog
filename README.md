@@ -7,6 +7,36 @@ programming, which is itself written in a high-level language.
 
 ![Scryer Logo: Cryer](logo/scryer.png)
 
+## Rebis Development Branch
+
+This is the Rebis development branch, which is planned to converge on
+version 0.9.0 of Scryer Prolog. As Rebis progresses to completion, it
+will absorb contributions made to complementary parts of the master
+branch. As such, it is now the bleeding edge version of Scryer.
+
+The major contribution of Rebis is the transition to a predicate-based
+module system from the atom-based module system of the master
+branch. Much of the compilation procedure has been ported from Rust to
+Prolog, and is laid out in the files `loader.[rs|pl]`. 
+
+A minimalized bootstrapping procedure written entirely in Rust is used
+to load `loader.pl` and several preliminary libraries into Scryer,
+which is called from `toplevel.pl` to compile and load new modules.
+
+Some established features of Scryer have been temporarily disrupted by
+Rebis' sweeping changes:
+
+* Logical update semantics must be re-implemented, although
+`asserta/1`, `assertz/1`, `retract/1`, and `clause/2` otherwise
+work as expected using the new incremental clause compilation of
+`compile.rs`.
+
+* Metacalls in several libraries must be modified to use the new
+predicate-based module system.
+
+* `multifile` declarations are no longer supported by the Rust loader.
+The current plan is to re-implement them mostly in Prolog.
+
 ## Phase 1
 
 Produce an implementation of the Warren Abstract Machine in Rust, done
