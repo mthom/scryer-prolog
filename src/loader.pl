@@ -421,7 +421,7 @@ thread_goals(Goals0, Goals1, Functor) :-
 
 thread_goals(Goals0, Goals1, Hole, Functor) :-
     (  var(Goals0) ->
-       Goals0 = Goals1
+       Goals1 =.. [Functor, Goals0, Hole]
     ;  (  Goals0 = [G | Gs] ->
           (  Gs == [] ->
              Goals1 =.. [Functor, G, Hole]
