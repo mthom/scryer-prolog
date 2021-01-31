@@ -1002,7 +1002,25 @@ fn append_compiled_clause(
                 );
 
                 if lower_bound + 1 == target_pos {
-                    set_switch_var_offset(code, index_loc, 1, retraction_info);
+                    let lower_bound_clause_start = find_inner_choice_instr(
+                        code,
+                        skeleton.clauses[lower_bound].clause_start,
+                        index_loc,
+                    );
+
+                    set_switch_var_offset(
+                        code,
+                        index_loc,
+                        lower_bound_clause_start - index_loc,
+                        retraction_info,
+                    );
+
+                    thread_choice_instr_at_to(
+                        code,
+                        lower_bound_clause_start,
+                        skeleton.clauses[target_pos].clause_start,
+                        retraction_info,
+                    );
                 }
 
                 skeleton.clauses[target_pos - 1].clause_start
@@ -1389,6 +1407,12 @@ impl<'a> LoadState<'a> {
                 Some(target_indexing_loc)
                     if mergeable_indexed_subsequences(lower_bound, target_pos, skeleton) =>
                 {
+                    let lower_bound_clause_start = find_inner_choice_instr(
+                        code,
+                        skeleton.clauses[lower_bound].clause_start,
+                        target_indexing_loc,
+                    );
+
                     let result;
 
                     match skeleton.clauses[target_pos + 1].opt_arg_index_key.switch_on_term_loc() {
@@ -1416,7 +1440,7 @@ impl<'a> LoadState<'a> {
                             set_switch_var_offset(
                                 code,
                                 later_indexing_loc,
-                                target_indexing_loc - later_indexing_loc + 1,
+                                lower_bound_clause_start - later_indexing_loc, // target_indexing_loc - later_indexing_loc + 1,
                                 &mut self.retraction_info,
                             );
 
@@ -1440,7 +1464,7 @@ impl<'a> LoadState<'a> {
                             set_switch_var_offset_to_choice_instr_(
                                 code,
                                 target_indexing_loc,
-                                1,
+                                lower_bound_clause_start - target_indexing_loc, //1,
                                 &mut self.retraction_info,
                             );
 
