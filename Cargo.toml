@@ -11,6 +11,9 @@ keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build.rs"
 
+[workspace]
+members = ["prolog_parser"]
+
 [build-dependencies]
 indexmap = "1.0.2"
 
@@ -32,7 +35,7 @@ libc = "0.2.62"
 nix = "0.15.0"
 num-rug-adapter = { optional = true, version = "0.1.4" }
 ordered-float = "0.5.0"
-prolog_parser = { version = "0.8.68", default-features = false }
+prolog_parser = { path = "./prolog_parser", default-features = false }
 ref_thread_local = "0.0.0"
 rug = { version = "1.4.0", optional = true }
 rustyline = "7.0.0"
