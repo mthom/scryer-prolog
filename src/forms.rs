@@ -1,5 +1,5 @@
-use crate::prolog_parser::ast::*;
-use crate::prolog_parser::parser::OpDesc;
+use crate::prolog_parser_rebis::ast::*;
+use crate::prolog_parser_rebis::parser::OpDesc;
 
 use crate::clause_types::*;
 use crate::machine::machine_errors::*;

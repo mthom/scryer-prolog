@@ -1,4 +1,4 @@
-use crate::prolog_parser::ast::*;
+use crate::prolog_parser_rebis::ast::*;
 
 use crate::read::PrologStream;
 use crate::read::readline::*;

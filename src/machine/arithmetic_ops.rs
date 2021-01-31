@@ -1,6 +1,6 @@
 use crate::divrem::*;
 
-use crate::prolog_parser::ast::*;
+use crate::prolog_parser_rebis::ast::*;
 
 use crate::arithmetic::*;
 use crate::clause_types::*;

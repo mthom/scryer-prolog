@@ -16,7 +16,7 @@ extern crate nix;
 extern crate openssl;
 extern crate ordered_float;
 #[macro_use]
-extern crate prolog_parser;
+extern crate prolog_parser_rebis;
 #[macro_use]
 extern crate ref_thread_local;
 extern crate ring;
