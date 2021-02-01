@@ -346,15 +346,6 @@ impl Machine {
         lib_path.pop(); // remove the "lib" at the end
 
         bootstrapping_compile(
-            Stream::from(include_str!("../term_and_goal_expansion.pl")),
-            &mut wam,
-            ListingSource::from_file_and_path(
-                clause_name!("term_and_goal_expansion.pl"),
-                lib_path.clone(),
-            ),
-        ).unwrap();
-
-        bootstrapping_compile(
             Stream::from(include_str!("../loader.pl")),
             &mut wam,
             ListingSource::from_file_and_path(

@@ -17,6 +17,51 @@
 :- use_module(library(pairs)).
 
 
+'$print_message_and_fail'(Error, Culprit) :-
+%    writeq(error(Error, Culprit)),
+%    nl,
+    '$fail'.
+
+expand_term(Term, ExpandedTerm) :-
+    (  catch(user:term_expansion(Term, ExpandedTerm0),
+             E,
+             loader:'$print_message_and_fail'(E, user:term_expansion)) ->
+       (  var(ExpandedTerm0) ->
+          error:instantiation_error(term_expansion/2)
+       ;  ExpandedTerm0 = [_|_] ->
+          term_expansion_list(ExpandedTerm0, ExpandedTerm, [])
+       ;  expand_term(ExpandedTerm0, ExpandedTerm) % term_expansion(ExpandedTerm0, ExpandedTerm)
+       )
+    ;  Term = ExpandedTerm
+    ).
+
+
+term_expansion_list([], ExpandedTerms, ExpandedTerms).
+term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
+    expand_term(Term, ExpandedTerm0), % term_expansion(Term, ExpandedTerm0),
+    (  var(ExpandedTerm0) ->
+       error:instantiation_error(term_expansion/2)
+    ;  ExpandedTerm0 = [_|_] ->
+       term_expansion_list(ExpandedTerm0, ExpandedTermsHead, ExpandedTerms0Tail),
+       term_expansion_list(Terms, ExpandedTerms0Tail, ExpandedTermsTail)
+    ;  ExpandedTermsHead = [ExpandedTerm0 | ExpandedTerms0Tail],
+       term_expansion_list(Terms, ExpandedTerms0Tail, ExpandedTermsTail)
+    ).
+
+
+goal_expansion(Goal, Module, ExpandedGoal) :-
+    (  catch(Module:goal_expansion(Goal, ExpandedGoal0),
+             E,
+             loader:'$print_message_and_fail'(E, Module:goal_expansion)) ->
+       (  var(ExpandedGoal0) ->
+          error:instantiation_error(goal_expansion/2)
+       ;  goal_expansion(ExpandedGoal0, Module, ExpandedGoal)
+       )
+    ;  Goal = ExpandedGoal
+    ).
+
+
+
 create_file_load_context(Stream, Path, Evacuable) :-
     '$push_load_context'(Stream, Path),
     '$push_load_state_payload'(Evacuable).
@@ -132,10 +177,6 @@ expand_terms_and_goals(Term, Terms) :-
     ).
 
 
-expand_term(UnexpandedTerm, ExpandedTerm) :-
-    user:term_expansion(UnexpandedTerm, ExpandedTerm).
-
-
 compile_dispatch_or_clause_on_list([], Evacuable, VNs).
 compile_dispatch_or_clause_on_list([Term | Terms], Evacuable, VNs) :-
     compile_dispatch_or_clause(Term, Evacuable, VNs),
@@ -158,13 +199,13 @@ compile_dispatch((:- Declaration), Evacuable, _VNs) :-
        compile_declaration(Declaration, Evacuable)
     ).
 compile_dispatch(term_expansion(Term, Terms), Evacuable, VNs) :-
-    '$add_term_expansion_clause'('$term_expansion'(Term, Terms), Evacuable, VNs).
+    '$add_term_expansion_clause'(term_expansion(Term, Terms), Evacuable, VNs).
 compile_dispatch((term_expansion(Term, Terms) :- Body), Evacuable, VNs) :-
-    '$add_term_expansion_clause'(('$term_expansion'(Term, Terms) :- Body), Evacuable, VNs).
+    '$add_term_expansion_clause'((term_expansion(Term, Terms) :- Body), Evacuable, VNs).
 compile_dispatch(user:term_expansion(Term, Terms), Evacuable, VNs) :-
-    '$add_term_expansion_clause'('$term_expansion'(Term, Terms), Evacuable, VNs).
+    '$add_term_expansion_clause'(term_expansion(Term, Terms), Evacuable, VNs).
 compile_dispatch((user:term_expansion(Term, Terms) :- Body), Evacuable, VNs) :-
-    '$add_term_expansion_clause'(('$term_expansion'(Term, Terms) :- Body), Evacuable, VNs).
+    '$add_term_expansion_clause'((term_expansion(Term, Terms) :- Body), Evacuable, VNs).
 compile_dispatch(goal_expansion(Term, Terms), Evacuable, VNs) :-
     prolog_load_context(module, Target),
     '$add_goal_expansion_clause'(Target, goal_expansion(Term, Terms), Evacuable, VNs).
@@ -263,6 +304,7 @@ load_context_path(Module, Path) :-
        Module = Path
     ).
 
+
 use_module(Module, Exports, Evacuable) :-
     (  var(Module) ->
        instantiation_error(load/1)
@@ -334,9 +376,9 @@ strip_module(Goal, M, G) :-
 expand_subgoal(UnexpandedGoals, MS, Module, ExpandedGoals, HeadVars) :-
     (  var(UnexpandedGoals) ->
        UnexpandedGoals = ExpandedGoals
-    ;  user:goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
+    ;  goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
        (  Module \== user ->
-          user:goal_expansion(UnexpandedGoals1, user, Goals)
+          goal_expansion(UnexpandedGoals1, user, Goals)
        ;  Goals = UnexpandedGoals1
        ),
        (  inner_meta_specs(MS, Goals, _, MetaSpecs) ->
@@ -393,9 +435,9 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals) :-
 expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
     (  var(UnexpandedGoals) ->
        UnexpandedGoals = ExpandedGoals
-    ;  user:goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
+    ;  goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
        (  Module \== user ->
-          user:goal_expansion(UnexpandedGoals1, user, Goals)
+          goal_expansion(UnexpandedGoals1, user, Goals)
        ;  Goals = UnexpandedGoals1
        ),
        (  Goals = (Goal0, Goals0) ->

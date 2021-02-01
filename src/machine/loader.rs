@@ -1045,7 +1045,7 @@ impl Machine {
             let term = loader.read_term_from_heap(temp_v!(1))?;
 
             loader.incremental_compile_clause(
-                (clause_name!("$term_expansion"), 2),
+                (clause_name!("term_expansion"), 2),
                 term,
                 CompilationTarget::User,
                 false,
