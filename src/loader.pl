@@ -56,7 +56,6 @@ load_loop(Stream, Evacuable) :-
     ;  var(Term) ->
        instantiation_error(load/1)
     ;  expand_terms_and_goals(Term, Terms),
-       nl, write('Terms:'), write(Terms), nl, nl,
        !,
        (  var(Terms) ->
           instantiation_error(load/1)
@@ -100,7 +99,7 @@ module_expanded_head_variables_([HeadArg | HeadArgs], [MetaSpec | MetaSpecs], He
     ;  module_expanded_head_variables_(HeadArgs, MetaSpecs, HeadVars, HeadVars0)
     ).
 
-module_expanded_head_variables(Head, MetaSpecs, HeadVars) :-
+module_expanded_head_variables(Head, HeadVars) :-
     (  var(Head) ->
        instantiation_error(load/1)
     ;  predicate_property(Head, meta_predicate(MetaSpecs)),
@@ -110,19 +109,26 @@ module_expanded_head_variables(Head, MetaSpecs, HeadVars) :-
     ).
 
 
-expand_terms_and_goals(Term, Terms) :-
-    expand_term(Term, Terms0),
-    (  var(Terms0) ->
-       instantiation_error(load/1)
-    ;  Terms0 = (Head1 :- Body0) ->
+expand_term_goals(Terms0, Terms) :-
+    (  Terms0 = (Head1 :- Body0) ->
        (  var(Head1) ->
           instantiation_error(load/1)
        ;  prolog_load_context(module, Target),
-          module_expanded_head_variables(Head1, MetaSpecs, HeadVars),
+          module_expanded_head_variables(Head1, HeadVars),
           expand_goal(Body0, Target, Body1, HeadVars)
        ),
        Terms = (Head1 :- Body1)
     ;  Terms = Terms0
+    ).
+
+
+expand_terms_and_goals(Term, Terms) :-
+    expand_term(Term, Terms0),
+    (  var(Terms0) ->
+       instantiation_error(load/1)
+    ;  Terms0 = [_|_] ->
+       maplist(loader:expand_term_goals, Terms0, Terms)
+    ;  expand_term_goals(Terms0, Terms)
     ).
 
 
@@ -141,8 +147,7 @@ compile_dispatch_or_clause(Term, Evacuable, VNs) :-
        instantiation_error(load/1)
     ;  compile_dispatch(Term, Evacuable, VNs) ->
        true
-    ;
-       compile_clause(Term, Evacuable, VNs)
+    ;  compile_clause(Term, Evacuable, VNs)
     ).
 
 
@@ -286,21 +291,30 @@ use_module(Module, Exports, Evacuable) :-
 
 
 
-check_predicate_property(meta_predicate, Name, Arity, MetaPredicateTerm) :-
+check_predicate_property(meta_predicate, Module, Name, Arity, MetaPredicateTerm) :-
     must_be(atom, Name),
     must_be(integer, Arity),
-    '$cpp_meta_predicate_property'(Name, Arity, MetaPredicateTerm).
+    '$cpp_meta_predicate_property'(Module, Name, Arity, MetaPredicateTerm).
 
+
+extract_predicate_property(Property, PropertyType) :-
+    (  var(Property) ->
+       true
+    ;  functor(Property, PropertyType, _)
+    ).
 
 predicate_property(Callable, Property) :-
     (  var(Callable) ->
        instantiation_error(load/1)
+    ;  Callable =.. [(:), Module, Callable0],
+       atom(Module) ->
+       functor(Callable0, Name, Arity),
+       extract_predicate_property(Property, PropertyType),
+       check_predicate_property(PropertyType, Module, Name, Arity, Property)
     ;  functor(Callable, Name, Arity),
-       (  var(Property) ->
-          true
-       ;  functor(Property, PropertyType, _)
-       ),
-       check_predicate_property(PropertyType, Name, Arity, Property)
+       extract_predicate_property(Property, PropertyType),
+       prolog_load_context(module, Module),
+       check_predicate_property(PropertyType, Module, Name, Arity, Property)
     ).
 
 
@@ -363,8 +377,10 @@ expand_meta_predicate_subgoals([], _, _, [], _).
 
 expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars) :-
     Goals =.. [GoalFunctor | SubGoals],
-    (  GoalFunctor == (:) ->
-       false
+    (  GoalFunctor == (:),
+       SubGoals = [M, SubGoal] ->
+       expand_module_names(SubGoal, MetaSpecs, Module, ExpandedSubGoal, HeadVars),
+       ExpandedGoals = M:ExpandedSubGoal
     ;  expand_meta_predicate_subgoals(SubGoals, MetaSpecs, Module, ExpandedGoalList, HeadVars),
        ExpandedGoals =.. [GoalFunctor | ExpandedGoalList]
     ).

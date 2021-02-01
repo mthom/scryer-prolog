@@ -1483,17 +1483,23 @@ impl Machine {
 
     pub(crate)
     fn meta_predicate_property(&mut self) {
+        let module_name = atom_from!(
+            self.machine_st,
+            self.machine_st.store(self.machine_st.deref(
+                self.machine_st[temp_v!(1)]
+            ))
+        );
+
         let (predicate_name, arity) =
             self.machine_st.read_predicate_key(
-                self.machine_st[temp_v!(1)],
                 self.machine_st[temp_v!(2)],
+                self.machine_st[temp_v!(3)],
             );
 
         let compilation_target =
-            if let Some(load_context) = self.load_contexts.last() {
-                CompilationTarget::Module(load_context.module.clone())
-            } else {
-                CompilationTarget::User
+            match module_name.as_str() {
+                "user" => CompilationTarget::User,
+                _ => CompilationTarget::Module(module_name),
             };
 
         match self.indices.get_meta_predicate_spec(predicate_name, arity, &compilation_target) {
@@ -1516,7 +1522,7 @@ impl Machine {
                 );
 
                 self.machine_st.heap.push(HeapCellValue::Addr(Addr::HeapCell(list_loc)));
-                self.machine_st.unify(Addr::HeapCell(heap_loc), self.machine_st[temp_v!(3)]);
+                self.machine_st.unify(Addr::HeapCell(heap_loc), self.machine_st[temp_v!(4)]);
             }
             None => {
                 self.machine_st.fail = true;

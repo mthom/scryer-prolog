@@ -769,7 +769,7 @@ impl SystemClauseType {
             ("$prolog_lc_dir", 1) => Some(SystemClauseType::REPL(REPLCodePtr::LoadContextDirectory)),
             ("$prolog_lc_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::LoadContextModule)),
             ("$prolog_lc_stream", 1) => Some(SystemClauseType::REPL(REPLCodePtr::LoadContextStream)),
-            ("$cpp_meta_predicate_property", 3) => Some(SystemClauseType::REPL(REPLCodePtr::MetaPredicateProperty)),
+            ("$cpp_meta_predicate_property", 4) => Some(SystemClauseType::REPL(REPLCodePtr::MetaPredicateProperty)),
             ("$compile_pending_predicates", 1) => Some(SystemClauseType::REPL(REPLCodePtr::CompilePendingPredicates)),
             _ => None,
         }
