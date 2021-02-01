@@ -128,7 +128,7 @@ maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7
 sum_list(Ls, S) :-
         foldl(sum_, Ls, 0, S).
 
-sum_(L, S0, S) :- is(S, +(S0, L)).
+sum_(L, S0, S) :- S is S0 + L.
 
 
 

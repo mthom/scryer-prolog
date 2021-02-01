@@ -303,7 +303,6 @@ pub enum MetaSpec {
     Minus,
     Plus,
     Either,
-    RequiresExpansion,
     RequiresExpansionWithArgument(usize),
 }
 

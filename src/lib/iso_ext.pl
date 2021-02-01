@@ -46,14 +46,14 @@ bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
 bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).
 
 
-:- meta_predicate call_cleanup(:, :).
+:- meta_predicate call_cleanup(0, 0).
 
 call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
 
 % setup_call_cleanup.
 
-:- meta_predicate setup_call_cleanup(:, :, :).
+:- meta_predicate setup_call_cleanup(0, 0, 0).
 
 setup_call_cleanup(S, G, C) :-
     '$get_b_value'(B),
@@ -122,7 +122,7 @@ handle_ile(B, E, _) :-
     '$remove_call_policy_check'(B),
     '$call_with_default_policy'(throw(E)).
 
-:- meta_predicate call_with_inference_limit(:, ?, ?).
+:- meta_predicate call_with_inference_limit(0, ?, ?).
 
 call_with_inference_limit(G, L, R) :-
     '$get_current_block'(Bb),

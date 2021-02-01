@@ -152,7 +152,7 @@ set_prolog_flag(Flag, _) :-
 fail :- '$fail'.
 
 
-:- meta_predicate \+(:).
+:- meta_predicate \+(0).
 
 \+ G :- call(G), !, false.
 \+ _.
@@ -162,7 +162,7 @@ X \= X :- !, false.
 _ \= _.
 
 
-:- meta_predicate once(:).
+:- meta_predicate once(0).
 
 once(G) :- call(G), !.
 
@@ -172,17 +172,17 @@ repeat :- repeat.
 
 
 
-:- meta_predicate ','(:, :).
+:- meta_predicate ','(0, 0).
 
-:- meta_predicate ','(:, +, +).
+:- meta_predicate ','(0, +, +).
 
-:- meta_predicate ;(:, :).
+:- meta_predicate ;(0, 0).
 
-:- meta_predicate ;(:, :, +).
+:- meta_predicate ;(0, 0, +).
 
-:- meta_predicate ->(:, :).
+:- meta_predicate ->(0, 0).
 
-:- meta_predicate ->(:, :, +).
+:- meta_predicate ->(0, 0, +).
 
 
 ','(G1, G2) :-
@@ -363,7 +363,7 @@ get_args([Arg|Args], Func, I0, N) :-
     '$call_with_default_policy'(get_args(Args, Func, I1, N)).
 
 
-:- meta_predicate parse_options_list(?, :, ?, ?, ?).
+:- meta_predicate parse_options_list(?, 0, ?, ?, ?).
 
 parse_options_list(Options, Selector, DefaultPairs, OptionValues, Stub) :-
     '$skip_max_list'(_, -1, Options, Tail),
@@ -521,14 +521,14 @@ term_variables(Term, Vars) :-
 
 % exceptions.
 
-:- meta_predicate catch(:, ?, :).
+:- meta_predicate catch(0, ?, 0).
 
 catch(G,C,R) :-
     '$get_current_block'(Bb),
     '$call_with_default_policy'(catch(G,C,R,Bb)).
 
 
-:- meta_predicate catch(:, ?, :, +).
+:- meta_predicate catch(0, ?, 0, +).
 
 :- non_counted_backtracking catch/4.
 catch(G,C,R,Bb) :-
@@ -549,7 +549,7 @@ end_block(Bb, NBb) :-
     '$reset_block'(NBb),
     '$fail'.
 
-:- meta_predicate handle_ball(?, ?, :).
+:- meta_predicate handle_ball(?, ?, 0).
 
 :- non_counted_backtracking handle_ball/3.
 handle_ball(C, C, R) :-
@@ -562,7 +562,7 @@ handle_ball(_, _, _) :-
 throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
 
 
-% :- meta_predicate '$iterate_find_all'(?, :, ?, ?).
+% :- meta_predicate '$iterate_find_all'(?, 0, ?, ?).
 
 :- non_counted_backtracking '$iterate_find_all'/4.
 '$iterate_find_all'(Template, Goal, _, LhOffset) :-
@@ -577,7 +577,7 @@ throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
 truncate_lh_to(LhLength) :- '$truncate_lh_to'(LhLength).
 
 
-:- meta_predicate findall(?, :, ?).
+:- meta_predicate findall(?, 0, ?).
 
 findall(Template, Goal, Solutions) :-
     error:can_be(list, Solutions),
@@ -589,7 +589,7 @@ findall(Template, Goal, Solutions) :-
     ).
 
 
-% :- meta_predicate '$iterate_find_all_diff'(?, :, ?, ?, ?).
+% :- meta_predicate '$iterate_find_all_diff'(?, 0, ?, ?, ?).
 
 :- non_counted_backtracking '$iterate_find_all_diff'/5.
 '$iterate_find_all_diff'(Template, Goal, _, _, LhOffset) :-
@@ -601,7 +601,7 @@ findall(Template, Goal, Solutions) :-
     '$get_lh_from_offset_diff'(LhOffset, Solutions0, Solutions1).
 
 
-% :- meta_predicate findall(?, :, ?, ?).
+% :- meta_predicate findall(?, 0, ?, ?).
 
 findall(Template, Goal, Solutions0, Solutions1) :-
     error:can_be(list, Solutions0),
@@ -649,7 +649,7 @@ rightmost_power(Term, FinalTerm, Xs) :-
     ).
 
 
-% :- meta_predicate findall_with_existential(?, :, ?, ?, ?).
+% :- meta_predicate findall_with_existential(?, 0, ?, ?, ?).
 
 findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses) :-
     (  nonvar(Goal),
@@ -665,7 +665,7 @@ findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses)
     ).
 
 
-:- meta_predicate bagof(?, :, ?).
+:- meta_predicate bagof(?, 0, ?).
 
 bagof(Template, Goal, Solution) :-
     error:can_be(list, Solution),
@@ -688,7 +688,7 @@ iterate_variants_and_sort([_|GroupSolutions], Ws, Solution) :-
     iterate_variants_and_sort(GroupSolutions, Ws, Solution).
 
 
-:- meta_predicate setof(?, :, ?).
+:- meta_predicate setof(?, 0, ?).
 
 setof(Template, Goal, Solution) :-
     error:can_be(list, Solution),

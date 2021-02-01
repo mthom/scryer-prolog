@@ -5,7 +5,7 @@
 		  map_list_to_pairs/3]).
 
 
-:- meta_predicate map_list_to_pairs(:, ?, ?).
+:- meta_predicate map_list_to_pairs(0, ?, ?).
 
 pairs_keys_values([], [], []).
 pairs_keys_values([A-B|ABs], [A|As], [B|Bs]) :-

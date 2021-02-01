@@ -1498,8 +1498,6 @@ impl Machine {
 
         match self.indices.get_meta_predicate_spec(predicate_name, arity, &compilation_target) {
             Some(meta_specs) => {
-                let op_spec = fetch_op_spec(clause_name!(":"), 2, &self.indices.op_dir);
-
                 let list_loc = self.machine_st.heap.to_list(
                     meta_specs.iter().map(|meta_spec| {
                         match meta_spec {
@@ -1508,9 +1506,6 @@ impl Machine {
                             MetaSpec::Either => HeapCellValue::Atom(clause_name!("?"), None),
                             MetaSpec::RequiresExpansionWithArgument(ref arg_num) => {
                                 HeapCellValue::Addr(Addr::Usize(*arg_num))
-                            }
-                            MetaSpec::RequiresExpansion => {
-                                HeapCellValue::Atom(clause_name!(":"), op_spec.clone())
                             }
                         }
                     }),

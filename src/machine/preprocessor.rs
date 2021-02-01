@@ -347,7 +347,6 @@ fn setup_meta_predicate<'a>(
                 Term::Constant(_, Constant::Atom(meta_spec, _)) => {
                     let meta_spec =
                         match meta_spec.as_str() {
-                            ":" => MetaSpec::RequiresExpansion,
                             "+" => MetaSpec::Plus,
                             "-" => MetaSpec::Minus,
                             "?" => MetaSpec::Either,
