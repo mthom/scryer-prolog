@@ -1019,7 +1019,6 @@ impl CodeOffsets {
             .or_insert(sdeq![]);
 
         let is_initial_index = code.is_empty();
-
         code.push_back(compute_index(is_initial_index, index));
 
         for constant in &overlapping_constants {

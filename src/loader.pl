@@ -56,6 +56,7 @@ load_loop(Stream, Evacuable) :-
     ;  var(Term) ->
        instantiation_error(load/1)
     ;  expand_terms_and_goals(Term, Terms),
+       nl, write('Terms:'), write(Terms), nl, nl,
        !,
        (  var(Terms) ->
           instantiation_error(load/1)
