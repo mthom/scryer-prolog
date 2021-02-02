@@ -230,6 +230,7 @@ impl Machine {
                 &mut self.indices.code_dir,
                 &mut self.indices.op_dir,
                 &mut self.indices.meta_predicates,
+                &CompilationTarget::User,
                 toplevel,
             );
         } else {
@@ -337,6 +338,7 @@ impl Machine {
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
                 &mut wam.indices.meta_predicates,
+                &CompilationTarget::User,
                 builtins,
             );
         } else {
@@ -354,13 +356,32 @@ impl Machine {
             ),
         ).unwrap();
 
-        if let Some(loader) = wam.indices.modules.get(&clause_name!("loader")) {
+        if let Some(loader) = wam.indices.modules.swap_remove(&clause_name!("loader")) {
+            if let Some(builtins) = wam.indices.modules.get_mut(&clause_name!("builtins")) {
+                // Import loader's exports into the builtins module so they will be
+                // implicitly included every further module.
+                load_module(
+                    &mut builtins.code_dir,
+                    &mut builtins.op_dir,
+                    &mut builtins.meta_predicates,
+                    &CompilationTarget::Module(clause_name!("builtins")),
+                    &loader,
+                );
+
+                for export in &loader.module_decl.exports {
+                    builtins.module_decl.exports.push(export.clone());
+                }
+            }
+
             load_module(
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
                 &mut wam.indices.meta_predicates,
-                loader,
+                &CompilationTarget::User,
+                &loader,
             );
+
+            wam.indices.modules.insert(clause_name!("loader"), loader);
         } else {
             unreachable!()
         }

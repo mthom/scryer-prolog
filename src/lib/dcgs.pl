@@ -18,9 +18,12 @@ phrase(GRBody, S0) :-
 phrase(GRBody, S0, S) :-
     (  var(GRBody) ->
        throw(error(instantiation_error, phrase/3))
-    ;  strip_module(GRBody, _, GRBody0),
-       dcg_constr(GRBody0) ->
-       phrase_(GRBody0, S0, S)
+    ;  strip_module(GRBody, Module, GRBody0),
+       dcg_constr(GRBody0),
+       (  var(Module) ->
+          phrase_(GRBody0, S0, S)
+       ;  phrase_(Module:GRBody0, S0, S)
+       )
     ;  functor(GRBody, _, _) ->
        call(GRBody, S0, S)
     ;  throw(error(type_error(callable, GRBody), phrase/3))
@@ -30,22 +33,36 @@ phrase_([], S, S).
 phrase_(!, S, S).
 phrase_((A, B), S0, S) :-
     phrase(A, S0, S1), phrase(B, S1, S).
+phrase_(M:(A, B), S0, S) :-
+    phrase(M:A, S0, S1), phrase(M:B, S1, S).
 phrase_((A -> B ; C), S0, S) :-
     !,
     (  phrase(A, S0, S1) ->
        phrase(B, S1, S)
     ;  phrase(C, S0, S)
     ).
+phrase_(M:(A -> B ; C), S0, S) :-
+    !,
+    (  phrase(M:A, S0, S1) ->
+       phrase(M:B, S1, S)
+    ;  phrase(M:C, S0, S)
+    ).
 phrase_((A ; B), S0, S) :-
     (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
+phrase_(M:(A ; B), S0, S) :-
+    (  phrase(M:A, S0, S) ; phrase(M:B, S0, S)  ).
 phrase_((A | B), S0, S) :-
     (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
+phrase_(M:(A | B), S0, S) :-
+    (  phrase(M:A, S0, S) ; phrase(M:B, S0, S)  ).
 phrase_({G}, S0, S) :-
     (  call(G), S0 = S  ).
 phrase_(call(G), S0, S) :-
     call(G, S0, S).
 phrase_((A -> B), S0, S) :-
     phrase((A -> B ; fail), S0, S).
+phrase_(M:(A -> B), S0, S) :-
+    phrase((M:A -> M:B ; fail), S0, S).
 phrase_(phrase(NonTerminal), S0, S) :-
     phrase(NonTerminal, S0, S).
 phrase_([T|Ts], S0, S) :-

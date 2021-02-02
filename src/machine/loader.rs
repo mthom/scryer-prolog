@@ -1733,11 +1733,12 @@ fn load_module(
     code_dir: &mut CodeDir,
     op_dir: &mut OpDir,
     meta_predicate_dir: &mut MetaPredicateDir,
+    compilation_target: &CompilationTarget,
     module: &Module,
 ) {
     import_module_exports(
         &mut RetractionInfo::new(0),
-        &CompilationTarget::User,
+        &compilation_target,
         module,
         code_dir,
         op_dir,

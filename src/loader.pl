@@ -30,7 +30,7 @@ expand_term(Term, ExpandedTerm) :-
           error:instantiation_error(term_expansion/2)
        ;  ExpandedTerm0 = [_|_] ->
           term_expansion_list(ExpandedTerm0, ExpandedTerm, [])
-       ;  expand_term(ExpandedTerm0, ExpandedTerm) % term_expansion(ExpandedTerm0, ExpandedTerm)
+       ;  expand_term(ExpandedTerm0, ExpandedTerm)
        )
     ;  Term = ExpandedTerm
     ).
@@ -38,7 +38,7 @@ expand_term(Term, ExpandedTerm) :-
 
 term_expansion_list([], ExpandedTerms, ExpandedTerms).
 term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
-    expand_term(Term, ExpandedTerm0), % term_expansion(Term, ExpandedTerm0),
+    expand_term(Term, ExpandedTerm0),
     (  var(ExpandedTerm0) ->
        error:instantiation_error(term_expansion/2)
     ;  ExpandedTerm0 = [_|_] ->
