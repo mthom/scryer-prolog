@@ -16,11 +16,13 @@ phrase(GRBody, S0) :-
 
 
 phrase(GRBody, S0, S) :-
-    (  var(GRBody) -> throw(error(instantiation_error, phrase/3))
+    (  var(GRBody) ->
+       throw(error(instantiation_error, phrase/3))
     ;  strip_module(GRBody, _, GRBody0),
        dcg_constr(GRBody0) ->
        phrase_(GRBody0, S0, S)
-    ;  functor(GRBody, _, _) -> call(GRBody, S0, S)
+    ;  functor(GRBody, _, _) ->
+       call(GRBody, S0, S)
     ;  throw(error(type_error(callable, GRBody), phrase/3))
     ).
 
@@ -48,6 +50,7 @@ phrase_(phrase(NonTerminal), S0, S) :-
     phrase(NonTerminal, S0, S).
 phrase_([T|Ts], S0, S) :-
     append([T|Ts], S, S0).
+
 
 % The same version of the below two dcg_rule clauses, but with module scoping.
 dcg_rule(( M:NonTerminal, Terminals --> GRBody ), ( M:Head :- Body )) :-

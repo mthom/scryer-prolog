@@ -1531,6 +1531,43 @@ impl Machine {
     }
 
     pub(crate)
+    fn builtin_property(&mut self) {
+        let key =
+            self.machine_st.read_predicate_key(
+                self.machine_st[temp_v!(1)],
+                self.machine_st[temp_v!(2)],
+            );
+
+        match ClauseType::from(key.0, key.1, None) {
+            ClauseType::BuiltIn(_) | ClauseType::Inlined(..) | ClauseType::CallN => {
+                return;
+            }
+            ClauseType::Named(ref name, arity, _) => {
+                if let Some(module) = self.indices.modules.get(&(clause_name!("builtins"))) {
+                    self.machine_st.fail = !module.code_dir.contains_key(
+                        &(name.clone(), arity),
+                    );
+
+                    return;
+                }
+            }
+            ClauseType::Op(ref name, ref op_desc, _) => {
+                if let Some(module) = self.indices.modules.get(&(clause_name!("builtins"))) {
+                    self.machine_st.fail = !module.code_dir.contains_key(
+                        &(name.clone(), op_desc.arity()),
+                    );
+
+                    return;
+                }
+            }
+            _ => {
+            }
+        }
+
+        self.machine_st.fail = true;
+    }
+
+    pub(crate)
     fn compile_pending_predicates(&mut self) {
         let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(1));
 

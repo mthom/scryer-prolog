@@ -112,7 +112,7 @@ load_loop(Stream, Evacuable) :-
     ).
 
 
-inner_meta_specs((:), HeadArg, InnerHeadArgs, InnerMetaSpecs) :-
+inner_meta_specs(0, HeadArg, InnerHeadArgs, InnerMetaSpecs) :-
     !,
     predicate_property(HeadArg, meta_predicate(InnerMetaSpecs)),
     HeadArg =.. [_ | InnerHeadArgs].
@@ -334,9 +334,9 @@ use_module(Module, Exports, Evacuable) :-
 
 
 check_predicate_property(meta_predicate, Module, Name, Arity, MetaPredicateTerm) :-
-    must_be(atom, Name),
-    must_be(integer, Arity),
     '$cpp_meta_predicate_property'(Module, Name, Arity, MetaPredicateTerm).
+check_predicate_property(built_in, _, Name, Arity, built_in) :-
+    '$cpp_built_in_property'(Name, Arity).
 
 
 extract_predicate_property(Property, PropertyType) :-
@@ -355,7 +355,10 @@ predicate_property(Callable, Property) :-
        check_predicate_property(PropertyType, Module, Name, Arity, Property)
     ;  functor(Callable, Name, Arity),
        extract_predicate_property(Property, PropertyType),
-       prolog_load_context(module, Module),
+       (  prolog_load_context(module, Module) ->
+          true
+       ;  Module = user
+       ),
        check_predicate_property(PropertyType, Module, Name, Arity, Property)
     ).
 
@@ -392,15 +395,14 @@ expand_subgoal(UnexpandedGoals, MS, Module, ExpandedGoals, HeadVars) :-
 expand_module_name(ESG0, M, ESG) :-
     (  var(ESG0) ->
        ESG = M:ESG0
-    ;  ESG0 = _:ESG1 ->
+    ;  ESG0 = _:_ ->
        ESG = ESG0
     ;  ESG = M:ESG0
     ).
 
 
 expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars) :-
-    (  (  MS == (:)
-       ;  integer(MS),
+    (  (  integer(MS),
           MS >= 0
        )  ->
        (  var(SG),

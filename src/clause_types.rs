@@ -398,6 +398,8 @@ impl SystemClauseType {
                 clause_name!("$prolog_lc_stream"),
             &SystemClauseType::REPL(REPLCodePtr::MetaPredicateProperty) =>
                 clause_name!("$cpp_meta_predicate_property"),
+            &SystemClauseType::REPL(REPLCodePtr::BuiltInProperty) =>
+                clause_name!("$cpp_built_in_property"),
             &SystemClauseType::REPL(REPLCodePtr::CompilePendingPredicates) =>
                 clause_name!("$compile_pending_predicates"),
             &SystemClauseType::Close => clause_name!("$close"),
@@ -770,6 +772,7 @@ impl SystemClauseType {
             ("$prolog_lc_module", 1) => Some(SystemClauseType::REPL(REPLCodePtr::LoadContextModule)),
             ("$prolog_lc_stream", 1) => Some(SystemClauseType::REPL(REPLCodePtr::LoadContextStream)),
             ("$cpp_meta_predicate_property", 4) => Some(SystemClauseType::REPL(REPLCodePtr::MetaPredicateProperty)),
+            ("$cpp_built_in_property", 2) => Some(SystemClauseType::REPL(REPLCodePtr::BuiltInProperty)),
             ("$compile_pending_predicates", 1) => Some(SystemClauseType::REPL(REPLCodePtr::CompilePendingPredicates)),
             _ => None,
         }

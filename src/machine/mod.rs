@@ -463,6 +463,9 @@ impl Machine {
             REPLCodePtr::MetaPredicateProperty => {
                 self.meta_predicate_property();
             }
+            REPLCodePtr::BuiltInProperty => {
+                self.builtin_property();
+            }
             REPLCodePtr::CompilePendingPredicates => {
                 self.compile_pending_predicates();
             }

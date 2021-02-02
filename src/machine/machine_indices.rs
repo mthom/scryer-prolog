@@ -505,6 +505,7 @@ pub enum REPLCodePtr {
     AddDynamicPredicate,
     AddGoalExpansionClause,
     AddTermExpansionClause,
+    BuiltInProperty,
     ClauseToEvacuable,
     ConcludeLoad,
     DeclareModule,

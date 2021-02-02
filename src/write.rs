@@ -26,6 +26,8 @@ impl fmt::Display for REPLCodePtr {
                 write!(f, "REPLCodePtr::AddGoalExpansionClause"),
             REPLCodePtr::AddTermExpansionClause =>
                 write!(f, "REPLCodePtr::AddTermExpansionClause"),
+            REPLCodePtr::BuiltInProperty =>
+                write!(f, "REPLCodePtr::BuiltInProperty"),
             REPLCodePtr::UserAssertz =>
                 write!(f, "REPLCodePtr::UserAssertz"),
             REPLCodePtr::UserAsserta =>
