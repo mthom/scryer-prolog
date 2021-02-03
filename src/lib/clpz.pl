@@ -5884,10 +5884,12 @@ difference_arcs([V|Vs], FL0) -->
 
 writeln(T) :- write(T), nl.
 
+:- meta_predicate must_succeed(0).
+
 must_succeed(G) :-
-    (G -> true
-     ;write(failed-G), halt
-    ).
+        (   G -> true
+        ;   throw(failed-G)
+        ).
 
 enumerate([], _) --> [].
 enumerate([N|Ns], V) -->
@@ -6046,6 +6048,8 @@ del_all_attrs(Var) :-
 remove_attr(Var, Attr) :-
         functor(Term, Attr, 1),
         put_atts(Var, -Term).
+
+:- meta_predicate with_local_attributes(?, 0, ?).
 
 with_local_attributes(Vars, Goal, Result) :-
         catch((Goal,
