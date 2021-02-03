@@ -6047,6 +6047,8 @@ remove_attr(Var, Attr) :-
         functor(Term, Attr, 1),
         put_atts(Var, -Term).
 
+:- meta_predicate with_local_attributes(?, 0, ?).
+
 with_local_attributes(Vars, Goal, Result) :-
         catch((Goal,
                maplist(del_all_attrs, Vars),
