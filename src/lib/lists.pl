@@ -160,8 +160,8 @@ transpose(Ls, Ts) :-
 
 lists_transpose([], []).
 lists_transpose([L|Ls], Ts) :-
-        maplist(same_length(L), Ls),
-        foldl(transpose_, L, Ts, [L|Ls], _).
+        maplist(lists:same_length(L), Ls),
+        foldl(lists:transpose_, L, Ts, [L|Ls], _).
 
 transpose_(_, Fs, Lists0, Lists) :-
         maplist(lists:list_first_rest, Lists0, Fs, Lists).
