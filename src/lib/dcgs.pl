@@ -19,7 +19,7 @@ phrase(GRBody, S0, S) :-
     (  var(GRBody) ->
        throw(error(instantiation_error, phrase/3))
     ;  strip_module(GRBody, Module, GRBody0),
-       dcg_constr(GRBody0),
+       dcg_constr(GRBody0) ->
        (  var(Module) ->
           phrase_(GRBody0, S0, S)
        ;  phrase_(Module:GRBody0, S0, S)
