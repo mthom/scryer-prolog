@@ -5884,10 +5884,12 @@ difference_arcs([V|Vs], FL0) -->
 
 writeln(T) :- write(T), nl.
 
+:- meta_predicate must_succeed(0).
+
 must_succeed(G) :-
-    (G -> true
-     ;write(failed-G), halt
-    ).
+        (   G -> true
+        ;   throw(failed-G)
+        ).
 
 enumerate([], _) --> [].
 enumerate([N|Ns], V) -->
