@@ -1,6 +1,6 @@
-use crate::prolog_parser::ast::*;
-use crate::prolog_parser::parser::*;
-use crate::prolog_parser::tabled_rc::TabledData;
+use crate::prolog_parser_rebis::ast::*;
+use crate::prolog_parser_rebis::parser::*;
+use crate::prolog_parser_rebis::tabled_rc::TabledData;
 
 use crate::forms::*;
 use crate::iterators::*;
@@ -195,7 +195,7 @@ impl MachineState {
 
         let term = {
             let mut parser = Parser::new(&mut stream, atom_tbl, self.flags);
-            parser.read_term(composite_op!(op_dir))?
+            parser.read_term(&CompositeOpDir::new(op_dir, None))?
         };
 
         // 'pausing' the stream saves the pending top buffer

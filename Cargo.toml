@@ -18,8 +18,8 @@ members = ["crates/prolog_parser"]
 indexmap = "1.0.2"
 
 [features]
-default = ["rug", "prolog_parser/rug"]
-num = ["num-rug-adapter", "prolog_parser/num"]
+default = ["rug", "prolog_parser_rebis/rug"]
+num = ["num-rug-adapter", "prolog_parser_rebis/num"]
 
 [dependencies]
 cpu-time = "1.0.0"
@@ -35,7 +35,7 @@ libc = "0.2.62"
 nix = "0.15.0"
 num-rug-adapter = { optional = true, version = "0.1.4" }
 ordered-float = "0.5.0"
-prolog_parser = { path = "./crates/prolog_parser", default-features = false }
+prolog_parser_rebis = { path = "./crates/prolog_parser", default-features = false }
 ref_thread_local = "0.0.0"
 rug = { version = "1.4.0", optional = true }
 rustyline = "7.0.0"
@@ -51,3 +51,4 @@ select = "0.4.3"
 roxmltree = "0.11.0"
 base64 = "0.12.3"
 sodiumoxide = "0.2.6"
+slice-deque = "0.3.0"

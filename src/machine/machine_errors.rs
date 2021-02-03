@@ -1,6 +1,6 @@
-use crate::prolog_parser::ast::*;
+use crate::prolog_parser_rebis::ast::*;
 
-use crate::forms::{ModuleSource, Number, PredicateKey};
+use crate::forms::{ModuleSource, Number}; //, PredicateKey};
 use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
@@ -356,23 +356,10 @@ impl MachineError {
     }
 
     pub(super)
-    fn uninstantiation_error(culprit: Addr) -> Self {
-        let stub = functor!(
-            "uninstantiation_error",
-            [addr(culprit)]
-        );
-
-        MachineError {
-            stub,
-            location: None,
-            from: ErrorProvenance::Received,
-        }
-    }
-
-    pub(super)
     fn session_error(h: usize, err: SessionError) -> Self {
         match err {
-            SessionError::CannotOverwriteBuiltIn(pred_str) |
+            // SessionError::CannotOverwriteBuiltIn(pred_str) |
+            /*
             SessionError::CannotOverwriteImport(pred_str) => {
                 Self::permission_error(
                     h,
@@ -381,18 +368,29 @@ impl MachineError {
                     functor!(clause_name(pred_str)),
                 )
             }
+            */
             SessionError::ExistenceError(err) => {
                 Self::existence_error(h, err)
             }
-            SessionError::InvalidFileName(filename) => {
-                Self::existence_error(h, ExistenceError::Module(filename))
-            }
+            // SessionError::InvalidFileName(filename) => {
+            //     Self::existence_error(h, ExistenceError::Module(filename))
+            // }
+            /*
             SessionError::ModuleDoesNotContainExport(..) => {
                 Self::permission_error(
                     h,
                     Permission::Access,
                     "private_procedure",
                     functor!("module_does_not_contain_claimed_export"),
+                )
+            }
+            */
+            SessionError::ModuleCannotImportSelf(module_name) => {
+                Self::permission_error(
+                    h,
+                    Permission::Modify,
+                    "module",
+                    functor!("module_cannot_import_self", [clause_name(module_name)]),
                 )
             }
             SessionError::NamelessEntry => {
@@ -411,7 +409,7 @@ impl MachineError {
                     functor!(clause_name(op)),
                 )
             }
-            SessionError::ParserError(err) => {
+            SessionError::CompilationError(err) => {
                 Self::syntax_error(h, err)
             }
             SessionError::QueryCannotBeDefinedAsFact => {
@@ -426,13 +424,15 @@ impl MachineError {
     }
 
     pub(super)
-    fn syntax_error(h: usize, err: ParserError) -> Self {
-        if let ParserError::Arithmetic(err) = err {
+    fn syntax_error<E: Into<CompilationError>>(h: usize, err: E) -> Self {
+        let err = err.into();
+
+        if let CompilationError::Arithmetic(err) = err {
             return Self::arithmetic_error(h, err);
         }
 
         let location = err.line_and_col_num();
-        let stub = functor!(err.as_str());
+        let stub = err.as_functor(h);
 
         let stub = functor!(
             "syntax_error",
@@ -475,9 +475,103 @@ impl MachineError {
     }
 }
 
+#[derive(Debug)]
+pub enum CompilationError {
+    Arithmetic(ArithmeticError),
+    ParserError(ParserError),
+    // BadPendingByte,
+    CannotParseCyclicTerm,
+    // ExpandedTermsListNotAList,
+    ExpectedRel,
+    // ExpectedTopLevelTerm,
+    InadmissibleFact,
+    InadmissibleQueryTerm,
+    InconsistentEntry,
+    // InvalidDoubleQuotesDecl,
+    // InvalidHook,
+    InvalidMetaPredicateDecl,
+    InvalidModuleDecl,
+    InvalidModuleExport,
+    InvalidRuleHead,
+    InvalidUseModuleDecl,
+    InvalidModuleResolution(ClauseName),
+    UnreadableTerm,
+}
+
+impl From<ArithmeticError> for CompilationError {
+    #[inline]
+    fn from(err: ArithmeticError) -> CompilationError {
+        CompilationError::Arithmetic(err)
+    }
+}
+
+impl From<ParserError> for CompilationError {
+    #[inline]
+    fn from(err: ParserError) -> CompilationError {
+        CompilationError::ParserError(err)
+    }
+}
+
+impl CompilationError {
+    pub fn line_and_col_num(&self) -> Option<(usize, usize)> {
+        match self {
+            &CompilationError::ParserError(ref err) =>
+                err.line_and_col_num(),
+            _ =>
+                None
+        }
+    }
+
+    pub fn as_functor(&self, _h: usize) -> MachineStub {
+        match self {
+            &CompilationError::Arithmetic(..) =>
+                functor!("arithmetic_error"),
+            // &CompilationError::BadPendingByte =>
+            //     functor!("bad_pending_byte"),
+            &CompilationError::CannotParseCyclicTerm =>
+                functor!("cannot_parse_cyclic_term"),
+            // &CompilationError::ExpandedTermsListNotAList =>
+            //     functor!("expanded_terms_list_is_not_a_list"),
+            &CompilationError::ExpectedRel =>
+                functor!("expected_relation"),
+            // &CompilationError::ExpectedTopLevelTerm =>
+            //     functor!("expected_atom_or_cons_or_clause"),
+            &CompilationError::InadmissibleFact =>
+                functor!("inadmissible_fact"),
+            &CompilationError::InadmissibleQueryTerm =>
+                functor!("inadmissible_query_term"),
+            &CompilationError::InconsistentEntry =>
+                functor!("inconsistent_entry"),
+            // &CompilationError::InvalidDoubleQuotesDecl =>
+            //     functor!("invalid_double_quotes_declaration"),
+            // &CompilationError::InvalidHook =>
+            //     functor!("invalid_hook"),
+            &CompilationError::InvalidMetaPredicateDecl =>
+                functor!("invalid_meta_predicate_decl"),
+            &CompilationError::InvalidModuleDecl =>
+                functor!("invalid_module_declaration"),
+            &CompilationError::InvalidModuleExport =>
+                functor!("invalid_module_export"),
+            &CompilationError::InvalidModuleResolution(ref module_name) =>
+                functor!(
+                    "no_such_module",
+                    [clause_name(module_name.clone())]
+                ),
+            &CompilationError::InvalidRuleHead =>
+                functor!("invalid_head_of_rule"),
+            &CompilationError::InvalidUseModuleDecl =>
+                functor!("invalid_use_module_declaration"),
+            &CompilationError::ParserError(ref err) =>
+                functor!(err.as_str()),
+            &CompilationError::UnreadableTerm =>
+                functor!("unreadable_term"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Permission {
-    Access,
+    // Access,
     Create,
     InputStream,
     Modify,
@@ -490,7 +584,7 @@ impl Permission {
     #[inline]
     pub fn as_str(self) -> &'static str {
         match self {
-            Permission::Access => "access",
+            // Permission::Access => "access",
             Permission::Create => "create",
             Permission::InputStream => "input",
             Permission::Modify => "modify",
@@ -807,37 +901,55 @@ pub enum ExistenceError {
 
 #[derive(Debug)]
 pub enum SessionError {
-    CannotOverwriteBuiltIn(ClauseName),
-    CannotOverwriteImport(ClauseName),
+    CompilationError(CompilationError),
+    // CannotOverwriteBuiltIn(ClauseName),
+    // CannotOverwriteImport(ClauseName),
     ExistenceError(ExistenceError),
-    InvalidFileName(ClauseName),
-    ModuleDoesNotContainExport(ClauseName, PredicateKey),
+    // InvalidFileName(ClauseName),
+    // ModuleDoesNotContainExport(ClauseName, PredicateKey),
+    ModuleCannotImportSelf(ClauseName),
     NamelessEntry,
     OpIsInfixAndPostFix(ClauseName),
     QueryCannotBeDefinedAsFact,
-    ParserError(ParserError),
 }
 
 #[derive(Debug)]
 pub enum EvalSession {
-    EntrySuccess,
+    // EntrySuccess,
     Error(SessionError),
 }
 
 impl From<SessionError> for EvalSession {
+    #[inline]
     fn from(err: SessionError) -> Self {
         EvalSession::Error(err)
     }
 }
 
+impl From<std::io::Error> for SessionError {
+    #[inline]
+    fn from(err: std::io::Error) -> SessionError {
+        SessionError::from(ParserError::from(err))
+    }
+}
+
 impl From<ParserError> for SessionError {
+    #[inline]
     fn from(err: ParserError) -> Self {
-        SessionError::ParserError(err)
+        SessionError::CompilationError(CompilationError::from(err))
+    }
+}
+
+impl From<CompilationError> for SessionError {
+    #[inline]
+    fn from(err: CompilationError) -> Self {
+        SessionError::CompilationError(err)
     }
 }
 
 impl From<ParserError> for EvalSession {
+    #[inline]
     fn from(err: ParserError) -> Self {
-        EvalSession::from(SessionError::ParserError(err))
+        EvalSession::from(SessionError::from(err))
     }
 }

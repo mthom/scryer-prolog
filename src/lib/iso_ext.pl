@@ -11,6 +11,12 @@
 
 :- use_module(library(error), [can_be/2,domain_error/3]).
 
+
+:- meta_predicate call_cleanup(0, 0).
+
+:- meta_predicate setup_call_cleanup(0, 0, 0).
+
+
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
 
@@ -44,6 +50,7 @@ reset_global_var_at_offset(Key, Value, Offset) :- '$reset_global_var_at_offset'(
 
 bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
 bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).
+
 
 call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
@@ -116,6 +123,8 @@ handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :- !.
 handle_ile(B, E, _) :-
     '$remove_call_policy_check'(B),
     '$call_with_default_policy'(throw(E)).
+
+:- meta_predicate call_with_inference_limit(0, ?, ?).
 
 call_with_inference_limit(G, L, R) :-
     '$get_current_block'(Bb),

@@ -6,9 +6,6 @@ use crate::indexmap::IndexSet;
 use std::cmp::Ordering;
 use std::vec::IntoIter;
 
-pub static VERIFY_ATTRS: &str = include_str!("attributed_variables.pl");
-pub static PROJECT_ATTRS: &str = include_str!("project_attributes.pl");
-
 pub(super) type Bindings = Vec<(usize, Addr)>;
 
 #[derive(Debug)]
@@ -126,7 +123,7 @@ impl MachineState {
         self.stack.index_and_frame_mut(e).prelude.interrupt_cp = self.attr_var_init.cp;
 
         for i in 1 .. self.num_of_args + 1 {
-            self.stack.index_and_frame_mut(e)[i] = self[RegType::Temp(i)].clone();
+            self.stack.index_and_frame_mut(e)[i] = self[RegType::Temp(i)];
         }
 
         self.stack.index_and_frame_mut(e)[self.num_of_args + 1] =

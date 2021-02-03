@@ -1,9 +1,9 @@
-use crate::prolog_parser::ast::*;
-use crate::prolog_parser::tabled_rc::*;
+use crate::prolog_parser_rebis::ast::*;
 
 use crate::clause_types::*;
 use crate::fixtures::*;
 use crate::forms::*;
+use crate::machine::CompilationTarget;
 use crate::machine::code_repo::CodeRepo;
 use crate::machine::Ball;
 use crate::machine::heap::*;
@@ -11,20 +11,21 @@ use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
 use crate::machine::raw_block::RawBlockTraits;
 use crate::machine::streams::Stream;
+use crate::machine::term_stream::LoadStatePayload;
 use crate::instructions::*;
 use crate::ordered_float::OrderedFloat;
 use crate::rug::{Integer, Rational};
 
 use crate::indexmap::IndexMap;
 
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fmt;
-use std::mem;
+// use std::mem;
 use std::net::TcpListener;
-use std::ops::{Add, AddAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -64,6 +65,7 @@ pub enum Addr {
     Fixnum(isize),
     Float(OrderedFloat<f64>),
     Lis(usize),
+    LoadStatePayload(usize),
     HeapCell(usize),
     PStrLocation(usize, usize), // location of pstr in heap, offset into string in bytes.
     StackCell(usize, usize),
@@ -231,7 +233,7 @@ impl Addr {
                     Addr::Lis(_) | Addr::PStrLocation(..) | Addr::Str(_) => {
                         Some(TermOrderCategory::Compound)
                     }
-                    Addr::CutPoint(_) | Addr::Stream(_) | Addr::TcpListener(_) => {
+                    Addr::CutPoint(_) | Addr::LoadStatePayload(_) | Addr::Stream(_) | Addr::TcpListener(_) => {
                         None
                     }
                 }
@@ -369,6 +371,7 @@ pub enum HeapCellValue {
     Atom(ClauseName, Option<SharedOpDesc>),
     DBRef(DBRef),
     Integer(Rc<Integer>),
+    LoadStatePayload(LoadStatePayload),
     NamedStr(usize, ClauseName, Option<SharedOpDesc>), // arity, name, precedence/Specifier if it has one.
     Rational(Rc<Rational>),
     PartialString(PartialString, bool), // the partial string, a bool indicating whether it came from a Constant.
@@ -386,6 +389,9 @@ impl HeapCellValue {
             HeapCellValue::Atom(..) | HeapCellValue::DBRef(..) | HeapCellValue::Integer(..) |
             HeapCellValue::Rational(..) => {
                 Addr::Con(focus)
+            }
+            HeapCellValue::LoadStatePayload(_) => {
+                Addr::LoadStatePayload(focus)
             }
             HeapCellValue::NamedStr(_, _, _) => {
                 Addr::Str(focus)
@@ -417,6 +423,9 @@ impl HeapCellValue {
             &HeapCellValue::Integer(ref n) => {
                 HeapCellValue::Integer(n.clone())
             }
+            &HeapCellValue::LoadStatePayload(_) => {
+                HeapCellValue::Atom(clause_name!("$live_term_stream"), None)
+            }
             &HeapCellValue::NamedStr(arity, ref name, ref op) => {
                 HeapCellValue::NamedStr(arity, name.clone(), op.clone())
             }
@@ -443,50 +452,42 @@ impl From<Addr> for HeapCellValue {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum IndexPtr {
     DynamicUndefined, // a predicate, declared as dynamic, whose location in code is as yet undefined.
-    Undefined,
-    InSituDirEntry(usize),
     Index(usize),
-    UserGoalExpansion,
-    UserTermExpansion
+    Undefined,
 }
 
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub struct CodeIndex(pub Rc<RefCell<(IndexPtr, ClauseName)>>);
+pub struct CodeIndex(pub Rc<Cell<IndexPtr>>);
+
+impl Deref for CodeIndex {
+    type Target = Cell<IndexPtr>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
 
 impl CodeIndex {
     #[inline]
-    pub fn new(ptr: IndexPtr, module_name: ClauseName) -> Self {
-        CodeIndex(Rc::new(RefCell::new(( ptr, module_name ))))
+    pub(super)
+    fn new(ptr: IndexPtr) -> Self {
+        CodeIndex(Rc::new(Cell::new(ptr)))
     }
 
     #[inline]
     pub fn is_undefined(&self) -> bool {
-        let index_ptr = &self.0.borrow().0;
-
-        match index_ptr {
-            &IndexPtr::Undefined | &IndexPtr::DynamicUndefined => true,
+        match self.0.get() {
+            IndexPtr::Undefined => true, // | &IndexPtr::DynamicUndefined => true,
             _ => false
         }
     }
 
-    #[inline]
-    pub fn dynamic_undefined(module_name: ClauseName) -> Self {
-        CodeIndex(Rc::new(RefCell::new((
-            IndexPtr::DynamicUndefined,
-            module_name
-        ))))
-    }
-
-    #[inline]
-    pub fn module_name(&self) -> ClauseName {
-        self.0.borrow().1.clone()
-    }
-
     pub fn local(&self) -> Option<usize> {
-        match self.0.borrow().0 {
+        match self.0.get() {
             IndexPtr::Index(i) => Some(i),
             _ => None,
         }
@@ -495,60 +496,35 @@ impl CodeIndex {
 
 impl Default for CodeIndex {
     fn default() -> Self {
-        CodeIndex(Rc::new(RefCell::new((
-            IndexPtr::Undefined,
-            clause_name!(""),
-        ))))
+        CodeIndex(Rc::new(Cell::new(IndexPtr::Undefined)))
     }
-}
-
-impl From<(usize, ClauseName)> for CodeIndex {
-    fn from(value: (usize, ClauseName)) -> Self {
-        CodeIndex(Rc::new(RefCell::new((IndexPtr::Index(value.0), value.1))))
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum DynamicAssertPlace {
-    Back,
-    Front,
-}
-
-impl DynamicAssertPlace {
-    #[inline]
-    pub fn predicate_name(self) -> ClauseName {
-        match self {
-            DynamicAssertPlace::Back => clause_name!("assertz"),
-            DynamicAssertPlace::Front => clause_name!("asserta"),
-        }
-    }
-
-    #[inline]
-    pub fn push_to_queue(self, addrs: &mut VecDeque<Addr>, new_addr: Addr) {
-        match self {
-            DynamicAssertPlace::Back => addrs.push_back(new_addr),
-            DynamicAssertPlace::Front => addrs.push_front(new_addr),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum DynamicTransactionType {
-    Abolish,
-    Assert(DynamicAssertPlace),
-    ModuleAbolish,
-    ModuleAssert(DynamicAssertPlace),
-    ModuleRetract,
-    Retract, // dynamic index of the clause to remove.
 }
 
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum REPLCodePtr {
-    CompileBatch,
+    AddDynamicPredicate,
+    AddGoalExpansionClause,
+    AddTermExpansionClause,
+    BuiltInProperty,
+    ClauseToEvacuable,
+    ConcludeLoad,
+    DeclareModule,
+    LoadCompiledLibrary,
+    LoadContextSource,
+    LoadContextFile,
+    LoadContextDirectory,
+    LoadContextModule,
+    LoadContextStream,
+    PopLoadContext,
+    PopLoadStatePayload,
+    PushLoadContext,
+    PushLoadStatePayload,
     UseModule,
-    UseQualifiedModule,
-    UseModuleFromFile,
-    UseQualifiedModuleFromFile
+    MetaPredicateProperty,
+    CompilePendingPredicates,
+    UserAsserta,
+    UserAssertz,
+    UserRetract,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -556,7 +532,7 @@ pub enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
     CallN(usize, LocalCodePtr, bool),               // arity, local, last call.
     Local(LocalCodePtr),
-    DynamicTransaction(DynamicTransactionType, LocalCodePtr), // the type of transaction, the return pointer.
+    // DynamicTransaction(DynamicTransactionType, LocalCodePtr), // the type of transaction, the return pointer.
     REPL(REPLCodePtr, LocalCodePtr),                          // the REPL code, the return pointer.
     VerifyAttrInterrupt(usize), // location of the verify attribute interrupt code in the CodeDir.
 }
@@ -568,18 +544,26 @@ impl CodePtr {
           | &CodePtr::CallN(_, ref local, _)
           | &CodePtr::Local(ref local) => local.clone(),
             &CodePtr::VerifyAttrInterrupt(p) => LocalCodePtr::DirEntry(p),
-            &CodePtr::REPL(_, p) | &CodePtr::DynamicTransaction(_, p) => p,
+            &CodePtr::REPL(_, p) => p // | &CodePtr::DynamicTransaction(_, p) => p,
+        }
+    }
+
+    #[inline]
+    pub fn is_halt(&self) -> bool {
+        if let CodePtr::Local(LocalCodePtr::Halt) = self {
+            true
+        } else {
+            false
         }
     }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum LocalCodePtr {
-    DirEntry(usize), // offset.
-    InSituDirEntry(usize),
-    TopLevel(usize, usize), // chunk_num, offset.
-    UserGoalExpansion(usize),
-    UserTermExpansion(usize),
+    DirEntry(usize), // offset
+    Halt,
+    IndexingBuf(usize, usize, usize), // DirEntry offset, first internal offset, second internal offset
+    // TopLevel(usize, usize), // chunk_num, offset
 }
 
 impl LocalCodePtr {
@@ -588,6 +572,16 @@ impl LocalCodePtr {
         match cp {
             CodePtr::Local(local) => *self = local,
             _ => {}
+        }
+    }
+
+    #[inline]
+    pub(crate)
+    fn abs_loc(&self) -> usize {
+        match self {
+            LocalCodePtr::DirEntry(ref p) => *p,
+            LocalCodePtr::IndexingBuf(ref p, ..) => *p,
+            LocalCodePtr::Halt => unreachable!(),
         }
     }
 
@@ -621,28 +615,21 @@ impl LocalCodePtr {
                     [integer(*p)]
                 ));
             }
-            LocalCodePtr::InSituDirEntry(p) => {
-                heap.append(functor!(
-                    "in_situ_dir_entry",
-                    [integer(*p)]
-                ));
+            LocalCodePtr::Halt => {
+                heap.append(functor!("halt"));
             }
+            /*
             LocalCodePtr::TopLevel(chunk_num, offset) => {
                 heap.append(functor!(
                     "top_level",
                     [integer(*chunk_num), integer(*offset)]
                 ));
             }
-            LocalCodePtr::UserGoalExpansion(p) => {
+            */
+            LocalCodePtr::IndexingBuf(p, o, i) => {
                 heap.append(functor!(
-                    "user_goal_expansion",
-                    [integer(*p)]
-                ));
-            }
-            LocalCodePtr::UserTermExpansion(p) => {
-                heap.append(functor!(
-                    "user_term_expansion",
-                    [integer(*p)]
+                    "indexed_buf",
+                    [integer(*p), integer(*o), integer(*i)]
                 ));
             }
         }
@@ -651,6 +638,7 @@ impl LocalCodePtr {
     }
 }
 
+/*
 impl PartialOrd<CodePtr> for CodePtr {
     fn partial_cmp(&self, other: &CodePtr) -> Option<Ordering> {
         match (self, other) {
@@ -667,11 +655,8 @@ impl PartialOrd<CodePtr> for CodePtr {
 impl PartialOrd<LocalCodePtr> for LocalCodePtr {
     fn partial_cmp(&self, other: &LocalCodePtr) -> Option<Ordering> {
         match (self, other) {
-            (&LocalCodePtr::InSituDirEntry(p1), &LocalCodePtr::InSituDirEntry(ref p2))
-	  | (&LocalCodePtr::DirEntry(p1), &LocalCodePtr::DirEntry(ref p2))
-          | (&LocalCodePtr::UserTermExpansion(p1), &LocalCodePtr::UserTermExpansion(ref p2))
-          | (&LocalCodePtr::UserGoalExpansion(p1), &LocalCodePtr::UserGoalExpansion(ref p2))
-          | (&LocalCodePtr::TopLevel(_, p1), &LocalCodePtr::TopLevel(_, ref p2)) => {
+	        (&LocalCodePtr::DirEntry(p1), &LocalCodePtr::DirEntry(ref p2)) |
+            (&LocalCodePtr::TopLevel(_, p1), &LocalCodePtr::TopLevel(_, ref p2)) => {
                 p1.partial_cmp(p2)
             }
             (_, &LocalCodePtr::TopLevel(_, _)) => {
@@ -683,29 +668,34 @@ impl PartialOrd<LocalCodePtr> for LocalCodePtr {
         }
     }
 }
+*/
 
 impl Default for CodePtr {
+    #[inline]
     fn default() -> Self {
         CodePtr::Local(LocalCodePtr::default())
     }
 }
 
 impl Default for LocalCodePtr {
+    #[inline]
     fn default() -> Self {
-        LocalCodePtr::TopLevel(0, 0)
+        LocalCodePtr::DirEntry(0)
     }
 }
 
 impl Add<usize> for LocalCodePtr {
     type Output = LocalCodePtr;
 
+    #[inline]
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            LocalCodePtr::InSituDirEntry(p) => LocalCodePtr::InSituDirEntry(p + rhs),
-            LocalCodePtr::DirEntry(p) => LocalCodePtr::DirEntry(p + rhs),
-            LocalCodePtr::TopLevel(cn, p) => LocalCodePtr::TopLevel(cn, p + rhs),
-            LocalCodePtr::UserTermExpansion(p) => LocalCodePtr::UserTermExpansion(p + rhs),
-            LocalCodePtr::UserGoalExpansion(p) => LocalCodePtr::UserGoalExpansion(p + rhs),
+            LocalCodePtr::DirEntry(p) =>
+                LocalCodePtr::DirEntry(p + rhs),
+            LocalCodePtr::Halt =>
+                unreachable!(),
+            LocalCodePtr::IndexingBuf(p, o, i) =>
+                LocalCodePtr::IndexingBuf(p, o, i + rhs),
         }
     }
 }
@@ -713,30 +703,40 @@ impl Add<usize> for LocalCodePtr {
 impl Sub<usize> for LocalCodePtr {
     type Output = Option<LocalCodePtr>;
 
+    #[inline]
     fn sub(self, rhs: usize) -> Self::Output {
         match self {
-            LocalCodePtr::InSituDirEntry(p) =>
-                p.checked_sub(rhs).map(LocalCodePtr::InSituDirEntry),
             LocalCodePtr::DirEntry(p) =>
                 p.checked_sub(rhs).map(LocalCodePtr::DirEntry),
-            LocalCodePtr::TopLevel(cn, p) =>
-                p.checked_sub(rhs).map(|r| LocalCodePtr::TopLevel(cn, r)),
-            LocalCodePtr::UserTermExpansion(p) =>
-                p.checked_sub(rhs).map(LocalCodePtr::UserTermExpansion),
-            LocalCodePtr::UserGoalExpansion(p) =>
-                p.checked_sub(rhs).map(LocalCodePtr::UserGoalExpansion),
+            LocalCodePtr::Halt =>
+                unreachable!(),
+            LocalCodePtr::IndexingBuf(p, o, i) =>
+                i.checked_sub(rhs).map(|r| LocalCodePtr::IndexingBuf(p, o, r)),
         }
     }
 }
 
+impl SubAssign<usize> for LocalCodePtr {
+    #[inline]
+    fn sub_assign(&mut self, rhs: usize) {
+        match self {
+            LocalCodePtr::DirEntry(ref mut p) =>
+                *p -= rhs,
+            LocalCodePtr::Halt | LocalCodePtr::IndexingBuf(..) =>
+                unreachable!(),
+        }
+    }
+}
+
+
 impl AddAssign<usize> for LocalCodePtr {
+    #[inline]
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut LocalCodePtr::InSituDirEntry(ref mut p)
-          | &mut LocalCodePtr::UserGoalExpansion(ref mut p)
-          | &mut LocalCodePtr::UserTermExpansion(ref mut p)
-          | &mut LocalCodePtr::DirEntry(ref mut p)
-          | &mut LocalCodePtr::TopLevel(_, ref mut p) => *p += rhs,
+            &mut LocalCodePtr::DirEntry(ref mut p) /* |
+            &mut LocalCodePtr::TopLevel(_, ref mut p) */    => *p += rhs,
+            &mut LocalCodePtr::IndexingBuf(_, _, ref mut i) => *i += rhs,
+            &mut LocalCodePtr::Halt => unreachable!(),
         }
     }
 }
@@ -746,10 +746,14 @@ impl Add<usize> for CodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            p @ CodePtr::REPL(..)
-          | p @ CodePtr::VerifyAttrInterrupt(_)
-          | p @ CodePtr::DynamicTransaction(..) => p,
-            CodePtr::Local(local) => CodePtr::Local(local + rhs),
+            p @ CodePtr::REPL(..) |
+            p @ CodePtr::VerifyAttrInterrupt(_) => { // |
+            // p @ CodePtr::DynamicTransaction(..) => {
+                p
+            }
+            CodePtr::Local(local) => {
+                CodePtr::Local(local + rhs)
+            }
             CodePtr::BuiltInClause(_, local) | CodePtr::CallN(_, local, _) => {
                 CodePtr::Local(local + rhs)
             }
@@ -767,186 +771,206 @@ impl AddAssign<usize> for CodePtr {
     }
 }
 
-pub type HeapVarDict = IndexMap<Rc<Var>, Addr>;
-pub type AllocVarDict = IndexMap<Rc<Var>, VarData>;
-
-#[derive(Debug, Clone)]
-pub struct DynamicPredicateInfo {
-    pub(super) clauses_subsection_p: usize, // a LocalCodePtr::DirEntry value.
-}
-
-impl Default for DynamicPredicateInfo {
-    fn default() -> Self {
-        DynamicPredicateInfo {
-            clauses_subsection_p: 0,
+impl SubAssign<usize> for CodePtr {
+    #[inline]
+    fn sub_assign(&mut self, rhs: usize) {
+        match self {
+            CodePtr::Local(ref mut local) => *local -= rhs,
+            _ => unreachable!(),
         }
     }
 }
 
+
+pub type HeapVarDict = IndexMap<Rc<Var>, Addr>;
+pub type AllocVarDict = IndexMap<Rc<Var>, VarData>;
+
 pub type InSituCodeDir = IndexMap<PredicateKey, usize>;
-
-// key type: module name, predicate indicator.
-pub type DynamicCodeDir = IndexMap<(ClauseName, ClauseName, usize), DynamicPredicateInfo>;
-
 pub type GlobalVarDir = IndexMap<ClauseName, (Ball, Option<usize>)>;
 
 #[derive(Debug)]
 pub(crate) struct ModuleStub {
-    pub(crate) atom_tbl: TabledData<Atom>,
     pub(crate) in_situ_code_dir: InSituCodeDir,
 }
 
-impl ModuleStub {
-    pub(crate) fn new(atom_tbl: TabledData<Atom>) -> Self {
-        ModuleStub {
-            atom_tbl,
-            in_situ_code_dir: InSituCodeDir::new(),
-        }
-    }
-}
-
-pub(crate) type ModuleStubDir = IndexMap<ClauseName, ModuleStub>;
+// pub(crate) type ModuleStubDir = IndexMap<ClauseName, ModuleStub>;
 pub(crate) type StreamAliasDir = IndexMap<ClauseName, Stream>;
 pub(crate) type StreamDir = BTreeSet<Stream>;
 
+pub type MetaPredicateDir = IndexMap<PredicateKey, Vec<MetaSpec>>;
+
+pub type ExtensiblePredicates = IndexMap<PredicateKey, PredicateSkeleton>;
+
 #[derive(Debug)]
 pub struct IndexStore {
-    pub(super) atom_tbl: TabledData<Atom>,
     pub(super) code_dir: CodeDir,
-    pub(super) dynamic_code_dir: DynamicCodeDir,
+    pub(super) extensible_predicates: ExtensiblePredicates,
     pub(super) global_variables: GlobalVarDir,
-    pub(super) in_situ_code_dir: InSituCodeDir,
-    pub(super) in_situ_module_dir: ModuleStubDir,
-    pub(super) module_dir: ModuleDir,
+    pub(super) meta_predicates: MetaPredicateDir,
     pub(super) modules: ModuleDir,
     pub(super) op_dir: OpDir,
     pub(super) streams: StreamDir,
     pub(super) stream_aliases: StreamAliasDir,
 }
 
+impl Default for IndexStore {
+    #[inline]
+    fn default() -> Self {
+        index_store!(CodeDir::new(), default_op_dir(), ModuleDir::new())
+    }
+}
+
 impl IndexStore {
-    pub fn predicate_exists(
-        &self,
-        name: ClauseName,
-        module: ClauseName,
-        arity: usize,
-        op_spec: Option<SharedOpDesc>,
-    ) -> bool {
-        match self.modules.get(&module) {
-            Some(module) => match ClauseType::from(name, arity, op_spec) {
-                ClauseType::Named(name, arity, _) => module.code_dir.contains_key(&(name, arity)),
-                ClauseType::Op(name, spec, ..) => {
-                    module.code_dir.contains_key(&(name, spec.arity()))
+    pub fn get_predicate_skeleton(
+        &mut self,
+        compilation_target: &CompilationTarget,
+        key: &PredicateKey,
+    ) -> Option<&mut PredicateSkeleton> {
+        match (key.0.as_str(), key.1) {
+            ("term_expansion", 2) => {
+                self.extensible_predicates.get_mut(key)
+            }
+            _ => {
+                match compilation_target {
+                    CompilationTarget::User => {
+                        self.extensible_predicates.get_mut(key)
+                    }
+                    CompilationTarget::Module(ref module_name) => {
+                        if let Some(module) = self.modules.get_mut(module_name) {
+                            module.extensible_predicates.get_mut(key)
+                        } else {
+                            None
+                        }
+                    }
                 }
-                _ => true,
-            },
-            None => match ClauseType::from(name, arity, op_spec) {
-                ClauseType::Named(name, arity, _) => self.code_dir.contains_key(&(name, arity)),
-                ClauseType::Op(name, spec, ..) => self.code_dir.contains_key(&(name, spec.arity())),
-                _ => true,
-            },
+            }
         }
     }
 
-    pub fn add_term_and_goal_expansion_indices(&mut self) {
-        self.code_dir.insert((clause_name!("term_expansion"), 2),
-                             CodeIndex(Rc::new(RefCell::new(
-                                 (IndexPtr::UserTermExpansion,
-                                  clause_name!("user"))
-                             ))));
-        self.code_dir.insert((clause_name!("goal_expansion"), 2),
-                             CodeIndex(Rc::new(RefCell::new(
-                                 (IndexPtr::UserGoalExpansion,
-                                  clause_name!("user"))
-                             ))));
+    pub fn remove_predicate_skeleton(
+        &mut self,
+        compilation_target: &CompilationTarget,
+        key: &PredicateKey,
+    ) {
+        match (key.0.as_str(), key.1) {
+            ("term_expansion", 2) => {
+                self.extensible_predicates.remove(key);
+            },
+            _ => {
+                match compilation_target {
+                    CompilationTarget::User => {
+                        self.extensible_predicates.remove(key);
+                    }
+                    CompilationTarget::Module(ref module_name) => {
+                        if let Some(module) = self.modules.get_mut(module_name) {
+                            module.extensible_predicates.remove(key);
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    #[inline]
-    pub fn remove_clause_subsection(&mut self, module: ClauseName, name: ClauseName, arity: usize) {
-        self.dynamic_code_dir.swap_remove(&(module, name, arity));
-    }
-
-    #[inline]
-    pub fn get_clause_subsection(
+    pub fn get_predicate_code_index(
         &self,
-        module: ClauseName,
         name: ClauseName,
         arity: usize,
-    ) -> Option<DynamicPredicateInfo> {
-        self.dynamic_code_dir.get(&(module, name, arity)).cloned()
+        module: ClauseName,
+        op_spec: Option<SharedOpDesc>,
+    ) -> Option<CodeIndex> {
+        if module.as_str() == "user" {
+            match ClauseType::from(name, arity, op_spec) {
+                ClauseType::Named(name, arity, _) => {
+                    self.code_dir.get(&(name, arity)).cloned()
+                }
+                ClauseType::Op(name, spec, ..) => {
+                    self.code_dir.get(&(name, spec.arity())).cloned()
+                }
+                _ => {
+                    None
+                }
+            }
+        } else {
+            self.modules.get(&module).and_then(|module| {
+                match ClauseType::from(name, arity, op_spec) {
+                    ClauseType::Named(name, arity, _) => {
+                        module.code_dir.get(&(name, arity)).cloned()
+                    }
+                    ClauseType::Op(name, spec, ..) => {
+                        module.code_dir.get(&(name, spec.arity())).cloned()
+                    }
+                    _ => {
+                        None
+                    }
+                }
+            })
+        }
     }
 
-    #[inline]
-    pub(crate) fn take_in_situ_module_dir(&mut self) -> ModuleStubDir {
-        mem::replace(&mut self.in_situ_module_dir, ModuleStubDir::new())
+    pub fn get_meta_predicate_spec(
+        &self,
+        name: ClauseName,
+        arity: usize,
+        compilation_target: &CompilationTarget,
+    ) -> Option<&Vec<MetaSpec>> {
+        match compilation_target {
+            CompilationTarget::User => {
+                self.meta_predicates.get(&(name, arity))
+            }
+            CompilationTarget::Module(ref module_name) => {
+                match self.modules.get(module_name) {
+                    Some(ref module) => {
+                        module.meta_predicates.get(&(name.clone(), arity))
+                              .or_else(|| {
+                                  self.meta_predicates.get(&(name, arity))
+                              })
+                    }
+                    None => {
+                        self.meta_predicates.get(&(name, arity))
+                    }
+                }
+            }
+        }
     }
 
-    #[inline]
-    pub fn take_in_situ_code_dir(&mut self) -> InSituCodeDir {
-        mem::replace(&mut self.in_situ_code_dir, InSituCodeDir::new())
-    }
-
-    #[inline]
-    pub fn take_module(&mut self, name: ClauseName) -> Option<Module> {
-        self.modules.swap_remove(&name)
-    }
-
-    #[inline]
-    pub fn insert_module(&mut self, module: Module) {
-        self.modules.insert(module.module_decl.name.clone(), module);
+    pub fn is_dynamic_predicate(&self, module_name: ClauseName, key: PredicateKey) -> bool {
+        match module_name.as_str() {
+            "user" => {
+                self.extensible_predicates.get(&key)
+                    .map(|skeleton| skeleton.is_dynamic)
+                    .unwrap_or(false)
+            }
+            _ => {
+                match self.modules.get(&module_name) {
+                    Some(ref module) => {
+                        module.extensible_predicates.get(&key)
+                              .map(|skeleton| skeleton.is_dynamic)
+                              .unwrap_or(false)
+                    }
+                    None => {
+                        false
+                    }
+                }
+            }
+        }
     }
 
     #[inline]
     pub(super) fn new() -> Self {
-        IndexStore {
-            atom_tbl: TabledData::new(Rc::new("user".to_string())),
-            code_dir: CodeDir::new(),
-            module_dir: ModuleDir::new(),
-            dynamic_code_dir: DynamicCodeDir::new(),
-            global_variables: GlobalVarDir::new(),
-            in_situ_code_dir: InSituCodeDir::new(),
-            in_situ_module_dir: ModuleStubDir::new(),
-            op_dir: default_op_dir(),
-            modules: ModuleDir::new(),
-            stream_aliases: StreamAliasDir::new(),
-            streams: StreamDir::new(),
-        }
+        IndexStore::default()
     }
 
-    #[inline]
-    pub(super) fn copy_and_swap(&mut self, other: &mut IndexStore) {
-        self.code_dir = other.code_dir.clone();
-        self.op_dir = other.op_dir.clone();
-
-        mem::swap(&mut self.code_dir, &mut other.code_dir);
-        mem::swap(&mut self.op_dir, &mut other.op_dir);
-        mem::swap(&mut self.modules, &mut other.modules);
-    }
-
-    #[inline]
-    fn get_internal(
-        &self,
-        name: ClauseName,
-        arity: usize,
-        in_mod: ClauseName,
-    ) -> Option<CodeIndex> {
-        self.modules
-            .get(&in_mod)
-            .and_then(|ref module| module.code_dir.get(&(name, arity)))
-            .cloned()
-    }
-
-    pub(super) fn get_cleaner_sites(&self) -> (usize, usize) {
+    pub(super)
+    fn get_cleaner_sites(&self) -> (usize, usize) {
         let r_w_h = clause_name!("run_cleaners_with_handling");
         let r_wo_h = clause_name!("run_cleaners_without_handling");
-
         let iso_ext = clause_name!("iso_ext");
 
         let r_w_h = self
-            .get_internal(r_w_h, 0, iso_ext.clone())
+            .get_predicate_code_index(r_w_h, 0, iso_ext.clone(), None)
             .and_then(|item| item.local());
         let r_wo_h = self
-            .get_internal(r_wo_h, 1, iso_ext)
+            .get_predicate_code_index(r_wo_h, 1, iso_ext, None)
             .and_then(|item| item.local());
 
         if let Some(r_w_h) = r_w_h {
@@ -960,129 +984,6 @@ impl IndexStore {
 }
 
 pub type CodeDir = BTreeMap<PredicateKey, CodeIndex>;
-pub type TermDir = IndexMap<PredicateKey, (Predicate, VecDeque<TopLevel>)>;
-
-#[derive(Debug)]
-pub struct TermDirQuantumEntry {
-    pub old_terms: (Predicate, VecDeque<TopLevel>),
-    pub new_terms: (Predicate, VecDeque<TopLevel>),
-    pub is_fresh: bool,
-}
-
-impl TermDirQuantumEntry {
-    #[inline]
-    pub fn new() -> Self {
-        TermDirQuantumEntry {
-            old_terms: (Predicate::new(), VecDeque::new()),
-            new_terms: (Predicate::new(), VecDeque::new()),
-            is_fresh: false,
-        }
-    }
-
-    pub fn from(preds: &Predicate, queue: &VecDeque<TopLevel>) -> Self
-    {
-        let mut entry = TermDirQuantumEntry::new();
-        entry.is_fresh = false;
-
-        (entry.old_terms.0).0.extend(preds.0.iter().cloned());
-        entry.old_terms.1.extend(queue.iter().cloned());
-
-        entry
-    }
-}
-
-#[derive(Debug)]
-pub struct TermDirQuantum(IndexMap<PredicateKey, TermDirQuantumEntry>);
-
-impl TermDirQuantum {
-    #[inline]
-    pub fn new() -> Self {
-        TermDirQuantum(IndexMap::new())
-    }
-
-    #[inline]
-    pub fn insert_or_refresh(&mut self, key: PredicateKey, mut entry: TermDirQuantumEntry) {
-        if let Some(prev_entry) = self.get_mut(&key) {
-            prev_entry.is_fresh = true;
-        } else {
-            entry.is_fresh = true;
-            self.0.insert(key, entry);
-        }
-    }
-
-    #[inline]
-    pub fn insert(&mut self, key: PredicateKey, entry: TermDirQuantumEntry) {
-        self.0.insert(key, entry);
-    }
-
-    #[inline]
-    pub fn get_mut(&mut self, key: &PredicateKey) -> Option<&mut TermDirQuantumEntry> {
-        self.0.get_mut(key)
-    }
-
-    pub fn consolidate(self) -> TermDir {
-        let mut term_dir = TermDir::new();
-
-        for (key, entry) in self.0 {
-            let (preds, queue) =
-                term_dir.entry(key).or_insert((Predicate::new(), VecDeque::new()));
-
-            preds.0.extend((entry.new_terms.0).0.into_iter());
-            queue.extend(entry.new_terms.1.into_iter());
-        }
-
-        term_dir
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
-pub enum CompileTimeHook {
-    GoalExpansion,
-    TermExpansion,
-    UserGoalExpansion,
-    UserTermExpansion,
-}
-
-impl CompileTimeHook {
-    pub fn name(self) -> ClauseName {
-        match self {
-            CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion => {
-                clause_name!("goal_expansion")
-            }
-            CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion => {
-                clause_name!("term_expansion")
-            }
-        }
-    }
-
-    #[inline]
-    pub fn arity(self) -> usize {
-        match self {
-            CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion => 2,
-            CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion => 2,
-        }
-    }
-
-    #[inline]
-    pub fn user_scope(self) -> Self {
-        match self {
-            CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion => {
-                CompileTimeHook::UserGoalExpansion
-            }
-            CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion => {
-                CompileTimeHook::UserTermExpansion
-            }
-        }
-    }
-
-    #[inline]
-    pub fn has_module_scope(self) -> bool {
-        match self {
-            CompileTimeHook::UserTermExpansion | CompileTimeHook::UserGoalExpansion => false,
-            _ => true,
-        }
-    }
-}
 
 pub enum RefOrOwned<'a, T: 'a> {
     Borrowed(&'a T),
@@ -1094,7 +995,8 @@ impl<'a, T: 'a + fmt::Debug> fmt::Debug for RefOrOwned<'a, T> {
         match self {
             &RefOrOwned::Borrowed(ref borrowed) =>
                 write!(f, "Borrowed({:?})", borrowed),
-            &RefOrOwned::Owned(ref owned) => write!(f, "Owned({:?})", owned),
+            &RefOrOwned::Owned(ref owned) =>
+                write!(f, "Owned({:?})", owned),
         }
     }
 }
@@ -1107,9 +1009,7 @@ impl<'a, T> RefOrOwned<'a, T> {
         }
     }
 
-    pub fn to_owned(self) -> T
-    where
-        T: Clone,
+    pub fn to_owned(self) -> T where T: Clone
     {
         match self {
             RefOrOwned::Borrowed(item) => item.clone(),

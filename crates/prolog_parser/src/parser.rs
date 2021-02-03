@@ -46,24 +46,24 @@ struct TokenDesc {
 }
 
 pub
-fn get_clause_spec(name: ClauseName, arity: usize, op_dir: CompositeOp) -> Option<SharedOpDesc>
+fn get_clause_spec(name: ClauseName, arity: usize, op_dir: &CompositeOpDir) -> Option<SharedOpDesc>
 {
     match arity {
         1 => {
             /* This is a clause with an operator principal functor. Prefix operators
             are supposed over post.
              */
-            if let Some(OpDirValue(cell, _)) = op_dir.get(name.clone(), Fixity::Pre) {
-                return Some(cell);
+            if let Some(OpDirValue(cell)) = op_dir.get(name.clone(), Fixity::Pre) {
+                return Some(cell.clone());
             }
 
-            if let Some(OpDirValue(cell, _)) = op_dir.get(name, Fixity::Post) {
-                return Some(cell);
+            if let Some(OpDirValue(cell)) = op_dir.get(name, Fixity::Post) {
+                return Some(cell.clone());
             }
         },
         2 =>
-            if let Some(OpDirValue(cell, _)) = op_dir.get(name, Fixity::In) {
-                return Some(cell);
+            if let Some(OpDirValue(cell)) = op_dir.get(name, Fixity::In) {
+                return Some(cell.clone());
             },
         _ => {}
     };
@@ -71,11 +71,11 @@ fn get_clause_spec(name: ClauseName, arity: usize, op_dir: CompositeOp) -> Optio
     None
 }
 
-pub fn get_desc(name: ClauseName, op_dir: CompositeOp) -> Option<OpDesc>
+pub fn get_op_desc(name: ClauseName, op_dir: &CompositeOpDir) -> Option<OpDesc>
 {
     let mut op_desc = OpDesc { pre: 0, inf: 0, post: 0, spec: 0 };
 
-    if let Some(OpDirValue(cell, _)) = op_dir.get(name.clone(), Fixity::Pre) {
+    if let Some(OpDirValue(cell)) = op_dir.get(name.clone(), Fixity::Pre) {
         let (pri, spec) = cell.get();
 
         if pri > 0 {
@@ -86,7 +86,7 @@ pub fn get_desc(name: ClauseName, op_dir: CompositeOp) -> Option<OpDesc>
         }
     }
 
-    if let Some(OpDirValue(cell, _)) = op_dir.get(name.clone(), Fixity::Post) {
+    if let Some(OpDirValue(cell)) = op_dir.get(name.clone(), Fixity::Post) {
         let (pri, spec) = cell.get();
 
         if pri > 0 {
@@ -95,7 +95,7 @@ pub fn get_desc(name: ClauseName, op_dir: CompositeOp) -> Option<OpDesc>
         }
     }
 
-    if let Some(OpDirValue(cell, _)) = op_dir.get(name.clone(), Fixity::In) {
+    if let Some(OpDirValue(cell)) = op_dir.get(name.clone(), Fixity::In) {
         let (pri, spec) = cell.get();
 
         if pri > 0 {
@@ -319,7 +319,7 @@ impl<'a, R: Read> Parser<'a, R> {
     }
 
     fn promote_atom_op(&mut self, atom: ClauseName, priority: usize, assoc: u32,
-                       op_dir_val: Option<OpDirValue>)
+                       op_dir_val: Option<&OpDirValue>)
     {
         let spec = op_dir_val.map(|op_dir_val| op_dir_val.shared_op_desc());
 
@@ -454,7 +454,7 @@ impl<'a, R: Read> Parser<'a, R> {
         None
     }
 
-    fn reduce_term(&mut self, op_dir: CompositeOp) -> bool
+    fn reduce_term(&mut self, op_dir: &CompositeOpDir) -> bool
     {
         if self.stack.is_empty() {
             return false;
@@ -687,12 +687,18 @@ impl<'a, R: Read> Parser<'a, R> {
 
                         let term = match self.terms.pop() {
                             Some(term) => term,
-                            _ => return Err(ParserError::IncompleteReduction(self.lexer.line_num,
-                                                                             self.lexer.col_num))
+                            _ => return Err(ParserError::IncompleteReduction(
+                                self.lexer.line_num,
+                                self.lexer.col_num,
+                            ))
                         };
 
-                        self.terms.push(Term::Clause(Cell::default(), clause_name!("{}"),
-                                                     vec![Box::new(term)], None));
+                        self.terms.push(Term::Clause(
+                            Cell::default(),
+                            clause_name!("{}"),
+                            vec![Box::new(term)],
+                            None
+                        ));
 
                         return Ok(true);
                     }
@@ -738,8 +744,8 @@ impl<'a, R: Read> Parser<'a, R> {
         }
     }
 
-    fn shift_op(&mut self, name: ClauseName, op_dir: CompositeOp) -> Result<bool, ParserError> {
-        if let Some(OpDesc { pre, inf, post, spec }) = get_desc(name.clone(), op_dir) {
+    fn shift_op(&mut self, name: ClauseName, op_dir: &CompositeOpDir) -> Result<bool, ParserError> {
+        if let Some(OpDesc { pre, inf, post, spec }) = get_op_desc(name.clone(), op_dir) {
             if (pre > 0 && inf + post > 0) || is_negate!(spec) {
                 match self.tokens.last().ok_or(ParserError::UnexpectedEOF)? {
                     // do this when layout hasn't been inserted,
@@ -752,8 +758,12 @@ impl<'a, R: Read> Parser<'a, R> {
                         let fixity = if inf > 0 { Fixity::In } else { Fixity::Post };
                         let op_dir_val = op_dir.get(name.clone(), fixity);
 
-                        self.promote_atom_op(name, inf + post, spec & (XFX | XFY | YFX | YF | XF),
-                                             op_dir_val);
+                        self.promote_atom_op(
+                            name,
+                            inf + post,
+                            spec & (XFX | XFY | YFX | YF | XF),
+                            op_dir_val,
+                        );
                     },
                     _ => {
                         self.reduce_op(inf + post);
@@ -764,9 +774,12 @@ impl<'a, R: Read> Parser<'a, R> {
                                 let fixity = if inf > 0 { Fixity::In } else { Fixity::Post };
                                 let op_dir_val = op_dir.get(name.clone(), fixity);
 
-                                self.promote_atom_op(name, inf + post,
-                                                     spec & (XFX | XFY | YFX | XF | YF),
-                                                     op_dir_val);
+                                self.promote_atom_op(
+                                    name,
+                                    inf + post,
+                                    spec & (XFX | XFY | YFX | XF | YF),
+                                    op_dir_val,
+                                );
                             } else {
                                 let op_dir_val = op_dir.get(name.clone(), Fixity::Pre);
                                 self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN), op_dir_val);
@@ -778,14 +791,16 @@ impl<'a, R: Read> Parser<'a, R> {
                     }
                 }
             } else {
-                let op_dir_val = op_dir.get(name.clone(),
-                                            if pre + inf == 0 {
-                                                Fixity::Post
-                                            } else if post + pre == 0 {
-                                                Fixity::In
-                                            } else {
-                                                Fixity::Pre
-                                            });
+                let op_dir_val = op_dir.get(
+                    name.clone(),
+                    if pre + inf == 0 {
+                        Fixity::Post
+                    } else if post + pre == 0 {
+                        Fixity::In
+                    } else {
+                        Fixity::Pre
+                    },
+                );
 
                 self.reduce_op(pre + inf + post); // only one non-zero priority among these.
                 self.promote_atom_op(name, pre + inf + post, spec, op_dir_val);
@@ -843,7 +858,7 @@ impl<'a, R: Read> Parser<'a, R> {
         self.shift(Token::Constant(constr(n)), 0, TERM);
     }
 
-    fn shift_token(&mut self, token: Token, op_dir: CompositeOp) -> Result<(), ParserError> {
+    fn shift_token(&mut self, token: Token, op_dir: &CompositeOpDir) -> Result<(), ParserError> {
         fn negate_rc<T: NegAssign>(mut t: Rc<T>) -> Rc<T> {
             match Rc::get_mut(&mut t) {
                 Some(t) => {
@@ -909,7 +924,7 @@ impl<'a, R: Read> Parser<'a, R> {
                 /* '|' as an operator must have priority > 1000 and can only be infix.
                  * See: http://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#Res_A78
                  */
-                let (priority, spec) = get_desc(clause_name!("|"), op_dir)
+                let (priority, spec) = get_op_desc(clause_name!("|"), op_dir)
                     .map(|OpDesc { inf, spec, .. }| (inf, spec))
                     .unwrap_or((1000, DELIMITER));
 
@@ -942,7 +957,7 @@ impl<'a, R: Read> Parser<'a, R> {
         self.lexer.eof()
     }
 
-    pub fn read_term(&mut self, op_dir: CompositeOp) -> Result<Term, ParserError>
+    pub fn read_term(&mut self, op_dir: &CompositeOpDir) -> Result<Term, ParserError>
     {
         self.tokens = read_tokens(&mut self.lexer)?;
 
@@ -966,7 +981,7 @@ impl<'a, R: Read> Parser<'a, R> {
         }
     }
 
-    pub fn read(&mut self, op_dir: CompositeOp) -> Result<Vec<Term>, ParserError>
+    pub fn read(&mut self, op_dir: &CompositeOpDir) -> Result<Vec<Term>, ParserError>
     {
         let mut terms = Vec::new();
 

@@ -1,6 +1,6 @@
 use crate::indexmap::IndexMap;
 
-use crate::prolog_parser::ast::*;
+use crate::prolog_parser_rebis::ast::*;
 
 use crate::allocator::*;
 use crate::fixtures::*;

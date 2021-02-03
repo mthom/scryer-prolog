@@ -1,15 +1,29 @@
 :- module(lists, [member/2, select/3, append/2, append/3, foldl/4, foldl/5,
-		  memberchk/2, reverse/2, length/2, maplist/2,
-		  maplist/3, maplist/4, maplist/5, maplist/6,
-		  maplist/7, maplist/8, maplist/9, same_length/2, nth0/3,
-		  sum_list/2, transpose/2, list_to_set/2, list_max/2, list_min/2]).
+		          memberchk/2, reverse/2, length/2, maplist/2,
+		          maplist/3, maplist/4, maplist/5, maplist/6,
+		          maplist/7, maplist/8, maplist/9, same_length/2, nth0/3,
+		          sum_list/2, transpose/2, list_to_set/2, list_max/2, list_min/2]).
 
 
 :- use_module(library(error)).
 
 
+:- meta_predicate maplist(1, ?).
+:- meta_predicate maplist(2, ?, ?).
+:- meta_predicate maplist(3, ?, ?, ?).
+:- meta_predicate maplist(4, ?, ?, ?, ?).
+:- meta_predicate maplist(5, ?, ?, ?, ?, ?).
+:- meta_predicate maplist(6, ?, ?, ?, ?, ?, ?).
+:- meta_predicate maplist(7, ?, ?, ?, ?, ?, ?, ?).
+:- meta_predicate maplist(8, ?, ?, ?, ?, ?, ?, ?, ?).
+
+:- meta_predicate foldl(3, ?, ?, ?).
+:- meta_predicate foldl(4, ?, ?, ?, ?).
+
+
 length(Xs, N) :-
-    var(N), !,
+    var(N),
+    !,
     '$skip_max_list'(M, -1, Xs, Xs0),
     (  Xs0 == [] -> N = M
     ;  var(Xs0)  -> length_addendum(Xs0, N, M)).
@@ -66,7 +80,6 @@ reverse([], [], YsRev, YsRev).
 reverse([_|Xs], [Y1|Ys], YsPreludeRev, Xss) :-
     reverse(Xs, Ys, [Y1|YsPreludeRev], Xss).
 
-
 maplist(_, []).
 maplist(Cont1, [E1|E1s]) :-
     call(Cont1, E1),
@@ -87,20 +100,24 @@ maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s]) :-
     call(Cont, E1, E2, E3, E4),
     maplist(Cont, E1s, E2s, E3s, E4s).
 
+
 maplist(_, [], [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s]) :-
     call(Cont, E1, E2, E3, E4, E5),
     maplist(Cont, E1s, E2s, E3s, E4s, E5s).
+
 
 maplist(_, [], [], [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s]) :-
     call(Cont, E1, E2, E3, E4, E5, E6),
     maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s).
 
+
 maplist(_, [], [], [], [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7s]) :-
     call(Cont, E1, E2, E3, E4, E5, E6, E7),
     maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s, E7s).
+
 
 maplist(_, [], [], [], [], [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7s], [E8|E8s]) :-
@@ -131,6 +148,7 @@ foldl_([L|Ls], G_3, A0, A) :-
 
 foldl(Goal_4, Xs, Ys, A0, A) :-
         foldl_(Xs, Ys, Goal_4, A0, A).
+
 
 foldl_([], [], _, A, A).
 foldl_([X|Xs], [Y|Ys], G_4, A0, A) :-

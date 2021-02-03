@@ -82,6 +82,8 @@ sleep(T) :-
 
 % '$cpu_now' can be replaced by statistics/2 once that is implemented.
 
+:- meta_predicate time(0).
+
 time(Goal) :-
         '$cpu_now'(T0),
         setup_call_cleanup(true,

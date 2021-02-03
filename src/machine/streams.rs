@@ -1,4 +1,4 @@
-use crate::prolog_parser::ast::*;
+use crate::prolog_parser_rebis::ast::*;
 
 use crate::read::PrologStream;
 use crate::read::readline::*;
@@ -179,10 +179,10 @@ impl Drop for StreamInstance {
     fn drop(&mut self) {
         match self {
             StreamInstance::TcpStream(_, ref mut tcp_stream) => {
-                discard_result!(tcp_stream.shutdown(Shutdown::Both));
+                tcp_stream.shutdown(Shutdown::Both).unwrap();
             }
             StreamInstance::TlsStream(_, ref mut tls_stream) => {
-                discard_result!(tls_stream.shutdown());
+                tls_stream.shutdown().unwrap();
             }
             _ => {
             }

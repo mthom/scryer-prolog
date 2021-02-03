@@ -1,19 +1,21 @@
-use crate::prolog_parser::ast::*;
-use crate::prolog_parser::parser::*;
-use crate::prolog_parser::tabled_rc::*;
+use crate::prolog_parser_rebis::ast::*;
+use crate::prolog_parser_rebis::parser::*;
+use crate::prolog_parser_rebis::tabled_rc::*;
 
 use crate::clause_types::*;
 use crate::forms::*;
 use crate::heap_print::*;
 use crate::instructions::*;
+use crate::machine;
 use crate::machine::code_repo::CodeRepo;
 use crate::machine::copier::*;
 use crate::machine::code_walker::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
+use crate::machine::preprocessor::to_op_decl;
 use crate::machine::streams::*;
-use crate::machine::toplevel::to_op_decl;
+
 use crate::ordered_float::OrderedFloat;
 use crate::read::readline;
 use crate::rug::Integer;
@@ -402,9 +404,7 @@ impl MachineState {
             }
         }
 
-        let mode =
-            atom_from!(self, indices, self.store(self.deref(self[temp_v!(2)])));
-
+        let mode = atom_from!(self, self.store(self.deref(self[temp_v!(2)])));
         let mut open_options = fs::OpenOptions::new();
 
         let (is_input_file, in_append_mode) =
@@ -560,7 +560,7 @@ impl MachineState {
                         let spec = get_clause_spec(
                             name.clone(),
                             *arity,
-                            composite_op!(&indices.op_dir),
+                            &CompositeOpDir::new(&indices.op_dir, None),
                         );
 
                         let addr = self.heap.to_unifiable(HeapCellValue::DBRef(
@@ -681,11 +681,11 @@ impl MachineState {
 
         let mut parser = Parser::new(
             &mut stream,
-            indices.atom_tbl.clone(),
+            self.atom_tbl.clone(),
             self.machine_flags(),
         );
 
-        match parser.read_term(composite_op!(&indices.op_dir)) {
+        match parser.read_term(&CompositeOpDir::new(&indices.op_dir, None)) {
             Err(err) => {
                 let h = self.heap.h();
                 let err = MachineError::syntax_error(h, err);
@@ -792,6 +792,7 @@ impl MachineState {
         current_output_stream: &mut Stream,
     ) -> CallResult {
         match ct {
+            /*
             &SystemClauseType::AbolishClause => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::Abolish;
@@ -806,6 +807,7 @@ impl MachineState {
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
             }
+            */
             &SystemClauseType::BindFromRegister => {
                 let reg = self.store(self.deref(self[temp_v!(2)]));
                 let n =
@@ -833,6 +835,7 @@ impl MachineState {
 
                 self.fail = true;
             }
+            /*
             &SystemClauseType::AssertDynamicPredicateToFront => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Front);
@@ -841,19 +844,21 @@ impl MachineState {
                 return Ok(());
             }
             &SystemClauseType::AssertDynamicPredicateToBack => {
-                let p = self.cp;
-                let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Back);
+                // let p = self.cp;
+                // let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Back);
 
-                self.p = CodePtr::DynamicTransaction(trans_type, p);
+                // self.p = CodePtr::DynamicTransaction(trans_type, p);
+                self.p = CodePtr::REPL(REPLCodePtr::UserAssertz, self.cp);
                 return Ok(());
             }
+            */
             &SystemClauseType::CurrentHostname => {
                 match hostname::get().ok() {
                     Some(host) => {
                         match host.into_string().ok() {
                             Some(host) => {
                                 let hostname = self.heap.to_unifiable(
-                                    HeapCellValue::Atom(clause_name!(host, indices.atom_tbl), None)
+                                    HeapCellValue::Atom(clause_name!(host, self.atom_tbl), None)
                                 );
 
                                 self.unify(self[temp_v!(1)], hostname);
@@ -1016,6 +1021,7 @@ impl MachineState {
                                    return Err(err);
                             }
                         };
+
                     let chars = self.heap.put_complete_string(current);
                     self.unify(self[temp_v!(1)], chars);
 
@@ -1092,11 +1098,13 @@ impl MachineState {
                     return Ok(());
                 }
             }
+            /*
             &SystemClauseType::AtEndOfExpansion => {
                 if self.cp == LocalCodePtr::TopLevel(0, 0) {
                     self.at_end_of_expansion = true;
                 }
             }
+            */
             &SystemClauseType::AtomChars => {
                 let a1 = self[temp_v!(1)];
 
@@ -1139,7 +1147,7 @@ impl MachineState {
                                 if &string == "[]" {
                                     self.unify(addr, Addr::EmptyList);
                                 } else {
-                                    let chars = clause_name!(string, indices.atom_tbl);
+                                    let chars = clause_name!(string, self.atom_tbl);
                                     let atom  = self.heap.to_unifiable(
                                         HeapCellValue::Atom(chars, None)
                                     );
@@ -1254,7 +1262,7 @@ impl MachineState {
                                 }
 
                                 let string = self.heap.to_unifiable(
-                                    HeapCellValue::Atom(clause_name!(chars, indices.atom_tbl), None)
+                                    HeapCellValue::Atom(clause_name!(chars, self.atom_tbl), None)
                                 );
 
                                 self.bind(addr.as_var().unwrap(), string);
@@ -1281,7 +1289,7 @@ impl MachineState {
                         clause_name!("[]")
                     }
                     Addr::Char(c) => {
-                        clause_name!(c.to_string(), indices.atom_tbl)
+                        clause_name!(c.to_string(), self.atom_tbl)
                     }
                     _ => {
                         unreachable!()
@@ -1858,6 +1866,7 @@ impl MachineState {
                     }
                 }
             }
+            /*
             &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::ModuleAssert(DynamicAssertPlace::Front);
@@ -1872,6 +1881,7 @@ impl MachineState {
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
             }
+            */
             &SystemClauseType::LiftedHeapLength => {
                 let a1 = self[temp_v!(1)];
                 let lh_len = Addr::Usize(self.lifted_heap.h());
@@ -2854,6 +2864,7 @@ impl MachineState {
 
                 self.unify(Addr::Char(c), a1);
             }
+/*
             &SystemClauseType::GetModuleClause => {
                 let module = self[temp_v!(3)];
                 let head = self[temp_v!(1)];
@@ -2944,20 +2955,24 @@ impl MachineState {
                     _ => unreachable!(),
                 };
             }
+*/
             &SystemClauseType::HeadIsDynamic => {
-                let head = self[temp_v!(1)];
+                let module_name = atom_from!(
+                    self,
+                    self.store(self.deref(
+                        self[temp_v!(1)]
+                    ))
+                );
 
-                self.fail = !match self.store(self.deref(head)) {
+                self.fail = !match self.store(self.deref(self[temp_v!(2)])) {
                     Addr::Str(s) => match &self.heap[s] {
-                        &HeapCellValue::NamedStr(arity, ref name, ..) => indices
-                            .get_clause_subsection(name.owning_module(), name.clone(), arity)
-                            .is_some(),
+                        &HeapCellValue::NamedStr(arity, ref name, ..) =>
+                            indices.is_dynamic_predicate(module_name, (name.clone(), arity)),
                         _ => unreachable!(),
                     },
                     Addr::Con(h) if self.heap.atom_at(h) => {
-	                if let HeapCellValue::Atom(name, _) = &self.heap[h] {
-                            indices.get_clause_subsection(name.owning_module(), name.clone(), 0)
-                                   .is_some()
+	                    if let HeapCellValue::Atom(name, _) = &self.heap[h] {
+                            indices.is_dynamic_predicate(module_name, (name.clone(), 0))
                         } else {
                             unreachable!()
                         }
@@ -3111,21 +3126,27 @@ impl MachineState {
 
                             return self.module_lookup(
                                 indices,
+                                call_policy,
                                 (name, arity + narity),
                                 module_name,
                                 true,
+                                current_input_stream,
+                                current_output_stream,
                             );
                         } else {
                             unreachable!()
                         }
                     }
                     Addr::Con(h) if self.heap.atom_at(h) => {
-	                if let HeapCellValue::Atom(name, _) = self.heap.clone(h) {
+	                    if let HeapCellValue::Atom(name, _) = self.heap.clone(h) {
                             return self.module_lookup(
                                 indices,
+                                call_policy,
                                 (name.clone(), narity),
                                 module_name,
                                 true,
+                                current_input_stream,
+                                current_output_stream,
                             );
                         } else {
                             unreachable!()
@@ -3160,6 +3181,7 @@ impl MachineState {
                     }
                 }
             }
+            /*
             &SystemClauseType::ExpandGoal => {
                 self.p = CodePtr::Local(LocalCodePtr::UserGoalExpansion(0));
                 return Ok(());
@@ -3168,6 +3190,7 @@ impl MachineState {
                 self.p = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
                 return Ok(());
             }
+            */
             &SystemClauseType::GetNextDBRef => {
                 let a1 = self[temp_v!(1)];
 
@@ -3185,7 +3208,7 @@ impl MachineState {
                             let spec = get_clause_spec(
                                 name.clone(),
                                 *arity,
-                                composite_op!(&indices.op_dir),
+                                &CompositeOpDir::new(&indices.op_dir, None),
                             );
 
                             let db_ref = DBRef::NamedPred(name.clone(), *arity, spec);
@@ -3429,7 +3452,7 @@ impl MachineState {
 
                 let op = match self.store(self.deref(op)) {
                     Addr::Char(c) =>
-                        clause_name!(c.to_string(), indices.atom_tbl),
+                        clause_name!(c.to_string(), self.atom_tbl),
                     Addr::Con(h) if self.heap.atom_at(h) =>
                         if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
                             name.clone()
@@ -3440,16 +3463,18 @@ impl MachineState {
                         unreachable!(),
                 };
 
-                let module = op.owning_module();
-
                 let result = to_op_decl(priority, specifier.as_str(), op)
                     .map_err(SessionError::from)
-                    .and_then(|op_decl| {
-                        if op_decl.0 == 0 {
+                    .and_then(|mut op_decl| {
+                        if op_decl.prec == 0 {
                             Ok(op_decl.remove(&mut indices.op_dir))
                         } else {
-                            let spec = get_desc(op_decl.name(), composite_op!(&indices.op_dir));
-                            op_decl.submit(module, spec, &mut indices.op_dir)
+                            let spec = get_op_desc(
+                                op_decl.name.clone(),
+                                &CompositeOpDir::new(&indices.op_dir, None),
+                            );
+
+                            op_decl.submit(spec, &mut indices.op_dir)
                         }
                     });
 
@@ -3493,10 +3518,10 @@ impl MachineState {
                                     let mut heap_pstr_iter =
                                         self.heap_pstr_iter(Addr::PStrLocation(h, n));
 
-                                    let file_spec = 
+                                    let file_spec =
                                         clause_name!(
                                             heap_pstr_iter.to_string(),
-                                            indices.atom_tbl.clone()
+                                            self.atom_tbl
                                         );
 
                                     self.stream_from_file_spec(file_spec, indices, &options)?
@@ -3901,65 +3926,18 @@ impl MachineState {
                     }
                 };
             }
-            &SystemClauseType::ModuleOf => {
-                let module = self.store(self.deref(self[temp_v!(2)]));
-
-                match module {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-	                if let HeapCellValue::Atom(name, _) = self.heap.clone(h) {
-                            let module = self.heap.to_unifiable(
-                                HeapCellValue::Atom(
-                                    name.owning_module(),
-                                    None
-                                ),
-                            );
-
-                            let target = self[temp_v!(1)];
-
-                            self.unify(target, module);
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    Addr::Str(s) => match self.heap.clone(s) {
-                        HeapCellValue::NamedStr(_, name, ..) => {
-                            let module = self.heap.to_unifiable(
-                                HeapCellValue::Atom(
-                                    name.owning_module(),
-                                    None
-                                ),
-                            );
-
-                            let target = self[temp_v!(1)];
-
-                            self.unify(target, module);
-                        }
-                        HeapCellValue::Addr(addr) if addr.is_ref() => {
-                            let err = MachineError::uninstantiation_error(addr);
-                            let stub = MachineError::functor_stub(
-                                clause_name!("$module_of"),
-                                2,
-                            );
-
-                            return Err(self.error_form(err, stub));
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    },
-                    _ => {
-                        self.fail = true;
-                    }
-                };
-            }
             &SystemClauseType::NoSuchPredicate => {
-                let head = self[temp_v!(1)];
+                let module_name = atom_from!(self, self.store(self.deref(self[temp_v!(1)])));
 
-                self.fail = match self.store(self.deref(head)) {
+                self.fail = match self.store(self.deref(self[temp_v!(2)])) {
                     Addr::Str(s) => match &self.heap[s] {
                         &HeapCellValue::NamedStr(arity, ref name, ref spec) => {
-                            let module = name.owning_module();
-                            indices.predicate_exists(name.clone(), module, arity, spec.clone())
+                            indices.get_predicate_code_index(
+                                name.clone(),
+                                arity,
+                                module_name,
+                                spec.clone(),
+                            ).is_some()
                         }
                         _ => {
                             unreachable!()
@@ -3967,14 +3945,14 @@ impl MachineState {
                     },
                     Addr::Con(h) if self.heap.atom_at(h) => {
 	                    if let &HeapCellValue::Atom(ref name, ref spec) = &self.heap[h] {
-                            let module = name.owning_module();
                             let spec = fetch_atom_op_spec(
                                 name.clone(),
                                 spec.clone(),
                                 &indices.op_dir,
                             );
 
-                            indices.predicate_exists(name.clone(), module, 0, spec)
+                            indices.get_predicate_code_index(name.clone(), 0, module_name, spec)
+                                   .is_some()
                         } else {
                             unreachable!()
                         }
@@ -4116,6 +4094,7 @@ impl MachineState {
             &SystemClauseType::REPL(repl_code_ptr) => {
                 return self.repl_redirect(repl_code_ptr);
             }
+            /*
             &SystemClauseType::ModuleRetractClause => {
                 let p = self.cp;
                 let trans_type = DynamicTransactionType::ModuleRetract;
@@ -4130,6 +4109,7 @@ impl MachineState {
                 self.p = CodePtr::DynamicTransaction(trans_type, p);
                 return Ok(());
             }
+            */
             &SystemClauseType::ReturnFromVerifyAttr => {
                 let e = self.e;
                 let frame_len = self.stack.index_and_frame(e).prelude.univ_prelude.num_cells;
@@ -4326,6 +4306,7 @@ impl MachineState {
 
                 self.unify(a1, a2);
             }
+/*
             &SystemClauseType::GetClause => {
                 let head = self[temp_v!(1)];
 
@@ -4343,14 +4324,14 @@ impl MachineState {
                         }
                     },
                     Addr::Con(h) if self.heap.atom_at(h) => {
-	                if let &HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+	                    if let &HeapCellValue::Atom(ref name, _) = &self.heap[h] {
                             indices.get_clause_subsection(
                                 name.owning_module(),
                                 name.clone(),
                                 0,
                             )
                         } else {
-                            unreachable!()
+                unreachable!()
                         }
                     }
                     _ => {
@@ -4372,6 +4353,7 @@ impl MachineState {
                     }
                 }
             }
+*/
             &SystemClauseType::GetCutPoint => {
                 let a1 = self[temp_v!(1)];
                 let a2 = Addr::CutPoint(self.b0);
@@ -4524,7 +4506,7 @@ impl MachineState {
                     let term_write_result =
                         match self.read(
                             Stream::from(chars),
-                            indices.atom_tbl.clone(),
+                            self.atom_tbl.clone(),
                             &indices.op_dir,
                         ) {
                             Ok(term_write_result) => {
@@ -4595,10 +4577,11 @@ impl MachineState {
                 let mut rand = RANDOM_STATE.borrow_mut();
                 rand.seed(&seed);
             }
-            &SystemClauseType::SkipMaxList =>
+            &SystemClauseType::SkipMaxList => {
                 if let Err(err) = self.skip_max_list() {
                     return Err(err);
-                },
+                }
+            }
             &SystemClauseType::Sleep => {
                 let time = self.store(self.deref(self[temp_v!(1)]));
 
@@ -4695,11 +4678,10 @@ impl MachineState {
                 let stream =
                     match TcpStream::connect(&socket_addr).map_err(|e| e.kind()) {
                         Ok(tcp_stream) => {
-                            let socket_addr = clause_name!(socket_addr, indices.atom_tbl.clone());
+                            let socket_addr = clause_name!(socket_addr, self.atom_tbl);
 
-
-                            let mut stream =
-                              { let tls = match self.store(self.deref(self[temp_v!(8)])) {
+                            let mut stream = {
+                                let tls = match self.store(self.deref(self[temp_v!(8)])) {
                                     Addr::Con(h) if self.heap.atom_at(h) => {
                                         if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
                                             atom.as_str()
@@ -4711,6 +4693,7 @@ impl MachineState {
                                         unreachable!()
                                     }
                                 };
+
                                 match tls {
                                   "false" => { Stream::from_tcp_stream(socket_addr, tcp_stream) }
                                   "true" => { let connector = TlsConnector::new().unwrap();
@@ -4724,6 +4707,7 @@ impl MachineState {
                                    _ => { unreachable!() }
                                 }
                               };
+
                             stream.options = options;
 
                             if let Some(ref alias) = &stream.options.alias {
@@ -4877,7 +4861,7 @@ impl MachineState {
                                 match tcp_listener.accept().ok() {
                                     Some((tcp_stream, socket_addr)) => {
                                         let client =
-                                            clause_name!(format!("{}", socket_addr), indices.atom_tbl);
+                                            clause_name!(format!("{}", socket_addr), self.atom_tbl);
 
                                         let mut tcp_stream =
                                             Stream::from_tcp_stream(client.clone(), tcp_stream);
@@ -5226,8 +5210,13 @@ impl MachineState {
                 self.fail = self.structural_eq_test();
             }
             &SystemClauseType::WAMInstructions => {
-                let name  = self[temp_v!(1)];
-                let arity = self[temp_v!(2)];
+                let module_name = atom_from!(
+                    self,
+                    self.store(self.deref(self[temp_v!(1)]))
+                );
+
+                let name  = self[temp_v!(2)];
+                let arity = self[temp_v!(3)];
 
                 let name = match self.store(self.deref(name)) {
                     Addr::Con(h) if self.heap.atom_at(h) => {
@@ -5257,51 +5246,84 @@ impl MachineState {
                         }
                     };
 
-                let first_idx = match indices
-                    .code_dir
-                    .get(&(name.clone(), arity.to_usize().unwrap()))
-                {
-                    Some(ref idx) if idx.local().is_some() => {
-                        if let Some(idx) = idx.local() {
-                            idx
-                        } else {
-                            unreachable!()
+                let key = (name.clone(), arity.to_usize().unwrap());
+
+                let first_idx = match module_name.as_str() {
+                    "user" => indices.code_dir.get(&key),
+                    _ => match indices.modules.get(&module_name) {
+                        Some(module) => module.code_dir.get(&key),
+                        None => {
+                            let stub = MachineError::functor_stub(key.0, key.1);
+                            let h = self.heap.h();
+
+                            let err = MachineError::session_error(
+                                h,
+                                SessionError::from(
+                                    CompilationError::InvalidModuleResolution(
+                                        module_name
+                                    )
+                                ),
+                            );
+
+                            let err = self.error_form(err, stub);
+
+                            self.throw_exception(err);
+                            return Ok(());
                         }
-                    }
-                    _ => {
-                        let arity = arity.to_usize().unwrap();
-                        let stub = MachineError::functor_stub(name.clone(), arity);
-                        let h = self.heap.h();
-
-                        let err = MachineError::existence_error(
-                            h,
-                            ExistenceError::Procedure(name, arity),
-                        );
-
-                        let err = self.error_form(err, stub);
-
-                        self.throw_exception(err);
-                        return Ok(());
-                    }
+                    },
                 };
+
+                let first_idx =
+                    match first_idx {
+                        Some(ref idx) if idx.local().is_some() => {
+                            if let Some(idx) = idx.local() {
+                                idx
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => {
+                            let arity = arity.to_usize().unwrap();
+                            let stub = MachineError::functor_stub(name.clone(), arity);
+                            let h = self.heap.h();
+
+                            let err = MachineError::existence_error(
+                                h,
+                                ExistenceError::Procedure(name, arity),
+                            );
+
+                            let err = self.error_form(err, stub);
+
+                            self.throw_exception(err);
+                            return Ok(());
+                        }
+                    };
 
                 let mut h = self.heap.h();
                 let mut functors = vec![];
+                let mut functor_list = vec![];
 
                 walk_code(
                     &code_repo.code,
                     first_idx,
                     |instr| {
-                        let section = instr.to_functor(h);
-                        functors.push(Addr::HeapCell(h));
+                        let old_len = functors.len();
+                        instr.enqueue_functors(h, &mut functors);
+                        let new_len = functors.len();
 
-                        h += section.len();
-                        self.heap.extend(section.into_iter());
+                        for index in old_len .. new_len {
+                            functor_list.push(Addr::HeapCell(h));
+                            h += functors[index].len();
+                        }
                     },
                 );
 
-                let listing = Addr::HeapCell(self.heap.to_list(functors.into_iter()));
-                let listing_var = self[temp_v!(3)];
+                for functor in functors {
+                    self.heap.extend(functor.into_iter());
+                }
+
+                let listing = Addr::HeapCell(self.heap.to_list(functor_list.into_iter()));
+                let listing_var = self[temp_v!(4)];
 
                 self.unify(listing, listing_var);
             }
@@ -5831,6 +5853,53 @@ impl MachineState {
                     self.unify(self[temp_v!(2)], cstr);
                 }
             }
+            &SystemClauseType::LoadLibraryAsStream => {
+                let library_name =
+                    atom_from!(
+                        self,
+                        self.store(self.deref(self[temp_v!(1)]))
+                    );
+
+                use crate::LIBRARIES;
+
+                match LIBRARIES.borrow().get(library_name.as_str()) {
+                    Some(library) => {
+                        let var_ref = Ref::HeapCell(self.heap.push(
+                            HeapCellValue::Stream(Stream::from(*library))
+                        ));
+
+                        self.bind(var_ref, self[temp_v!(2)]);
+
+                        let mut path_buf = machine::current_dir();
+
+                        path_buf.push("/lib");
+                        path_buf.push(library_name.as_str());
+
+                        let library_path_str = path_buf.to_str().unwrap();
+                        let library_path =
+                            clause_name!(library_path_str.to_string(), self.atom_tbl);
+
+                        let library_path_ref = Ref::HeapCell(
+                            self.heap.push(HeapCellValue::Atom(library_path, None))
+                        );
+
+                        self.bind(library_path_ref, self[temp_v!(3)]);
+                    }
+                    None => {
+                        return Err(
+                            self.error_form(
+                                MachineError::existence_error(
+                                    self.heap.h(),
+                                    ExistenceError::ModuleSource(
+                                        ModuleSource::Library(library_name)
+                                    ),
+                                ),
+                                MachineError::functor_stub(clause_name!("load"), 1),
+                            )
+                        );
+                    }
+                }
+            }
         };
 
         return_from_clause!(self.last_call, self)
@@ -5905,7 +5974,7 @@ impl MachineState {
         } else {
             let mut avec = Vec::new();
             for attr in node.attributes() {
-                let chars = clause_name!(String::from(attr.name()), indices.atom_tbl);
+                let chars = clause_name!(String::from(attr.name()), self.atom_tbl);
                 let name  = self.heap.to_unifiable(
                     HeapCellValue::Atom(chars, None)
                 );
@@ -5926,7 +5995,7 @@ impl MachineState {
             }
             let children = Addr::HeapCell(self.heap.to_list(cvec.into_iter()));
 
-            let chars = clause_name!(String::from(node.tag_name().name()), indices.atom_tbl);
+            let chars = clause_name!(String::from(node.tag_name().name()), self.atom_tbl);
             let tag  = self.heap.to_unifiable(
                 HeapCellValue::Atom(chars, None)
             );
@@ -5955,7 +6024,7 @@ impl MachineState {
             Some(name) => {
                 let mut avec = Vec::new();
                 for attr in node.attrs() {
-                    let chars = clause_name!(String::from(attr.0), indices.atom_tbl);
+                    let chars = clause_name!(String::from(attr.0), self.atom_tbl);
                     let name  = self.heap.to_unifiable(
                         HeapCellValue::Atom(chars, None)
                     );
@@ -5976,7 +6045,7 @@ impl MachineState {
                 }
                 let children = Addr::HeapCell(self.heap.to_list(cvec.into_iter()));
 
-                let chars = clause_name!(String::from(name), indices.atom_tbl);
+                let chars = clause_name!(String::from(name), self.atom_tbl);
                 let tag  = self.heap.to_unifiable(
                     HeapCellValue::Atom(chars, None)
                 );

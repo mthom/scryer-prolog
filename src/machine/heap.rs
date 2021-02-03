@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use crate::prolog_parser::ast::Constant;
+use crate::prolog_parser_rebis::ast::Constant;
 
 use crate::machine::machine_indices::*;
 use crate::machine::partial_string::*;
@@ -168,6 +168,9 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             &HeapCellValue::Integer(ref n) => {
                 HeapCellValue::Integer(n.clone())
             }
+            &HeapCellValue::LoadStatePayload(_) => {
+                HeapCellValue::Addr(Addr::LoadStatePayload(h))
+            }
             &HeapCellValue::NamedStr(arity, ref name, ref op) => {
                 HeapCellValue::NamedStr(arity, name.clone(), op.clone())
             }
@@ -295,6 +298,9 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
             val @ HeapCellValue::Rational(_) => {
                 Addr::Con(self.push(val))
             }
+            val @ HeapCellValue::LoadStatePayload(_) => {
+                Addr::LoadStatePayload(self.push(val))
+            }
             val @ HeapCellValue::NamedStr(..) => {
                 Addr::Str(self.push(val))
             }
@@ -368,15 +374,6 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
                 self.push(HeapCellValue::Addr(Addr::HeapCell(h + 1)));
                 return Some(Addr::PStrLocation(orig_h, 0));
             }
-        }
-    }
-
-    #[inline]
-    pub(crate)
-    fn take(&mut self) -> Self {
-        HeapTemplate {
-            buf: self.buf.take(),
-            _marker: PhantomData,
         }
     }
 
@@ -479,9 +476,7 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
                             ("dir_entry", 1) => {
                                 extract_integer(s+1).map(LocalCodePtr::DirEntry)
                             }
-                            ("in_situ_dir_entry", 1) => {
-                                extract_integer(s+1).map(LocalCodePtr::InSituDirEntry)
-                            }
+                            /*
                             ("top_level", 2) => {
                                 if let Some(chunk_num) = extract_integer(s+1) {
                                     if let Some(p) = extract_integer(s+2) {
@@ -491,13 +486,10 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
 
                                 None
                             }
-                            ("user_goal_expansion", 1) => {
-                                extract_integer(s+1).map(LocalCodePtr::UserGoalExpansion)
+                            */
+                            _ => {
+                                None
                             }
-                            ("user_term_expansion", 1) => {
-                                extract_integer(s+1).map(LocalCodePtr::UserTermExpansion)
-                            }
-                            _ => None
                         }
                     }
                     _ => unreachable!()
@@ -508,8 +500,7 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     }
 
     #[inline]
-    pub
-    fn index_addr<'a>(&'a self, addr: &Addr) -> RefOrOwned<'a, HeapCellValue> {
+    pub fn index_addr<'a>(&'a self, addr: &Addr) -> RefOrOwned<'a, HeapCellValue> {
         match addr {
             &Addr::Con(h) | &Addr::Str(h) | &Addr::Stream(h) | &Addr::TcpListener(h) => {
                 RefOrOwned::Borrowed(&self[h])

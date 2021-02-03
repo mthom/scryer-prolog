@@ -1,5 +1,5 @@
-use crate::prolog_parser::ast::*;
-use crate::prolog_parser::tabled_rc::*;
+use crate::prolog_parser_rebis::ast::*;
+use crate::prolog_parser_rebis::tabled_rc::*;
 
 use crate::clause_types::*;
 use crate::forms::*;
@@ -9,14 +9,14 @@ use crate::machine::copier::*;
 use crate::machine::heap::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
-use crate::machine::modules::*;
+use crate::machine::partial_string::HeapPStrIter;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::rug::Integer;
 
 use crate::downcast::Any;
 
-use crate::indexmap::{IndexMap, IndexSet};
+use crate::indexmap::IndexMap;
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
@@ -24,292 +24,6 @@ use std::fmt;
 use std::io::Write;
 use std::mem;
 use std::ops::{Index, IndexMut};
-
-#[derive(Debug)]
-pub(crate) struct HeapPStrIter<'a> {
-    focus: Addr,
-    machine_st: &'a MachineState,
-    seen: IndexSet<Addr>,
-}
-
-impl<'a> HeapPStrIter<'a> {
-    #[inline]
-    fn new(machine_st: &'a MachineState, focus: Addr) -> Self {
-        HeapPStrIter {
-            focus,
-            machine_st,
-            seen: IndexSet::new(),
-        }
-    }
-
-    #[inline]
-    pub(crate)
-    fn focus(&self) -> Addr {
-        self.machine_st.store(self.machine_st.deref(self.focus))
-    }
-
-    #[inline]
-    pub(crate)
-    fn to_string(&mut self) -> String {
-        let mut buf = String::new();
-
-        while let Some(iteratee) = self.next() {
-            match iteratee {
-                PStrIteratee::Char(c) => {
-                    buf.push(c);
-                }
-                PStrIteratee::PStrSegment(h, n) => {
-                    match &self.machine_st.heap[h] {
-                        HeapCellValue::PartialString(ref pstr, _) => {
-                            buf += pstr.as_str_from(n);
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    }
-                }
-            }
-        }
-
-        buf
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum PStrIteratee {
-    Char(char),
-    PStrSegment(usize, usize),
-}
-
-impl<'a> Iterator for HeapPStrIter<'a> {
-    type Item = PStrIteratee;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let addr = self.machine_st.store(self.machine_st.deref(self.focus));
-
-        if !self.seen.contains(&addr) {
-            self.seen.insert(addr);
-        } else {
-            return None;
-        }
-
-        match addr {
-            Addr::PStrLocation(h, n) => {
-                if let &HeapCellValue::PartialString(_, has_tail) = &self.machine_st.heap[h] {
-                    self.focus = if has_tail {
-                        Addr::HeapCell(h + 1)
-                    } else {
-                        Addr::EmptyList
-                    };
-
-                    return Some(PStrIteratee::PStrSegment(h, n));
-                } else {
-                    unreachable!()
-                }
-            }
-            Addr::Lis(l) => {
-                let addr = self.machine_st.store(self.machine_st.deref(Addr::HeapCell(l)));
-
-                let opt_c = match addr {
-                    Addr::Con(h) if self.machine_st.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref atom, _) = &self.machine_st.heap[h] {
-                            if atom.is_char() {
-                                Some(atom.as_str().chars().next().unwrap())
-                            } else {
-                                None
-                            }
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    Addr::Char(c) => {
-                        Some(c)
-                    }
-                    _ => {
-                        None
-                    }
-                };
-
-                if let Some(c) = opt_c {
-                    self.focus = Addr::HeapCell(l + 1);
-                    return Some(PStrIteratee::Char(c));
-                } else {
-                    return None;
-                }
-            }
-            Addr::EmptyList => {
-                self.focus = Addr::EmptyList;
-                return None;
-            }
-            _ => {
-                return None;
-            }
-        }
-    }
-}
-
-#[inline]
-pub(super)
-fn compare_pstr_prefixes<'a>(
-    i1: &mut HeapPStrIter<'a>,
-    i2: &mut HeapPStrIter<'a>,
-) -> Option<Ordering> {
-    let mut r1 = i1.next();
-    let mut r2 = i2.next();
-
-    loop {
-        if let Some(r1i) = r1 {
-            if let Some(r2i) = r2 {
-                match (r1i, r2i) {
-                    (PStrIteratee::Char(c1), PStrIteratee::Char(c2)) => {
-                        if c1 != c2 {
-                            return c1.partial_cmp(&c2);
-                        }
-                    }
-                    (PStrIteratee::Char(c1), PStrIteratee::PStrSegment(h, n)) => {
-                        if let &HeapCellValue::PartialString(ref pstr, _) = &i2.machine_st.heap[h] {
-                            if let Some(c2) = pstr.as_str_from(n).chars().next() {
-                                if c1 != c2 {
-                                    return c1.partial_cmp(&c2);
-                                } else {
-                                    r1 = i1.next();
-                                    r2 = Some(PStrIteratee::PStrSegment(h, n + c2.len_utf8()));
-
-                                    continue;
-                                }
-                            } else {
-                                r2 = i2.next();
-                                continue;
-                            }
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    (PStrIteratee::PStrSegment(h, n), PStrIteratee::Char(c2)) => {
-                        if let &HeapCellValue::PartialString(ref pstr, _) = &i1.machine_st.heap[h] {
-                            if let Some(c1) = pstr.as_str_from(n).chars().next() {
-                                if c1 != c2 {
-                                    return c2.partial_cmp(&c1);
-                                } else {
-                                    r1 = i1.next();
-                                    r2 = Some(PStrIteratee::PStrSegment(h, n + c1.len_utf8()));
-
-                                    continue;
-                                }
-                            } else {
-                                r1 = i1.next();
-                                continue;
-                            }
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    (PStrIteratee::PStrSegment(h1, n1), PStrIteratee::PStrSegment(h2, n2)) => {
-                        match (&i1.machine_st.heap[h1], &i2.machine_st.heap[h2]) {
-                            (
-                                &HeapCellValue::PartialString(ref pstr1, _),
-                                &HeapCellValue::PartialString(ref pstr2, _),
-                            ) => {
-                                let str1 = pstr1.as_str_from(n1);
-                                let str2 = pstr2.as_str_from(n2);
-
-                                if str1.starts_with(str2) {
-                                    r1 = Some(PStrIteratee::PStrSegment(h1, n1 + str2.len()));
-                                    r2 = i2.next();
-
-                                    continue;
-                                } else if str2.starts_with(str1) {
-                                    r1 = i1.next();
-                                    r2 = Some(PStrIteratee::PStrSegment(h2, n2 + str1.len()));
-
-                                    continue;
-                                } else {
-                                    return str1.partial_cmp(str2);
-                                }
-                            }
-                            _ => {
-                                unreachable!()
-                            }
-                        }
-                    }
-                }
-
-                r1 = i1.next();
-                r2 = i2.next();
-
-                continue;
-            }
-        }
-
-        return match (i1.focus(), i2.focus()) {
-            (Addr::EmptyList, Addr::EmptyList) => {
-                Some(Ordering::Equal)
-            }
-            (Addr::EmptyList, _) => {
-                Some(Ordering::Less)
-            }
-            (_, Addr::EmptyList) => {
-                Some(Ordering::Greater)
-            }
-            _ => {
-                None
-            }
-        };
-    }
-}
-
-#[inline]
-pub(super)
-fn compare_pstr_to_string<'a>(
-    heap_pstr_iter: &mut HeapPStrIter<'a>,
-    s: &String,
-) -> Option<usize> {
-    let mut s_offset = 0;
-
-    while let Some(iteratee) = heap_pstr_iter.next() {
-        match iteratee {
-            PStrIteratee::Char(c1) => {
-                if let Some(c2) = s[s_offset ..].chars().next() {
-                    if c1 != c2 {
-                        return None;
-                    } else {
-                        s_offset += c1.len_utf8();
-                    }
-                } else {
-                    return Some(s_offset);
-                }
-            }
-            PStrIteratee::PStrSegment(h, n) => {
-                match heap_pstr_iter.machine_st.heap[h] {
-                    HeapCellValue::PartialString(ref pstr, _) => {
-                        let t = pstr.as_str_from(n);
-
-                        if s[s_offset ..].starts_with(t) {
-                            s_offset += t.len();
-                        } else if t.starts_with(&s[s_offset ..]) {
-                            heap_pstr_iter.focus =
-                                Addr::PStrLocation(h, n + s[s_offset ..].len());
-
-                            s_offset += s[s_offset ..].len();
-                            return Some(s_offset);
-                        } else {
-                            return None;
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                }
-            }
-        }
-
-        if s[s_offset ..].is_empty() {
-            return Some(s_offset);
-        }
-    }
-
-    Some(s_offset)
-}
 
 #[derive(Debug)]
 pub struct Ball {
@@ -330,17 +44,6 @@ impl Ball {
     fn reset(&mut self) {
         self.boundary = 0;
         self.stub.clear();
-    }
-
-    pub(super)
-    fn take(&mut self) -> Ball {
-        let boundary = self.boundary;
-        self.boundary = 0;
-
-        Ball {
-            boundary,
-            stub: self.stub.take(),
-        }
     }
 
     pub(super)
@@ -586,6 +289,7 @@ impl Default for HeapPtr {
 
 #[derive(Debug)]
 pub struct MachineState {
+    pub(crate) atom_tbl: TabledData<Atom>,
     pub(super) s: HeapPtr,
     pub(super) p: CodePtr,
     pub(super) b: usize,
@@ -640,7 +344,7 @@ impl MachineState {
         loop {
             match self.read(
                 stream.clone(),
-                indices.atom_tbl.clone(),
+                self.atom_tbl.clone(),
                 &indices.op_dir,
             ) {
                 Ok(term_write_result) => {
@@ -654,7 +358,7 @@ impl MachineState {
                     let mut list_of_var_eqs = vec![];
 
                     for (var, binding) in term_write_result.var_dict.into_iter() {
-                        let var_atom = clause_name!(var.to_string(), indices.atom_tbl);
+                        let var_atom = clause_name!(var.to_string(), self.atom_tbl);
 
                         let h = self.heap.h();
                         let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
@@ -854,6 +558,15 @@ impl MachineState {
         Ok(Some(printer))
     }
 
+    pub(super)
+    fn throw_undefined_error(&mut self, name: ClauseName, arity: usize) -> MachineStub {
+        let stub = MachineError::functor_stub(name.clone(), arity);
+        let h = self.heap.h();
+        let key = ExistenceError::Procedure(name, arity);
+
+        self.error_form(MachineError::existence_error(h, key), stub)
+    }
+
     #[inline]
     pub(crate)
     fn heap_pstr_iter<'a>(&'a self, focus: Addr) -> HeapPStrIter<'a> {
@@ -896,6 +609,24 @@ impl MachineState {
     }
 
     pub(super)
+    fn read_predicate_key(&self, name: Addr, arity: Addr) -> (ClauseName, usize) {
+        let predicate_name = atom_from!(self, self.store(self.deref(name)));
+        let arity = self.store(self.deref(arity));
+
+        let arity =
+            match Number::try_from((arity, &self.heap)) {
+                Ok(Number::Integer(n)) if &*n >= &0 && &*n <= &MAX_ARITY =>
+                    n.to_usize().unwrap(),
+                Ok(Number::Fixnum(n)) if n >= 0 && n <= MAX_ARITY as isize =>
+                    usize::try_from(n).unwrap(),
+                _ =>
+                    unreachable!()
+            };
+
+        (predicate_name, arity)
+    }
+
+    pub(super)
     fn call_at_index(&mut self, arity: usize, p: LocalCodePtr) {
         self.cp.assign_if_local(self.p.clone() + 1);
         self.num_of_args = arity;
@@ -914,106 +645,40 @@ impl MachineState {
     fn module_lookup(
         &mut self,
         indices: &IndexStore,
+        call_policy: &mut Box<dyn CallPolicy>,
         key: PredicateKey,
         module_name: ClauseName,
-        last_call: bool,
+        _last_call: bool,
+        current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) -> CallResult {
-        let (name, arity) = key;
-
-        if let Some(ref idx) = indices.get_code_index((name.clone(), arity), module_name.clone()) {
-            match idx.0.borrow().0 {
-                IndexPtr::Index(compiled_tl_index) => {
-                    if last_call {
-                        self.execute_at_index(arity, dir_entry!(compiled_tl_index));
-                    } else {
-                        self.call_at_index(arity, dir_entry!(compiled_tl_index));
-                    }
-
-                    return Ok(());
-                }
-                IndexPtr::DynamicUndefined => {
-                    self.fail = true;
-                    return Ok(());
-                }
-                IndexPtr::UserTermExpansion => {
-                    if last_call {
-                        self.execute_at_index(arity, LocalCodePtr::UserTermExpansion(0));
-                    } else {
-                        self.call_at_index(arity, LocalCodePtr::UserTermExpansion(0));
-                    }
-
-                    return Ok(());
-                }
-                IndexPtr::UserGoalExpansion => {
-                    if last_call {
-                        self.execute_at_index(arity, LocalCodePtr::UserGoalExpansion(0));
-                    } else {
-                        self.call_at_index(arity, LocalCodePtr::UserGoalExpansion(0));
-                    }
-
-                    return Ok(());
-                }
-                IndexPtr::InSituDirEntry(p) => {
-                    if last_call {
-                        self.execute_at_index(arity, LocalCodePtr::InSituDirEntry(p));
-                    } else {
-                        self.call_at_index(arity, LocalCodePtr::InSituDirEntry(p));
-                    }
-
-                    return Ok(());
-                }
-                _ => {}
-            }
+        if module_name.as_str() == "user" {
+            return call_policy.call_clause_type(
+                self,
+                key,
+                &indices.code_dir,
+                &indices.op_dir,
+                current_input_stream,
+                current_output_stream,
+            );
+        } else if let Some(module) = indices.modules.get(&module_name) {
+            return call_policy.call_clause_type(
+                self,
+                key,
+                &module.code_dir,
+                &module.op_dir,
+                current_input_stream,
+                current_output_stream,
+            );
         }
+
+        let (name, arity) = key;
 
         let h = self.heap.h();
         let stub = MachineError::functor_stub(name.clone(), arity);
         let err = MachineError::module_resolution_error(h, module_name, name, arity);
 
         return Err(self.error_form(err, stub));
-    }
-}
-
-fn try_in_situ_lookup(name: ClauseName, arity: usize, indices: &IndexStore) -> Option<LocalCodePtr>
-{
-    match indices.in_situ_code_dir.get(&(name.clone(), arity)) {
-        Some(p) => Some(LocalCodePtr::InSituDirEntry(*p)),
-        None =>
-            match indices.code_dir.get(&(name, arity)) {
-                Some(ref idx) => {
-                    if let IndexPtr::Index(p) = idx.0.borrow().0 {
-                        Some(LocalCodePtr::DirEntry(p))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            },
-    }
-}
-
-fn try_in_situ(
-    machine_st: &mut MachineState,
-    name: ClauseName,
-    arity: usize,
-    indices: &IndexStore,
-    last_call: bool,
-) -> CallResult {
-    if let Some(p) = try_in_situ_lookup(name.clone(), arity, indices) {
-        if last_call {
-            machine_st.execute_at_index(arity, p);
-        } else {
-            machine_st.call_at_index(arity, p);
-        }
-
-        machine_st.p = CodePtr::Local(p);
-        Ok(())
-    } else {
-        let stub = MachineError::functor_stub(name.clone(), arity);
-        let h = machine_st.heap.h();
-        let key = ExistenceError::Procedure(name, arity);
-
-        Err(machine_st.error_form(MachineError::existence_error(h, key), stub))
     }
 }
 
@@ -1090,7 +755,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         machine_st.attr_var_init.backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
 
         machine_st.hb = machine_st.heap.h();
-        machine_st.p += offset;
+        machine_st.p = CodePtr::Local(dir_entry!(machine_st.p.local().abs_loc() + offset));
 
         Ok(())
     }
@@ -1130,7 +795,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         machine_st.stack.truncate(b);
 
         machine_st.hb = machine_st.heap.h();
-        machine_st.p += offset;
+        machine_st.p = CodePtr::Local(dir_entry!(machine_st.p.local().abs_loc() + offset));
 
         Ok(())
     }
@@ -1180,13 +845,12 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         machine_st: &mut MachineState,
         name: ClauseName,
         arity: usize,
-        idx: CodeIndex,
-        indices: &mut IndexStore,
+        idx: &CodeIndex,
     ) -> CallResult {
         if machine_st.last_call {
-            self.try_execute(machine_st, name, arity, idx, indices)
+            self.try_execute(machine_st, name, arity, idx)
         } else {
-            self.try_call(machine_st, name, arity, idx, indices)
+            self.try_call(machine_st, name, arity, idx)
         }
     }
 
@@ -1195,27 +859,18 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         machine_st: &mut MachineState,
         name: ClauseName,
         arity: usize,
-        idx: CodeIndex,
-        indices: &IndexStore,
+        idx: &CodeIndex,
     ) -> CallResult {
-        match idx.0.borrow().0 {
+        match idx.get() {
             IndexPtr::DynamicUndefined => {
                 machine_st.fail = true;
+                return Ok(());
             }
             IndexPtr::Undefined => {
-                return try_in_situ(machine_st, name, arity, indices, false);
+                return Err(machine_st.throw_undefined_error(name, arity));
             }
             IndexPtr::Index(compiled_tl_index) => {
-                machine_st.call_at_index(arity, LocalCodePtr::DirEntry(compiled_tl_index))
-            }
-            IndexPtr::UserTermExpansion => {
-                machine_st.call_at_index(arity, LocalCodePtr::UserTermExpansion(0));
-            }
-            IndexPtr::UserGoalExpansion => {
-                machine_st.call_at_index(arity, LocalCodePtr::UserGoalExpansion(0));
-            }
-            IndexPtr::InSituDirEntry(p) => {
-                machine_st.call_at_index(arity, LocalCodePtr::InSituDirEntry(p));
+                machine_st.call_at_index(arity, LocalCodePtr::DirEntry(compiled_tl_index));
             }
         }
 
@@ -1227,25 +882,18 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         machine_st: &mut MachineState,
         name: ClauseName,
         arity: usize,
-        idx: CodeIndex,
-        indices: &IndexStore,
+        idx: &CodeIndex,
     ) -> CallResult {
-        match idx.0.borrow().0 {
-            IndexPtr::DynamicUndefined =>
-                machine_st.fail = true,
-            IndexPtr::Undefined =>
-                return try_in_situ(machine_st, name, arity, indices, true),
+        match idx.get() {
+            IndexPtr::DynamicUndefined => {
+                machine_st.fail = true;
+                return Ok(());
+            }
+            IndexPtr::Undefined => {
+                return Err(machine_st.throw_undefined_error(name, arity));
+            }
             IndexPtr::Index(compiled_tl_index) => {
                 machine_st.execute_at_index(arity, dir_entry!(compiled_tl_index))
-            }
-            IndexPtr::UserTermExpansion => {
-                machine_st.execute_at_index(arity, LocalCodePtr::UserTermExpansion(0));
-            }
-            IndexPtr::UserGoalExpansion => {
-                machine_st.execute_at_index(arity, LocalCodePtr::UserGoalExpansion(0));
-            }
-            IndexPtr::InSituDirEntry(p) => {
-                machine_st.execute_at_index(arity, LocalCodePtr::InSituDirEntry(p));
             }
         }
 
@@ -1256,7 +904,8 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         &mut self,
         machine_st: &mut MachineState,
         ct: &BuiltInClauseType,
-        indices: &mut IndexStore,
+        _code_dir: &CodeDir,
+        op_dir: &OpDir,
         current_input_stream: &mut Stream,
         current_output_stream: &mut Stream,
     ) -> CallResult {
@@ -1305,15 +954,15 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
 
                 let atom = match machine_st.compare_term_test(&a2, &a3) {
                     Some(Ordering::Greater) => {
-                        let spec = fetch_atom_op_spec(clause_name!(">"), None, &indices.op_dir);
+                        let spec = fetch_atom_op_spec(clause_name!(">"), None, op_dir);
                         HeapCellValue::Atom(clause_name!(">"), spec)
                     }
                     Some(Ordering::Equal) => {
-                        let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
+                        let spec = fetch_atom_op_spec(clause_name!("="), None, op_dir);
                         HeapCellValue::Atom(clause_name!("="), spec)
                     }
                     None | Some(Ordering::Less) => {
-                        let spec = fetch_atom_op_spec(clause_name!("<"), None, &indices.op_dir);
+                        let spec = fetch_atom_op_spec(clause_name!("<"), None, op_dir);
                         HeapCellValue::Atom(clause_name!("<"), spec)
                     }
                 };
@@ -1338,8 +987,8 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
             &BuiltInClauseType::Read => {
                 match machine_st.read(
                     current_input_stream.clone(),
-                    indices.atom_tbl.clone(),
-                    &indices.op_dir,
+                    machine_st.atom_tbl.clone(),
+                    op_dir,
                 ) {
                     Ok(offset) => {
                         let addr = machine_st[temp_v!(1)];
@@ -1347,16 +996,18 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                     }
                     Err(ParserError::UnexpectedEOF) => {
                         let addr = machine_st[temp_v!(1)];
-                        let eof = clause_name!("end_of_file".to_string(),
-                            indices.atom_tbl);
+                        let eof = clause_name!("end_of_file".to_string(), machine_st.atom_tbl);
+
                         let atom = machine_st.heap.to_unifiable(
                             HeapCellValue::Atom(eof, None)
                         );
+
                         machine_st.unify(addr, atom);
                     }
                     Err(e) => {
                         let h = machine_st.heap.h();
                         let stub = MachineError::functor_stub(clause_name!("read"), 1);
+
                         let err = MachineError::syntax_error(h, e);
                         let err = machine_st.error_form(err, stub);
 
@@ -1382,7 +1033,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Functor => {
-                machine_st.try_functor(&indices)?;
+                machine_st.try_functor(op_dir)?;
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::NotEq => {
@@ -1453,24 +1104,66 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         }
     }
 
-    fn compile_hook(
+    fn call_clause_type(
         &mut self,
         machine_st: &mut MachineState,
-        hook: &CompileTimeHook,
+        key: PredicateKey,
+        code_dir: &CodeDir,
+        op_dir: &OpDir,
+        current_input_stream: &mut Stream,
+        current_output_stream: &mut Stream,
     ) -> CallResult {
-        machine_st.cp = LocalCodePtr::TopLevel(0, 0);
+        let (name, arity) = key;
 
-        machine_st.num_of_args = hook.arity();
-        machine_st.b0 = machine_st.b;
+        match ClauseType::from(name.clone(), arity, None) {
+            ClauseType::BuiltIn(built_in) => {
+                machine_st.setup_built_in_call(built_in.clone());
+                self.call_builtin(
+                    machine_st,
+                    &built_in,
+                    code_dir,
+                    op_dir,
+                    current_input_stream,
+                    current_output_stream,
+                )?;
+            }
+            ClauseType::CallN => {
+                machine_st.handle_internal_call_n(arity);
 
-        machine_st.p = match hook {
-            CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion => {
-                CodePtr::Local(LocalCodePtr::UserTermExpansion(0))
+                if machine_st.fail {
+                    return Ok(());
+                }
+
+                machine_st.p = CodePtr::CallN(arity, machine_st.p.local(), machine_st.last_call);
             }
-            CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion => {
-                CodePtr::Local(LocalCodePtr::UserGoalExpansion(0))
+            ClauseType::Inlined(inlined) => {
+                machine_st.execute_inlined(&inlined);
+
+                if machine_st.last_call {
+                    machine_st.p = CodePtr::Local(machine_st.cp);
+                }
             }
-        };
+            ClauseType::Op(..) | ClauseType::Named(..) => {
+                if let Some(idx) = code_dir.get(&(name.clone(), arity)) {
+                    self.context_call(machine_st, name, arity, idx)?;
+                } else {
+                    return Err(machine_st.throw_undefined_error(name, arity));
+                }
+            }
+            ClauseType::System(_) => {
+                let name = functor!(clause_name(name));
+                let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
+
+                return Err(machine_st.error_form(
+                    MachineError::type_error(
+                        machine_st.heap.h(),
+                        ValidType::Callable,
+                        name
+                    ),
+                    stub,
+                ));
+            }
+        }
 
         Ok(())
     }
@@ -1479,57 +1172,20 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         &mut self,
         machine_st: &mut MachineState,
         arity: usize,
-        indices: &mut IndexStore,
+        code_dir: &CodeDir,
+        op_dir: &OpDir,
         current_input_stream: &mut Stream,
         current_output_stream: &mut Stream,
     ) -> CallResult {
-        if let Some((name, arity)) = machine_st.setup_call_n(arity) {
-            match ClauseType::from(name.clone(), arity, None) {
-                ClauseType::BuiltIn(built_in) => {
-                    machine_st.setup_built_in_call(built_in.clone());
-                    self.call_builtin(
-                        machine_st,
-                        &built_in,
-                        indices,
-                        current_input_stream,
-                        current_output_stream,
-                    )?;
-                }
-                ClauseType::CallN => {
-                    machine_st.handle_internal_call_n(arity);
-
-                    if machine_st.fail {
-                        return Ok(());
-                    }
-
-                    machine_st.p = CodePtr::CallN(arity, machine_st.p.local(), machine_st.last_call);
-                }
-                ClauseType::Inlined(inlined) => {
-                    machine_st.execute_inlined(&inlined);
-
-                    if machine_st.last_call {
-                        machine_st.p = CodePtr::Local(machine_st.cp);
-                    }
-                }
-                ClauseType::Op(..) | ClauseType::Named(..) => {
-                    let module = name.owning_module();
-
-                    if let Some(idx) = indices.get_code_index((name.clone(), arity), module) {
-                        self.context_call(machine_st, name, arity, idx, indices)?;
-                    } else {
-                        try_in_situ(machine_st, name, arity, indices, machine_st.last_call)?;
-                    }
-                }
-                ClauseType::Hook(_) | ClauseType::System(_) => {
-                    let name = functor!(clause_name(name));
-                    let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
-
-                    return Err(machine_st.error_form(
-                        MachineError::type_error(machine_st.heap.h(), ValidType::Callable, name),
-                        stub,
-                    ));
-                }
-            };
+        if let Some(key) = machine_st.setup_call_n(arity) {
+            self.call_clause_type(
+                machine_st,
+                key,
+                code_dir,
+                op_dir,
+                current_input_stream,
+                current_output_stream,
+            )?;
         }
 
         Ok(())
@@ -1542,11 +1198,9 @@ impl CallPolicy for CWILCallPolicy {
         machine_st: &mut MachineState,
         name: ClauseName,
         arity: usize,
-        idx: CodeIndex,
-        indices: &mut IndexStore,
+        idx: &CodeIndex,
     ) -> CallResult {
-        self.prev_policy
-            .context_call(machine_st, name, arity, idx, indices)?;
+        self.prev_policy.context_call(machine_st, name, arity, idx)?;//, indices)?;
         self.increment(machine_st)
     }
 
@@ -1574,14 +1228,16 @@ impl CallPolicy for CWILCallPolicy {
         &mut self,
         machine_st: &mut MachineState,
         ct: &BuiltInClauseType,
-        indices: &mut IndexStore,
+        code_dir: &CodeDir,
+        op_dir: &OpDir,
         current_input_stream: &mut Stream,
         current_output_stream: &mut Stream,
     ) -> CallResult {
         self.prev_policy.call_builtin(
             machine_st,
             ct,
-            indices,
+            code_dir,
+            op_dir,
             current_input_stream,
             current_output_stream
         )?;
@@ -1593,14 +1249,16 @@ impl CallPolicy for CWILCallPolicy {
         &mut self,
         machine_st: &mut MachineState,
         arity: usize,
-        indices: &mut IndexStore,
+        code_dir: &CodeDir,
+        op_dir: &OpDir,
         current_input_stream: &mut Stream,
         current_output_stream: &mut Stream,
     ) -> CallResult {
         self.prev_policy.call_n(
             machine_st,
             arity,
-            indices,
+            code_dir,
+            op_dir,
             current_input_stream,
             current_output_stream,
         )?;

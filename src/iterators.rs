@@ -1,4 +1,4 @@
-use crate::prolog_parser::ast::*;
+use crate::prolog_parser_rebis::ast::*;
 
 use crate::clause_types::*;
 use crate::forms::*;
@@ -481,7 +481,7 @@ impl<'a> ChunkedIterator<'a> {
             }
         }))
     }
-
+/*
     pub fn from_term_sequence(terms: &'a [QueryTerm]) -> Self {
         ChunkedIterator {
             chunk_num: 0,
@@ -490,7 +490,7 @@ impl<'a> ChunkedIterator<'a> {
             cut_var_in_head: false,
         }
     }
-
+*/
     pub fn from_rule_body(p1: &'a QueryTerm, clauses: &'a Vec<QueryTerm>) -> Self {
         let inner_iter = Box::new(once(ChunkedTerm::BodyTerm(p1)));
         let iter = inner_iter.chain(clauses.iter().map(|t| ChunkedTerm::BodyTerm(t)));

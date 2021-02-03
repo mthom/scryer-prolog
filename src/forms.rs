@@ -1,6 +1,5 @@
-use crate::prolog_parser::ast::*;
-use crate::prolog_parser::parser::OpDesc;
-use crate::prolog_parser::tabled_rc::*;
+use crate::prolog_parser_rebis::ast::*;
+use crate::prolog_parser_rebis::parser::OpDesc;
 
 use crate::clause_types::*;
 use crate::machine::machine_errors::*;
@@ -8,14 +7,18 @@ use crate::machine::machine_indices::*;
 use crate::ordered_float::OrderedFloat;
 use crate::rug::{Integer, Rational};
 
-use crate::indexmap::IndexMap;
+use crate::indexmap::{IndexMap, IndexSet};
+
+use slice_deque::*;
 
 use std::cell::Cell;
-use std::collections::VecDeque;
+use std::ops::AddAssign;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 pub type PredicateKey = (ClauseName, usize); // name, arity.
+
+pub type Predicate = Vec<PredicateClause>;
 
 // vars of predicate, toplevel offset.  Vec<Term> is always a vector
 // of vars (we get their adjoining cells this way).
@@ -24,19 +27,24 @@ pub type JumpStub = Vec<Term>;
 #[derive(Debug, Clone)]
 pub enum TopLevel {
     Declaration(Declaration),
-    Fact(Term, usize, usize), // Term, line_num, col_num
+    Fact(Term), // Term, line_num, col_num
     Predicate(Predicate),
     Query(Vec<QueryTerm>),
-    Rule(Rule, usize, usize), // Rule, line_num, col_num
+    Rule(Rule), // Rule, line_num, col_num
 }
 
-impl TopLevel {
-    pub fn is_end_of_file_atom(&self) -> bool {
+#[derive(Debug, Clone, Copy)]
+pub enum AppendOrPrepend {
+    Append,
+    Prepend
+}
+
+impl AppendOrPrepend {
+    #[inline]
+    pub fn is_append(self) -> bool {
         match self {
-            &TopLevel::Fact(Term::Constant(_, Constant::Atom(ref name, _)), ..) => {
-                return name.as_str() == "end_of_file"
-            }
-            _ => false,
+            AppendOrPrepend::Append => true,
+            AppendOrPrepend::Prepend => false,
         }
     }
 }
@@ -91,30 +99,9 @@ pub struct Rule {
     pub clauses: Vec<QueryTerm>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Predicate(pub Vec<PredicateClause>);
-
-impl Predicate {
-    #[inline]
-    pub fn new() -> Self {
-        Predicate(vec![])
-    }
-
-    #[inline]
-    pub fn clauses(self) -> Vec<PredicateClause> {
-        self.0
-    }
-
-    #[inline]
-    pub fn predicate_indicator(&self) -> Option<(ClauseName, usize)> {
-        self.0
-            .first()
-            .and_then(|clause| clause.name().map(|name| (name, clause.arity())))
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Hash)]
 pub enum ListingSource {
+    DynamicallyGenerated,
     File(ClauseName, PathBuf), // filename, path
     User,
 }
@@ -123,98 +110,13 @@ impl ListingSource {
     pub fn from_file_and_path(filename: ClauseName, path_buf: PathBuf) -> Self {
         ListingSource::File(filename, path_buf)
     }
-
-    pub fn name(&self) -> ClauseName {
-        match self {
-            ListingSource::File(ref filename, _) => filename.clone(),
-            ListingSource::User => clause_name!("[user]")
-        }
-    }
-
-    pub fn path(&self) -> PathBuf {
-        match self {
-            ListingSource::File(_, ref path) => path.clone(),
-            ListingSource::User => std::env::current_dir().unwrap(),
-        }
-    }
 }
 
-fn resolved_term_and_module(term: &Term) -> Option<(ClauseName, ClauseName)>
-{
-    match term {
-        Term::Clause(_, ref name, ref terms, _) => {
-            if name.as_str() == ":" && terms.len() == 2 {
-                let module_name = match terms[0].as_ref() {
-                    &Term::Constant(_, Constant::Atom(ref module_name, _)) => {
-                        module_name.clone()
-                    }
-                    _ => {
-                        return Some((name.owning_module(), name.clone()));
-                    }
-                };
-
-                match terms[1].as_ref() {
-                    Term::Clause(_, ref name, ..)
-                  | Term::Constant(_, Constant::Atom(ref name, ..)) => {
-                        return Some((module_name, name.clone()));
-                    }
-                    _ => {
-                    }
-                }
-
-                Some((name.owning_module(), name.clone()))
-            } else {
-                Some((name.owning_module(), name.clone()))
-            }
-        }
-        Term::Constant(_, Constant::Atom(ref name, _)) => {
-            Some((name.owning_module(), name.clone()))
-        }
-        _ => {
-            None
-        }
-    }
-}
-
-fn resolved_term_arity(term: &Term) -> usize
-{
-    match term {
-        Term::Clause(_, ref name, ref terms, _) => {
-            if name.as_str() == ":" && terms.len() == 2 {
-                match terms[0].as_ref() {
-                    &Term::Constant(_, Constant::Atom(..)) => {
-                    }
-                    _ => {
-                        return 2;
-                    }
-                }
-
-                match terms[1].as_ref() {
-                    Term::Clause(_, _, ref terms, _) => {
-                        terms.len()
-                    }
-                    Term::Constant(_, Constant::Atom(..)) => {
-                        0
-                    }
-                    _ => {
-                        2
-                    }
-                }
-            } else {
-                terms.len()
-            }
-        }
-        _ => {
-            0
-        }
-    }
-}
-
-pub trait ClauseConsistency {
+pub trait ClauseInfo {
     fn is_consistent(&self, clauses: &Vec<PredicateClause>) -> bool {
         match clauses.first() {
-            Some(ref cl) => {
-                self.name_and_module() == cl.name_and_module() && self.arity() == cl.arity()
+            Some(cl) => {
+                self.name() == cl.name() && self.arity() == cl.arity()
             }
             None => {
                 true
@@ -222,33 +124,29 @@ pub trait ClauseConsistency {
         }
     }
 
-    fn name_and_module(&self) -> Option<(ClauseName, ClauseName)>;
+    fn name(&self) -> Option<ClauseName>;
     fn arity(&self) -> usize;
 }
 
-/* Of course '$current_module$' isn't the name of the current
- * module. It'll do if no module is explicitly specified through
- * (:)/2.
- */
-impl ClauseConsistency for Term {
-    fn name_and_module(&self) -> Option<(ClauseName, ClauseName)>
-    {
+impl ClauseInfo for Term {
+    fn name(&self) -> Option<ClauseName> {
         match self {
-            Term::Clause(_, ref name, ref terms, _) =>
+            Term::Clause(_, ref name, ref terms, _) => {
                 match name.as_str() {
                     ":-" => {
                         match terms.len() {
                             1 => None, // a declaration.
-                            2 => resolved_term_and_module(&terms[0]),
-                            _ => Some((name.owning_module(), clause_name!(":-"))),
+                            2 => terms[0].name(),
+                            _ => Some(clause_name!(":-")),
                         }
                     }
                     _ => {
-                        resolved_term_and_module(self)
+                        Some(name.clone())
                     }
-                },
+                }
+            }
             Term::Constant(_, Constant::Atom(ref name, _)) => {
-                Some((name.owning_module(), name.clone()))
+                Some(name.clone())
             }
             _ => {
                 None
@@ -263,12 +161,12 @@ impl ClauseConsistency for Term {
                     ":-" => {
                         match terms.len() {
                             1 => 0,
-                            2 => resolved_term_arity(&terms[0]),
+                            2 => terms[0].arity(),
                             _ => terms.len(),
                         }
                     }
                     _ => {
-                        resolved_term_arity(self)
+                        terms.len()
                     }
                 },
             _ => {
@@ -278,9 +176,9 @@ impl ClauseConsistency for Term {
     }
 }
 
-impl ClauseConsistency for Rule {
-    fn name_and_module(&self) -> Option<(ClauseName, ClauseName)> {
-        Some((self.head.0.owning_module(), self.head.0.clone()))
+impl ClauseInfo for Rule {
+    fn name(&self) -> Option<ClauseName> {
+        Some(self.head.0.clone())
     }
 
     fn arity(&self) -> usize {
@@ -288,15 +186,14 @@ impl ClauseConsistency for Rule {
     }
 }
 
-impl ClauseConsistency for PredicateClause {
-    fn name_and_module(&self) -> Option<(ClauseName, ClauseName)> {
+impl ClauseInfo for PredicateClause {
+    fn name(&self) -> Option<ClauseName> {
         match self {
             &PredicateClause::Fact(ref term, ..) => {
-                term.name_and_module()
-                    .map(|(_, name)| (name.owning_module(), name))
+                term.name()
             }
             &PredicateClause::Rule(ref rule, ..) => {
-                rule.name_and_module()
+                rule.name()
             }
         }
     }
@@ -313,22 +210,12 @@ impl ClauseConsistency for PredicateClause {
     }
 }
 
-impl ClauseConsistency for Predicate {
-    fn name_and_module(&self) -> Option<(ClauseName, ClauseName)> {
-        self.0.first().and_then(|clause| clause.name_and_module())
-    }
-
-    fn arity(&self) -> usize {
-        self.0.first().map(|clause| clause.arity()).unwrap_or(0)
-    }
-}
-
-pub type CompiledResult = (Predicate, VecDeque<TopLevel>);
+// pub type CompiledResult = (Predicate, VecDeque<TopLevel>);
 
 #[derive(Debug, Clone)]
 pub enum PredicateClause {
-    Fact(Term, usize, usize), // Term, line number, column number.
-    Rule(Rule, usize, usize), // Term, line number, column number.
+    Fact(Term),
+    Rule(Rule),
 }
 
 impl PredicateClause {
@@ -401,66 +288,60 @@ impl ModuleSource {
     }
 }
 
-pub type ScopedPredicateKey = (ClauseName, PredicateKey); // module name, predicate indicator.
+// pub type ScopedPredicateKey = (ClauseName, PredicateKey); // module name, predicate indicator.
 
+/*
 #[derive(Debug, Clone)]
 pub enum MultiFileIndicator {
     LocalScoped(ClauseName, usize), // name, arity
     ModuleScoped(ScopedPredicateKey),
 }
+*/
+
+#[derive(Clone, Copy, Hash, Debug)]
+pub enum MetaSpec {
+    Minus,
+    Plus,
+    Either,
+    RequiresExpansionWithArgument(usize),
+}
 
 #[derive(Debug, Clone)]
 pub enum Declaration {
-    Dynamic(ClauseName, usize), // name, arity
-    EndOfFile,
-    Hook(CompileTimeHook, PredicateClause, VecDeque<TopLevel>),
-    ModuleInitialization(Vec<QueryTerm>, VecDeque<TopLevel>), // goal
+    Dynamic(ClauseName, usize),
+    MetaPredicate(ClauseName, ClauseName, Vec<MetaSpec>), // module name, name, meta-specs
     Module(ModuleDecl),
-    MultiFile(MultiFileIndicator),
     NonCountedBacktracking(ClauseName, usize), // name, arity
     Op(OpDecl),
-    SetPrologFlag(DoubleQuotes),
     UseModule(ModuleSource),
-    UseQualifiedModule(ModuleSource, Vec<ModuleExport>),
+    UseQualifiedModule(ModuleSource, IndexSet<ModuleExport>),
 }
 
-impl Declaration {
-    #[inline]
-    pub fn is_module_decl(&self) -> bool {
-        if let &Declaration::Module(_) = self {
-            true
-        } else {
-            false
-        }
-    }
-
-    #[inline]
-    pub fn is_end_of_file(&self) -> bool {
-        if let &Declaration::EndOfFile = self {
-            true
-        } else {
-            false
-        }
-    }
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd)]
+pub struct OpDecl {
+    pub prec: usize,
+    pub spec: Specifier,
+    pub name: ClauseName
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct OpDecl(pub usize, pub Specifier, pub ClauseName);
 
 impl OpDecl {
     #[inline]
-    pub fn name(&self) -> ClauseName {
-        self.2.clone()
+    pub fn new(prec: usize, spec: Specifier, name: ClauseName) -> Self {
+        Self { prec, spec, name }
     }
 
     #[inline]
-    pub fn remove(&self, op_dir: &mut OpDir) {
-        self.insert_into_op_dir(clause_name!(""), op_dir, 0);
+    pub fn remove(&mut self, op_dir: &mut OpDir) {
+        let prec = self.prec;
+        self.prec = 0;
+
+        self.insert_into_op_dir(op_dir);
+        self.prec = prec;
     }
 
     #[inline]
     pub fn fixity(&self) -> Fixity {
-        match self.1 {
+        match self.spec {
             XFY | XFX | YFX => Fixity::In,
             XF | YF => Fixity::Post,
             FX | FY => Fixity::Pre,
@@ -468,29 +349,27 @@ impl OpDecl {
         }
     }
 
-    pub fn insert_into_op_dir(&self, module: ClauseName, op_dir: &mut OpDir, prec: usize) {
-        let (spec, name) = (self.1, self.2.clone());
+    pub fn insert_into_op_dir(&self, op_dir: &mut OpDir) -> Option<(usize, Specifier)> {
+        let key = (self.name.clone(), self.fixity());
 
-        let fixity = self.fixity();
-
-        match op_dir.get(&(name.clone(), fixity)) {
+        match op_dir.get(&key) {
             Some(cell) => {
-                cell.shared_op_desc().set(prec, spec);
-                return;
+                return Some(cell.shared_op_desc().replace((self.prec, self.spec)));
             }
-            None => {}
+            None => {
+            }
         }
 
-        op_dir.insert((name, fixity), OpDirValue::new(spec, prec, module));
+        op_dir.insert(key, OpDirValue::new(self.spec, self.prec))
+              .map(|op_dir_value| op_dir_value.shared_op_desc().get())
     }
 
     pub fn submit(
         &self,
-        module: ClauseName,
         existing_desc: Option<OpDesc>,
         op_dir: &mut OpDir,
     ) -> Result<(), SessionError> {
-        let (prec, spec, name) = (self.0, self.1, self.2.clone());
+        let (spec, name) = (self.spec, self.name.clone());
 
         if is_infix!(spec) {
             if let Some(desc) = existing_desc {
@@ -508,7 +387,8 @@ impl OpDecl {
             }
         }
 
-        Ok(self.insert_into_op_dir(module, op_dir, prec))
+        self.insert_into_op_dir(op_dir);
+        Ok(())
     }
 }
 
@@ -547,7 +427,7 @@ pub fn fetch_op_spec(
     match arity {
         2 => op_dir
             .get(&(name, Fixity::In))
-            .and_then(|OpDirValue(spec, _)| {
+            .and_then(|OpDirValue(spec)| {
                 if spec.prec() > 0 {
                     Some(spec.clone())
                 } else {
@@ -555,15 +435,15 @@ pub fn fetch_op_spec(
                 }
             }),
         1 => {
-            if let Some(OpDirValue(spec, _)) = op_dir.get(&(name.clone(), Fixity::Pre)) {
+            if let Some(OpDirValue(spec)) = op_dir.get(&(name.clone(), Fixity::Pre)) {
                 if spec.prec() > 0 {
                     return Some(spec.clone());
                 }
             }
 
             op_dir
-                .get(&(name, Fixity::Post))
-                .and_then(|OpDirValue(spec, _)| {
+                .get(&(name.clone(), Fixity::Post))
+                .and_then(|OpDirValue(spec)| {
                     if spec.prec() > 0 {
                         Some(spec.clone())
                     } else {
@@ -579,7 +459,7 @@ pub fn fetch_op_spec(
 
 pub type ModuleDir = IndexMap<ClauseName, Module>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum ModuleExport {
     OpDecl(OpDecl),
     PredicateKey(PredicateKey),
@@ -593,21 +473,32 @@ pub struct ModuleDecl {
 
 #[derive(Debug)]
 pub struct Module {
-    pub atom_tbl: TabledData<Atom>,
     pub module_decl: ModuleDecl,
     pub code_dir: CodeDir,
     pub op_dir: OpDir,
-    pub term_dir: TermDir, // this contains multifile predicates.
-    pub term_expansions: (Predicate, VecDeque<TopLevel>),
-    pub goal_expansions: (Predicate, VecDeque<TopLevel>),
-    pub user_term_expansions: (Predicate, VecDeque<TopLevel>), // term expansions inherited from the user scope.
-    pub user_goal_expansions: (Predicate, VecDeque<TopLevel>), // same for goal_expansions.
-    pub local_term_expansions: (Predicate, VecDeque<TopLevel>), // expansions local to the module.
-    pub local_goal_expansions: (Predicate, VecDeque<TopLevel>),
-    pub inserted_expansions: bool, // has the module been successfully inserted into toplevel??
+    pub meta_predicates: MetaPredicateDir,
+    pub extensible_predicates: IndexMap<PredicateKey, PredicateSkeleton>,
     pub is_impromptu_module: bool,
     pub listing_src: ListingSource,
- }
+    pub clause_assert_margin: usize,
+}
+
+// Module's and related types are defined in forms.
+impl Module {
+    pub fn new(module_decl: ModuleDecl, listing_src: ListingSource) -> Self {
+        Module {
+            module_decl,
+            code_dir: CodeDir::new(),
+            op_dir: default_op_dir(),
+            meta_predicates: MetaPredicateDir::new(),
+            is_impromptu_module: false,
+            extensible_predicates: IndexMap::new(),
+            listing_src,
+            clause_assert_margin: 0,
+        }
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub enum Number {
@@ -714,4 +605,155 @@ impl Number {
             Number::Rational(r) => Number::from(Rational::from(r.abs_ref())),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum OptArgIndexKey {
+    Constant(usize, usize, Constant, Vec<Constant>), // index, IndexingCode location, opt arg, alternatives
+    List(usize, usize),                              // index, IndexingCode location
+    None,
+    Structure(usize, usize, ClauseName, usize), // index, IndexingCode location, name, arity
+}
+
+impl OptArgIndexKey {
+    #[inline]
+    pub fn take(&mut self) -> OptArgIndexKey {
+        std::mem::replace(self, OptArgIndexKey::None)
+    }
+
+    #[inline]
+    pub fn arg_num(&self) -> usize {
+        match &self {
+            OptArgIndexKey::Constant(arg_num, ..) |
+            OptArgIndexKey::Structure(arg_num, ..) |
+            OptArgIndexKey::List(arg_num, _) => {
+                // these are always at least 1.
+                *arg_num
+            }
+            OptArgIndexKey::None => {
+                0
+            }
+        }
+    }
+
+    #[inline]
+    pub fn is_some(&self) -> bool {
+        self.switch_on_term_loc().is_some()
+    }
+
+    #[inline]
+    pub fn switch_on_term_loc(&self) -> Option<usize> {
+        match &self {
+            OptArgIndexKey::Constant(_, loc, ..) |
+            OptArgIndexKey::Structure(_, loc, ..) |
+            OptArgIndexKey::List(_, loc) => {
+                Some(*loc)
+            }
+            OptArgIndexKey::None => {
+                None
+            }
+        }
+    }
+
+    #[inline]
+    pub fn set_switch_on_term_loc(&mut self, value: usize) {
+        match self {
+            OptArgIndexKey::Constant(_, ref mut loc, ..) |
+            OptArgIndexKey::Structure(_, ref mut loc, ..) |
+            OptArgIndexKey::List(_, ref mut loc) => {
+                *loc = value;
+            }
+            OptArgIndexKey::None => {
+            }
+        }
+    }
+}
+
+impl AddAssign<usize> for OptArgIndexKey {
+    #[inline]
+    fn add_assign(&mut self, n: usize) {
+        match self {
+            OptArgIndexKey::Constant(_, ref mut o, ..) |
+            OptArgIndexKey::List(_, ref mut o) |
+            OptArgIndexKey::Structure(_, ref mut o, ..) => {
+                *o += n;
+            }
+            OptArgIndexKey::None => {
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ClauseIndexInfo {
+    pub clause_start: usize,
+    pub opt_arg_index_key: OptArgIndexKey,
+}
+
+impl ClauseIndexInfo {
+    #[inline]
+    pub fn new(clause_start: usize) -> Self {
+        Self {
+            clause_start,
+            opt_arg_index_key: OptArgIndexKey::None,
+            // index_locs: vec![],
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PredicateSkeleton {
+    pub is_discontiguous: bool,
+    pub is_dynamic: bool,
+    pub is_multifile: bool,
+    pub clauses: SliceDeque<ClauseIndexInfo>,
+    pub clause_clause_locs: SliceDeque<usize>,
+}
+
+impl PredicateSkeleton {
+    #[inline]
+    pub fn new() -> Self {
+        PredicateSkeleton {
+            is_discontiguous: false,
+            is_dynamic: false,
+            is_multifile: false,
+            clauses: sdeq![],
+            clause_clause_locs: sdeq![],
+        }
+    }
+
+    /*
+    #[inline]
+    pub fn set_discontiguous(self, is_discontiguous: bool) -> Self {
+        PredicateSkeleton {
+            is_discontiguous,
+            is_dynamic: self.is_dynamic,
+            is_multifile: self.is_multifile,
+            clauses: self.clauses,
+        }
+    }
+    */
+
+    #[inline]
+    pub fn set_dynamic(self, is_dynamic: bool) -> Self {
+        PredicateSkeleton {
+            is_discontiguous: self.is_discontiguous,
+            is_dynamic,
+            is_multifile: self.is_multifile,
+            clauses: self.clauses,
+            clause_clause_locs: self.clause_clause_locs,
+        }
+    }
+
+    /*
+    #[inline]
+    pub fn set_multifile(self, is_multifile: bool) -> Self {
+        PredicateSkeleton {
+           is_discontiguous: self.is_discontiguous,
+            is_dynamic: self.is_dynamic,
+            is_multifile,
+            clauses: self.clauses,
+        }
+    }
+    */
 }

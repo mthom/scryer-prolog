@@ -16,7 +16,7 @@ extern crate nix;
 extern crate openssl;
 extern crate ordered_float;
 #[macro_use]
-extern crate prolog_parser;
+extern crate prolog_parser_rebis;
 #[macro_use]
 extern crate ref_thread_local;
 extern crate ring;
@@ -35,6 +35,7 @@ use crate::nix::sys::signal;
 mod macros;
 mod allocator;
 mod arithmetic;
+mod machine;
 mod codegen;
 mod clause_types;
 mod debray_allocator;
@@ -45,7 +46,6 @@ mod heap_print;
 mod indexing;
 mod instructions;
 mod iterators;
-mod machine;
 mod read;
 mod targets;
 mod write;

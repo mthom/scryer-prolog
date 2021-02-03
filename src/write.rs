@@ -1,5 +1,6 @@
 use crate::clause_types::*;
 use crate::forms::*;
+use crate::indexing::IndexingCodePtr;
 use crate::instructions::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
@@ -10,14 +11,8 @@ impl fmt::Display for LocalCodePtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             LocalCodePtr::DirEntry(p) => write!(f, "LocalCodePtr::DirEntry({})", p),
-            LocalCodePtr::InSituDirEntry(p) => write!(f, "LocalCodePtr::InSituDirEntry({})", p),
-            LocalCodePtr::TopLevel(cn, p) => write!(f, "LocalCodePtr::TopLevel({}, {})", cn, p),
-            LocalCodePtr::UserGoalExpansion(p) => {
-                write!(f, "LocalCodePtr::UserGoalExpansion({})", p)
-            }
-            LocalCodePtr::UserTermExpansion(p) => {
-                write!(f, "LocalCodePtr::UserTermExpansion({})", p)
-            }
+            LocalCodePtr::Halt => write!(f, "LocalCodePtr::Halt"),
+            LocalCodePtr::IndexingBuf(p, o, i) => write!(f, "LocalCodePtr::IndexingBuf({}, {}, {})", p, o, i),
         }
     }
 }
@@ -25,16 +20,52 @@ impl fmt::Display for LocalCodePtr {
 impl fmt::Display for REPLCodePtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            REPLCodePtr::CompileBatch =>
-                write!(f, "REPLCodePtr::CompileBatch"),
+            REPLCodePtr::AddDynamicPredicate =>
+                write!(f, "REPLCodePtr::AddDynamicPredicate"),
+            REPLCodePtr::AddGoalExpansionClause =>
+                write!(f, "REPLCodePtr::AddGoalExpansionClause"),
+            REPLCodePtr::AddTermExpansionClause =>
+                write!(f, "REPLCodePtr::AddTermExpansionClause"),
+            REPLCodePtr::BuiltInProperty =>
+                write!(f, "REPLCodePtr::BuiltInProperty"),
+            REPLCodePtr::UserAssertz =>
+                write!(f, "REPLCodePtr::UserAssertz"),
+            REPLCodePtr::UserAsserta =>
+                write!(f, "REPLCodePtr::UserAsserta"),
+            REPLCodePtr::UserRetract =>
+                write!(f, "REPLCodePtr::UserRetract"),
+            REPLCodePtr::ClauseToEvacuable =>
+                write!(f, "REPLCodePtr::ClauseToEvacuable"),
+            REPLCodePtr::ConcludeLoad =>
+                write!(f, "REPLCodePtr::ConcludeLoad"),
+	        REPLCodePtr::DeclareModule =>
+		        write!(f, "REPLCodePtr::DeclareModule"),
+            REPLCodePtr::LoadCompiledLibrary =>
+                write!(f, "REPLCodePtr::LoadCompiledLibrary"),
+            REPLCodePtr::LoadContextSource =>
+                write!(f, "REPLCodePtr::LoadContextSource"),
+            REPLCodePtr::LoadContextFile =>
+                write!(f, "REPLCodePtr::LoadContextFile"),
+            REPLCodePtr::LoadContextDirectory =>
+                write!(f, "REPLCodePtr::LoadContextDirectory"),
+            REPLCodePtr::LoadContextModule =>
+                write!(f, "REPLCodePtr::LoadContextModule"),
+            REPLCodePtr::LoadContextStream =>
+                write!(f, "REPLCodePtr::LoadContextStream"),
+            REPLCodePtr::PopLoadContext =>
+                write!(f, "REPLCodePtr::PopLoadContext"),
+            REPLCodePtr::PopLoadStatePayload =>
+                write!(f, "REPLCodePtr::PopLoadStatePayload"),
+            REPLCodePtr::PushLoadContext =>
+                write!(f, "REPLCodePtr::PushLoadContext"),
+            REPLCodePtr::PushLoadStatePayload =>
+                write!(f, "REPLCodePtr::PushLoadStatePayload"),
 	        REPLCodePtr::UseModule =>
 		        write!(f, "REPLCodePtr::UseModule"),
-	        REPLCodePtr::UseQualifiedModule =>
-		        write!(f, "REPLCodePtr::UseQualifiedModule"),
-	        REPLCodePtr::UseModuleFromFile =>
-		        write!(f, "REPLCodePtr::UseModuleFromFile"),
-	        REPLCodePtr::UseQualifiedModuleFromFile =>
-		        write!(f, "REPLCodePtr::UseQualifiedModuleFromFile")
+            REPLCodePtr::MetaPredicateProperty =>
+                write!(f, "REPLCodePtr::MetaPredicateProperty"),
+            REPLCodePtr::CompilePendingPredicates =>
+                write!(f, "REPLCodePtr::CompilePendingPredicates"),
         }
     }
 }
@@ -45,9 +76,6 @@ impl fmt::Display for IndexPtr {
             &IndexPtr::DynamicUndefined => write!(f, "undefined"),
             &IndexPtr::Undefined => write!(f, "undefined"),
             &IndexPtr::Index(i) => write!(f, "{}", i),
-            &IndexPtr::InSituDirEntry(i) => write!(f, "in_situ({})", i),
-            &IndexPtr::UserTermExpansion => write!(f, "user:term_expansion"),
-            &IndexPtr::UserGoalExpansion => write!(f, "user:goal_expansion"),
         }
     }
 }
@@ -68,17 +96,27 @@ impl fmt::Display for FactInstruction {
             &FactInstruction::GetStructure(ref ct, ref arity, ref r) => {
                 write!(f, "get_structure {}/{}, {}", ct.name(), arity, r)
             }
-            &FactInstruction::GetValue(ref x, ref a) => write!(f, "get_value {}, A{}", x, a),
+            &FactInstruction::GetValue(ref x, ref a) => {
+                write!(f, "get_value {}, A{}", x, a)
+            }
             &FactInstruction::GetVariable(ref x, ref a) => {
                 write!(f, "fact:get_variable {}, A{}", x, a)
             }
             &FactInstruction::UnifyConstant(ref constant) => {
                 write!(f, "unify_constant {}", constant)
             }
-            &FactInstruction::UnifyVariable(ref r) => write!(f, "unify_variable {}", r),
-            &FactInstruction::UnifyLocalValue(ref r) => write!(f, "unify_local_value {}", r),
-            &FactInstruction::UnifyValue(ref r) => write!(f, "unify_value {}", r),
-            &FactInstruction::UnifyVoid(n) => write!(f, "unify_void {}", n),
+            &FactInstruction::UnifyVariable(ref r) => {
+                write!(f, "unify_variable {}", r)
+            }
+            &FactInstruction::UnifyLocalValue(ref r) => {
+                write!(f, "unify_local_value {}", r)
+            }
+            &FactInstruction::UnifyValue(ref r) => {
+                write!(f, "unify_value {}", r)
+            }
+            &FactInstruction::UnifyVoid(n) => {
+                write!(f, "unify_void {}", n)
+            }
         }
     }
 }
@@ -141,12 +179,16 @@ impl fmt::Display for CompareTermQT {
 impl fmt::Display for ClauseType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ClauseType::System(SystemClauseType::SetCutPoint(r)) => write!(f, "$set_cp({})", r),
-            &ClauseType::Named(ref name, _, ref idx) | &ClauseType::Op(ref name, _, ref idx) => {
-                let idx = idx.0.borrow();
-                write!(f, "{}:{}/{}", idx.1, name, idx.0)
+            &ClauseType::System(SystemClauseType::SetCutPoint(r)) => {
+                write!(f, "$set_cp({})", r)
             }
-            ref ct => write!(f, "{}", ct.name()),
+            &ClauseType::Named(ref name, _, ref idx) | &ClauseType::Op(ref name, _, ref idx) => {
+                let idx = idx.0.get();
+                write!(f, "{}/{}", name, idx)
+            }
+            ref ct => {
+                write!(f, "{}", ct.name())
+            }
         }
     }
 }
@@ -158,6 +200,7 @@ impl fmt::Display for HeapCellValue {
             &HeapCellValue::Atom(ref atom, _) => write!(f, "{}", atom.as_str()),
             &HeapCellValue::DBRef(ref db_ref) => write!(f, "{}", db_ref),
             &HeapCellValue::Integer(ref n) => write!(f, "{}", n),
+            &HeapCellValue::LoadStatePayload(_) => write!(f, "LoadStatePayload"),
             &HeapCellValue::Rational(ref n) => write!(f, "{}", n),
             &HeapCellValue::NamedStr(arity, ref name, Some(ref cell)) => write!(
                 f,
@@ -209,6 +252,7 @@ impl fmt::Display for Addr {
             &Addr::CutPoint(cp) => write!(f, "Addr::CutPoint({})", cp),
             &Addr::Con(ref c) => write!(f, "Addr::Con({})", c),
             &Addr::Lis(l) => write!(f, "Addr::Lis({})", l),
+            &Addr::LoadStatePayload(s) => write!(f, "Addr::LoadStatePayload({})", s),
             &Addr::AttrVar(h) => write!(f, "Addr::AttrVar({})", h),
             &Addr::HeapCell(h) => write!(f, "Addr::HeapCell({})", h),
             &Addr::StackCell(fr, sc) => write!(f, "Addr::StackCell({}, {})", fr, sc),
@@ -244,6 +288,9 @@ impl fmt::Display for ControlInstruction {
             &ControlInstruction::JmpBy(arity, offset, pvs, true) => {
                 write!(f, "jmp_by_execute {}/{}, {}", offset, arity, pvs)
             }
+            &ControlInstruction::RevJmpBy(offset) => {
+                write!(f, "rev_jmp_by {}", offset)
+            }
             &ControlInstruction::Proceed => write!(f, "proceed"),
         }
     }
@@ -262,13 +309,33 @@ impl fmt::Display for IndexedChoiceInstruction {
 impl fmt::Display for ChoiceInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ChoiceInstruction::TryMeElse(offset) => write!(f, "try_me_else {}", offset),
+            &ChoiceInstruction::TryMeElse(offset) =>
+                write!(f, "try_me_else {}", offset),
             &ChoiceInstruction::DefaultRetryMeElse(offset) => {
                 write!(f, "retry_me_else_by_default {}", offset)
             }
-            &ChoiceInstruction::RetryMeElse(offset) => write!(f, "retry_me_else {}", offset),
-            &ChoiceInstruction::DefaultTrustMe => write!(f, "trust_me_by_default"),
-            &ChoiceInstruction::TrustMe => write!(f, "trust_me"),
+            &ChoiceInstruction::RetryMeElse(offset) =>
+                write!(f, "retry_me_else {}", offset),
+            &ChoiceInstruction::DefaultTrustMe(_) =>
+                write!(f, "trust_me_by_default"),
+            &ChoiceInstruction::TrustMe(_) =>
+                write!(f, "trust_me"),
+        }
+    }
+}
+
+impl fmt::Display for IndexingCodePtr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &IndexingCodePtr::External(o) => {
+                write!(f, "IndexingCodePtr::External({})", o)
+            }
+            &IndexingCodePtr::Fail => {
+                write!(f, "IndexingCodePtr::Fail")
+            }
+            &IndexingCodePtr::Internal(o) => {
+                write!(f, "IndexingCodePtr::Internal({})", o)
+            }
         }
     }
 }
@@ -279,11 +346,11 @@ impl fmt::Display for IndexingInstruction {
             &IndexingInstruction::SwitchOnTerm(a, v, c, l, s) => {
                 write!(f, "switch_on_term {}, {}, {}, {}, {}", a, v, c, l, s)
             }
-            &IndexingInstruction::SwitchOnConstant(_, num_cs, _) => {
-                write!(f, "switch_on_constant {}", num_cs)
+            &IndexingInstruction::SwitchOnConstant(ref constants) => {
+                write!(f, "switch_on_constant {}", constants.len())
             }
-            &IndexingInstruction::SwitchOnStructure(_, num_ss, _) => {
-                write!(f, "switch_on_structure {}", num_ss)
+            &IndexingInstruction::SwitchOnStructure(ref structures) => {
+                write!(f, "switch_on_structure {}", structures.len())
             }
         }
     }
@@ -295,35 +362,39 @@ impl fmt::Display for SessionError {
             &SessionError::ExistenceError(ref err) => {
                 write!(f, "{}", err)
             }
-            &SessionError::CannotOverwriteBuiltIn(ref msg) => {
-                write!(f, "cannot overwrite {}", msg)
-            }
-            &SessionError::CannotOverwriteImport(ref msg) => {
-                write!(f, "cannot overwrite import {}", msg)
-            }
-            &SessionError::InvalidFileName(ref filename) => {
-                write!(f, "filename {} is invalid", filename)
-            }
-            &SessionError::ModuleDoesNotContainExport(ref module, ref key) => {
-                write!(
-                    f,
-                    "module {} does not contain claimed export {}/{}",
-                    module,
-                    key.0,
-                    key.1,
-                )
-            }
+            // &SessionError::CannotOverwriteBuiltIn(ref msg) => {
+            //     write!(f, "cannot overwrite {}", msg)
+            // }
+            // &SessionError::CannotOverwriteImport(ref msg) => {
+            //     write!(f, "cannot overwrite import {}", msg)
+            // }
+            // &SessionError::InvalidFileName(ref filename) => {
+            //     write!(f, "filename {} is invalid", filename)
+            // }
+            // &SessionError::ModuleDoesNotContainExport(ref module, ref key) => {
+            //     write!(
+            //         f,
+            //         "module {} does not contain claimed export {}/{}",
+            //         module,
+            //         key.0,
+            //         key.1,
+            //     )
+            // }
             &SessionError::OpIsInfixAndPostFix(_) => {
                 write!(f, "cannot define an op to be both postfix and infix.")
             }
             &SessionError::NamelessEntry => {
                 write!(f, "the predicate head is not an atom or clause.")
             }
-            &SessionError::ParserError(ref e) => {
-                write!(f, "syntax_error({})", e.as_str())
+            &SessionError::CompilationError(ref e) => {
+                write!(f, "syntax_error({:?})", e)
             }
             &SessionError::QueryCannotBeDefinedAsFact => {
                 write!(f, "queries cannot be defined as facts.")
+            }
+            &SessionError::ModuleCannotImportSelf(ref module_name) => {
+                write!(f, "modules ({}, in this case) cannot import themselves.",
+                       module_name)
             }
         }
     }
@@ -364,6 +435,23 @@ impl fmt::Display for ModuleSource {
     }
 }
 
+impl fmt::Display for IndexingLine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &IndexingLine::Indexing(ref indexing_instr) => {
+                write!(f, "{}", indexing_instr)
+            }
+            &IndexingLine::IndexedChoice(ref indexed_choice_instrs) => {
+                for indexed_choice_instr in indexed_choice_instrs {
+                    write!(f, "{}", indexed_choice_instr)?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
 impl fmt::Display for Line {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -372,7 +460,13 @@ impl fmt::Display for Line {
             &Line::Control(ref control_instr) => write!(f, "{}", control_instr),
             &Line::Cut(ref cut_instr) => write!(f, "{}", cut_instr),
             &Line::Fact(ref fact_instr) => write!(f, "{}", fact_instr),
-            &Line::Indexing(ref indexing_instr) => write!(f, "{}", indexing_instr),
+            &Line::IndexingCode(ref indexing_instrs) => {
+                for indexing_instr in indexing_instrs {
+                    write!(f, "{}", indexing_instr)?;
+                }
+
+                Ok(())
+            }
             &Line::IndexedChoice(ref indexed_choice_instr) => write!(f, "{}", indexed_choice_instr),
             &Line::Query(ref query_instr) => write!(f, "{}", query_instr),
         }

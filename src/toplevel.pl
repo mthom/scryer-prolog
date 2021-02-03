@@ -1,9 +1,17 @@
-:- module('$toplevel', ['$repl'/1, consult/1, use_module/1, use_module/2,
-                        argv/1]).
+:- module('$toplevel', [argv/1,
+                        copy_term/3,
+                        predicate_property/2,
+                        prolog_load_context/2]).
+
+:- use_module(library(loader)).
 
 :- use_module(library(charsio)).
+:- use_module(library(iso_ext)).
 :- use_module(library(lists)).
 :- use_module(library(si)).
+
+:- use_module(library('$project_atts')).
+:- use_module(library('$atts')).
 
 :- dynamic(argv/1).
 
@@ -109,9 +117,6 @@ read_and_match :-
     instruction_match(Term, VarList).
 
 
-% make compile_batch, a system routine, callable.
-compile_batch :- '$compile_batch'.
-
 instruction_match(Term, VarList) :-
     (  var(Term) ->
        throw(error(instantiation_error, repl/0))
@@ -119,37 +124,42 @@ instruction_match(Term, VarList) :-
        !,
        (  atom(Item) ->
 	      (  Item == user ->
-	         catch(compile_batch, E, print_exception_with_check(E))
-	      ;  consult(Item)
+	         catch(load(user_input), E, print_exception_with_check(E))
+	      ;
+             consult(Item)
 	      )
        ;
-	   catch(throw(error(type_error(atom, Item), repl/0)),
+	   catch(type_error(atom, Item, repl/0),
 		     E,
 		     print_exception_with_check(E))
        )
     ;  Term = end_of_file ->
        halt
-    ;  submit_query_and_print_results(Term, VarList)
+    ;
+       submit_query_and_print_results(Term, VarList)
     ).
 
-:- use_module(library(iso_ext)).
 
-% auxiliary predicates, so that using them in setup_call_cleanup/3 works
-get_b_value(B) :- '$get_b_value'(B).
-clear_attribute_goals :- '$clear_attribute_goals'.
+submit_query_and_print_results_(Term, VarList) :-
+    '$get_b_value'(B),
+    call(Term),
+    write_eqs_and_read_input(B, VarList),
+    !.
+submit_query_and_print_results_(_, _) :-
+    %  clear attribute goal lists, which may be populated by
+    %  copy_term/3 prior to failure.
+    '$clear_attribute_goals',
+    write('false.'),
+    nl.
+
 
 submit_query_and_print_results(Term0, VarList) :-
-    (  expand_goals(Term0, Term) -> true
-    ;  Term0 = Term
-    ),
+    expand_goal(call(Term0), user, Term),
+    !,
     setup_call_cleanup(bb_put('$first_answer', true),
-                       (   get_b_value(B), call(Term), write_eqs_and_read_input(B, VarList),
-                           !
-                       ;   %  clear attribute goal lists, which may be populated by
-                           %  copy_term/3 prior to failure.
-                           clear_attribute_goals, write('false.'), nl
-                       ),
+                       submit_query_and_print_results_(Term, VarList),
                        bb_put('$first_answer', false)).
+
 
 needs_bracketing(Value, Op) :-
     catch((functor(Value, F, _),
@@ -254,12 +264,12 @@ write_eqs_and_read_input(B, VarList) :-
     (  B0 == B ->
        (  Goals == [] ->
 	      write('true.'), nl
-       ;  thread_goals(Goals, ThreadedGoals, (',')),
+       ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
 	      write_eq(ThreadedGoals, NewVarList0, 20),
 	      write('.'),
 	      nl
        )
-    ;  thread_goals(Goals, ThreadedGoals, (',')),
+    ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
        write_eq(ThreadedGoals, NewVarList0, 20),
        read_input(ThreadedGoals, NewVarList0)
     ).
@@ -352,134 +362,4 @@ print_exception_with_check(E) :-
     % number, a GNU-style error message
     % is expected to be printed instead.
     ;  print_exception(E)
-    ).
-
-module_export(Source, PI) :-
-    (  nonvar(PI) ->
-       (  PI = Name / Arity ->
-	      (  var(Name) -> throw(error(instantiation_error, Source))
-	      ;  integer(Arity) ->
-	         (  \+ atom(Name) -> throw(error(type_error(atom, Name), Source))
-	         ;  Arity < 0 -> throw(error(domain_error(not_less_than_zero, Arity), Source))
-	         ;  true
-	         )
-	      ;  throw(error(type_error(integer, Arity), Source))
-	      )
-       ;  PI = op(Prec, Spec, Name) ->
-	      (  integer(Prec) ->
-	         (  \+ atom(Name) ->
-		        throw(error(type_error(atom, Name), Source))
-	         ;  Prec < 0 ->
-		        throw(error(domain_error(not_less_than_zero, Prec), Source))
-	         ;  Prec > 1200 ->
-		        throw(error(domain_error(operator_precision, Prec), Source))
-	         ;  memberchk(Spec, [xfy, yfx, xfx, fx, fy, yf, xf])
-	         ;  throw(error(domain_error(operator_specification, Spec), Source))
-	         )
-	      ;  throw(error(type_error(integer, Prec), Source))
-	      )
-       ;  throw(error(type_error(module_export, PI), Source))
-       )
-    ;  throw(error(instantiation_error, Source))
-    ).
-
-consult(Item) :-
-    (  atom(Item) -> use_module(Item)
-    ;  throw(error(type_error(atom, Item), consult/1))
-    ).
-
-use_module(Module) :-
-    (  nonvar(Module) ->
-       (  Module = library(Filename) ->
-          write_term_to_chars(Filename, [], FilenameString),
-          '$use_module'(FilenameString)
-       ;  atom(Module) ->
-          '$use_module_from_file'(Module)
-       ;  throw(error(invalid_module_specifier, use_module/1))
-       )
-    ;  throw(error(instantiation_error, use_module/1))
-    ).
-
-use_module(Module, QualifiedExports) :-
-    (  nonvar(Module) ->
-       (  list_si(QualifiedExports) ->
-	      maplist('$module_export'(use_module/2), QualifiedExports) ->
-	          (  Module = library(Filename) ->
-                 write_term_to_chars(Filename, [], FilenameString),
-	             '$use_qualified_module'(FilenameString, QualifiedExports)
-	          ;  atom(Module) ->
-	             '$use_qualified_module_from_file'(Module, QualifiedExports)
-	          ;  throw(error(invalid_module_specifier, use_module/2))
-	          )
-       ;  throw(error(type_error(list, QualifiedExports), use_module/2))
-       )
-    ;  throw(error(instantiation_error, use_module/2))
-    ).
-
-
-% expand goals in initialization directives.
-user:term_expansion(Term0, (:- initialization(ExpandedGoals))) :-
-    nonvar(Term0),
-    Term0 = (:- initialization(Goals)),
-    expand_goals(Goals, ExpandedGoals),
-    Goals \== ExpandedGoals.
-
-module_expand_goal(UnexpandedGoals, ExpandedGoals) :-
-    (  '$module_of'(Module, UnexpandedGoals),
-       '$module_exists'(Module),
-       Module:goal_expansion(UnexpandedGoals, ExpandedGoals),
-       UnexpandedGoals \== ExpandedGoals ->
-       true
-    ;  user:goal_expansion(UnexpandedGoals, ExpandedGoals)
-    ).
-
-expand_goals(UnexpandedGoals, ExpandedGoals) :-
-    nonvar(UnexpandedGoals),
-    var(ExpandedGoals),
-    (  module_expand_goal(UnexpandedGoals, Goals) ->
-       true
-    ;  Goals = UnexpandedGoals
-    ),
-    (  Goals = (Goal0, Goals0) ->
-       (  expand_goals(Goal0, Goal1) ->
-	      expand_goals(Goals0, Goals1),
-	      thread_goals(Goal1, ExpandedGoals, Goals1, (','))
-       ;  expand_goals(Goals0, Goals1),
-	      ExpandedGoals = (Goal0, Goals1)
-       )
-    ;  Goals = (Goals0 -> Goals1) ->
-       expand_goals(Goals0, ExpandedGoals0),
-       expand_goals(Goals1, ExpandedGoals1),
-       ExpandedGoals = (ExpandedGoals0 -> ExpandedGoals1)
-    ;  Goals = (Goals0 ; Goals1) ->
-       expand_goals(Goals0, ExpandedGoals0),
-       expand_goals(Goals1, ExpandedGoals1),
-       ExpandedGoals = (ExpandedGoals0 ; ExpandedGoals1)
-    ;  Goals = (\+ Goals0) ->
-       expand_goals(Goals0, Goals1),
-       ExpandedGoals = (\+ Goals1)
-    ;  thread_goals(Goals, ExpandedGoals, (','))
-    ;  Goals = ExpandedGoals
-    ).
-
-thread_goals(Goals0, Goals1, Hole, Functor) :-
-    nonvar(Goals0),
-    (  Goals0 = [G | Gs] ->
-       (  Gs == [] ->
-	      Goals1 =.. [Functor, G, Hole]
-       ;  Goals1 =.. [Functor, G, Goals2],
-	      thread_goals(Gs, Goals2, Hole, Functor)
-       )
-    ;  Goals1 =.. [Functor, Goals0, Hole]
-    ).
-
-thread_goals(Goals0, Goals1, Functor) :-
-    nonvar(Goals0),
-    (  Goals0 = [G | Gs] ->
-       (  Gs = [] ->
-	      Goals1 = G
-       ;  Goals1 =.. [Functor, G, Goals2],
-	      thread_goals(Gs, Goals2, Functor)
-       )
-    ;  Goals1 = Goals0
     ).
