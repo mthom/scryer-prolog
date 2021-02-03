@@ -712,6 +712,9 @@ impl Preprocessor {
                     Ok(clause_to_query_term(load_state, name, vec![], fixity))
                 }
             }
+            Term::Constant(_, Constant::Char('!')) => {
+                Ok(QueryTerm::BlockedCut)
+            }
             Term::Var(_, ref v) if v.as_str() == "!" => {
                 Ok(QueryTerm::UnblockedCut(Cell::default()))
             }
