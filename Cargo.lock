@@ -880,8 +880,6 @@ dependencies = [
 [[package]]
 name = "prolog_parser_rebis"
 version = "0.8.68"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f52213fbb212208bf9e80c6d34bbfeb9ebef4dca28462f034e195e073e79c334"
 dependencies = [
  "lexical",
  "num-rug-adapter",

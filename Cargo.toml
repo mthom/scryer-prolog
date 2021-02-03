@@ -32,7 +32,7 @@ libc = "0.2.62"
 nix = "0.15.0"
 num-rug-adapter = { optional = true, version = "0.1.4" }
 ordered-float = "0.5.0"
-prolog_parser_rebis = { version = "0.8.68", default-features = false }
+prolog_parser_rebis = { path = "./crates/prolog_parser", default-features = false }
 ref_thread_local = "0.0.0"
 rug = { version = "1.4.0", optional = true }
 rustyline = "7.0.0"

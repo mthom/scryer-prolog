@@ -1,0 +1,21 @@
+[package]
+name = "prolog_parser_rebis"
+version = "0.8.68"
+authors = ["Mark Thom <markjordanthom@gmail.com>"]
+repository = "https://github.com/mthom/prolog_parser"
+description = " An operator precedence parser for the Rebis development version of Scryer Prolog, an up and coming ISO Prolog implementation."
+license = "BSD-3-Clause"
+
+[dependencies]
+lexical = "2.1.0"
+ordered-float = "0.5.0"
+rug = { optional = true, version = "1.4.0" }
+num-rug-adapter = { optional = true, version = "0.1.3" }
+unicode_reader = "1.0.0"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+num = ["num-rug-adapter"]
+default = ["rug"]
