@@ -11,6 +11,9 @@ keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build.rs"
 
+[workspace]
+members = ["crates/prolog_parser"]
+
 [build-dependencies]
 indexmap = "1.0.2"
 

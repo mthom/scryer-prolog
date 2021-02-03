@@ -162,6 +162,14 @@ impl MachineState {
     }
 
     fn bind_with_occurs_check(&mut self, r: Ref, addr: Addr) {
+        if let Ref::StackCell(..) = r {
+            // local variable optimization -- r cannot occur in the
+            // data structure bound to addr, so don't bother
+            // traversing it.
+            self.bind(r, addr);
+            return;
+        }
+
         let mut fail = false;
 
         for addr in self.acyclic_pre_order_iter(addr) {
