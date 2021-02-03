@@ -156,6 +156,8 @@ user:goal_expansion(Term, M:get_atts(Var, Attr)) :-
     nonvar(Term),
     Term = get_atts(Var, M, Attr).
 
+:- meta_predicate call_residue_vars(0, ?).
+
 call_residue_vars(Goal, Vars) :-
     '$get_attr_var_queue_delim'(B),
     call(Goal),
