@@ -434,7 +434,7 @@ fn blunt_leading_choice_instr(
     }
 }
 
-fn set_switch_var_offset_to_choice_instr_(
+fn set_switch_var_offset_to_choice_instr(
     code: &mut Code,
     index_loc: usize,
     offset: usize,
@@ -1014,13 +1014,6 @@ fn append_compiled_clause(
                         lower_bound_clause_start - index_loc,
                         retraction_info,
                     );
-
-                    thread_choice_instr_at_to(
-                        code,
-                        lower_bound_clause_start,
-                        skeleton.clauses[target_pos].clause_start,
-                        retraction_info,
-                    );
                 }
 
                 skeleton.clauses[target_pos - 1].clause_start
@@ -1037,9 +1030,27 @@ fn append_compiled_clause(
 
                         skeleton.clauses[lower_bound].clause_start - 2
                     }
-                    _ => {
+                    None => {
                         if lower_bound == 0 {
                             code_ptr_opt = Some(skeleton.clauses[lower_bound].clause_start);
+                        }
+
+                        match skeleton.clauses[target_pos].opt_arg_index_key.switch_on_term_loc() {
+                            Some(index_loc) => {
+                                // point to the inner-threaded TryMeElse(0) if target_pos is
+                                // indexed, and make switch_on_term point one line after it in
+                                // its variable offset.
+                                skeleton.clauses[target_pos].clause_start += 2;
+
+                                set_switch_var_offset(
+                                    code,
+                                    index_loc,
+                                    2,
+                                    retraction_info,
+                                );
+                            }
+                            None => {
+                            }
                         }
 
                         skeleton.clauses[lower_bound].clause_start
@@ -1440,7 +1451,7 @@ impl<'a> LoadState<'a> {
                             set_switch_var_offset(
                                 code,
                                 later_indexing_loc,
-                                lower_bound_clause_start - later_indexing_loc, // target_indexing_loc - later_indexing_loc + 1,
+                                lower_bound_clause_start - later_indexing_loc,
                                 &mut self.retraction_info,
                             );
 
@@ -1461,10 +1472,10 @@ impl<'a> LoadState<'a> {
                             );
                         }
                         _ => {
-                            set_switch_var_offset_to_choice_instr_(
+                            set_switch_var_offset_to_choice_instr(
                                 code,
                                 target_indexing_loc,
-                                lower_bound_clause_start - target_indexing_loc, //1,
+                                lower_bound_clause_start - target_indexing_loc,
                                 &mut self.retraction_info,
                             );
 
