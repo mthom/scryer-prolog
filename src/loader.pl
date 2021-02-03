@@ -460,7 +460,7 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
        ;  Goals = (\+ Goals0) ->
           expand_goal(Goals0, Module, Goals1, HeadVars),
           ExpandedGoals = (\+ Goals1)
-       ;  predicate_property(Goals, meta_predicate(MetaSpecs)) ->
+       ;  predicate_property(Module:Goals, meta_predicate(MetaSpecs)) ->
           expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars)
        ;  thread_goals(Goals, ExpandedGoals, (','))
        ;  Goals = ExpandedGoals
