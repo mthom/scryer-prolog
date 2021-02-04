@@ -1001,22 +1001,22 @@ fn append_compiled_clause(
                     AppendOrPrepend::Append,
                 );
 
-                if lower_bound + 1 == target_pos {
-                    let lower_bound_clause_start = find_inner_choice_instr(
-                        code,
-                        skeleton.clauses[lower_bound].clause_start,
-                        index_loc,
-                    );
+                let target_pos_clause_start = find_inner_choice_instr(
+                    code,
+                    skeleton.clauses[target_pos - 1].clause_start,
+                    index_loc,
+                );
 
+                if lower_bound + 1 == target_pos {
                     set_switch_var_offset(
                         code,
                         index_loc,
-                        lower_bound_clause_start - index_loc,
+                        target_pos_clause_start - index_loc,
                         retraction_info,
                     );
                 }
 
-                skeleton.clauses[target_pos - 1].clause_start
+                target_pos_clause_start // skeleton.clauses[target_pos - 1].clause_start
             }
             _ => {
                 skeleton.clauses[target_pos].opt_arg_index_key += clause_loc;

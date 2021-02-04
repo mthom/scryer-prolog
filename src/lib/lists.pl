@@ -126,7 +126,7 @@ maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7
 
 
 sum_list(Ls, S) :-
-        foldl(sum_, Ls, 0, S).
+        foldl(lists:sum_, Ls, 0, S).
 
 sum_(L, S0, S) :- S is S0 + L.
 
@@ -160,17 +160,17 @@ transpose(Ls, Ts) :-
 
 lists_transpose([], []).
 lists_transpose([L|Ls], Ts) :-
-        maplist(same_length(L), Ls),
-        foldl(transpose_, L, Ts, [L|Ls], _).
+        maplist(lists:same_length(L), Ls),
+        foldl(lists:transpose_, L, Ts, [L|Ls], _).
 
 transpose_(_, Fs, Lists0, Lists) :-
-        maplist(list_first_rest, Lists0, Fs, Lists).
+        maplist(lists:list_first_rest, Lists0, Fs, Lists).
 
 list_first_rest([L|Ls], L, Ls).
 
 
 list_to_set(Ls0, Ls) :-
-        maplist(with_var, Ls0, LVs0),
+        maplist(lists:with_var, Ls0, LVs0),
         keysort(LVs0, LVs),
         same_elements(LVs),
         pick_firsts(LVs0, Ls).
@@ -188,7 +188,7 @@ with_var(E, E-_).
 
 same_elements([]).
 same_elements([EV|EVs]) :-
-        foldl(unify_same, EVs, EV, _).
+        foldl(lists:unify_same, EVs, EV, _).
 
 unify_same(E-V, Prev-Var, E-V) :-
         (   Prev == E ->
@@ -221,13 +221,13 @@ nth0_search(N0, N, [_|Es], E) :-
 
 
 list_max([N|Ns], Max) :-
-    foldl(list_max_, Ns, N, Max).
+    foldl(lists:list_max_, Ns, N, Max).
 
 list_max_(N, Max0, Max) :-
     Max is max(N, Max0).
 
 list_min([N|Ns], Min) :-
-    foldl(list_min_, Ns, N, Min).
+    foldl(lists:list_min_, Ns, N, Min).
 
 list_min_(N, Min0, Min) :-
     Min is min(N, Min0).

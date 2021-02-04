@@ -423,7 +423,7 @@ expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars) :-
     Goals =.. [GoalFunctor | SubGoals],
     (  GoalFunctor == (:),
        SubGoals = [M, SubGoal] ->
-       expand_module_names(SubGoal, MetaSpecs, Module, ExpandedSubGoal, HeadVars),
+       expand_module_names(SubGoal, MetaSpecs, M, ExpandedSubGoal, HeadVars),
        ExpandedGoals = M:ExpandedSubGoal
     ;  expand_meta_predicate_subgoals(SubGoals, MetaSpecs, Module, ExpandedGoalList, HeadVars),
        ExpandedGoals =.. [GoalFunctor | ExpandedGoalList]
@@ -434,6 +434,28 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals) :-
     expand_goal(UnexpandedGoals, Module, ExpandedGoals, []),
     !.
 
+expand_goal_cases((Goal0, Goals0), Module, ExpandedGoals, HeadVars) :-
+    (  expand_goal(Goal0, Module, Goal1, HeadVars) ->
+       expand_goal(Goals0, Module, Goals1, HeadVars),
+       thread_goals(Goal1, ExpandedGoals, Goals1, (','))
+    ;  expand_goal(Goals0, Module, Goals1, HeadVars),
+       ExpandedGoals = (Goal0, Goals1)
+    ).
+expand_goal_cases((Goals0 -> Goals1), Module, ExpandedGoals, HeadVars) :-
+    expand_goal(Goals0, Module, ExpandedGoals0, HeadVars),
+    expand_goal(Goals1, Module, ExpandedGoals1, HeadVars),
+    ExpandedGoals = (ExpandedGoals0 -> ExpandedGoals1).
+expand_goal_cases((Goals0 ; Goals1), Module, ExpandedGoals, HeadVars) :-
+    expand_goal(Goals0, Module, ExpandedGoals0, HeadVars),
+    expand_goal(Goals1, Module, ExpandedGoals1, HeadVars),
+    ExpandedGoals = (ExpandedGoals0 ; ExpandedGoals1).
+expand_goal_cases((\+ Goals0), Module, ExpandedGoals, HeadVars) :-
+    expand_goal(Goals0, Module, Goals1, HeadVars),
+    ExpandedGoals = (\+ Goals1).
+expand_goal_cases((Module:Goals0), _, ExpandedGoals, HeadVars) :-
+    expand_goal(Goals0, Module, Goals1, HeadVars),
+    ExpandedGoals = (Module:Goals1).
+
 expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
     (  var(UnexpandedGoals) ->
        UnexpandedGoals = ExpandedGoals
@@ -442,24 +464,8 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
           goal_expansion(UnexpandedGoals1, user, Goals)
        ;  Goals = UnexpandedGoals1
        ),
-       (  Goals = (Goal0, Goals0) ->
-          (  expand_goal(Goal0, Module, Goal1, HeadVars) ->
-             expand_goal(Goals0, Module, Goals1, HeadVars),
-             thread_goals(Goal1, ExpandedGoals, Goals1, (','))
-          ;  expand_goal(Goals0, Module, Goals1, HeadVars),
-             ExpandedGoals = (Goal0, Goals1)
-          )
-       ;  Goals = (Goals0 -> Goals1) ->
-          expand_goal(Goals0, Module, ExpandedGoals0, HeadVars),
-          expand_goal(Goals1, Module, ExpandedGoals1, HeadVars),
-          ExpandedGoals = (ExpandedGoals0 -> ExpandedGoals1)
-       ;  Goals = (Goals0 ; Goals1) ->
-          expand_goal(Goals0, Module, ExpandedGoals0, HeadVars),
-          expand_goal(Goals1, Module, ExpandedGoals1, HeadVars),
-          ExpandedGoals = (ExpandedGoals0 ; ExpandedGoals1)
-       ;  Goals = (\+ Goals0) ->
-          expand_goal(Goals0, Module, Goals1, HeadVars),
-          ExpandedGoals = (\+ Goals1)
+       (  expand_goal_cases(Goals, Module, ExpandedGoals, HeadVars) ->
+          true
        ;  predicate_property(Module:Goals, meta_predicate(MetaSpecs)) ->
           expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars)
        ;  thread_goals(Goals, ExpandedGoals, (','))

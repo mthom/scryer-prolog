@@ -5884,10 +5884,12 @@ difference_arcs([V|Vs], FL0) -->
 
 writeln(T) :- write(T), nl.
 
+:- meta_predicate must_succeed(0).
+
 must_succeed(G) :-
-    (G -> true
-     ;write(failed-G), halt
-    ).
+        (   G -> true
+        ;   throw(failed-G)
+        ).
 
 enumerate([], _) --> [].
 enumerate([N|Ns], V) -->
@@ -6046,6 +6048,8 @@ del_all_attrs(Var) :-
 remove_attr(Var, Attr) :-
         functor(Term, Attr, 1),
         put_atts(Var, -Term).
+
+:- meta_predicate with_local_attributes(?, 0, ?).
 
 with_local_attributes(Vars, Goal, Result) :-
         catch((Goal,
@@ -7763,11 +7767,10 @@ zo_t(1, true).
    Generated predicates
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-generated_clauses(Cs) :-
-        make_parse_clpz(Cs1),
-        make_parse_reified(Cs2),
-        make_matches(Cs3),
-        append([Cs1,Cs2,Cs3], Cs).
+term_expansion(make_parse_clpz, Clauses)    :- make_parse_clpz(Clauses).
+term_expansion(make_parse_reified, Clauses) :- make_parse_reified(Clauses).
+term_expansion(make_matches, Clauses)       :- make_matches(Clauses).
 
-:- initialization((generated_clauses(Cs),
-                   maplist(assertz, Cs))).
+make_parse_clpz.
+make_parse_reified.
+make_matches.

@@ -1,8 +1,8 @@
-extern crate prolog_parser;
+extern crate prolog_parser_rebis;
 
-use prolog_parser::ast::*;
-use prolog_parser::lexer::{Lexer, Token};
-use prolog_parser::tabled_rc::TabledData;
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::lexer::{Lexer, Token};
+use prolog_parser_rebis::tabled_rc::TabledData;
 
 use std::rc::Rc;
 
