@@ -863,7 +863,7 @@ impl ClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
             &ClauseType::BuiltIn(ref built_in) => built_in.name(),
-            &ClauseType::CallN => clause_name!("call"),
+            &ClauseType::CallN => clause_name!("$call"),
             &ClauseType::Inlined(ref inlined) => clause_name!(inlined.name()),
             &ClauseType::Op(ref name, ..) => name.clone(),
             &ClauseType::Named(ref name, ..) => name.clone(),
@@ -882,7 +882,7 @@ impl ClauseType {
                     .unwrap_or_else(|| {
                         if let Some(spec) = spec {
                             ClauseType::Op(name, spec, CodeIndex::default())
-                        } else if name.as_str() == "call" {
+                        } else if name.as_str() == "$call" {
                             ClauseType::CallN
                         } else {
                             ClauseType::Named(name, arity, CodeIndex::default())

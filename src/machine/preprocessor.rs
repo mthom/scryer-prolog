@@ -401,7 +401,7 @@ fn setup_meta_predicate<'a>(
             }
         Term::Clause(_, name, mut terms, _) => {
             let (name, meta_specs) = get_name_and_meta_specs(name, &mut terms)?;
-            Ok((load_state.module_name(), name, meta_specs))
+            Ok((load_state.compilation_target.module_name(), name, meta_specs))
         }
         _ => {
             Err(CompilationError::InvalidMetaPredicateDecl)

@@ -51,7 +51,6 @@ call_goals_0([Module-GoalList | GoalLists]) :-
 call_goals_0([]).
 
 call_goals_1([Goal | Goals], Module) :-
-    expand_goal(Goal, Module, Goal1), % TODO: remove this when goal expansions are added to call/N.
-    call(Module:Goal1),
+    call(Module:Goal),
     call_goals_1(Goals, Module).
 call_goals_1([], _).

@@ -528,19 +528,6 @@ impl<'a> LoadState<'a> {
         }
     }
 
-    #[inline]
-    pub(super)
-    fn module_name(&self) -> ClauseName {
-        match self.compilation_target {
-            CompilationTarget::User => {
-                clause_name!("user")
-            }
-            CompilationTarget::Module(ref module_name) => {
-                module_name.clone()
-            }
-        }
-    }
-
     pub(super)
     fn add_meta_predicate_record(
         &mut self,

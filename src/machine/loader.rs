@@ -573,6 +573,19 @@ impl CompilationTarget {
     fn take(&mut self) -> CompilationTarget {
         mem::replace(self, CompilationTarget::User)
     }
+
+    #[inline]
+    pub(super)
+    fn module_name(&self) -> ClauseName {
+        match self {
+            CompilationTarget::User => {
+                clause_name!("user")
+            }
+            CompilationTarget::Module(ref module_name) => {
+                module_name.clone()
+            }
+        }
+    }
 }
 
 pub(crate) struct Loader<'a, TermStream> {

@@ -119,39 +119,6 @@ include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
 impl Machine {
     /*
-    fn compile_special_forms(&mut self)
-    {
-        let verify_attrs_src = ListingSource::User;
-
-        match compile_special_form(
-            self,
-            Stream::from(VERIFY_ATTRS),
-            verify_attrs_src,
-        )
-        {
-            Ok(p) => {
-                self.machine_st.attr_var_init.verify_attrs_loc = p;
-            }
-            Err(_) =>
-                panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS"),
-        }
-
-        let project_attrs_src = ListingSource::User;
-
-        match compile_special_form(
-            self,
-            Stream::from(PROJECT_ATTRS),
-            project_attrs_src,
-        )
-        {
-            Ok(p) => {
-                self.machine_st.attr_var_init.project_attrs_loc = p;
-            }
-            Err(e) =>
-                panic!("Machine::compile_special_forms() failed at PROJECT_ATTRS: {}", e),
-        }
-    }
-
     fn compile_scryerrc(&mut self) {
         let mut path = match dirs_next::home_dir() {
             Some(path) => path,
@@ -177,7 +144,8 @@ impl Machine {
             compile_user_module(self, file_src, rc_src);
         }
     }
-*/
+    */
+
     #[cfg(test)]
     pub fn reset(&mut self) {
         self.current_input_stream = readline::input_stream();
@@ -289,10 +257,60 @@ impl Machine {
 
         self.machine_st[temp_v!(1)] = list_addr;
 
-        // WAS:
-        // self.run_module_predicate(clause_name!("$toplevel"), (clause_name!("$repl"), 1));
-
         self.run_module_predicate(clause_name!("$toplevel"), (clause_name!("repl"), 0));
+    }
+
+    fn configure_modules(&mut self) {
+        fn update_call_n_indices(loader: &Module, target_module: &mut Module) {
+            for arity in 1 .. 66 {
+                let key = (clause_name!("call"), arity);
+
+                match loader.code_dir.get(&key).cloned() {
+                    Some(src_code_index) => {
+                        let target_code_index = target_module.code_dir
+                            .entry(key.clone())
+                            .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined));
+
+                        target_code_index.set(src_code_index.get());
+                    }
+                    None => {
+                        unreachable!();
+                    }
+                }
+            }
+        }
+
+        if let Some(loader) = self.indices.modules.swap_remove(&clause_name!("loader")) {
+            if let Some(builtins) = self.indices.modules.get_mut(&clause_name!("builtins")) {
+                // Import loader's exports into the builtins module so they will be
+                // implicitly included in every further module.
+                load_module(
+                    &mut builtins.code_dir,
+                    &mut builtins.op_dir,
+                    &mut builtins.meta_predicates,
+                    &CompilationTarget::Module(clause_name!("builtins")),
+                    &loader,
+                );
+
+                for export in &loader.module_decl.exports {
+                    builtins.module_decl.exports.push(export.clone());
+                }
+
+                for arity in 10 .. 66 {
+                    builtins.module_decl.exports.push(
+                        ModuleExport::PredicateKey((clause_name!("call"), arity)),
+                    );
+                }
+            }
+
+            for (_, target_module) in self.indices.modules.iter_mut() {
+                update_call_n_indices(&loader, target_module);
+            }
+
+            self.indices.modules.insert(clause_name!("loader"), loader);
+        } else {
+            unreachable!()
+        }
     }
 
     pub fn new(user_input: Stream, user_output: Stream) -> Self
@@ -356,32 +374,16 @@ impl Machine {
             ),
         ).unwrap();
 
-        if let Some(loader) = wam.indices.modules.swap_remove(&clause_name!("loader")) {
-            if let Some(builtins) = wam.indices.modules.get_mut(&clause_name!("builtins")) {
-                // Import loader's exports into the builtins module so they will be
-                // implicitly included every further module.
-                load_module(
-                    &mut builtins.code_dir,
-                    &mut builtins.op_dir,
-                    &mut builtins.meta_predicates,
-                    &CompilationTarget::Module(clause_name!("builtins")),
-                    &loader,
-                );
+        wam.configure_modules();
 
-                for export in &loader.module_decl.exports {
-                    builtins.module_decl.exports.push(export.clone());
-                }
-            }
-
+        if let Some(loader) = wam.indices.modules.get(&clause_name!("loader")) {
             load_module(
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
                 &mut wam.indices.meta_predicates,
                 &CompilationTarget::User,
-                &loader,
+                loader,
             );
-
-            wam.indices.modules.insert(clause_name!("loader"), loader);
         } else {
             unreachable!()
         }

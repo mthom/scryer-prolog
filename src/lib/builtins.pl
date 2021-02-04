@@ -4,9 +4,10 @@
                      abolish/1, asserta/1, assertz/1,
                      at_end_of_stream/0, at_end_of_stream/1,
                      atom_chars/2, atom_codes/2, atom_concat/3,
-                     atom_length/2, bagof/3, catch/3, char_code/2,
-                     clause/2, close/1, close/2, current_input/1,
-                     current_output/1, current_op/3,
+                     atom_length/2, bagof/3, call/1, call/2, call/3,
+                     call/4, call/5, call/6, call/7, call/8, call/9,
+                     catch/3, char_code/2, clause/2, close/1, close/2,
+                     current_input/1, current_output/1, current_op/3,
                      current_predicate/1, current_prolog_flag/2,
                      fail/0, false/0, findall/3, findall/4,
                      flush_output/0, flush_output/1, get_byte/1,
@@ -37,6 +38,30 @@ X = X.
 true.
 
 false :- '$fail'.
+
+
+% These are stub versions of call/{1-9} defined for bootstrapping.
+% Once Scryer is bootstrapped, each is replaced with a version that
+% uses expand_goal to pass the expanded goal along to '$call'.
+
+call(G) :- '$call'(G).
+
+call(G, A) :- '$call'(G, A).
+
+call(G, A, B) :- '$call'(G, A, B).
+
+call(G, A, B, C) :- '$call'(G, A, B, C).
+
+call(G, A, B, C, D) :- '$call'(G, A, B, C, D).
+
+call(G, A, B, C, D, E) :- '$call'(G, A, B, C, D, E).
+
+call(G, A, B, C, D, E, F) :- '$call'(G, A, B, C, D, E, F).
+
+call(G, A, B, C, D, E, F, G) :- '$call'(G, A, B, C, D, E, F, G).
+
+call(G, A, B, C, D, E, F, G, H) :- '$call'(G, A, B, C, D, E, F, G, H).
+
 
 Module : Predicate :-
     ( atom(Module) ->
