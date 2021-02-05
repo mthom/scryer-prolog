@@ -146,13 +146,6 @@ impl Machine {
     }
     */
 
-    #[cfg(test)]
-    pub fn reset(&mut self) {
-        self.current_input_stream = readline::input_stream();
-        self.policies.cut_policy = Box::new(DefaultCutPolicy {});
-        self.machine_st.reset();
-    }
-
     fn run_module_predicate(&mut self, module_name: ClauseName, key: PredicateKey) {
         if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(ref code_index) = module.code_dir.get(&key) {
