@@ -665,8 +665,11 @@ iterate_variants([V-Solution|GroupSolutions], V, Solution) :-
 iterate_variants([_|GroupSolutions], Ws, Solution) :-
     iterate_variants(GroupSolutions, Ws, Solution).
 
+
 rightmost_power(Term, FinalTerm, Xs) :-
-    (  Term = X ^ Y
+    (  (  Term = X ^ Y
+       ;  Term = _ : X ^ Y
+       )
     -> (  var(Y) -> FinalTerm = Y, Xs = [X]
        ;  Xs = [X | Xss], rightmost_power(Y, FinalTerm, Xss)
        )
@@ -674,11 +677,11 @@ rightmost_power(Term, FinalTerm, Xs) :-
     ).
 
 
-% :- meta_predicate findall_with_existential(?, 0, ?, ?, ?).
-
 findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses) :-
     (  nonvar(Goal),
-       Goal = _ ^ _ ->
+       (  Goal = _ ^ _
+       ;  Goal = _ : (_ ^ _)
+       )  ->
        rightmost_power(Goal, Goal1, ExistentialVars0),
        term_variables(ExistentialVars0, ExistentialVars),
        sort(Witnesses0, Witnesses1),
