@@ -6090,7 +6090,7 @@ distinct_goals_([flow_to(F,To)|Es], V) -->
               get_attr(To, lowlink, L2),
               L1 =\= L2 } ->
             { get_attr(To, value, N) },
-            [clpz:neq_num(V, N)]
+            [neq_num(V, N)]
         ;   []
         ),
         distinct_goals_(Es, V).
@@ -6611,7 +6611,7 @@ gcc_edge_goal(arc_to(_,_,V,F), Val) -->
               get_attr(Val, lowlink, L2),
               L1 =\= L2,
               get_attr(Val, value, Value) } ->
-            [clpz:neq_num(V, Value)]
+            [neq_num(V, Value)]
         ;   []
         ).
 
