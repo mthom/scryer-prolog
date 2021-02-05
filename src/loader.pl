@@ -336,6 +336,13 @@ check_predicate_property(meta_predicate, Module, Name, Arity, MetaPredicateTerm)
     '$cpp_meta_predicate_property'(Module, Name, Arity, MetaPredicateTerm).
 check_predicate_property(built_in, _, Name, Arity, built_in) :-
     '$cpp_built_in_property'(Name, Arity).
+check_predicate_property(dynamic, Module, Name, Arity, dynamic) :-
+    '$cpp_dynamic_property'(Module, Name, Arity).
+check_predicate_property(multifile, Module, Name, Arity, multifile) :-
+    '$cpp_multifile_property'(Module, Name, Arity).
+check_predicate_property(discontiguous, Module, Name, Arity, multifile) :-
+    '$cpp_discontiguous_property'(Module, Name, Arity).
+
 
 
 extract_predicate_property(Property, PropertyType) :-
@@ -356,12 +363,20 @@ predicate_property(Callable, Property) :-
     ;  Callable =.. [(:), Module, Callable0],
        atom(Module) ->
        functor(Callable0, Name, Arity),
-       extract_predicate_property(Property, PropertyType),
-       check_predicate_property(PropertyType, Module, Name, Arity, Property)
+       (  atom(Name),
+          Name \== [] ->
+          extract_predicate_property(Property, PropertyType),
+          check_predicate_property(PropertyType, Module, Name, Arity, Property)
+       ;  type_error(callable, Callable0, predicate_property/2)
+       )
     ;  functor(Callable, Name, Arity),
-       extract_predicate_property(Property, PropertyType),
-       load_context(Module),
-       check_predicate_property(PropertyType, Module, Name, Arity, Property)
+       (  atom(Name),
+          Name \== [] ->
+          extract_predicate_property(Property, PropertyType),
+          load_context(Module),
+          check_predicate_property(PropertyType, Module, Name, Arity, Property)
+       ;  type_error(callable, Callable, predicate_property/2)
+       )
     ).
 
 

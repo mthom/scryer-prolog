@@ -258,7 +258,7 @@ impl Machine {
             for arity in 1 .. 66 {
                 let key = (clause_name!("call"), arity);
 
-                match loader.code_dir.get(&key).cloned() {
+                match loader.code_dir.get(&key) {
                     Some(src_code_index) => {
                         let target_code_index = target_module.code_dir
                             .entry(key.clone())
@@ -481,6 +481,15 @@ impl Machine {
             }
             REPLCodePtr::BuiltInProperty => {
                 self.builtin_property();
+            }
+            REPLCodePtr::MultifileProperty => {
+                self.multifile_property();
+            }
+            REPLCodePtr::DiscontiguousProperty => {
+                self.discontiguous_property();
+            }
+            REPLCodePtr::DynamicProperty => {
+                self.dynamic_property();
             }
             REPLCodePtr::CompilePendingPredicates => {
                 self.compile_pending_predicates();

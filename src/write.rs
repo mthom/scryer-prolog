@@ -26,8 +26,6 @@ impl fmt::Display for REPLCodePtr {
                 write!(f, "REPLCodePtr::AddGoalExpansionClause"),
             REPLCodePtr::AddTermExpansionClause =>
                 write!(f, "REPLCodePtr::AddTermExpansionClause"),
-            REPLCodePtr::BuiltInProperty =>
-                write!(f, "REPLCodePtr::BuiltInProperty"),
             REPLCodePtr::UserAssertz =>
                 write!(f, "REPLCodePtr::UserAssertz"),
             REPLCodePtr::UserAsserta =>
@@ -64,6 +62,14 @@ impl fmt::Display for REPLCodePtr {
 		        write!(f, "REPLCodePtr::UseModule"),
             REPLCodePtr::MetaPredicateProperty =>
                 write!(f, "REPLCodePtr::MetaPredicateProperty"),
+            REPLCodePtr::BuiltInProperty =>
+                write!(f, "REPLCodePtr::BuiltInProperty"),
+            REPLCodePtr::DynamicProperty =>
+                write!(f, "REPLCodePtr::DynamicProperty"),
+            REPLCodePtr::MultifileProperty =>
+                write!(f, "REPLCodePtr::MultifileProperty"),
+            REPLCodePtr::DiscontiguousProperty =>
+                write!(f, "REPLCodePtr::DiscontiguousProperty"),
             REPLCodePtr::CompilePendingPredicates =>
                 write!(f, "REPLCodePtr::CompilePendingPredicates"),
         }
