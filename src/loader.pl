@@ -296,11 +296,13 @@ use_module(Module, Exports) :-
 
 %% If use_module is invoked in an existing load context, use its
 %% directory. Otherwise, use the relative path of Path.
+
 load_context_path(Module, Path) :-
     (  prolog_load_context(directory, CurrentDir) ->
        atom_concat(CurrentDir, Path, Module)
-    ;
-    Module = Path
+    ;  atom_concat(_, '.pl', Module) ->
+       Module = Path
+    ;  atom_concat(Module, '.pl', Path)
     ).
 
 
@@ -311,23 +313,21 @@ use_module(Module, Exports, Evacuable) :-
        (  atom(Library) ->
           (  '$load_compiled_library'(Library, Evacuable) -> %% TODO: What about Exports?
              true
-          ;
-          '$load_library_as_stream'(Library, Stream, Path),
-          file_load(Stream, Path, Subevacuable),
-          '$use_module'(Evacuable, Subevacuable, Exports)
+          ;  '$load_library_as_stream'(Library, Stream, Path),
+             file_load(Stream, Path, Subevacuable),
+             '$use_module'(Evacuable, Subevacuable, Exports)
           )
        ;  var(Library) ->
           instantiation_error(load/1)
-       ;
-       type_error(atom, Library, load/1)
+       ;  type_error(atom, Library, load/1)
        )
-    ;  atom(Module) ->
-       load_context_path(Module, Path),
-       open(Path, read, Stream),
-       file_load(Stream, Path, Subevacuable),
-       '$use_module'(Evacuable, Subevacuable, Exports)
-    ;
-    type_error(atom, Library, load/1)
+    ;  (  atom(Module) ->
+          load_context_path(Module, Path),
+          open(Path, read, Stream),
+          file_load(Stream, Path, Subevacuable),
+          '$use_module'(Evacuable, Subevacuable, Exports)
+       ;  type_error(atom, Library, load/1)
+       )
     ).
 
 
@@ -387,7 +387,6 @@ strip_module_(M0, G0, M1, G1) :-
     ;  M0 = M1,
        G0 = G1
     ).
-
 strip_module(Goal, M, G) :-
     strip_module_(_, Goal, M, G).
 

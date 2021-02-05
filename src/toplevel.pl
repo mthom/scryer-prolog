@@ -1,9 +1,5 @@
 :- module('$toplevel', [argv/1,
-                        copy_term/3,
-                        predicate_property/2,
-                        prolog_load_context/2]).
-
-:- use_module(library(loader)).
+                        copy_term/3]).
 
 :- use_module(library(charsio)).
 :- use_module(library(iso_ext)).

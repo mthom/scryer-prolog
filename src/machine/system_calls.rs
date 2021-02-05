@@ -1098,13 +1098,6 @@ impl MachineState {
                     return Ok(());
                 }
             }
-            /*
-            &SystemClauseType::AtEndOfExpansion => {
-                if self.cp == LocalCodePtr::TopLevel(0, 0) {
-                    self.at_end_of_expansion = true;
-                }
-            }
-            */
             &SystemClauseType::AtomChars => {
                 let a1 = self[temp_v!(1)];
 
