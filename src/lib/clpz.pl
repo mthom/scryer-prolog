@@ -3068,12 +3068,10 @@ is_false(var(X)) :- nonvar(X).
 
 :- dynamic(goal_expansion/1).
 
-% goal expansion is disabled for now, until #445 is resolved
-%
-% user:goal_expansion(Goal0, Goal) :-
-%         \+ goal_expansion(false),
-%         clpz_expandable(Goal0),
-%         clpz_expansion(Goal0, Goal).
+user:goal_expansion(Goal0, Goal) :-
+        \+ goal_expansion(false),
+        clpz_expandable(Goal0),
+        clpz_expansion(Goal0, Goal).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
