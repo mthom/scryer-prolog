@@ -3068,12 +3068,10 @@ is_false(var(X)) :- nonvar(X).
 
 :- dynamic(goal_expansion/1).
 
-% goal expansion is disabled for now, until #445 is resolved
-%
-% user:goal_expansion(Goal0, Goal) :-
-%         \+ goal_expansion(false),
-%         clpz_expandable(Goal0),
-%         clpz_expansion(Goal0, Goal).
+user:goal_expansion(Goal0, Goal) :-
+        \+ goal_expansion(false),
+        clpz_expandable(Goal0),
+        clpz_expansion(Goal0, Goal).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -6090,7 +6088,7 @@ distinct_goals_([flow_to(F,To)|Es], V) -->
               get_attr(To, lowlink, L2),
               L1 =\= L2 } ->
             { get_attr(To, value, N) },
-            [clpz:neq_num(V, N)]
+            [neq_num(V, N)]
         ;   []
         ),
         distinct_goals_(Es, V).
@@ -6611,7 +6609,7 @@ gcc_edge_goal(arc_to(_,_,V,F), Val) -->
               get_attr(Val, lowlink, L2),
               L1 =\= L2,
               get_attr(Val, value, Value) } ->
-            [clpz:neq_num(V, Value)]
+            [neq_num(V, Value)]
         ;   []
         ).
 
