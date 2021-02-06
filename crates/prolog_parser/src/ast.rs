@@ -187,10 +187,7 @@ impl RegType {
     }
 
     pub fn is_perm(self) -> bool {
-        match self {
-            RegType::Perm(_) => true,
-            _ => false,
-        }
+        matches!(self, RegType::Perm(_))
     }
 }
 
@@ -305,27 +302,15 @@ pub enum DoubleQuotes {
 
 impl DoubleQuotes {
     pub fn is_chars(self) -> bool {
-        if let DoubleQuotes::Chars = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, DoubleQuotes::Chars)
     }
 
     pub fn is_atom(self) -> bool {
-        if let DoubleQuotes::Atom = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, DoubleQuotes::Atom)
     }
 
     pub fn is_codes(self) -> bool {
-        if let DoubleQuotes::Codes = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, DoubleQuotes::Codes)
     }
 }
 
@@ -674,11 +659,7 @@ impl ClauseName {
     pub fn has_table_of(&self, other: &ClauseName) -> bool {
         match self {
             ClauseName::BuiltIn(_) => {
-                if let ClauseName::BuiltIn(_) = other {
-                    true
-                } else {
-                    false
-                }
+                matches!(other, ClauseName::BuiltIn(_))
             }
             ClauseName::User(ref name) => other.has_table(&name.table),
         }

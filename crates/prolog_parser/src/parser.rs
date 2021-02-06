@@ -28,18 +28,18 @@ enum TokenType {
 
 impl TokenType {
     fn is_sep(self) -> bool {
-        match self {
+        matches!(
+            self,
             TokenType::HeadTailSeparator
-            | TokenType::OpenCT
-            | TokenType::Open
-            | TokenType::Close
-            | TokenType::OpenList
-            | TokenType::CloseList
-            | TokenType::OpenCurly
-            | TokenType::CloseCurly
-            | TokenType::Comma => true,
-            _ => false,
-        }
+                | TokenType::OpenCT
+                | TokenType::Open
+                | TokenType::Close
+                | TokenType::OpenList
+                | TokenType::CloseList
+                | TokenType::OpenCurly
+                | TokenType::CloseCurly
+                | TokenType::Comma
+        )
     }
 }
 
