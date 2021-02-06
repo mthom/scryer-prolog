@@ -35,7 +35,7 @@ macro_rules! symbolic_hexadecimal_char {
 #[macro_export]
 macro_rules! octal_digit_char {
     ($c: expr) => {
-        $c >= '0' && $c <= '7'
+        ('0'..='7').contains(&$c)
     };
 }
 
@@ -49,7 +49,7 @@ macro_rules! binary_digit_char {
 #[macro_export]
 macro_rules! hexadecimal_digit_char {
     ($c: expr) => {
-        $c >= '0' && $c <= '9' || $c >= 'A' && $c <= 'F' || $c >= 'a' && $c <= 'f'
+        ('0'..='9').contains(&$c) || ('A'..='F').contains(&$c) || ('a'..='f').contains(&$c)
     };
 }
 
@@ -98,14 +98,14 @@ macro_rules! comment_2_char {
 #[macro_export]
 macro_rules! capital_letter_char {
     ($c: expr) => {
-        $c >= 'A' && $c <= 'Z'
+        ('A'..='Z').contains(&$c)
     };
 }
 
 #[macro_export]
 macro_rules! small_letter_char {
     ($c: expr) => {
-        $c >= 'a' && $c <= 'z'
+        ('a'..='z').contains(&$c)
     };
 }
 
@@ -160,7 +160,7 @@ macro_rules! alpha_char {
 #[macro_export]
 macro_rules! decimal_digit_char {
     ($c: expr) => {
-        $c >= '0' && $c <= '9'
+        ('0'..='9').contains(&$c)
     };
 }
 
