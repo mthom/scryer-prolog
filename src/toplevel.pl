@@ -37,7 +37,8 @@ delegate_task([Arg0|Args], Goals0) :-
     ;   member(Arg0, ["-v", "--version"]) -> print_version
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
     ;   atom_chars(Mod, Arg0),
-        catch(use_module(Mod), E, print_exception(E))
+        catch(use_module(Mod), E, print_exception(E)),
+        nl
     ),
     delegate_task(Args, Goals0).
 
@@ -122,7 +123,7 @@ instruction_match(Term, VarList) :-
 	      (  Item == user ->
 	         catch(load(user_input), E, print_exception_with_check(E))
 	      ;
-             consult(Item)
+             submit_query_and_print_results(consult(Item), [])
 	      )
        ;
 	   catch(type_error(atom, Item, repl/0),

@@ -35,7 +35,6 @@ expand_term(Term, ExpandedTerm) :-
     ;  Term = ExpandedTerm
     ).
 
-
 term_expansion_list([], ExpandedTerms, ExpandedTerms).
 term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
     expand_term(Term, ExpandedTerm0),
@@ -310,9 +309,7 @@ use_module(Module, Exports) :-
 load_context_path(Module, Path) :-
     (  prolog_load_context(directory, CurrentDir) ->
        atom_concat(CurrentDir, Path, Module)
-    ;  atom_concat(_, '.pl', Module) ->
-       Module = Path
-    ;  atom_concat(Module, '.pl', Path)
+    ;  Module = Path
     ).
 
 

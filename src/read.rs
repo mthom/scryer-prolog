@@ -17,7 +17,7 @@ pub type PrologStream = ParsingStream<Stream>;
 pub mod readline {
     use crate::machine::streams::Stream;
     use crate::rustyline::error::ReadlineError;
-    use crate::rustyline::{Cmd, Editor, KeyEvent};
+    use crate::rustyline::{Cmd, Config, Editor, KeyEvent};
     use std::io::{Cursor, Error, ErrorKind, Read};
 
     static mut PROMPT: bool = false;
@@ -46,7 +46,11 @@ pub mod readline {
     impl ReadlineStream {
         #[inline]
         pub fn new(pending_input: String) -> Self {
-            let mut rl = Editor::<()>::new();
+            let config = Config::builder()
+                .check_cursor_position(true)
+                .build();
+
+            let mut rl = Editor::<()>::with_config(config); //Editor::<()>::new();
             if let Some(mut path) = dirs_next::home_dir() {
                 path.push(HISTORY_FILE);
                 if path.exists() {

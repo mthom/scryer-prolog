@@ -3349,6 +3349,10 @@ impl MachineState {
                                 }
                             }
                         }
+                        Addr::Char(c) => {
+                            let atom = clause_name!(c.to_string(), self.atom_tbl);
+                            self.stream_from_file_spec(atom, indices, &options)?
+                        }
                         Addr::PStrLocation(h, n) => {
                             match &self.heap[h] {
                                 &HeapCellValue::PartialString(_, true) => {
