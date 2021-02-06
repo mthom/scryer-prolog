@@ -197,8 +197,8 @@ impl RegType {
 impl fmt::Display for RegType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &RegType::Perm(val) => write!(f, "Y{}", val),
-            &RegType::Temp(val) => write!(f, "X{}", val),
+            RegType::Perm(val) => write!(f, "Y{}", val),
+            RegType::Temp(val) => write!(f, "X{}", val),
         }
     }
 }
@@ -220,10 +220,10 @@ impl VarReg {
 impl fmt::Display for VarReg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &VarReg::Norm(RegType::Perm(reg)) => write!(f, "Y{}", reg),
-            &VarReg::Norm(RegType::Temp(reg)) => write!(f, "X{}", reg),
-            &VarReg::ArgAndNorm(RegType::Perm(reg), arg) => write!(f, "Y{} A{}", reg, arg),
-            &VarReg::ArgAndNorm(RegType::Temp(reg), arg) => write!(f, "X{} A{}", reg, arg),
+            VarReg::Norm(RegType::Perm(reg)) => write!(f, "Y{}", reg),
+            VarReg::Norm(RegType::Temp(reg)) => write!(f, "X{}", reg),
+            VarReg::ArgAndNorm(RegType::Perm(reg), arg) => write!(f, "Y{} A{}", reg, arg),
+            VarReg::ArgAndNorm(RegType::Temp(reg), arg) => write!(f, "X{} A{}", reg, arg),
         }
     }
 }
@@ -382,16 +382,16 @@ impl ParserError {
 
     pub fn as_str(&self) -> &'static str {
         match self {
-            &ParserError::BackQuotedString(..) => "back_quoted_string",
-            &ParserError::UnexpectedChar(..) => "unexpected_char",
-            &ParserError::UnexpectedEOF => "unexpected_end_of_file",
-            &ParserError::IncompleteReduction(..) => "incomplete_reduction",
-            &ParserError::InvalidSingleQuotedCharacter(..) => "invalid_single_quoted_character",
-            &ParserError::IO(_) => "input_output_error",
-            &ParserError::MissingQuote(..) => "missing_quote",
-            &ParserError::NonPrologChar(..) => "non_prolog_character",
-            &ParserError::ParseBigInt(..) => "cannot_parse_big_int",
-            &ParserError::Utf8Error(..) => "utf8_conversion_error",
+            ParserError::BackQuotedString(..) => "back_quoted_string",
+            ParserError::UnexpectedChar(..) => "unexpected_char",
+            ParserError::UnexpectedEOF => "unexpected_end_of_file",
+            ParserError::IncompleteReduction(..) => "incomplete_reduction",
+            ParserError::InvalidSingleQuotedCharacter(..) => "invalid_single_quoted_character",
+            ParserError::IO(_) => "input_output_error",
+            ParserError::MissingQuote(..) => "missing_quote",
+            ParserError::NonPrologChar(..) => "non_prolog_character",
+            ParserError::ParseBigInt(..) => "cannot_parse_big_int",
+            ParserError::Utf8Error(..) => "utf8_conversion_error",
         }
     }
 }
@@ -525,21 +525,21 @@ pub enum Constant {
 impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &Constant::Atom(ref atom, _) => {
+            Constant::Atom(ref atom, _) => {
                 if atom.as_str().chars().any(|c| "`.$'\" ".contains(c)) {
                     write!(f, "'{}'", atom.as_str())
                 } else {
                     write!(f, "{}", atom.as_str())
                 }
             }
-            &Constant::Char(c) => write!(f, "'{}'", c as u32),
-            &Constant::EmptyList => write!(f, "[]"),
-            &Constant::Fixnum(n) => write!(f, "{}", n),
-            &Constant::Integer(ref n) => write!(f, "{}", n),
-            &Constant::Rational(ref n) => write!(f, "{}", n),
-            &Constant::Float(ref n) => write!(f, "{}", n),
-            &Constant::String(ref s) => write!(f, "\"{}\"", &s),
-            &Constant::Usize(integer) => write!(f, "u{}", integer),
+            Constant::Char(c) => write!(f, "'{}'", *c as u32),
+            Constant::EmptyList => write!(f, "[]"),
+            Constant::Fixnum(n) => write!(f, "{}", n),
+            Constant::Integer(ref n) => write!(f, "{}", n),
+            Constant::Rational(ref n) => write!(f, "{}", n),
+            Constant::Float(ref n) => write!(f, "{}", n),
+            Constant::String(ref s) => write!(f, "\"{}\"", &s),
+            Constant::Usize(integer) => write!(f, "u{}", integer),
         }
     }
 }
@@ -549,7 +549,7 @@ impl PartialEq for Constant {
         match (self, other) {
             (&Constant::Atom(ref atom, _), &Constant::Char(c))
             | (&Constant::Char(c), &Constant::Atom(ref atom, _)) => {
-                atom.is_char() && Some(c) == atom.as_str().chars().next()
+                atom.is_char() && atom.as_str().starts_with(c)
             }
             (&Constant::Atom(ref a1, _), &Constant::Atom(ref a2, _)) => a1.as_str() == a2.as_str(),
             (&Constant::Char(c1), &Constant::Char(c2)) => c1 == c2,
@@ -565,7 +565,7 @@ impl PartialEq for Constant {
             (&Constant::Integer(ref n1), &Constant::Integer(ref n2)) => n1 == n2,
             (&Constant::Rational(ref n1), &Constant::Rational(ref n2)) => n1 == n2,
             (&Constant::Float(ref n1), &Constant::Float(ref n2)) => n1 == n2,
-            (&Constant::String(ref s1), &Constant::String(ref s2)) => &s1 == &s2,
+            (&Constant::String(ref s1), &Constant::String(ref s2)) => s1 == s2,
             (&Constant::EmptyList, &Constant::EmptyList) => true,
             (&Constant::Usize(u1), &Constant::Usize(u2)) => u1 == u2,
             _ => false,
@@ -632,7 +632,7 @@ impl ClauseName {
     #[inline]
     pub fn owning_module(&self) -> Self {
         match self {
-            &ClauseName::User(ref name) => {
+            ClauseName::User(ref name) => {
                 let module = name.owning_module();
                 ClauseName::User(TabledRc {
                     atom: module.clone(),
@@ -646,8 +646,8 @@ impl ClauseName {
     #[inline]
     pub fn to_rc(&self) -> Rc<String> {
         match self {
-            &ClauseName::BuiltIn(s) => Rc::new(s.to_string()),
-            &ClauseName::User(ref rc) => rc.inner(),
+            ClauseName::BuiltIn(s) => Rc::new(s.to_string()),
+            ClauseName::User(ref rc) => rc.inner(),
         }
     }
 
@@ -687,14 +687,14 @@ impl ClauseName {
     #[inline]
     pub fn as_str(&self) -> &str {
         match self {
-            &ClauseName::BuiltIn(s) => s,
-            &ClauseName::User(ref name) => name.as_ref(),
+            ClauseName::BuiltIn(s) => s,
+            ClauseName::User(ref name) => name.as_ref(),
         }
     }
 
     #[inline]
     pub fn is_char(&self) -> bool {
-        !self.as_str().is_empty() && self.as_str().chars().skip(1).next().is_none()
+        !self.as_str().is_empty() && self.as_str().chars().nth(1).is_none()
     }
 
     pub fn defrock_brackets(self) -> Self {
@@ -739,8 +739,8 @@ pub enum Term {
 impl Term {
     pub fn shared_op_desc(&self) -> Option<SharedOpDesc> {
         match self {
-            &Term::Clause(_, _, _, ref spec) => spec.clone(),
-            &Term::Constant(_, Constant::Atom(_, ref spec)) => spec.clone(),
+            Term::Clause(_, _, _, ref spec) => spec.clone(),
+            Term::Constant(_, Constant::Atom(_, ref spec)) => spec.clone(),
             _ => None,
         }
     }
@@ -754,7 +754,7 @@ impl Term {
 
     pub fn first_arg(&self) -> Option<&Term> {
         match self {
-            &Term::Clause(_, _, ref terms, _) => terms.first().map(|bt| bt.as_ref()),
+            Term::Clause(_, _, ref terms, _) => terms.first().map(|bt| bt.as_ref()),
             _ => None,
         }
     }
@@ -780,14 +780,14 @@ impl Term {
 
     pub fn arity(&self) -> usize {
         match self {
-            &Term::Clause(_, _, ref child_terms, ..) => child_terms.len(),
+            Term::Clause(_, _, ref child_terms, ..) => child_terms.len(),
             _ => 0,
         }
     }
 }
 
 fn unfold_by_str_once(term: &mut Term, s: &str) -> Option<(Term, Term)> {
-    if let &mut Term::Clause(_, ref name, ref mut subterms, _) = term {
+    if let Term::Clause(_, ref name, ref mut subterms, _) = term {
         if name.as_str() == s && subterms.len() == 2 {
             let snd = *subterms.pop().unwrap();
             let fst = *subterms.pop().unwrap();

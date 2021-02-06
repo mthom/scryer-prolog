@@ -484,7 +484,7 @@ impl<'a, R: Read> Parser<'a, R> {
             if self.atomize_term(&self.terms[idx - 1]).is_some() {
                 self.stack.truncate(stack_len + 1);
 
-                let mut subterms: Vec<_> = self.terms.drain(idx..).map(|t| Box::new(t)).collect();
+                let mut subterms: Vec<_> = self.terms.drain(idx..).map(Box::new).collect();
 
                 if let Some(name) = self.terms.pop().and_then(|t| self.atomize_term(&t)) {
                     // reduce the '.' functor to a cons cell if it applies.
@@ -722,25 +722,24 @@ impl<'a, R: Read> Parser<'a, R> {
 
         let idx = self.stack.len() - 2;
 
-        match self.stack.remove(idx) {
-            td => match td.tt {
-                TokenType::Open | TokenType::OpenCT => {
-                    if self.stack[idx].tt == TokenType::Comma {
-                        return false;
-                    }
-
-                    if let Some(atom) = sep_to_atom(self.stack[idx].tt) {
-                        self.terms
-                            .push(Term::Constant(Cell::default(), Constant::Atom(atom, None)));
-                    }
-
-                    self.stack[idx].spec = TERM;
-                    self.stack[idx].tt = TokenType::Term;
-                    self.stack[idx].priority = 0;
-                    true
+        let td = self.stack.remove(idx);
+        match td.tt {
+            TokenType::Open | TokenType::OpenCT => {
+                if self.stack[idx].tt == TokenType::Comma {
+                    return false;
                 }
-                _ => false,
-            },
+
+                if let Some(atom) = sep_to_atom(self.stack[idx].tt) {
+                    self.terms
+                        .push(Term::Constant(Cell::default(), Constant::Atom(atom, None)));
+                }
+
+                self.stack[idx].spec = TERM;
+                self.stack[idx].tt = TokenType::Term;
+                self.stack[idx].priority = 0;
+                true
+            }
+            _ => false,
         }
     }
 
@@ -756,7 +755,7 @@ impl<'a, R: Read> Parser<'a, R> {
                 match self.tokens.last().ok_or(ParserError::UnexpectedEOF)? {
                     // do this when layout hasn't been inserted,
                     // ie. why we don't match on Token::Open.
-                    &Token::OpenCT => {
+                    Token::OpenCT => {
                         // can't be prefix, so either inf == 0
                         // or post == 0.
                         self.reduce_op(inf + post);
@@ -831,16 +830,16 @@ impl<'a, R: Read> Parser<'a, R> {
 
     fn atomize_term(&self, term: &Term) -> Option<ClauseName> {
         match term {
-            &Term::Constant(_, ref c) => self.atomize_constant(c),
+            Term::Constant(_, ref c) => self.atomize_constant(c),
             _ => None,
         }
     }
 
     fn atomize_constant(&self, c: &Constant) -> Option<ClauseName> {
         match c {
-            &Constant::Atom(ref name, _) => Some(name.clone()),
-            &Constant::Char(c) => Some(clause_name!(c.to_string(), self.lexer.atom_tbl)),
-            &Constant::EmptyList => Some(clause_name!(c.to_string(), self.lexer.atom_tbl)),
+            Constant::Atom(ref name, _) => Some(name.clone()),
+            Constant::Char(c) => Some(clause_name!(c.to_string(), self.lexer.atom_tbl)),
+            Constant::EmptyList => Some(clause_name!(c.to_string(), self.lexer.atom_tbl)),
             _ => None,
         }
     }
@@ -892,7 +891,7 @@ impl<'a, R: Read> Parser<'a, R> {
                 self.negate_number(n, negate_rc, Constant::Rational)
             }
             Token::Constant(Constant::Float(n)) => {
-                self.negate_number(n, |n| OrderedFloat(-n.into_inner()), |n| Constant::Float(n))
+                self.negate_number(n, |n| OrderedFloat(-n.into_inner()), Constant::Float)
             }
             Token::Constant(c) => {
                 if let Some(name) = self.atomize_constant(&c) {

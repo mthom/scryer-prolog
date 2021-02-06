@@ -104,7 +104,7 @@ impl<T: Hash + Eq> Hash for TabledRc<T> {
 impl<T: Hash + Eq + ToString> TabledRc<T> {
     pub fn new(atom: T, table: TabledData<T>) -> Self {
         let atom = match table.borrow_mut().take(&atom) {
-            Some(atom) => atom.clone(),
+            Some(atom) => atom,
             None => Rc::new(atom),
         };
 

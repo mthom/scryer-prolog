@@ -517,7 +517,7 @@ impl<'a, R: Read> Lexer<'a, R> {
             if single_quote_char!(self.lookahead_char()?) {
                 self.skip_char()?;
 
-                if !token.is_empty() && token.chars().skip(1).next().is_none() {
+                if !token.is_empty() && token.chars().nth(1).is_none() {
                     if let Some(c) = token.chars().next() {
                         return Ok(Token::Constant(Constant::Char(c)));
                     }
@@ -713,7 +713,7 @@ impl<'a, R: Read> Lexer<'a, R> {
                     }
 
                     self.get_single_quoted_char()
-                        .and_then(|c| Ok(Token::Constant(Constant::Fixnum(c as isize))))
+                        .map(|c| Token::Constant(Constant::Fixnum(c as isize)))
                         .or_else(|_| {
                             self.return_char(c);
 
