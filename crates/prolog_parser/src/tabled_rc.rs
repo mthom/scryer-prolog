@@ -4,11 +4,11 @@ use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::rc::{Rc};
+use std::rc::Rc;
 
 pub struct TabledData<T> {
     table: Rc<RefCell<HashSet<Rc<T>>>>,
-    pub(crate) module_name: Rc<String>
+    pub(crate) module_name: Rc<String>,
 }
 
 impl<T: Hash + Eq + fmt::Debug> fmt::Debug for TabledData<T> {
@@ -22,14 +22,15 @@ impl<T: Hash + Eq + fmt::Debug> fmt::Debug for TabledData<T> {
 
 impl<T> Clone for TabledData<T> {
     fn clone(&self) -> Self {
-        TabledData { table: self.table.clone(),
-                     module_name: self.module_name.clone() }
+        TabledData {
+            table: self.table.clone(),
+            module_name: self.module_name.clone(),
+        }
     }
 }
 
 impl<T: PartialEq> PartialEq for TabledData<T> {
-    fn eq(&self, other: &TabledData<T>) -> bool
-    {
+    fn eq(&self, other: &TabledData<T>) -> bool {
         Rc::ptr_eq(&self.table, &other.table) && self.module_name == other.module_name
     }
 }
@@ -39,7 +40,7 @@ impl<T: Hash + Eq> TabledData<T> {
     pub fn new(module_name: Rc<String>) -> Self {
         TabledData {
             table: Rc::new(RefCell::new(HashSet::new())),
-            module_name
+            module_name,
         }
     }
 
@@ -51,7 +52,7 @@ impl<T: Hash + Eq> TabledData<T> {
 
 pub struct TabledRc<T: Hash + Eq> {
     pub(crate) atom: Rc<T>,
-    pub table: TabledData<T>
+    pub table: TabledData<T>,
 }
 
 impl<T: Hash + Eq + fmt::Debug> fmt::Debug for TabledRc<T> {
@@ -67,27 +68,27 @@ impl<T: Hash + Eq + fmt::Debug> fmt::Debug for TabledRc<T> {
 // from complaining when deriving Clone for StringList.
 impl<T: Hash + Eq> Clone for TabledRc<T> {
     fn clone(&self) -> Self {
-        TabledRc { atom: self.atom.clone(), table: self.table.clone() }
+        TabledRc {
+            atom: self.atom.clone(),
+            table: self.table.clone(),
+        }
     }
 }
 
 impl<T: Ord + Hash + Eq> PartialOrd for TabledRc<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering>
-    {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.atom.cmp(&other.atom))
     }
 }
 
 impl<T: Ord + Hash + Eq> Ord for TabledRc<T> {
-    fn cmp(&self, other: &Self) -> Ordering
-    {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.atom.cmp(&other.atom)
     }
 }
 
 impl<T: Hash + Eq> PartialEq for TabledRc<T> {
-    fn eq(&self, other: &TabledRc<T>) -> bool
-    {
+    fn eq(&self, other: &TabledRc<T>) -> bool {
         self.atom == other.atom
     }
 }
@@ -104,7 +105,7 @@ impl<T: Hash + Eq + ToString> TabledRc<T> {
     pub fn new(atom: T, table: TabledData<T>) -> Self {
         let atom = match table.borrow_mut().take(&atom) {
             Some(atom) => atom.clone(),
-            None => Rc::new(atom)
+            None => Rc::new(atom),
         };
 
         table.borrow_mut().insert(atom.clone());
@@ -147,7 +148,7 @@ impl<T: Hash + Eq + fmt::Display> fmt::Display for TabledRc<T> {
 
 #[macro_export]
 macro_rules! tabled_rc {
-    ($e:expr, $tbl:expr) => (
-        TabledRc::new(String::from($e), $tbl.clone())
-    )
+    ($e:expr, $tbl:expr) => {
+        $crate::tabled_rc::TabledRc::new(String::from($e), $tbl.clone())
+    };
 }

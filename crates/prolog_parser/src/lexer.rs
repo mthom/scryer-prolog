@@ -14,7 +14,7 @@ macro_rules! is_not_eof {
     ($c:expr) => {
         match $c {
             Ok(c) => c,
-            Err(ParserError::UnexpectedEOF) => return Ok(true),
+            Err($crate::ast::ParserError::UnexpectedEOF) => return Ok(true),
             Err(e) => return Err(e),
         }
     };
@@ -26,7 +26,7 @@ macro_rules! consume_chars_with {
             match $e {
                 Ok(Some(c)) => $token.push(c),
                 Ok(None) => continue,
-                Err(ParserError::UnexpectedChar(..)) => break,
+                Err($crate::ast::ParserError::UnexpectedChar(..)) => break,
                 Err(e) => return Err(e),
             }
         }

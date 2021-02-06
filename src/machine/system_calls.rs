@@ -1,11 +1,10 @@
 use prolog_parser_rebis::ast::*;
 use prolog_parser_rebis::parser::*;
-use prolog_parser_rebis::tabled_rc::*;
 use prolog_parser_rebis::{
-    alpha_char, alpha_numeric_char, backslash_char, binary_digit_char, char_class, clause_name,
-    decimal_digit_char, exponent_char, graphic_char, graphic_token_char, hexadecimal_digit_char,
-    layout_char, meta_char, new_line_char, octal_digit_char, prolog_char, sign_char, solo_char,
-    symbolic_control_char, symbolic_hexadecimal_char, temp_v,
+    alpha_char, binary_digit_char, clause_name, decimal_digit_char, exponent_char, graphic_char,
+    graphic_token_char, hexadecimal_digit_char, layout_char, meta_char, new_line_char,
+    octal_digit_char, prolog_char, sign_char, solo_char, symbolic_control_char,
+    symbolic_hexadecimal_char, temp_v,
 };
 
 use lazy_static::lazy_static;

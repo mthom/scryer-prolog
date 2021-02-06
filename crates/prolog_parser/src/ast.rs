@@ -40,20 +40,23 @@ pub const NEGATIVE_SIGN: u32 = 0x0200;
 #[macro_export]
 macro_rules! clause_name {
     ($name: expr, $tbl: expr) => {
-        ClauseName::User(TabledRc::new($name, $tbl.clone()))
+        $crate::ast::ClauseName::User($crate::tabled_rc::TabledRc::new($name, $tbl.clone()))
     };
     ($name: expr) => {
-        ClauseName::BuiltIn($name)
+        $crate::ast::ClauseName::BuiltIn($name)
     };
 }
 
 #[macro_export]
 macro_rules! atom {
     ($e:expr, $tbl:expr) => {
-        Constant::Atom(ClauseName::User(tabled_rc!($e, $tbl)), None)
+        $crate::ast::Constant::Atom(
+            $crate::ast::ClauseName::User($crate::tabled_rc!($e, $tbl)),
+            None,
+        )
     };
     ($e:expr) => {
-        Constant::Atom(clause_name!($e), None)
+        $crate::ast::Constant::Atom($crate::clause_name!($e), None)
     };
 }
 
@@ -65,95 +68,102 @@ macro_rules! rc_atom {
 }
 macro_rules! is_term {
     ($x:expr) => {
-        ($x & TERM) != 0
+        ($x & $crate::ast::TERM) != 0
     };
 }
 
 macro_rules! is_lterm {
     ($x:expr) => {
-        ($x & LTERM) != 0
+        ($x & $crate::ast::LTERM) != 0
     };
 }
 
 macro_rules! is_op {
     ($x:expr) => {
-        $x & (XF | YF | FX | FY | XFX | XFY | YFX) != 0
+        $x & ($crate::ast::XF
+            | $crate::ast::YF
+            | $crate::ast::FX
+            | $crate::ast::FY
+            | $crate::ast::XFX
+            | $crate::ast::XFY
+            | $crate::ast::YFX)
+            != 0
     };
 }
 
 macro_rules! is_negate {
     ($x:expr) => {
-        ($x & NEGATIVE_SIGN) != 0
+        ($x & $crate::ast::NEGATIVE_SIGN) != 0
     };
 }
 
 #[macro_export]
 macro_rules! is_prefix {
     ($x:expr) => {
-        $x & (FX | FY) != 0
+        $x & ($crate::ast::FX | $crate::ast::FY) != 0
     };
 }
 
 #[macro_export]
 macro_rules! is_postfix {
     ($x:expr) => {
-        $x & (XF | YF) != 0
+        $x & ($crate::ast::XF | $crate::ast::YF) != 0
     };
 }
 
 #[macro_export]
 macro_rules! is_infix {
     ($x:expr) => {
-        ($x & (XFX | XFY | YFX)) != 0
+        ($x & ($crate::ast::XFX | $crate::ast::XFY | $crate::ast::YFX)) != 0
     };
 }
 
 #[macro_export]
 macro_rules! is_xfx {
     ($x:expr) => {
-        ($x & XFX) != 0
+        ($x & $crate::ast::XFX) != 0
     };
 }
 
 #[macro_export]
 macro_rules! is_xfy {
     ($x:expr) => {
-        ($x & XFY) != 0
+        ($x & $crate::ast::XFY) != 0
     };
 }
 
 #[macro_export]
 macro_rules! is_yfx {
     ($x:expr) => {
-        ($x & YFX) != 0
+        ($x & $crate::ast::YFX) != 0
     };
 }
 
 #[macro_export]
 macro_rules! is_yf {
     ($x:expr) => {
-        ($x & YF) != 0
+        ($x & $crate::ast::YF) != 0
     };
 }
 
 #[macro_export]
 macro_rules! is_xf {
     ($x:expr) => {
-        ($x & XF) != 0
+        ($x & $crate::ast::XF) != 0
     };
 }
 
 #[macro_export]
 macro_rules! is_fx {
     ($x:expr) => {
-        ($x & FX) != 0
+        ($x & $crate::ast::FX) != 0
     };
 }
 
 #[macro_export]
 macro_rules! is_fy {
     ($x:expr) => {
-        ($x & FY) != 0
+        ($x & $crate::ast::FY) != 0
     };
 }
 
@@ -227,14 +237,14 @@ impl Default for VarReg {
 #[macro_export]
 macro_rules! temp_v {
     ($x:expr) => {
-        RegType::Temp($x)
+        $crate::ast::RegType::Temp($x)
     };
 }
 
 #[macro_export]
 macro_rules! perm_v {
     ($x:expr) => {
-        RegType::Perm($x)
+        $crate::ast::RegType::Perm($x)
     };
 }
 
