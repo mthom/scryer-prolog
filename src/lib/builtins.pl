@@ -813,8 +813,6 @@ setof(Template, Goal, Solution) :-
     ).
 
 
-:- dynamic('$clause'/2).
-
 clause(H, B) :-
     (  var(H) ->
        throw(error(instantiation_error, clause/2))
