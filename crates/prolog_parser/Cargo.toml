@@ -2,6 +2,7 @@
 name = "prolog_parser_rebis"
 version = "0.8.68"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
+edition = "2018"
 repository = "https://github.com/mthom/prolog_parser"
 description = " An operator precedence parser for the Rebis development version of Scryer Prolog, an up and coming ISO Prolog implementation."
 license = "BSD-3-Clause"
