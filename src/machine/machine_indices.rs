@@ -525,6 +525,7 @@ pub enum REPLCodePtr {
     DiscontiguousProperty,
     DynamicProperty,
     CompilePendingPredicates,
+    AbolishClause,
     Asserta,
     Assertz,
     Retract,

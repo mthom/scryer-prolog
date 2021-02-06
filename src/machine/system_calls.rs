@@ -792,22 +792,6 @@ impl MachineState {
         current_output_stream: &mut Stream,
     ) -> CallResult {
         match ct {
-            /*
-            &SystemClauseType::AbolishClause => {
-                let p = self.cp;
-                let trans_type = DynamicTransactionType::Abolish;
-
-                self.p = CodePtr::DynamicTransaction(trans_type, p);
-                return Ok(());
-            }
-            &SystemClauseType::AbolishModuleClause => {
-                let p = self.cp;
-                let trans_type = DynamicTransactionType::ModuleAbolish;
-
-                self.p = CodePtr::DynamicTransaction(trans_type, p);
-                return Ok(());
-            }
-            */
             &SystemClauseType::BindFromRegister => {
                 let reg = self.store(self.deref(self[temp_v!(2)]));
                 let n =
@@ -835,23 +819,6 @@ impl MachineState {
 
                 self.fail = true;
             }
-            /*
-            &SystemClauseType::AssertDynamicPredicateToFront => {
-                let p = self.cp;
-                let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Front);
-
-                self.p = CodePtr::DynamicTransaction(trans_type, p);
-                return Ok(());
-            }
-            &SystemClauseType::AssertDynamicPredicateToBack => {
-                // let p = self.cp;
-                // let trans_type = DynamicTransactionType::Assert(DynamicAssertPlace::Back);
-
-                // self.p = CodePtr::DynamicTransaction(trans_type, p);
-                self.p = CodePtr::REPL(REPLCodePtr::UserAssertz, self.cp);
-                return Ok(());
-            }
-            */
             &SystemClauseType::CurrentHostname => {
                 match hostname::get().ok() {
                     Some(host) => {
@@ -1755,15 +1722,7 @@ impl MachineState {
                             } else if self.fail {
                                 return Ok(());
                             }
-                        }/*
-                        _ => {
-                            let stub = MachineError::functor_stub(clause_name!("get_char"), 2);
-                            let err = MachineError::representation_error(RepFlag::Character);
-                            let err = self.error_form(err, stub);
-
-                            return Err(err);
-                        }*/
-                    }
+                        }                    }
                 }
             }
             &SystemClauseType::NumberToChars => {
@@ -1859,22 +1818,6 @@ impl MachineState {
                     }
                 }
             }
-            /*
-            &SystemClauseType::ModuleAssertDynamicPredicateToFront => {
-                let p = self.cp;
-                let trans_type = DynamicTransactionType::ModuleAssert(DynamicAssertPlace::Front);
-
-                self.p = CodePtr::DynamicTransaction(trans_type, p);
-                return Ok(());
-            }
-            &SystemClauseType::ModuleAssertDynamicPredicateToBack => {
-                let p = self.cp;
-                let trans_type = DynamicTransactionType::ModuleAssert(DynamicAssertPlace::Back);
-
-                self.p = CodePtr::DynamicTransaction(trans_type, p);
-                return Ok(());
-            }
-            */
             &SystemClauseType::LiftedHeapLength => {
                 let a1 = self[temp_v!(1)];
                 let lh_len = Addr::Usize(self.lifted_heap.h());
@@ -2732,14 +2675,7 @@ impl MachineState {
                             } else if self.fail {
                                 return Ok(());
                             }
-                        }/*
-                        _ => {
-                            let stub = MachineError::functor_stub(clause_name!("get_char"), 2);
-                            let err = MachineError::representation_error(RepFlag::Character);
-                            let err = self.error_form(err, stub);
-
-                            return Err(err);
-                        }*/
+                        }
                     }
                 }
             }
@@ -2857,98 +2793,6 @@ impl MachineState {
 
                 self.unify(Addr::Char(c), a1);
             }
-/*
-            &SystemClauseType::GetModuleClause => {
-                let module = self[temp_v!(3)];
-                let head = self[temp_v!(1)];
-
-                let module = match self.store(self.deref(module)) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(module, _) = &self.heap[h] {
-                            module.clone()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        self.fail = true;
-                        return Ok(());
-                    }
-                };
-
-                let subsection = match self.store(self.deref(head)) {
-                    Addr::Str(s) => match &self.heap[s] {
-                        &HeapCellValue::NamedStr(arity, ref name, ..) => {
-                            indices.get_clause_subsection(module, name.clone(), arity)
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    },
-                    Addr::Con(h) => {
-	                if let HeapCellValue::Atom(name, _) = &self.heap[h] {
-                            indices.get_clause_subsection(module, name.clone(), 0)
-                        } else {
-                            unreachable!()
-                        }
-                    }
-
-                    _ => {
-                        unreachable!()
-                    }
-                };
-
-                match subsection {
-                    Some(dynamic_predicate_info) => {
-                        self.execute_at_index(
-                            2,
-                            dir_entry!(dynamic_predicate_info.clauses_subsection_p),
-                        );
-
-                        return Ok(());
-                    }
-                    None => {
-                        self.fail = true;
-                    }
-                }
-            }
-            &SystemClauseType::ModuleHeadIsDynamic => {
-                let module = self[temp_v!(2)];
-                let head = self[temp_v!(1)];
-
-                let module = match self.store(self.deref(module)) {
-                    Addr::Con(h) if self.heap.atom_at(h) =>
-                        if let HeapCellValue::Atom(module, _) = &self.heap[h] {
-                            module.clone()
-                        } else {
-                            unreachable!()
-                        }
-                    _ => {
-                        self.fail = true;
-                        return Ok(());
-                    }
-                };
-
-                self.fail = !match self.store(self.deref(head)) {
-                    Addr::Str(s) => match &self.heap[s] {
-                        &HeapCellValue::NamedStr(arity, ref name, ..) => {
-                            indices.get_clause_subsection(module, name.clone(), arity)
-                                   .is_some()
-                        }
-                        _ => unreachable!(),
-                    },
-                    Addr::Con(h) => {
-	                if let HeapCellValue::Atom(name, _) = &self.heap[h] {
-                            indices.get_clause_subsection(module, name.clone(), 0)
-                                   .is_some()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => unreachable!(),
-                };
-            }
-*/
             &SystemClauseType::HeadIsDynamic => {
                 let module_name = atom_from!(
                     self,

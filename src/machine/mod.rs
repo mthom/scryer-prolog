@@ -503,6 +503,9 @@ impl Machine {
             REPLCodePtr::Retract => {
                 self.retract_clause();
             }
+            REPLCodePtr::AbolishClause => {
+                self.abolish_clause();
+            }
         }
 
         self.machine_st.p = CodePtr::Local(p);

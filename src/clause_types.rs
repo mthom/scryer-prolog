@@ -310,11 +310,6 @@ pub enum SystemClauseType {
 impl SystemClauseType {
     pub fn name(&self) -> ClauseName {
         match self {
-            // &SystemClauseType::AbolishClause => clause_name!("$abolish_clause"),
-            // &SystemClauseType::AbolishModuleClause => clause_name!("$abolish_module_clause"),
-            // &SystemClauseType::AssertDynamicPredicateToBack => clause_name!("$assertz"),
-            // &SystemClauseType::AssertDynamicPredicateToFront => clause_name!("$asserta"),
-            // &SystemClauseType::AtEndOfExpansion => clause_name!("$at_end_of_expansion"),
             &SystemClauseType::AtomChars => clause_name!("$atom_chars"),
             &SystemClauseType::AtomCodes => clause_name!("$atom_codes"),
             &SystemClauseType::AtomLength => clause_name!("$atom_length"),
@@ -394,6 +389,8 @@ impl SystemClauseType {
                 clause_name!("$cpp_discontiguous_property"),
             &SystemClauseType::REPL(REPLCodePtr::CompilePendingPredicates) =>
                 clause_name!("$compile_pending_predicates"),
+            &SystemClauseType::REPL(REPLCodePtr::AbolishClause) =>
+                clause_name!("$abolish_clause"),
             &SystemClauseType::Close => clause_name!("$close"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
@@ -561,7 +558,8 @@ impl SystemClauseType {
 
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
-            // ("$abolish_clause", 2) => Some(SystemClauseType::AbolishClause),
+            ("$abolish_clause", 3) =>
+                Some(SystemClauseType::REPL(REPLCodePtr::AbolishClause)),
             ("$add_dynamic_predicate", 3) =>
                 Some(SystemClauseType::REPL(REPLCodePtr::AddDynamicPredicate)),
             ("$add_goal_expansion_clause", 4) =>

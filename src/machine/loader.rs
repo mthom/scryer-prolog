@@ -1433,6 +1433,75 @@ impl Machine {
     }
 
     pub(crate)
+    fn abolish_clause(&mut self) {
+        let module_name = atom_from!(
+            self.machine_st,
+            self.machine_st.store(self.machine_st.deref(
+                self.machine_st[temp_v!(1)]
+            ))
+        );
+
+        let key =
+            self.machine_st.read_predicate_key(
+                self.machine_st[temp_v!(2)],
+                self.machine_st[temp_v!(3)],
+            );
+
+        let compilation_target =
+            match module_name.as_str() {
+                "user" => CompilationTarget::User,
+                _ => CompilationTarget::Module(module_name),
+            };
+
+        let mut loader = Loader::new(LiveTermStream::new(ListingSource::User), self);
+        loader.load_state.compilation_target = compilation_target;
+
+        match loader.load_state.wam.indices.get_predicate_skeleton(
+            &loader.load_state.compilation_target,
+            &key
+        ) {
+            Some(skeleton) => {
+                skeleton.clauses.clear();
+                skeleton.clause_clause_locs.clear();
+            }
+            _ => {
+                unreachable!();
+            }
+        }
+
+        let code_index = loader.load_state.get_or_insert_code_index(key);
+        code_index.set(IndexPtr::DynamicUndefined);
+
+        match loader.load_state.compilation_target {
+            CompilationTarget::User => {
+                loader.load_state.compilation_target =
+                    CompilationTarget::Module(clause_name!("builtins"));
+            }
+            _ => {
+            }
+        };
+
+        match loader.load_state.wam.indices.get_predicate_skeleton(
+            &loader.load_state.compilation_target,
+            &(clause_name!("$clause"), 2),
+        ) {
+            Some(skeleton) => {
+                skeleton.clauses.clear();
+                skeleton.clause_clause_locs.clear();
+            }
+            _ => {
+                unreachable!();
+            }
+        }
+
+        let clause_clause_code_index = loader.load_state.get_or_insert_code_index(
+            (clause_name!("$clause"), 2),
+        );
+
+        clause_clause_code_index.set(IndexPtr::DynamicUndefined);
+    }
+
+    pub(crate)
     fn retract_clause(&mut self) {
         let key =
             self.machine_st.read_predicate_key(
