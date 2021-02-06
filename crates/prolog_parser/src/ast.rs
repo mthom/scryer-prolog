@@ -1,6 +1,6 @@
+use crate::rug::{Integer, Rational};
 use crate::tabled_rc::*;
 use ordered_float::*;
-use rug::{Integer, Rational};
 
 use crate::put_back_n::*;
 
