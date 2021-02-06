@@ -95,7 +95,7 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, Compilatio
             let name = *terms.pop().unwrap();
 
             let arity = arity
-                .to_constant()
+                .into_constant()
                 .and_then(|c| match c {
                     Constant::Integer(n) => n.to_usize(),
                     Constant::Fixnum(n) => usize::try_from(n).ok(),
@@ -104,7 +104,7 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, Compilatio
                 .ok_or(CompilationError::InvalidModuleExport)?;
 
             let name = name
-                .to_constant()
+                .into_constant()
                 .and_then(|c| c.to_atom())
                 .ok_or(CompilationError::InvalidModuleExport)?;
 
@@ -174,7 +174,7 @@ pub(super) fn setup_module_export_list(
         export_list = *t2;
     }
 
-    if export_list.to_constant() != Some(Constant::EmptyList) {
+    if export_list.into_constant() != Some(Constant::EmptyList) {
         Err(CompilationError::InvalidModuleDecl)
     } else {
         Ok(exports)
@@ -189,7 +189,7 @@ fn setup_module_decl(
     let name = terms
         .pop()
         .unwrap()
-        .to_constant()
+        .into_constant()
         .and_then(|c| c.to_atom())
         .ok_or(CompilationError::InvalidModuleDecl)?;
 
@@ -205,7 +205,7 @@ fn setup_use_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleSource, Comp
             terms
                 .pop()
                 .unwrap()
-                .to_constant()
+                .into_constant()
                 .and_then(|c| c.to_atom())
                 .map(|c| ModuleSource::Library(c))
                 .ok_or(CompilationError::InvalidUseModuleDecl)
@@ -257,7 +257,7 @@ fn setup_qualified_import(
             terms
                 .pop()
                 .unwrap()
-                .to_constant()
+                .into_constant()
                 .and_then(|c| c.to_atom())
                 .map(|c| ModuleSource::Library(c))
                 .ok_or(CompilationError::InvalidUseModuleDecl)
@@ -273,7 +273,7 @@ fn setup_qualified_import(
         export_list = *t2;
     }
 
-    if export_list.to_constant() != Some(Constant::EmptyList) {
+    if export_list.into_constant() != Some(Constant::EmptyList) {
         Err(CompilationError::InvalidModuleDecl)
     } else {
         Ok((module_src, exports))

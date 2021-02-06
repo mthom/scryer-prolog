@@ -561,7 +561,7 @@ impl PartialEq for Constant {
 impl Eq for Constant {}
 
 impl Constant {
-    pub fn to_atom(self) -> Option<ClauseName> {
+    pub fn to_atom(&self) -> Option<ClauseName> {
         match self {
             Constant::Atom(a, _) => Some(a.defrock_brackets()),
             _ => None,
@@ -678,7 +678,7 @@ impl ClauseName {
         !self.as_str().is_empty() && self.as_str().chars().nth(1).is_none()
     }
 
-    pub fn defrock_brackets(self) -> Self {
+    pub fn defrock_brackets(&self) -> Self {
         fn defrock_brackets(s: &str) -> &str {
             if s.starts_with('(') && s.ends_with(')') {
                 &s[1..s.len() - 1]
@@ -726,7 +726,7 @@ impl Term {
         }
     }
 
-    pub fn to_constant(self) -> Option<Constant> {
+    pub fn into_constant(self) -> Option<Constant> {
         match self {
             Term::Constant(_, c) => Some(c),
             _ => None,
