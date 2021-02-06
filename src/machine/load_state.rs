@@ -1,6 +1,6 @@
 use crate::machine::machine_indices::*;
 use crate::machine::*;
-use prolog_parser_rebis::clause_name;
+use prolog_parser::clause_name;
 
 use crate::machine::term_stream::*;
 use indexmap::IndexSet;

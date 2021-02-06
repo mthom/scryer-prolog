@@ -1,5 +1,5 @@
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::parser::*;
+use prolog_parser::ast::*;
+use prolog_parser::parser::*;
 
 use crate::machine::machine_errors::CompilationError;
 use crate::machine::preprocessor::*;

@@ -1,4 +1,4 @@
-use prolog_parser_rebis::ast::*;
+use prolog_parser::ast::*;
 
 use crate::forms::*;
 use crate::instructions::*;

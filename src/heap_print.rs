@@ -1,5 +1,5 @@
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::{
+use prolog_parser::ast::*;
+use prolog_parser::{
     alpha_numeric_char, capital_letter_char, clause_name, cut_char, decimal_digit_char,
     graphic_token_char, is_fx, is_infix, is_postfix, is_prefix, is_xf, is_xfx, is_xfy, is_yfx,
     semicolon_char, sign_char, single_quote_char, small_letter_char, solo_char,

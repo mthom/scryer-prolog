@@ -1,5 +1,5 @@
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::clause_name;
+use prolog_parser::ast::*;
+use prolog_parser::clause_name;
 
 use crate::clause_types::*;
 use crate::forms::*;

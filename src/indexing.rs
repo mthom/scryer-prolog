@@ -1,6 +1,6 @@
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::clause_name;
-use prolog_parser_rebis::tabled_rc::*;
+use prolog_parser::ast::*;
+use prolog_parser::clause_name;
+use prolog_parser::tabled_rc::*;
 
 use crate::forms::*;
 use crate::instructions::*;

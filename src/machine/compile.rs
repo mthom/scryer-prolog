@@ -1,4 +1,4 @@
-use prolog_parser_rebis::clause_name;
+use prolog_parser::clause_name;
 
 use crate::codegen::*;
 use crate::debray_allocator::*;

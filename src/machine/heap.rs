@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use prolog_parser_rebis::ast::Constant;
+use prolog_parser::ast::Constant;
 
 use crate::machine::machine_indices::*;
 use crate::machine::partial_string::*;

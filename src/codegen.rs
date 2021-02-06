@@ -1,7 +1,7 @@
 /// Code generation to WAM-like instructions.
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::tabled_rc::TabledData;
-use prolog_parser_rebis::{perm_v, temp_v};
+use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::TabledData;
+use prolog_parser::{perm_v, temp_v};
 
 use crate::allocator::*;
 use crate::arithmetic::*;

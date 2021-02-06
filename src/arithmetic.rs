@@ -1,5 +1,5 @@
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::{atom, clause_name};
+use prolog_parser::ast::*;
+use prolog_parser::{atom, clause_name};
 
 use crate::clause_types::*;
 use crate::fixtures::*;

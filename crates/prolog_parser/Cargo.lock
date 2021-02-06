@@ -148,7 +148,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "prolog_parser_rebis"
+name = "prolog_parser"
 version = "0.8.68"
 dependencies = [
  "lexical",

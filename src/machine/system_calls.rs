@@ -1,6 +1,6 @@
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::parser::*;
-use prolog_parser_rebis::{
+use prolog_parser::ast::*;
+use prolog_parser::parser::*;
+use prolog_parser::{
     alpha_char, binary_digit_char, clause_name, decimal_digit_char, exponent_char, graphic_char,
     graphic_token_char, hexadecimal_digit_char, layout_char, meta_char, new_line_char,
     octal_digit_char, prolog_char, sign_char, solo_char, symbolic_control_char,
@@ -67,10 +67,9 @@ use sodiumoxide::crypto::scalarmult::curve25519::*;
 
 use native_tls::TlsConnector;
 
-extern crate select;
-
 use base64;
 use roxmltree;
+use select;
 
 pub fn get_key() -> KeyEvent {
     let key;

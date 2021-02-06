@@ -1,6 +1,6 @@
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::tabled_rc::*;
-use prolog_parser_rebis::{atom, clause_name, rc_atom};
+use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::*;
+use prolog_parser::{atom, clause_name, rc_atom};
 
 use crate::forms::*;
 use crate::iterators::*;

@@ -1,6 +1,6 @@
 use crate::heap_iter::*;
 use crate::machine::*;
-use prolog_parser_rebis::temp_v;
+use prolog_parser::temp_v;
 
 use indexmap::IndexSet;
 

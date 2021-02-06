@@ -1,5 +1,5 @@
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::{clause_name, temp_v};
+use prolog_parser::ast::*;
+use prolog_parser::{clause_name, temp_v};
 
 use crate::forms::Number;
 use crate::machine::machine_indices::*;

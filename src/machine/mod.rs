@@ -1,6 +1,6 @@
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::tabled_rc::*;
-use prolog_parser_rebis::{clause_name, temp_v};
+use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::*;
+use prolog_parser::{clause_name, temp_v};
 
 use lazy_static::lazy_static;
 
@@ -48,7 +48,7 @@ use crate::machine::streams::*;
 use indexmap::IndexMap;
 
 //use std::convert::TryFrom;
-use prolog_parser_rebis::ast::ClauseName;
+use prolog_parser::ast::ClauseName;
 use std::fs::File;
 use std::mem;
 use std::path::PathBuf;

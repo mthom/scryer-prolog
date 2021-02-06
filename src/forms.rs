@@ -1,6 +1,6 @@
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::parser::OpDesc;
-use prolog_parser_rebis::{clause_name, is_infix, is_postfix};
+use prolog_parser::ast::*;
+use prolog_parser::parser::OpDesc;
+use prolog_parser::{clause_name, is_infix, is_postfix};
 
 use crate::clause_types::*;
 use crate::machine::machine_errors::*;

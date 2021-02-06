@@ -878,7 +878,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "prolog_parser_rebis"
+name = "prolog_parser"
 version = "0.8.68"
 dependencies = [
  "lexical",
@@ -1221,7 +1221,7 @@ dependencies = [
  "num-rug-adapter",
  "openssl",
  "ordered-float",
- "prolog_parser_rebis",
+ "prolog_parser",
  "ref_thread_local",
  "ring",
  "ripemd160",
