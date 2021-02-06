@@ -398,16 +398,16 @@ predicate_property(Callable, Property) :-
     ).
 
 
-strip_module_(M0, G0, M1, G1) :-
+strip_module(M0, G0, M1, G1) :-
     (  nonvar(G0),
        G0 = (MG1:G2) ->
-       strip_module_(MG1, G2, M1, G1)
+       strip_module(MG1, G2, M1, G1)
     ;  M0 = M1,
        G0 = G1
     ).
-strip_module(Goal, M, G) :-
-    strip_module_(_, Goal, M, G).
 
+strip_module(Goal, M, G) :-
+    strip_module(_, Goal, M, G).
 
 
 expand_subgoal(UnexpandedGoals, MS, Module, ExpandedGoals, HeadVars) :-

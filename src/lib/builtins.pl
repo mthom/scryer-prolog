@@ -243,13 +243,24 @@ call_or_cut(G, B, ErrorPI) :-
 
 call_or_cut(!, B) :-
     '$set_cp_by_default'(B).
+call_or_cut(_:!, B) :-
+    '$set_cp_by_default'(B).
 call_or_cut((G1, G2), B) :-
+    !,
+    '$call_with_default_policy'(','(G1, G2, B)).
+call_or_cut(_:(G1, G2), B) :-
     !,
     '$call_with_default_policy'(','(G1, G2, B)).
 call_or_cut((G1 ; G2), B) :-
     !,
     '$call_with_default_policy'(';'(G1, G2, B)).
+call_or_cut(_:(G1 ; G2), B) :-
+    !,
+    '$call_with_default_policy'(';'(G1, G2, B)).
 call_or_cut((G1 -> G2), B) :-
+    !,
+    '$call_with_default_policy'(->(G1, G2, B)).
+call_or_cut(_:(G1 -> G2), B) :-
     !,
     '$call_with_default_policy'(->(G1, G2, B)).
 call_or_cut(G, _) :-
@@ -261,11 +272,23 @@ call_or_cut(G, _) :-
     !,
     '$call_with_default_policy'(','(G1, G2, B)),
     '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+','(_:(G1, G2), G3, B) :-
+    !,
+    '$call_with_default_policy'(','(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
 ','((G1; G2), G3, B) :-
     !,
     '$call_with_default_policy'(';'(G1, G2, B)),
     '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+','(_:(G1; G2), G3, B) :-
+    !,
+    '$call_with_default_policy'(';'(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
 ','((G1 -> G2), G3, B) :-
+    !,
+    '$call_with_default_policy'(->(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+','(_:(G1 -> G2), G3, B) :-
     !,
     '$call_with_default_policy'(->(G1, G2, B)),
     '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
@@ -280,12 +303,28 @@ call_or_cut(G, _) :-
     (  '$call_with_default_policy'(','(G1, G2, B))
     ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
     ).
+';'(_:(G1, G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(','(G1, G2, B))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
 ';'((G1; G2), G3, B) :-
     !,
     (  '$call_with_default_policy'(';'(G1, G2, B))
     ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
     ).
+';'(_:(G1; G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(';'(G1, G2, B))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
 ';'((G1 -> G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
+       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+';'(_:(G1 -> G2), G3, B) :-
     !,
     (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
        '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
@@ -303,12 +342,27 @@ call_or_cut(G, _) :-
     (  '$call_with_default_policy'(','(G1, G2, B)) ->
        '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
     ).
+->(_:(G1, G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(','(G1, G2, B)) ->
+       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
+    ).
 ->((G1 ; G2), G3, B) :-
     !,
     (  '$call_with_default_policy'(';'(G1, G2, B)) ->
        '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
     ).
+->(_:(G1 ; G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(';'(G1, G2, B)) ->
+       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
+    ).
 ->((G1 -> G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(->(G1, G2, B)) ->
+       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
+    ).
+->(_:(G1 -> G2), G3, B) :-
     !,
     (  '$call_with_default_policy'(->(G1, G2, B)) ->
        '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
