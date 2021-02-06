@@ -300,8 +300,7 @@ use_module(Module, Exports) :-
     '$push_load_state_payload'(Evacuable),
     (  Exports == [] ->
        '$remove_module_exports'(Module, Evacuable)
-    ;
-    use_module(Module, Exports, Evacuable)
+    ;  use_module(Module, Exports, Evacuable)
     ).
 
 
@@ -317,14 +316,22 @@ load_context_path(Module, Path) :-
     ).
 
 
+path_atom(Dir/File, Path) :-
+    must_be(atom, File),
+    !,
+    path_atom(Dir, DirPath),
+    foldl(builtins:atom_concat, ['/', DirPath], File, Path).
+path_atom(Path, Path) :-
+    must_be(atom, Path).
+
 use_module(Module, Exports, Evacuable) :-
     (  var(Module) ->
        instantiation_error(load/1)
     ;  Module = library(Library) ->
-       (  atom(Library) ->
-          (  '$load_compiled_library'(Library, Evacuable) -> %% TODO: What about Exports?
+       (  path_atom(Library, LibraryPath) ->
+          (  '$load_compiled_library'(LibraryPath, Evacuable) -> %% TODO: What about Exports?
              true
-          ;  '$load_library_as_stream'(Library, Stream, Path),
+          ;  '$load_library_as_stream'(LibraryPath, Stream, Path),
              file_load(Stream, Path, Subevacuable),
              '$use_module'(Evacuable, Subevacuable, Exports)
           )
@@ -332,8 +339,8 @@ use_module(Module, Exports, Evacuable) :-
           instantiation_error(load/1)
        ;  type_error(atom, Library, load/1)
        )
-    ;  (  atom(Module) ->
-          load_context_path(Module, Path),
+    ;  (  path_atom(Module, ModulePath) ->
+          load_context_path(ModulePath, Path),
           open(Path, read, Stream),
           file_load(Stream, Path, Subevacuable),
           '$use_module'(Evacuable, Subevacuable, Exports)
