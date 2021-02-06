@@ -358,11 +358,11 @@ impl SystemClauseType {
                 clause_name!("$load_compiled_library"),
             &SystemClauseType::REPL(REPLCodePtr::PushLoadStatePayload) =>
                 clause_name!("$push_load_state_payload"),
-            &SystemClauseType::REPL(REPLCodePtr::UserAsserta) =>
+            &SystemClauseType::REPL(REPLCodePtr::Asserta) =>
                 clause_name!("$asserta"),
-            &SystemClauseType::REPL(REPLCodePtr::UserAssertz) =>
+            &SystemClauseType::REPL(REPLCodePtr::Assertz) =>
                 clause_name!("$assertz"),
-            &SystemClauseType::REPL(REPLCodePtr::UserRetract) =>
+            &SystemClauseType::REPL(REPLCodePtr::Retract) =>
                 clause_name!("$retract_clause"),
             &SystemClauseType::REPL(REPLCodePtr::UseModule) =>
                 clause_name!("$use_module"),
@@ -568,14 +568,11 @@ impl SystemClauseType {
                 Some(SystemClauseType::REPL(REPLCodePtr::AddGoalExpansionClause)),
             ("$add_term_expansion_clause", 3) =>
                 Some(SystemClauseType::REPL(REPLCodePtr::AddTermExpansionClause)),
-            // ("$at_end_of_expansion", 0) => Some(SystemClauseType::AtEndOfExpansion),
             ("$atom_chars", 2) => Some(SystemClauseType::AtomChars),
             ("$atom_codes", 2) => Some(SystemClauseType::AtomCodes),
             ("$atom_length", 2) => Some(SystemClauseType::AtomLength),
             // ("$abolish_module_clause", 3) => Some(SystemClauseType::AbolishModuleClause),
             ("$bind_from_register", 2) => Some(SystemClauseType::BindFromRegister),
-            // ("$module_asserta", 5) => Some(SystemClauseType::ModuleAssertDynamicPredicateToFront),
-            // ("$module_assertz", 5) => Some(SystemClauseType::ModuleAssertDynamicPredicateToBack),
             ("$call_continuation", 1) => Some(SystemClauseType::CallContinuation),
             ("$char_code", 2) => Some(SystemClauseType::CharCode),
             ("$char_type", 2) => Some(SystemClauseType::CharType),
@@ -608,8 +605,6 @@ impl SystemClauseType {
             ("$peek_char", 2) => Some(SystemClauseType::PeekChar),
             ("$peek_code", 2) => Some(SystemClauseType::PeekCode),
             ("$is_partial_string", 1) => Some(SystemClauseType::IsPartialString),
-//          ("$expand_term", 2) => Some(SystemClauseType::ExpandTerm),
-//          ("$expand_goal", 2) => Some(SystemClauseType::ExpandGoal),
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
             ("$fetch_global_var_with_offset", 3) => Some(SystemClauseType::FetchGlobalVarWithOffset),
             ("$get_byte", 2) => Some(SystemClauseType::GetByte),
@@ -641,8 +636,6 @@ impl SystemClauseType {
             }
             ("$get_attr_list", 2) => Some(SystemClauseType::GetAttributedVariableList),
             ("$get_b_value", 1) => Some(SystemClauseType::GetBValue),
-//          ("$get_clause", 2) => Some(SystemClauseType::GetClause),
-//          ("$get_module_clause", 3) => Some(SystemClauseType::GetModuleClause),
             ("$get_lh_from_offset", 2) => Some(SystemClauseType::GetLiftedHeapFromOffset),
             ("$get_lh_from_offset_diff", 3) => Some(SystemClauseType::GetLiftedHeapFromOffsetDiff),
             ("$get_double_quotes", 1) => Some(SystemClauseType::GetDoubleQuotes),
@@ -656,8 +649,6 @@ impl SystemClauseType {
             ("$cpu_now", 1) => Some(SystemClauseType::CpuNow),
             ("$current_time", 1) => Some(SystemClauseType::CurrentTime),
             ("$module_exists", 1) => Some(SystemClauseType::ModuleExists),
-            // ("$module_retract_clause", 5) => Some(SystemClauseType::ModuleRetractClause),
-            // ("$module_head_is_dynamic", 2) => Some(SystemClauseType::ModuleHeadIsDynamic),
             ("$no_such_predicate", 2) => Some(SystemClauseType::NoSuchPredicate),
             ("$number_to_chars", 2) => Some(SystemClauseType::NumberToChars),
             ("$number_to_codes", 2) => Some(SystemClauseType::NumberToCodes),
@@ -692,7 +683,6 @@ impl SystemClauseType {
             ("$reset_cont_marker", 0) => Some(SystemClauseType::ResetContinuationMarker),
             ("$reset_global_var_at_key", 1) => Some(SystemClauseType::ResetGlobalVarAtKey),
             ("$reset_global_var_at_offset", 3) => Some(SystemClauseType::ResetGlobalVarAtOffset),
-            // ("$retract_clause", 4) => Some(SystemClauseType::RetractClause),
             ("$return_from_verify_attr", 0) => Some(SystemClauseType::ReturnFromVerifyAttr),
             ("$set_ball", 1) => Some(SystemClauseType::SetBall),
             ("$set_cp_by_default", 1) => Some(SystemClauseType::SetCutPointByDefault(temp_v!(1))),
@@ -728,9 +718,9 @@ impl SystemClauseType {
             ("$declare_module", 3) => Some(SystemClauseType::REPL(REPLCodePtr::DeclareModule)),
             ("$load_compiled_library", 2) => Some(SystemClauseType::REPL(REPLCodePtr::LoadCompiledLibrary)),
             ("$push_load_state_payload", 1) => Some(SystemClauseType::REPL(REPLCodePtr::PushLoadStatePayload)),
-            ("$asserta", 4) => Some(SystemClauseType::REPL(REPLCodePtr::UserAsserta)),
-            ("$assertz", 4) => Some(SystemClauseType::REPL(REPLCodePtr::UserAssertz)),
-            ("$retract_clause", 3) => Some(SystemClauseType::REPL(REPLCodePtr::UserRetract)),
+            ("$asserta", 5) => Some(SystemClauseType::REPL(REPLCodePtr::Asserta)),
+            ("$assertz", 5) => Some(SystemClauseType::REPL(REPLCodePtr::Assertz)),
+            ("$retract_clause", 4) => Some(SystemClauseType::REPL(REPLCodePtr::Retract)),
             ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$wam_instructions", 4) => Some(SystemClauseType::WAMInstructions),
             ("$write_term", 7) => Some(SystemClauseType::WriteTerm),

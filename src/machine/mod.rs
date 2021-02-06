@@ -494,14 +494,14 @@ impl Machine {
             REPLCodePtr::CompilePendingPredicates => {
                 self.compile_pending_predicates();
             }
-            REPLCodePtr::UserAssertz => {
-                self.compile_user_assert(AppendOrPrepend::Append);
+            REPLCodePtr::Assertz => {
+                self.compile_assert(AppendOrPrepend::Append);
             }
-            REPLCodePtr::UserAsserta => {
-                self.compile_user_assert(AppendOrPrepend::Prepend);
+            REPLCodePtr::Asserta => {
+                self.compile_assert(AppendOrPrepend::Prepend);
             }
-            REPLCodePtr::UserRetract => {
-                self.retract_user_clause();
+            REPLCodePtr::Retract => {
+                self.retract_clause();
             }
         }
 

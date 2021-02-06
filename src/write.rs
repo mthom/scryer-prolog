@@ -26,12 +26,12 @@ impl fmt::Display for REPLCodePtr {
                 write!(f, "REPLCodePtr::AddGoalExpansionClause"),
             REPLCodePtr::AddTermExpansionClause =>
                 write!(f, "REPLCodePtr::AddTermExpansionClause"),
-            REPLCodePtr::UserAssertz =>
-                write!(f, "REPLCodePtr::UserAssertz"),
-            REPLCodePtr::UserAsserta =>
-                write!(f, "REPLCodePtr::UserAsserta"),
-            REPLCodePtr::UserRetract =>
-                write!(f, "REPLCodePtr::UserRetract"),
+            REPLCodePtr::Assertz =>
+                write!(f, "REPLCodePtr::Assertz"),
+            REPLCodePtr::Asserta =>
+                write!(f, "REPLCodePtr::Asserta"),
+            REPLCodePtr::Retract =>
+                write!(f, "REPLCodePtr::Retract"),
             REPLCodePtr::ClauseToEvacuable =>
                 write!(f, "REPLCodePtr::ClauseToEvacuable"),
             REPLCodePtr::ConcludeLoad =>

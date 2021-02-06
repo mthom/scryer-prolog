@@ -1360,14 +1360,26 @@ impl Machine {
     }
 
     pub(crate)
-    fn compile_user_assert(&mut self, append_or_prepend: AppendOrPrepend) {
-        let key =
-            self.machine_st.read_predicate_key(
-                self.machine_st[temp_v!(3)],
-                self.machine_st[temp_v!(4)],
-            );
+    fn compile_assert(&mut self, append_or_prepend: AppendOrPrepend) {
+        let key = self.machine_st.read_predicate_key(
+            self.machine_st[temp_v!(3)],
+            self.machine_st[temp_v!(4)],
+        );
 
-        let compile_user_assert = || {
+        let module_name = atom_from!(
+            self.machine_st,
+            self.machine_st.store(self.machine_st.deref(
+                self.machine_st[temp_v!(5)]
+            ))
+        );
+
+        let compilation_target =
+            match module_name.as_str() {
+                "user" => CompilationTarget::User,
+                _ => CompilationTarget::Module(module_name),
+            };
+
+        let compile_assert = || {
             let mut loader = Loader::new(LiveTermStream::new(ListingSource::User), self);
 
             let head = loader.read_term_from_heap(temp_v!(1))?;
@@ -1384,23 +1396,28 @@ impl Machine {
             loader.incremental_compile_clause(
                 key.clone(),
                 asserted_clause,
-                CompilationTarget::User,
+                compilation_target.clone(),
                 false,
                 append_or_prepend,
             )?;
 
             // if a new predicate was just created, make it dynamic.
             loader.load_state.wam.indices.get_predicate_skeleton(
-                &loader.load_state.compilation_target,
+                &compilation_target,
                 &key,
             ).map(|skeleton| skeleton.is_dynamic = true);
 
-            loader.compile_clause_clauses(key, std::iter::once((head, body)), append_or_prepend)?;
+            loader.compile_clause_clauses(
+                key,
+                compilation_target,
+                std::iter::once((head, body)),
+                append_or_prepend,
+            )?;
 
             LiveTermStream::evacuate(loader)
         };
 
-        match compile_user_assert() {
+        match compile_assert() {
             Ok(_) => {
             }
             Err(e) => {
@@ -1416,7 +1433,7 @@ impl Machine {
     }
 
     pub(crate)
-    fn retract_user_clause(&mut self) {
+    fn retract_clause(&mut self) {
         let key =
             self.machine_st.read_predicate_key(
                 self.machine_st[temp_v!(1)],
@@ -1436,18 +1453,44 @@ impl Machine {
                     unreachable!()
             };
 
-        let retract_user_clause = || {
+        let module_name = atom_from!(
+            self.machine_st,
+            self.machine_st.store(self.machine_st.deref(
+                self.machine_st[temp_v!(4)]
+            ))
+        );
+
+        let compilation_target =
+            match module_name.as_str() {
+                "user" => CompilationTarget::User,
+                _ => CompilationTarget::Module(module_name),
+            };
+
+        let clause_clause_compilation_target =
+            match &compilation_target {
+                CompilationTarget::User => {
+                    CompilationTarget::Module(clause_name!("builtins"))
+                }
+                _ => {
+                    compilation_target.clone()
+                }
+            };
+
+        let retract_clause = || {
             let mut loader = Loader::new(LiveTermStream::new(ListingSource::User), self);
+            loader.load_state.compilation_target = compilation_target;
+
             let clause_clause_loc = loader.load_state.retract_clause(key, target_pos);
 
             let clause_assert_margin =
-                loader.load_state.wam.indices.modules.get(&clause_name!("builtins"))
-                      .map(|builtins| builtins.clause_assert_margin)
+                loader.load_state.wam.indices.modules
+                      .get(&clause_clause_compilation_target.module_name())
+                      .map(|module| module.clause_assert_margin)
                       .unwrap();
 
             let target_pos =
                 match loader.load_state.wam.indices.get_predicate_skeleton(
-                    &CompilationTarget::Module(clause_name!("builtins")),
+                    &clause_clause_compilation_target,
                     &(clause_name!("$clause"), 2),
                 ) {
                     Some(skeleton) => {
@@ -1463,8 +1506,9 @@ impl Machine {
                             });
 
                         if result < clause_assert_margin {
-                            loader.load_state.wam.indices.modules.get_mut(&clause_name!("builtins"))
-                                  .map(|builtins| builtins.clause_assert_margin -= 1);
+                            loader.load_state.wam.indices.modules
+                                  .get_mut(&clause_clause_compilation_target.module_name())
+                                  .map(|module| module.clause_assert_margin -= 1);
                         }
 
                         result
@@ -1474,19 +1518,13 @@ impl Machine {
                     }
                 };
 
-
-            let compilation_target = mem::replace(
-                &mut loader.load_state.compilation_target,
-                CompilationTarget::Module(clause_name!("builtins")),
-            );
-
+            loader.load_state.compilation_target = clause_clause_compilation_target;
             loader.load_state.retract_clause((clause_name!("$clause"), 2), target_pos);
-            loader.load_state.compilation_target = compilation_target;
 
             LiveTermStream::evacuate(loader)
         };
 
-        match retract_user_clause() {
+        match retract_clause() {
             Ok(_) => {
             }
             Err(e) => {

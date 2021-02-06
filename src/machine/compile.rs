@@ -1448,13 +1448,6 @@ impl<'a> LoadState<'a> {
                                 }
                             }
 
-                            set_switch_var_offset(
-                                code,
-                                later_indexing_loc,
-                                lower_bound_clause_start - later_indexing_loc,
-                                &mut self.retraction_info,
-                            );
-
                             result = merge_indexed_subsequences(
                                 code,
                                 skeleton,
@@ -1470,15 +1463,15 @@ impl<'a> LoadState<'a> {
                                 &mut skeleton.clauses[lower_bound ..],
                                 &mut self.retraction_info,
                             );
-                        }
-                        _ => {
-                            set_switch_var_offset_to_choice_instr(
+
+                            set_switch_var_offset(
                                 code,
-                                target_indexing_loc,
-                                lower_bound_clause_start - target_indexing_loc,
+                                later_indexing_loc,
+                                lower_bound_clause_start - later_indexing_loc,
                                 &mut self.retraction_info,
                             );
-
+                        }
+                        _ => {
                             result = merge_indexed_subsequences(
                                 code,
                                 skeleton,
@@ -1492,6 +1485,13 @@ impl<'a> LoadState<'a> {
                                 target_indexing_loc,
                                 target_pos + 1 - lower_bound .. skeleton.clauses.len() - lower_bound,
                                 &mut skeleton.clauses[lower_bound ..],
+                                &mut self.retraction_info,
+                            );
+
+                            set_switch_var_offset_to_choice_instr(
+                                code,
+                                target_indexing_loc,
+                                lower_bound_clause_start - target_indexing_loc,
                                 &mut self.retraction_info,
                             );
                         }
@@ -1581,6 +1581,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
     fn compile_clause_clauses<ClauseIter: Iterator<Item=(Term, Term)>>(
         &mut self,
         key: PredicateKey,
+        compilation_target: CompilationTarget,
         clause_clauses: ClauseIter,
         append_or_prepend: AppendOrPrepend,
     ) -> Result<(), SessionError> {
@@ -1596,9 +1597,19 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                 )
             });
 
-        let compilation_target = mem::replace(
+        let clause_clause_compilation_target =
+            match compilation_target {
+                CompilationTarget::User => {
+                    CompilationTarget::Module(clause_name!("builtins"))
+                }
+                _ => {
+                    compilation_target.clone()
+                }
+            };
+
+        let old_compilation_target = mem::replace(
             &mut self.load_state.compilation_target,
-            CompilationTarget::Module(clause_name!("builtins")),
+            clause_clause_compilation_target,
         );
 
         let mut clause_clause_locs = sdeq![];
@@ -1615,7 +1626,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             );
 
             if let Err(e) = result {
-                self.load_state.compilation_target = compilation_target;
+                self.load_state.compilation_target = old_compilation_target;
                 return Err(e);
             }
         }
@@ -1676,7 +1687,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             }
         }
 
-        self.load_state.compilation_target = compilation_target;
+        self.load_state.compilation_target = old_compilation_target;
         Ok(())
     }
 
@@ -1704,7 +1715,14 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
 
         if is_dynamic {
             let iter = mem::replace(&mut self.clause_clauses, vec![]).into_iter();
-            self.compile_clause_clauses(key, iter, AppendOrPrepend::Append)?;
+            let compilation_target = self.load_state.compilation_target.clone();
+
+            self.compile_clause_clauses(
+                key,
+                compilation_target,
+                iter,
+                AppendOrPrepend::Append,
+            )?;
         }
 
         Ok(self.predicates.clear())

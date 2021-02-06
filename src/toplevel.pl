@@ -14,15 +14,15 @@
 '$repl'([_|Args0]) :-
     \+ argv(_),
     (   append(Args1, ["--"|Args2], Args0) ->
-        asserta(argv(Args2)),
+        asserta('$toplevel':argv(Args2)),
         Args = Args1
-    ;   asserta(argv([])),
+    ;   asserta('$toplevel':argv([])),
         Args = Args0
     ),
     delegate_task(Args, []),
     repl.
 '$repl'(_) :-
-    (   \+ argv(_) -> asserta(argv([]))
+    (   \+ argv(_) -> asserta('$toplevel':argv([]))
     ;   true
     ),
     repl.

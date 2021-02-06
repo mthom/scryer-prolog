@@ -742,13 +742,16 @@ setof(Template, Goal, Solution) :-
     ).
 
 '$module_clause'(H, B, Module) :-
-    (  var(H) -> throw(error(instantiation_error, clause/2))
+    (  var(H) ->
+       throw(error(instantiation_error, clause/2))
     ;  functor(H, Name, Arity) ->
        (  Name == '.' ->
           throw(error(type_error(callable, H), clause/2))
+       ;  '$no_such_predicate'(Module, H) ->
+          '$fail'
 	   ;  '$head_is_dynamic'(Module, H) ->
 		  '$clause_body_is_valid'(B),
-		  Module:'$clause'(H, B) %%TODO: how do we show this exists?
+		  Module:'$clause'(H, B)
 	   ;  throw(error(permission_error(access, private_procedure, Name/Arity),
 					  clause/2))
 	   )
@@ -781,24 +784,19 @@ clause(H, B) :-
     ;  throw(error(type_error(callable, H), clause/2))
     ).
 
-call_module_asserta(Head, Body, Name, Arity, Module) :-
+call_asserta(Head, Body, Name, Arity, Module) :-
     '$clause_body_is_valid'(Body),
-    functor(VarHead, Name, Arity),
-    findall((VarHead :- VarBody), builtins:clause(Module:VarHead, VarBody), Clauses),
-    '$module_asserta'((Head :- Body), Clauses, Name, Arity, Module).
-
-call_asserta(Head, Body, Name, Arity) :-
-    '$clause_body_is_valid'(Body),
-    functor(VarHead, Name, Arity),
-    '$asserta'(Head, Body, Name, Arity).
+    functor(_, Name, Arity),
+    '$asserta'(Head, Body, Name, Arity, Module).
 
 module_asserta_clause(Head, Body, Module) :-
-    (  var(Head) -> throw(error(instantiation_error, asserta/1))
+    (  var(Head) ->
+       throw(error(instantiation_error, asserta/1))
     ;  functor(Head, Name, Arity),
        atom(Name),
        Name \== '.' ->
-       (  '$module_head_is_dynamic'(Head, Module) ->
-          call_module_asserta(Head, Body, Name, Arity, Module)
+       (  '$head_is_dynamic'(Module, Head) ->
+          call_asserta(Head, Body, Name, Arity, Module)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
        )
     ;  throw(error(type_error(callable, Head), asserta/1))
@@ -815,9 +813,9 @@ asserta_clause(Head, Body) :-
 	     arg(2, Head, F),
 	     module_asserta_clause(F, Body, Module)
        ; '$no_such_predicate'(user, Head) ->
-         call_asserta(Head, Body, Name, Arity)
+         call_asserta(Head, Body, Name, Arity, user)
        ; '$head_is_dynamic'(user, Head) ->
-         call_asserta(Head, Body, Name, Arity)
+         call_asserta(Head, Body, Name, Arity, user)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
        )
     ;  throw(error(type_error(callable, Head), asserta/1))
@@ -826,17 +824,11 @@ asserta_clause(Head, Body) :-
 asserta(Clause) :-
     (  Clause \= (_ :- _) ->
        Head = Clause,
-       Body = true, asserta_clause(Head, Body)
+       Body = true,
+       asserta_clause(Head, Body)
     ;  Clause = (Head :- Body) ->
        asserta_clause(Head, Body)
     ).
-
-% NOT MODIFIED.
-call_module_assertz(Head, Body, Name, Arity, Module) :-
-    '$clause_body_is_valid'(Body),
-    functor(VarHead, Name, Arity),
-    findall((VarHead :- VarBody), builtins:clause(Module:VarHead, VarBody), Clauses),
-    '$module_assertz'((Head :- Body), Clauses, Name, Arity, Module).
 
 module_assertz_clause(Head, Body, Module) :-
     (  var(Head) ->
@@ -845,17 +837,18 @@ module_assertz_clause(Head, Body, Module) :-
        atom(Name),
        Name \== '.' ->
        (  '$head_is_dynamic'(Module, Head) ->
-          call_module_assertz(Head, Body, Name, Arity, Module)
-       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), assertz/1))
+          call_assertz(Head, Body, Name, Arity, Module)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity),
+                      assertz/1))
        )
     ;  throw(error(type_error(callable, Head), assertz/1))
     ).
 
-% MODIFIED.
-call_assertz(Head, Body, Name, Arity) :-
+
+call_assertz(Head, Body, Name, Arity, Module) :-
     '$clause_body_is_valid'(Body),
-    functor(VarHead, Name, Arity),
-    '$assertz'(Head, Body, Name, Arity).
+    functor(_, Name, Arity),
+    '$assertz'(Head, Body, Name, Arity, Module).
 
 assertz_clause(Head, Body) :-
     (  var(Head) ->
@@ -863,16 +856,17 @@ assertz_clause(Head, Body) :-
     ;  functor(Head, Name, Arity),
        atom(Name),
        Name \== '.' ->
-       ( Name == (:),
-         Arity =:= 2 ->
-	     arg(1, Head, Module),
-	     arg(2, Head, F),
-	     module_assertz_clause(F, Body, Module)
-       ; '$no_such_predicate'(user, Head) ->
-	     call_assertz(Head, Body, Name, Arity)
-       ; '$head_is_dynamic'(user, Head) ->
-	     call_assertz(Head, Body, Name, Arity)
-       ; throw(error(permission_error(modify, static_procedure, Name/Arity), assertz/1))
+       (  Name == (:),
+          Arity =:= 2 ->
+	      arg(1, Head, Module),
+	      arg(2, Head, F),
+	      module_assertz_clause(F, Body, Module)
+       ;  '$no_such_predicate'(user, Head) ->
+	      call_assertz(Head, Body, Name, Arity, user)
+       ;  '$head_is_dynamic'(user, Head) ->
+	      call_assertz(Head, Body, Name, Arity, user)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity),
+                      assertz/1))
        )
     ;  throw(error(type_error(callable, Head), assertz/1))
     ).
@@ -889,18 +883,18 @@ assertz(Clause) :-
 
 module_retract_clauses([Clause|Clauses0], Head, Body, Name, Arity, Module) :-
     functor(VarHead, Name, Arity),
-    findall((VarHead :- VarBody), builtins:clause(Module:VarHead, VarBody), Clauses1),
+    findall((VarHead :- VarBody), Module:clause(Module:VarHead, VarBody), Clauses1),
     first_match_index(Clauses1, (Head :- Body), 0, N),
     (  Clauses0 == [] -> !
     ;  true
     ),
-    '$module_retract_clause'(Name, Arity, N, Clauses1, Module).
+    '$retract_clause'(Name, Arity, N, Module).
 
 module_retract_clauses([_|Clauses0], Head, Body, Name, Arity, Module) :-
     module_retract_clauses(Clauses0, Head, Body, Name, Arity, Module).
 
 call_module_retract(Head, Body, Name, Arity, Module) :-
-    findall((Head :- Body), builtins:clause(Module:Head, Body), Clauses),
+    findall((Head :- Body), Module:clause(Module:Head, Body), Clauses),
     module_retract_clauses(Clauses, Head, Body, Name, Arity, Module).
 
 retract_module_clause(Head, Body, Module) :-
@@ -909,9 +903,9 @@ retract_module_clause(Head, Body, Module) :-
     ;  functor(Head, Name, Arity),
        atom(Name),
        Name \== '.' ->
-       ( '$module_head_is_dynamic'(Head, Module) ->
-	     call_module_retract(Head, Body, Name, Arity, Module)
-       ; throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
+       (  '$head_is_dynamic'(Module, Head) ->
+	      call_module_retract(Head, Body, Name, Arity, Module)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
        )
     ;  throw(error(type_error(callable, Head), retract/1))
     ).
@@ -932,7 +926,7 @@ retract_clauses([Clause | Clauses0], Head, Body, Name, Arity) :-
     (  Clauses0 == [] -> !
     ;  true
     ),
-    '$retract_clause'(Name, Arity, N).
+    '$retract_clause'(Name, Arity, N, user).
 
 retract_clauses([_ | Clauses0], Head, Body, Name, Arity) :-
     retract_clauses(Clauses0, Head, Body, Name, Arity).
