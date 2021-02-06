@@ -1,6 +1,7 @@
 use crate::indexmap::IndexMap;
 
 use crate::prolog_parser_rebis::ast::*;
+use crate::prolog_parser_rebis::temp_v;
 
 use crate::allocator::*;
 use crate::fixtures::*;
@@ -293,9 +294,7 @@ impl<'a> Allocator<'a> for DebrayAllocator {
 
                 (pr, true)
             }
-            r => {
-                (r, false)
-            }
+            r => (r, false),
         };
 
         self.mark_reserved_var(var, lvl, cell, term_loc, target, r, is_new_var);

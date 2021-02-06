@@ -1,5 +1,6 @@
 use crate::heap_iter::*;
 use crate::machine::*;
+use crate::prolog_parser_rebis::temp_v;
 
 use crate::indexmap::IndexSet;
 
@@ -20,8 +21,7 @@ pub(super) struct AttrVarInitializer {
 }
 
 impl AttrVarInitializer {
-    pub(super)
-    fn new(verify_attrs_loc: usize, project_attrs_loc: usize) -> Self {
+    pub(super) fn new(verify_attrs_loc: usize, project_attrs_loc: usize) -> Self {
         AttrVarInitializer {
             attribute_goals: vec![],
             attr_var_queue: vec![],
@@ -34,24 +34,21 @@ impl AttrVarInitializer {
     }
 
     #[inline]
-    pub(super)
-    fn reset(&mut self) {
-	    self.attribute_goals.clear();
+    pub(super) fn reset(&mut self) {
+        self.attribute_goals.clear();
         self.attr_var_queue.clear();
         self.bindings.clear();
     }
 
     #[inline]
-    pub(super)
-    fn backtrack(&mut self, queue_b: usize, bindings_b: usize) {
+    pub(super) fn backtrack(&mut self, queue_b: usize, bindings_b: usize) {
         self.attr_var_queue.truncate(queue_b);
         self.bindings.truncate(bindings_b);
     }
 }
 
 impl MachineState {
-    pub(super)
-    fn push_attr_var_binding(&mut self, h: usize, addr: Addr) {
+    pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: Addr) {
         if self.attr_var_init.bindings.is_empty() {
             self.attr_var_init.instigating_p = self.p.local();
 
@@ -79,7 +76,7 @@ impl MachineState {
         let iter = self
             .attr_var_init
             .bindings
-            .drain(0 ..)
+            .drain(0..)
             .map(|(_, addr)| HeapCellValue::Addr(addr));
 
         let value_list_addr = Addr::HeapCell(self.heap.to_list(iter));
@@ -97,8 +94,7 @@ impl MachineState {
         self[temp_v!(2)] = value_list_addr;
     }
 
-    pub(super)
-    fn gather_attr_vars_created_since(&self, b: usize) -> IntoIter<Addr> {
+    pub(super) fn gather_attr_vars_created_since(&self, b: usize) -> IntoIter<Addr> {
         let mut attr_vars: Vec<_> = self.attr_var_init.attr_var_queue[b..]
             .iter()
             .filter_map(|h| match self.store(self.deref(Addr::HeapCell(*h))) {
@@ -107,29 +103,25 @@ impl MachineState {
             })
             .collect();
 
-        attr_vars.sort_unstable_by(|a1, a2| {
-            self.compare_term_test(a1, a2).unwrap_or(Ordering::Less)
-        });
+        attr_vars
+            .sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2).unwrap_or(Ordering::Less));
 
         self.term_dedup(&mut attr_vars);
         attr_vars.into_iter()
     }
 
-    pub(super)
-    fn verify_attr_interrupt(&mut self, p: usize) {
+    pub(super) fn verify_attr_interrupt(&mut self, p: usize) {
         self.allocate(self.num_of_args + 2);
 
         let e = self.e;
         self.stack.index_and_frame_mut(e).prelude.interrupt_cp = self.attr_var_init.cp;
 
-        for i in 1 .. self.num_of_args + 1 {
+        for i in 1..self.num_of_args + 1 {
             self.stack.index_and_frame_mut(e)[i] = self[RegType::Temp(i)];
         }
 
-        self.stack.index_and_frame_mut(e)[self.num_of_args + 1] =
-            Addr::CutPoint(self.b0);
-        self.stack.index_and_frame_mut(e)[self.num_of_args + 2] =
-            Addr::Usize(self.num_of_args);
+        self.stack.index_and_frame_mut(e)[self.num_of_args + 1] = Addr::CutPoint(self.b0);
+        self.stack.index_and_frame_mut(e)[self.num_of_args + 2] = Addr::Usize(self.num_of_args);
 
         self.verify_attributes();
 
@@ -138,9 +130,8 @@ impl MachineState {
         self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
     }
 
-    pub(super)
-    fn attr_vars_of_term(&self, addr: Addr) -> Vec<Addr> {
-        let mut seen_set  = IndexSet::new();
+    pub(super) fn attr_vars_of_term(&self, addr: Addr) -> Vec<Addr> {
+        let mut seen_set = IndexSet::new();
         let mut seen_vars = vec![];
 
         let mut iter = self.acyclic_pre_order_iter(addr);

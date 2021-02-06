@@ -1,5 +1,6 @@
 use crate::prolog_parser_rebis::ast::*;
 use crate::prolog_parser_rebis::tabled_rc::*;
+use crate::prolog_parser_rebis::{clause_name, temp_v};
 
 use crate::clause_types::*;
 use crate::forms::*;
@@ -14,7 +15,9 @@ use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::rug::Integer;
 
-use crate::downcast::Any;
+use crate::downcast::{
+    downcast, downcast_methods, downcast_methods_core, downcast_methods_std, impl_downcast, Any,
+};
 
 use crate::indexmap::IndexMap;
 
@@ -32,33 +35,26 @@ pub struct Ball {
 }
 
 impl Ball {
-    pub(super)
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Ball {
             boundary: 0,
             stub: Heap::new(),
         }
     }
 
-    pub(super)
-    fn reset(&mut self) {
+    pub(super) fn reset(&mut self) {
         self.boundary = 0;
         self.stub.clear();
     }
 
-    pub(super)
-    fn copy_and_align(&self, h: usize) -> Heap {
+    pub(super) fn copy_and_align(&self, h: usize) -> Heap {
         let diff = self.boundary as i64 - h as i64;
         let mut stub = Heap::new();
 
         for heap_value in self.stub.iter_from(0) {
             stub.push(match heap_value {
-                &HeapCellValue::Addr(addr) => {
-                    HeapCellValue::Addr(addr - diff)
-                }
-                heap_value => {
-                    heap_value.context_free_clone()
-                }
+                &HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr - diff),
+                heap_value => heap_value.context_free_clone(),
             });
         }
 
@@ -123,11 +119,7 @@ pub(super) struct CopyBallTerm<'a> {
 }
 
 impl<'a> CopyBallTerm<'a> {
-    pub(super) fn new(
-        stack: &'a mut Stack,
-        heap: &'a mut Heap,
-        stub: &'a mut Heap,
-    ) -> Self {
+    pub(super) fn new(stack: &'a mut Stack, heap: &'a mut Heap, stub: &'a mut Heap) -> Self {
         let hb = heap.h();
 
         CopyBallTerm {
@@ -182,12 +174,8 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
                 let index = h - self.heap_boundary;
                 self.stub[index].as_addr(h)
             }
-            Addr::StackCell(fr, sc) => {
-                self.stack.index_and_frame(fr)[sc]
-            }
-            addr => {
-                addr
-            }
+            Addr::StackCell(fr, sc) => self.stack.index_and_frame(fr)[sc],
+            addr => addr,
         }
     }
 
@@ -226,9 +214,7 @@ impl Index<RegType> for MachineState {
 impl IndexMut<RegType> for MachineState {
     fn index_mut(&mut self, reg: RegType) -> &mut Self::Output {
         match reg {
-            RegType::Temp(temp) => {
-                &mut self.registers[temp]
-            }
+            RegType::Temp(temp) => &mut self.registers[temp],
             RegType::Perm(perm) => {
                 let e = self.e;
 
@@ -255,15 +241,12 @@ pub(super) enum HeapPtr {
 
 impl HeapPtr {
     #[inline]
-    pub(super)
-    fn read(&self, heap: &Heap) -> Addr {
+    pub(super) fn read(&self, heap: &Heap) -> Addr {
         match self {
-            &HeapPtr::HeapCell(h) => {
-                Addr::HeapCell(h)
-            }
+            &HeapPtr::HeapCell(h) => Addr::HeapCell(h),
             &HeapPtr::PStrChar(h, n) => {
                 if let &HeapCellValue::PartialString(ref pstr, has_tail) = &heap[h] {
-                    if let Some(c) = pstr.range_from(n ..).next() {
+                    if let Some(c) = pstr.range_from(n..).next() {
                         Addr::Char(c)
                     } else if has_tail {
                         Addr::HeapCell(h + 1)
@@ -274,9 +257,7 @@ impl HeapPtr {
                     unreachable!()
                 }
             }
-            &HeapPtr::PStrLocation(h, n) => {
-                Addr::PStrLocation(h, n)
-            }
+            &HeapPtr::PStrLocation(h, n) => Addr::PStrLocation(h, n),
         }
     }
 }
@@ -313,16 +294,11 @@ pub struct MachineState {
     pub(super) last_call: bool,
     pub(crate) heap_locs: HeapVarDict,
     pub(crate) flags: MachineFlags,
-    pub(crate) at_end_of_expansion: bool
+    pub(crate) at_end_of_expansion: bool,
 }
 
 impl MachineState {
-    pub(crate)
-    fn read_term(
-        &mut self,
-        mut stream: Stream,
-        indices: &mut IndexStore,
-    ) -> CallResult {
+    pub(crate) fn read_term(&mut self, mut stream: Stream, indices: &mut IndexStore) -> CallResult {
         self.check_stream_properties(
             &mut stream,
             StreamType::Text,
@@ -342,11 +318,7 @@ impl MachineState {
         let mut orig_stream = stream.clone();
 
         loop {
-            match self.read(
-                stream.clone(),
-                self.atom_tbl.clone(),
-                &indices.op_dir,
-            ) {
+            match self.read(stream.clone(), self.atom_tbl.clone(), &indices.op_dir) {
                 Ok(term_write_result) => {
                     let term = self[temp_v!(2)];
                     self.unify(Addr::HeapCell(term_write_result.heap_loc), term);
@@ -363,7 +335,8 @@ impl MachineState {
                         let h = self.heap.h();
                         let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
 
-                        self.heap.push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
+                        self.heap
+                            .push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
                         self.heap.push(HeapCellValue::Atom(var_atom, None));
                         self.heap.push(HeapCellValue::Addr(binding));
 
@@ -406,8 +379,7 @@ impl MachineState {
                     }
 
                     let vars_addr = self[temp_v!(4)];
-                    let vars_offset =
-                        Addr::HeapCell(self.heap.to_list(var_list.into_iter()));
+                    let vars_offset = Addr::HeapCell(self.heap.to_list(var_list.into_iter()));
 
                     self.unify(vars_offset, vars_addr);
 
@@ -427,7 +399,7 @@ impl MachineState {
                             self[temp_v!(2)],
                             &mut orig_stream,
                             clause_name!("read_term"),
-                            3
+                            3,
                         )?;
 
                         if orig_stream.options.eof_action == EOFAction::Reset {
@@ -448,12 +420,10 @@ impl MachineState {
         }
     }
 
-    pub(crate)
-    fn write_term<'a>(
+    pub(crate) fn write_term<'a>(
         &'a self,
         op_dir: &'a OpDir,
-    ) -> Result<Option<HCPrinter<'a, PrinterOutputter>>, MachineStub>
-    {
+    ) -> Result<Option<HCPrinter<'a, PrinterOutputter>>, MachineStub> {
         let ignore_ops = self.store(self.deref(self[temp_v!(3)]));
         let numbervars = self.store(self.deref(self[temp_v!(4)]));
         let quoted = self.store(self.deref(self[temp_v!(5)]));
@@ -462,7 +432,7 @@ impl MachineState {
         let mut printer = HCPrinter::new(&self, op_dir, PrinterOutputter::new());
 
         if let &Addr::Con(h) = &ignore_ops {
-	        if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+            if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
                 printer.ignore_ops = name.as_str() == "true";
             } else {
                 unreachable!()
@@ -470,7 +440,7 @@ impl MachineState {
         }
 
         if let &Addr::Con(h) = &numbervars {
-	        if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+            if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
                 printer.numbervars = name.as_str() == "true";
             } else {
                 unreachable!()
@@ -478,7 +448,7 @@ impl MachineState {
         }
 
         if let &Addr::Con(h) = &quoted {
-	        if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
+            if let HeapCellValue::Atom(ref name, _) = &self.heap[h] {
                 printer.quoted = name.as_str() == "true";
             } else {
                 unreachable!()
@@ -514,9 +484,7 @@ impl MachineState {
                 for addr in addrs {
                     match addr {
                         Addr::Str(s) => match &self.heap[s] {
-                            &HeapCellValue::NamedStr(2, ref name, _)
-                                if name.as_str() == "=" =>
-                            {
+                            &HeapCellValue::NamedStr(2, ref name, _) if name.as_str() == "=" => {
                                 let atom = self.heap[s + 1].as_addr(s + 1);
                                 let var = self.heap[s + 2].as_addr(s + 2);
 
@@ -540,11 +508,9 @@ impl MachineState {
 
                                 var_names.insert(var, atom);
                             }
-                            _ => {
-                            }
+                            _ => {}
                         },
-                        _ => {
-                        }
+                        _ => {}
                     }
                 }
 
@@ -558,8 +524,7 @@ impl MachineState {
         Ok(Some(printer))
     }
 
-    pub(super)
-    fn throw_undefined_error(&mut self, name: ClauseName, arity: usize) -> MachineStub {
+    pub(super) fn throw_undefined_error(&mut self, name: ClauseName, arity: usize) -> MachineStub {
         let stub = MachineError::functor_stub(name.clone(), arity);
         let h = self.heap.h();
         let key = ExistenceError::Procedure(name, arity);
@@ -568,13 +533,11 @@ impl MachineState {
     }
 
     #[inline]
-    pub(crate)
-    fn heap_pstr_iter<'a>(&'a self, focus: Addr) -> HeapPStrIter<'a> {
+    pub(crate) fn heap_pstr_iter<'a>(&'a self, focus: Addr) -> HeapPStrIter<'a> {
         HeapPStrIter::new(self, focus)
     }
 
-    pub(super)
-    fn try_char_list(&self, addrs: Vec<Addr>) -> Result<String, MachineError> {
+    pub(super) fn try_char_list(&self, addrs: Vec<Addr>) -> Result<String, MachineError> {
         let mut chars = String::new();
         let mut iter = addrs.iter();
 
@@ -594,55 +557,46 @@ impl MachineState {
                         }
                     }
                 }
-                _ => {
-                }
+                _ => {}
             };
 
             let h = self.heap.h();
 
-            return Err(
-                MachineError::type_error(h, ValidType::Character, addr)
-            );
+            return Err(MachineError::type_error(h, ValidType::Character, addr));
         }
 
         Ok(chars)
     }
 
-    pub(super)
-    fn read_predicate_key(&self, name: Addr, arity: Addr) -> (ClauseName, usize) {
+    pub(super) fn read_predicate_key(&self, name: Addr, arity: Addr) -> (ClauseName, usize) {
         let predicate_name = atom_from!(self, self.store(self.deref(name)));
         let arity = self.store(self.deref(arity));
 
-        let arity =
-            match Number::try_from((arity, &self.heap)) {
-                Ok(Number::Integer(n)) if &*n >= &0 && &*n <= &MAX_ARITY =>
-                    n.to_usize().unwrap(),
-                Ok(Number::Fixnum(n)) if n >= 0 && n <= MAX_ARITY as isize =>
-                    usize::try_from(n).unwrap(),
-                _ =>
-                    unreachable!()
-            };
+        let arity = match Number::try_from((arity, &self.heap)) {
+            Ok(Number::Integer(n)) if &*n >= &0 && &*n <= &MAX_ARITY => n.to_usize().unwrap(),
+            Ok(Number::Fixnum(n)) if n >= 0 && n <= MAX_ARITY as isize => {
+                usize::try_from(n).unwrap()
+            }
+            _ => unreachable!(),
+        };
 
         (predicate_name, arity)
     }
 
-    pub(super)
-    fn call_at_index(&mut self, arity: usize, p: LocalCodePtr) {
+    pub(super) fn call_at_index(&mut self, arity: usize, p: LocalCodePtr) {
         self.cp.assign_if_local(self.p.clone() + 1);
         self.num_of_args = arity;
         self.b0 = self.b;
         self.p = CodePtr::Local(p);
     }
 
-    pub(super)
-    fn execute_at_index(&mut self, arity: usize, p: LocalCodePtr) {
+    pub(super) fn execute_at_index(&mut self, arity: usize, p: LocalCodePtr) {
         self.num_of_args = arity;
         self.b0 = self.b;
         self.p = CodePtr::Local(p);
     }
 
-    pub(super)
-    fn module_lookup(
+    pub(super) fn module_lookup(
         &mut self,
         indices: &IndexStore,
         call_policy: &mut Box<dyn CallPolicy>,
@@ -687,10 +641,15 @@ pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 pub(crate) trait CallPolicy: Any + fmt::Debug {
     fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
         let b = machine_st.b;
-        let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
+        let n = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .univ_prelude
+            .num_cells;
 
-        for i in 1 .. n + 1 {
-            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1];
+        for i in 1..n + 1 {
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i - 1];
         }
 
         machine_st.num_of_args = n;
@@ -706,17 +665,24 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
-        machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
+        machine_st
+            .heap
+            .truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b =
-            machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
-        let attr_var_init_bindings_b =
-            machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
+        let attr_var_init_queue_b = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .attr_var_init_queue_b;
+        let attr_var_init_bindings_b = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .attr_var_init_bindings_b;
 
-        machine_st.attr_var_init.backtrack(
-            attr_var_init_queue_b,
-            attr_var_init_bindings_b,
-        );
+        machine_st
+            .attr_var_init
+            .backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
 
         machine_st.hb = machine_st.heap.h();
         machine_st.p += 1;
@@ -726,10 +692,15 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
 
     fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
         let b = machine_st.b;
-        let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
+        let n = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .univ_prelude
+            .num_cells;
 
-        for i in 1 .. n + 1 {
-            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1];
+        for i in 1..n + 1 {
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i - 1];
         }
 
         machine_st.num_of_args = n;
@@ -745,14 +716,24 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
-        machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
+        machine_st
+            .heap
+            .truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b =
-            machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
-        let attr_var_init_bindings_b =
-            machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
+        let attr_var_init_queue_b = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .attr_var_init_queue_b;
+        let attr_var_init_bindings_b = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .attr_var_init_bindings_b;
 
-        machine_st.attr_var_init.backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
+        machine_st
+            .attr_var_init
+            .backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
 
         machine_st.hb = machine_st.heap.h();
         machine_st.p = CodePtr::Local(dir_entry!(machine_st.p.local().abs_loc() + offset));
@@ -762,10 +743,15 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
 
     fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
         let b = machine_st.b;
-        let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
+        let n = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .univ_prelude
+            .num_cells;
 
-        for i in 1 .. n + 1 {
-            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1];
+        for i in 1..n + 1 {
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i - 1];
         }
 
         machine_st.num_of_args = n;
@@ -779,17 +765,24 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
-        machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
+        machine_st
+            .heap
+            .truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b =
-            machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
-        let attr_var_init_bindings_b =
-            machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
+        let attr_var_init_queue_b = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .attr_var_init_queue_b;
+        let attr_var_init_bindings_b = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .attr_var_init_bindings_b;
 
-        machine_st.attr_var_init.backtrack(
-            attr_var_init_queue_b,
-            attr_var_init_bindings_b,
-        );
+        machine_st
+            .attr_var_init
+            .backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
 
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
         machine_st.stack.truncate(b);
@@ -802,10 +795,15 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
 
     fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult {
         let b = machine_st.b;
-        let n = machine_st.stack.index_or_frame(b).prelude.univ_prelude.num_cells;
+        let n = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .univ_prelude
+            .num_cells;
 
-        for i in 1 .. n + 1 {
-            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i-1];
+        for i in 1..n + 1 {
+            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i - 1];
         }
 
         machine_st.num_of_args = n;
@@ -819,17 +817,24 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
-        machine_st.heap.truncate(machine_st.stack.index_or_frame(b).prelude.h);
+        machine_st
+            .heap
+            .truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b =
-            machine_st.stack.index_or_frame(b).prelude.attr_var_init_queue_b;
-        let attr_var_init_bindings_b =
-            machine_st.stack.index_or_frame(b).prelude.attr_var_init_bindings_b;
+        let attr_var_init_queue_b = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .attr_var_init_queue_b;
+        let attr_var_init_bindings_b = machine_st
+            .stack
+            .index_or_frame(b)
+            .prelude
+            .attr_var_init_bindings_b;
 
-        machine_st.attr_var_init.backtrack(
-            attr_var_init_queue_b,
-            attr_var_init_bindings_b,
-        );
+        machine_st
+            .attr_var_init
+            .backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
 
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
         machine_st.stack.truncate(b);
@@ -928,13 +933,13 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                     Addr::Con(h) if machine_st.heap.atom_at(h) => {
                         if let HeapCellValue::Atom(ref atom, _) = &machine_st.heap[h] {
                             match atom.as_str() {
-                                ">" | "<" | "=" => {
-                                }
+                                ">" | "<" | "=" => {}
                                 _ => {
                                     let stub =
                                         MachineError::functor_stub(clause_name!("compare"), 3);
 
-                                    let err = MachineError::domain_error(DomainErrorType::Order, a1);
+                                    let err =
+                                        MachineError::domain_error(DomainErrorType::Order, a1);
                                     return Err(machine_st.error_form(err, stub));
                                 }
                             }
@@ -948,8 +953,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                         let err = MachineError::type_error(h, ValidType::Atom, a1);
                         return Err(machine_st.error_form(err, stub));
                     }
-                    _ => {
-                    }
+                    _ => {}
                 }
 
                 let atom = match machine_st.compare_term_test(&a2, &a3) {
@@ -998,9 +1002,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                         let addr = machine_st[temp_v!(1)];
                         let eof = clause_name!("end_of_file".to_string(), machine_st.atom_tbl);
 
-                        let atom = machine_st.heap.to_unifiable(
-                            HeapCellValue::Atom(eof, None)
-                        );
+                        let atom = machine_st.heap.to_unifiable(HeapCellValue::Atom(eof, None));
 
                         machine_st.unify(addr, atom);
                     }
@@ -1056,7 +1058,9 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 let mut list = machine_st.try_from_list(temp_v!(1), stub)?;
 
                 list.sort_unstable_by(|a1, a2| {
-                    machine_st.compare_term_test(a1, a2).unwrap_or(Ordering::Less)
+                    machine_st
+                        .compare_term_test(a1, a2)
+                        .unwrap_or(Ordering::Less)
                 });
 
                 machine_st.term_dedup(&mut list);
@@ -1081,7 +1085,9 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 }
 
                 key_pairs.sort_by(|a1, a2| {
-                    machine_st.compare_term_test(&a1.0, &a2.0).unwrap_or(Ordering::Less)
+                    machine_st
+                        .compare_term_test(&a1.0, &a2.0)
+                        .unwrap_or(Ordering::Less)
                 });
 
                 let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
@@ -1155,11 +1161,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
 
                 return Err(machine_st.error_form(
-                    MachineError::type_error(
-                        machine_st.heap.h(),
-                        ValidType::Callable,
-                        name
-                    ),
+                    MachineError::type_error(machine_st.heap.h(), ValidType::Callable, name),
                     stub,
                 ));
             }
@@ -1200,7 +1202,8 @@ impl CallPolicy for CWILCallPolicy {
         arity: usize,
         idx: &CodeIndex,
     ) -> CallResult {
-        self.prev_policy.context_call(machine_st, name, arity, idx)?;//, indices)?;
+        self.prev_policy
+            .context_call(machine_st, name, arity, idx)?; //, indices)?;
         self.increment(machine_st)
     }
 
@@ -1239,7 +1242,7 @@ impl CallPolicy for CWILCallPolicy {
             code_dir,
             op_dir,
             current_input_stream,
-            current_output_stream
+            current_output_stream,
         )?;
 
         self.increment(machine_st)
@@ -1283,8 +1286,7 @@ pub(crate) struct CWILCallPolicy {
 }
 
 impl CWILCallPolicy {
-    pub(crate)
-    fn new_in_place(policy: &mut Box<dyn CallPolicy>) {
+    pub(crate) fn new_in_place(policy: &mut Box<dyn CallPolicy>) {
         let mut prev_policy: Box<dyn CallPolicy> = Box::new(DefaultCallPolicy {});
         mem::swap(&mut prev_policy, policy);
 
@@ -1319,8 +1321,7 @@ impl CWILCallPolicy {
         Ok(())
     }
 
-    pub(crate)
-    fn add_limit(&mut self, mut limit: Integer, b: usize) -> &Integer {
+    pub(crate) fn add_limit(&mut self, mut limit: Integer, b: usize) -> &Integer {
         limit += &self.count;
 
         match self.limits.last().cloned() {
@@ -1331,8 +1332,7 @@ impl CWILCallPolicy {
         &self.count
     }
 
-    pub(crate)
-    fn remove_limit(&mut self, b: usize) -> &Integer {
+    pub(crate) fn remove_limit(&mut self, b: usize) -> &Integer {
         if let Some((_, bp)) = self.limits.last().cloned() {
             if bp == b {
                 self.limits.pop();
@@ -1342,13 +1342,11 @@ impl CWILCallPolicy {
         &self.count
     }
 
-    pub(crate)
-    fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.limits.is_empty()
     }
 
-    pub(crate)
-    fn into_inner(&mut self) -> Box<dyn CallPolicy> {
+    pub(crate) fn into_inner(&mut self) -> Box<dyn CallPolicy> {
         let mut new_inner: Box<dyn CallPolicy> = Box::new(DefaultCallPolicy {});
         mem::swap(&mut self.prev_policy, &mut new_inner);
         new_inner
