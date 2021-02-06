@@ -250,7 +250,7 @@ impl Machine {
 
         self.machine_st[temp_v!(1)] = list_addr;
 
-        self.run_module_predicate(clause_name!("$toplevel"), (clause_name!("repl"), 0));
+        self.run_module_predicate(clause_name!("$toplevel"), (clause_name!("$repl"), 1));
     }
 
     fn configure_modules(&mut self) {
@@ -527,23 +527,6 @@ impl Machine {
                         self.machine_st.backtrack();
                     }
                 }
-                /*
-                CodePtr::DynamicTransaction(_trans_type, _p) => {
-                    // self.code_repo.cached_query is about to be overwritten by the term expander,
-                    // so hold onto it locally and restore it after the compiler has finished.
-                    self.machine_st.fail = false;
-                    /*
-                    let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
-
-                    // self.dynamic_transaction(trans_type, p);
-                    self.code_repo.cached_query = cached_query;
-
-                    if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                        break;
-                    }
-                    */
-                }
-                */
                 _ => {
                     break;
                 }
@@ -624,22 +607,12 @@ impl MachineState {
     }
 
     fn backtrack(&mut self) {
-        // if self.b > 0 {
         let b = self.b;
 
         self.b0 = self.stack.index_or_frame(b).prelude.b0;
         self.p = CodePtr::Local(self.stack.index_or_frame(b).prelude.bp);
 
-        /*
-        if let CodePtr::Local(LocalCodePtr::TopLevel(_, p)) = self.p {
-            self.fail = p == 0;
-        } else {
-        */
         self.fail = false;
-        // }
-        /*} else {
-            self.p = CodePtr::Local(LocalCodePtr::TopLevel(0, 0));
-        }*/
     }
 
     fn check_machine_index(&mut self, code_repo: &CodeRepo) -> bool {
@@ -651,15 +624,6 @@ impl MachineState {
             CodePtr::Local(LocalCodePtr::Halt) | CodePtr::REPL(..) => {
                 return false;
             }
-            /*
-            CodePtr::DynamicTransaction(..) => {
-                // prevent use of dynamic transactions from
-                // succeeding in expansions. self.fail will be toggled
-                // back to false later.
-                self.fail = true;
-                return false;
-            }
-            */
             _ => {
             }
         }
