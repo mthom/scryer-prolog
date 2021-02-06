@@ -1,6 +1,6 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::tabled_rc::*;
-use crate::prolog_parser_rebis::{clause_name, temp_v};
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::tabled_rc::*;
+use prolog_parser_rebis::{clause_name, temp_v};
 
 use crate::clause_types::*;
 use crate::forms::*;
@@ -15,11 +15,11 @@ use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::rug::Integer;
 
-use crate::downcast::{
+use downcast::{
     downcast, downcast_methods, downcast_methods_core, downcast_methods_std, impl_downcast, Any,
 };
 
-use crate::indexmap::IndexMap;
+use indexmap::IndexMap;
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;

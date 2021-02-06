@@ -1,11 +1,11 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::{clause_name, temp_v};
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::{clause_name, temp_v};
 
 use crate::forms::Number;
 use crate::machine::machine_indices::*;
 use crate::rug::rand::RandState;
 
-use crate::ref_thread_local::{ref_thread_local, RefThreadLocal};
+use ref_thread_local::{ref_thread_local, RefThreadLocal};
 
 use std::collections::BTreeMap;
 

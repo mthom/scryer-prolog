@@ -1,5 +1,5 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::clause_name;
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::clause_name;
 
 use crate::clause_types::*;
 use crate::forms::*;
@@ -9,7 +9,7 @@ use crate::machine::machine_errors::MachineStub;
 use crate::machine::machine_indices::*;
 use crate::rug::Integer;
 
-use crate::indexmap::IndexMap;
+use indexmap::IndexMap;
 
 use slice_deque::SliceDeque;
 

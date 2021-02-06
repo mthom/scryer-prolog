@@ -1,8 +1,8 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::tabled_rc::*;
-use crate::prolog_parser_rebis::{clause_name, temp_v};
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::tabled_rc::*;
+use prolog_parser_rebis::{clause_name, temp_v};
 
-use crate::lazy_static::lazy_static;
+use lazy_static::lazy_static;
 
 use crate::clause_types::*;
 use crate::forms::*;
@@ -45,7 +45,7 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::streams::*;
 
-use crate::indexmap::IndexMap;
+use indexmap::IndexMap;
 
 //use std::convert::TryFrom;
 use prolog_parser_rebis::ast::ClauseName;
@@ -304,7 +304,7 @@ impl Machine {
     }
 
     pub fn new(user_input: Stream, user_output: Stream) -> Self {
-        use crate::ref_thread_local::RefThreadLocal;
+        use ref_thread_local::RefThreadLocal;
 
         let mut wam = Machine {
             machine_st: MachineState::new(),

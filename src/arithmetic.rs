@@ -1,5 +1,5 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::{atom, clause_name};
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::{atom, clause_name};
 
 use crate::clause_types::*;
 use crate::fixtures::*;
@@ -11,9 +11,9 @@ use crate::machine::heap::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 
-use crate::ordered_float::*;
 use crate::rug::ops::PowAssign;
 use crate::rug::{Assign, Integer, Rational};
+use ordered_float::*;
 
 use std::cell::Cell;
 use std::cmp::{max, min, Ordering};

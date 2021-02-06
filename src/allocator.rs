@@ -1,5 +1,5 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::temp_v;
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::temp_v;
 
 use crate::fixtures::*;
 use crate::forms::*;

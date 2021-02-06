@@ -1,5 +1,5 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::clause_name;
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::clause_name;
 
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
@@ -20,7 +20,7 @@ use std::net::{Shutdown, TcpStream};
 use std::ops::DerefMut;
 use std::rc::Rc;
 
-use crate::native_tls::TlsStream;
+use native_tls::TlsStream;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StreamType {
@@ -629,7 +629,7 @@ impl Stream {
 
     #[inline]
     pub(crate) fn peek_char(&mut self) -> std::io::Result<char> {
-        use crate::unicode_reader::CodePoints;
+        use unicode_reader::CodePoints;
 
         match self.stream_inst.0.borrow_mut().1 {
             StreamInstance::InputFile(_, ref mut file) => {

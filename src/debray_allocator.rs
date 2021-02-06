@@ -1,7 +1,7 @@
-use crate::indexmap::IndexMap;
+use indexmap::IndexMap;
 
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::temp_v;
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::temp_v;
 
 use crate::allocator::*;
 use crate::fixtures::*;

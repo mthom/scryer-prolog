@@ -1,5 +1,5 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::clause_name;
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::clause_name;
 
 use crate::clause_types::*;
 use crate::fixtures::*;
@@ -14,10 +14,10 @@ use crate::machine::streams::Stream;
 use crate::machine::term_stream::LoadStatePayload;
 use crate::machine::Ball;
 use crate::machine::CompilationTarget;
-use crate::ordered_float::OrderedFloat;
 use crate::rug::{Integer, Rational};
+use ordered_float::OrderedFloat;
 
-use crate::indexmap::IndexMap;
+use indexmap::IndexMap;
 
 use std::cell::Cell;
 use std::cmp::Ordering;

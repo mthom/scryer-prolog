@@ -1,14 +1,14 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::parser::OpDesc;
-use crate::prolog_parser_rebis::{clause_name, is_infix, is_postfix};
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::parser::OpDesc;
+use prolog_parser_rebis::{clause_name, is_infix, is_postfix};
 
 use crate::clause_types::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
-use crate::ordered_float::OrderedFloat;
 use crate::rug::{Integer, Rational};
+use ordered_float::OrderedFloat;
 
-use crate::indexmap::{IndexMap, IndexSet};
+use indexmap::{IndexMap, IndexSet};
 
 use slice_deque::*;
 

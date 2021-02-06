@@ -1,8 +1,8 @@
 use crate::heap_iter::*;
 use crate::machine::*;
-use crate::prolog_parser_rebis::temp_v;
+use prolog_parser_rebis::temp_v;
 
-use crate::indexmap::IndexSet;
+use indexmap::IndexSet;
 
 use std::cmp::Ordering;
 use std::vec::IntoIter;

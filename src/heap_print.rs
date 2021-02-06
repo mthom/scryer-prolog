@@ -1,5 +1,5 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::{
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::{
     alpha_char, alpha_numeric_char, backslash_char, capital_letter_char, char_class, clause_name,
     cut_char, decimal_digit_char, graphic_char, graphic_token_char, is_fx, is_infix, is_postfix,
     is_prefix, is_xf, is_xfx, is_xfy, is_yfx, semicolon_char, sign_char, single_quote_char,
@@ -13,10 +13,10 @@ use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::streams::*;
-use crate::ordered_float::OrderedFloat;
 use crate::rug::{Integer, Rational};
+use ordered_float::OrderedFloat;
 
-use crate::indexmap::{IndexMap, IndexSet};
+use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
 use std::convert::TryFrom;

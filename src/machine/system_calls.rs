@@ -1,14 +1,14 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::parser::*;
-use crate::prolog_parser_rebis::tabled_rc::*;
-use crate::prolog_parser_rebis::{
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::parser::*;
+use prolog_parser_rebis::tabled_rc::*;
+use prolog_parser_rebis::{
     alpha_char, alpha_numeric_char, backslash_char, binary_digit_char, char_class, clause_name,
     decimal_digit_char, exponent_char, graphic_char, graphic_token_char, hexadecimal_digit_char,
     layout_char, meta_char, new_line_char, octal_digit_char, prolog_char, sign_char, solo_char,
     symbolic_control_char, symbolic_hexadecimal_char, temp_v,
 };
 
-use crate::lazy_static::lazy_static;
+use lazy_static::lazy_static;
 
 use crate::clause_types::*;
 use crate::forms::*;
@@ -24,13 +24,13 @@ use crate::machine::machine_state::*;
 use crate::machine::preprocessor::to_op_decl;
 use crate::machine::streams::*;
 
-use crate::ordered_float::OrderedFloat;
 use crate::read::readline;
 use crate::rug::Integer;
+use ordered_float::OrderedFloat;
 
-use crate::indexmap::IndexSet;
+use indexmap::IndexSet;
 
-use crate::ref_thread_local::RefThreadLocal;
+use ref_thread_local::RefThreadLocal;
 
 use std::cmp;
 use std::collections::BTreeSet;
@@ -44,29 +44,29 @@ use std::num::NonZeroU32;
 use std::ops::Sub;
 use std::rc::Rc;
 
-use crate::chrono::{offset::Local, DateTime};
-use crate::cpu_time::ProcessTime;
+use chrono::{offset::Local, DateTime};
+use cpu_time::ProcessTime;
 use std::time::{Duration, SystemTime};
 
-use crate::crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
-use crate::crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
-use crate::blake2::{Blake2b, Blake2s};
-use crate::ring::rand::{SecureRandom, SystemRandom};
-use crate::ring::{
+use blake2::{Blake2b, Blake2s};
+use ring::rand::{SecureRandom, SystemRandom};
+use ring::{
     aead, digest, hkdf, pbkdf2,
     signature::{self, KeyPair},
 };
-use crate::ripemd160::{Digest, Ripemd160};
-use crate::sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
+use ripemd160::{Digest, Ripemd160};
+use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
-use crate::openssl::bn::{BigNum, BigNumContext};
-use crate::openssl::ec::{EcGroup, EcPoint};
-use crate::openssl::nid::Nid;
+use openssl::bn::{BigNum, BigNumContext};
+use openssl::ec::{EcGroup, EcPoint};
+use openssl::nid::Nid;
 
 use sodiumoxide::crypto::scalarmult::curve25519::*;
 
-use crate::native_tls::TlsConnector;
+use native_tls::TlsConnector;
 
 extern crate select;
 
@@ -4883,7 +4883,7 @@ impl MachineState {
                 }
             }
             &SystemClauseType::ScryerPrologVersion => {
-                use crate::git_version::git_version;
+                use git_version::git_version;
                 let version = self[temp_v!(1)];
                 let buffer = git_version!(cargo_prefix = "cargo:", fallback = "unknown");
                 let chars = buffer.chars().map(|c| Addr::Char(c));

@@ -1,6 +1,6 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::tabled_rc::*;
-use crate::prolog_parser_rebis::{atom, clause_name, rc_atom};
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::tabled_rc::*;
+use prolog_parser_rebis::{atom, clause_name, rc_atom};
 
 use crate::forms::*;
 use crate::iterators::*;
@@ -8,7 +8,7 @@ use crate::machine::load_state::*;
 use crate::machine::machine_errors::*;
 use crate::machine::*;
 
-use crate::indexmap::IndexSet;
+use indexmap::IndexSet;
 
 use std::cell::Cell;
 use std::collections::VecDeque;

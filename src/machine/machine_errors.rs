@@ -1,5 +1,5 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::{clause_name, temp_v};
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::{clause_name, temp_v};
 
 use crate::forms::{ModuleSource, Number}; //, PredicateKey};
 use crate::machine::heap::*;

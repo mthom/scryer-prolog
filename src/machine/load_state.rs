@@ -1,11 +1,11 @@
 use crate::machine::machine_indices::*;
 use crate::machine::*;
-use crate::prolog_parser_rebis::clause_name;
+use prolog_parser_rebis::clause_name;
 
 use crate::machine::term_stream::*;
 use indexmap::IndexSet;
 
-use crate::ref_thread_local::RefThreadLocal;
+use ref_thread_local::RefThreadLocal;
 
 type ModuleOpExports = Vec<(OpDecl, Option<(usize, Specifier)>)>;
 

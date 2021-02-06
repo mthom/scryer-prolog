@@ -1,12 +1,12 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::clause_name;
-use crate::prolog_parser_rebis::tabled_rc::*;
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::clause_name;
+use prolog_parser_rebis::tabled_rc::*;
 
 use crate::forms::*;
 use crate::instructions::*;
 
-use crate::indexmap::IndexMap;
 use crate::rug::Integer;
+use indexmap::IndexMap;
 
 use slice_deque::{sdeq, SliceDeque};
 

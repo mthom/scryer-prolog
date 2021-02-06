@@ -1,7 +1,7 @@
 /// Code generation to WAM-like instructions.
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::tabled_rc::TabledData;
-use crate::prolog_parser_rebis::{perm_v, temp_v};
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::tabled_rc::TabledData;
+use prolog_parser_rebis::{perm_v, temp_v};
 
 use crate::allocator::*;
 use crate::arithmetic::*;
@@ -15,7 +15,7 @@ use crate::targets::*;
 
 use crate::machine::machine_errors::*;
 
-use crate::indexmap::{IndexMap, IndexSet};
+use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
 use std::collections::VecDeque;

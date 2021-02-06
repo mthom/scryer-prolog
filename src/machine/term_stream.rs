@@ -1,16 +1,16 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::parser::*;
+use prolog_parser_rebis::ast::*;
+use prolog_parser_rebis::parser::*;
 
-use crate::machine::*;
 use crate::machine::machine_errors::CompilationError;
 use crate::machine::preprocessor::*;
+use crate::machine::*;
 
 use indexmap::IndexSet;
 
 use std::collections::VecDeque;
 use std::fmt;
 
-pub(crate) trait TermStream : Sized {
+pub(crate) trait TermStream: Sized {
     type Evacuable;
 
     fn next(&mut self, op_dir: &CompositeOpDir) -> Result<Term, CompilationError>;
@@ -27,15 +27,17 @@ pub(super) struct BootstrappingTermStream<'a> {
 
 impl<'a> BootstrappingTermStream<'a> {
     #[inline]
-    pub(super)
-    fn from_prolog_stream(
+    pub(super) fn from_prolog_stream(
         stream: &'a mut PrologStream,
         atom_tbl: TabledData<Atom>,
         flags: MachineFlags,
         listing_src: ListingSource,
     ) -> Self {
         let parser = Parser::new(stream, atom_tbl, flags);
-        Self { parser, listing_src }
+        Self {
+            parser,
+            listing_src,
+        }
     }
 }
 
@@ -45,13 +47,14 @@ impl<'a> TermStream for BootstrappingTermStream<'a> {
     #[inline]
     fn next(&mut self, op_dir: &CompositeOpDir) -> Result<Term, CompilationError> {
         self.parser.reset();
-        self.parser.read_term(op_dir)
+        self.parser
+            .read_term(op_dir)
             .map_err(CompilationError::from)
     }
 
     #[inline]
     fn eof(&mut self) -> Result<bool, CompilationError> {
-	    self.parser.devour_whitespace()?; // eliminate dangling comments before checking for EOF.
+        self.parser.devour_whitespace()?; // eliminate dangling comments before checking for EOF.
         Ok(self.parser.eof()?)
     }
 
@@ -65,9 +68,10 @@ impl<'a> TermStream for BootstrappingTermStream<'a> {
             loader.compile_and_submit()?;
         }
 
-        loader.load_state.retraction_info.reset(
-            loader.load_state.wam.code_repo.code.len(),
-        );
+        loader
+            .load_state
+            .retraction_info
+            .reset(loader.load_state.wam.code_repo.code.len());
 
         loader.load_state.remove_module_op_exports();
 
@@ -82,8 +86,7 @@ pub struct LiveTermStream {
 
 impl LiveTermStream {
     #[inline]
-    pub(super)
-    fn new(listing_src: ListingSource) -> Self {
+    pub(super) fn new(listing_src: ListingSource) -> Self {
         Self {
             term_queue: VecDeque::new(),
             listing_src,
@@ -109,8 +112,7 @@ impl fmt::Debug for LoadStatePayload {
 }
 
 impl LoadStatePayload {
-    pub(super)
-    fn new(wam: &Machine) -> Self {
+    pub(super) fn new(wam: &Machine) -> Self {
         Self {
             term_stream: LiveTermStream::new(ListingSource::User),
             compilation_target: CompilationTarget::default(),
