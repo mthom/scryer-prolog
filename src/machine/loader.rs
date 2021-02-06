@@ -1789,22 +1789,6 @@ impl Machine {
 
         self.machine_st.fail = true;
     }
-
-    pub(crate)
-    fn compile_pending_predicates(&mut self) {
-        let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(1));
-
-        let compile_pending_predicates = || {
-            if !loader.predicates.is_empty() {
-                loader.compile_and_submit()?;
-            }
-
-            LiveTermStream::evacuate(loader)
-        };
-
-        let result = compile_pending_predicates();
-        self.restore_load_state_payload(result, evacuable_h);
-    }
 }
 
 impl<'a> Loader<'a, LiveTermStream> {

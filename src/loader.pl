@@ -74,6 +74,16 @@ unload_evacuable(Evacuable) :-
     '$pop_load_state_payload'(Evacuable),
     '$pop_load_context'.
 
+run_initialization_goals :-
+    prolog_load_context(module, Module),
+    (  predicate_property(Module:'$initialization_goals'(_), dynamic) ->
+       findall(Goal, '$call'(builtins:retract(Module:'$initialization_goals'(Goal))), Goals),
+       (  maplist(Module:call, Goals) ->
+          true
+       ;  true %% initialization goals can fail without thwarting the load.
+       )
+    ;  true
+    ).
 
 file_load(Stream, Path) :-
     file_load(Stream, Path, _).
@@ -83,6 +93,7 @@ file_load(Stream, Path, Evacuable) :-
     catch(loader:load_loop(Stream, Evacuable),
           E,
           (loader:unload_evacuable(Evacuable), throw(E))),
+    run_initialization_goals,
     '$pop_load_context'.
 
 
@@ -91,6 +102,7 @@ load(Stream) :-
     catch(loader:load_loop(Stream, Evacuable),
           E,
           (loader:unload_evacuable(Evacuable), throw(E))),
+    run_initialization_goals,
     '$pop_load_context'.
 
 load_loop(Stream, Evacuable) :-
@@ -237,9 +249,8 @@ compile_declaration(dynamic(Name/Arity), Evacuable) :-
     '$add_dynamic_predicate'(Name, Arity, Evacuable).
 compile_declaration(initialization(Goal), Evacuable) :-
     prolog_load_context(module, Module),
-    '$compile_pending_predicates'(Evacuable),
-    expand_goal(call(Goal), Module, call(ExpandedGoal)),
-    call(ExpandedGoal).
+    assertz(Module:'$initialization_goals'(Goal)).
+
 
 
 compile_clause(Clause, Evacuable, VNs) :-

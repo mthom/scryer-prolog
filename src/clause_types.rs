@@ -387,8 +387,6 @@ impl SystemClauseType {
                 clause_name!("$cpp_multifile_property"),
             &SystemClauseType::REPL(REPLCodePtr::DiscontiguousProperty) =>
                 clause_name!("$cpp_discontiguous_property"),
-            &SystemClauseType::REPL(REPLCodePtr::CompilePendingPredicates) =>
-                clause_name!("$compile_pending_predicates"),
             &SystemClauseType::REPL(REPLCodePtr::AbolishClause) =>
                 clause_name!("$abolish_clause"),
             &SystemClauseType::Close => clause_name!("$close"),
@@ -756,7 +754,6 @@ impl SystemClauseType {
             ("$cpp_dynamic_property", 3) => Some(SystemClauseType::REPL(REPLCodePtr::DynamicProperty)),
             ("$cpp_multifile_property", 3) => Some(SystemClauseType::REPL(REPLCodePtr::MultifileProperty)),
             ("$cpp_discontiguous_property", 3) => Some(SystemClauseType::REPL(REPLCodePtr::DiscontiguousProperty)),
-            ("$compile_pending_predicates", 1) => Some(SystemClauseType::REPL(REPLCodePtr::CompilePendingPredicates)),
             _ => None,
         }
     }

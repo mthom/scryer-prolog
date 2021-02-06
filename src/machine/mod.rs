@@ -491,9 +491,6 @@ impl Machine {
             REPLCodePtr::DynamicProperty => {
                 self.dynamic_property();
             }
-            REPLCodePtr::CompilePendingPredicates => {
-                self.compile_pending_predicates();
-            }
             REPLCodePtr::Assertz => {
                 self.compile_assert(AppendOrPrepend::Append);
             }

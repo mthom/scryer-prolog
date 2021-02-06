@@ -72,8 +72,6 @@ impl fmt::Display for REPLCodePtr {
                 write!(f, "REPLCodePtr::MultifileProperty"),
             REPLCodePtr::DiscontiguousProperty =>
                 write!(f, "REPLCodePtr::DiscontiguousProperty"),
-            REPLCodePtr::CompilePendingPredicates =>
-                write!(f, "REPLCodePtr::CompilePendingPredicates"),
         }
     }
 }
