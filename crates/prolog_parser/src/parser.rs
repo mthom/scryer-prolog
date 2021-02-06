@@ -195,7 +195,7 @@ pub struct Parser<'a, R: Read> {
     terms: Vec<Term>,
 }
 
-fn read_tokens<'a, R: Read>(lexer: &mut Lexer<'a, R>) -> Result<Vec<Token>, ParserError> {
+fn read_tokens<R: Read>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserError> {
     let mut tokens = vec![];
 
     loop {
@@ -872,11 +872,8 @@ impl<'a, R: Read> Parser<'a, R> {
 
     fn shift_token(&mut self, token: Token, op_dir: &CompositeOpDir) -> Result<(), ParserError> {
         fn negate_rc<T: NegAssign>(mut t: Rc<T>) -> Rc<T> {
-            match Rc::get_mut(&mut t) {
-                Some(t) => {
-                    t.neg_assign();
-                }
-                None => {}
+            if let Some(t) = Rc::get_mut(&mut t) {
+                t.neg_assign();
             };
 
             t

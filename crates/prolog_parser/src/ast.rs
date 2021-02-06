@@ -698,7 +698,7 @@ impl ClauseName {
 
 impl AsRef<str> for ClauseName {
     #[inline]
-    fn as_ref(self: &Self) -> &str {
+    fn as_ref(&self) -> &str {
         self.as_str()
     }
 }
