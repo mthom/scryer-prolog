@@ -1367,7 +1367,6 @@ fn cut_body(machine_st: &mut MachineState, addr: &Addr) -> bool {
         &Addr::CutPoint(b0) | &Addr::Usize(b0) => {
             if b > b0 {
                 machine_st.b = b0;
-                machine_st.tidy_trail();
             }
         }
         _ => {
@@ -1455,7 +1454,6 @@ impl CutPolicy for SCCCutPolicy {
             Addr::Usize(b0) | Addr::CutPoint(b0) => {
                 if b > b0 {
                     machine_st.b = b0;
-                    machine_st.tidy_trail();
                 }
             }
             _ => {

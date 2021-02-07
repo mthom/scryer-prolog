@@ -588,7 +588,8 @@ impl MachineState {
         }
     }
 
-    pub(super) fn trail(&mut self, r: TrailRef) {
+    pub(super)
+    fn trail(&mut self, r: TrailRef) {
         match r {
             TrailRef::Ref(Ref::HeapCell(h)) => {
                 if h < self.hb {
@@ -666,41 +667,6 @@ impl MachineState {
                 }
             }
         }
-    }
-
-    pub(super) fn tidy_trail(&mut self) {
-        if self.b == 0 {
-            return;
-        }
-
-        let b = self.b;
-        let hb = self.hb;
-        let mut offset = 0;
-
-        for i in self.stack.index_or_frame(b).prelude.tr..self.tr {
-            match self.trail[i] {
-                TrailRef::Ref(Ref::AttrVar(tr_i))
-                | TrailRef::Ref(Ref::HeapCell(tr_i))
-                | TrailRef::AttrVarHeapLink(tr_i)
-                | TrailRef::AttrVarListLink(tr_i, _) => {
-                    if tr_i >= hb {
-                        offset += 1;
-                    } else {
-                        self.trail[i - offset] = self.trail[i];
-                    }
-                }
-                TrailRef::Ref(Ref::StackCell(b, _)) => {
-                    if b < self.b {
-                        self.trail[i - offset] = self.trail[i];
-                    } else {
-                        offset += 1;
-                    }
-                }
-            }
-        }
-
-        self.tr -= offset;
-        self.trail.truncate(self.tr);
     }
 
     pub(super) fn match_partial_string(&mut self, addr: Addr, string: &String, has_tail: bool) {
@@ -3120,7 +3086,6 @@ impl MachineState {
 
                 if b > b0 {
                     self.b = b0;
-                    self.tidy_trail();
 
                     if b > self.e {
                         self.stack.truncate(b);
