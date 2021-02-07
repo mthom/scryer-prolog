@@ -308,10 +308,12 @@ use_module(Module, Exports) :-
 
 load_context_path(Module, Path) :-
     (  prolog_load_context(directory, CurrentDir) ->
-       atom_concat(CurrentDir, Path, Module)
+       % Rust's Path module never ends a directory path with '/', so
+       % add one here.
+       atom_concat(CurrentDir, '/', CurrentDirSlashed),
+       atom_concat(CurrentDirSlashed, Module, Path)
     ;  Module = Path
     ).
-
 
 path_atom(Dir/File, Path) :-
     must_be(atom, File),
@@ -320,6 +322,18 @@ path_atom(Dir/File, Path) :-
     foldl(builtins:atom_concat, ['/', DirPath], File, Path).
 path_atom(Path, Path) :-
     must_be(atom, Path).
+
+% Try to open the file with the Path name as given; if that fails,
+% append '.pl' and try again.
+open_file(Path, Stream) :-
+    (  atom_concat(_, '.pl', Path) ->
+       open(Path, read, Stream)
+    ;  catch(open(Path, read, Stream),
+             error(existence_error(source_sink, Path), _),
+             ( atom_concat(Path, '.pl', ExtendedPath),
+               open(ExtendedPath, read, Stream) )
+            )
+    ).
 
 use_module(Module, Exports, Evacuable) :-
     (  var(Module) ->
@@ -338,7 +352,7 @@ use_module(Module, Exports, Evacuable) :-
        )
     ;  (  path_atom(Module, ModulePath) ->
           load_context_path(ModulePath, Path),
-          open(Path, read, Stream),
+          open_file(Path, Stream),
           file_load(Stream, Path, Subevacuable),
           '$use_module'(Evacuable, Subevacuable, Exports)
        ;  type_error(atom, Library, load/1)
@@ -375,7 +389,9 @@ load_context(Module) :-
 predicate_property(Callable, Property) :-
     (  var(Callable) ->
        instantiation_error(load/1)
-    ;  Callable =.. [(:), Module, Callable0],
+    ;  functor(Callable, (:), 2),  % Callable =.. [(:), Module, Callable0],
+       arg(1, Callable, Module),
+       arg(2, Callable, Callable0),
        atom(Module) ->
        functor(Callable0, Name, Arity),
        (  atom(Name),
