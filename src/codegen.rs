@@ -1,6 +1,7 @@
 /// Code generation to WAM-like instructions.
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::tabled_rc::TabledData;
+use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::TabledData;
+use prolog_parser::{perm_v, temp_v};
 
 use crate::allocator::*;
 use crate::arithmetic::*;
@@ -14,7 +15,7 @@ use crate::targets::*;
 
 use crate::machine::machine_errors::*;
 
-use crate::indexmap::{IndexMap, IndexSet};
+use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -66,18 +67,14 @@ impl<'a> ConjunctInfo<'a> {
         self.has_deep_cut as usize
     }
 
-    fn mark_unsafe_vars(
-        &self,
-        mut unsafe_var_marker: UnsafeVarMarker,
-        code: &mut Code,
-    ) {
+    fn mark_unsafe_vars(&self, mut unsafe_var_marker: UnsafeVarMarker, code: &mut Code) {
         if code.is_empty() {
             return;
         }
 
         let mut code_index = 0;
 
-        for phase in 0 .. {
+        for phase in 0.. {
             while let Line::Query(ref query_instr) = &code[code_index] {
                 if !unsafe_var_marker.mark_safe_vars(query_instr) {
                     unsafe_var_marker.mark_phase(query_instr, phase);
@@ -95,7 +92,7 @@ impl<'a> ConjunctInfo<'a> {
 
         code_index = 0;
 
-        for phase in 0 .. {
+        for phase in 0.. {
             while let Line::Query(ref mut query_instr) = &mut code[code_index] {
                 unsafe_var_marker.mark_unsafe_vars(query_instr, phase);
                 code_index += 1;
@@ -173,7 +170,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         code: &mut Code,
     ) -> RegType {
         let mut target = Vec::new();
-        self.marker.mark_var(name, Level::Shallow, vr, term_loc, &mut target);
+        self.marker
+            .mark_var(name, Level::Shallow, vr, term_loc, &mut target);
 
         if !target.is_empty() {
             code.extend(target.into_iter().map(Line::Query));
@@ -191,9 +189,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         code: &mut Code,
     ) -> RegType {
         match self.marker.bindings().get(&name) {
-            Some(&VarData::Temp(_, t, _)) if t != 0 => {
-                RegType::Temp(t)
-            }
+            Some(&VarData::Temp(_, t, _)) if t != 0 => RegType::Temp(t),
             Some(&VarData::Perm(p)) if p != 0 => {
                 if let GenContext::Last(_) = term_loc {
                     self.mark_var_in_non_callable(name.clone(), term_loc, vr, code);
@@ -202,9 +198,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                     RegType::Perm(p)
                 }
             }
-            _ => {
-                self.mark_var_in_non_callable(name, term_loc, vr, code)
-            }
+            _ => self.mark_var_in_non_callable(name, term_loc, vr, code),
         }
     }
 
@@ -231,7 +225,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         target: &mut Vec<Target>,
     ) {
         if is_exposed || self.get_var_count(var.as_ref()) > 1 {
-            self.marker.mark_var(var.clone(), Level::Deep, cell, term_loc, target);
+            self.marker
+                .mark_var(var.clone(), Level::Deep, cell, term_loc, target);
         } else {
             Self::add_or_increment_void_instr(target);
         }
@@ -252,7 +247,8 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 Self::add_or_increment_void_instr(target);
             }
             &Term::Cons(ref cell, _, _) | &Term::Clause(ref cell, _, _, _) => {
-                self.marker.mark_non_var(Level::Deep, term_loc, cell, target);
+                self.marker
+                    .mark_non_var(Level::Deep, term_loc, cell, target);
                 target.push(Target::clause_arg_to_instr(cell.get()));
             }
             &Term::Constant(_, ref constant) => {
@@ -264,7 +260,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         };
     }
 
-     fn compile_target<Target, Iter>(
+    fn compile_target<Target, Iter>(
         &mut self,
         iter: Iter,
         term_loc: GenContext,
@@ -334,13 +330,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                         }
                     }
 
-                    self.marker.mark_var(var.clone(), lvl, cell, term_loc, &mut target);
+                    self.marker
+                        .mark_var(var.clone(), lvl, cell, term_loc, &mut target);
                 }
                 TermRef::Var(lvl @ Level::Shallow, cell, var) => {
-                    self.marker.mark_var(var.clone(), lvl, cell, term_loc, &mut target);
+                    self.marker
+                        .mark_var(var.clone(), lvl, cell, term_loc, &mut target);
                 }
-                _ => {
-                }
+                _ => {}
             };
         }
 
@@ -353,8 +350,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         while let Some((chunk_num, lt_arity, chunked_terms)) = iter.next() {
             for (i, chunked_term) in chunked_terms.iter().enumerate() {
                 let term_loc = match chunked_term {
-                    &ChunkedTerm::HeadClause(..) =>
-                        GenContext::Head,
+                    &ChunkedTerm::HeadClause(..) => GenContext::Head,
                     &ChunkedTerm::BodyTerm(_) => {
                         if i < chunked_terms.len() - 1 {
                             GenContext::Mid(chunk_num)
@@ -391,8 +387,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             &QueryTerm::Clause(_, ref ct, ref terms, false) => {
                 code.push(call_clause!(ct.clone(), terms.len(), pvs));
             }
-            _ => {
-            }
+            _ => {}
         }
     }
 
@@ -407,8 +402,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 &mut ControlInstruction::JmpBy(_, _, _, ref mut last_call) => {
                     *last_call = true;
                 }
-                &mut ControlInstruction::Proceed => {
-                }
+                &mut ControlInstruction::Proceed => {}
                 _ => {
                     dealloc_index += 1;
                 }
@@ -416,8 +410,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             Some(&mut Line::Cut(CutInstruction::Cut(_))) => {
                 dealloc_index += 1;
             }
-            _ => {
-            }
+            _ => {}
         };
 
         dealloc_index
@@ -437,23 +430,17 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 let (mut lcode, at_1) = self.call_arith_eval(terms[0].as_ref(), 1)?;
                 let (mut rcode, at_2) = self.call_arith_eval(terms[1].as_ref(), 2)?;
 
-                let at_1 =
-                    if let &Term::Var(ref vr, ref name) = terms[0].as_ref() {
-                        ArithmeticTerm::Reg(
-                            self.mark_non_callable(name.clone(), 1, term_loc, vr, code)
-                        )
-                    } else {
-                        at_1.unwrap_or(interm!(1))
-                    };
+                let at_1 = if let &Term::Var(ref vr, ref name) = terms[0].as_ref() {
+                    ArithmeticTerm::Reg(self.mark_non_callable(name.clone(), 1, term_loc, vr, code))
+                } else {
+                    at_1.unwrap_or(interm!(1))
+                };
 
-                let at_2 =
-                    if let &Term::Var(ref vr, ref name) = terms[1].as_ref() {
-                        ArithmeticTerm::Reg(
-                            self.mark_non_callable(name.clone(), 2, term_loc, vr, code)
-                        )
-                    } else {
-                        at_2.unwrap_or(interm!(2))
-                    };
+                let at_2 = if let &Term::Var(ref vr, ref name) = terms[1].as_ref() {
+                    ArithmeticTerm::Reg(self.mark_non_callable(name.clone(), 2, term_loc, vr, code))
+                } else {
+                    at_2.unwrap_or(interm!(2))
+                };
 
                 code.append(&mut lcode);
                 code.append(&mut rcode);
@@ -461,9 +448,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 code.push(compare_number_instr!(cmp, at_1, at_2));
             }
             &InlinedClauseType::IsAtom(..) => match terms[0].as_ref() {
-                &Term::Constant(_, Constant::Char(_)) |
-                &Term::Constant(_, Constant::EmptyList) |
-                &Term::Constant(_, Constant::Atom(..)) => {
+                &Term::Constant(_, Constant::Char(_))
+                | &Term::Constant(_, Constant::EmptyList)
+                | &Term::Constant(_, Constant::Atom(..)) => {
                     code.push(succeed!());
                 }
                 &Term::Var(ref vr, ref name) => {
@@ -528,11 +515,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 }
             },
             &InlinedClauseType::IsNumber(..) => match terms[0].as_ref() {
-                &Term::Constant(_, Constant::Float(_)) |
-                &Term::Constant(_, Constant::Rational(_)) |
-                &Term::Constant(_, Constant::Integer(_)) |
-                &Term::Constant(_, Constant::Fixnum(_)) |
-                &Term::Constant(_, Constant::Usize(_)) => {
+                &Term::Constant(_, Constant::Float(_))
+                | &Term::Constant(_, Constant::Rational(_))
+                | &Term::Constant(_, Constant::Integer(_))
+                | &Term::Constant(_, Constant::Fixnum(_))
+                | &Term::Constant(_, Constant::Usize(_)) => {
                     code.push(succeed!());
                 }
                 &Term::Var(ref vr, ref name) => {
@@ -558,9 +545,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 }
             },
             &InlinedClauseType::IsInteger(..) => match terms[0].as_ref() {
-                &Term::Constant(_, Constant::Integer(_)) |
-                &Term::Constant(_, Constant::Fixnum(_)) |
-                &Term::Constant(_, Constant::Usize(_)) => {
+                &Term::Constant(_, Constant::Integer(_))
+                | &Term::Constant(_, Constant::Fixnum(_))
+                | &Term::Constant(_, Constant::Usize(_)) => {
                     code.push(succeed!());
                 }
                 &Term::Var(ref vr, ref name) => {
@@ -615,14 +602,15 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             &Term::Var(ref vr, ref name) => {
                 let mut target = vec![];
 
-                self.marker.mark_var(name.clone(), Level::Shallow, vr, term_loc, &mut target);
+                self.marker
+                    .mark_var(name.clone(), Level::Shallow, vr, term_loc, &mut target);
 
                 if !target.is_empty() {
                     code.extend(target.into_iter().map(Line::Query));
                 }
             }
-            &Term::Constant(_, ref c @ Constant::Integer(_)) |
-            &Term::Constant(_, ref c @ Constant::Fixnum(_)) => {
+            &Term::Constant(_, ref c @ Constant::Integer(_))
+            | &Term::Constant(_, ref c @ Constant::Fixnum(_)) => {
                 code.push(Line::Query(put_constant!(
                     Level::Shallow,
                     c.clone(),
@@ -655,14 +643,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             }
         }
 
-        let at =
-            if let &Term::Var(ref vr, ref name) = terms[1].as_ref() {
-                ArithmeticTerm::Reg(
-                    self.mark_non_callable(name.clone(), 2, term_loc, vr, code)
-                )
-            } else {
-                at.unwrap_or(interm!(1))
-            };
+        let at = if let &Term::Var(ref vr, ref name) = terms[1].as_ref() {
+            ArithmeticTerm::Reg(self.mark_non_callable(name.clone(), 2, term_loc, vr, code))
+        } else {
+            at.unwrap_or(interm!(1))
+        };
 
         Ok(if use_default_call_policy {
             code.push(is_call_by_default!(temp_v!(1), at));
@@ -721,24 +706,18 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                     &QueryTerm::GetLevelAndUnify(ref cell, ref var) => {
                         self.compile_get_level_and_unify(code, cell, var.clone(), term_loc)
                     }
-                    &QueryTerm::UnblockedCut(ref cell) => {
-                        self.compile_unblocked_cut(code, cell)
-                    }
-                    &QueryTerm::BlockedCut => {
-                        code.push(if chunk_num == 0 {
-                            Line::Cut(CutInstruction::NeckCut)
-                        } else {
-                            Line::Cut(CutInstruction::Cut(perm_v!(1)))
-                        })
-                    }
+                    &QueryTerm::UnblockedCut(ref cell) => self.compile_unblocked_cut(code, cell),
+                    &QueryTerm::BlockedCut => code.push(if chunk_num == 0 {
+                        Line::Cut(CutInstruction::NeckCut)
+                    } else {
+                        Line::Cut(CutInstruction::Cut(perm_v!(1)))
+                    }),
                     &QueryTerm::Clause(
                         _,
                         ClauseType::BuiltIn(BuiltInClauseType::Is(..)),
                         ref terms,
                         use_default_call_policy,
-                    ) => {
-                        self.compile_is_call(terms, code, term_loc, use_default_call_policy)?
-                    }
+                    ) => self.compile_is_call(terms, code, term_loc, use_default_call_policy)?,
                     &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms, _) => {
                         self.compile_inlined(ct, terms, term_loc, code)?
                     }
@@ -772,7 +751,12 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         }
     }
 
-    fn compile_cleanup(&mut self, code: &mut Code, conjunct_info: &ConjunctInfo, toc: &'a QueryTerm) {
+    fn compile_cleanup(
+        &mut self,
+        code: &mut Code,
+        conjunct_info: &ConjunctInfo,
+        toc: &'a QueryTerm,
+    ) {
         // add a proceed to bookend any trailing cuts.
         match toc {
             &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => code.push(proceed!()),
@@ -786,7 +770,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         if conjunct_info.allocates() {
             let offset = self.global_jmp_by_locs_offset;
 
-            if let Some(jmp_by_offset) = self.jmp_by_locs[offset ..].last_mut() {
+            if let Some(jmp_by_offset) = self.jmp_by_locs[offset..].last_mut() {
                 if *jmp_by_offset == dealloc_index {
                     *jmp_by_offset += 1;
                 }
@@ -905,32 +889,32 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         self.add_conditional_call(code, term, num_perm_vars_left);
     }
 
-/*
-    pub fn compile_query(&mut self, query: &'a Vec<QueryTerm>) -> Result<Code, CompilationError> {
-        let iter = ChunkedIterator::from_term_sequence(query);
-        let conjunct_info = self.collect_var_data(iter);
+    /*
+        pub fn compile_query(&mut self, query: &'a Vec<QueryTerm>) -> Result<Code, CompilationError> {
+            let iter = ChunkedIterator::from_term_sequence(query);
+            let conjunct_info = self.collect_var_data(iter);
 
-        let mut code = Vec::new();
-        self.compile_seq_prelude(&conjunct_info, &mut code);
+            let mut code = Vec::new();
+            self.compile_seq_prelude(&conjunct_info, &mut code);
 
-        let iter = ChunkedIterator::from_term_sequence(query);
-        self.compile_seq(iter, &conjunct_info, &mut code, true)?;
+            let iter = ChunkedIterator::from_term_sequence(query);
+            self.compile_seq(iter, &conjunct_info, &mut code, true)?;
 
-        conjunct_info.mark_unsafe_vars(UnsafeVarMarker::new(), &mut code);
+            conjunct_info.mark_unsafe_vars(UnsafeVarMarker::new(), &mut code);
 
-        if let Some(query_term) = query.last() {
-            Self::compile_cleanup(&mut code, &conjunct_info, query_term);
+            if let Some(query_term) = query.last() {
+                Self::compile_cleanup(&mut code, &conjunct_info, query_term);
+            }
+
+            Ok(code)
         }
-
-        Ok(code)
-    }
-*/
+    */
 
     #[inline]
     fn increment_jmp_by_locs_by(&mut self, incr: usize) {
         let offset = self.global_jmp_by_locs_offset;
 
-        for loc in &mut self.jmp_by_locs[offset ..] {
+        for loc in &mut self.jmp_by_locs[offset..] {
             *loc += incr;
         }
     }
@@ -1077,7 +1061,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
 
             if skip_stub_try_me_else {
                 // skip the TryMeElse(0) also.
-                 self.increment_jmp_by_locs_by(2);
+                self.increment_jmp_by_locs_by(2);
             } else {
                 self.increment_jmp_by_locs_by(1);
             }
@@ -1105,7 +1089,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
 
         for (l, r) in split_pred {
             let skel_lower_bound = self.skeleton.clauses.len();
-            let code_segment = self.compile_pred_subseq(&clauses[l .. r], optimal_index)?;
+            let code_segment = self.compile_pred_subseq(&clauses[l..r], optimal_index)?;
             let clause_start_offset = code.len();
 
             if multi_seq {
@@ -1123,11 +1107,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             if self.is_extensible {
                 let segment_is_indexed = to_indexing_line(&code_segment[0]).is_some();
 
-                for clause_index_info in self.skeleton.clauses[skel_lower_bound ..].iter_mut() {
+                for clause_index_info in self.skeleton.clauses[skel_lower_bound..].iter_mut() {
                     clause_index_info.clause_start +=
                         clause_start_offset + 2 * (segment_is_indexed as usize);
-                    clause_index_info.opt_arg_index_key +=
-                        clause_start_offset + 1;
+                    clause_index_info.opt_arg_index_key += clause_start_offset + 1;
                 }
             }
 

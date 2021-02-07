@@ -1,10 +1,10 @@
-use ast::*;
-use lexer::*;
-use tabled_rc::*;
+use crate::ast::*;
+use crate::lexer::*;
+use crate::tabled_rc::*;
 
 use ordered_float::OrderedFloat;
 
-use rug::ops::NegAssign;
+use crate::rug::ops::NegAssign;
 
 use std::cell::Cell;
 use std::io::Read;
@@ -16,25 +16,30 @@ enum TokenType {
     Term,
     Open,
     OpenCT,
-    OpenList,       // '['
-    OpenCurly,      // '{'
+    OpenList,          // '['
+    OpenCurly,         // '{'
     HeadTailSeparator, // '|'
-    Comma,          // ','
+    Comma,             // ','
     Close,
-    CloseList,      // ']'
-    CloseCurly,     // '}'
-    End
+    CloseList,  // ']'
+    CloseCurly, // '}'
+    End,
 }
 
 impl TokenType {
     fn is_sep(self) -> bool {
-        match self {
-            TokenType::HeadTailSeparator | TokenType::OpenCT | TokenType::Open |
-            TokenType::Close | TokenType::OpenList | TokenType::CloseList |
-            TokenType::OpenCurly | TokenType::CloseCurly | TokenType::Comma
-                => true,
-            _   => false
-        }
+        matches!(
+            self,
+            TokenType::HeadTailSeparator
+                | TokenType::OpenCT
+                | TokenType::Open
+                | TokenType::Close
+                | TokenType::OpenList
+                | TokenType::CloseList
+                | TokenType::OpenCurly
+                | TokenType::CloseCurly
+                | TokenType::Comma
+        )
     }
 }
 
@@ -42,12 +47,14 @@ impl TokenType {
 struct TokenDesc {
     tt: TokenType,
     priority: usize,
-    spec: u32
+    spec: u32,
 }
 
-pub
-fn get_clause_spec(name: ClauseName, arity: usize, op_dir: &CompositeOpDir) -> Option<SharedOpDesc>
-{
+pub fn get_clause_spec(
+    name: ClauseName,
+    arity: usize,
+    op_dir: &CompositeOpDir,
+) -> Option<SharedOpDesc> {
     match arity {
         1 => {
             /* This is a clause with an operator principal functor. Prefix operators
@@ -60,20 +67,25 @@ fn get_clause_spec(name: ClauseName, arity: usize, op_dir: &CompositeOpDir) -> O
             if let Some(OpDirValue(cell)) = op_dir.get(name, Fixity::Post) {
                 return Some(cell.clone());
             }
-        },
-        2 =>
+        }
+        2 => {
             if let Some(OpDirValue(cell)) = op_dir.get(name, Fixity::In) {
                 return Some(cell.clone());
-            },
+            }
+        }
         _ => {}
     };
 
     None
 }
 
-pub fn get_op_desc(name: ClauseName, op_dir: &CompositeOpDir) -> Option<OpDesc>
-{
-    let mut op_desc = OpDesc { pre: 0, inf: 0, post: 0, spec: 0 };
+pub fn get_op_desc(name: ClauseName, op_dir: &CompositeOpDir) -> Option<OpDesc> {
+    let mut op_desc = OpDesc {
+        pre: 0,
+        inf: 0,
+        post: 0,
+        spec: 0,
+    };
 
     if let Some(OpDirValue(cell)) = op_dir.get(name.clone(), Fixity::Pre) {
         let (pri, spec) = cell.get();
@@ -111,8 +123,7 @@ pub fn get_op_desc(name: ClauseName, op_dir: &CompositeOpDir) -> Option<OpDesc>
     }
 }
 
-fn affirm_xfx(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> bool
-{
+fn affirm_xfx(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> bool {
     d2.priority <= priority
         && is_term!(d3.spec)
         && is_term!(d1.spec)
@@ -120,18 +131,15 @@ fn affirm_xfx(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> b
         && d1.priority < d2.priority
 }
 
-fn affirm_yfx(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> bool
-{
+fn affirm_yfx(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> bool {
     d2.priority <= priority
-        &&    ((is_term!(d3.spec) && d3.priority < d2.priority)
-           ||  (is_lterm!(d3.spec) && d3.priority == d2.priority))
+        && ((is_term!(d3.spec) && d3.priority < d2.priority)
+            || (is_lterm!(d3.spec) && d3.priority == d2.priority))
         && is_term!(d1.spec)
         && d1.priority < d2.priority
 }
 
-
-fn affirm_xfy(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> bool
-{
+fn affirm_xfy(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> bool {
     d2.priority < priority
         && is_term!(d3.spec)
         && d3.priority < d2.priority
@@ -139,49 +147,35 @@ fn affirm_xfy(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> b
         && d1.priority <= d2.priority
 }
 
-fn affirm_yf(d1: TokenDesc, d2: TokenDesc) -> bool
-{
+fn affirm_yf(d1: TokenDesc, d2: TokenDesc) -> bool {
     let is_valid_lterm = is_lterm!(d2.spec) && d2.priority == d1.priority;
     (is_term!(d2.spec) && d2.priority < d1.priority) || is_valid_lterm
 }
 
-fn affirm_xf(d1: TokenDesc, d2: TokenDesc) -> bool
-{
+fn affirm_xf(d1: TokenDesc, d2: TokenDesc) -> bool {
     is_term!(d2.spec) && d2.priority < d1.priority
 }
 
-fn affirm_fy(priority: usize, d1: TokenDesc, d2: TokenDesc) -> bool
-{
+fn affirm_fy(priority: usize, d1: TokenDesc, d2: TokenDesc) -> bool {
     d2.priority < priority && is_term!(d1.spec) && d1.priority <= d2.priority
 }
 
-fn affirm_fx(priority: usize, d1: TokenDesc, d2: TokenDesc) -> bool
-{
+fn affirm_fx(priority: usize, d1: TokenDesc, d2: TokenDesc) -> bool {
     d2.priority <= priority && is_term!(d1.spec) && d1.priority < d2.priority
 }
 
-fn sep_to_atom(tt: TokenType) -> Option<ClauseName>
-{
+fn sep_to_atom(tt: TokenType) -> Option<ClauseName> {
     match tt {
-        TokenType::Open | TokenType::OpenCT =>
-            Some(clause_name!("(")),
-        TokenType::Close =>
-            Some(clause_name!(")")),
-        TokenType::OpenList =>
-            Some(clause_name!("[")),
-        TokenType::CloseList =>
-            Some(clause_name!("]")),
-        TokenType::OpenCurly =>
-            Some(clause_name!("{")),
-        TokenType::CloseCurly =>
-            Some(clause_name!("}")),
-        TokenType::HeadTailSeparator =>
-            Some(clause_name!("|")),
-        TokenType::Comma =>
-            Some(clause_name!(",")),
-        TokenType::End =>
-            Some(clause_name!(".")),
-        _ => None
+        TokenType::Open | TokenType::OpenCT => Some(clause_name!("(")),
+        TokenType::Close => Some(clause_name!(")")),
+        TokenType::OpenList => Some(clause_name!("[")),
+        TokenType::CloseList => Some(clause_name!("]")),
+        TokenType::OpenCurly => Some(clause_name!("{")),
+        TokenType::CloseCurly => Some(clause_name!("}")),
+        TokenType::HeadTailSeparator => Some(clause_name!("|")),
+        TokenType::Comma => Some(clause_name!(",")),
+        TokenType::End => Some(clause_name!(".")),
+        _ => None,
     }
 }
 
@@ -190,7 +184,7 @@ pub struct OpDesc {
     pub pre: usize,
     pub inf: usize,
     pub post: usize,
-    pub spec: Specifier
+    pub spec: Specifier,
 }
 
 #[derive(Debug)]
@@ -201,8 +195,7 @@ pub struct Parser<'a, R: Read> {
     terms: Vec<Term>,
 }
 
-fn read_tokens<'a, R: Read>(lexer: &mut Lexer<'a, R>) -> Result<Vec<Token>, ParserError>
-{
+fn read_tokens<R: Read>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserError> {
     let mut tokens = vec![];
 
     loop {
@@ -227,10 +220,12 @@ impl<'a, R: Read> Parser<'a, R> {
         atom_tbl: TabledData<Atom>,
         flags: MachineFlags,
     ) -> Self {
-        Parser { lexer: Lexer::new(atom_tbl, flags, stream),
-                 tokens: vec![],
-                 stack:  Vec::new(),
-                 terms:  Vec::new() }
+        Parser {
+            lexer: Lexer::new(atom_tbl, flags, stream),
+            tokens: vec![],
+            stack: Vec::new(),
+            terms: Vec::new(),
+        }
     }
 
     #[inline]
@@ -255,50 +250,46 @@ impl<'a, R: Read> Parser<'a, R> {
 
     fn get_term_name(&mut self, td: TokenDesc) -> Option<(ClauseName, Option<SharedOpDesc>)> {
         match td.tt {
-            TokenType::HeadTailSeparator => {
-                Some((clause_name!("|"), Some(SharedOpDesc::new(td.priority, td.spec))))
-            }
-            TokenType::Comma => {
-                Some((clause_name!(","), Some(SharedOpDesc::new(1000, XFY))))
-            }
-            TokenType::Term => {
-                match self.terms.pop() {
-                    Some(Term::Constant(_, Constant::Atom(atom, spec))) =>
-                        Some((atom, spec)),
-                    Some(term) => {
-                        self.terms.push(term);
-                        None
-                    },
-                    _ => None
+            TokenType::HeadTailSeparator => Some((
+                clause_name!("|"),
+                Some(SharedOpDesc::new(td.priority, td.spec)),
+            )),
+            TokenType::Comma => Some((clause_name!(","), Some(SharedOpDesc::new(1000, XFY)))),
+            TokenType::Term => match self.terms.pop() {
+                Some(Term::Constant(_, Constant::Atom(atom, spec))) => Some((atom, spec)),
+                Some(term) => {
+                    self.terms.push(term);
+                    None
                 }
-            }
-            _ => {
-                None
-            }
+                _ => None,
+            },
+            _ => None,
         }
     }
 
-    fn push_binary_op(&mut self, td: TokenDesc, spec: Specifier)
-    {
+    fn push_binary_op(&mut self, td: TokenDesc, spec: Specifier) {
         if let Some(arg2) = self.terms.pop() {
             if let Some((name, shared_op_desc)) = self.get_term_name(td) {
                 if let Some(arg1) = self.terms.pop() {
-                    let term = Term::Clause(Cell::default(),
-                                            name,
-                                            vec![Box::new(arg1), Box::new(arg2)],
-                                            shared_op_desc);
+                    let term = Term::Clause(
+                        Cell::default(),
+                        name,
+                        vec![Box::new(arg1), Box::new(arg2)],
+                        shared_op_desc,
+                    );
 
                     self.terms.push(term);
-                    self.stack.push(TokenDesc { tt: TokenType::Term,
-                                                priority: td.priority,
-                                                spec });
+                    self.stack.push(TokenDesc {
+                        tt: TokenType::Term,
+                        priority: td.priority,
+                        spec,
+                    });
                 }
             }
         }
     }
 
-    fn push_unary_op(&mut self, td: TokenDesc, spec: Specifier, assoc: u32)
-    {
+    fn push_unary_op(&mut self, td: TokenDesc, spec: Specifier, assoc: u32) {
         if let Some(mut arg1) = self.terms.pop() {
             if let Some(mut name) = self.terms.pop() {
                 if is_postfix!(assoc) {
@@ -306,52 +297,61 @@ impl<'a, R: Read> Parser<'a, R> {
                 }
 
                 if let Term::Constant(_, Constant::Atom(name, shared_op_desc)) = name {
-                    let term = Term::Clause(Cell::default(), name, vec![Box::new(arg1)],
-                                            shared_op_desc);
+                    let term =
+                        Term::Clause(Cell::default(), name, vec![Box::new(arg1)], shared_op_desc);
 
                     self.terms.push(term);
-                    self.stack.push(TokenDesc { tt: TokenType::Term,
-                                                priority: td.priority,
-                                                spec });
+                    self.stack.push(TokenDesc {
+                        tt: TokenType::Term,
+                        priority: td.priority,
+                        spec,
+                    });
                 }
             }
         }
     }
 
-    fn promote_atom_op(&mut self, atom: ClauseName, priority: usize, assoc: u32,
-                       op_dir_val: Option<&OpDirValue>)
-    {
+    fn promote_atom_op(
+        &mut self,
+        atom: ClauseName,
+        priority: usize,
+        assoc: u32,
+        op_dir_val: Option<&OpDirValue>,
+    ) {
         let spec = op_dir_val.map(|op_dir_val| op_dir_val.shared_op_desc());
 
-        self.terms.push(Term::Constant(Cell::default(), Constant::Atom(atom, spec)));
-        self.stack.push(TokenDesc { tt: TokenType::Term, priority, spec: assoc });
+        self.terms
+            .push(Term::Constant(Cell::default(), Constant::Atom(atom, spec)));
+        self.stack.push(TokenDesc {
+            tt: TokenType::Term,
+            priority,
+            spec: assoc,
+        });
     }
 
-    fn shift(&mut self, token: Token, priority: usize, spec: Specifier)
-    {
+    fn shift(&mut self, token: Token, priority: usize, spec: Specifier) {
         let tt = match token {
-            Token::Constant(Constant::String(s))
-                if self.lexer.flags.double_quotes.is_codes() => {
-                    let mut list = Term::Constant(Cell::default(), Constant::EmptyList);
+            Token::Constant(Constant::String(s)) if self.lexer.flags.double_quotes.is_codes() => {
+                let mut list = Term::Constant(Cell::default(), Constant::EmptyList);
 
-                    for c in s.chars().rev() {
-                        list = Term::Cons(
+                for c in s.chars().rev() {
+                    list = Term::Cons(
+                        Cell::default(),
+                        Box::new(Term::Constant(
                             Cell::default(),
-                            Box::new(Term::Constant(
-                                Cell::default(),
-                                Constant::Fixnum(c as isize),
-                            )),
-                            Box::new(list),
-                        );
-                    }
-
-                    self.terms.push(list);
-                    TokenType::Term
+                            Constant::Fixnum(c as isize),
+                        )),
+                        Box::new(list),
+                    );
                 }
+
+                self.terms.push(list);
+                TokenType::Term
+            }
             Token::Constant(c) => {
                 self.terms.push(Term::Constant(Cell::default(), c));
                 TokenType::Term
-            },
+            }
             Token::Var(v) => {
                 if v.trim() == "_" {
                     self.terms.push(Term::AnonVar);
@@ -360,7 +360,7 @@ impl<'a, R: Read> Parser<'a, R> {
                 }
 
                 TokenType::Term
-            },
+            }
             Token::Comma => TokenType::Comma,
             Token::Open => TokenType::Open,
             Token::Close => TokenType::Close,
@@ -381,18 +381,13 @@ impl<'a, R: Read> Parser<'a, R> {
             if let Some(desc1) = self.stack.pop() {
                 if let Some(desc2) = self.stack.pop() {
                     if let Some(desc3) = self.stack.pop() {
-                        if is_xfx!(desc2.spec) && affirm_xfx(priority, desc2, desc3, desc1)
-                        {
+                        if is_xfx!(desc2.spec) && affirm_xfx(priority, desc2, desc3, desc1) {
                             self.push_binary_op(desc2, LTERM);
                             continue;
-                        }
-                        else if is_yfx!(desc2.spec) && affirm_yfx(priority, desc2, desc3, desc1)
-                        {
+                        } else if is_yfx!(desc2.spec) && affirm_yfx(priority, desc2, desc3, desc1) {
                             self.push_binary_op(desc2, LTERM);
                             continue;
-                        }
-                        else if is_xfy!(desc2.spec) && affirm_xfy(priority, desc2, desc3, desc1)
-                        {
+                        } else if is_xfy!(desc2.spec) && affirm_xfy(priority, desc2, desc3, desc1) {
                             self.push_binary_op(desc2, TERM);
                             continue;
                         } else {
@@ -425,12 +420,12 @@ impl<'a, R: Read> Parser<'a, R> {
         }
     }
 
-    fn compute_arity_in_brackets(&self) -> Option<usize>
-    {
+    fn compute_arity_in_brackets(&self) -> Option<usize> {
         let mut arity = 0;
 
         for (i, desc) in self.stack.iter().rev().enumerate() {
-            if i % 2 == 0 { // expect a term or non-comma operator.
+            if i % 2 == 0 {
+                // expect a term or non-comma operator.
                 if let TokenType::Comma = desc.tt {
                     return None;
                 } else if is_term!(desc.spec) || is_op!(desc.spec) || is_negate!(desc.spec) {
@@ -454,8 +449,7 @@ impl<'a, R: Read> Parser<'a, R> {
         None
     }
 
-    fn reduce_term(&mut self, op_dir: &CompositeOpDir) -> bool
-    {
+    fn reduce_term(&mut self, op_dir: &CompositeOpDir) -> bool {
         if self.stack.is_empty() {
             return false;
         }
@@ -464,7 +458,7 @@ impl<'a, R: Read> Parser<'a, R> {
 
         let arity = match self.compute_arity_in_brackets() {
             Some(arity) => arity,
-            None => return false
+            None => return false,
         };
 
         if self.stack.len() > 2 * arity {
@@ -490,9 +484,7 @@ impl<'a, R: Read> Parser<'a, R> {
             if self.atomize_term(&self.terms[idx - 1]).is_some() {
                 self.stack.truncate(stack_len + 1);
 
-                let mut subterms: Vec<_> = self.terms.drain(idx ..)
-                    .map(|t| Box::new(t))
-                    .collect();
+                let mut subterms: Vec<_> = self.terms.drain(idx..).map(Box::new).collect();
 
                 if let Some(name) = self.terms.pop().and_then(|t| self.atomize_term(&t)) {
                     // reduce the '.' functor to a cons cell if it applies.
@@ -503,11 +495,15 @@ impl<'a, R: Read> Parser<'a, R> {
                         self.terms.push(Term::Cons(Cell::default(), head, tail));
                     } else {
                         let spec = get_clause_spec(name.clone(), subterms.len(), op_dir);
-                        self.terms.push(Term::Clause(Cell::default(), name, subterms, spec));
+                        self.terms
+                            .push(Term::Clause(Cell::default(), name, subterms, spec));
                     }
 
-                    if let Some(&mut TokenDesc { ref mut priority, ref mut spec,
-                                                 ref mut tt }) = self.stack.last_mut()
+                    if let Some(&mut TokenDesc {
+                        ref mut priority,
+                        ref mut spec,
+                        ref mut tt,
+                    }) = self.stack.last_mut()
                     {
                         *tt = TokenType::Term;
                         *priority = 0;
@@ -523,7 +519,7 @@ impl<'a, R: Read> Parser<'a, R> {
     }
 
     pub fn devour_whitespace(&mut self) -> Result<(), ParserError> {
-	    self.lexer.scan_for_layout()?;
+        self.lexer.scan_for_layout()?;
         Ok(())
     }
 
@@ -531,8 +527,7 @@ impl<'a, R: Read> Parser<'a, R> {
         self.stack.clear()
     }
 
-    fn expand_comma_compacted_terms(&mut self, index: usize) -> usize
-    {
+    fn expand_comma_compacted_terms(&mut self, index: usize) -> usize {
         if let Some(term) = self.terms.pop() {
             let op_desc = self.stack[index - 1];
 
@@ -548,8 +543,7 @@ impl<'a, R: Read> Parser<'a, R> {
                         self.terms.extend(terms.into_iter());
                         return arity;
                     }
-                    _ => {
-                    }
+                    _ => {}
                 }
             }
 
@@ -559,12 +553,12 @@ impl<'a, R: Read> Parser<'a, R> {
         0
     }
 
-    fn compute_arity_in_list(&self) -> Option<usize>
-    {
+    fn compute_arity_in_list(&self) -> Option<usize> {
         let mut arity = 0;
 
         for (i, desc) in self.stack.iter().rev().enumerate() {
-            if i % 2 == 0 { // expect a term or non-comma operator.
+            if i % 2 == 0 {
+                // expect a term or non-comma operator.
                 if let TokenType::Comma = desc.tt {
                     return None;
                 } else if is_term!(desc.spec) || is_op!(desc.spec) {
@@ -590,8 +584,7 @@ impl<'a, R: Read> Parser<'a, R> {
         None
     }
 
-    fn reduce_list(&mut self) -> Result<bool, ParserError>
-    {
+    fn reduce_list(&mut self) -> Result<bool, ParserError> {
         if self.stack.is_empty() {
             return Ok(false);
         }
@@ -602,7 +595,8 @@ impl<'a, R: Read> Parser<'a, R> {
                 td.tt = TokenType::Term;
                 td.priority = 0;
 
-                self.terms.push(Term::Constant(Cell::default(), Constant::EmptyList));
+                self.terms
+                    .push(Term::Constant(Cell::default(), Constant::EmptyList));
                 return Ok(true);
             }
         }
@@ -611,7 +605,7 @@ impl<'a, R: Read> Parser<'a, R> {
 
         let mut arity = match self.compute_arity_in_list() {
             Some(arity) => arity,
-            None => return Ok(false)
+            None => return Ok(false),
         };
 
         // we know that self.stack.len() >= 2 by this point.
@@ -621,12 +615,15 @@ impl<'a, R: Read> Parser<'a, R> {
         let end_term = if self.stack[idx].tt != TokenType::HeadTailSeparator {
             Term::Constant(Cell::default(), Constant::EmptyList)
         } else {
-            let term =
-                match self.terms.pop() {
-                    Some(term) => term,
-                    _ => return Err(ParserError::IncompleteReduction(self.lexer.line_num,
-                                                                     self.lexer.col_num))
-                };
+            let term = match self.terms.pop() {
+                Some(term) => term,
+                _ => {
+                    return Err(ParserError::IncompleteReduction(
+                        self.lexer.line_num,
+                        self.lexer.col_num,
+                    ))
+                }
+            };
 
             if self.stack[idx].priority > 1000 {
                 arity += self.expand_comma_compacted_terms(idx);
@@ -639,15 +636,17 @@ impl<'a, R: Read> Parser<'a, R> {
 
         let idx = self.terms.len() - arity;
 
-        let list = self.terms.drain(idx ..)
-            .rev()
-            .fold(end_term, |acc, t| Term::Cons(Cell::default(),
-                                                Box::new(t),
-                                                Box::new(acc)));
+        let list = self.terms.drain(idx..).rev().fold(end_term, |acc, t| {
+            Term::Cons(Cell::default(), Box::new(t), Box::new(acc))
+        });
 
         self.stack.truncate(list_len);
 
-        self.stack.push(TokenDesc { tt: TokenType::Term, priority: 0, spec: TERM });
+        self.stack.push(TokenDesc {
+            tt: TokenType::Term,
+            priority: 0,
+            spec: TERM,
+        });
         self.terms.push(list);
 
         Ok(true)
@@ -664,8 +663,7 @@ impl<'a, R: Read> Parser<'a, R> {
                 td.priority = 0;
                 td.spec = TERM;
 
-                let term = Term::Constant(Cell::default(),
-                                          atom!("{}", self.lexer.atom_tbl));
+                let term = Term::Constant(Cell::default(), atom!("{}", self.lexer.atom_tbl));
                 self.terms.push(term);
                 return Ok(true);
             }
@@ -687,17 +685,19 @@ impl<'a, R: Read> Parser<'a, R> {
 
                         let term = match self.terms.pop() {
                             Some(term) => term,
-                            _ => return Err(ParserError::IncompleteReduction(
-                                self.lexer.line_num,
-                                self.lexer.col_num,
-                            ))
+                            _ => {
+                                return Err(ParserError::IncompleteReduction(
+                                    self.lexer.line_num,
+                                    self.lexer.col_num,
+                                ))
+                            }
                         };
 
                         self.terms.push(Term::Clause(
                             Cell::default(),
                             clause_name!("{}"),
                             vec![Box::new(term)],
-                            None
+                            None,
                         ));
 
                         return Ok(true);
@@ -722,35 +722,40 @@ impl<'a, R: Read> Parser<'a, R> {
 
         let idx = self.stack.len() - 2;
 
-        match self.stack.remove(idx) {
-            td =>
-                match td.tt {
-                    TokenType::Open | TokenType::OpenCT => {
-                        if self.stack[idx].tt == TokenType::Comma {
-                            return false;
-                        }
-
-                        if let Some(atom) = sep_to_atom(self.stack[idx].tt) {
-                            self.terms.push(Term::Constant(Cell::default(), Constant::Atom(atom, None)));
-                        }
-
-                        self.stack[idx].spec = TERM;
-                        self.stack[idx].tt = TokenType::Term;
-                        self.stack[idx].priority = 0;
-                        true
-                    },
-                    _ => false
+        let td = self.stack.remove(idx);
+        match td.tt {
+            TokenType::Open | TokenType::OpenCT => {
+                if self.stack[idx].tt == TokenType::Comma {
+                    return false;
                 }
+
+                if let Some(atom) = sep_to_atom(self.stack[idx].tt) {
+                    self.terms
+                        .push(Term::Constant(Cell::default(), Constant::Atom(atom, None)));
+                }
+
+                self.stack[idx].spec = TERM;
+                self.stack[idx].tt = TokenType::Term;
+                self.stack[idx].priority = 0;
+                true
+            }
+            _ => false,
         }
     }
 
     fn shift_op(&mut self, name: ClauseName, op_dir: &CompositeOpDir) -> Result<bool, ParserError> {
-        if let Some(OpDesc { pre, inf, post, spec }) = get_op_desc(name.clone(), op_dir) {
+        if let Some(OpDesc {
+            pre,
+            inf,
+            post,
+            spec,
+        }) = get_op_desc(name.clone(), op_dir)
+        {
             if (pre > 0 && inf + post > 0) || is_negate!(spec) {
                 match self.tokens.last().ok_or(ParserError::UnexpectedEOF)? {
                     // do this when layout hasn't been inserted,
                     // ie. why we don't match on Token::Open.
-                    &Token::OpenCT => {
+                    Token::OpenCT => {
                         // can't be prefix, so either inf == 0
                         // or post == 0.
                         self.reduce_op(inf + post);
@@ -764,7 +769,7 @@ impl<'a, R: Read> Parser<'a, R> {
                             spec & (XFX | XFY | YFX | YF | XF),
                             op_dir_val,
                         );
-                    },
+                    }
                     _ => {
                         self.reduce_op(inf + post);
 
@@ -782,11 +787,21 @@ impl<'a, R: Read> Parser<'a, R> {
                                 );
                             } else {
                                 let op_dir_val = op_dir.get(name.clone(), Fixity::Pre);
-                                self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN), op_dir_val);
+                                self.promote_atom_op(
+                                    name,
+                                    pre,
+                                    spec & (FX | FY | NEGATIVE_SIGN),
+                                    op_dir_val,
+                                );
                             }
                         } else {
                             let op_dir_val = op_dir.get(name.clone(), Fixity::Pre);
-                            self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN), op_dir_val);
+                            self.promote_atom_op(
+                                name,
+                                pre,
+                                spec & (FX | FY | NEGATIVE_SIGN),
+                                op_dir_val,
+                            );
                         }
                     }
                 }
@@ -807,49 +822,46 @@ impl<'a, R: Read> Parser<'a, R> {
             }
 
             Ok(true)
-        } else { // not an operator.
+        } else {
+            // not an operator.
             Ok(false)
         }
     }
 
     fn atomize_term(&self, term: &Term) -> Option<ClauseName> {
         match term {
-            &Term::Constant(_, ref c) => self.atomize_constant(c),
-            _ => None
+            Term::Constant(_, ref c) => self.atomize_constant(c),
+            _ => None,
         }
     }
 
     fn atomize_constant(&self, c: &Constant) -> Option<ClauseName> {
         match c {
-            &Constant::Atom(ref name, _) => Some(name.clone()),
-            &Constant::Char(c) =>
-                Some(clause_name!(c.to_string(), self.lexer.atom_tbl)),
-            &Constant::EmptyList =>
-                Some(clause_name!(c.to_string(), self.lexer.atom_tbl)),
-            _ => None
+            Constant::Atom(ref name, _) => Some(name.clone()),
+            Constant::Char(c) => Some(clause_name!(c.to_string(), self.lexer.atom_tbl)),
+            Constant::EmptyList => Some(clause_name!(c.to_string(), self.lexer.atom_tbl)),
+            _ => None,
         }
     }
 
-    fn negate_number<N, Negator, ToConstant>(
-        &mut self,
-        n: N,
-        negator: Negator,
-        constr: ToConstant
-    )
-    where Negator: Fn(N) -> N,
-          ToConstant: Fn(N) -> Constant
+    fn negate_number<N, Negator, ToConstant>(&mut self, n: N, negator: Negator, constr: ToConstant)
+    where
+        Negator: Fn(N) -> N,
+        ToConstant: Fn(N) -> Constant,
     {
         if let Some(desc) = self.stack.last().cloned() {
             if let Some(term) = self.terms.last().cloned() {
                 match term {
                     Term::Constant(_, Constant::Atom(ref name, _))
-                        if name.as_str() == "-" && (is_prefix!(desc.spec) || is_negate!(desc.spec)) => {
-                            self.stack.pop();
-                            self.terms.pop();
+                        if name.as_str() == "-"
+                            && (is_prefix!(desc.spec) || is_negate!(desc.spec)) =>
+                    {
+                        self.stack.pop();
+                        self.terms.pop();
 
-                            self.shift(Token::Constant(constr(negator(n))), 0, TERM);
-                            return;
-                        },
+                        self.shift(Token::Constant(constr(negator(n))), 0, TERM);
+                        return;
+                    }
                     _ => {}
                 }
             }
@@ -860,42 +872,37 @@ impl<'a, R: Read> Parser<'a, R> {
 
     fn shift_token(&mut self, token: Token, op_dir: &CompositeOpDir) -> Result<(), ParserError> {
         fn negate_rc<T: NegAssign>(mut t: Rc<T>) -> Rc<T> {
-            match Rc::get_mut(&mut t) {
-                Some(t) => {
-                    t.neg_assign();
-                }
-                None => {
-                }
+            if let Some(t) = Rc::get_mut(&mut t) {
+                t.neg_assign();
             };
 
             t
         }
 
         match token {
-            Token::Constant(Constant::Fixnum(n)) =>
-                self.negate_number(n, |n| -n, Constant::Fixnum),
-            Token::Constant(Constant::Integer(n)) =>
-                self.negate_number(n, negate_rc, Constant::Integer),
-            Token::Constant(Constant::Rational(n)) =>
-                self.negate_number(n, negate_rc, Constant::Rational),
-            Token::Constant(Constant::Float(n)) =>
-                self.negate_number(
-                    n,
-                    |n| OrderedFloat(-n.into_inner()),
-                    |n| Constant::Float(n)
-                ),
-            Token::Constant(c) =>
+            Token::Constant(Constant::Fixnum(n)) => self.negate_number(n, |n| -n, Constant::Fixnum),
+            Token::Constant(Constant::Integer(n)) => {
+                self.negate_number(n, negate_rc, Constant::Integer)
+            }
+            Token::Constant(Constant::Rational(n)) => {
+                self.negate_number(n, negate_rc, Constant::Rational)
+            }
+            Token::Constant(Constant::Float(n)) => {
+                self.negate_number(n, |n| OrderedFloat(-n.into_inner()), Constant::Float)
+            }
+            Token::Constant(c) => {
                 if let Some(name) = self.atomize_constant(&c) {
                     if !self.shift_op(name, op_dir)? {
                         self.shift(Token::Constant(c), 0, TERM);
                     }
                 } else {
                     self.shift(Token::Constant(c), 0, TERM);
-                },
+                }
+            }
             Token::Var(v) => self.shift(Token::Var(v), 0, TERM),
-            Token::Open   => self.shift(Token::Open, 1300, DELIMITER),
+            Token::Open => self.shift(Token::Open, 1300, DELIMITER),
             Token::OpenCT => self.shift(Token::OpenCT, 1300, DELIMITER),
-            Token::Close  =>
+            Token::Close => {
                 if !self.reduce_term(op_dir) {
                     if !self.reduce_brackets() {
                         return Err(ParserError::IncompleteReduction(
@@ -903,23 +910,26 @@ impl<'a, R: Read> Parser<'a, R> {
                             self.lexer.col_num,
                         ));
                     }
-                },
-            Token::OpenList  => self.shift(Token::OpenList, 1300, DELIMITER),
-            Token::CloseList =>
+                }
+            }
+            Token::OpenList => self.shift(Token::OpenList, 1300, DELIMITER),
+            Token::CloseList => {
                 if !self.reduce_list()? {
                     return Err(ParserError::IncompleteReduction(
                         self.lexer.line_num,
                         self.lexer.col_num,
                     ));
-                },
+                }
+            }
             Token::OpenCurly => self.shift(Token::OpenCurly, 1300, DELIMITER),
-            Token::CloseCurly =>
+            Token::CloseCurly => {
                 if !self.reduce_curly()? {
                     return Err(ParserError::IncompleteReduction(
                         self.lexer.line_num,
                         self.lexer.col_num,
                     ));
-                },
+                }
+            }
             Token::HeadTailSeparator => {
                 /* '|' as an operator must have priority > 1000 and can only be infix.
                  * See: http://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#Res_A78
@@ -930,23 +940,25 @@ impl<'a, R: Read> Parser<'a, R> {
 
                 self.reduce_op(priority);
                 self.shift(Token::HeadTailSeparator, priority, spec);
-            },
+            }
             Token::Comma => {
                 self.reduce_op(1000);
                 self.shift(Token::Comma, 1000, XFY);
-            },
-            Token::End =>
-                match self.stack.last().map(|t| t.tt) {
-                    Some(TokenType::Open)
-                  | Some(TokenType::OpenCT)
-                  | Some(TokenType::OpenList)
-                  | Some(TokenType::OpenCurly)
-                  | Some(TokenType::HeadTailSeparator)
-                  | Some(TokenType::Comma)
-                      => return Err(ParserError::IncompleteReduction(self.lexer.line_num,
-                                                                     self.lexer.col_num)),
-                    _ => {}
+            }
+            Token::End => match self.stack.last().map(|t| t.tt) {
+                Some(TokenType::Open)
+                | Some(TokenType::OpenCT)
+                | Some(TokenType::OpenList)
+                | Some(TokenType::OpenCurly)
+                | Some(TokenType::HeadTailSeparator)
+                | Some(TokenType::Comma) => {
+                    return Err(ParserError::IncompleteReduction(
+                        self.lexer.line_num,
+                        self.lexer.col_num,
+                    ))
                 }
+                _ => {}
+            },
         }
 
         Ok(())
@@ -957,8 +969,7 @@ impl<'a, R: Read> Parser<'a, R> {
         self.lexer.eof()
     }
 
-    pub fn read_term(&mut self, op_dir: &CompositeOpDir) -> Result<Term, ParserError>
-    {
+    pub fn read_term(&mut self, op_dir: &CompositeOpDir) -> Result<Term, ParserError> {
         self.tokens = read_tokens(&mut self.lexer)?;
 
         while let Some(token) = self.tokens.pop() {
@@ -968,21 +979,31 @@ impl<'a, R: Read> Parser<'a, R> {
         self.reduce_op(1400);
 
         if self.terms.len() > 1 || self.stack.len() > 1 {
-            return Err(ParserError::IncompleteReduction(self.lexer.line_num, self.lexer.col_num));
+            return Err(ParserError::IncompleteReduction(
+                self.lexer.line_num,
+                self.lexer.col_num,
+            ));
         }
 
         match self.terms.pop() {
-            Some(term) => if self.terms.is_empty() {
-                Ok(term)
-            } else {
-                Err(ParserError::IncompleteReduction(self.lexer.line_num, self.lexer.col_num))
-            },
-            _ => Err(ParserError::IncompleteReduction(self.lexer.line_num, self.lexer.col_num))
+            Some(term) => {
+                if self.terms.is_empty() {
+                    Ok(term)
+                } else {
+                    Err(ParserError::IncompleteReduction(
+                        self.lexer.line_num,
+                        self.lexer.col_num,
+                    ))
+                }
+            }
+            _ => Err(ParserError::IncompleteReduction(
+                self.lexer.line_num,
+                self.lexer.col_num,
+            )),
         }
     }
 
-    pub fn read(&mut self, op_dir: &CompositeOpDir) -> Result<Vec<Term>, ParserError>
-    {
+    pub fn read(&mut self, op_dir: &CompositeOpDir) -> Result<Vec<Term>, ParserError> {
         let mut terms = Vec::new();
 
         loop {

@@ -1,13 +1,14 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::parser::OpDesc;
+use prolog_parser::ast::*;
+use prolog_parser::parser::OpDesc;
+use prolog_parser::{clause_name, is_infix, is_postfix};
 
 use crate::clause_types::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
-use crate::ordered_float::OrderedFloat;
 use crate::rug::{Integer, Rational};
+use ordered_float::OrderedFloat;
 
-use crate::indexmap::{IndexMap, IndexSet};
+use indexmap::{IndexMap, IndexSet};
 
 use slice_deque::*;
 
@@ -36,7 +37,7 @@ pub enum TopLevel {
 #[derive(Debug, Clone, Copy)]
 pub enum AppendOrPrepend {
     Append,
-    Prepend
+    Prepend,
 }
 
 impl AppendOrPrepend {
@@ -115,12 +116,8 @@ impl ListingSource {
 pub trait ClauseInfo {
     fn is_consistent(&self, clauses: &Vec<PredicateClause>) -> bool {
         match clauses.first() {
-            Some(cl) => {
-                self.name() == cl.name() && self.arity() == cl.arity()
-            }
-            None => {
-                true
-            }
+            Some(cl) => self.name() == cl.name() && self.arity() == cl.arity(),
+            None => true,
         }
     }
 
@@ -140,38 +137,25 @@ impl ClauseInfo for Term {
                             _ => Some(clause_name!(":-")),
                         }
                     }
-                    _ => {
-                        Some(name.clone())
-                    }
+                    _ => Some(name.clone()),
                 }
             }
-            Term::Constant(_, Constant::Atom(ref name, _)) => {
-                Some(name.clone())
-            }
-            _ => {
-                None
-            }
+            Term::Constant(_, Constant::Atom(ref name, _)) => Some(name.clone()),
+            _ => None,
         }
     }
 
     fn arity(&self) -> usize {
         match self {
-            Term::Clause(_, ref name, ref terms, _) =>
-                match name.as_str() {
-                    ":-" => {
-                        match terms.len() {
-                            1 => 0,
-                            2 => terms[0].arity(),
-                            _ => terms.len(),
-                        }
-                    }
-                    _ => {
-                        terms.len()
-                    }
+            Term::Clause(_, ref name, ref terms, _) => match name.as_str() {
+                ":-" => match terms.len() {
+                    1 => 0,
+                    2 => terms[0].arity(),
+                    _ => terms.len(),
                 },
-            _ => {
-                0
-            }
+                _ => terms.len(),
+            },
+            _ => 0,
         }
     }
 }
@@ -189,23 +173,15 @@ impl ClauseInfo for Rule {
 impl ClauseInfo for PredicateClause {
     fn name(&self) -> Option<ClauseName> {
         match self {
-            &PredicateClause::Fact(ref term, ..) => {
-                term.name()
-            }
-            &PredicateClause::Rule(ref rule, ..) => {
-                rule.name()
-            }
+            &PredicateClause::Fact(ref term, ..) => term.name(),
+            &PredicateClause::Rule(ref rule, ..) => rule.name(),
         }
     }
 
     fn arity(&self) -> usize {
         match self {
-            &PredicateClause::Fact(ref term, ..) => {
-                term.arity()
-            }
-            &PredicateClause::Rule(ref rule, ..) => {
-                rule.arity()
-            }
+            &PredicateClause::Fact(ref term, ..) => term.arity(),
+            &PredicateClause::Rule(ref rule, ..) => rule.arity(),
         }
     }
 }
@@ -222,11 +198,9 @@ impl PredicateClause {
     // TODO: add this to `Term` in `prolog_parser` like `first_arg`.
     pub fn args(&self) -> Option<&[Box<Term>]> {
         match *self {
-            PredicateClause::Fact(ref term, ..) => {
-                match term {
-                    Term::Clause(_, _, args, _) => Some(&args),
-                    _ => None,
-                }
+            PredicateClause::Fact(ref term, ..) => match term {
+                Term::Clause(_, _, args, _) => Some(&args),
+                _ => None,
             },
             PredicateClause::Rule(ref rule, ..) => {
                 if rule.head.1.is_empty() {
@@ -240,14 +214,11 @@ impl PredicateClause {
 
     pub fn arity(&self) -> usize {
         match self {
-            &PredicateClause::Fact(ref term, ..) => {
-                term.arity()
-            }
+            &PredicateClause::Fact(ref term, ..) => term.arity(),
             &PredicateClause::Rule(ref rule, ..) => {
                 if rule.head.0.as_str() == ":" && rule.head.1.len() == 2 {
                     match (rule.head.1)[0].as_ref() {
-                        &Term::Constant(_, Constant::Atom(..)) => {
-                        }
+                        &Term::Constant(_, Constant::Atom(..)) => {}
                         _ => {
                             return 2;
                         }
@@ -321,7 +292,7 @@ pub enum Declaration {
 pub struct OpDecl {
     pub prec: usize,
     pub spec: Specifier,
-    pub name: ClauseName
+    pub name: ClauseName,
 }
 
 impl OpDecl {
@@ -345,7 +316,7 @@ impl OpDecl {
             XFY | XFX | YFX => Fixity::In,
             XF | YF => Fixity::Post,
             FX | FY => Fixity::Pre,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -356,12 +327,12 @@ impl OpDecl {
             Some(cell) => {
                 return Some(cell.shared_op_desc().replace((self.prec, self.spec)));
             }
-            None => {
-            }
+            None => {}
         }
 
-        op_dir.insert(key, OpDirValue::new(self.spec, self.prec))
-              .map(|op_dir_value| op_dir_value.shared_op_desc().get())
+        op_dir
+            .insert(key, OpDirValue::new(self.spec, self.prec))
+            .map(|op_dir_value| op_dir_value.shared_op_desc().get())
     }
 
     pub fn submit(
@@ -419,11 +390,7 @@ pub fn fetch_op_spec_from_existing(
     spec.or_else(|| fetch_op_spec(name, arity, op_dir))
 }
 
-pub fn fetch_op_spec(
-    name: ClauseName,
-    arity: usize,
-    op_dir: &OpDir,
-) -> Option<SharedOpDesc> {
+pub fn fetch_op_spec(name: ClauseName, arity: usize, op_dir: &OpDir) -> Option<SharedOpDesc> {
     match arity {
         2 => op_dir
             .get(&(name, Fixity::In))
@@ -451,9 +418,7 @@ pub fn fetch_op_spec(
                     }
                 })
         }
-        _ => {
-            None
-        }
+        _ => None,
     }
 }
 
@@ -498,7 +463,6 @@ impl Module {
         }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub enum Number {
@@ -559,7 +523,6 @@ impl Into<HeapCellValue> for Number {
     }
 }
 
-
 impl Number {
     #[inline]
     pub fn is_positive(&self) -> bool {
@@ -594,12 +557,13 @@ impl Number {
     #[inline]
     pub fn abs(self) -> Self {
         match self {
-            Number::Fixnum(n) =>
+            Number::Fixnum(n) => {
                 if let Some(n) = n.checked_abs() {
                     Number::from(n)
                 } else {
                     Number::from(Integer::from(n).abs())
                 }
+            }
             Number::Integer(n) => Number::from(Integer::from(n.abs_ref())),
             Number::Float(f) => Number::Float(OrderedFloat(f.abs())),
             Number::Rational(r) => Number::from(Rational::from(r.abs_ref())),
@@ -624,15 +588,13 @@ impl OptArgIndexKey {
     #[inline]
     pub fn arg_num(&self) -> usize {
         match &self {
-            OptArgIndexKey::Constant(arg_num, ..) |
-            OptArgIndexKey::Structure(arg_num, ..) |
-            OptArgIndexKey::List(arg_num, _) => {
+            OptArgIndexKey::Constant(arg_num, ..)
+            | OptArgIndexKey::Structure(arg_num, ..)
+            | OptArgIndexKey::List(arg_num, _) => {
                 // these are always at least 1.
                 *arg_num
             }
-            OptArgIndexKey::None => {
-                0
-            }
+            OptArgIndexKey::None => 0,
         }
     }
 
@@ -644,27 +606,22 @@ impl OptArgIndexKey {
     #[inline]
     pub fn switch_on_term_loc(&self) -> Option<usize> {
         match &self {
-            OptArgIndexKey::Constant(_, loc, ..) |
-            OptArgIndexKey::Structure(_, loc, ..) |
-            OptArgIndexKey::List(_, loc) => {
-                Some(*loc)
-            }
-            OptArgIndexKey::None => {
-                None
-            }
+            OptArgIndexKey::Constant(_, loc, ..)
+            | OptArgIndexKey::Structure(_, loc, ..)
+            | OptArgIndexKey::List(_, loc) => Some(*loc),
+            OptArgIndexKey::None => None,
         }
     }
 
     #[inline]
     pub fn set_switch_on_term_loc(&mut self, value: usize) {
         match self {
-            OptArgIndexKey::Constant(_, ref mut loc, ..) |
-            OptArgIndexKey::Structure(_, ref mut loc, ..) |
-            OptArgIndexKey::List(_, ref mut loc) => {
+            OptArgIndexKey::Constant(_, ref mut loc, ..)
+            | OptArgIndexKey::Structure(_, ref mut loc, ..)
+            | OptArgIndexKey::List(_, ref mut loc) => {
                 *loc = value;
             }
-            OptArgIndexKey::None => {
-            }
+            OptArgIndexKey::None => {}
         }
     }
 }
@@ -673,13 +630,12 @@ impl AddAssign<usize> for OptArgIndexKey {
     #[inline]
     fn add_assign(&mut self, n: usize) {
         match self {
-            OptArgIndexKey::Constant(_, ref mut o, ..) |
-            OptArgIndexKey::List(_, ref mut o) |
-            OptArgIndexKey::Structure(_, ref mut o, ..) => {
+            OptArgIndexKey::Constant(_, ref mut o, ..)
+            | OptArgIndexKey::List(_, ref mut o)
+            | OptArgIndexKey::Structure(_, ref mut o, ..) => {
                 *o += n;
             }
-            OptArgIndexKey::None => {
-            }
+            OptArgIndexKey::None => {}
         }
     }
 }
