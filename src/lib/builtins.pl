@@ -234,6 +234,8 @@ G1 -> G2 :-
     ).
 
 
+:-non_counted_backtracking call_or_cut/3.
+
 call_or_cut(G, B, ErrorPI) :-
     (  '$call_with_default_policy'(var(G)) ->
        throw(error(instantiation_error, ErrorPI))
@@ -241,94 +243,71 @@ call_or_cut(G, B, ErrorPI) :-
     ).
 
 
-call_or_cut(!, B) :-
+:- non_counted_backtracking call_or_cut/2.
+
+call_or_cut(M:G, B) :-
+    !,
+    (  nonvar(G),
+       '$call_with_default_policy'(call_or_cut_interp(G, B)) ->
+       true
+    ;  call(M:G)
+    ).
+call_or_cut(G, B) :-
+    (  '$call_with_default_policy'(call_or_cut_interp(G, B)) ->
+       true
+    ;  call(G)
+    ).
+
+
+:- non_counted_backtracking call_or_cut_interp/2.
+
+call_or_cut_interp(!, B) :-
     '$set_cp_by_default'(B).
-call_or_cut(_:!, B) :-
-    '$set_cp_by_default'(B).
-call_or_cut((G1, G2), B) :-
-    !,
+call_or_cut_interp((G1, G2), B) :-
     '$call_with_default_policy'(','(G1, G2, B)).
-call_or_cut(_:(G1, G2), B) :-
-    !,
-    '$call_with_default_policy'(','(G1, G2, B)).
-call_or_cut((G1 ; G2), B) :-
-    !,
+call_or_cut_interp((G1 ; G2), B) :-
     '$call_with_default_policy'(';'(G1, G2, B)).
-call_or_cut(_:(G1 ; G2), B) :-
-    !,
-    '$call_with_default_policy'(';'(G1, G2, B)).
-call_or_cut((G1 -> G2), B) :-
-    !,
+call_or_cut_interp((G1 -> G2), B) :-
     '$call_with_default_policy'(->(G1, G2, B)).
-call_or_cut(_:(G1 -> G2), B) :-
-    !,
-    '$call_with_default_policy'(->(G1, G2, B)).
-call_or_cut(G, _) :-
-    '$call_with_default_policy'(G).
 
 
 :- non_counted_backtracking (',')/3.
-','((G1, G2), G3, B) :-
+
+','(M:G1, G2, B) :-
     !,
-    '$call_with_default_policy'(','(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
-','(_:(G1, G2), G3, B) :-
-    !,
-    '$call_with_default_policy'(','(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
-','((G1; G2), G3, B) :-
-    !,
-    '$call_with_default_policy'(';'(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
-','(_:(G1; G2), G3, B) :-
-    !,
-    '$call_with_default_policy'(';'(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
-','((G1 -> G2), G3, B) :-
-    !,
-    '$call_with_default_policy'(->(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
-','(_:(G1 -> G2), G3, B) :-
-    !,
-    '$call_with_default_policy'(->(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+    (  nonvar(G1),
+       '$call_with_default_policy'(',-interp'(G1, G2, B)) ->
+       true
+    ;  call(M:G1),
+       '$call_with_default_policy'(call_or_cut(G2, B, (',')/2))
+    ).
 ','(G1, G2, B) :-
     '$call_with_default_policy'(call_or_cut(G1, B, (',')/2)),
     '$call_with_default_policy'(call_or_cut(G2, B, (',')/2)).
 
 
+:- non_counted_backtracking (',-interp')/3.
+
+',-interp'((G1, G2), G3, B) :-
+    '$call_with_default_policy'(','(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+',-interp'((G1; G2), G3, B) :-
+    '$call_with_default_policy'(';'(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+',-interp'((G1 -> G2), G3, B) :-
+    '$call_with_default_policy'(->(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+
+
 :- non_counted_backtracking (;)/3.
-';'((G1, G2), G3, B) :-
+
+';'(M:G1, G2, B) :-
     !,
-    (  '$call_with_default_policy'(','(G1, G2, B))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
-';'(_:(G1, G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(','(G1, G2, B))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
-';'((G1; G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(';'(G1, G2, B))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
-';'(_:(G1; G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(';'(G1, G2, B))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
-';'((G1 -> G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
-       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
-';'(_:(G1 -> G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
-       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    (  nonvar(G1),
+       '$call_with_default_policy'(';-interp'(G1, G2, B)) ->
+       true
+    ;  call(M:G1)
+    ;  '$call_with_default_policy'(call_or_cut(G2, B, (;)/2))
     ).
 ';'(G1, G2, B) :-
     (  '$call_with_default_policy'(call_or_cut(G1, B, (;)/2))
@@ -336,41 +315,54 @@ call_or_cut(G, _) :-
     ).
 
 
+:- non_counted_backtracking ';-interp'/3.
+
+';-interp'((G1, G2), G3, B) :-
+    (  '$call_with_default_policy'(','(G1, G2, B))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+';-interp'((G1; G2), G3, B) :-
+    (  '$call_with_default_policy'(';'(G1, G2, B))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+';-interp'((G1 -> G2), G3, B) :-
+    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
+       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+
+
 :- non_counted_backtracking (->)/3.
-->((G1, G2), G3, B) :-
+
+->(M:G1, G2, B) :-
     !,
-    (  '$call_with_default_policy'(','(G1, G2, B)) ->
-       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
-    ).
-->(_:(G1, G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(','(G1, G2, B)) ->
-       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
-    ).
-->((G1 ; G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(';'(G1, G2, B)) ->
-       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
-    ).
-->(_:(G1 ; G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(';'(G1, G2, B)) ->
-       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
-    ).
-->((G1 -> G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(->(G1, G2, B)) ->
-       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
-    ).
-->(_:(G1 -> G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(->(G1, G2, B)) ->
-       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
+    (  nonvar(G1),
+       '$call_with_default_policy'('->-interp'(G1, G2, B)) ->
+       true
+    ;  call(M:G1) ->
+       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
     ).
 ->(G1, G2, B) :-
-    (   '$call_with_default_policy'(call_or_cut(G1, B, (->)/2))
-    ->  '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
+       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
     ).
+
+
+:- non_counted_backtracking '->-interp'/3.
+
+'->-interp'((G1, G2), G3, B) :-
+    (  '$call_with_default_policy'(','(G1, G2, B)) ->
+       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
+    ).
+'->-interp'((G1 ; G2), G3, B) :-
+    (  '$call_with_default_policy'(';'(G1, G2, B)) ->
+       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
+    ).
+'->-interp'((G1 -> G2), G3, B) :-
+    (  '$call_with_default_policy'(->(G1, G2, B)) ->
+       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
+    ).
+
 
 % univ.
 
