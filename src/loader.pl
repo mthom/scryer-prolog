@@ -92,7 +92,7 @@ file_load(Stream, Path, Evacuable) :-
     catch(loader:load_loop(Stream, Evacuable),
           E,
           builtins:(loader:unload_evacuable(Evacuable),
-		    builtins:throw(E))),
+		            builtins:throw(E))),
     run_initialization_goals,
     '$pop_load_context'.
 
@@ -102,7 +102,7 @@ load(Stream) :-
     catch(loader:load_loop(Stream, Evacuable),
           E,
           builtins:(loader:unload_evacuable(Evacuable),
-		    builtins:throw(E))),
+		            builtins:throw(E))),
     run_initialization_goals,
     '$pop_load_context'.
 

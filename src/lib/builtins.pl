@@ -243,18 +243,26 @@ call_or_cut(G, B, ErrorPI) :-
     ).
 
 
+:- non_counted_backtracking control_functor/1.
+
+control_functor(!).
+control_functor((_,_)).
+control_functor((_;_)).
+control_functor((_->_)).
+
+
 :- non_counted_backtracking call_or_cut/2.
 
 call_or_cut(M:G, B) :-
     !,
     (  nonvar(G),
-       '$call_with_default_policy'(call_or_cut_interp(G, B)) ->
-       true
+       '$call_with_default_policy'(control_functor(G)) ->
+       '$call_with_default_policy'(call_or_cut_interp(G, B))
     ;  call(M:G)
     ).
 call_or_cut(G, B) :-
-    (  '$call_with_default_policy'(call_or_cut_interp(G, B)) ->
-       true
+    (  '$call_with_default_policy'(control_functor(G)) ->
+       '$call_with_default_policy'(call_or_cut_interp(G, B))
     ;  call(G)
     ).
 
@@ -276,8 +284,8 @@ call_or_cut_interp((G1 -> G2), B) :-
 ','(M:G1, G2, B) :-
     !,
     (  nonvar(G1),
-       '$call_with_default_policy'(',-interp'(G1, G2, B)) ->
-       true
+       '$call_with_default_policy'(control_functor(G1)) ->
+       '$call_with_default_policy'(',-interp'(G1, G2, B))
     ;  call(M:G1),
        '$call_with_default_policy'(call_or_cut(G2, B, (',')/2))
     ).
@@ -304,8 +312,8 @@ call_or_cut_interp((G1 -> G2), B) :-
 ';'(M:G1, G2, B) :-
     !,
     (  nonvar(G1),
-       '$call_with_default_policy'(';-interp'(G1, G2, B)) ->
-       true
+       '$call_with_default_policy'(control_functor(G1)) ->
+       '$call_with_default_policy'(';-interp'(G1, G2, B))
     ;  call(M:G1)
     ;  '$call_with_default_policy'(call_or_cut(G2, B, (;)/2))
     ).
@@ -337,8 +345,8 @@ call_or_cut_interp((G1 -> G2), B) :-
 ->(M:G1, G2, B) :-
     !,
     (  nonvar(G1),
-       '$call_with_default_policy'('->-interp'(G1, G2, B)) ->
-       true
+       '$call_with_default_policy'(control_functor(G1)) ->
+       '$call_with_default_policy'('->-interp'(G1, G2, B))
     ;  call(M:G1) ->
        '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
     ).
