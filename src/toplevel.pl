@@ -1,9 +1,5 @@
 :- module('$toplevel', [argv/1,
-                        copy_term/3,
-                        predicate_property/2,
-                        prolog_load_context/2]).
-
-:- use_module(library(loader)).
+                        copy_term/3]).
 
 :- use_module(library(charsio)).
 :- use_module(library(iso_ext)).
@@ -18,15 +14,15 @@
 '$repl'([_|Args0]) :-
     \+ argv(_),
     (   append(Args1, ["--"|Args2], Args0) ->
-        asserta(argv(Args2)),
+        asserta('$toplevel':argv(Args2)),
         Args = Args1
-    ;   asserta(argv([])),
+    ;   asserta('$toplevel':argv([])),
         Args = Args0
     ),
     delegate_task(Args, []),
     repl.
 '$repl'(_) :-
-    (   \+ argv(_) -> asserta(argv([]))
+    (   \+ argv(_) -> asserta('$toplevel':argv([]))
     ;   true
     ),
     repl.
@@ -41,7 +37,8 @@ delegate_task([Arg0|Args], Goals0) :-
     ;   member(Arg0, ["-v", "--version"]) -> print_version
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
     ;   atom_chars(Mod, Arg0),
-        catch(use_module(Mod), E, print_exception(E))
+        catch(use_module(Mod), E, print_exception(E)),
+        nl
     ),
     delegate_task(Args, Goals0).
 
@@ -126,7 +123,7 @@ instruction_match(Term, VarList) :-
 	      (  Item == user ->
 	         catch(load(user_input), E, print_exception_with_check(E))
 	      ;
-             consult(Item)
+             submit_query_and_print_results(consult(Item), [])
 	      )
        ;
 	   catch(type_error(atom, Item, repl/0),

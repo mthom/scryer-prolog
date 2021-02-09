@@ -1,13 +1,14 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::tabled_rc::*;
+use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::*;
+use prolog_parser::{atom, clause_name, rc_atom};
 
 use crate::forms::*;
 use crate::iterators::*;
-use crate::machine::*;
 use crate::machine::load_state::*;
 use crate::machine::machine_errors::*;
+use crate::machine::*;
 
-use crate::indexmap::IndexSet;
+use indexmap::IndexSet;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -85,28 +86,25 @@ fn setup_op_decl(
     to_op_decl(prec, spec.as_str(), name)
 }
 
-fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, CompilationError>
-{
+fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, CompilationError> {
     match term {
         Term::Clause(_, ref slash, ref mut terms, Some(_))
             if (slash.as_str() == "/" || slash.as_str() == "//") && terms.len() == 2 =>
         {
             let arity = *terms.pop().unwrap();
-            let name  = *terms.pop().unwrap();
+            let name = *terms.pop().unwrap();
 
             let arity = arity
-                .to_constant()
-                .and_then(|c| {
-                    match c {
-                        Constant::Integer(n) => n.to_usize(),
-                        Constant::Fixnum(n) => usize::try_from(n).ok(),
-                        _ => None
-                    }
+                .into_constant()
+                .and_then(|c| match c {
+                    Constant::Integer(n) => n.to_usize(),
+                    Constant::Fixnum(n) => usize::try_from(n).ok(),
+                    _ => None,
                 })
                 .ok_or(CompilationError::InvalidModuleExport)?;
 
-            let name  = name
-                .to_constant()
+            let name = name
+                .into_constant()
                 .and_then(|c| c.to_atom())
                 .ok_or(CompilationError::InvalidModuleExport)?;
 
@@ -116,9 +114,7 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, Compilatio
                 Ok((name, arity + 2))
             }
         }
-        _ => {
-            Err(CompilationError::InvalidModuleExport)
-        }
+        _ => Err(CompilationError::InvalidModuleExport),
     }
 }
 
@@ -155,10 +151,7 @@ fn setup_module_export(
         .or_else(|_| {
             if let Term::Clause(_, name, terms, _) = term {
                 if terms.len() == 3 && name.as_str() == "op" {
-                    Ok(ModuleExport::OpDecl(setup_op_decl(
-                        terms,
-                        atom_tbl
-                    )?))
+                    Ok(ModuleExport::OpDecl(setup_op_decl(terms, atom_tbl)?))
                 } else {
                     Err(CompilationError::InvalidModuleDecl)
                 }
@@ -168,8 +161,7 @@ fn setup_module_export(
         })
 }
 
-pub(super)
-fn setup_module_export_list(
+pub(super) fn setup_module_export_list(
     mut export_list: Term,
     atom_tbl: TabledData<Atom>,
 ) -> Result<Vec<ModuleExport>, CompilationError> {
@@ -182,7 +174,7 @@ fn setup_module_export_list(
         export_list = *t2;
     }
 
-    if export_list.to_constant() != Some(Constant::EmptyList) {
+    if export_list.into_constant() != Some(Constant::EmptyList) {
         Err(CompilationError::InvalidModuleDecl)
     } else {
         Ok(exports)
@@ -197,7 +189,7 @@ fn setup_module_decl(
     let name = terms
         .pop()
         .unwrap()
-        .to_constant()
+        .into_constant()
         .and_then(|c| c.to_atom())
         .ok_or(CompilationError::InvalidModuleDecl)?;
 
@@ -213,13 +205,12 @@ fn setup_use_module_decl(mut terms: Vec<Box<Term>>) -> Result<ModuleSource, Comp
             terms
                 .pop()
                 .unwrap()
-                .to_constant()
+                .into_constant()
                 .and_then(|c| c.to_atom())
                 .map(|c| ModuleSource::Library(c))
                 .ok_or(CompilationError::InvalidUseModuleDecl)
         }
-        Term::Constant(_, Constant::Atom(ref name, _)) =>
-            Ok(ModuleSource::File(name.clone())),
+        Term::Constant(_, Constant::Atom(ref name, _)) => Ok(ModuleSource::File(name.clone())),
         _ => Err(CompilationError::InvalidUseModuleDecl),
     }
 }
@@ -266,17 +257,13 @@ fn setup_qualified_import(
             terms
                 .pop()
                 .unwrap()
-                .to_constant()
+                .into_constant()
                 .and_then(|c| c.to_atom())
                 .map(|c| ModuleSource::Library(c))
                 .ok_or(CompilationError::InvalidUseModuleDecl)
         }
-        Term::Constant(_, Constant::Atom(ref name, _)) => {
-            Ok(ModuleSource::File(name.clone()))
-        }
-        _ => {
-            Err(CompilationError::InvalidUseModuleDecl)
-        }
+        Term::Constant(_, Constant::Atom(ref name, _)) => Ok(ModuleSource::File(name.clone())),
+        _ => Err(CompilationError::InvalidUseModuleDecl),
     }?;
 
     let mut exports = IndexSet::new();
@@ -286,7 +273,7 @@ fn setup_qualified_import(
         export_list = *t2;
     }
 
-    if export_list.to_constant() != Some(Constant::EmptyList) {
+    if export_list.into_constant() != Some(Constant::EmptyList) {
         Err(CompilationError::InvalidModuleDecl)
     } else {
         Ok((module_src, exports))
@@ -334,8 +321,7 @@ fn setup_qualified_import(
 fn setup_meta_predicate<'a>(
     mut terms: Vec<Box<Term>>,
     load_state: &LoadState<'a>,
-) -> Result<(ClauseName, ClauseName, Vec<MetaSpec>), CompilationError>
-{
+) -> Result<(ClauseName, ClauseName, Vec<MetaSpec>), CompilationError> {
     fn get_name_and_meta_specs(
         name: ClauseName,
         terms: &mut [Box<Term>],
@@ -345,26 +331,23 @@ fn setup_meta_predicate<'a>(
         for meta_spec in terms.into_iter() {
             match &**meta_spec {
                 Term::Constant(_, Constant::Atom(meta_spec, _)) => {
-                    let meta_spec =
-                        match meta_spec.as_str() {
-                            "+" => MetaSpec::Plus,
-                            "-" => MetaSpec::Minus,
-                            "?" => MetaSpec::Either,
-                            _   => return Err(CompilationError::InvalidMetaPredicateDecl),
-                        };
+                    let meta_spec = match meta_spec.as_str() {
+                        "+" => MetaSpec::Plus,
+                        "-" => MetaSpec::Minus,
+                        "?" => MetaSpec::Either,
+                        _ => return Err(CompilationError::InvalidMetaPredicateDecl),
+                    };
 
                     meta_specs.push(meta_spec);
                 }
-                Term::Constant(_, Constant::Fixnum(n)) => {
-                    match usize::try_from(*n) {
-                        Ok(n) if n <= MAX_ARITY => {
-                            meta_specs.push(MetaSpec::RequiresExpansionWithArgument(n));
-                        }
-                        _ => {
-                            return Err(CompilationError::InvalidMetaPredicateDecl);
-                        }
+                Term::Constant(_, Constant::Fixnum(n)) => match usize::try_from(*n) {
+                    Ok(n) if n <= MAX_ARITY => {
+                        meta_specs.push(MetaSpec::RequiresExpansionWithArgument(n));
                     }
-                }
+                    _ => {
+                        return Err(CompilationError::InvalidMetaPredicateDecl);
+                    }
+                },
                 _ => {
                     return Err(CompilationError::InvalidMetaPredicateDecl);
                 }
@@ -375,42 +358,35 @@ fn setup_meta_predicate<'a>(
     }
 
     match *terms.pop().unwrap() {
-        Term::Clause(_, name, mut terms, _)
-            if name.as_str() == ":" && terms.len() == 2 => {
-                let spec = *terms.pop().unwrap();
-                let module_name = *terms.pop().unwrap();
+        Term::Clause(_, name, mut terms, _) if name.as_str() == ":" && terms.len() == 2 => {
+            let spec = *terms.pop().unwrap();
+            let module_name = *terms.pop().unwrap();
 
-                match module_name {
-                    Term::Constant(_, Constant::Atom(module_name, _)) => {
-                        match spec {
-                            Term::Clause(_, name, mut terms, _) => {
-                                let (name, meta_specs) =
-                                    get_name_and_meta_specs(name, &mut terms)?;
+            match module_name {
+                Term::Constant(_, Constant::Atom(module_name, _)) => match spec {
+                    Term::Clause(_, name, mut terms, _) => {
+                        let (name, meta_specs) = get_name_and_meta_specs(name, &mut terms)?;
 
-                                Ok((module_name, name, meta_specs))
-                            }
-                            _ => {
-                                Err(CompilationError::InvalidMetaPredicateDecl)
-                            }
-                        }
+                        Ok((module_name, name, meta_specs))
                     }
-                    _ => {
-                        Err(CompilationError::InvalidMetaPredicateDecl)
-                    }
-                }
+                    _ => Err(CompilationError::InvalidMetaPredicateDecl),
+                },
+                _ => Err(CompilationError::InvalidMetaPredicateDecl),
             }
+        }
         Term::Clause(_, name, mut terms, _) => {
             let (name, meta_specs) = get_name_and_meta_specs(name, &mut terms)?;
-            Ok((load_state.module_name(), name, meta_specs))
+            Ok((
+                load_state.compilation_target.module_name(),
+                name,
+                meta_specs,
+            ))
         }
-        _ => {
-            Err(CompilationError::InvalidMetaPredicateDecl)
-        }
+        _ => Err(CompilationError::InvalidMetaPredicateDecl),
     }
 }
 
-fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, CompilationError>
-{
+fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, CompilationError> {
     let mut clauses = vec![];
 
     while let Some(tl) = tls.pop_front() {
@@ -432,9 +408,7 @@ fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, CompilationEr
                 let clause = PredicateClause::Rule(rule);
                 clauses.push(clause);
             }
-            TopLevel::Predicate(predicate) => {
-                clauses.extend(predicate.into_iter())
-            }
+            TopLevel::Predicate(predicate) => clauses.extend(predicate.into_iter()),
             _ => {
                 tls.push_front(tl);
                 break;
@@ -506,8 +480,8 @@ fn check_for_internal_if_then(terms: &mut Vec<Term>) {
 
         conq_terms.push_front(Term::Constant(
             Cell::default(),
-            Constant::Atom(clause_name!("blocked_!"), None))
-        );
+            Constant::Atom(clause_name!("blocked_!"), None),
+        ));
 
         while let Some(term) = pre_cut_terms.pop_back() {
             conq_terms.push_front(term);
@@ -531,38 +505,29 @@ fn setup_declaration<'a>(
     let atom_tbl = load_state.wam.machine_st.atom_tbl.clone();
 
     match term {
-        Term::Clause(_, name, mut terms, _) =>
-            match (name.as_str(), terms.len()) {
-                ("dynamic", 1) => {
-		            let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
-		            Ok(Declaration::Dynamic(name, arity))
-		        }
-                ("module", 2) =>
-                    Ok(Declaration::Module(setup_module_decl(terms, atom_tbl)?)),
-                ("op", 3) =>
-                    Ok(Declaration::Op(setup_op_decl(terms, atom_tbl)?)),
-                ("non_counted_backtracking", 1) => {
-                    let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
-                    Ok(Declaration::NonCountedBacktracking(name, arity))
-                }
-                ("use_module", 1) => {
-                    Ok(Declaration::UseModule(setup_use_module_decl(terms)?))
-                }
-                ("use_module", 2) => {
-                    let (name, exports) = setup_qualified_import(terms, atom_tbl)?;
-                    Ok(Declaration::UseQualifiedModule(name, exports))
-                }
-                ("meta_predicate", 1) => {
-                    let (module_name, name, meta_specs) = setup_meta_predicate(terms, load_state)?;
-                    Ok(Declaration::MetaPredicate(module_name, name, meta_specs))
-                }
-                _ => {
-                    Err(CompilationError::InconsistentEntry)
-                }
-            },
-        _ => {
-            Err(CompilationError::InconsistentEntry)
-        }
+        Term::Clause(_, name, mut terms, _) => match (name.as_str(), terms.len()) {
+            ("dynamic", 1) => {
+                let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
+                Ok(Declaration::Dynamic(name, arity))
+            }
+            ("module", 2) => Ok(Declaration::Module(setup_module_decl(terms, atom_tbl)?)),
+            ("op", 3) => Ok(Declaration::Op(setup_op_decl(terms, atom_tbl)?)),
+            ("non_counted_backtracking", 1) => {
+                let (name, arity) = setup_predicate_indicator(&mut *terms.pop().unwrap())?;
+                Ok(Declaration::NonCountedBacktracking(name, arity))
+            }
+            ("use_module", 1) => Ok(Declaration::UseModule(setup_use_module_decl(terms)?)),
+            ("use_module", 2) => {
+                let (name, exports) = setup_qualified_import(terms, atom_tbl)?;
+                Ok(Declaration::UseQualifiedModule(name, exports))
+            }
+            ("meta_predicate", 1) => {
+                let (module_name, name, meta_specs) = setup_meta_predicate(terms, load_state)?;
+                Ok(Declaration::MetaPredicate(module_name, name, meta_specs))
+            }
+            _ => Err(CompilationError::InconsistentEntry),
+        },
+        _ => Err(CompilationError::InconsistentEntry),
     }
 }
 
@@ -596,8 +561,7 @@ pub(crate) struct Preprocessor {
 }
 
 impl Preprocessor {
-    pub(super)
-    fn new(flags: MachineFlags) -> Self {
+    pub(super) fn new(flags: MachineFlags) -> Self {
         Preprocessor {
             flags,
             queue: VecDeque::new(),
@@ -606,12 +570,8 @@ impl Preprocessor {
 
     fn setup_fact(&mut self, term: Term) -> Result<Term, CompilationError> {
         match term {
-            Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) => {
-                Ok(term)
-            }
-            _ => {
-                Err(CompilationError::InadmissibleFact)
-            }
+            Term::Clause(..) | Term::Constant(_, Constant::Atom(..)) => Ok(term),
+            _ => Err(CompilationError::InadmissibleFact),
         }
     }
 
@@ -712,109 +672,97 @@ impl Preprocessor {
                     Ok(clause_to_query_term(load_state, name, vec![], fixity))
                 }
             }
-            Term::Constant(_, Constant::Char('!')) => {
-                Ok(QueryTerm::BlockedCut)
-            }
+            Term::Constant(_, Constant::Char('!')) => Ok(QueryTerm::BlockedCut),
             Term::Var(_, ref v) if v.as_str() == "!" => {
                 Ok(QueryTerm::UnblockedCut(Cell::default()))
             }
-            Term::Clause(r, name, mut terms, fixity) => {
-                match (name.as_str(), terms.len()) {
-                    (";", 2) => {
-                        let term = Term::Clause(r, name.clone(), terms, fixity);
+            Term::Clause(r, name, mut terms, fixity) => match (name.as_str(), terms.len()) {
+                (";", 2) => {
+                    let term = Term::Clause(r, name.clone(), terms, fixity);
 
-                        let (stub, clauses) = self.fabricate_disjunct(term);
-                        self.queue.push_back(clauses);
+                    let (stub, clauses) = self.fabricate_disjunct(term);
+                    self.queue.push_back(clauses);
 
-                        Ok(QueryTerm::Jump(stub))
-                    }
-                    ("->", 2) => {
-                        let conq = *terms.pop().unwrap();
-                        let prec = *terms.pop().unwrap();
+                    Ok(QueryTerm::Jump(stub))
+                }
+                ("->", 2) => {
+                    let conq = *terms.pop().unwrap();
+                    let prec = *terms.pop().unwrap();
 
-                        let (stub, clauses) = self.fabricate_if_then(prec, conq);
-                        self.queue.push_back(clauses);
+                    let (stub, clauses) = self.fabricate_if_then(prec, conq);
+                    self.queue.push_back(clauses);
 
-                        Ok(QueryTerm::Jump(stub))
-                    }
-                    ("\\+", 1) => {
-                        terms.push(Box::new(Term::Constant(
-                            Cell::default(),
-                            Constant::Atom(clause_name!("$fail"), None)
-                        )));
+                    Ok(QueryTerm::Jump(stub))
+                }
+                ("\\+", 1) => {
+                    terms.push(Box::new(Term::Constant(
+                        Cell::default(),
+                        Constant::Atom(clause_name!("$fail"), None),
+                    )));
 
-                        let conq = Term::Constant(
-                            Cell::default(),
-                            Constant::Atom(clause_name!("true"), None)
-                        );
+                    let conq =
+                        Term::Constant(Cell::default(), Constant::Atom(clause_name!("true"), None));
 
-                        let prec = Term::Clause(Cell::default(), clause_name!("->"), terms, None);
-                        let terms = vec![Box::new(prec), Box::new(conq)];
+                    let prec = Term::Clause(Cell::default(), clause_name!("->"), terms, None);
+                    let terms = vec![Box::new(prec), Box::new(conq)];
 
-                        let term = Term::Clause(Cell::default(), clause_name!(";"), terms, None);
-                        let (stub, clauses) = self.fabricate_disjunct(term);
+                    let term = Term::Clause(Cell::default(), clause_name!(";"), terms, None);
+                    let (stub, clauses) = self.fabricate_disjunct(term);
 
-                        debug_assert!(clauses.len() > 0);
-                        self.queue.push_back(clauses);
+                    debug_assert!(clauses.len() > 0);
+                    self.queue.push_back(clauses);
 
-                        Ok(QueryTerm::Jump(stub))
-                    }
-                    ("$get_level", 1) => {
-                        if let Term::Var(_, ref var) = *terms[0] {
-                            Ok(QueryTerm::GetLevelAndUnify(Cell::default(), var.clone()))
-                        } else {
-                            Err(CompilationError::InadmissibleQueryTerm)
-                        }
-                    }
-                    (":", 2) => {
-                        let predicate_name = *terms.pop().unwrap();
-                        let module_name = *terms.pop().unwrap();
-
-                        match (module_name, predicate_name) {
-                            (Term::Constant(_, Constant::Atom(module_name, _)),
-                             Term::Constant(_, Constant::Atom(predicate_name, fixity))) => {
-                                Ok(qualified_clause_to_query_term(
-                                    load_state,
-                                    module_name,
-                                    predicate_name,
-                                    vec![],
-                                    fixity,
-                                ))
-                            }
-                            (Term::Constant(_, Constant::Atom(module_name, _)),
-                             Term::Clause(_, name, terms, fixity)) => {
-                                Ok(qualified_clause_to_query_term(
-                                    load_state,
-                                    module_name,
-                                    name,
-                                    terms,
-                                    fixity,
-                                ))
-                            }
-                            (module_name, predicate_name) => {
-                                terms.push(Box::new(module_name));
-                                terms.push(Box::new(predicate_name));
-
-                                Ok(clause_to_query_term(load_state, name, terms, fixity))
-                            }
-                        }
-                    }
-                    _ => {
-                        Ok(clause_to_query_term(load_state, name, terms, fixity))
+                    Ok(QueryTerm::Jump(stub))
+                }
+                ("$get_level", 1) => {
+                    if let Term::Var(_, ref var) = *terms[0] {
+                        Ok(QueryTerm::GetLevelAndUnify(Cell::default(), var.clone()))
+                    } else {
+                        Err(CompilationError::InadmissibleQueryTerm)
                     }
                 }
-            }
-            Term::Var(..) => {
-                Ok(QueryTerm::Clause(
-                    Cell::default(),
-                    ClauseType::CallN,
-                    vec![Box::new(term)],
-                    false,
-                ))
-            }
-            _ => {
-                Err(CompilationError::InadmissibleQueryTerm)
-            }
+                (":", 2) => {
+                    let predicate_name = *terms.pop().unwrap();
+                    let module_name = *terms.pop().unwrap();
+
+                    match (module_name, predicate_name) {
+                        (
+                            Term::Constant(_, Constant::Atom(module_name, _)),
+                            Term::Constant(_, Constant::Atom(predicate_name, fixity)),
+                        ) => Ok(qualified_clause_to_query_term(
+                            load_state,
+                            module_name,
+                            predicate_name,
+                            vec![],
+                            fixity,
+                        )),
+                        (
+                            Term::Constant(_, Constant::Atom(module_name, _)),
+                            Term::Clause(_, name, terms, fixity),
+                        ) => Ok(qualified_clause_to_query_term(
+                            load_state,
+                            module_name,
+                            name,
+                            terms,
+                            fixity,
+                        )),
+                        (module_name, predicate_name) => {
+                            terms.push(Box::new(module_name));
+                            terms.push(Box::new(predicate_name));
+
+                            Ok(clause_to_query_term(load_state, name, terms, fixity))
+                        }
+                    }
+                }
+                _ => Ok(clause_to_query_term(load_state, name, terms, fixity)),
+            },
+            Term::Var(..) => Ok(QueryTerm::Clause(
+                Cell::default(),
+                ClauseType::CallN,
+                vec![Box::new(term)],
+                false,
+            )),
+            _ => Err(CompilationError::InadmissibleQueryTerm),
         }
     }
 
@@ -835,9 +783,7 @@ impl Preprocessor {
                     self.to_query_term(load_state, Term::Clause(r, name, subterms, fixity))
                 }
             }
-            _ => {
-                self.to_query_term(load_state, term)
-            }
+            _ => self.to_query_term(load_state, term),
         }
     }
 
@@ -884,30 +830,23 @@ impl Preprocessor {
         mut terms: Vec<Box<Term>>,
         cut_context: CutContext,
     ) -> Result<Rule, CompilationError> {
-        let post_head_terms: Vec<_> = terms.drain(1 ..).collect();
+        let post_head_terms: Vec<_> = terms.drain(1..).collect();
 
-        let mut query_terms =
-            self.setup_query(load_state, post_head_terms, cut_context)?;
+        let mut query_terms = self.setup_query(load_state, post_head_terms, cut_context)?;
 
-        let clauses = query_terms.drain(1 ..).collect();
+        let clauses = query_terms.drain(1..).collect();
         let qt = query_terms.pop().unwrap();
 
         match *terms.pop().unwrap() {
-            Term::Clause(_, name, terms, _) => {
-                Ok(Rule {
-                    head: (name, terms, qt),
-                    clauses,
-                })
-            }
-            Term::Constant(_, Constant::Atom(name, _)) => {
-                Ok(Rule {
-                    head: (name, vec![], qt),
-                    clauses,
-                })
-            }
-            _ => {
-                Err(CompilationError::InvalidRuleHead)
-            }
+            Term::Clause(_, name, terms, _) => Ok(Rule {
+                head: (name, terms, qt),
+                clauses,
+            }),
+            Term::Constant(_, Constant::Atom(name, _)) => Ok(Rule {
+                head: (name, vec![], qt),
+                clauses,
+            }),
+            _ => Err(CompilationError::InvalidRuleHead),
         }
     }
 
@@ -917,11 +856,14 @@ impl Preprocessor {
         terms: Vec<Box<Term>>,
         cut_context: CutContext,
     ) -> Result<TopLevel, CompilationError> {
-        Ok(TopLevel::Query(self.setup_query(load_state, terms, cut_context)?))
+        Ok(TopLevel::Query(self.setup_query(
+            load_state,
+            terms,
+            cut_context,
+        )?))
     }
 
-    pub(super)
-    fn try_term_to_tl<'a>(
+    pub(super) fn try_term_to_tl<'a>(
         &mut self,
         load_state: &mut LoadState<'a>,
         term: Term,
@@ -944,9 +886,7 @@ impl Preprocessor {
                     Ok(TopLevel::Fact(self.setup_fact(term)?))
                 }
             }
-            term => {
-                Ok(TopLevel::Fact(self.setup_fact(term)?))
-            }
+            term => Ok(TopLevel::Fact(self.setup_fact(term)?)),
         }
     }
 
@@ -965,21 +905,18 @@ impl Preprocessor {
         Ok(results)
     }
 
-    pub(super)
-    fn parse_queue<'a>(
+    pub(super) fn parse_queue<'a>(
         &mut self,
         load_state: &mut LoadState<'a>,
     ) -> Result<VecDeque<TopLevel>, CompilationError> {
         let mut queue = VecDeque::new();
 
         while let Some(terms) = self.queue.pop_front() {
-            let clauses = merge_clauses(
-                &mut self.try_terms_to_tls(
-                    load_state,
-                    terms,
-                    CutContext::HasCutVariable,
-                )?
-            )?;
+            let clauses = merge_clauses(&mut self.try_terms_to_tls(
+                load_state,
+                terms,
+                CutContext::HasCutVariable,
+            )?)?;
 
             queue.push_back(clauses);
         }

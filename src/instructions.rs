@@ -1,4 +1,5 @@
-use crate::prolog_parser_rebis::ast::*;
+use prolog_parser::ast::*;
+use prolog_parser::clause_name;
 
 use crate::clause_types::*;
 use crate::forms::*;
@@ -8,7 +9,7 @@ use crate::machine::machine_errors::MachineStub;
 use crate::machine::machine_indices::*;
 use crate::rug::Integer;
 
-use crate::indexmap::IndexMap;
+use indexmap::IndexMap;
 
 use slice_deque::SliceDeque;
 
@@ -34,9 +35,7 @@ impl Level {
 impl ArithmeticTerm {
     fn into_functor(&self) -> MachineStub {
         match self {
-            &ArithmeticTerm::Reg(r) => {
-                reg_type_into_functor(r)
-            }
+            &ArithmeticTerm::Reg(r) => reg_type_into_functor(r),
             &ArithmeticTerm::Interm(i) => {
                 functor!("intermediate", [integer(i)])
             }
@@ -185,16 +184,11 @@ impl Line {
 
     pub fn enqueue_functors(&self, mut h: usize, functors: &mut Vec<MachineStub>) {
         match self {
-            &Line::Arithmetic(ref arith_instr) =>
-                functors.push(arith_instr.to_functor(h)),
-            &Line::Choice(ref choice_instr) =>
-                functors.push(choice_instr.to_functor()),
-            &Line::Control(ref control_instr) =>
-                functors.push(control_instr.to_functor()),
-            &Line::Cut(ref cut_instr) =>
-                functors.push(cut_instr.to_functor(h)),
-            &Line::Fact(ref fact_instr) =>
-                functors.push(fact_instr.to_functor(h)),
+            &Line::Arithmetic(ref arith_instr) => functors.push(arith_instr.to_functor(h)),
+            &Line::Choice(ref choice_instr) => functors.push(choice_instr.to_functor()),
+            &Line::Control(ref control_instr) => functors.push(control_instr.to_functor()),
+            &Line::Cut(ref cut_instr) => functors.push(cut_instr.to_functor(h)),
+            &Line::Fact(ref fact_instr) => functors.push(fact_instr.to_functor(h)),
             &Line::IndexingCode(ref indexing_instrs) => {
                 for indexing_instr in indexing_instrs {
                     match indexing_instr {
@@ -213,10 +207,10 @@ impl Line {
                     }
                 }
             }
-            &Line::IndexedChoice(ref indexed_choice_instr) =>
-                functors.push(indexed_choice_instr.to_functor()),
-            &Line::Query(ref query_instr) =>
-                functors.push(query_instr.to_functor(h)),
+            &Line::IndexedChoice(ref indexed_choice_instr) => {
+                functors.push(indexed_choice_instr.to_functor())
+            }
+            &Line::Query(ref query_instr) => functors.push(query_instr.to_functor(h)),
         }
     }
 }
@@ -224,24 +218,16 @@ impl Line {
 #[inline]
 pub fn to_indexing_line_mut(line: &mut Line) -> Option<&mut Vec<IndexingLine>> {
     match line {
-        Line::IndexingCode(ref mut indexing_code) => {
-            Some(indexing_code)
-        }
-        _ => {
-            None
-        }
+        Line::IndexingCode(ref mut indexing_code) => Some(indexing_code),
+        _ => None,
     }
 }
 
 #[inline]
 pub fn to_indexing_line(line: &Line) -> Option<&Vec<IndexingLine>> {
     match line {
-        Line::IndexingCode(ref indexing_code) => {
-            Some(indexing_code)
-        }
-        _ => {
-            None
-        }
+        Line::IndexingCode(ref indexing_code) => Some(indexing_code),
+        _ => None,
     }
 }
 
@@ -296,11 +282,7 @@ fn arith_instr_unary_functor(
 ) -> MachineStub {
     let at_stub = at.into_functor();
 
-    functor!(
-        name,
-        [aux(h, 0), integer(t)],
-        [at_stub]
-    )
+    functor!(name, [aux(h, 0), integer(t)], [at_stub])
 }
 
 fn arith_instr_bin_functor(
@@ -383,39 +365,17 @@ impl ArithmeticInstruction {
             &ArithmeticInstruction::Gcd(ref at_1, ref at_2, t) => {
                 arith_instr_bin_functor(h, "gcd", at_1, at_2, t)
             }
-            &ArithmeticInstruction::Sign(ref at, t) => {
-                arith_instr_unary_functor(h, "sign", at, t)
-            }
-            &ArithmeticInstruction::Cos(ref at, t)  => {
-                arith_instr_unary_functor(h, "cos", at, t)
-            }
-            &ArithmeticInstruction::Sin(ref at, t)  => {
-                arith_instr_unary_functor(h, "sin", at, t)
-            }
-            &ArithmeticInstruction::Tan(ref at, t)  => {
-                arith_instr_unary_functor(h, "tan", at, t)
-            }
-            &ArithmeticInstruction::Log(ref at, t)  => {
-                arith_instr_unary_functor(h, "log", at, t)
-            }
-            &ArithmeticInstruction::Exp(ref at, t)  => {
-                arith_instr_unary_functor(h, "exp", at, t)
-            }
-            &ArithmeticInstruction::ACos(ref at, t) => {
-                arith_instr_unary_functor(h, "acos", at, t)
-            }
-            &ArithmeticInstruction::ASin(ref at, t) => {
-                arith_instr_unary_functor(h, "asin", at, t)
-            }
-            &ArithmeticInstruction::ATan(ref at, t) => {
-                arith_instr_unary_functor(h, "atan", at, t)
-            }
-            &ArithmeticInstruction::Sqrt(ref at, t) => {
-                arith_instr_unary_functor(h, "sqrt", at, t)
-            }
-            &ArithmeticInstruction::Abs(ref at, t) => {
-                arith_instr_unary_functor(h, "abs", at, t)
-            }
+            &ArithmeticInstruction::Sign(ref at, t) => arith_instr_unary_functor(h, "sign", at, t),
+            &ArithmeticInstruction::Cos(ref at, t) => arith_instr_unary_functor(h, "cos", at, t),
+            &ArithmeticInstruction::Sin(ref at, t) => arith_instr_unary_functor(h, "sin", at, t),
+            &ArithmeticInstruction::Tan(ref at, t) => arith_instr_unary_functor(h, "tan", at, t),
+            &ArithmeticInstruction::Log(ref at, t) => arith_instr_unary_functor(h, "log", at, t),
+            &ArithmeticInstruction::Exp(ref at, t) => arith_instr_unary_functor(h, "exp", at, t),
+            &ArithmeticInstruction::ACos(ref at, t) => arith_instr_unary_functor(h, "acos", at, t),
+            &ArithmeticInstruction::ASin(ref at, t) => arith_instr_unary_functor(h, "asin", at, t),
+            &ArithmeticInstruction::ATan(ref at, t) => arith_instr_unary_functor(h, "atan", at, t),
+            &ArithmeticInstruction::Sqrt(ref at, t) => arith_instr_unary_functor(h, "sqrt", at, t),
+            &ArithmeticInstruction::Abs(ref at, t) => arith_instr_unary_functor(h, "abs", at, t),
             &ArithmeticInstruction::Float(ref at, t) => {
                 arith_instr_unary_functor(h, "float", at, t)
             }
@@ -431,12 +391,8 @@ impl ArithmeticInstruction {
             &ArithmeticInstruction::Floor(ref at, t) => {
                 arith_instr_unary_functor(h, "floor", at, t)
             }
-            &ArithmeticInstruction::Neg(ref at, t) => {
-                arith_instr_unary_functor(h, "-", at, t)
-            }
-            &ArithmeticInstruction::Plus(ref at, t) => {
-                arith_instr_unary_functor(h, "+", at, t)
-            }
+            &ArithmeticInstruction::Neg(ref at, t) => arith_instr_unary_functor(h, "-", at, t),
+            &ArithmeticInstruction::Plus(ref at, t) => arith_instr_unary_functor(h, "+", at, t),
             &ArithmeticInstruction::BitwiseComplement(ref at, t) => {
                 arith_instr_unary_functor(h, "\\", at, t)
             }
@@ -451,21 +407,18 @@ pub enum ControlInstruction {
     CallClause(ClauseType, usize, usize, bool, bool),
     Deallocate,
     JmpBy(usize, usize, usize, bool), // arity, global_offset, perm_vars after threshold, last call.
-    RevJmpBy(usize), // notice the lack of context change as in
-                     // JmpBy. RevJmpBy is used only to patch extensible
-                     // predicates together.
+    RevJmpBy(usize),                  // notice the lack of context change as in
+    // JmpBy. RevJmpBy is used only to patch extensible
+    // predicates together.
     Proceed,
 }
 
 impl ControlInstruction {
     pub fn perm_vars(&self) -> Option<usize> {
         match self {
-            ControlInstruction::CallClause(_, _, num_cells, ..) =>
-                Some(*num_cells),
-            ControlInstruction::JmpBy(_, _, num_cells, ..) =>
-                Some(*num_cells),
-            _ =>
-                None
+            ControlInstruction::CallClause(_, _, num_cells, ..) => Some(*num_cells),
+            ControlInstruction::JmpBy(_, _, num_cells, ..) => Some(*num_cells),
+            _ => None,
         }
     }
 
@@ -500,7 +453,13 @@ impl ControlInstruction {
 #[derive(Debug)]
 pub enum IndexingInstruction {
     // The first index is the optimal argument being indexed.
-    SwitchOnTerm(usize, usize, IndexingCodePtr, IndexingCodePtr, IndexingCodePtr),
+    SwitchOnTerm(
+        usize,
+        usize,
+        IndexingCodePtr,
+        IndexingCodePtr,
+        IndexingCodePtr,
+    ),
     SwitchOnConstant(IndexMap<Constant, IndexingCodePtr>),
     SwitchOnStructure(IndexMap<(ClauseName, usize), IndexingCodePtr>),
 }
@@ -511,11 +470,13 @@ impl IndexingInstruction {
             &IndexingInstruction::SwitchOnTerm(arg, vars, constants, lists, structures) => {
                 functor!(
                     "switch_on_term",
-                    [integer(arg),
-                     integer(vars),
-                     indexing_code_ptr(h, constants),
-                     indexing_code_ptr(h, lists),
-                     indexing_code_ptr(h, structures)]
+                    [
+                        integer(arg),
+                        integer(vars),
+                        indexing_code_ptr(h, constants),
+                        indexing_code_ptr(h, lists),
+                        indexing_code_ptr(h, structures)
+                    ]
                 )
             }
             &IndexingInstruction::SwitchOnConstant(ref constants) => {
@@ -528,15 +489,14 @@ impl IndexingInstruction {
                     let key_value_pair = functor!(
                         ":",
                         SharedOpDesc::new(600, XFY),
-                        [constant(c),
-                         indexing_code_ptr(h + 3, *ptr)]
+                        [constant(c), indexing_code_ptr(h + 3, *ptr)]
                     );
 
                     key_value_list_stub.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
                     key_value_list_stub.push(HeapCellValue::Addr(Addr::Str(h + 3)));
-                    key_value_list_stub.push(HeapCellValue::Addr(
-                        Addr::HeapCell(h + 3 + key_value_pair.len())
-                    ));
+                    key_value_list_stub.push(HeapCellValue::Addr(Addr::HeapCell(
+                        h + 3 + key_value_pair.len(),
+                    )));
 
                     h += key_value_pair.len() + 3;
                     key_value_list_stub.extend(key_value_pair.into_iter());
@@ -560,23 +520,21 @@ impl IndexingInstruction {
                     let predicate_indicator_stub = functor!(
                         "/",
                         SharedOpDesc::new(400, YFX),
-                        [clause_name(name.clone()),
-                         integer(*arity)]
+                        [clause_name(name.clone()), integer(*arity)]
                     );
 
                     let key_value_pair = functor!(
                         ":",
                         SharedOpDesc::new(600, XFY),
-                        [aux(h + 3, 0),
-                         indexing_code_ptr(h + 3, *ptr)],
+                        [aux(h + 3, 0), indexing_code_ptr(h + 3, *ptr)],
                         [predicate_indicator_stub]
                     );
 
                     key_value_list_stub.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
                     key_value_list_stub.push(HeapCellValue::Addr(Addr::Str(h + 3)));
-                    key_value_list_stub.push(HeapCellValue::Addr(
-                        Addr::HeapCell(h + 3 + key_value_pair.len())
-                    ));
+                    key_value_list_stub.push(HeapCellValue::Addr(Addr::HeapCell(
+                        h + 3 + key_value_pair.len(),
+                    )));
 
                     h += key_value_pair.len() + 3;
                     key_value_list_stub.extend(key_value_pair.into_iter());
@@ -614,7 +572,7 @@ impl FactInstruction {
         match self {
             &FactInstruction::GetConstant(lvl, ref c, r) => {
                 let lvl_stub = lvl.into_functor();
-                let rt_stub  = reg_type_into_functor(r);
+                let rt_stub = reg_type_into_functor(r);
 
                 functor!(
                     "get_constant",
@@ -624,17 +582,13 @@ impl FactInstruction {
             }
             &FactInstruction::GetList(lvl, r) => {
                 let lvl_stub = lvl.into_functor();
-                let rt_stub  = reg_type_into_functor(r);
+                let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "get_list",
-                    [aux(h, 0), aux(h, 1)],
-                    [lvl_stub, rt_stub]
-                )
+                functor!("get_list", [aux(h, 0), aux(h, 1)], [lvl_stub, rt_stub])
             }
             &FactInstruction::GetPartialString(lvl, ref s, r, has_tail) => {
                 let lvl_stub = lvl.into_functor();
-                let rt_stub  = reg_type_into_functor(r);
+                let rt_stub = reg_type_into_functor(r);
 
                 functor!(
                     "get_partial_string",
@@ -654,20 +608,12 @@ impl FactInstruction {
             &FactInstruction::GetValue(r, arg) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "get_value",
-                    [aux(h, 0), integer(arg)],
-                    [rt_stub]
-                )
+                functor!("get_value", [aux(h, 0), integer(arg)], [rt_stub])
             }
             &FactInstruction::GetVariable(r, arg) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "get_variable",
-                    [aux(h, 0), integer(arg)],
-                    [rt_stub]
-                )
+                functor!("get_variable", [aux(h, 0), integer(arg)], [rt_stub])
             }
             &FactInstruction::UnifyConstant(ref c) => {
                 functor!("unify_constant", [constant(h, c)], [])
@@ -675,29 +621,17 @@ impl FactInstruction {
             &FactInstruction::UnifyLocalValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "unify_local_value",
-                    [aux(h, 0)],
-                    [rt_stub]
-                )
+                functor!("unify_local_value", [aux(h, 0)], [rt_stub])
             }
             &FactInstruction::UnifyVariable(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "unify_variable",
-                    [aux(h, 0)],
-                    [rt_stub]
-                )
+                functor!("unify_variable", [aux(h, 0)], [rt_stub])
             }
             &FactInstruction::UnifyValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "unify_value",
-                    [aux(h, 0)],
-                    [rt_stub]
-                )
+                functor!("unify_value", [aux(h, 0)], [rt_stub])
             }
             &FactInstruction::UnifyVoid(vars) => {
                 functor!("unify_void", [integer(vars)])
@@ -726,13 +660,12 @@ pub enum QueryInstruction {
 impl QueryInstruction {
     pub fn to_functor(&self, h: usize) -> MachineStub {
         match self {
-            &QueryInstruction::PutUnsafeValue(norm, arg) => functor!(
-                "put_unsafe_value",
-                [integer(norm), integer(arg)]
-            ),
+            &QueryInstruction::PutUnsafeValue(norm, arg) => {
+                functor!("put_unsafe_value", [integer(norm), integer(arg)])
+            }
             &QueryInstruction::PutConstant(lvl, ref c, r) => {
                 let lvl_stub = lvl.into_functor();
-                let rt_stub  = reg_type_into_functor(r);
+                let rt_stub = reg_type_into_functor(r);
 
                 functor!(
                     "put_constant",
@@ -742,17 +675,13 @@ impl QueryInstruction {
             }
             &QueryInstruction::PutList(lvl, r) => {
                 let lvl_stub = lvl.into_functor();
-                let rt_stub  = reg_type_into_functor(r);
+                let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "put_list",
-                    [aux(h, 0), aux(h, 1)],
-                    [lvl_stub, rt_stub]
-                )
+                functor!("put_list", [aux(h, 0), aux(h, 1)], [lvl_stub, rt_stub])
             }
             &QueryInstruction::PutPartialString(lvl, ref s, r, has_tail) => {
                 let lvl_stub = lvl.into_functor();
-                let rt_stub  = reg_type_into_functor(r);
+                let rt_stub = reg_type_into_functor(r);
 
                 functor!(
                     "put_partial_string",
@@ -772,29 +701,17 @@ impl QueryInstruction {
             &QueryInstruction::PutValue(r, arg) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "put_value",
-                    [aux(h, 0), integer(arg)],
-                    [rt_stub]
-                )
+                functor!("put_value", [aux(h, 0), integer(arg)], [rt_stub])
             }
             &QueryInstruction::GetVariable(r, arg) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "get_variable",
-                    [aux(h, 0), integer(arg)],
-                    [rt_stub]
-                )
+                functor!("get_variable", [aux(h, 0), integer(arg)], [rt_stub])
             }
             &QueryInstruction::PutVariable(r, arg) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "put_variable",
-                    [aux(h, 0), integer(arg)],
-                    [rt_stub]
-                )
+                functor!("put_variable", [aux(h, 0), integer(arg)], [rt_stub])
             }
             &QueryInstruction::SetConstant(ref c) => {
                 functor!("set_constant", [constant(h, c)], [])
@@ -802,29 +719,17 @@ impl QueryInstruction {
             &QueryInstruction::SetLocalValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "set_local_value",
-                    [aux(h, 0)],
-                    [rt_stub]
-                )
+                functor!("set_local_value", [aux(h, 0)], [rt_stub])
             }
             &QueryInstruction::SetVariable(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "set_variable",
-                    [aux(h, 0)],
-                    [rt_stub]
-                )
+                functor!("set_variable", [aux(h, 0)], [rt_stub])
             }
             &QueryInstruction::SetValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!(
-                    "set_value",
-                    [aux(h, 0)],
-                    [rt_stub]
-                )
+                functor!("set_value", [aux(h, 0)], [rt_stub])
             }
             &QueryInstruction::SetVoid(vars) => {
                 functor!("set_void", [integer(vars)])

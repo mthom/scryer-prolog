@@ -26,14 +26,14 @@ impl fmt::Display for REPLCodePtr {
                 write!(f, "REPLCodePtr::AddGoalExpansionClause"),
             REPLCodePtr::AddTermExpansionClause =>
                 write!(f, "REPLCodePtr::AddTermExpansionClause"),
-            REPLCodePtr::BuiltInProperty =>
-                write!(f, "REPLCodePtr::BuiltInProperty"),
-            REPLCodePtr::UserAssertz =>
-                write!(f, "REPLCodePtr::UserAssertz"),
-            REPLCodePtr::UserAsserta =>
-                write!(f, "REPLCodePtr::UserAsserta"),
-            REPLCodePtr::UserRetract =>
-                write!(f, "REPLCodePtr::UserRetract"),
+            REPLCodePtr::AbolishClause =>
+                write!(f, "REPLCodePtr::AbolishClause"),
+            REPLCodePtr::Assertz =>
+                write!(f, "REPLCodePtr::Assertz"),
+            REPLCodePtr::Asserta =>
+                write!(f, "REPLCodePtr::Asserta"),
+            REPLCodePtr::Retract =>
+                write!(f, "REPLCodePtr::Retract"),
             REPLCodePtr::ClauseToEvacuable =>
                 write!(f, "REPLCodePtr::ClauseToEvacuable"),
             REPLCodePtr::ConcludeLoad =>
@@ -64,8 +64,14 @@ impl fmt::Display for REPLCodePtr {
 		        write!(f, "REPLCodePtr::UseModule"),
             REPLCodePtr::MetaPredicateProperty =>
                 write!(f, "REPLCodePtr::MetaPredicateProperty"),
-            REPLCodePtr::CompilePendingPredicates =>
-                write!(f, "REPLCodePtr::CompilePendingPredicates"),
+            REPLCodePtr::BuiltInProperty =>
+                write!(f, "REPLCodePtr::BuiltInProperty"),
+            REPLCodePtr::DynamicProperty =>
+                write!(f, "REPLCodePtr::DynamicProperty"),
+            REPLCodePtr::MultifileProperty =>
+                write!(f, "REPLCodePtr::MultifileProperty"),
+            REPLCodePtr::DiscontiguousProperty =>
+                write!(f, "REPLCodePtr::DiscontiguousProperty"),
         }
     }
 }
@@ -371,15 +377,15 @@ impl fmt::Display for SessionError {
             // &SessionError::InvalidFileName(ref filename) => {
             //     write!(f, "filename {} is invalid", filename)
             // }
-            // &SessionError::ModuleDoesNotContainExport(ref module, ref key) => {
-            //     write!(
-            //         f,
-            //         "module {} does not contain claimed export {}/{}",
-            //         module,
-            //         key.0,
-            //         key.1,
-            //     )
-            // }
+            &SessionError::ModuleDoesNotContainExport(ref module, ref key) => {
+                write!(
+                    f,
+                    "module {} does not contain claimed export {}/{}",
+                    module,
+                    key.0,
+                    key.1,
+                )
+            }
             &SessionError::OpIsInfixAndPostFix(_) => {
                 write!(f, "cannot define an op to be both postfix and infix.")
             }

@@ -4,9 +4,10 @@
                      abolish/1, asserta/1, assertz/1,
                      at_end_of_stream/0, at_end_of_stream/1,
                      atom_chars/2, atom_codes/2, atom_concat/3,
-                     atom_length/2, bagof/3, catch/3, char_code/2,
-                     clause/2, close/1, close/2, current_input/1,
-                     current_output/1, current_op/3,
+                     atom_length/2, bagof/3, call/1, call/2, call/3,
+                     call/4, call/5, call/6, call/7, call/8, call/9,
+                     catch/3, char_code/2, clause/2, close/1, close/2,
+                     current_input/1, current_output/1, current_op/3,
                      current_predicate/1, current_prolog_flag/2,
                      fail/0, false/0, findall/3, findall/4,
                      flush_output/0, flush_output/1, get_byte/1,
@@ -37,6 +38,30 @@ X = X.
 true.
 
 false :- '$fail'.
+
+
+% These are stub versions of call/{1-9} defined for bootstrapping.
+% Once Scryer is bootstrapped, each is replaced with a version that
+% uses expand_goal to pass the expanded goal along to '$call'.
+
+call(G) :- '$call'(G).
+
+call(G, A) :- '$call'(G, A).
+
+call(G, A, B) :- '$call'(G, A, B).
+
+call(G, A, B, C) :- '$call'(G, A, B, C).
+
+call(G, A, B, C, D) :- '$call'(G, A, B, C, D).
+
+call(G, A, B, C, D, E) :- '$call'(G, A, B, C, D, E).
+
+call(G, A, B, C, D, E, F) :- '$call'(G, A, B, C, D, E, F).
+
+call(G, A, B, C, D, E, F, G) :- '$call'(G, A, B, C, D, E, F, G).
+
+call(G, A, B, C, D, E, F, G, H) :- '$call'(G, A, B, C, D, E, F, G, H).
+
 
 Module : Predicate :-
     ( atom(Module) ->
@@ -209,6 +234,8 @@ G1 -> G2 :-
     ).
 
 
+:-non_counted_backtracking call_or_cut/3.
+
 call_or_cut(G, B, ErrorPI) :-
     (  '$call_with_default_policy'(var(G)) ->
        throw(error(instantiation_error, ErrorPI))
@@ -216,55 +243,71 @@ call_or_cut(G, B, ErrorPI) :-
     ).
 
 
-call_or_cut(!, B) :-
+:- non_counted_backtracking call_or_cut/2.
+
+call_or_cut(M:G, B) :-
+    !,
+    (  nonvar(G),
+       '$call_with_default_policy'(call_or_cut_interp(G, B)) ->
+       true
+    ;  call(M:G)
+    ).
+call_or_cut(G, B) :-
+    (  '$call_with_default_policy'(call_or_cut_interp(G, B)) ->
+       true
+    ;  call(G)
+    ).
+
+
+:- non_counted_backtracking call_or_cut_interp/2.
+
+call_or_cut_interp(!, B) :-
     '$set_cp_by_default'(B).
-call_or_cut((G1, G2), B) :-
-    !,
+call_or_cut_interp((G1, G2), B) :-
     '$call_with_default_policy'(','(G1, G2, B)).
-call_or_cut((G1 ; G2), B) :-
-    !,
+call_or_cut_interp((G1 ; G2), B) :-
     '$call_with_default_policy'(';'(G1, G2, B)).
-call_or_cut((G1 -> G2), B) :-
-    !,
+call_or_cut_interp((G1 -> G2), B) :-
     '$call_with_default_policy'(->(G1, G2, B)).
-call_or_cut(G, _) :-
-    '$call_with_default_policy'(G).
 
 
 :- non_counted_backtracking (',')/3.
-','((G1, G2), G3, B) :-
+
+','(M:G1, G2, B) :-
     !,
-    '$call_with_default_policy'(','(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
-','((G1; G2), G3, B) :-
-    !,
-    '$call_with_default_policy'(';'(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
-','((G1 -> G2), G3, B) :-
-    !,
-    '$call_with_default_policy'(->(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+    (  nonvar(G1),
+       '$call_with_default_policy'(',-interp'(G1, G2, B)) ->
+       true
+    ;  call(M:G1),
+       '$call_with_default_policy'(call_or_cut(G2, B, (',')/2))
+    ).
 ','(G1, G2, B) :-
     '$call_with_default_policy'(call_or_cut(G1, B, (',')/2)),
     '$call_with_default_policy'(call_or_cut(G2, B, (',')/2)).
 
 
+:- non_counted_backtracking (',-interp')/3.
+
+',-interp'((G1, G2), G3, B) :-
+    '$call_with_default_policy'(','(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+',-interp'((G1; G2), G3, B) :-
+    '$call_with_default_policy'(';'(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+',-interp'((G1 -> G2), G3, B) :-
+    '$call_with_default_policy'(->(G1, G2, B)),
+    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
+
+
 :- non_counted_backtracking (;)/3.
-';'((G1, G2), G3, B) :-
+
+';'(M:G1, G2, B) :-
     !,
-    (  '$call_with_default_policy'(','(G1, G2, B))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
-';'((G1; G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(';'(G1, G2, B))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
-';'((G1 -> G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
-       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    (  nonvar(G1),
+       '$call_with_default_policy'(';-interp'(G1, G2, B)) ->
+       true
+    ;  call(M:G1)
+    ;  '$call_with_default_policy'(call_or_cut(G2, B, (;)/2))
     ).
 ';'(G1, G2, B) :-
     (  '$call_with_default_policy'(call_or_cut(G1, B, (;)/2))
@@ -272,26 +315,54 @@ call_or_cut(G, _) :-
     ).
 
 
+:- non_counted_backtracking ';-interp'/3.
+
+';-interp'((G1, G2), G3, B) :-
+    (  '$call_with_default_policy'(','(G1, G2, B))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+';-interp'((G1; G2), G3, B) :-
+    (  '$call_with_default_policy'(';'(G1, G2, B))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+';-interp'((G1 -> G2), G3, B) :-
+    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
+       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+
+
 :- non_counted_backtracking (->)/3.
-->((G1, G2), G3, B) :-
+
+->(M:G1, G2, B) :-
     !,
+    (  nonvar(G1),
+       '$call_with_default_policy'('->-interp'(G1, G2, B)) ->
+       true
+    ;  call(M:G1) ->
+       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+    ).
+->(G1, G2, B) :-
+    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
+       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+    ).
+
+
+:- non_counted_backtracking '->-interp'/3.
+
+'->-interp'((G1, G2), G3, B) :-
     (  '$call_with_default_policy'(','(G1, G2, B)) ->
        '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
     ).
-->((G1 ; G2), G3, B) :-
-    !,
+'->-interp'((G1 ; G2), G3, B) :-
     (  '$call_with_default_policy'(';'(G1, G2, B)) ->
        '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
     ).
-->((G1 -> G2), G3, B) :-
-    !,
+'->-interp'((G1 -> G2), G3, B) :-
     (  '$call_with_default_policy'(->(G1, G2, B)) ->
        '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
     ).
-->(G1, G2, B) :-
-    (   '$call_with_default_policy'(call_or_cut(G1, B, (->)/2))
-    ->  '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
-    ).
+
 
 % univ.
 
@@ -640,8 +711,11 @@ iterate_variants([V-Solution|GroupSolutions], V, Solution) :-
 iterate_variants([_|GroupSolutions], Ws, Solution) :-
     iterate_variants(GroupSolutions, Ws, Solution).
 
+
 rightmost_power(Term, FinalTerm, Xs) :-
-    (  Term = X ^ Y
+    (  (  Term = X ^ Y
+       ;  Term = _ : X ^ Y
+       )
     -> (  var(Y) -> FinalTerm = Y, Xs = [X]
        ;  Xs = [X | Xss], rightmost_power(Y, FinalTerm, Xss)
        )
@@ -649,11 +723,11 @@ rightmost_power(Term, FinalTerm, Xs) :-
     ).
 
 
-% :- meta_predicate findall_with_existential(?, 0, ?, ?, ?).
-
 findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses) :-
     (  nonvar(Goal),
-       Goal = _ ^ _ ->
+       (  Goal = _ ^ _
+       ;  Goal = _ : (_ ^ _)
+       )  ->
        rightmost_power(Goal, Goal1, ExistentialVars0),
        term_variables(ExistentialVars0, ExistentialVars),
        sort(Witnesses0, Witnesses1),
@@ -714,21 +788,22 @@ setof(Template, Goal, Solution) :-
     ).
 
 '$module_clause'(H, B, Module) :-
-    (  var(H) -> throw(error(instantiation_error, clause/2))
+    (  var(H) ->
+       throw(error(instantiation_error, clause/2))
     ;  functor(H, Name, Arity) ->
        (  Name == '.' ->
           throw(error(type_error(callable, H), clause/2))
+       ;  '$no_such_predicate'(Module, H) ->
+          '$fail'
 	   ;  '$head_is_dynamic'(Module, H) ->
 		  '$clause_body_is_valid'(B),
-		  Module:'$clause'(H, B) %%TODO: how do we show this exists?
+		  Module:'$clause'(H, B)
 	   ;  throw(error(permission_error(access, private_procedure, Name/Arity),
 					  clause/2))
 	   )
     ;  throw(error(type_error(callable, H), clause/2))
     ).
 
-
-:- dynamic('$clause'/2).
 
 clause(H, B) :-
     (  var(H) ->
@@ -753,24 +828,19 @@ clause(H, B) :-
     ;  throw(error(type_error(callable, H), clause/2))
     ).
 
-call_module_asserta(Head, Body, Name, Arity, Module) :-
+call_asserta(Head, Body, Name, Arity, Module) :-
     '$clause_body_is_valid'(Body),
-    functor(VarHead, Name, Arity),
-    findall((VarHead :- VarBody), builtins:clause(Module:VarHead, VarBody), Clauses),
-    '$module_asserta'((Head :- Body), Clauses, Name, Arity, Module).
-
-call_asserta(Head, Body, Name, Arity) :-
-    '$clause_body_is_valid'(Body),
-    functor(VarHead, Name, Arity),
-    '$asserta'(Head, Body, Name, Arity).
+    functor(_, Name, Arity),
+    '$asserta'(Head, Body, Name, Arity, Module).
 
 module_asserta_clause(Head, Body, Module) :-
-    (  var(Head) -> throw(error(instantiation_error, asserta/1))
+    (  var(Head) ->
+       throw(error(instantiation_error, asserta/1))
     ;  functor(Head, Name, Arity),
        atom(Name),
        Name \== '.' ->
-       (  '$module_head_is_dynamic'(Head, Module) ->
-          call_module_asserta(Head, Body, Name, Arity, Module)
+       (  '$head_is_dynamic'(Module, Head) ->
+          call_asserta(Head, Body, Name, Arity, Module)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
        )
     ;  throw(error(type_error(callable, Head), asserta/1))
@@ -787,9 +857,9 @@ asserta_clause(Head, Body) :-
 	     arg(2, Head, F),
 	     module_asserta_clause(F, Body, Module)
        ; '$no_such_predicate'(user, Head) ->
-         call_asserta(Head, Body, Name, Arity)
+         call_asserta(Head, Body, Name, Arity, user)
        ; '$head_is_dynamic'(user, Head) ->
-         call_asserta(Head, Body, Name, Arity)
+         call_asserta(Head, Body, Name, Arity, user)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
        )
     ;  throw(error(type_error(callable, Head), asserta/1))
@@ -798,17 +868,11 @@ asserta_clause(Head, Body) :-
 asserta(Clause) :-
     (  Clause \= (_ :- _) ->
        Head = Clause,
-       Body = true, asserta_clause(Head, Body)
+       Body = true,
+       asserta_clause(Head, Body)
     ;  Clause = (Head :- Body) ->
        asserta_clause(Head, Body)
     ).
-
-% NOT MODIFIED.
-call_module_assertz(Head, Body, Name, Arity, Module) :-
-    '$clause_body_is_valid'(Body),
-    functor(VarHead, Name, Arity),
-    findall((VarHead :- VarBody), builtins:clause(Module:VarHead, VarBody), Clauses),
-    '$module_assertz'((Head :- Body), Clauses, Name, Arity, Module).
 
 module_assertz_clause(Head, Body, Module) :-
     (  var(Head) ->
@@ -816,18 +880,21 @@ module_assertz_clause(Head, Body, Module) :-
     ;  functor(Head, Name, Arity),
        atom(Name),
        Name \== '.' ->
-       (  '$head_is_dynamic'(Module, Head) ->
-          call_module_assertz(Head, Body, Name, Arity, Module)
-       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), assertz/1))
+       (  '$no_such_predicate'(Module, Head) ->
+	      call_assertz(Head, Body, Name, Arity, Module)
+       ;  '$head_is_dynamic'(Module, Head) ->
+          call_assertz(Head, Body, Name, Arity, Module)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity),
+                      assertz/1))
        )
     ;  throw(error(type_error(callable, Head), assertz/1))
     ).
 
-% MODIFIED.
-call_assertz(Head, Body, Name, Arity) :-
+
+call_assertz(Head, Body, Name, Arity, Module) :-
     '$clause_body_is_valid'(Body),
-    functor(VarHead, Name, Arity),
-    '$assertz'(Head, Body, Name, Arity).
+    functor(_, Name, Arity),
+    '$assertz'(Head, Body, Name, Arity, Module).
 
 assertz_clause(Head, Body) :-
     (  var(Head) ->
@@ -835,16 +902,17 @@ assertz_clause(Head, Body) :-
     ;  functor(Head, Name, Arity),
        atom(Name),
        Name \== '.' ->
-       ( Name == (:),
-         Arity =:= 2 ->
-	     arg(1, Head, Module),
-	     arg(2, Head, F),
-	     module_assertz_clause(F, Body, Module)
-       ; '$no_such_predicate'(user, Head) ->
-	     call_assertz(Head, Body, Name, Arity)
-       ; '$head_is_dynamic'(user, Head) ->
-	     call_assertz(Head, Body, Name, Arity)
-       ; throw(error(permission_error(modify, static_procedure, Name/Arity), assertz/1))
+       (  Name == (:),
+          Arity =:= 2 ->
+	      arg(1, Head, Module),
+	      arg(2, Head, F),
+	      module_assertz_clause(F, Body, Module)
+       ;  '$no_such_predicate'(user, Head) ->
+	      call_assertz(Head, Body, Name, Arity, user)
+       ;  '$head_is_dynamic'(user, Head) ->
+	      call_assertz(Head, Body, Name, Arity, user)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity),
+                      assertz/1))
        )
     ;  throw(error(type_error(callable, Head), assertz/1))
     ).
@@ -861,18 +929,18 @@ assertz(Clause) :-
 
 module_retract_clauses([Clause|Clauses0], Head, Body, Name, Arity, Module) :-
     functor(VarHead, Name, Arity),
-    findall((VarHead :- VarBody), builtins:clause(Module:VarHead, VarBody), Clauses1),
+    findall((VarHead :- VarBody), Module:'$clause'(VarHead, VarBody), Clauses1),
     first_match_index(Clauses1, (Head :- Body), 0, N),
     (  Clauses0 == [] -> !
     ;  true
     ),
-    '$module_retract_clause'(Name, Arity, N, Clauses1, Module).
+    '$retract_clause'(Name, Arity, N, Module).
 
 module_retract_clauses([_|Clauses0], Head, Body, Name, Arity, Module) :-
     module_retract_clauses(Clauses0, Head, Body, Name, Arity, Module).
 
 call_module_retract(Head, Body, Name, Arity, Module) :-
-    findall((Head :- Body), builtins:clause(Module:Head, Body), Clauses),
+    findall((Head :- Body), Module:'$clause'(Head, Body), Clauses),
     module_retract_clauses(Clauses, Head, Body, Name, Arity, Module).
 
 retract_module_clause(Head, Body, Module) :-
@@ -881,9 +949,12 @@ retract_module_clause(Head, Body, Module) :-
     ;  functor(Head, Name, Arity),
        atom(Name),
        Name \== '.' ->
-       ( '$module_head_is_dynamic'(Head, Module) ->
-	     call_module_retract(Head, Body, Name, Arity, Module)
-       ; throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
+       (  '$head_is_dynamic'(Module, Head) ->
+          (  Module == user ->
+             call_retract(Head, Body, Name, Arity)
+          ;  call_module_retract(Head, Body, Name, Arity, Module)
+          )
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
        )
     ;  throw(error(type_error(callable, Head), retract/1))
     ).
@@ -904,7 +975,7 @@ retract_clauses([Clause | Clauses0], Head, Body, Name, Arity) :-
     (  Clauses0 == [] -> !
     ;  true
     ),
-    '$retract_clause'(Name, Arity, N).
+    '$retract_clause'(Name, Arity, N, user).
 
 retract_clauses([_ | Clauses0], Head, Body, Name, Arity) :-
     retract_clauses(Clauses0, Head, Body, Name, Arity).
@@ -919,16 +990,16 @@ retract_clause(Head, Body) :-
     ;  functor(Head, Name, Arity),
        atom(Name),
        Name \== '.' ->
-       ( Name == (:),
-         Arity =:= 2 ->
-	     arg(1, Head, Module),
-	     arg(2, Head, F),
-	     retract_module_clause(F, Body, Module)
-       ; '$head_is_dynamic'(user, Head) ->
-         call_retract(Head, Body, Name, Arity)
-       ; '$no_such_predicate'(user, Head) ->
-         '$fail'
-       ; throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
+       (  Name == (:),
+          Arity =:= 2 ->
+	      arg(1, Head, Module),
+	      arg(2, Head, F),
+	      retract_module_clause(F, Body, Module)
+       ;  '$head_is_dynamic'(user, Head) ->
+          call_retract(Head, Body, Name, Arity)
+       ;  '$no_such_predicate'(user, Head) ->
+          '$fail'
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
        )
     ;  throw(error(type_error(callable, Head), retract/1))
     ).
@@ -950,21 +1021,21 @@ module_abolish(Pred, Module) :-
        (  var(Name)  ->
           throw(error(instantiation_error, abolish/1))
        ;  integer(Arity) ->
-	      ( \+ atom(Name) ->
-            throw(error(type_error(atom, Name), abolish/1))
-	      ; Arity < 0 ->
-            throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
-	      ; max_arity(N), Arity > N ->
-            throw(error(representation_error(max_arity), abolish/1))
-	      ; functor(Head, Name, Arity) ->
-	        (  '$module_head_is_dynamic'(Head, Module) ->
-	           '$abolish_module_clause'(Name, Arity, Module)
-	        ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
-	        )
+	      (  \+ atom(Name) ->
+             throw(error(type_error(atom, Name), abolish/1))
+	      ;  Arity < 0 ->
+             throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
+	      ;  max_arity(N), Arity > N ->
+             throw(error(representation_error(max_arity), abolish/1))
+	      ;  functor(Head, Name, Arity) ->
+	         (  '$head_is_dynamic'(Module, Head) ->
+	            '$abolish_clause'(Module, Name, Arity)
+	         ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
+	         )
 	      )
        ;  throw(error(type_error(integer, Arity), abolish/1))
        )
-    ; throw(error(type_error(predicate_indicator, Module:Pred), abolish/1))
+    ;  throw(error(type_error(predicate_indicator, Module:Pred), abolish/1))
     ).
 
 abolish(Pred) :-
@@ -978,17 +1049,19 @@ abolish(Pred) :-
        ;  var(Arity) ->
           throw(error(instantiation_error, abolish/1))
        ;  integer(Arity) ->
-	      ( \+ atom(Name) ->
-            throw(error(type_error(atom, Name), abolish/1))
-	      ; Arity < 0 ->
-            throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
-	      ; max_arity(N), Arity > N ->
-            throw(error(representation_error(max_arity), abolish/1))
-	      ; functor(Head, Name, Arity) ->
-	        (  '$no_such_predicate'(Head) -> true
-	        ;  '$head_is_dynamic'(Head) -> '$abolish_clause'(Name, Arity)
-	        ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
-	        )
+	      (  \+ atom(Name) ->
+             throw(error(type_error(atom, Name), abolish/1))
+	      ;  Arity < 0 ->
+             throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
+	      ;  max_arity(N), Arity > N ->
+             throw(error(representation_error(max_arity), abolish/1))
+	      ;  functor(Head, Name, Arity) ->
+	         (  '$no_such_predicate'(user, Head) ->
+                true
+	         ;  '$head_is_dynamic'(user, Head) ->
+                '$abolish_clause'(user, Name, Arity)
+	         ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
+	         )
 	      )
        ;  throw(error(type_error(integer, Arity), abolish/1))
        )

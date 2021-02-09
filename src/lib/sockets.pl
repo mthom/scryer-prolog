@@ -15,7 +15,7 @@ parse_socket_options_(Option, OptionPair) :-
 
 parse_socket_options(Options, OptionValues, Stub) :-
     DefaultOptions = [alias-[], eof_action-eof_code, reposition-false, tls-false, type-text],
-    builtins:parse_options_list(Options, parse_socket_options_, DefaultOptions, OptionValues, Stub).
+    builtins:parse_options_list(Options, sockets:parse_socket_options_, DefaultOptions, OptionValues, Stub).
 
 socket_client_open(Addr, Stream, Options) :-
     (  var(Addr) ->

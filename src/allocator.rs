@@ -1,4 +1,5 @@
-use crate::prolog_parser_rebis::ast::*;
+use prolog_parser::ast::*;
+use prolog_parser::temp_v;
 
 use crate::fixtures::*;
 use crate::forms::*;
@@ -14,8 +15,13 @@ pub trait Allocator<'a> {
     fn mark_anon_var<Target>(&mut self, _: Level, _: GenContext, _: &mut Vec<Target>)
     where
         Target: CompilationTarget<'a>;
-    fn mark_non_var<Target>(&mut self, _: Level, _: GenContext, _: &'a Cell<RegType>, _: &mut Vec<Target>)
-    where
+    fn mark_non_var<Target>(
+        &mut self,
+        _: Level,
+        _: GenContext,
+        _: &'a Cell<RegType>,
+        _: &mut Vec<Target>,
+    ) where
         Target: CompilationTarget<'a>;
     fn mark_reserved_var<Target>(
         &mut self,
@@ -28,8 +34,14 @@ pub trait Allocator<'a> {
         _: bool,
     ) where
         Target: CompilationTarget<'a>;
-    fn mark_var<Target>(&mut self, _: Rc<Var>, _: Level, _: &'a Cell<VarReg>, _: GenContext, _: &mut Vec<Target>)
-    where
+    fn mark_var<Target>(
+        &mut self,
+        _: Rc<Var>,
+        _: Level,
+        _: &'a Cell<VarReg>,
+        _: GenContext,
+        _: &mut Vec<Target>,
+    ) where
         Target: CompilationTarget<'a>;
 
     fn reset(&mut self);
@@ -47,7 +59,7 @@ pub trait Allocator<'a> {
     fn drain_var_data(
         &mut self,
         vs: VariableFixtures<'a>,
-        num_of_chunks: usize
+        num_of_chunks: usize,
     ) -> VariableFixtures<'a> {
         let mut perm_vs = VariableFixtures::new();
 

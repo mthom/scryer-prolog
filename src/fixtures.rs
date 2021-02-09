@@ -1,10 +1,10 @@
-use crate::prolog_parser_rebis::ast::*;
+use prolog_parser::ast::*;
 
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
 
-use crate::indexmap::{IndexMap, IndexSet};
+use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
 use std::collections::BTreeSet;
@@ -83,18 +83,17 @@ impl TempVarData {
 type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
 
 #[derive(Debug)]
-pub struct VariableFixtures<'a>{
+pub struct VariableFixtures<'a> {
     perm_vars: IndexMap<Rc<Var>, VariableFixture<'a>>,
-    last_chunk_temp_vars: IndexSet<Rc<Var>>
+    last_chunk_temp_vars: IndexSet<Rc<Var>>,
 }
 
 impl<'a> VariableFixtures<'a> {
     pub fn new() -> Self {
         VariableFixtures {
             perm_vars: IndexMap::new(),
-            last_chunk_temp_vars: IndexSet::new()
+            last_chunk_temp_vars: IndexSet::new(),
         }
-
     }
 
     pub fn insert(&mut self, var: Rc<Var>, vs: VariableFixture<'a>) {
@@ -262,34 +261,32 @@ impl UnsafeVarMarker {
     pub fn new() -> Self {
         UnsafeVarMarker {
             unsafe_vars: IndexMap::new(),
-            safe_vars: IndexSet::new()
+            safe_vars: IndexSet::new(),
         }
     }
 
     pub fn from_safe_vars(safe_vars: IndexSet<RegType>) -> Self {
         UnsafeVarMarker {
             unsafe_vars: IndexMap::new(),
-            safe_vars
+            safe_vars,
         }
     }
 
     pub fn mark_safe_vars(&mut self, query_instr: &QueryInstruction) -> bool {
         match query_instr {
             &QueryInstruction::PutVariable(r @ RegType::Temp(_), _)
-          | &QueryInstruction::SetVariable(r) =>  {
+            | &QueryInstruction::SetVariable(r) => {
                 self.safe_vars.insert(r);
                 true
             }
-            _ => {
-                false
-            }
+            _ => false,
         }
     }
 
     pub fn mark_phase(&mut self, query_instr: &QueryInstruction, phase: usize) {
         match query_instr {
             &QueryInstruction::PutValue(r @ RegType::Perm(_), _)
-          | &QueryInstruction::SetValue(r) => {
+            | &QueryInstruction::SetValue(r) => {
                 let p = self.unsafe_vars.entry(r).or_insert(0);
                 *p = phase;
             }

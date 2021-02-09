@@ -1,8 +1,6 @@
-extern crate prolog_parser_rebis;
-
-use prolog_parser_rebis::ast::*;
-use prolog_parser_rebis::lexer::{Lexer, Token};
-use prolog_parser_rebis::tabled_rc::TabledData;
+use prolog_parser::ast::*;
+use prolog_parser::lexer::{Lexer, Token};
+use prolog_parser::tabled_rc::TabledData;
 
 use std::rc::Rc;
 
@@ -27,7 +25,7 @@ fn skip_utf8_bom() {
     let mut lexer = Lexer::new(atom_tbl, flags, &mut stream);
     match lexer.next_token() {
         Ok(Token::Constant(Constant::Fixnum(4))) => (),
-        _ => assert!(false)
+        _ => assert!(false),
     }
 }
 
@@ -37,7 +35,6 @@ fn invalid_utf16_bom() {
     let stream = parsing_stream(bytes);
     match stream {
         Err(ParserError::Utf8Error(0, 0)) => (),
-        _ => assert!(false)
+        _ => assert!(false),
     }
 }
-

@@ -1,5 +1,8 @@
-use crate::prolog_parser_rebis::ast::*;
-use crate::prolog_parser_rebis::tabled_rc::*;
+use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::*;
+use prolog_parser::{clause_name, temp_v};
+
+use lazy_static::lazy_static;
 
 use crate::clause_types::*;
 use crate::forms::*;
@@ -34,17 +37,18 @@ mod machine_state_impl;
 mod system_calls;
 
 //use crate::machine::attributed_variables::*;
-use crate::machine::compile::*;
 use crate::machine::code_repo::*;
+use crate::machine::compile::*;
 // use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::streams::*;
 
-use crate::indexmap::IndexMap;
+use indexmap::IndexMap;
 
 //use std::convert::TryFrom;
+use prolog_parser::ast::ClauseName;
 use std::fs::File;
 use std::mem;
 use std::path::PathBuf;
@@ -119,39 +123,6 @@ include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
 impl Machine {
     /*
-    fn compile_special_forms(&mut self)
-    {
-        let verify_attrs_src = ListingSource::User;
-
-        match compile_special_form(
-            self,
-            Stream::from(VERIFY_ATTRS),
-            verify_attrs_src,
-        )
-        {
-            Ok(p) => {
-                self.machine_st.attr_var_init.verify_attrs_loc = p;
-            }
-            Err(_) =>
-                panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS"),
-        }
-
-        let project_attrs_src = ListingSource::User;
-
-        match compile_special_form(
-            self,
-            Stream::from(PROJECT_ATTRS),
-            project_attrs_src,
-        )
-        {
-            Ok(p) => {
-                self.machine_st.attr_var_init.project_attrs_loc = p;
-            }
-            Err(e) =>
-                panic!("Machine::compile_special_forms() failed at PROJECT_ATTRS: {}", e),
-        }
-    }
-
     fn compile_scryerrc(&mut self) {
         let mut path = match dirs_next::home_dir() {
             Some(path) => path,
@@ -177,13 +148,7 @@ impl Machine {
             compile_user_module(self, file_src, rc_src);
         }
     }
-*/
-    #[cfg(test)]
-    pub fn reset(&mut self) {
-        self.current_input_stream = readline::input_stream();
-        self.policies.cut_policy = Box::new(DefaultCutPolicy {});
-        self.machine_st.reset();
-    }
+    */
 
     fn run_module_predicate(&mut self, module_name: ClauseName, key: PredicateKey) {
         if let Some(module) = self.indices.modules.get(&module_name) {
@@ -201,18 +166,13 @@ impl Machine {
     }
 
     fn load_file(&mut self, path: String, stream: Stream) {
-        self.machine_st[temp_v!(1)] = Addr::Stream(
-            self.machine_st.heap.push(HeapCellValue::Stream(
-                stream,
-            ))
-        );
+        self.machine_st[temp_v!(1)] =
+            Addr::Stream(self.machine_st.heap.push(HeapCellValue::Stream(stream)));
 
-        self.machine_st[temp_v!(2)] = Addr::Con(
-            self.machine_st.heap.push(HeapCellValue::Atom(
-                clause_name!(path, self.machine_st.atom_tbl),
-                None,
-            ))
-        );
+        self.machine_st[temp_v!(2)] = Addr::Con(self.machine_st.heap.push(HeapCellValue::Atom(
+            clause_name!(path, self.machine_st.atom_tbl),
+            None,
+        )));
 
         self.run_module_predicate(clause_name!("loader"), (clause_name!("file_load"), 2));
     }
@@ -245,11 +205,9 @@ impl Machine {
         bootstrapping_compile(
             Stream::from(include_str!("attributed_variables.pl")),
             self,
-            ListingSource::from_file_and_path(
-                clause_name!("attributed_variables"),
-                path_buf,
-            ),
-        ).unwrap();
+            ListingSource::from_file_and_path(clause_name!("attributed_variables"), path_buf),
+        )
+        .unwrap();
 
         let mut path_buf = current_dir();
         path_buf.push("machine/project_attributes.pl");
@@ -257,11 +215,9 @@ impl Machine {
         bootstrapping_compile(
             Stream::from(include_str!("project_attributes.pl")),
             self,
-            ListingSource::from_file_and_path(
-                clause_name!("project_attributes"),
-                path_buf,
-            ),
-        ).unwrap();
+            ListingSource::from_file_and_path(clause_name!("project_attributes"), path_buf),
+        )
+        .unwrap();
 
         if let Some(module) = self.indices.modules.get(&clause_name!("$atts")) {
             if let Some(code_index) = module.code_dir.get(&(clause_name!("driver"), 2)) {
@@ -289,15 +245,66 @@ impl Machine {
 
         self.machine_st[temp_v!(1)] = list_addr;
 
-        // WAS:
-        // self.run_module_predicate(clause_name!("$toplevel"), (clause_name!("$repl"), 1));
-
-        self.run_module_predicate(clause_name!("$toplevel"), (clause_name!("repl"), 0));
+        self.run_module_predicate(clause_name!("$toplevel"), (clause_name!("$repl"), 1));
     }
 
-    pub fn new(user_input: Stream, user_output: Stream) -> Self
-    {
-        use crate::ref_thread_local::RefThreadLocal;
+    fn configure_modules(&mut self) {
+        fn update_call_n_indices(loader: &Module, target_module: &mut Module) {
+            for arity in 1..66 {
+                let key = (clause_name!("call"), arity);
+
+                match loader.code_dir.get(&key) {
+                    Some(src_code_index) => {
+                        let target_code_index = target_module
+                            .code_dir
+                            .entry(key.clone())
+                            .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined));
+
+                        target_code_index.set(src_code_index.get());
+                    }
+                    None => {
+                        unreachable!();
+                    }
+                }
+            }
+        }
+
+        if let Some(loader) = self.indices.modules.swap_remove(&clause_name!("loader")) {
+            if let Some(builtins) = self.indices.modules.get_mut(&clause_name!("builtins")) {
+                // Import loader's exports into the builtins module so they will be
+                // implicitly included in every further module.
+                load_module(
+                    &mut builtins.code_dir,
+                    &mut builtins.op_dir,
+                    &mut builtins.meta_predicates,
+                    &CompilationTarget::Module(clause_name!("builtins")),
+                    &loader,
+                );
+
+                for export in &loader.module_decl.exports {
+                    builtins.module_decl.exports.push(export.clone());
+                }
+
+                for arity in 10..66 {
+                    builtins
+                        .module_decl
+                        .exports
+                        .push(ModuleExport::PredicateKey((clause_name!("call"), arity)));
+                }
+            }
+
+            for (_, target_module) in self.indices.modules.iter_mut() {
+                update_call_n_indices(&loader, target_module);
+            }
+
+            self.indices.modules.insert(clause_name!("loader"), loader);
+        } else {
+            unreachable!()
+        }
+    }
+
+    pub fn new(user_input: Stream, user_output: Stream) -> Self {
+        use ref_thread_local::RefThreadLocal;
 
         let mut wam = Machine {
             machine_st: MachineState::new(),
@@ -322,16 +329,15 @@ impl Machine {
                 clause_name!("ops_and_meta_predicates.pl"),
                 lib_path.clone(),
             ),
-        ).unwrap();
+        )
+        .unwrap();
 
         bootstrapping_compile(
             Stream::from(LIBRARIES.borrow()["builtins"]),
             &mut wam,
-            ListingSource::from_file_and_path(
-                clause_name!("builtins.pl"),
-                lib_path.clone(),
-            ),
-        ).unwrap();
+            ListingSource::from_file_and_path(clause_name!("builtins.pl"), lib_path.clone()),
+        )
+        .unwrap();
 
         if let Some(builtins) = wam.indices.modules.get(&clause_name!("builtins")) {
             load_module(
@@ -350,38 +356,20 @@ impl Machine {
         bootstrapping_compile(
             Stream::from(include_str!("../loader.pl")),
             &mut wam,
-            ListingSource::from_file_and_path(
-                clause_name!("loader.pl"),
-                lib_path.clone(),
-            ),
-        ).unwrap();
+            ListingSource::from_file_and_path(clause_name!("loader.pl"), lib_path.clone()),
+        )
+        .unwrap();
 
-        if let Some(loader) = wam.indices.modules.swap_remove(&clause_name!("loader")) {
-            if let Some(builtins) = wam.indices.modules.get_mut(&clause_name!("builtins")) {
-                // Import loader's exports into the builtins module so they will be
-                // implicitly included every further module.
-                load_module(
-                    &mut builtins.code_dir,
-                    &mut builtins.op_dir,
-                    &mut builtins.meta_predicates,
-                    &CompilationTarget::Module(clause_name!("builtins")),
-                    &loader,
-                );
+        wam.configure_modules();
 
-                for export in &loader.module_decl.exports {
-                    builtins.module_decl.exports.push(export.clone());
-                }
-            }
-
+        if let Some(loader) = wam.indices.modules.get(&clause_name!("loader")) {
             load_module(
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
                 &mut wam.indices.meta_predicates,
                 &CompilationTarget::User,
-                &loader,
+                loader,
             );
-
-            wam.indices.modules.insert(clause_name!("loader"), loader);
         } else {
             unreachable!()
         }
@@ -396,25 +384,19 @@ impl Machine {
     pub fn configure_streams(&mut self) {
         self.user_input.options.alias = Some(clause_name!("user_input"));
 
-        self.indices.stream_aliases.insert(
-            clause_name!("user_input"),
-            self.user_input.clone(),
-        );
+        self.indices
+            .stream_aliases
+            .insert(clause_name!("user_input"), self.user_input.clone());
 
-        self.indices.streams.insert(
-            self.user_input.clone()
-        );
+        self.indices.streams.insert(self.user_input.clone());
 
         self.user_output.options.alias = Some(clause_name!("user_output"));
 
-        self.indices.stream_aliases.insert(
-            clause_name!("user_output"),
-            self.user_output.clone(),
-        );
+        self.indices
+            .stream_aliases
+            .insert(clause_name!("user_output"), self.user_output.clone());
 
-        self.indices.streams.insert(
-            self.user_output.clone()
-        );
+        self.indices.streams.insert(self.user_output.clone());
     }
 
     fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
@@ -487,25 +469,33 @@ impl Machine {
             REPLCodePtr::BuiltInProperty => {
                 self.builtin_property();
             }
-            REPLCodePtr::CompilePendingPredicates => {
-                self.compile_pending_predicates();
+            REPLCodePtr::MultifileProperty => {
+                self.multifile_property();
             }
-            REPLCodePtr::UserAssertz => {
-                self.compile_user_assert(AppendOrPrepend::Append);
+            REPLCodePtr::DiscontiguousProperty => {
+                self.discontiguous_property();
             }
-            REPLCodePtr::UserAsserta => {
-                self.compile_user_assert(AppendOrPrepend::Prepend);
+            REPLCodePtr::DynamicProperty => {
+                self.dynamic_property();
             }
-            REPLCodePtr::UserRetract => {
-                self.retract_user_clause();
+            REPLCodePtr::Assertz => {
+                self.compile_assert(AppendOrPrepend::Append);
+            }
+            REPLCodePtr::Asserta => {
+                self.compile_assert(AppendOrPrepend::Prepend);
+            }
+            REPLCodePtr::Retract => {
+                self.retract_clause();
+            }
+            REPLCodePtr::AbolishClause => {
+                self.abolish_clause();
             }
         }
 
         self.machine_st.p = CodePtr::Local(p);
     }
 
-    pub(super)
-    fn run_query(&mut self) {
+    pub(super) fn run_query(&mut self) {
         while !self.machine_st.p.is_halt() {
             self.machine_st.query_stepper(
                 &mut self.indices,
@@ -523,23 +513,6 @@ impl Machine {
                         self.machine_st.backtrack();
                     }
                 }
-                /*
-                CodePtr::DynamicTransaction(_trans_type, _p) => {
-                    // self.code_repo.cached_query is about to be overwritten by the term expander,
-                    // so hold onto it locally and restore it after the compiler has finished.
-                    self.machine_st.fail = false;
-                    /*
-                    let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
-
-                    // self.dynamic_transaction(trans_type, p);
-                    self.code_repo.cached_query = cached_query;
-
-                    if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                        break;
-                    }
-                    */
-                }
-                */
                 _ => {
                     break;
                 }
@@ -559,26 +532,22 @@ impl MachineState {
         user_output: &mut Stream,
     ) {
         match instr {
-            &Line::Arithmetic(ref arith_instr) => {
-                self.execute_arith_instr(arith_instr)
-            }
+            &Line::Arithmetic(ref arith_instr) => self.execute_arith_instr(arith_instr),
             &Line::Choice(ref choice_instr) => {
                 self.execute_choice_instr(choice_instr, &mut policies.call_policy)
             }
             &Line::Cut(ref cut_instr) => {
                 self.execute_cut_instr(cut_instr, &mut policies.cut_policy)
             }
-            &Line::Control(ref control_instr) => {
-                self.execute_ctrl_instr(
-                    indices,
-                    code_repo,
-                    &mut policies.call_policy,
-                    &mut policies.cut_policy,
-                    user_input,
-                    user_output,
-                    control_instr,
-                )
-            }
+            &Line::Control(ref control_instr) => self.execute_ctrl_instr(
+                indices,
+                code_repo,
+                &mut policies.call_policy,
+                &mut policies.cut_policy,
+                user_input,
+                user_output,
+                control_instr,
+            ),
             &Line::Fact(ref fact_instr) => {
                 self.execute_fact_instr(&fact_instr);
                 self.p += 1;
@@ -620,44 +589,23 @@ impl MachineState {
     }
 
     fn backtrack(&mut self) {
-        // if self.b > 0 {
         let b = self.b;
 
         self.b0 = self.stack.index_or_frame(b).prelude.b0;
         self.p = CodePtr::Local(self.stack.index_or_frame(b).prelude.bp);
 
-        /*
-        if let CodePtr::Local(LocalCodePtr::TopLevel(_, p)) = self.p {
-            self.fail = p == 0;
-        } else {
-        */
         self.fail = false;
-        // }
-        /*} else {
-            self.p = CodePtr::Local(LocalCodePtr::TopLevel(0, 0));
-        }*/
     }
 
     fn check_machine_index(&mut self, code_repo: &CodeRepo) -> bool {
         match self.p {
-            CodePtr::Local(LocalCodePtr::DirEntry(p)) |
-            CodePtr::Local(LocalCodePtr::IndexingBuf(p, ..))
-                if p < code_repo.code.len() => {
-                }
+            CodePtr::Local(LocalCodePtr::DirEntry(p))
+            | CodePtr::Local(LocalCodePtr::IndexingBuf(p, ..))
+                if p < code_repo.code.len() => {}
             CodePtr::Local(LocalCodePtr::Halt) | CodePtr::REPL(..) => {
                 return false;
             }
-            /*
-            CodePtr::DynamicTransaction(..) => {
-                // prevent use of dynamic transactions from
-                // succeeding in expansions. self.fail will be toggled
-                // back to false later.
-                self.fail = true;
-                return false;
-            }
-            */
-            _ => {
-            }
+            _ => {}
         }
 
         true
@@ -721,13 +669,7 @@ impl MachineState {
         user_output: &mut Stream,
     ) {
         loop {
-            self.execute_instr(
-                indices,
-                policies,
-                code_repo,
-                user_input,
-                user_output,
-            );
+            self.execute_instr(indices, policies, code_repo, user_input, user_output);
 
             if self.fail {
                 self.backtrack();
