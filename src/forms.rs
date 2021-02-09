@@ -711,5 +711,21 @@ impl PredicateSkeleton {
             clauses: self.clauses,
         }
     }
-    */
+     */
+
+    pub fn target_pos_of_clause_clause_loc(
+        &self,
+        clause_clause_loc: usize,
+        clause_assert_margin: usize,
+    ) -> usize {
+        let search_result = self.clause_clause_locs[0..clause_assert_margin]
+            .binary_search_by(|loc| clause_clause_loc.cmp(&loc));
+
+        search_result.unwrap_or_else(|_| {
+            self.clause_clause_locs[clause_assert_margin..]
+                .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
+                .unwrap()
+                + clause_assert_margin
+        })
+    }
 }

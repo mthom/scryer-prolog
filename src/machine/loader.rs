@@ -199,7 +199,7 @@ impl<'a> Drop for LoadState<'a> {
                 RetractionRecord::AppendedModuleExtensiblePredicate(module_name, key) => {
                     self.wam
                         .indices
-                        .get_predicate_skeleton(&CompilationTarget::Module(module_name), &key)
+                        .get_predicate_skeleton_mut(&CompilationTarget::Module(module_name), &key)
                         .map(|skeleton| {
                             skeleton.clauses.pop_back();
                         });
@@ -207,7 +207,7 @@ impl<'a> Drop for LoadState<'a> {
                 RetractionRecord::PrependedModuleExtensiblePredicate(module_name, key) => {
                     self.wam
                         .indices
-                        .get_predicate_skeleton(&CompilationTarget::Module(module_name), &key)
+                        .get_predicate_skeleton_mut(&CompilationTarget::Module(module_name), &key)
                         .map(|skeleton| {
                             skeleton.clauses.pop_front();
                         });
@@ -266,7 +266,7 @@ impl<'a> Drop for LoadState<'a> {
                 RetractionRecord::AppendedUserExtensiblePredicate(key) => {
                     self.wam
                         .indices
-                        .get_predicate_skeleton(&CompilationTarget::User, &key)
+                        .get_predicate_skeleton_mut(&CompilationTarget::User, &key)
                         .map(|skeleton| {
                             skeleton.clauses.pop_back();
                         });
@@ -274,7 +274,7 @@ impl<'a> Drop for LoadState<'a> {
                 RetractionRecord::PrependedUserExtensiblePredicate(key) => {
                     self.wam
                         .indices
-                        .get_predicate_skeleton(&CompilationTarget::User, &key)
+                        .get_predicate_skeleton_mut(&CompilationTarget::User, &key)
                         .map(|skeleton| {
                             skeleton.clauses.pop_front();
                         });
@@ -412,7 +412,7 @@ impl<'a> Drop for LoadState<'a> {
                     match self
                         .wam
                         .indices
-                        .get_predicate_skeleton(&compilation_target, &key)
+                        .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
                         Some(skeleton) => {
                             skeleton.clause_clause_locs.truncate_front(len);
@@ -430,7 +430,7 @@ impl<'a> Drop for LoadState<'a> {
                     match self
                         .wam
                         .indices
-                        .get_predicate_skeleton(&compilation_target, &(clause_name!("$clause"), 2))
+                        .get_predicate_skeleton_mut(&compilation_target, &(clause_name!("$clause"), 2))
                     {
                         Some(skeleton) => {
                             skeleton.clause_clause_locs.truncate_front(len);
@@ -446,7 +446,7 @@ impl<'a> Drop for LoadState<'a> {
                     match self
                         .wam
                         .indices
-                        .get_predicate_skeleton(&compilation_target, &key)
+                        .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
                         Some(skeleton) => {
                             skeleton.clause_clause_locs.truncate_back(len);
@@ -464,7 +464,7 @@ impl<'a> Drop for LoadState<'a> {
                     match self
                         .wam
                         .indices
-                        .get_predicate_skeleton(&compilation_target, &(clause_name!("$clause"), 2))
+                        .get_predicate_skeleton_mut(&compilation_target, &(clause_name!("$clause"), 2))
                     {
                         Some(skeleton) => {
                             skeleton.clause_clause_locs.truncate_back(len);
@@ -476,7 +476,7 @@ impl<'a> Drop for LoadState<'a> {
                     match self
                         .wam
                         .indices
-                        .get_predicate_skeleton(&compilation_target, &key)
+                        .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
                         Some(skeleton) => {
                             skeleton.clauses.pop_back();
@@ -488,7 +488,7 @@ impl<'a> Drop for LoadState<'a> {
                     match self
                         .wam
                         .indices
-                        .get_predicate_skeleton(&compilation_target, &key)
+                        .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
                         Some(skeleton) => {
                             skeleton.clauses.pop_front();
@@ -500,7 +500,7 @@ impl<'a> Drop for LoadState<'a> {
                     match self
                         .wam
                         .indices
-                        .get_predicate_skeleton(&compilation_target, &key)
+                        .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
                         Some(skeleton) => {
                             skeleton.clauses.truncate_back(len);
@@ -517,7 +517,7 @@ impl<'a> Drop for LoadState<'a> {
                     match self
                         .wam
                         .indices
-                        .get_predicate_skeleton(&compilation_target, &key)
+                        .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
                         Some(skeleton) => {
                             skeleton.clauses[target_pos].clause_start = clause_start;
@@ -535,7 +535,7 @@ impl<'a> Drop for LoadState<'a> {
                     match self
                         .wam
                         .indices
-                        .get_predicate_skeleton(&compilation_target, &key)
+                        .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
                         Some(skeleton) => {
                             skeleton
@@ -1365,7 +1365,7 @@ impl Machine {
                 .load_state
                 .wam
                 .indices
-                .get_predicate_skeleton(&compilation_target, &key)
+                .get_predicate_skeleton_mut(&compilation_target, &key)
                 .map(|skeleton| skeleton.is_dynamic = true);
 
             loader.compile_clause_clauses(
@@ -1407,53 +1407,98 @@ impl Machine {
             _ => CompilationTarget::Module(module_name),
         };
 
-        let mut loader = Loader::new(LiveTermStream::new(ListingSource::User), self);
-        loader.load_state.compilation_target = compilation_target;
+        let abolish_clause = || {
+            let mut loader = Loader::new(LiveTermStream::new(ListingSource::User), self);
+            loader.load_state.compilation_target = compilation_target;
 
-        match loader
-            .load_state
-            .wam
-            .indices
-            .get_predicate_skeleton(&loader.load_state.compilation_target, &key)
-        {
-            Some(skeleton) => {
-                skeleton.clauses.clear();
-                skeleton.clause_clause_locs.clear();
-            }
-            _ => {
-                unreachable!();
-            }
-        }
+            let clause_clause_compilation_target =
+                match &loader.load_state.compilation_target {
+                    CompilationTarget::User => {
+                        CompilationTarget::Module(clause_name!("builtins"))
+                    }
+                    module => {
+                        module.clone()
+                    }
+                };
 
-        let code_index = loader.load_state.get_or_insert_code_index(key);
-        code_index.set(IndexPtr::DynamicUndefined);
+            let mut clause_assert_margin = loader
+                .load_state
+                .wam
+                .indices
+                .modules
+                .get(&clause_clause_compilation_target.module_name())
+                .map(|module| module.clause_assert_margin)
+                .unwrap();
 
-        match loader.load_state.compilation_target {
-            CompilationTarget::User => {
-                loader.load_state.compilation_target =
-                    CompilationTarget::Module(clause_name!("builtins"));
+            let mut clause_clause_target_poses: Vec<_> = loader
+                .load_state
+                .wam
+                .indices
+                .get_predicate_skeleton(&loader.load_state.compilation_target, &key)
+                .map(|skeleton| {
+                    loader
+                        .load_state
+                        .wam
+                        .indices
+                        .get_predicate_skeleton(
+                            &clause_clause_compilation_target,
+                            &(clause_name!("$clause"), 2),
+                        )
+                        .map(|clause_clause_skeleton| {
+                            skeleton.clause_clause_locs
+                                .iter()
+                                .map(|clause_clause_loc| {
+                                    clause_clause_skeleton.target_pos_of_clause_clause_loc(
+                                        *clause_clause_loc,
+                                        clause_assert_margin,
+                                    )
+                                })
+                                .collect()
+                        })
+                        .unwrap()
+                })
+                .unwrap();
+
+            loader
+                .load_state
+                .wam
+                .indices
+                .get_predicate_skeleton_mut(&loader.load_state.compilation_target, &key)
+                .map(|skeleton| {
+                    skeleton.clauses.clear();
+                    skeleton.clause_clause_locs.clear();
+                });
+
+            let code_index = loader.load_state.get_or_insert_code_index(key);
+            code_index.set(IndexPtr::DynamicUndefined);
+
+            loader.load_state.compilation_target = clause_clause_compilation_target;
+
+            while let Some(target_pos) = clause_clause_target_poses.pop() {
+                loader.load_state.retract_clause((clause_name!("$clause"), 2), target_pos);
+
+                if target_pos < clause_assert_margin {
+                    clause_assert_margin -= 1;
+                }
             }
-            _ => {}
+
+            loader
+                .load_state
+                .wam
+                .indices
+                .modules
+                .get_mut(&loader.load_state.compilation_target.module_name())
+                .map(|module| module.clause_assert_margin = clause_assert_margin);
+
+            LiveTermStream::evacuate(loader)
         };
 
-        match loader.load_state.wam.indices.get_predicate_skeleton(
-            &loader.load_state.compilation_target,
-            &(clause_name!("$clause"), 2),
-        ) {
-            Some(skeleton) => {
-                skeleton.clauses.clear();
-                skeleton.clause_clause_locs.clear();
-            }
-            _ => {
-                unreachable!();
+        match abolish_clause() {
+            Ok(_) => {}
+            Err(e) => {
+                self.throw_session_error(e, (clause_name!("abolish"), 1));
             }
         }
-
-        let clause_clause_code_index = loader
-            .load_state
-            .get_or_insert_code_index((clause_name!("$clause"), 2));
-
-        clause_clause_code_index.set(IndexPtr::DynamicUndefined);
     }
 
     pub(crate) fn retract_clause(&mut self) {
@@ -1507,17 +1552,12 @@ impl Machine {
                 &(clause_name!("$clause"), 2),
             ) {
                 Some(skeleton) => {
-                    let search_result = skeleton.clause_clause_locs[0..clause_assert_margin]
-                        .binary_search_by(|loc| clause_clause_loc.cmp(&loc));
+                    let target_pos = skeleton.target_pos_of_clause_clause_loc(
+                        clause_clause_loc,
+                        clause_assert_margin,
+                    );
 
-                    let result = search_result.unwrap_or_else(|_| {
-                        skeleton.clause_clause_locs[clause_assert_margin..]
-                            .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
-                            .unwrap()
-                            + clause_assert_margin
-                    });
-
-                    if result < clause_assert_margin {
+                    if target_pos < clause_assert_margin {
                         loader
                             .load_state
                             .wam
@@ -1527,7 +1567,7 @@ impl Machine {
                             .map(|module| module.clause_assert_margin -= 1);
                     }
 
-                    result
+                    target_pos
                 }
                 None => {
                     unreachable!();

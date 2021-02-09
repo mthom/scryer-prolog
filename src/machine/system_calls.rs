@@ -4631,7 +4631,7 @@ impl MachineState {
 
                 copy_term(
                     CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut ball.stub),
-                    value.clone(),
+                    value,
                     AttrVarPolicy::DeepCopy,
                 );
 

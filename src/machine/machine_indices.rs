@@ -720,7 +720,7 @@ impl Default for IndexStore {
 }
 
 impl IndexStore {
-    pub fn get_predicate_skeleton(
+    pub fn get_predicate_skeleton_mut(
         &mut self,
         compilation_target: &CompilationTarget,
         key: &PredicateKey,
@@ -732,6 +732,26 @@ impl IndexStore {
                 CompilationTarget::Module(ref module_name) => {
                     if let Some(module) = self.modules.get_mut(module_name) {
                         module.extensible_predicates.get_mut(key)
+                    } else {
+                        None
+                    }
+                }
+            },
+        }
+    }
+
+    pub fn get_predicate_skeleton(
+        &self,
+        compilation_target: &CompilationTarget,
+        key: &PredicateKey,
+    ) -> Option<&PredicateSkeleton> {
+        match (key.0.as_str(), key.1) {
+            ("term_expansion", 2) => self.extensible_predicates.get(key),
+            _ => match compilation_target {
+                CompilationTarget::User => self.extensible_predicates.get(key),
+                CompilationTarget::Module(ref module_name) => {
+                    if let Some(module) = self.modules.get(module_name) {
+                        module.extensible_predicates.get(key)
                     } else {
                         None
                     }

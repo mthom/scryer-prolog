@@ -1047,7 +1047,7 @@ impl<'a> LoadState<'a> {
             match self
                 .wam
                 .indices
-                .get_predicate_skeleton(&self.compilation_target, &key)
+                .get_predicate_skeleton_mut(&self.compilation_target, &key)
             {
                 Some(skeleton) => {
                     self.retraction_info
@@ -1120,7 +1120,7 @@ impl<'a> LoadState<'a> {
         let skeleton = match self
             .wam
             .indices
-            .get_predicate_skeleton(&self.compilation_target, &key)
+            .get_predicate_skeleton_mut(&self.compilation_target, &key)
         {
             Some(skeleton) if !skeleton.clauses.is_empty() => skeleton,
             _ => {
@@ -1212,7 +1212,7 @@ impl<'a> LoadState<'a> {
         let skeleton = match self
             .wam
             .indices
-            .get_predicate_skeleton(&self.compilation_target, &key)
+            .get_predicate_skeleton_mut(&self.compilation_target, &key)
         {
             Some(skeleton) => skeleton,
             None => {
@@ -1540,7 +1540,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             }
         }
 
-        match self.load_state.wam.indices.get_predicate_skeleton(
+        match self.load_state.wam.indices.get_predicate_skeleton_mut(
             &self.load_state.compilation_target,
             &(clause_name!("$clause"), 2),
         ) {
@@ -1563,7 +1563,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             .load_state
             .wam
             .indices
-            .get_predicate_skeleton(&compilation_target, &key)
+            .get_predicate_skeleton_mut(&compilation_target, &key)
         {
             Some(skeleton) if append_or_prepend.is_append() => {
                 self.load_state.retraction_info.push_record(
