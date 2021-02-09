@@ -80,7 +80,6 @@ fn add_op_decl_as_module_export(
         }
         None => {
             retraction_info.push_record(RetractionRecord::AddedUserOp(op_decl.clone()));
-
             module_op_exports.push((op_decl.clone(), None));
         }
     }
@@ -133,7 +132,7 @@ pub(super) fn import_module_exports(
     code_dir: &mut CodeDir,
     op_dir: &mut OpDir,
     meta_predicates: &mut MetaPredicateDir,
-) {
+) -> Result<(), SessionError> {
     for export in imported_module.module_decl.exports.iter() {
         match export {
             ModuleExport::PredicateKey((ref name, arity)) => {
@@ -157,7 +156,10 @@ pub(super) fn import_module_exports(
                         src_code_index.get(),
                     );
                 } else {
-                    unreachable!()
+                    return Err(SessionError::ModuleDoesNotContainExport(
+                        imported_module.module_decl.name.clone(),
+                        (name.clone(), *arity),
+                    ));
                 }
             }
             ModuleExport::OpDecl(ref op_decl) => {
@@ -165,6 +167,8 @@ pub(super) fn import_module_exports(
             }
         }
     }
+
+    Ok(())
 }
 
 fn import_module_exports_into_module(
@@ -176,7 +180,7 @@ fn import_module_exports_into_module(
     meta_predicates: &mut MetaPredicateDir,
     wam_op_dir: &mut OpDir,
     module_op_exports: &mut ModuleOpExports,
-) {
+) -> Result<(), SessionError> {
     for export in imported_module.module_decl.exports.iter() {
         match export {
             ModuleExport::PredicateKey((ref name, arity)) => {
@@ -200,7 +204,10 @@ fn import_module_exports_into_module(
                         src_code_index.get(),
                     );
                 } else {
-                    unreachable!()
+                    return Err(SessionError::ModuleDoesNotContainExport(
+                        imported_module.module_decl.name.clone(),
+                        (name.clone(), *arity),
+                    ));
                 }
             }
             ModuleExport::OpDecl(ref op_decl) => {
@@ -215,6 +222,8 @@ fn import_module_exports_into_module(
             }
         }
     }
+
+    Ok(())
 }
 
 fn import_qualified_module_exports(
@@ -224,7 +233,7 @@ fn import_qualified_module_exports(
     exports: &IndexSet<ModuleExport>,
     code_dir: &mut CodeDir,
     op_dir: &mut OpDir,
-) {
+) -> Result<(), SessionError> {
     for export in imported_module.module_decl.exports.iter() {
         if !exports.contains(export) {
             continue;
@@ -248,7 +257,10 @@ fn import_qualified_module_exports(
                         src_code_index.get(),
                     );
                 } else {
-                    unreachable!()
+                    return Err(SessionError::ModuleDoesNotContainExport(
+                        imported_module.module_decl.name.clone(),
+                        (name.clone(), *arity),
+                    ));
                 }
             }
             ModuleExport::OpDecl(ref op_decl) => {
@@ -256,6 +268,8 @@ fn import_qualified_module_exports(
             }
         }
     }
+
+    Ok(())
 }
 
 fn import_qualified_module_exports_into_module(
@@ -267,7 +281,7 @@ fn import_qualified_module_exports_into_module(
     op_dir: &mut OpDir,
     wam_op_dir: &mut OpDir,
     module_op_exports: &mut ModuleOpExports,
-) {
+) -> Result<(), SessionError> {
     for export in imported_module.module_decl.exports.iter() {
         if !exports.contains(export) {
             continue;
@@ -291,7 +305,10 @@ fn import_qualified_module_exports_into_module(
                         src_code_index.get(),
                     );
                 } else {
-                    unreachable!()
+                    return Err(SessionError::ModuleDoesNotContainExport(
+                        imported_module.module_decl.name.clone(),
+                        (name.clone(), *arity),
+                    ));
                 }
             }
             ModuleExport::OpDecl(ref op_decl) => {
@@ -306,6 +323,8 @@ fn import_qualified_module_exports_into_module(
             }
         }
     }
+
+    Ok(())
 }
 
 impl<'a> LoadState<'a> {
@@ -608,7 +627,7 @@ impl<'a> LoadState<'a> {
                 code_dir,
                 op_dir,
                 meta_predicates,
-            );
+            ).unwrap();
         }
     }
 
@@ -673,7 +692,7 @@ impl<'a> LoadState<'a> {
                         &mut self.wam.indices.code_dir,
                         &mut self.wam.indices.op_dir,
                         &mut self.wam.indices.meta_predicates,
-                    );
+                    )?;
                 }
                 CompilationTarget::Module(ref defining_module_name) => {
                     match self.wam.indices.modules.get_mut(defining_module_name) {
@@ -687,7 +706,7 @@ impl<'a> LoadState<'a> {
                                 &mut target_module.meta_predicates,
                                 &mut self.wam.indices.op_dir,
                                 &mut self.module_op_exports,
-                            );
+                            )?;
                         }
                         None => {
                             // we find ourselves here because we're trying to import
@@ -723,7 +742,7 @@ impl<'a> LoadState<'a> {
                         &exports,
                         &mut self.wam.indices.code_dir,
                         &mut self.wam.indices.op_dir,
-                    );
+                    )?;
                 }
                 CompilationTarget::Module(ref defining_module_name) => {
                     match self.wam.indices.modules.get_mut(defining_module_name) {
@@ -737,7 +756,7 @@ impl<'a> LoadState<'a> {
                                 &mut target_module.op_dir,
                                 &mut self.wam.indices.op_dir,
                                 &mut self.module_op_exports,
-                            );
+                            )?;
                         }
                         None => {
                             // we find ourselves here because we're trying to import

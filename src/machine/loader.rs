@@ -1868,5 +1868,5 @@ pub(super) fn load_module(
         code_dir,
         op_dir,
         meta_predicate_dir,
-    );
+    ).unwrap();
 }

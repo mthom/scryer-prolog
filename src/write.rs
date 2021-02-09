@@ -377,15 +377,15 @@ impl fmt::Display for SessionError {
             // &SessionError::InvalidFileName(ref filename) => {
             //     write!(f, "filename {} is invalid", filename)
             // }
-            // &SessionError::ModuleDoesNotContainExport(ref module, ref key) => {
-            //     write!(
-            //         f,
-            //         "module {} does not contain claimed export {}/{}",
-            //         module,
-            //         key.0,
-            //         key.1,
-            //     )
-            // }
+            &SessionError::ModuleDoesNotContainExport(ref module, ref key) => {
+                write!(
+                    f,
+                    "module {} does not contain claimed export {}/{}",
+                    module,
+                    key.0,
+                    key.1,
+                )
+            }
             &SessionError::OpIsInfixAndPostFix(_) => {
                 write!(f, "cannot define an op to be both postfix and infix.")
             }

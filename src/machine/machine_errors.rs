@@ -2,6 +2,7 @@ use prolog_parser::ast::*;
 use prolog_parser::{clause_name, temp_v};
 
 use crate::forms::{ModuleSource, Number}; //, PredicateKey};
+use crate::machine::PredicateKey;
 use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
@@ -319,7 +320,6 @@ impl MachineError {
             // SessionError::InvalidFileName(filename) => {
             //     Self::existence_error(h, ExistenceError::Module(filename))
             // }
-            /*
             SessionError::ModuleDoesNotContainExport(..) => {
                 Self::permission_error(
                     h,
@@ -328,7 +328,6 @@ impl MachineError {
                     functor!("module_does_not_contain_claimed_export"),
                 )
             }
-            */
             SessionError::ModuleCannotImportSelf(module_name) => Self::permission_error(
                 h,
                 Permission::Modify,
@@ -479,7 +478,7 @@ impl CompilationError {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Permission {
-    // Access,
+    Access,
     Create,
     InputStream,
     Modify,
@@ -492,7 +491,7 @@ impl Permission {
     #[inline]
     pub fn as_str(self) -> &'static str {
         match self {
-            // Permission::Access => "access",
+            Permission::Access => "access",
             Permission::Create => "create",
             Permission::InputStream => "input",
             Permission::Modify => "modify",
@@ -805,7 +804,7 @@ pub enum SessionError {
     // CannotOverwriteImport(ClauseName),
     ExistenceError(ExistenceError),
     // InvalidFileName(ClauseName),
-    // ModuleDoesNotContainExport(ClauseName, PredicateKey),
+    ModuleDoesNotContainExport(ClauseName, PredicateKey),
     ModuleCannotImportSelf(ClauseName),
     NamelessEntry,
     OpIsInfixAndPostFix(ClauseName),
