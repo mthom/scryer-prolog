@@ -60,7 +60,8 @@ Extend Scryer Prolog to include the following, among other features:
 - [x] Streams and predicates for stream control.
   - [x] A simple sockets library representing TCP connections as streams.  
 - [ ] Incremental compilation and loading process, newly written,
-      primarily in Prolog. (_in progress_)
+      primarily in Prolog. (_in progress_, see
+      [#775](https://github.com/mthom/scryer-prolog/issues/775))
 - [ ] A compacting garbage collector satisfying the five
       properties of "Precise Garbage Collection in Prolog."
 - [ ] Mode declarations.
