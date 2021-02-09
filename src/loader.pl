@@ -25,7 +25,7 @@
 expand_term(Term, ExpandedTerm) :-
     (  catch('$call'(user:term_expansion(Term, ExpandedTerm0)),
              E,
-             '$call'(loader:'$print_message_and_fail'(E, user:term_expansion))) ->
+             '$call'(loader:'$print_message_and_fail'(E, user:term_expansion/2))) ->
        (  var(ExpandedTerm0) ->
           error:instantiation_error(term_expansion/2)
        ;  ExpandedTerm0 = [_|_] ->
@@ -51,7 +51,7 @@ term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
 goal_expansion(Goal, Module, ExpandedGoal) :-
     (  catch('$call'(Module:goal_expansion(Goal, ExpandedGoal0)),
              E,
-             '$call'(loader:'$print_message_and_fail'(E, Module:goal_expansion))) ->
+             '$call'(loader:'$print_message_and_fail'(E, Module:goal_expansion/2))) ->
        (  var(ExpandedGoal0) ->
           error:instantiation_error(goal_expansion/2)
        ;  goal_expansion(ExpandedGoal0, Module, ExpandedGoal)
@@ -91,7 +91,8 @@ file_load(Stream, Path, Evacuable) :-
     create_file_load_context(Stream, Path, Evacuable),
     catch(loader:load_loop(Stream, Evacuable),
           E,
-          (loader:unload_evacuable(Evacuable), throw(E))),
+          builtins:(loader:unload_evacuable(Evacuable),
+		    builtins:throw(E))),
     run_initialization_goals,
     '$pop_load_context'.
 
@@ -100,7 +101,8 @@ load(Stream) :-
     create_load_context(Stream, Evacuable),
     catch(loader:load_loop(Stream, Evacuable),
           E,
-          (loader:unload_evacuable(Evacuable), throw(E))),
+          builtins:(loader:unload_evacuable(Evacuable),
+		    builtins:throw(E))),
     run_initialization_goals,
     '$pop_load_context'.
 
