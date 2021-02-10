@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written March 2020 by Markus Triska (triska@metalevel.at)
+   Written 2020, 2021 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
    This library provides the nonterminal format_//2 to describe
@@ -141,7 +141,7 @@ element_gluevar(glue(_,V), N, N) --> [V].
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Our key datastructure is a list of cells and newlines.
-   A cell has the shape from_to(From,To,Elements), where
+   A cell has the shape cell(From,To,Elements), where
    From and To denote the positions of surrounding tab stops.
 
    Elements is a list of elements that occur in a cell,
@@ -263,6 +263,11 @@ cells([~,'`',Char,t|Fs], Args, Tab, Es, VNs) --> !,
         cells(Fs, Args, Tab, [glue(Char,_)|Es], VNs).
 cells([~,t|Fs], Args, Tab, Es, VNs) --> !,
         cells(Fs, Args, Tab, [glue(' ',_)|Es], VNs).
+cells([~,'|'|Fs], Args, Tab0, Es, VNs) --> !,
+        { phrase(elements_gluevars(Es, 0, Width), _),
+          Tab is Tab0 + Width },
+        cell(Tab0, Tab, Es),
+        cells(Fs, Args, Tab, [], VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['|'|Fs], Args0, Args) },
         !,
@@ -381,15 +386,15 @@ format(Stream, Fs, Args) :-
         flush_output(Stream).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-?- phrase(cells("hello", [], 0, []), Cs).
+?- phrase(format:cells("hello", [], 0, [], []), Cs).
 
-?- phrase(cells("hello~10|", [], 0, []), Cs).
-?- phrase(cells("~ta~t~10|", [], 0, []), Cs).
+?- phrase(format:cells("hello~10|", [], 0, [], []), Cs).
+?- phrase(format:cells("~ta~t~10|", [], 0, [], []), Cs).
 
 ?- phrase(format_("~`at~50|", []), Ls).
 
-?- phrase(cells("~`at~50|", [], 0, []), Cs),
-   phrase(format_cells(Cs), Ls).
+?- phrase(format:cells("~`at~50|", [], 0, [], []), Cs),
+   phrase(format:format_cells(Cs), Ls).
 ?- phrase(format:cells("~ta~t~tb~tc~21|", [], 0, [], []), Cs).
 Cs = [cell(0,21,[glue(' ',_A),chars("a"),glue(' ',_B),glue(' ',_C),chars("b"),glue(' ',_D),chars("c ...")])]
 ?- phrase(format:cells("~ta~t~4|", [], 0, [], []), Cs).
