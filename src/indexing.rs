@@ -479,6 +479,8 @@ pub fn merge_clause_index(
             merging_ptr.index_constant(constant.clone(), offset);
 
             for overlapping_constant in overlapping_constants {
+                merging_ptr.offset = 0;
+
                 merging_ptr.index_overlapping_constant(
                     constant,
                     overlapping_constant.clone(),
