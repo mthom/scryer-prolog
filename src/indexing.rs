@@ -561,15 +561,15 @@ pub fn remove_constant_indices(
                     constants_index = index;
 
                     match constants.get(constant).cloned() {
-                        Some(IndexingCodePtr::External(_)) => {
+                        Some(IndexingCodePtr::External(_)) | Some(IndexingCodePtr::Fail) => {
                             constants.remove(constant);
                             break;
                         }
                         Some(IndexingCodePtr::Internal(o)) => {
                             index += o;
                         }
-                        Some(IndexingCodePtr::Fail) | None => {
-                            unreachable!()
+                        None => {
+                            break;
                         }
                     }
                 }
