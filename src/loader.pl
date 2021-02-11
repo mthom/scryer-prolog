@@ -85,7 +85,9 @@ run_initialization_goals :-
     ).
 
 file_load(Stream, Path) :-
-    file_load(Stream, Path, _).
+    file_load(Stream, Path, _),
+    false.        %% Clear the heap.
+file_load(_, _).
 
 file_load(Stream, Path, Evacuable) :-
     create_file_load_context(Stream, Path, Evacuable),
@@ -104,7 +106,9 @@ load(Stream) :-
           builtins:(loader:unload_evacuable(Evacuable),
 		            builtins:throw(E))),
     run_initialization_goals,
-    '$pop_load_context'.
+    '$pop_load_context',
+    false.        %% Clear the heap.
+load(_).
 
 load_loop(Stream, Evacuable) :-
     read_term(Stream, Term, [variable_names(VNs), singletons(Singletons)]),
