@@ -249,14 +249,13 @@ impl Machine {
     }
 
     fn configure_modules(&mut self) {
-        fn update_call_n_indices(loader: &Module, target_module: &mut Module) {
+        fn update_call_n_indices(loader: &Module, target_code_dir: &mut CodeDir) {
             for arity in 1..66 {
                 let key = (clause_name!("call"), arity);
 
                 match loader.code_dir.get(&key) {
                     Some(src_code_index) => {
-                        let target_code_index = target_module
-                            .code_dir
+                        let target_code_index = target_code_dir
                             .entry(key.clone())
                             .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined));
 
@@ -294,8 +293,10 @@ impl Machine {
             }
 
             for (_, target_module) in self.indices.modules.iter_mut() {
-                update_call_n_indices(&loader, target_module);
+                update_call_n_indices(&loader, &mut target_module.code_dir);
             }
+
+            update_call_n_indices(&loader, &mut self.indices.code_dir);
 
             self.indices.modules.insert(clause_name!("loader"), loader);
         } else {
