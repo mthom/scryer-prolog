@@ -848,7 +848,7 @@ fn second_level_index<IndexKey: Eq + Hash>(
 }
 
 fn switch_on<IndexKey: Eq + Hash>(
-    instr_fn: impl Fn(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
+    mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
     index: IndexMap<IndexKey, SliceDeque<IndexedChoiceInstruction>>,
     prelude: &mut SliceDeque<IndexingLine>,
 ) -> IndexingCodePtr {
@@ -1083,31 +1083,40 @@ impl CodeOffsets {
 
         let mut prelude = sdeq![];
 
+        let mut emitted_switch_on_structure = false;
+        let mut emitted_switch_on_constant  = false;
+
         let mut lst_loc = switch_on_list(self.lists, &mut prelude);
 
         let mut str_loc = switch_on(
-            IndexingInstruction::SwitchOnStructure,
+            |index| {
+                emitted_switch_on_structure = true;
+                IndexingInstruction::SwitchOnStructure(index)
+            },
             self.structures,
             &mut prelude,
         );
 
         let con_loc = switch_on(
-            IndexingInstruction::SwitchOnConstant,
+            |index| {
+                emitted_switch_on_constant = true;
+                IndexingInstruction::SwitchOnConstant(index)
+            },
             self.constants,
             &mut prelude,
         );
 
         match &mut str_loc {
             IndexingCodePtr::Internal(ref mut i) => {
-                *i += con_loc.is_internal() as usize;
+                *i += emitted_switch_on_constant as usize; // con_loc.is_internal() as usize;
             }
             _ => {}
         };
 
         match &mut lst_loc {
             IndexingCodePtr::Internal(ref mut i) => {
-                *i += con_loc.is_internal() as usize;
-                *i += str_loc.is_internal() as usize;
+                *i += emitted_switch_on_constant as usize; // con_loc.is_internal() as usize;
+                *i += emitted_switch_on_structure as usize; // str_loc.is_internal() as usize;
             }
             _ => {}
         };
