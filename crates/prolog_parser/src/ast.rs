@@ -6,7 +6,6 @@ use crate::put_back_n::*;
 
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::{Bytes, Error as IOError, Read};
@@ -14,6 +13,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::vec::Vec;
 
+use indexmap::IndexMap;
 use unicode_reader::CodePoints;
 
 pub type Atom = String;
@@ -278,7 +278,7 @@ impl OpDirValue {
 }
 
 // name and fixity -> operator type and precedence.
-pub type OpDir = HashMap<OpDirKey, OpDirValue>;
+pub type OpDir = IndexMap<OpDirKey, OpDirValue>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct MachineFlags {
