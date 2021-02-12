@@ -529,39 +529,6 @@ impl fmt::Display for Constant {
     }
 }
 
-/*
- * By defining constant_eq as the PartialEq instance of Constant, we
- * sometimes hash constants it considers identical to the same value,
- * which can make the WAM fail erroneously. This can be avoided by
- * using the machine-generated PartialEq for hashing.
- */
-pub fn constant_eq(arg: &Constant, other: &Constant) -> bool {
-    match (arg, other) {
-        (&Constant::Atom(ref atom, _), &Constant::Char(c))
-            | (&Constant::Char(c), &Constant::Atom(ref atom, _)) => {
-                atom.is_char() && atom.as_str().starts_with(c)
-            }
-        (&Constant::Atom(ref a1, _), &Constant::Atom(ref a2, _)) => a1.as_str() == a2.as_str(),
-        (&Constant::Char(c1), &Constant::Char(c2)) => c1 == c2,
-        (&Constant::Fixnum(n1), &Constant::Fixnum(n2)) => n1 == n2,
-        (&Constant::Fixnum(n1), &Constant::Integer(ref n2))
-            | (&Constant::Integer(ref n2), &Constant::Fixnum(n1)) => {
-                if let Some(n2) = n2.to_isize() {
-                    n1 == n2
-                } else {
-                    false
-                }
-            }
-        (&Constant::Integer(ref n1), &Constant::Integer(ref n2)) => n1 == n2,
-        (&Constant::Rational(ref n1), &Constant::Rational(ref n2)) => n1 == n2,
-        (&Constant::Float(ref n1), &Constant::Float(ref n2)) => n1 == n2,
-        (&Constant::String(ref s1), &Constant::String(ref s2)) => s1 == s2,
-        (&Constant::EmptyList, &Constant::EmptyList) => true,
-        (&Constant::Usize(u1), &Constant::Usize(u2)) => u1 == u2,
-        _ => false,
-    }
-}
-
 impl Constant {
     pub fn to_atom(&self) -> Option<ClauseName> {
         match self {
