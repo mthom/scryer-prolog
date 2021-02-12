@@ -174,7 +174,7 @@ pub(super) fn setup_module_export_list(
         export_list = *t2;
     }
 
-    if export_list.into_constant() != Some(Constant::EmptyList) {
+    if export_list.into_constant().map(|c| !constant_eq(&c, &Constant::EmptyList)).unwrap_or(true) {
         Err(CompilationError::InvalidModuleDecl)
     } else {
         Ok(exports)
@@ -273,7 +273,7 @@ fn setup_qualified_import(
         export_list = *t2;
     }
 
-    if export_list.into_constant() != Some(Constant::EmptyList) {
+    if export_list.into_constant().map(|c| !constant_eq(&c, &Constant::EmptyList)).unwrap_or(true) {
         Err(CompilationError::InvalidModuleDecl)
     } else {
         Ok((module_src, exports))

@@ -33,7 +33,7 @@ macro_rules! consume_chars_with {
     };
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Token {
     Constant(Constant),
     Var(Rc<Atom>),
@@ -47,6 +47,17 @@ pub enum Token {
     HeadTailSeparator, // '|'
     Comma,             // ','
     End,
+}
+
+impl Token {
+    #[inline]
+    pub(super) fn is_end(&self) -> bool {
+        if let Token::End = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub struct Lexer<'a, R: Read> {

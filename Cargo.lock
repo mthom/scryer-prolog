@@ -881,6 +881,7 @@ dependencies = [
 name = "prolog_parser"
 version = "0.8.68"
 dependencies = [
+ "indexmap",
  "lexical",
  "num-rug-adapter",
  "ordered-float",

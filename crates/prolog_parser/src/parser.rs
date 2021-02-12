@@ -200,7 +200,7 @@ fn read_tokens<R: Read>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserError>
 
     loop {
         let token = lexer.next_token()?;
-        let at_end = Token::End == token;
+        let at_end = token.is_end();
 
         tokens.push(token);
 
