@@ -22,17 +22,6 @@ pub enum IndexingCodePtr {
     Internal(usize), // the index points into the indexing instruction prelude.
 }
 
-impl IndexingCodePtr {
-    #[inline]
-    fn is_internal(self) -> bool {
-        if let IndexingCodePtr::Internal(_) = self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 enum OptArgIndexKeyType {
     Structure,
