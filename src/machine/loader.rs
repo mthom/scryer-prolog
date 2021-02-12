@@ -1098,7 +1098,7 @@ impl Machine {
 
     #[inline]
     pub(crate) fn push_load_state_payload(&mut self) {
-        let payload = LoadStatePayload::new(self);
+        let payload = Box::new(LoadStatePayload::new(self));
         let addr = Addr::LoadStatePayload(
             self.machine_st
                 .heap
@@ -1171,7 +1171,8 @@ impl Machine {
     ) {
         match result {
             Ok(payload) => {
-                self.machine_st.heap[evacuable_h] = HeapCellValue::LoadStatePayload(payload);
+                self.machine_st.heap[evacuable_h] =
+                    HeapCellValue::LoadStatePayload(Box::new(payload));
             }
             Err(e) => {
                 self.throw_session_error(e, (clause_name!("load"), 1));
@@ -1785,7 +1786,7 @@ impl<'a> Loader<'a, LiveTermStream> {
 
     pub(super) fn from_load_state_payload(
         wam: &'a mut Machine,
-        mut payload: LoadStatePayload,
+        mut payload: Box<LoadStatePayload>,
     ) -> Self {
         Loader {
             term_stream: mem::replace(

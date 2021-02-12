@@ -311,7 +311,7 @@ pub enum HeapCellValue {
     Atom(ClauseName, Option<SharedOpDesc>),
     DBRef(DBRef),
     Integer(Rc<Integer>),
-    LoadStatePayload(LoadStatePayload),
+    LoadStatePayload(Box<LoadStatePayload>),
     NamedStr(usize, ClauseName, Option<SharedOpDesc>), // arity, name, precedence/Specifier if it has one.
     Rational(Rc<Rational>),
     PartialString(PartialString, bool), // the partial string, a bool indicating whether it came from a Constant.
@@ -324,10 +324,10 @@ impl HeapCellValue {
     pub fn as_addr(&self, focus: usize) -> Addr {
         match self {
             HeapCellValue::Addr(ref a) => *a,
-            HeapCellValue::Atom(..)
-            | HeapCellValue::DBRef(..)
-            | HeapCellValue::Integer(..)
-            | HeapCellValue::Rational(..) => Addr::Con(focus),
+            HeapCellValue::Atom(..) |
+            HeapCellValue::DBRef(..) |
+            HeapCellValue::Integer(..) |
+            HeapCellValue::Rational(..) => Addr::Con(focus),
             HeapCellValue::LoadStatePayload(_) => Addr::LoadStatePayload(focus),
             HeapCellValue::NamedStr(_, _, _) => Addr::Str(focus),
             HeapCellValue::PartialString(..) => Addr::PStrLocation(focus, 0),
