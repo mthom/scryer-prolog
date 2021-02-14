@@ -329,21 +329,25 @@ fn import_qualified_module_exports_into_module(
 
 impl<'a> LoadState<'a> {
     #[inline]
-    pub(super) fn increment_clause_assert_margin(&mut self, incr: usize) {
-        match &self.compilation_target {
+    pub(super) fn increment_clause_assert_margin(
+        &mut self,
+        compilation_target: CompilationTarget,
+        incr: usize,
+    ) {
+        match compilation_target {
             CompilationTarget::User => {}
-            CompilationTarget::Module(ref module_name) => {
-                self.retraction_info
-                    .push_record(RetractionRecord::IncreasedClauseAssertMargin(
-                        module_name.clone(),
-                        incr,
-                    ));
-
+            CompilationTarget::Module(module_name) => {
                 self.wam
                     .indices
                     .modules
-                    .get_mut(module_name)
+                    .get_mut(&module_name)
                     .map(|module| module.clause_assert_margin += incr);
+
+                self.retraction_info
+                    .push_record(RetractionRecord::IncreasedClauseAssertMargin(
+                        module_name,
+                        incr,
+                    ));
             }
         }
     }
@@ -396,8 +400,12 @@ impl<'a> LoadState<'a> {
         }
     }
 
-    pub(super) fn get_or_insert_code_index(&mut self, key: PredicateKey) -> CodeIndex {
-        match self.compilation_target.clone() {
+    pub(super) fn get_or_insert_code_index(
+        &mut self,
+        key: PredicateKey,
+        compilation_target: CompilationTarget,
+    ) -> CodeIndex {
+        match compilation_target {
             CompilationTarget::User => self
                 .wam
                 .indices
@@ -434,8 +442,9 @@ impl<'a> LoadState<'a> {
         &mut self,
         key: PredicateKey,
         skeleton: PredicateSkeleton,
+        compilation_target: CompilationTarget,
     ) {
-        match &self.compilation_target {
+        match compilation_target {
             CompilationTarget::User => {
                 self.wam
                     .indices
@@ -445,12 +454,12 @@ impl<'a> LoadState<'a> {
                 self.retraction_info
                     .push_record(RetractionRecord::AddedUserExtensiblePredicate(key));
             }
-            CompilationTarget::Module(ref module_name) => {
-                if let Some(module) = self.wam.indices.modules.get_mut(module_name) {
+            CompilationTarget::Module(module_name) => {
+                if let Some(module) = self.wam.indices.modules.get_mut(&module_name) {
                     module.extensible_predicates.insert(key.clone(), skeleton);
 
                     self.retraction_info.push_record(
-                        RetractionRecord::AddedModuleExtensiblePredicate(module_name.clone(), key),
+                        RetractionRecord::AddedModuleExtensiblePredicate(module_name, key),
                     );
                 } else {
                     unreachable!()
@@ -497,11 +506,19 @@ impl<'a> LoadState<'a> {
     ) -> ClauseType {
         match ClauseType::from(name, arity, fixity) {
             ClauseType::Named(name, arity, _) => {
-                let idx = self.get_or_insert_code_index((name.clone(), arity));
+                let idx = self.get_or_insert_code_index(
+                    (name.clone(), arity),
+                    self.compilation_target.clone(),
+                );
+
                 ClauseType::Named(name, arity, idx)
             }
             ClauseType::Op(name, fixity, _) => {
-                let idx = self.get_or_insert_code_index((name.clone(), arity));
+                let idx = self.get_or_insert_code_index(
+                    (name.clone(), arity),
+                    self.compilation_target.clone(),
+                );
+
                 ClauseType::Op(name, fixity, idx)
             }
             ct => ct,

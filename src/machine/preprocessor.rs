@@ -780,7 +780,8 @@ impl Preprocessor {
                             query_term
                         })
                 } else {
-                    self.to_query_term(load_state, Term::Clause(r, name, subterms, fixity))
+                    let clause = Term::Clause(r, name, subterms, fixity);
+                    self.to_query_term(load_state, clause)
                 }
             }
             _ => self.to_query_term(load_state, term),
@@ -831,8 +832,11 @@ impl Preprocessor {
         cut_context: CutContext,
     ) -> Result<Rule, CompilationError> {
         let post_head_terms: Vec<_> = terms.drain(1..).collect();
-
-        let mut query_terms = self.setup_query(load_state, post_head_terms, cut_context)?;
+        let mut query_terms = self.setup_query(
+            load_state,
+            post_head_terms,
+            cut_context,
+        )?;
 
         let clauses = query_terms.drain(1..).collect();
         let qt = query_terms.pop().unwrap();
@@ -899,7 +903,11 @@ impl Preprocessor {
         let mut results = VecDeque::new();
 
         for term in terms.into_iter() {
-            results.push_back(self.try_term_to_tl(load_state, term, cut_context)?);
+            results.push_back(self.try_term_to_tl(
+                load_state,
+                term,
+                cut_context,
+            )?);
         }
 
         Ok(results)

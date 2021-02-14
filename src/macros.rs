@@ -362,6 +362,7 @@ macro_rules! index_store {
         IndexStore {
             code_dir: $code_dir,
             extensible_predicates: ExtensiblePredicates::new(),
+            local_extensible_predicates: LocalExtensiblePredicates::new(),
             global_variables: GlobalVarDir::new(),
             meta_predicates: MetaPredicateDir::new(),
             modules: $modules,

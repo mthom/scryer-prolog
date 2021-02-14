@@ -421,6 +421,7 @@ pub enum REPLCodePtr {
     AddGoalExpansionClause,
     AddTermExpansionClause,
     ClauseToEvacuable,
+    ScopedClauseToEvacuable,
     ConcludeLoad,
     DeclareModule,
     LoadCompiledLibrary,
@@ -692,7 +693,6 @@ pub(crate) struct ModuleStub {
     pub(crate) in_situ_code_dir: InSituCodeDir,
 }
 
-// pub(crate) type ModuleStubDir = IndexMap<ClauseName, ModuleStub>;
 pub(crate) type StreamAliasDir = IndexMap<ClauseName, Stream>;
 pub(crate) type StreamDir = BTreeSet<Stream>;
 
@@ -700,10 +700,13 @@ pub type MetaPredicateDir = IndexMap<PredicateKey, Vec<MetaSpec>>;
 
 pub type ExtensiblePredicates = IndexMap<PredicateKey, PredicateSkeleton>;
 
+pub type LocalExtensiblePredicates = IndexMap<(CompilationTarget, PredicateKey), PredicateSkeleton>;
+
 #[derive(Debug)]
 pub struct IndexStore {
     pub(super) code_dir: CodeDir,
     pub(super) extensible_predicates: ExtensiblePredicates,
+    pub(super) local_extensible_predicates: LocalExtensiblePredicates,
     pub(super) global_variables: GlobalVarDir,
     pub(super) meta_predicates: MetaPredicateDir,
     pub(super) modules: ModuleDir,

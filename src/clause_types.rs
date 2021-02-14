@@ -352,6 +352,9 @@ impl SystemClauseType {
             &SystemClauseType::REPL(REPLCodePtr::ClauseToEvacuable) => {
                 clause_name!("$clause_to_evacuable")
             }
+            &SystemClauseType::REPL(REPLCodePtr::ScopedClauseToEvacuable) => {
+                clause_name!("$scoped_clause_to_evacuable")
+            }
             &SystemClauseType::REPL(REPLCodePtr::ConcludeLoad) => clause_name!("$conclude_load"),
             &SystemClauseType::REPL(REPLCodePtr::DeclareModule) => clause_name!("$declare_module"),
             &SystemClauseType::REPL(REPLCodePtr::LoadCompiledLibrary) => {
@@ -728,8 +731,11 @@ impl SystemClauseType {
             ("$working_directory", 2) => Some(SystemClauseType::WorkingDirectory),
             ("$path_canonical", 2) => Some(SystemClauseType::PathCanonical),
             ("$file_time", 3) => Some(SystemClauseType::FileTime),
-            ("$clause_to_evacuable", 3) => {
+            ("$clause_to_evacuable", 2) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::ClauseToEvacuable))
+            }
+            ("$scoped_clause_to_evacuable", 3) => {
+                Some(SystemClauseType::REPL(REPLCodePtr::ScopedClauseToEvacuable))
             }
             ("$conclude_load", 1) => Some(SystemClauseType::REPL(REPLCodePtr::ConcludeLoad)),
             ("$use_module", 3) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),

@@ -36,6 +36,8 @@ impl fmt::Display for REPLCodePtr {
                 write!(f, "REPLCodePtr::Retract"),
             REPLCodePtr::ClauseToEvacuable =>
                 write!(f, "REPLCodePtr::ClauseToEvacuable"),
+            REPLCodePtr::ScopedClauseToEvacuable =>
+                write!(f, "REPLCodePtr::ScopedClauseToEvacuable"),
             REPLCodePtr::ConcludeLoad =>
                 write!(f, "REPLCodePtr::ConcludeLoad"),
 	        REPLCodePtr::DeclareModule =>

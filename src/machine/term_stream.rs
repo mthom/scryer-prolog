@@ -101,7 +101,7 @@ pub struct LoadStatePayload {
     pub(super) module_op_exports: Vec<(OpDecl, Option<(usize, Specifier)>)>,
     pub(super) non_counted_bt_preds: IndexSet<PredicateKey>,
     pub(super) preprocessor: Preprocessor,
-    pub(super) predicates: Vec<PredicateClause>,
+    pub(super) predicates: PredicateQueue,
     pub(super) clause_clauses: Vec<(Term, Term)>,
 }
 
@@ -120,7 +120,7 @@ impl LoadStatePayload {
             module_op_exports: vec![],
             non_counted_bt_preds: IndexSet::new(),
             preprocessor: Preprocessor::new(wam.machine_st.flags),
-            predicates: vec![],
+            predicates: predicate_queue![],
             clause_clauses: vec![],
         }
     }

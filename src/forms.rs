@@ -3,6 +3,7 @@ use prolog_parser::parser::OpDesc;
 use prolog_parser::{clause_name, is_infix, is_postfix};
 
 use crate::clause_types::*;
+use crate::machine::loader::PredicateQueue;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::rug::{Integer, Rational};
@@ -114,7 +115,7 @@ impl ListingSource {
 }
 
 pub trait ClauseInfo {
-    fn is_consistent(&self, clauses: &Vec<PredicateClause>) -> bool {
+    fn is_consistent(&self, clauses: &PredicateQueue) -> bool {
         match clauses.first() {
             Some(cl) => self.name() == cl.name() && self.arity() == cl.arity(),
             None => true,
@@ -442,7 +443,8 @@ pub struct Module {
     pub code_dir: CodeDir,
     pub op_dir: OpDir,
     pub meta_predicates: MetaPredicateDir,
-    pub extensible_predicates: IndexMap<PredicateKey, PredicateSkeleton>,
+    pub extensible_predicates: ExtensiblePredicates,
+    pub local_extensible_predicates: LocalExtensiblePredicates,
     pub is_impromptu_module: bool,
     pub listing_src: ListingSource,
     pub clause_assert_margin: usize,
@@ -457,7 +459,8 @@ impl Module {
             op_dir: default_op_dir(),
             meta_predicates: MetaPredicateDir::new(),
             is_impromptu_module: false,
-            extensible_predicates: IndexMap::new(),
+            extensible_predicates: ExtensiblePredicates::new(),
+            local_extensible_predicates: LocalExtensiblePredicates::new(),
             listing_src,
             clause_assert_margin: 0,
         }

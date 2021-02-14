@@ -175,11 +175,19 @@ expand_term_goals(Terms0, Terms) :-
     (  Terms0 = (Head1 :- Body0) ->
        (  var(Head1) ->
           instantiation_error(load/1)
+       ;  Head1 = Module:Head2 ->
+          (  atom(Module) ->
+             prolog_load_context(module, Target),
+             module_expanded_head_variables(Head2, HeadVars),
+             expand_goal(Body0, Target, Body1, HeadVars),
+             Terms = (Module:Head2 :- Body1)
+          ;  type_error(atom, Module, load/1)
+          )
        ;  prolog_load_context(module, Target),
           module_expanded_head_variables(Head1, HeadVars),
-          expand_goal(Body0, Target, Body1, HeadVars)
-       ),
-       Terms = (Head1 :- Body1)
+          expand_goal(Body0, Target, Body1, HeadVars),
+          Terms = (Head1 :- Body1)
+       )
     ;  Terms = Terms0
     ).
 
@@ -205,7 +213,7 @@ compile_dispatch_or_clause(Term, Evacuable, VNs) :-
        instantiation_error(load/1)
     ;  compile_dispatch(Term, Evacuable, VNs) ->
        true
-    ;  compile_clause(Term, Evacuable, VNs)
+    ;  compile_clause(Term, Evacuable)
     ).
 
 
@@ -257,9 +265,14 @@ compile_declaration(initialization(Goal), Evacuable) :-
     assertz(Module:'$initialization_goals'(Goal)).
 
 
-
-compile_clause(Clause, Evacuable, VNs) :-
-    '$clause_to_evacuable'(Clause, Evacuable, VNs).
+compile_clause((Target:Head :- Body), Evacuable) :-
+    !,
+    '$scoped_clause_to_evacuable'(Target, (Head :- Body), Evacuable).
+compile_clause(Target:Clause, Evacuable) :-
+    !,
+    '$scoped_clause_to_evacuable'(Target, Clause, Evacuable).
+compile_clause(Clause, Evacuable) :-
+    '$clause_to_evacuable'(Clause, Evacuable).
 
 
 prolog_load_context(source, Source) :-

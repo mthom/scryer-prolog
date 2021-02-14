@@ -557,7 +557,7 @@ impl<'a> Drop for LoadState<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompilationTarget {
     Module(ClauseName),
     User,
@@ -587,9 +587,58 @@ impl CompilationTarget {
     }
 }
 
+pub struct PredicateQueue {
+    pub(super) predicates: Vec<PredicateClause>,
+    pub(super) compilation_target: CompilationTarget,
+}
+
+impl PredicateQueue {
+    #[inline]
+    pub(super) fn push(&mut self, clause: PredicateClause) {
+        self.predicates.push(clause);
+    }
+
+    #[inline]
+    pub(super) fn extend(&mut self, iter: impl Iterator<Item = PredicateClause>) {
+        self.predicates.extend(iter);
+    }
+
+    #[inline]
+    pub(super) fn clear(&mut self) {
+        self.predicates.clear();
+    }
+
+    #[inline]
+    pub(crate) fn first(&self) -> Option<&PredicateClause> {
+        self.predicates.first()
+    }
+
+    #[inline]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.predicates.is_empty()
+    }
+
+    #[inline]
+    pub(super) fn take(&mut self) -> Self {
+        Self {
+            predicates: mem::replace(&mut self.predicates, vec![]),
+            compilation_target: self.compilation_target.take(),
+        }
+    }
+}
+
+macro_rules! predicate_queue {
+    [$($v:expr),*] => (
+        PredicateQueue {
+            predicates: vec![$($v,)*],
+            compilation_target: CompilationTarget::default(),
+        }
+    )
+}
+
 pub(crate) struct Loader<'a, TermStream> {
     pub(super) load_state: LoadState<'a>,
-    pub(super) predicates: Vec<PredicateClause>,
+    pub(super) predicates: PredicateQueue,
     pub(super) clause_clauses: Vec<(Term, Term)>,
     term_stream: TermStream,
     pub(super) non_counted_bt_preds: IndexSet<PredicateKey>,
@@ -612,7 +661,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             term_stream,
             non_counted_bt_preds: IndexSet::new(),
             preprocessor: Preprocessor::new(flags),
-            predicates: vec![],
+            predicates: predicate_queue![],
             clause_clauses: vec![],
         }
     }
@@ -643,7 +692,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             match tl {
                 TopLevel::Fact(fact) => self.predicates.push(PredicateClause::Fact(fact)),
                 TopLevel::Rule(rule) => self.predicates.push(PredicateClause::Rule(rule)),
-                TopLevel::Predicate(pred) => self.predicates.extend(pred),
+                TopLevel::Predicate(pred) => self.predicates.extend(pred.into_iter()),
                 TopLevel::Declaration(decl) => return Ok(Some(decl)),
                 TopLevel::Query(_) => return Err(SessionError::QueryCannotBeDefinedAsFact),
             }
@@ -664,6 +713,9 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             Declaration::Module(module_decl) => {
                 self.load_state.compilation_target =
                     CompilationTarget::Module(module_decl.name.clone());
+
+                self.predicates.compilation_target =
+                    self.load_state.compilation_target.clone();
 
                 self.load_state
                     .add_module(module_decl, self.term_stream.listing_src().clone());
@@ -827,14 +879,10 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                         }
                     }
                     None => {
-                        self.load_state
-                            .wam
-                            .indices
-                            .extensible_predicates
-                            .insert(key.clone(), PredicateSkeleton::new().set_dynamic(true));
-
-                        self.load_state.retraction_info.push_record(
-                            RetractionRecord::AddedUserExtensiblePredicate(key.clone()),
+                        self.load_state.add_extensible_predicate(
+                            key.clone(),
+                            PredicateSkeleton::new().set_dynamic(true),
+                            CompilationTarget::User,
                         );
                     }
                 }
@@ -855,15 +903,10 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                             }
                         }
                         None => {
-                            module
-                                .extensible_predicates
-                                .insert(key.clone(), PredicateSkeleton::new().set_dynamic(true));
-
-                            self.load_state.retraction_info.push_record(
-                                RetractionRecord::AddedModuleExtensiblePredicate(
-                                    module_name.clone(),
-                                    key.clone(),
-                                ),
+                            self.load_state.add_extensible_predicate(
+                                key.clone(),
+                                PredicateSkeleton::new().set_dynamic(true),
+                                self.load_state.compilation_target.clone(),
                             );
                         }
                     },
@@ -874,7 +917,10 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             }
         }
 
-        let code_index = self.load_state.get_or_insert_code_index(key.clone());
+        let code_index = self.load_state.get_or_insert_code_index(
+            key.clone(),
+            self.load_state.compilation_target.clone(),
+        );
 
         set_code_index(
             &mut self.load_state.retraction_info,
@@ -883,6 +929,29 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             &code_index,
             IndexPtr::DynamicUndefined,
         );
+    }
+
+    fn add_clause_clause_if_dynamic(&mut self, term: &Term) -> Result<(), SessionError> {
+        if let Some(predicate_name) = ClauseInfo::name(term) {
+            let arity = ClauseInfo::arity(term);
+
+            let is_dynamic = self
+                .load_state
+                .wam
+                .indices
+                .get_predicate_skeleton(
+                    &self.predicates.compilation_target,
+                    &(predicate_name, arity),
+                )
+                .map(|skeleton| skeleton.is_dynamic)
+                .unwrap_or(false);
+
+            if is_dynamic {
+                self.add_clause_clause(term.clone())?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -1180,36 +1249,29 @@ impl Machine {
         }
     }
 
-    pub(crate) fn clause_to_evacuable(&mut self) {
-        let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(2));
+    pub(crate) fn scoped_clause_to_evacuable(&mut self) {
+        let module_name = atom_from!(
+            self.machine_st,
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st[temp_v!(1)]))
+        );
 
-        let enqueue_term = || {
-            let term = loader.read_term_from_heap(temp_v!(1))?;
+        let (loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(3));
 
-            if let Some(predicate_name) = ClauseInfo::name(&term) {
-                let arity = ClauseInfo::arity(&term);
-
-                let is_dynamic = loader
-                    .load_state
-                    .wam
-                    .indices
-                    .get_predicate_skeleton(
-                        &loader.load_state.compilation_target,
-                        &(predicate_name, arity),
-                    )
-                    .map(|skeleton| skeleton.is_dynamic)
-                    .unwrap_or(false);
-
-                if is_dynamic {
-                    loader.add_clause_clause(term.clone())?;
-                }
-            }
-
-            loader.enqueue_term(term);
-            loader.load()
+        let compilation_target = match module_name.as_str() {
+            "user" => CompilationTarget::User,
+            _ => CompilationTarget::Module(module_name),
         };
 
-        let result = enqueue_term();
+        let result = loader.read_and_enqueue_term(temp_v!(2), compilation_target);
+        self.restore_load_state_payload(result, evacuable_h);
+    }
+
+    pub(crate) fn clause_to_evacuable(&mut self) {
+        let (loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(2));
+        let compilation_target = loader.load_state.compilation_target.clone();
+
+        let result = loader.read_and_enqueue_term(temp_v!(1), compilation_target);
         self.restore_load_state_payload(result, evacuable_h);
     }
 
@@ -1470,7 +1532,11 @@ impl Machine {
                     skeleton.clause_clause_locs.clear();
                 });
 
-            let code_index = loader.load_state.get_or_insert_code_index(key);
+            let code_index = loader.load_state.get_or_insert_code_index(
+                key,
+                loader.load_state.compilation_target.clone(),
+            );
+
             code_index.set(IndexPtr::DynamicUndefined);
 
             loader.load_state.compilation_target = clause_clause_compilation_target;
@@ -1778,7 +1844,7 @@ impl<'a> Loader<'a, LiveTermStream> {
                 &mut self.load_state.retraction_info,
                 RetractionInfo::new(self.load_state.wam.code_repo.code.len()),
             ),
-            predicates: mem::replace(&mut self.predicates, vec![]),
+            predicates: self.predicates.take(),
             clause_clauses: mem::replace(&mut self.clause_clauses, vec![]),
             module_op_exports: mem::replace(&mut self.load_state.module_op_exports, vec![]),
         }
@@ -1799,7 +1865,7 @@ impl<'a> Loader<'a, LiveTermStream> {
             ),
             non_counted_bt_preds: mem::replace(&mut payload.non_counted_bt_preds, IndexSet::new()),
             clause_clauses: mem::replace(&mut payload.clause_clauses, vec![]),
-            predicates: mem::replace(&mut payload.predicates, vec![]),
+            predicates: payload.predicates.take(),
             load_state: LoadState {
                 compilation_target: payload.compilation_target.take(),
                 module_op_exports: mem::replace(&mut payload.module_op_exports, vec![]),
@@ -1819,7 +1885,11 @@ impl<'a> Loader<'a, LiveTermStream> {
     ) -> Result<(), SessionError> {
         let mut preprocessor = Preprocessor::new(self.load_state.wam.machine_st.flags);
 
-        let tl = preprocessor.try_term_to_tl(&mut self.load_state, term, CutContext::BlocksCuts)?;
+        let tl = preprocessor.try_term_to_tl(
+            &mut self.load_state,
+            term,
+            CutContext::BlocksCuts,
+        )?;
 
         let queue = preprocessor.parse_queue(&mut self.load_state)?;
 
@@ -1831,26 +1901,37 @@ impl<'a> Loader<'a, LiveTermStream> {
             }
         };
 
-        let compilation_target =
-            mem::replace(&mut self.load_state.compilation_target, compilation_target);
-
-        let result = self.load_state.incremental_compile_clause(
+        self.load_state.incremental_compile_clause(
             key,
             clause,
             queue,
+            compilation_target,
             non_counted_bt,
             append_or_prepend,
-        );
-
-        self.load_state.compilation_target = compilation_target;
-        result?;
+        )?;
 
         Ok(())
     }
 
-    #[inline]
-    fn enqueue_term(&mut self, term: Term) {
+    fn read_and_enqueue_term(
+        mut self,
+        term_reg: RegType,
+        compilation_target: CompilationTarget,
+    ) -> Result<LoadStatePayload, SessionError> {
+        if self.predicates.compilation_target != compilation_target {
+            if !self.predicates.is_empty() {
+                self.compile_and_submit()?;
+            }
+
+            self.predicates.compilation_target = compilation_target;
+        }
+
+        let term = self.read_term_from_heap(term_reg)?;
+
+        self.add_clause_clause_if_dynamic(&term)?;
         self.term_stream.term_queue.push_back(term);
+
+        self.load()
     }
 }
 

@@ -15,11 +15,12 @@ use crate::read::*;
 mod attributed_variables;
 pub(super) mod code_repo;
 pub mod code_walker;
+#[macro_use]
+pub(crate) mod loader;
 mod compile;
 mod copier;
 pub mod heap;
 mod load_state;
-mod loader;
 pub mod machine_errors;
 pub mod machine_indices;
 pub(super) mod machine_state;
@@ -36,10 +37,8 @@ mod arithmetic_ops;
 mod machine_state_impl;
 mod system_calls;
 
-//use crate::machine::attributed_variables::*;
 use crate::machine::code_repo::*;
 use crate::machine::compile::*;
-// use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
@@ -424,6 +423,9 @@ impl Machine {
             }
             REPLCodePtr::ClauseToEvacuable => {
                 self.clause_to_evacuable();
+            }
+            REPLCodePtr::ScopedClauseToEvacuable => {
+                self.scoped_clause_to_evacuable();
             }
             REPLCodePtr::ConcludeLoad => {
                 self.conclude_load();

@@ -1010,18 +1010,22 @@ impl<'a> LoadState<'a> {
     fn compile(
         &mut self,
         key: PredicateKey,
-        predicates: &Vec<PredicateClause>,
+        predicates: &PredicateQueue, // &Vec<PredicateClause>,
         queue: &VecDeque<TopLevel>,
         settings: CodeGenSettings,
     ) -> Result<IndexPtr, SessionError> {
-        let code_index = self.get_or_insert_code_index(key.clone());
+        let code_index = self.get_or_insert_code_index(
+            key.clone(),
+            predicates.compilation_target.clone(),
+        );
+
         let code_len = self.wam.code_repo.code.len();
         let mut code_ptr = code_len;
 
         let mut cg =
             CodeGenerator::<DebrayAllocator>::new(self.wam.machine_st.atom_tbl.clone(), settings);
 
-        let mut code = cg.compile_predicate(predicates)?;
+        let mut code = cg.compile_predicate(&predicates.predicates)?;
 
         compile_appendix(
             &mut code,
@@ -1047,12 +1051,12 @@ impl<'a> LoadState<'a> {
             match self
                 .wam
                 .indices
-                .get_predicate_skeleton_mut(&self.compilation_target, &key)
+                .get_predicate_skeleton_mut(&predicates.compilation_target, &key)
             {
                 Some(skeleton) => {
                     self.retraction_info
                         .push_record(RetractionRecord::SkeletonClauseTruncateBack(
-                            self.compilation_target.clone(),
+                            predicates.compilation_target.clone(),
                             key.clone(),
                             skeleton.clauses.len(),
                         ));
@@ -1060,14 +1064,18 @@ impl<'a> LoadState<'a> {
                     skeleton.clauses.extend(cg.skeleton.clauses.into_iter());
                 }
                 None => {
-                    self.add_extensible_predicate(key.clone(), cg.skeleton);
+                    self.add_extensible_predicate(
+                        key.clone(),
+                        cg.skeleton,
+                        predicates.compilation_target.clone(),
+                    );
                 }
             }
         }
 
         set_code_index(
             &mut self.retraction_info,
-            &self.compilation_target,
+            &predicates.compilation_target,
             key,
             &code_index,
             IndexPtr::Index(code_ptr),
@@ -1080,10 +1088,11 @@ impl<'a> LoadState<'a> {
     fn record_incremental_compile(
         &mut self,
         key: PredicateKey,
+        compilation_target: CompilationTarget,
         append_or_prepend: AppendOrPrepend,
     ) {
         self.retraction_info
-            .push_record(match &self.compilation_target {
+            .push_record(match compilation_target {
                 CompilationTarget::User => match append_or_prepend {
                     AppendOrPrepend::Append => {
                         RetractionRecord::AppendedUserExtensiblePredicate(key)
@@ -1092,14 +1101,14 @@ impl<'a> LoadState<'a> {
                         RetractionRecord::PrependedUserExtensiblePredicate(key)
                     }
                 },
-                CompilationTarget::Module(ref module_name) => match append_or_prepend {
+                CompilationTarget::Module(module_name) => match append_or_prepend {
                     AppendOrPrepend::Append => RetractionRecord::AppendedModuleExtensiblePredicate(
-                        module_name.clone(),
+                        module_name,
                         key,
                     ),
                     AppendOrPrepend::Prepend => {
                         RetractionRecord::PrependedModuleExtensiblePredicate(
-                            module_name.clone(),
+                            module_name,
                             key,
                         )
                     }
@@ -1112,21 +1121,30 @@ impl<'a> LoadState<'a> {
         key: PredicateKey,
         clause: PredicateClause,
         queue: VecDeque<TopLevel>,
+        compilation_target: CompilationTarget,
         non_counted_bt: bool,
         append_or_prepend: AppendOrPrepend,
     ) -> Result<IndexPtr, SessionError> {
-        self.record_incremental_compile(key.clone(), append_or_prepend);
+        self.record_incremental_compile(
+            key.clone(),
+            compilation_target.clone(),
+            append_or_prepend,
+        );
 
         let skeleton = match self
             .wam
             .indices
-            .get_predicate_skeleton_mut(&self.compilation_target, &key)
+            .get_predicate_skeleton_mut(&compilation_target, &key)
         {
             Some(skeleton) if !skeleton.clauses.is_empty() => skeleton,
             _ => {
                 // true because this predicate is extensible.
                 let settings = CodeGenSettings::new(true, non_counted_bt);
-                return self.compile(key, &vec![clause], &queue, settings);
+
+                let mut predicate_queue = predicate_queue![clause];
+                predicate_queue.compilation_target = compilation_target;
+
+                return self.compile(key, &predicate_queue, &queue, settings);
             }
         };
 
@@ -1146,7 +1164,7 @@ impl<'a> LoadState<'a> {
 
                 self.retraction_info
                     .push_record(RetractionRecord::SkeletonClausePopBack(
-                        self.compilation_target.clone(),
+                        compilation_target.clone(),
                         key.clone(),
                     ));
 
@@ -1157,12 +1175,15 @@ impl<'a> LoadState<'a> {
                     &mut self.retraction_info,
                 );
 
-                let code_index = self.get_or_insert_code_index(key.clone());
+                let code_index = self.get_or_insert_code_index(
+                    key.clone(),
+                    compilation_target.clone(),
+                );
 
                 if let Some(new_code_index) = result {
                     set_code_index(
                         &mut self.retraction_info,
-                        &self.compilation_target,
+                        &compilation_target,
                         key,
                         &code_index,
                         IndexPtr::Index(new_code_index),
@@ -1178,24 +1199,27 @@ impl<'a> LoadState<'a> {
 
                 self.retraction_info
                     .push_record(RetractionRecord::SkeletonClausePopFront(
-                        self.compilation_target.clone(),
+                        compilation_target.clone(),
                         key.clone(),
                     ));
 
                 let threaded_choice_instr_loc = prepend_compiled_clause(
                     &mut self.wam.code_repo.code,
-                    self.compilation_target.clone(),
+                    compilation_target.clone(),
                     key.clone(),
                     clause_code,
                     skeleton,
                     &mut self.retraction_info,
                 );
 
-                let code_index = self.get_or_insert_code_index(key.clone());
+                let code_index = self.get_or_insert_code_index(
+                    key.clone(),
+                    compilation_target.clone(),
+                );
 
                 set_code_index(
                     &mut self.retraction_info,
-                    &self.compilation_target,
+                    &compilation_target,
                     key,
                     &code_index,
                     IndexPtr::Index(threaded_choice_instr_loc),
@@ -1207,7 +1231,10 @@ impl<'a> LoadState<'a> {
     }
 
     pub(super) fn retract_clause(&mut self, key: PredicateKey, target_pos: usize) -> usize {
-        let code_index = self.get_or_insert_code_index(key.clone());
+        let code_index = self.get_or_insert_code_index(
+            key.clone(),
+            self.compilation_target.clone(),
+        );
 
         let skeleton = match self
             .wam
@@ -1516,40 +1543,47 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             _ => compilation_target.clone(),
         };
 
-        let old_compilation_target = mem::replace(
-            &mut self.load_state.compilation_target,
-            clause_clause_compilation_target,
-        );
-
         let mut clause_clause_locs = sdeq![];
 
         for clause_predicate in clause_predicates {
             clause_clause_locs.push_back(self.load_state.wam.code_repo.code.len());
 
-            let result = self.load_state.incremental_compile_clause(
+            self.load_state.incremental_compile_clause(
                 (clause_name!("$clause"), 2),
                 clause_predicate,
                 VecDeque::new(),
+                clause_clause_compilation_target.clone(),
                 false, // non_counted_bt is false.
                 append_or_prepend,
-            );
-
-            if let Err(e) = result {
-                self.load_state.compilation_target = old_compilation_target;
-                return Err(e);
-            }
+            )?;
         }
 
         match self.load_state.wam.indices.get_predicate_skeleton_mut(
-            &self.load_state.compilation_target,
+            &clause_clause_compilation_target,
             &(clause_name!("$clause"), 2),
         ) {
             Some(skeleton) if append_or_prepend.is_append() => {
+                self.load_state.retraction_info.push_record(
+                    RetractionRecord::SkeletonClauseClausesTruncateBack(
+                        clause_clause_compilation_target.clone(),
+                        (clause_name!("$clause"), 2),
+                        skeleton.clause_clause_locs.len(),
+                    ),
+                );
+
                 skeleton
                     .clause_clause_locs
                     .extend_from_slice(&clause_clause_locs[0..]);
             }
             Some(skeleton) => {
+                self.load_state.retraction_info.push_record(
+                    RetractionRecord::SkeletonClauseClausesTruncateFront(
+                        clause_clause_compilation_target.clone(),
+                        (clause_name!("$clause"), 2),
+                        skeleton.clause_clause_locs.len(),
+                    ),
+                );
+
                 for loc in clause_clause_locs.iter() {
                     skeleton.clause_clause_locs.push_front(*loc);
                 }
@@ -1589,15 +1623,16 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                     skeleton.clause_clause_locs.push_front(*loc);
                 }
 
-                self.load_state
-                    .increment_clause_assert_margin(clause_clause_locs.len());
+                self.load_state.increment_clause_assert_margin(
+                    clause_clause_compilation_target,
+                    clause_clause_locs.len(),
+                );
             }
             None => {
-                unreachable!();
+                unreachable!()
             }
         }
 
-        self.load_state.compilation_target = old_compilation_target;
         Ok(())
     }
 
@@ -1617,7 +1652,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             .load_state
             .wam
             .indices
-            .get_predicate_skeleton(&self.load_state.compilation_target, &key)
+            .get_predicate_skeleton(&self.predicates.compilation_target, &key)
             .map(|skeleton| (skeleton.is_dynamic, true))
             .unwrap_or((false, false));
 
@@ -1629,7 +1664,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
 
         if is_dynamic {
             let iter = mem::replace(&mut self.clause_clauses, vec![]).into_iter();
-            let compilation_target = self.load_state.compilation_target.clone();
+            let compilation_target = self.predicates.compilation_target.clone();
 
             self.compile_clause_clauses(key, compilation_target, iter, AppendOrPrepend::Append)?;
         }
