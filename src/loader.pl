@@ -111,7 +111,7 @@ load(Stream) :-
 load(_).
 
 load_loop(Stream, Evacuable) :-
-    read_term(Stream, Term, [variable_names(VNs), singletons(Singletons)]),
+    read_term(Stream, Term, [singletons(Singletons)]),
     (  Term == end_of_file ->
        close(Stream),
        '$conclude_load'(Evacuable)
@@ -122,8 +122,8 @@ load_loop(Stream, Evacuable) :-
        (  var(Terms) ->
           instantiation_error(load/1)
        ;  Terms = [_|_] ->
-          compile_dispatch_or_clause_on_list(Terms, Evacuable, VNs)
-       ;  compile_dispatch_or_clause(Terms, Evacuable, VNs)
+          compile_dispatch_or_clause_on_list(Terms, Evacuable)
+       ;  compile_dispatch_or_clause(Terms, Evacuable)
        ),
        load_loop(Stream, Evacuable)
     ).
@@ -202,44 +202,44 @@ expand_terms_and_goals(Term, Terms) :-
     ).
 
 
-compile_dispatch_or_clause_on_list([], Evacuable, VNs).
-compile_dispatch_or_clause_on_list([Term | Terms], Evacuable, VNs) :-
-    compile_dispatch_or_clause(Term, Evacuable, VNs),
-    compile_dispatch_or_clause_on_list(Terms, Evacuable, VNs).
+compile_dispatch_or_clause_on_list([], Evacuable).
+compile_dispatch_or_clause_on_list([Term | Terms], Evacuable) :-
+    compile_dispatch_or_clause(Term, Evacuable),
+    compile_dispatch_or_clause_on_list(Terms, Evacuable).
 
 
-compile_dispatch_or_clause(Term, Evacuable, VNs) :-
+compile_dispatch_or_clause(Term, Evacuable) :-
     (  var(Term) ->
        instantiation_error(load/1)
-    ;  compile_dispatch(Term, Evacuable, VNs) ->
+    ;  compile_dispatch(Term, Evacuable) ->
        true
     ;  compile_clause(Term, Evacuable)
     ).
 
 
-compile_dispatch((:- Declaration), Evacuable, _VNs) :-
+compile_dispatch((:- Declaration), Evacuable) :-
     (  var(Declaration) ->
        instantiation_error(load/1)
     ;  compile_declaration(Declaration, Evacuable)
     ).
-compile_dispatch(term_expansion(Term, Terms), Evacuable, VNs) :-
-    '$add_term_expansion_clause'(term_expansion(Term, Terms), Evacuable, VNs).
-compile_dispatch((term_expansion(Term, Terms) :- Body), Evacuable, VNs) :-
-    '$add_term_expansion_clause'((term_expansion(Term, Terms) :- Body), Evacuable, VNs).
-compile_dispatch(user:term_expansion(Term, Terms), Evacuable, VNs) :-
-    '$add_term_expansion_clause'(term_expansion(Term, Terms), Evacuable, VNs).
-compile_dispatch((user:term_expansion(Term, Terms) :- Body), Evacuable, VNs) :-
-    '$add_term_expansion_clause'((term_expansion(Term, Terms) :- Body), Evacuable, VNs).
-compile_dispatch(goal_expansion(Term, Terms), Evacuable, VNs) :-
+compile_dispatch(term_expansion(Term, Terms), Evacuable) :-
+    '$add_term_expansion_clause'(term_expansion(Term, Terms), Evacuable).
+compile_dispatch((term_expansion(Term, Terms) :- Body), Evacuable) :-
+    '$add_term_expansion_clause'((term_expansion(Term, Terms) :- Body), Evacuable).
+compile_dispatch(user:term_expansion(Term, Terms), Evacuable) :-
+    '$add_term_expansion_clause'(term_expansion(Term, Terms), Evacuable).
+compile_dispatch((user:term_expansion(Term, Terms) :- Body), Evacuable) :-
+    '$add_term_expansion_clause'((term_expansion(Term, Terms) :- Body), Evacuable).
+compile_dispatch(goal_expansion(Term, Terms), Evacuable) :-
     prolog_load_context(module, user),
-    '$add_goal_expansion_clause'(user, goal_expansion(Term, Terms), Evacuable, VNs).
-compile_dispatch((goal_expansion(Term, Terms) :- Body), Evacuable, VNs) :-
+    '$add_goal_expansion_clause'(user, goal_expansion(Term, Terms), Evacuable).
+compile_dispatch((goal_expansion(Term, Terms) :- Body), Evacuable) :-
     prolog_load_context(module, user),
-    '$add_goal_expansion_clause'(user, (goal_expansion(Term, Terms) :- Body), Evacuable, VNs).
-compile_dispatch(user:goal_expansion(Term, Terms), Evacuable, VNs) :-
-    '$add_goal_expansion_clause'(user, goal_expansion(Term, Terms), Evacuable, VNs).
-compile_dispatch((user:goal_expansion(Term, Terms) :- Body), Evacuable, VNs) :-
-    '$add_goal_expansion_clause'(user, (goal_expansion(Term, Terms) :- Body), Evacuable, VNs).
+    '$add_goal_expansion_clause'(user, (goal_expansion(Term, Terms) :- Body), Evacuable).
+compile_dispatch(user:goal_expansion(Term, Terms), Evacuable) :-
+    '$add_goal_expansion_clause'(user, goal_expansion(Term, Terms), Evacuable).
+compile_dispatch((user:goal_expansion(Term, Terms) :- Body), Evacuable) :-
+    '$add_goal_expansion_clause'(user, (goal_expansion(Term, Terms) :- Body), Evacuable).
 
 
 compile_declaration(use_module(Module), Evacuable) :-

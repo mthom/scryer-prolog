@@ -597,10 +597,10 @@ impl SystemClauseType {
             ("$add_discontiguous_predicate", 4) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::AddDiscontiguousPredicate))
             }
-            ("$add_goal_expansion_clause", 4) => {
+            ("$add_goal_expansion_clause", 3) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::AddGoalExpansionClause))
             }
-            ("$add_term_expansion_clause", 3) => {
+            ("$add_term_expansion_clause", 2) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::AddTermExpansionClause))
             }
             ("$atom_chars", 2) => Some(SystemClauseType::AtomChars),
