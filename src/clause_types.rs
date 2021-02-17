@@ -413,6 +413,12 @@ impl SystemClauseType {
                 clause_name!("$cpp_discontiguous_property")
             }
             &SystemClauseType::REPL(REPLCodePtr::AbolishClause) => clause_name!("$abolish_clause"),
+            &SystemClauseType::REPL(REPLCodePtr::IsConsistentWithTermQueue) => {
+                clause_name!("$is_consistent_with_term_queue")
+            }
+            &SystemClauseType::REPL(REPLCodePtr::FlushTermQueue) => {
+                clause_name!("$flush_term_queue")
+            }
             &SystemClauseType::Close => clause_name!("$close"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
@@ -606,7 +612,6 @@ impl SystemClauseType {
             ("$atom_chars", 2) => Some(SystemClauseType::AtomChars),
             ("$atom_codes", 2) => Some(SystemClauseType::AtomCodes),
             ("$atom_length", 2) => Some(SystemClauseType::AtomLength),
-            // ("$abolish_module_clause", 3) => Some(SystemClauseType::AbolishModuleClause),
             ("$bind_from_register", 2) => Some(SystemClauseType::BindFromRegister),
             ("$call_continuation", 1) => Some(SystemClauseType::CallContinuation),
             ("$char_code", 2) => Some(SystemClauseType::CharCode),
@@ -761,6 +766,12 @@ impl SystemClauseType {
             ("$asserta", 5) => Some(SystemClauseType::REPL(REPLCodePtr::Asserta)),
             ("$assertz", 5) => Some(SystemClauseType::REPL(REPLCodePtr::Assertz)),
             ("$retract_clause", 4) => Some(SystemClauseType::REPL(REPLCodePtr::Retract)),
+            ("$is_consistent_with_term_queue", 4) => {
+                Some(SystemClauseType::REPL(REPLCodePtr::IsConsistentWithTermQueue))
+            }
+            ("$flush_term_queue", 1) => {
+                Some(SystemClauseType::REPL(REPLCodePtr::FlushTermQueue))
+            }
             ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$wam_instructions", 4) => Some(SystemClauseType::WAMInstructions),
             ("$write_term", 7) => Some(SystemClauseType::WriteTerm),

@@ -446,6 +446,8 @@ pub enum REPLCodePtr {
     Asserta,
     Assertz,
     Retract,
+    IsConsistentWithTermQueue,
+    FlushTermQueue,
 }
 
 #[derive(Debug, Clone, PartialEq)]

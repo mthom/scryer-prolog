@@ -79,6 +79,10 @@ impl fmt::Display for REPLCodePtr {
                 write!(f, "REPLCodePtr::MultifileProperty"),
             REPLCodePtr::DiscontiguousProperty =>
                 write!(f, "REPLCodePtr::DiscontiguousProperty"),
+            REPLCodePtr::IsConsistentWithTermQueue =>
+                write!(f, "REPLCodePtr::IsConsistentWithTermQueue"),
+            REPLCodePtr::FlushTermQueue =>
+                write!(f, "REPLCodePtr::FlushTermQueue"),
         }
     }
 }

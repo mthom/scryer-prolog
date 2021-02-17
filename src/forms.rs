@@ -125,6 +125,18 @@ pub trait ClauseInfo {
     fn arity(&self) -> usize;
 }
 
+impl ClauseInfo for PredicateKey {
+    #[inline]
+    fn name(&self) -> Option<ClauseName> {
+        Some(self.0.clone())
+    }
+
+    #[inline]
+    fn arity(&self) -> usize {
+        self.1
+    }
+}
+
 impl ClauseInfo for Term {
     fn name(&self) -> Option<ClauseName> {
         match self {

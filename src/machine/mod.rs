@@ -499,6 +499,12 @@ impl Machine {
             REPLCodePtr::AbolishClause => {
                 self.abolish_clause();
             }
+            REPLCodePtr::IsConsistentWithTermQueue => {
+                self.is_consistent_with_term_queue();
+            }
+            REPLCodePtr::FlushTermQueue => {
+                self.flush_term_queue();
+            }
         }
 
         self.machine_st.p = CodePtr::Local(p);

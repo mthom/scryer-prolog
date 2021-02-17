@@ -117,15 +117,19 @@ load_loop(Stream, Evacuable) :-
        '$conclude_load'(Evacuable)
     ;  var(Term) ->
        instantiation_error(load/1)
-    ;  expand_terms_and_goals(Term, Terms),
-       !,
-       (  var(Terms) ->
-          instantiation_error(load/1)
-       ;  Terms = [_|_] ->
-          compile_dispatch_or_clause_on_list(Terms, Evacuable)
-       ;  compile_dispatch_or_clause(Terms, Evacuable)
-       ),
+    ;  compile_term(Term, Evacuable),
        load_loop(Stream, Evacuable)
+    ).
+
+
+compile_term(Term, Evacuable) :-
+    expand_terms_and_goals(Term, Terms),
+    !,
+    (  var(Terms) ->
+       instantiation_error(load/1)
+    ;  Terms = [_|_] ->
+       compile_dispatch_or_clause_on_list(Terms, Evacuable)
+    ;  compile_dispatch_or_clause(Terms, Evacuable)
     ).
 
 
@@ -296,12 +300,37 @@ compile_declaration(initialization(Goal), Evacuable) :-
 
 compile_clause((Target:Head :- Body), Evacuable) :-
     !,
-    '$scoped_clause_to_evacuable'(Target, (Head :- Body), Evacuable).
-compile_clause(Target:Clause, Evacuable) :-
+    functor(Head, Name, Arity),
+    (  '$is_consistent_with_term_queue'(Target, Name, Arity, Evacuable) ->
+       '$scoped_clause_to_evacuable'(Target, (Head :- Body), Evacuable)
+    ;  '$flush_term_queue'(Evacuable),
+       compile_term((Target:Head :- Body), Evacuable)
+    ).
+compile_clause(Target:Head, Evacuable) :-
     !,
-    '$scoped_clause_to_evacuable'(Target, Clause, Evacuable).
-compile_clause(Clause, Evacuable) :-
-    '$clause_to_evacuable'(Clause, Evacuable).
+    functor(Head, Name, Arity),
+    (  '$is_consistent_with_term_queue'(Target, Name, Arity, Evacuable) ->
+       '$scoped_clause_to_evacuable'(Target, Head, Evacuable)
+    ;  '$flush_term_queue'(Evacuable),
+       compile_term(Target:Head, Evacuable)
+    ).
+compile_clause((Head :- Body), Evacuable) :-
+    !,
+    prolog_load_context(module, Target),
+    functor(Head, Name, Arity),
+    (  '$is_consistent_with_term_queue'(Target, Name, Arity, Evacuable) ->
+       '$clause_to_evacuable'((Head :- Body), Evacuable)
+    ;  '$flush_term_queue'(Evacuable),
+       compile_term((Head :- Body), Evacuable)
+    ).
+compile_clause(Head, Evacuable) :-
+    prolog_load_context(module, Target),
+    functor(Head, Name, Arity),
+    (  '$is_consistent_with_term_queue'(Target, Name, Arity, Evacuable) ->
+       '$clause_to_evacuable'(Head, Evacuable)
+    ;  '$flush_term_queue'(Evacuable),
+       compile_term(Head, Evacuable)
+    ).
 
 
 prolog_load_context(source, Source) :-

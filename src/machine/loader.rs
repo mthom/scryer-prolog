@@ -1882,6 +1882,48 @@ impl Machine {
         }
     }
 
+    pub(crate) fn is_consistent_with_term_queue(&mut self) {
+        let module_name = atom_from!(
+            self.machine_st,
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st[temp_v!(1)]))
+        );
+
+        let key = self
+            .machine_st
+            .read_predicate_key(self.machine_st[temp_v!(2)], self.machine_st[temp_v!(3)]);
+
+        let compilation_target = match module_name.as_str() {
+            "user" => CompilationTarget::User,
+            _ => CompilationTarget::Module(module_name),
+        };
+
+        let (loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(4));
+
+        loader.load_state.wam.machine_st.fail =
+            (!loader.predicates.is_empty() &&
+             loader.predicates.compilation_target != compilation_target) ||
+            !key.is_consistent(&loader.predicates);
+
+        let result = LiveTermStream::evacuate(loader);
+        self.restore_load_state_payload(result, evacuable_h);
+    }
+
+    pub(crate) fn flush_term_queue(&mut self) {
+        let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(1));
+
+        let flush_term_queue = || {
+            if !loader.predicates.is_empty() {
+                loader.compile_and_submit()?;
+            }
+
+            LiveTermStream::evacuate(loader)
+        };
+
+        let result = flush_term_queue();
+        self.restore_load_state_payload(result, evacuable_h);
+    }
+
     pub(crate) fn meta_predicate_property(&mut self) {
         let module_name = atom_from!(
             self.machine_st,
