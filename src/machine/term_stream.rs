@@ -2,7 +2,6 @@ use prolog_parser::ast::*;
 use prolog_parser::parser::*;
 
 use crate::machine::machine_errors::CompilationError;
-use crate::machine::preprocessor::*;
 use crate::machine::*;
 
 use indexmap::IndexSet;
@@ -100,7 +99,6 @@ pub struct LoadStatePayload {
     pub(super) retraction_info: RetractionInfo,
     pub(super) module_op_exports: Vec<(OpDecl, Option<(usize, Specifier)>)>,
     pub(super) non_counted_bt_preds: IndexSet<PredicateKey>,
-    pub(super) preprocessor: Preprocessor,
     pub(super) predicates: PredicateQueue,
     pub(super) clause_clauses: Vec<(Term, Term)>,
 }
@@ -119,7 +117,6 @@ impl LoadStatePayload {
             retraction_info: RetractionInfo::new(wam.code_repo.code.len()),
             module_op_exports: vec![],
             non_counted_bt_preds: IndexSet::new(),
-            preprocessor: Preprocessor::new(wam.machine_st.flags),
             predicates: predicate_queue![],
             clause_clauses: vec![],
         }

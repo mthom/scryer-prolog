@@ -394,9 +394,6 @@ fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, CompilationEr
             TopLevel::Query(_) if clauses.is_empty() && tls.is_empty() => {
                 return Ok(tl);
             }
-            TopLevel::Declaration(_) if clauses.is_empty() => {
-                return Ok(tl);
-            }
             TopLevel::Query(_) => {
                 return Err(CompilationError::InconsistentEntry);
             }
@@ -409,10 +406,6 @@ fn merge_clauses(tls: &mut VecDeque<TopLevel>) -> Result<TopLevel, CompilationEr
                 clauses.push(clause);
             }
             TopLevel::Predicate(predicate) => clauses.extend(predicate.into_iter()),
-            _ => {
-                tls.push_front(tl);
-                break;
-            }
         }
     }
 
@@ -497,7 +490,7 @@ fn check_for_internal_if_then(terms: &mut Vec<Term>) {
     }
 }
 
-fn setup_declaration<'a>(
+pub(super) fn setup_declaration<'a>(
     load_state: &LoadState<'a>,
     mut terms: Vec<Box<Term>>,
 ) -> Result<Declaration, CompilationError> {
@@ -883,8 +876,6 @@ impl Preprocessor {
                         terms,
                         cut_context,
                     )?))
-                } else if name.as_str() == ":-" && terms.len() == 1 {
-                    Ok(TopLevel::Declaration(setup_declaration(load_state, terms)?))
                 } else {
                     let term = Term::Clause(r, name, terms, fixity);
                     Ok(TopLevel::Fact(self.setup_fact(term)?))

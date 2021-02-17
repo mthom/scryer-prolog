@@ -340,8 +340,14 @@ impl SystemClauseType {
             &SystemClauseType::WorkingDirectory => clause_name!("$working_directory"),
             &SystemClauseType::PathCanonical => clause_name!("$path_canonical"),
             &SystemClauseType::FileTime => clause_name!("$file_time"),
+            &SystemClauseType::REPL(REPLCodePtr::AddDiscontiguousPredicate) => {
+                clause_name!("$add_discontiguous_predicate")
+            }
             &SystemClauseType::REPL(REPLCodePtr::AddDynamicPredicate) => {
                 clause_name!("$add_dynamic_predicate")
+            }
+            &SystemClauseType::REPL(REPLCodePtr::AddMultifilePredicate) => {
+                clause_name!("$add_multifile_predicate")
             }
             &SystemClauseType::REPL(REPLCodePtr::AddGoalExpansionClause) => {
                 clause_name!("$add_goal_expansion_clause")
@@ -582,8 +588,14 @@ impl SystemClauseType {
     pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$abolish_clause", 3) => Some(SystemClauseType::REPL(REPLCodePtr::AbolishClause)),
-            ("$add_dynamic_predicate", 3) => {
+            ("$add_dynamic_predicate", 4) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::AddDynamicPredicate))
+            }
+            ("$add_multifile_predicate", 4) => {
+                Some(SystemClauseType::REPL(REPLCodePtr::AddMultifilePredicate))
+            }
+            ("$add_discontiguous_predicate", 4) => {
+                Some(SystemClauseType::REPL(REPLCodePtr::AddDiscontiguousPredicate))
             }
             ("$add_goal_expansion_clause", 4) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::AddGoalExpansionClause))

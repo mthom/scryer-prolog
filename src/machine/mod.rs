@@ -412,8 +412,14 @@ impl Machine {
 
     fn handle_toplevel_command(&mut self, code_ptr: REPLCodePtr, p: LocalCodePtr) {
         match code_ptr {
+            REPLCodePtr::AddDiscontiguousPredicate => {
+                self.add_discontiguous_predicate();
+            }
             REPLCodePtr::AddDynamicPredicate => {
                 self.add_dynamic_predicate();
+            }
+            REPLCodePtr::AddMultifilePredicate => {
+                self.add_multifile_predicate();
             }
             REPLCodePtr::AddGoalExpansionClause => {
                 self.add_goal_expansion_clause();

@@ -257,9 +257,38 @@ compile_declaration(module(Module, Exports), Evacuable) :-
     type_error(atom, Module, load/1)
     ).
 compile_declaration(dynamic(Name/Arity), Evacuable) :-
+    !,
     must_be(atom, Name),
     must_be(integer, Arity),
-    '$add_dynamic_predicate'(Name, Arity, Evacuable).
+    prolog_load_context(module, Module),
+    '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
+compile_declaration(dynamic(Module:Name/Arity), Evacuable) :-
+    must_be(atom, Module),
+    must_be(atom, Name),
+    must_be(integer, Arity),
+    '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
+compile_declaration(multifile(Name/Arity), Evacuable) :-
+    !,
+    must_be(atom, Name),
+    must_be(integer, Arity),
+    prolog_load_context(module, Module),
+    '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
+compile_declaration(multifile(Module:Name/Arity), Evacuable) :-
+    must_be(atom, Module),
+    must_be(atom, Name),
+    must_be(integer, Arity),
+    '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
+compile_declaration(discontiguous(Name/Arity), Evacuable) :-
+    !,
+    must_be(atom, Name),
+    must_be(integer, Arity),
+    prolog_load_context(module, Module),
+    '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
+compile_declaration(discontiguous(Module:Name/Arity), Evacuable) :-
+    must_be(atom, Module),
+    must_be(atom, Name),
+    must_be(integer, Arity),
+    '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
 compile_declaration(initialization(Goal), Evacuable) :-
     prolog_load_context(module, Module),
     assertz(Module:'$initialization_goals'(Goal)).
@@ -388,7 +417,7 @@ check_predicate_property(dynamic, Module, Name, Arity, dynamic) :-
     '$cpp_dynamic_property'(Module, Name, Arity).
 check_predicate_property(multifile, Module, Name, Arity, multifile) :-
     '$cpp_multifile_property'(Module, Name, Arity).
-check_predicate_property(discontiguous, Module, Name, Arity, multifile) :-
+check_predicate_property(discontiguous, Module, Name, Arity, discontiguous) :-
     '$cpp_discontiguous_property'(Module, Name, Arity).
 
 
@@ -408,7 +437,7 @@ load_context(Module) :-
 predicate_property(Callable, Property) :-
     (  var(Callable) ->
        instantiation_error(load/1)
-    ;  functor(Callable, (:), 2),  % Callable =.. [(:), Module, Callable0],
+    ;  functor(Callable, (:), 2),
        arg(1, Callable, Module),
        arg(2, Callable, Callable0),
        atom(Module) ->

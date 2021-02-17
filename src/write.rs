@@ -2,6 +2,7 @@ use crate::clause_types::*;
 use crate::forms::*;
 use crate::indexing::IndexingCodePtr;
 use crate::instructions::*;
+use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 
@@ -20,8 +21,12 @@ impl fmt::Display for LocalCodePtr {
 impl fmt::Display for REPLCodePtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            REPLCodePtr::AddDiscontiguousPredicate =>
+                write!(f, "REPLCodePtr::AddDiscontiguousPredicate"),
             REPLCodePtr::AddDynamicPredicate =>
                 write!(f, "REPLCodePtr::AddDynamicPredicate"),
+            REPLCodePtr::AddMultifilePredicate =>
+                write!(f, "REPLCodePtr::AddMultifilePredicate"),
             REPLCodePtr::AddGoalExpansionClause =>
                 write!(f, "REPLCodePtr::AddGoalExpansionClause"),
             REPLCodePtr::AddTermExpansionClause =>
@@ -84,6 +89,15 @@ impl fmt::Display for IndexPtr {
             &IndexPtr::DynamicUndefined => write!(f, "undefined"),
             &IndexPtr::Undefined => write!(f, "undefined"),
             &IndexPtr::Index(i) => write!(f, "{}", i),
+        }
+    }
+}
+
+impl fmt::Display for CompilationTarget {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CompilationTarget::User => write!(f, "user"),
+            CompilationTarget::Module(ref module_name) => write!(f, "{}", module_name),
         }
     }
 }
@@ -403,6 +417,10 @@ impl fmt::Display for SessionError {
             &SessionError::ModuleCannotImportSelf(ref module_name) => {
                 write!(f, "modules ({}, in this case) cannot import themselves.",
                        module_name)
+            }
+            &SessionError::PredicateNotMultifileOrDiscontiguous(ref compilation_target, ref key) => {
+                write!(f, "module {} does not define {}/{} as multifile or discontiguous.",
+                       compilation_target.module_name(), key.0, key.1)
             }
         }
     }

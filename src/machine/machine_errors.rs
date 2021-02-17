@@ -4,6 +4,7 @@ use prolog_parser::{clause_name, temp_v};
 use crate::forms::{ModuleSource, Number}; //, PredicateKey};
 use crate::machine::PredicateKey;
 use crate::machine::heap::*;
+use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::rug::Integer;
@@ -344,6 +345,22 @@ impl MachineError {
                 Self::permission_error(h, Permission::Create, "operator", functor!(clause_name(op)))
             }
             SessionError::CompilationError(err) => Self::syntax_error(h, err),
+            SessionError::PredicateNotMultifileOrDiscontiguous(compilation_target, key) => {
+                let functor_stub = Self::functor_stub(key.0, key.1);
+                let stub = functor!(
+                    ":",
+                    SharedOpDesc::new(600, XFY),
+                    [clause_name(compilation_target.module_name()), aux(h + 4, 0)],
+                    [functor_stub]
+                );
+
+                Self::permission_error(
+                    h,
+                    Permission::Modify,
+                    "not_declared_multifile_or_discontiguous",
+                    stub,
+                )
+            }
             SessionError::QueryCannotBeDefinedAsFact => Self::permission_error(
                 h,
                 Permission::Create,
@@ -808,6 +825,7 @@ pub enum SessionError {
     ModuleCannotImportSelf(ClauseName),
     NamelessEntry,
     OpIsInfixAndPostFix(ClauseName),
+    PredicateNotMultifileOrDiscontiguous(CompilationTarget, PredicateKey),
     QueryCannotBeDefinedAsFact,
 }
 

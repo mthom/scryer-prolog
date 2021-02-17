@@ -417,7 +417,9 @@ impl Default for CodeIndex {
 
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum REPLCodePtr {
+    AddDiscontiguousPredicate,
     AddDynamicPredicate,
+    AddMultifilePredicate,
     AddGoalExpansionClause,
     AddTermExpansionClause,
     ClauseToEvacuable,
@@ -743,6 +745,68 @@ impl IndexStore {
         }
     }
 
+    pub fn get_local_predicate_skeleton_mut(
+        &mut self,
+        src_compilation_target: &CompilationTarget,
+        local_compilation_target: CompilationTarget,
+        key: PredicateKey,
+    ) -> Option<&mut PredicateSkeleton> {
+        match (key.0.as_str(), key.1) {
+            ("term_expansion", 2) => {
+                self.local_extensible_predicates.get_mut(
+                    &(local_compilation_target, key),
+                )
+            }
+            _ => match src_compilation_target {
+                CompilationTarget::User => {
+                    self.local_extensible_predicates.get_mut(
+                        &(local_compilation_target, key),
+                    )
+                }
+                CompilationTarget::Module(ref module_name) => {
+                    if let Some(module) = self.modules.get_mut(module_name) {
+                        module.local_extensible_predicates.get_mut(
+                            &(local_compilation_target, key),
+                        )
+                    } else {
+                        None
+                    }
+                }
+            },
+        }
+    }
+
+    pub fn get_local_predicate_skeleton(
+        &self,
+        src_compilation_target: &CompilationTarget,
+        local_compilation_target: CompilationTarget,
+        key: PredicateKey,
+    ) -> Option<&PredicateSkeleton> {
+        match (key.0.as_str(), key.1) {
+            ("term_expansion", 2) => {
+                self.local_extensible_predicates.get(
+                    &(local_compilation_target, key),
+                )
+            }
+            _ => match src_compilation_target {
+                CompilationTarget::User => {
+                    self.local_extensible_predicates.get(
+                        &(local_compilation_target, key),
+                    )
+                }
+                CompilationTarget::Module(ref module_name) => {
+                    if let Some(module) = self.modules.get(module_name) {
+                        module.local_extensible_predicates.get(
+                            &(local_compilation_target, key),
+                        )
+                    } else {
+                        None
+                    }
+                }
+            },
+        }
+    }
+
     pub fn get_predicate_skeleton(
         &self,
         compilation_target: &CompilationTarget,
@@ -767,18 +831,20 @@ impl IndexStore {
         &mut self,
         compilation_target: &CompilationTarget,
         key: &PredicateKey,
-    ) {
+    ) -> Option<PredicateSkeleton> {
         match (key.0.as_str(), key.1) {
             ("term_expansion", 2) => {
-                self.extensible_predicates.remove(key);
+                self.extensible_predicates.remove(key)
             }
             _ => match compilation_target {
                 CompilationTarget::User => {
-                    self.extensible_predicates.remove(key);
+                    self.extensible_predicates.remove(key)
                 }
                 CompilationTarget::Module(ref module_name) => {
                     if let Some(module) = self.modules.get_mut(module_name) {
-                        module.extensible_predicates.remove(key);
+                        module.extensible_predicates.remove(key)
+                    } else {
+                        None
                     }
                 }
             },

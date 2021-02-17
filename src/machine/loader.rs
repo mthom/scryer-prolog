@@ -9,6 +9,7 @@ use crate::machine::preprocessor::*;
 use crate::machine::*;
 
 use indexmap::IndexSet;
+use slice_deque::{sdeq, SliceDeque};
 
 use std::cell::Cell;
 use std::convert::TryFrom;
@@ -28,10 +29,10 @@ use std::rc::Rc;
  * compiling inline disjunctions.
  *
  * Since the loader can operate incrementally, it uses an intermittent
- * structure to rebuild the loader between
- * invocations. TopLevelBatchWorker needs access to a &'a mut Machine
- * for as long as it lives, and we can't have copies of &'a mut
- * Machine distributed among multiple owners.
+ * structure to rebuild the loader between invocations. Preprocessor
+ * needs access to a &'a mut Machine for as long as it lives, and we
+ * can't have copies of &'a mut Machine distributed among multiple
+ * owners.
  *
  * When loading a module, we modify the records of the WAM with the
  * location of new predicates, with new meta-predicate information,
@@ -46,19 +47,19 @@ pub(crate) enum RetractionRecord {
     AddedMetaPredicate(ClauseName, PredicateKey),
     ReplacedMetaPredicate(ClauseName, ClauseName, Vec<MetaSpec>),
     AddedModule(ClauseName),
-    ReplacedModule(ModuleDecl, ListingSource),
-    AddedModuleDynamicPredicate(ClauseName, PredicateKey),
-    AddedModuleExtensiblePredicate(ClauseName, PredicateKey),
+    ReplacedModule(ModuleDecl, ListingSource, LocalExtensiblePredicates),
     AppendedModuleExtensiblePredicate(ClauseName, PredicateKey),
     PrependedModuleExtensiblePredicate(ClauseName, PredicateKey),
     AddedModuleOp(ClauseName, OpDecl),
     ReplacedModuleOp(ClauseName, OpDecl, usize, Specifier),
     AddedModulePredicate(ClauseName, PredicateKey),
     ReplacedModulePredicate(ClauseName, PredicateKey, IndexPtr),
-    AddedUserDynamicPredicate(PredicateKey),
+    AddedDiscontiguousPredicate(CompilationTarget, PredicateKey),
+    AddedDynamicPredicate(CompilationTarget, PredicateKey),
+    AddedMultifilePredicate(CompilationTarget, PredicateKey),
     AddedUserOp(OpDecl),
     ReplacedUserOp(OpDecl, usize, Specifier),
-    AddedUserExtensiblePredicate(PredicateKey),
+    AddedExtensiblePredicate(CompilationTarget, PredicateKey),
     AppendedUserExtensiblePredicate(PredicateKey),
     PrependedUserExtensiblePredicate(PredicateKey),
     AddedUserPredicate(PredicateKey),
@@ -71,14 +72,13 @@ pub(crate) enum RetractionRecord {
     ModifiedTryMeElse(usize, usize),
     ModifiedRetryMeElse(usize, usize),
     ModifiedRevJmpBy(usize, usize),
-    IncreasedClauseAssertMargin(ClauseName, usize),
-    SkeletonClauseClausesTruncateBack(CompilationTarget, PredicateKey, usize),
-    SkeletonClauseClausesTruncateFront(CompilationTarget, PredicateKey, usize),
     SkeletonClausePopBack(CompilationTarget, PredicateKey),
     SkeletonClausePopFront(CompilationTarget, PredicateKey),
+    SkeletonLocalClauseClausePopBack(CompilationTarget, CompilationTarget, PredicateKey),
+    SkeletonLocalClauseClausePopFront(CompilationTarget, CompilationTarget, PredicateKey),
     SkeletonClauseTruncateBack(CompilationTarget, PredicateKey, usize),
     SkeletonClauseStartReplaced(CompilationTarget, PredicateKey, usize, usize),
-    RemovedDynamicSkeletonClause(
+    RemovedSkeletonClause(
         CompilationTarget,
         PredicateKey,
         usize,
@@ -86,6 +86,13 @@ pub(crate) enum RetractionRecord {
         usize,
     ),
     ReplacedIndexingLine(usize, Vec<IndexingLine>),
+    RemovedLocalSkeletonClauseLocations(
+        CompilationTarget,
+        CompilationTarget,
+        PredicateKey,
+        SliceDeque<usize>,
+    ),
+    RemovedSkeleton(CompilationTarget, PredicateKey, PredicateSkeleton),
 }
 
 /*
@@ -123,7 +130,7 @@ impl RetractionInfo {
 
         Self {
             orig_code_extent,
-            records: mem::replace(&mut self.records, vec![]), //BTreeMap::new()),
+            records: mem::replace(&mut self.records, vec![]),
         }
     }
 }
@@ -170,31 +177,90 @@ impl<'a> Drop for LoadState<'a> {
                 RetractionRecord::AddedModule(module_name) => {
                     self.wam.indices.modules.remove(&module_name);
                 }
-                RetractionRecord::ReplacedModule(module_decl, listing_src) => {
+                RetractionRecord::ReplacedModule(
+                    module_decl,
+                    listing_src,
+                    local_extensible_predicates,
+                ) => {
                     match self.wam.indices.modules.get_mut(&module_decl.name) {
                         Some(ref mut module) => {
                             module.module_decl = module_decl;
                             module.listing_src = listing_src;
+                            module.local_extensible_predicates = local_extensible_predicates;
                         }
                         _ => {
                             unreachable!()
                         }
                     }
                 }
-                RetractionRecord::AddedModuleDynamicPredicate(module_name, key) => {
-                    match self.wam.indices.modules.get_mut(&module_name) {
-                        Some(ref mut module) => {
-                            module.extensible_predicates.get_mut(&key).map(|skeleton| {
-                                skeleton.is_dynamic = false;
-                            });
+                RetractionRecord::AddedDiscontiguousPredicate(compilation_target, key) => {
+                    match compilation_target {
+                        CompilationTarget::User => {
+                            self.wam
+                                .indices
+                                .extensible_predicates
+                                .get_mut(&key)
+                                .map(|skeleton| {
+                                    skeleton.is_discontiguous = false;
+                                });
                         }
-                        None => {}
+                        CompilationTarget::Module(module_name) => {
+                            match self.wam.indices.modules.get_mut(&module_name) {
+                                Some(ref mut module) => {
+                                    module.extensible_predicates.get_mut(&key).map(|skeleton| {
+                                        skeleton.is_discontiguous = false;
+                                    });
+                                }
+                                None => {}
+                            }
+                        }
                     }
                 }
-                RetractionRecord::AddedModuleExtensiblePredicate(module_name, key) => {
-                    self.wam
-                        .indices
-                        .remove_predicate_skeleton(&CompilationTarget::Module(module_name), &key);
+                RetractionRecord::AddedDynamicPredicate(compilation_target, key) => {
+                    match compilation_target {
+                        CompilationTarget::User => {
+                            self.wam
+                                .indices
+                                .extensible_predicates
+                                .get_mut(&key)
+                                .map(|skeleton| {
+                                    skeleton.is_dynamic = false;
+                                });
+                        }
+                        CompilationTarget::Module(module_name) => {
+                            match self.wam.indices.modules.get_mut(&module_name) {
+                                Some(ref mut module) => {
+                                    module.extensible_predicates.get_mut(&key).map(|skeleton| {
+                                        skeleton.is_dynamic = false;
+                                    });
+                                }
+                                None => {}
+                            }
+                        }
+                    }
+                }
+                RetractionRecord::AddedMultifilePredicate(compilation_target, key) => {
+                    match compilation_target {
+                        CompilationTarget::User => {
+                            self.wam
+                                .indices
+                                .extensible_predicates
+                                .get_mut(&key)
+                                .map(|skeleton| {
+                                    skeleton.is_multifile = false;
+                                });
+                        }
+                        CompilationTarget::Module(module_name) => {
+                            match self.wam.indices.modules.get_mut(&module_name) {
+                                Some(ref mut module) => {
+                                    module.extensible_predicates.get_mut(&key).map(|skeleton| {
+                                        skeleton.is_multifile = false;
+                                    });
+                                }
+                                None => {}
+                            }
+                        }
+                    }
                 }
                 RetractionRecord::AppendedModuleExtensiblePredicate(module_name, key) => {
                     self.wam
@@ -249,19 +315,10 @@ impl<'a> Drop for LoadState<'a> {
                         None => {}
                     }
                 }
-                RetractionRecord::AddedUserDynamicPredicate(key) => {
+                RetractionRecord::AddedExtensiblePredicate(compilation_target, key) => {
                     self.wam
                         .indices
-                        .extensible_predicates
-                        .get_mut(&key)
-                        .map(|skeleton| {
-                            skeleton.is_dynamic = false;
-                        });
-                }
-                RetractionRecord::AddedUserExtensiblePredicate(key) => {
-                    self.wam
-                        .indices
-                        .remove_predicate_skeleton(&CompilationTarget::User, &key);
+                        .remove_predicate_skeleton(&compilation_target, &key);
                 }
                 RetractionRecord::AppendedUserExtensiblePredicate(key) => {
                     self.wam
@@ -399,79 +456,6 @@ impl<'a> Drop for LoadState<'a> {
                     self.wam.code_repo.code[instr_loc] =
                         Line::Control(ControlInstruction::RevJmpBy(o));
                 }
-                RetractionRecord::IncreasedClauseAssertMargin(module_name, incr) => {
-                    if let Some(module) = self.wam.indices.modules.get_mut(&module_name) {
-                        module.clause_assert_margin -= incr;
-                    }
-                }
-                RetractionRecord::SkeletonClauseClausesTruncateFront(
-                    compilation_target,
-                    key,
-                    len,
-                ) => {
-                    match self
-                        .wam
-                        .indices
-                        .get_predicate_skeleton_mut(&compilation_target, &key)
-                    {
-                        Some(skeleton) => {
-                            skeleton.clause_clause_locs.truncate_front(len);
-                        }
-                        None => {}
-                    }
-
-                    let compilation_target = match compilation_target {
-                        CompilationTarget::User => {
-                            CompilationTarget::Module(clause_name!("builtins"))
-                        }
-                        _ => compilation_target,
-                    };
-
-                    match self
-                        .wam
-                        .indices
-                        .get_predicate_skeleton_mut(&compilation_target, &(clause_name!("$clause"), 2))
-                    {
-                        Some(skeleton) => {
-                            skeleton.clause_clause_locs.truncate_front(len);
-                        }
-                        None => {}
-                    }
-                }
-                RetractionRecord::SkeletonClauseClausesTruncateBack(
-                    compilation_target,
-                    key,
-                    len,
-                ) => {
-                    match self
-                        .wam
-                        .indices
-                        .get_predicate_skeleton_mut(&compilation_target, &key)
-                    {
-                        Some(skeleton) => {
-                            skeleton.clause_clause_locs.truncate_back(len);
-                        }
-                        None => {}
-                    }
-
-                    let compilation_target = match compilation_target {
-                        CompilationTarget::User => {
-                            CompilationTarget::Module(clause_name!("builtins"))
-                        }
-                        _ => compilation_target,
-                    };
-
-                    match self
-                        .wam
-                        .indices
-                        .get_predicate_skeleton_mut(&compilation_target, &(clause_name!("$clause"), 2))
-                    {
-                        Some(skeleton) => {
-                            skeleton.clause_clause_locs.truncate_back(len);
-                        }
-                        None => {}
-                    }
-                }
                 RetractionRecord::SkeletonClausePopBack(compilation_target, key) => {
                     match self
                         .wam
@@ -480,6 +464,7 @@ impl<'a> Drop for LoadState<'a> {
                     {
                         Some(skeleton) => {
                             skeleton.clauses.pop_back();
+                            skeleton.clause_clause_locs.pop_back();
                         }
                         None => {}
                     }
@@ -492,6 +477,44 @@ impl<'a> Drop for LoadState<'a> {
                     {
                         Some(skeleton) => {
                             skeleton.clauses.pop_front();
+                            skeleton.clause_clause_locs.pop_front();
+                            skeleton.clause_assert_margin -= 1;
+                        }
+                        None => {}
+                    }
+                }
+                RetractionRecord::SkeletonLocalClauseClausePopFront(
+                    src_compilation_target, local_compilation_target, key,
+                ) => {
+                    match self
+                        .wam
+                        .indices
+                        .get_local_predicate_skeleton_mut(
+                            &src_compilation_target,
+                            local_compilation_target,
+                            key,
+                        )
+                    {
+                        Some(skeleton) => {
+                            skeleton.clause_clause_locs.pop_front();
+                        }
+                        None => {}
+                    }
+                }
+                RetractionRecord::SkeletonLocalClauseClausePopBack(
+                    src_compilation_target, local_compilation_target, key,
+                ) => {
+                    match self
+                        .wam
+                        .indices
+                        .get_local_predicate_skeleton_mut(
+                            &src_compilation_target,
+                            local_compilation_target,
+                            key,
+                        )
+                    {
+                        Some(skeleton) => {
+                            skeleton.clause_clause_locs.pop_back();
                         }
                         None => {}
                     }
@@ -504,6 +527,7 @@ impl<'a> Drop for LoadState<'a> {
                     {
                         Some(skeleton) => {
                             skeleton.clauses.truncate_back(len);
+                            skeleton.clause_clause_locs.truncate_back(len);
                         }
                         None => {}
                     }
@@ -525,7 +549,7 @@ impl<'a> Drop for LoadState<'a> {
                         None => {}
                     }
                 }
-                RetractionRecord::RemovedDynamicSkeletonClause(
+                RetractionRecord::RemovedSkeletonClause(
                     compilation_target,
                     key,
                     target_pos,
@@ -549,6 +573,37 @@ impl<'a> Drop for LoadState<'a> {
                 RetractionRecord::ReplacedIndexingLine(index_loc, indexing_code) => {
                     self.wam.code_repo.code[index_loc] = Line::IndexingCode(indexing_code);
                 }
+                RetractionRecord::RemovedLocalSkeletonClauseLocations(
+                    compilation_target,
+                    local_compilation_target,
+                    key,
+                    clause_locs,
+                ) => {
+                    match self
+                        .wam
+                        .indices
+                        .get_local_predicate_skeleton_mut(
+                            &compilation_target,
+                            local_compilation_target,
+                            key,
+                        )
+                    {
+                        Some(skeleton) => skeleton.clause_clause_locs = clause_locs,
+                        None => {}
+                    }
+                }
+                RetractionRecord::RemovedSkeleton(compilation_target, key, skeleton) => {
+                    match compilation_target {
+                        CompilationTarget::User => {
+                            self.wam.indices.extensible_predicates.insert(key, skeleton);
+                        }
+                        CompilationTarget::Module(module_name) => {
+                            if let Some(module) = self.wam.indices.modules.get_mut(&module_name) {
+                                module.extensible_predicates.insert(key, skeleton);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -557,7 +612,7 @@ impl<'a> Drop for LoadState<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum CompilationTarget {
     Module(ClauseName),
     User,
@@ -577,7 +632,7 @@ impl CompilationTarget {
     }
 
     #[inline]
-    pub(super) fn module_name(&self) -> ClauseName {
+    pub fn module_name(&self) -> ClauseName {
         match self {
             CompilationTarget::User => {
                 clause_name!("user")
@@ -588,28 +643,18 @@ impl CompilationTarget {
 }
 
 pub struct PredicateQueue {
-    pub(super) predicates: Vec<PredicateClause>,
+    pub(super) predicates: Vec<Term>,
     pub(super) compilation_target: CompilationTarget,
 }
 
 impl PredicateQueue {
     #[inline]
-    pub(super) fn push(&mut self, clause: PredicateClause) {
+    pub(super) fn push(&mut self, clause: Term) {
         self.predicates.push(clause);
     }
 
     #[inline]
-    pub(super) fn extend(&mut self, iter: impl Iterator<Item = PredicateClause>) {
-        self.predicates.extend(iter);
-    }
-
-    #[inline]
-    pub(super) fn clear(&mut self) {
-        self.predicates.clear();
-    }
-
-    #[inline]
-    pub(crate) fn first(&self) -> Option<&PredicateClause> {
+    pub(crate) fn first(&self) -> Option<&Term> {
         self.predicates.first()
     }
 
@@ -624,6 +669,11 @@ impl PredicateQueue {
             predicates: mem::replace(&mut self.predicates, vec![]),
             compilation_target: self.compilation_target.take(),
         }
+    }
+
+    #[inline]
+    pub(super) fn len(&self) -> usize {
+        self.predicates.len()
     }
 }
 
@@ -642,13 +692,11 @@ pub(crate) struct Loader<'a, TermStream> {
     pub(super) clause_clauses: Vec<(Term, Term)>,
     term_stream: TermStream,
     pub(super) non_counted_bt_preds: IndexSet<PredicateKey>,
-    pub(super) preprocessor: Preprocessor,
 }
 
 impl<'a, TS: TermStream> Loader<'a, TS> {
     #[inline]
     pub(super) fn new(term_stream: TS, wam: &'a mut Machine) -> Self {
-        let flags = wam.machine_st.flags;
         let load_state = LoadState {
             compilation_target: CompilationTarget::User,
             module_op_exports: vec![],
@@ -660,7 +708,6 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             load_state,
             term_stream,
             non_counted_bt_preds: IndexSet::new(),
-            preprocessor: Preprocessor::new(flags),
             predicates: predicate_queue![],
             clause_clauses: vec![],
         }
@@ -683,19 +730,15 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                 self.compile_and_submit()?;
             }
 
-            let tl = self.preprocessor.try_term_to_tl(
-                &mut self.load_state,
-                term,
-                CutContext::BlocksCuts,
-            )?;
+            let term = match term {
+                Term::Clause(_, name, terms, _)
+                    if name.as_str() == ":-" && terms.len() == 1 => {
+                        return Ok(Some(setup_declaration(&self.load_state, terms)?));
+                    },
+                term => term,
+            };
 
-            match tl {
-                TopLevel::Fact(fact) => self.predicates.push(PredicateClause::Fact(fact)),
-                TopLevel::Rule(rule) => self.predicates.push(PredicateClause::Rule(rule)),
-                TopLevel::Predicate(pred) => self.predicates.extend(pred.into_iter()),
-                TopLevel::Declaration(decl) => return Ok(Some(decl)),
-                TopLevel::Query(_) => return Err(SessionError::QueryCannotBeDefinedAsFact),
-            }
+            self.predicates.push(term);
         }
 
         Ok(None)
@@ -704,7 +747,8 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
     pub(super) fn load_decl(&mut self, decl: Declaration) -> Result<(), SessionError> {
         match decl {
             Declaration::Dynamic(name, arity) => {
-                self.add_dynamic_predicate(name, arity);
+                let compilation_target = self.load_state.compilation_target.clone();
+                self.add_dynamic_predicate(compilation_target, name, arity)?;
             }
             Declaration::MetaPredicate(module_name, name, meta_specs) => {
                 self.load_state
@@ -857,10 +901,18 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
         Ok(())
     }
 
-    fn add_dynamic_predicate(&mut self, name: ClauseName, arity: usize) {
+    fn add_extensible_predicate_declaration(
+        &mut self,
+        compilation_target: CompilationTarget,
+        name: ClauseName,
+        arity: usize,
+        flag_accessor: impl Fn(&mut PredicateSkeleton) -> &mut bool,
+        retraction_fn: impl Fn(CompilationTarget, PredicateKey) -> RetractionRecord,
+    ) -> Result<(), SessionError> {
         let key = (name, arity);
+        let mut throw_permission_error = false;
 
-        match &self.load_state.compilation_target {
+        match &compilation_target {
             CompilationTarget::User => {
                 match self
                     .load_state
@@ -870,20 +922,27 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                     .get_mut(&key)
                 {
                     Some(ref mut skeleton) => {
-                        if !skeleton.is_dynamic {
-                            skeleton.is_dynamic = true;
+                        if !*flag_accessor(skeleton) {
+                            *flag_accessor(skeleton) = true;
 
                             self.load_state.retraction_info.push_record(
-                                RetractionRecord::AddedUserDynamicPredicate(key.clone()),
+                                retraction_fn(compilation_target.clone(), key.clone()),
                             );
                         }
                     }
                     None => {
-                        self.load_state.add_extensible_predicate(
-                            key.clone(),
-                            PredicateSkeleton::new().set_dynamic(true),
-                            CompilationTarget::User,
-                        );
+                        if self.load_state.compilation_target == compilation_target {
+                            let mut skeleton = PredicateSkeleton::new();
+                            *flag_accessor(&mut skeleton) = true;
+
+                            self.load_state.add_extensible_predicate(
+                                key.clone(),
+                                skeleton,
+                                CompilationTarget::User,
+                            );
+                        } else {
+                            throw_permission_error = true;
+                        }
                     }
                 }
             }
@@ -891,44 +950,176 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                 match self.load_state.wam.indices.modules.get_mut(module_name) {
                     Some(ref mut module) => match module.extensible_predicates.get_mut(&key) {
                         Some(ref mut skeleton) => {
-                            if !skeleton.is_dynamic {
-                                skeleton.is_dynamic = true;
+                            if !*flag_accessor(skeleton) {
+                                *flag_accessor(skeleton) = true;
 
                                 self.load_state.retraction_info.push_record(
-                                    RetractionRecord::AddedModuleDynamicPredicate(
-                                        module_name.clone(),
-                                        key.clone(),
-                                    ),
+                                    retraction_fn(compilation_target.clone(), key.clone()),
                                 );
                             }
                         }
                         None => {
-                            self.load_state.add_extensible_predicate(
-                                key.clone(),
-                                PredicateSkeleton::new().set_dynamic(true),
-                                self.load_state.compilation_target.clone(),
-                            );
+                            if self.load_state.compilation_target == compilation_target {
+                                let mut skeleton = PredicateSkeleton::new();
+                                *flag_accessor(&mut skeleton) = true;
+
+                                self.load_state.add_extensible_predicate(
+                                    key.clone(),
+                                    skeleton,
+                                    compilation_target.clone(),
+                                );
+                            } else {
+                                throw_permission_error = true;
+                            }
                         }
                     },
                     None => {
-                        unreachable!();
+                        self.load_state.add_dynamically_generated_module(module_name);
+
+                        let mut skeleton = PredicateSkeleton::new();
+                        *flag_accessor(&mut skeleton) = true;
+
+                        self.load_state.add_extensible_predicate(
+                            key.clone(),
+                            skeleton,
+                            compilation_target.clone(),
+                        );
                     }
                 }
             }
         }
 
+        if !throw_permission_error {
+            match self.load_state.compilation_target.clone() {
+                CompilationTarget::User => {
+                    match self
+                        .load_state
+                        .wam
+                        .indices
+                        .local_extensible_predicates
+                        .get_mut(&(compilation_target.clone(), key.clone()))
+                    {
+                        Some(ref mut skeleton) => {
+                            if !*flag_accessor(skeleton) {
+                                *flag_accessor(skeleton) = true;
+                            }
+                        }
+                        None => {
+                            let mut skeleton = PredicateSkeleton::new();
+                            *flag_accessor(&mut skeleton) = true;
+
+                            self.load_state.add_local_extensible_predicate(
+                                compilation_target.clone(),
+                                key.clone(),
+                                skeleton,
+                            );
+                        }
+                    }
+                }
+                CompilationTarget::Module(ref module_name) => {
+                    match self.load_state.wam.indices.modules.get_mut(module_name) {
+                        Some(ref mut module) =>
+                            match module.local_extensible_predicates.get_mut(
+                                &(compilation_target.clone(), key.clone()),
+                            ) {
+                                Some(ref mut skeleton) => {
+                                    if !*flag_accessor(skeleton) {
+                                        *flag_accessor(skeleton) = true;
+                                    }
+                                }
+                                None => {
+                                    let mut skeleton = PredicateSkeleton::new();
+                                    *flag_accessor(&mut skeleton) = true;
+
+                                    self.load_state.add_local_extensible_predicate(
+                                        compilation_target.clone(),
+                                        key.clone(),
+                                        skeleton,
+                                    );
+                                }
+                            },
+                        None => {
+                            self.load_state.add_dynamically_generated_module(module_name);
+
+                            let mut skeleton = PredicateSkeleton::new();
+                            *flag_accessor(&mut skeleton) = true;
+
+                            self.load_state.add_local_extensible_predicate(
+                                compilation_target.clone(),
+                                key.clone(),
+                                skeleton,
+                            );
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        } else {
+            Err(SessionError::PredicateNotMultifileOrDiscontiguous(compilation_target, key))
+        }
+    }
+
+    fn add_discontiguous_predicate(
+        &mut self,
+        compilation_target: CompilationTarget,
+        name: ClauseName,
+        arity: usize,
+    ) -> Result<(), SessionError> {
+        self.add_extensible_predicate_declaration(
+            compilation_target,
+            name,
+            arity,
+            |skeleton| &mut skeleton.is_discontiguous,
+            RetractionRecord::AddedDiscontiguousPredicate,
+        )
+    }
+
+    fn add_dynamic_predicate(
+        &mut self,
+        compilation_target: CompilationTarget,
+        name: ClauseName,
+        arity: usize,
+    ) -> Result<(), SessionError> {
+        self.add_extensible_predicate_declaration(
+            compilation_target.clone(),
+            name.clone(),
+            arity,
+            |skeleton| &mut skeleton.is_dynamic,
+            RetractionRecord::AddedDynamicPredicate,
+        )?;
+
         let code_index = self.load_state.get_or_insert_code_index(
-            key.clone(),
-            self.load_state.compilation_target.clone(),
+            (name.clone(), arity),
+            compilation_target.clone(),
         );
 
-        set_code_index(
-            &mut self.load_state.retraction_info,
-            &self.load_state.compilation_target,
-            key,
-            &code_index,
-            IndexPtr::DynamicUndefined,
-        );
+        if let IndexPtr::Undefined = code_index.get() {
+            set_code_index(
+                &mut self.load_state.retraction_info,
+                &compilation_target,
+                (name, arity),
+                &code_index,
+                IndexPtr::DynamicUndefined,
+            );
+        }
+
+        Ok(())
+    }
+
+    fn add_multifile_predicate(
+        &mut self,
+        compilation_target: CompilationTarget,
+        name: ClauseName,
+        arity: usize,
+    ) -> Result<(), SessionError> {
+        self.add_extensible_predicate_declaration(
+            compilation_target,
+            name,
+            arity,
+            |skeleton| &mut skeleton.is_multifile,
+            RetractionRecord::AddedMultifilePredicate,
+        )
     }
 
     fn add_clause_clause_if_dynamic(&mut self, term: &Term) -> Result<(), SessionError> {
@@ -952,6 +1143,51 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
         }
 
         Ok(())
+    }
+
+    pub(super) fn retract_local_clauses(&mut self, key: &PredicateKey, is_dynamic: bool) {
+        let clause_locs = match self
+            .load_state
+            .wam
+            .indices
+            .get_local_predicate_skeleton_mut(
+                &self.load_state.compilation_target,
+                self.predicates.compilation_target.clone(),
+                key.clone(),
+            )
+        {
+            Some(skeleton) if !skeleton.clause_clause_locs.is_empty() =>
+                mem::replace(&mut skeleton.clause_clause_locs, sdeq![]),
+            _ =>
+                return,
+        };
+
+        self.load_state.retraction_info.push_record(
+            RetractionRecord::RemovedLocalSkeletonClauseLocations(
+                self.load_state.compilation_target.clone(),
+                self.predicates.compilation_target.clone(),
+                key.clone(),
+                clause_locs.clone(),
+            ),
+        );
+
+        self.load_state.retract_local_clauses(
+            self.predicates.compilation_target.clone(),
+            key.clone(),
+            &clause_locs,
+        );
+
+        if is_dynamic {
+            let clause_clause_compilation_target = match &self.predicates.compilation_target {
+                CompilationTarget::User => CompilationTarget::Module(clause_name!("builtins")),
+                module_name => module_name.clone(),
+            };
+
+            self.load_state.retract_local_clause_clauses(
+                clause_clause_compilation_target,
+                &clause_locs,
+            );
+        }
     }
 }
 
@@ -1052,16 +1288,52 @@ impl Machine {
         self.restore_load_state_payload(result, evacuable_h);
     }
 
+    #[inline]
+    pub(crate) fn add_discontiguous_predicate(&mut self) {
+        self.add_extensible_predicate_declaration(|loader, compilation_target, clause_name, arity| {
+            loader.add_discontiguous_predicate(compilation_target, clause_name, arity)
+        });
+    }
+
+    #[inline]
     pub(crate) fn add_dynamic_predicate(&mut self) {
-        let predicate_name = atom_from!(
+        self.add_extensible_predicate_declaration(|loader, compilation_target, clause_name, arity| {
+            loader.add_dynamic_predicate(compilation_target, clause_name, arity)
+        });
+    }
+
+    #[inline]
+    pub(crate) fn add_multifile_predicate(&mut self) {
+        self.add_extensible_predicate_declaration(|loader, compilation_target, clause_name, arity| {
+            loader.add_multifile_predicate(compilation_target, clause_name, arity)
+        });
+    }
+
+    fn add_extensible_predicate_declaration(
+        &mut self,
+        decl_adder: impl Fn(&mut Loader<LiveTermStream>, CompilationTarget, ClauseName, usize)
+                            -> Result<(), SessionError>,
+    ) {
+        let module_name = atom_from!(
             self.machine_st,
             self.machine_st
                 .store(self.machine_st.deref(self.machine_st[temp_v!(1)]))
         );
 
+        let compilation_target = match module_name.as_str() {
+            "user" => CompilationTarget::User,
+            _ => CompilationTarget::Module(module_name),
+        };
+
+        let predicate_name = atom_from!(
+            self.machine_st,
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st[temp_v!(2)]))
+        );
+
         let arity = self
             .machine_st
-            .store(self.machine_st.deref(self.machine_st[temp_v!(2)]));
+            .store(self.machine_st.deref(self.machine_st[temp_v!(3)]));
 
         let arity = match Number::try_from((arity, &self.machine_st.heap)) {
             Ok(Number::Integer(n)) if &*n >= &0 && &*n <= &MAX_ARITY => Ok(n.to_usize().unwrap()),
@@ -1071,14 +1343,14 @@ impl Machine {
             _ => Err(SessionError::from(CompilationError::InvalidRuleHead)),
         };
 
-        let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(3));
+        let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(4));
 
-        let add_dynamic_predicate = || {
-            loader.add_dynamic_predicate(predicate_name, arity?);
+        let add_predicate_decl = || {
+            decl_adder(&mut loader, compilation_target, predicate_name, arity?)?;
             LiveTermStream::evacuate(loader)
         };
 
-        let result = add_dynamic_predicate();
+        let result = add_predicate_decl();
         self.restore_load_state_payload(result, evacuable_h);
     }
 
@@ -1088,7 +1360,7 @@ impl Machine {
         let add_clause = || {
             let term = loader.read_term_from_heap(temp_v!(1))?;
 
-            loader.incremental_compile_clause(
+            loader.load_state.incremental_compile_clause(
                 (clause_name!("term_expansion"), 2),
                 term,
                 CompilationTarget::User,
@@ -1120,7 +1392,7 @@ impl Machine {
         let add_clause = || {
             let term = loader.read_term_from_heap(temp_v!(2))?;
 
-            loader.incremental_compile_clause(
+            loader.load_state.incremental_compile_clause(
                 (clause_name!("goal_expansion"), 2),
                 term,
                 compilation_target,
@@ -1415,7 +1687,7 @@ impl Machine {
                 fetch_op_spec(clause_name!(":-"), 2, &loader.load_state.wam.indices.op_dir),
             );
 
-            loader.incremental_compile_clause(
+            loader.load_state.incremental_compile_clause(
                 key.clone(),
                 asserted_clause,
                 compilation_target.clone(),
@@ -1484,15 +1756,6 @@ impl Machine {
                     }
                 };
 
-            let mut clause_assert_margin = loader
-                .load_state
-                .wam
-                .indices
-                .modules
-                .get(&clause_clause_compilation_target.module_name())
-                .map(|module| module.clause_assert_margin)
-                .unwrap();
-
             let mut clause_clause_target_poses: Vec<_> = loader
                 .load_state
                 .wam
@@ -1513,8 +1776,7 @@ impl Machine {
                                 .map(|clause_clause_loc| {
                                     clause_clause_skeleton.target_pos_of_clause_clause_loc(
                                         *clause_clause_loc,
-                                        clause_assert_margin,
-                                    )
+                                    ).unwrap()
                                 })
                                 .collect()
                         })
@@ -1527,10 +1789,7 @@ impl Machine {
                 .wam
                 .indices
                 .get_predicate_skeleton_mut(&loader.load_state.compilation_target, &key)
-                .map(|skeleton| {
-                    skeleton.clauses.clear();
-                    skeleton.clause_clause_locs.clear();
-                });
+                .map(|skeleton| skeleton.reset());
 
             let code_index = loader.load_state.get_or_insert_code_index(
                 key,
@@ -1543,19 +1802,7 @@ impl Machine {
 
             while let Some(target_pos) = clause_clause_target_poses.pop() {
                 loader.load_state.retract_clause((clause_name!("$clause"), 2), target_pos);
-
-                if target_pos < clause_assert_margin {
-                    clause_assert_margin -= 1;
-                }
             }
-
-            loader
-                .load_state
-                .wam
-                .indices
-                .modules
-                .get_mut(&loader.load_state.compilation_target.module_name())
-                .map(|module| module.clause_assert_margin = clause_assert_margin);
 
             LiveTermStream::evacuate(loader)
         };
@@ -1605,36 +1852,14 @@ impl Machine {
 
             let clause_clause_loc = loader.load_state.retract_clause(key, target_pos);
 
-            let clause_assert_margin = loader
-                .load_state
-                .wam
-                .indices
-                .modules
-                .get(&clause_clause_compilation_target.module_name())
-                .map(|module| module.clause_assert_margin)
-                .unwrap();
-
             let target_pos = match loader.load_state.wam.indices.get_predicate_skeleton(
                 &clause_clause_compilation_target,
                 &(clause_name!("$clause"), 2),
             ) {
                 Some(skeleton) => {
-                    let target_pos = skeleton.target_pos_of_clause_clause_loc(
+                    skeleton.target_pos_of_clause_clause_loc(
                         clause_clause_loc,
-                        clause_assert_margin,
-                    );
-
-                    if target_pos < clause_assert_margin {
-                        loader
-                            .load_state
-                            .wam
-                            .indices
-                            .modules
-                            .get_mut(&clause_clause_compilation_target.module_name())
-                            .map(|module| module.clause_assert_margin -= 1);
-                    }
-
-                    target_pos
+                    ).unwrap()
                 }
                 None => {
                     unreachable!();
@@ -1834,10 +2059,6 @@ impl<'a> Loader<'a, LiveTermStream> {
                 &mut self.term_stream,
                 LiveTermStream::new(ListingSource::User),
             ),
-            preprocessor: mem::replace(
-                &mut self.preprocessor,
-                Preprocessor::new(self.load_state.wam.machine_st.flags),
-            ),
             non_counted_bt_preds: mem::replace(&mut self.non_counted_bt_preds, IndexSet::new()),
             compilation_target: self.load_state.compilation_target.take(),
             retraction_info: mem::replace(
@@ -1859,10 +2080,6 @@ impl<'a> Loader<'a, LiveTermStream> {
                 &mut payload.term_stream,
                 LiveTermStream::new(ListingSource::User),
             ),
-            preprocessor: mem::replace(
-                &mut payload.preprocessor,
-                Preprocessor::new(MachineFlags::default()),
-            ),
             non_counted_bt_preds: mem::replace(&mut payload.non_counted_bt_preds, IndexSet::new()),
             clause_clauses: mem::replace(&mut payload.clause_clauses, vec![]),
             predicates: payload.predicates.take(),
@@ -1873,44 +2090,6 @@ impl<'a> Loader<'a, LiveTermStream> {
                 wam,
             },
         }
-    }
-
-    fn incremental_compile_clause(
-        &mut self,
-        key: PredicateKey,
-        term: Term,
-        compilation_target: CompilationTarget,
-        non_counted_bt: bool,
-        append_or_prepend: AppendOrPrepend,
-    ) -> Result<(), SessionError> {
-        let mut preprocessor = Preprocessor::new(self.load_state.wam.machine_st.flags);
-
-        let tl = preprocessor.try_term_to_tl(
-            &mut self.load_state,
-            term,
-            CutContext::BlocksCuts,
-        )?;
-
-        let queue = preprocessor.parse_queue(&mut self.load_state)?;
-
-        let clause = match tl {
-            TopLevel::Fact(fact) => PredicateClause::Fact(fact),
-            TopLevel::Rule(rule) => PredicateClause::Rule(rule),
-            _ => {
-                unreachable!()
-            }
-        };
-
-        self.load_state.incremental_compile_clause(
-            key,
-            clause,
-            queue,
-            compilation_target,
-            non_counted_bt,
-            append_or_prepend,
-        )?;
-
-        Ok(())
     }
 
     fn read_and_enqueue_term(

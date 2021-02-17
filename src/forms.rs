@@ -28,7 +28,6 @@ pub type JumpStub = Vec<Term>;
 
 #[derive(Debug, Clone)]
 pub enum TopLevel {
-    Declaration(Declaration),
     Fact(Term), // Term, line_num, col_num
     Predicate(Predicate),
     Query(Vec<QueryTerm>),
@@ -117,7 +116,7 @@ impl ListingSource {
 pub trait ClauseInfo {
     fn is_consistent(&self, clauses: &PredicateQueue) -> bool {
         match clauses.first() {
-            Some(cl) => self.name() == cl.name() && self.arity() == cl.arity(),
+            Some(cl) => self.name() == ClauseInfo::name(cl) && self.arity() == ClauseInfo::arity(cl),
             None => true,
         }
     }
@@ -210,33 +209,6 @@ impl PredicateClause {
                     Some(&rule.head.1)
                 }
             }
-        }
-    }
-
-    pub fn arity(&self) -> usize {
-        match self {
-            &PredicateClause::Fact(ref term, ..) => term.arity(),
-            &PredicateClause::Rule(ref rule, ..) => {
-                if rule.head.0.as_str() == ":" && rule.head.1.len() == 2 {
-                    match (rule.head.1)[0].as_ref() {
-                        &Term::Constant(_, Constant::Atom(..)) => {}
-                        _ => {
-                            return 2;
-                        }
-                    }
-
-                    (rule.head.1)[1].arity()
-                } else {
-                    rule.head.1.len()
-                }
-            }
-        }
-    }
-
-    pub fn name(&self) -> Option<ClauseName> {
-        match self {
-            &PredicateClause::Fact(ref term, ..) => term.name(),
-            &PredicateClause::Rule(ref rule, ..) => Some(rule.head.0.clone()),
         }
     }
 }
@@ -447,7 +419,6 @@ pub struct Module {
     pub local_extensible_predicates: LocalExtensiblePredicates,
     pub is_impromptu_module: bool,
     pub listing_src: ListingSource,
-    pub clause_assert_margin: usize,
 }
 
 // Module's and related types are defined in forms.
@@ -462,7 +433,6 @@ impl Module {
             extensible_predicates: ExtensiblePredicates::new(),
             local_extensible_predicates: LocalExtensiblePredicates::new(),
             listing_src,
-            clause_assert_margin: 0,
         }
     }
 }
@@ -643,7 +613,7 @@ impl AddAssign<usize> for OptArgIndexKey {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ClauseIndexInfo {
     pub clause_start: usize,
     pub opt_arg_index_key: OptArgIndexKey,
@@ -660,6 +630,41 @@ impl ClauseIndexInfo {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct PredicateInfo {
+    pub is_extensible: bool,
+    pub is_discontiguous: bool,
+    pub is_dynamic: bool,
+    pub is_multifile: bool,
+    pub has_clauses: bool,
+}
+
+impl Default for PredicateInfo {
+    #[inline]
+    fn default() -> Self {
+        PredicateInfo {
+            is_extensible: false,
+            is_discontiguous: false,
+            is_dynamic: false,
+            is_multifile: false,
+            has_clauses: false,
+        }
+    }
+}
+
+impl PredicateInfo {
+    #[inline]
+    pub fn compile_incrementally(&self) -> bool {
+        let base = self.is_extensible && self.has_clauses;
+        base && (self.is_discontiguous || self.is_multifile)
+    }
+
+    #[inline]
+    pub fn must_retract_local_clauses(&self) -> bool {
+        self.is_extensible && !self.is_discontiguous
+    }
+}
+
 #[derive(Debug)]
 pub struct PredicateSkeleton {
     pub is_discontiguous: bool,
@@ -667,6 +672,7 @@ pub struct PredicateSkeleton {
     pub is_multifile: bool,
     pub clauses: SliceDeque<ClauseIndexInfo>,
     pub clause_clause_locs: SliceDeque<usize>,
+    pub clause_assert_margin: usize,
 }
 
 impl PredicateSkeleton {
@@ -678,57 +684,41 @@ impl PredicateSkeleton {
             is_multifile: false,
             clauses: sdeq![],
             clause_clause_locs: sdeq![],
+            clause_assert_margin: 0,
         }
     }
 
-    /*
     #[inline]
-    pub fn set_discontiguous(self, is_discontiguous: bool) -> Self {
-        PredicateSkeleton {
-            is_discontiguous,
-            is_dynamic: self.is_dynamic,
-            is_multifile: self.is_multifile,
-            clauses: self.clauses,
-        }
-    }
-    */
-
-    #[inline]
-    pub fn set_dynamic(self, is_dynamic: bool) -> Self {
-        PredicateSkeleton {
+    pub fn predicate_info(&self) -> PredicateInfo {
+        PredicateInfo {
+            is_extensible: true,
             is_discontiguous: self.is_discontiguous,
-            is_dynamic,
+            is_dynamic: self.is_dynamic,
             is_multifile: self.is_multifile,
-            clauses: self.clauses,
-            clause_clause_locs: self.clause_clause_locs,
+            has_clauses: !self.clauses.is_empty(),
         }
     }
 
-    /*
     #[inline]
-    pub fn set_multifile(self, is_multifile: bool) -> Self {
-        PredicateSkeleton {
-           is_discontiguous: self.is_discontiguous,
-            is_dynamic: self.is_dynamic,
-            is_multifile,
-            clauses: self.clauses,
-        }
+    pub fn reset(&mut self) {
+        self.clauses.clear();
+        self.clause_clause_locs.clear();
+        self.clause_assert_margin = 0;
     }
-     */
 
     pub fn target_pos_of_clause_clause_loc(
         &self,
         clause_clause_loc: usize,
-        clause_assert_margin: usize,
-    ) -> usize {
-        let search_result = self.clause_clause_locs[0..clause_assert_margin]
+    ) -> Option<usize> {
+        let search_result = self.clause_clause_locs[0..self.clause_assert_margin]
             .binary_search_by(|loc| clause_clause_loc.cmp(&loc));
 
-        search_result.unwrap_or_else(|_| {
-            self.clause_clause_locs[clause_assert_margin..]
+        match search_result {
+            Ok(loc) => Some(loc),
+            Err(_)  => self.clause_clause_locs[self.clause_assert_margin..]
                 .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
-                .unwrap()
-                + clause_assert_margin
-        })
+                .map(|loc| loc + self.clause_assert_margin)
+                .ok()
+        }
     }
 }
