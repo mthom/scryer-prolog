@@ -1170,7 +1170,7 @@ op(Priority, OpSpec, Op) :-
     ;  valid_op(Op), op_priority(Priority), op_specifier(OpSpec) ->
        '$op'(Priority, OpSpec, Op)
     ;  list_of_op_atoms(Op), op_priority(Priority), op_specifier(OpSpec) ->
-       lists:maplist(op_(Priority, OpSpec), Op),
+       lists:maplist(builtins:op_(Priority, OpSpec), Op),
        !
     ;  throw(error(type_error(list, Op), op/3)) % 8.14.3.3 f)
     ).

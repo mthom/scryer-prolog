@@ -469,10 +469,6 @@ impl<'a, R: Read> Parser<'a, R> {
                     return false;
                 }
             }
-
-            if arity >= 2 && is_prefix!(self.stack[idx].spec) && self.stack[idx].priority > 0 {
-                return false;
-            }
         } else {
             return false;
         }
