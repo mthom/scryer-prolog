@@ -261,7 +261,8 @@ call_or_cut(M:G, B) :-
     ;  call(M:G)
     ).
 call_or_cut(G, B) :-
-    (  '$call_with_default_policy'(control_functor(G)) ->
+    (  nonvar(G),
+       '$call_with_default_policy'(control_functor(G)) ->
        '$call_with_default_policy'(call_or_cut_interp(G, B))
     ;  call(G)
     ).

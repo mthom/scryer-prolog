@@ -440,7 +440,8 @@ predicate_property(Callable, Property) :-
     ;  functor(Callable, (:), 2),
        arg(1, Callable, Module),
        arg(2, Callable, Callable0),
-       atom(Module) ->
+       atom(Module),
+       nonvar(Callable0) ->
        functor(Callable0, Name, Arity),
        (  atom(Name),
           Name \== [] ->
