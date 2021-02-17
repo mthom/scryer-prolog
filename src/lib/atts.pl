@@ -108,7 +108,7 @@ get_attrs_var_check -->
 
 put_attrs(Name/Arity, Module) -->
     put_attr(Name, Arity, Module),
-    [(put_atts(Var, Attr) :- lists:maplist(put_atts(Var), Attr), !)].
+    [(put_atts(Var, Attr) :- lists:maplist(Module:put_atts(Var), Attr), !)].
 put_attrs((Name/Arity, Atts), Module) -->
     { nonvar(Atts) },
     put_attr(Name, Arity, Module),

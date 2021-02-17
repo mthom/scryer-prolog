@@ -673,7 +673,7 @@ impl PredicateInfo {
 
     #[inline]
     pub fn must_retract_local_clauses(&self) -> bool {
-        self.is_extensible && !self.is_discontiguous
+        self.is_extensible && self.has_clauses && !self.is_discontiguous
     }
 }
 
@@ -707,7 +707,7 @@ impl PredicateSkeleton {
             is_discontiguous: self.is_discontiguous,
             is_dynamic: self.is_dynamic,
             is_multifile: self.is_multifile,
-            has_clauses: !self.clauses.is_empty(),
+            has_clauses: !self.clause_clause_locs.is_empty(),
         }
     }
 

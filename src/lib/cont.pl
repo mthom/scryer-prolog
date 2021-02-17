@@ -1,5 +1,7 @@
 :- module(cont, [reset/3, shift/1]).
 
+:- meta_predicate reset(0, ?, ?).
+
 reset(Goal, Ball, Cont) :-
     call(Goal),
     '$reset_cont_marker',
@@ -11,7 +13,7 @@ shift(Ball) :-
     get_chunks(E, P, L),
     (  L == [] ->
        Cont = cont(true)
-    ;  Cont = cont(call_continuation(L))
+    ;  Cont = cont(cont:call_continuation(L))
     ),
     '$write_cont_and_term'(_, _, Cont, Ball),
     '$unwind_environments'.

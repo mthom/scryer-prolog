@@ -40,6 +40,8 @@
 :- use_module(library(dcgs)).
 :- use_module(library(error)).
 
+:- multifile(tabled/2).
+
 %%:- multifile
 %%	system:term_expansion/2,
 %%	tabled/2.

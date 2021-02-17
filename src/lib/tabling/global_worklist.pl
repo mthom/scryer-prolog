@@ -13,6 +13,8 @@
 
 :- attribute table_global_worklist/1.
 
+verify_attributes(_, _, []).
+
 put_new_global_worklist :-
   (  bb_get(table_global_worklist_initialized, _) ->
      true

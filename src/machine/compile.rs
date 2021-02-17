@@ -1754,7 +1754,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             .map(|skeleton| skeleton.predicate_info())
             .unwrap_or_default();
 
-        if predicate_info.must_retract_local_clauses() {
+        if local_predicate_info.must_retract_local_clauses() {
             self.retract_local_clauses(&key, predicate_info.is_dynamic);
         }
 

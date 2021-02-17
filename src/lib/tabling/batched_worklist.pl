@@ -53,6 +53,8 @@
 
 :- attribute executing_all_work/1, worklist_presence/1, wkl_answer_cluster/1, wkl_suspension_cluster/1, wkl_answer_cluster_pointer_flag/1.
 
+verify_attributes(_, _, []).
+
 /** <module> Tabling Worklist management
 
 A batched worklist: a worklist that  clusters suspensions and answers as
