@@ -231,15 +231,15 @@ compile_dispatch(user:term_expansion(Term, Terms), Evacuable, VNs) :-
 compile_dispatch((user:term_expansion(Term, Terms) :- Body), Evacuable, VNs) :-
     '$add_term_expansion_clause'((term_expansion(Term, Terms) :- Body), Evacuable, VNs).
 compile_dispatch(goal_expansion(Term, Terms), Evacuable, VNs) :-
-    prolog_load_context(module, Target),
-    '$add_goal_expansion_clause'(Target, goal_expansion(Term, Terms), Evacuable, VNs).
+    prolog_load_context(module, user),
+    '$add_goal_expansion_clause'(user, goal_expansion(Term, Terms), Evacuable, VNs).
 compile_dispatch((goal_expansion(Term, Terms) :- Body), Evacuable, VNs) :-
-    prolog_load_context(module, Target),
-    '$add_goal_expansion_clause'(Target, (goal_expansion(Term, Terms) :- Body), Evacuable, VNs).
-compile_dispatch(Target:goal_expansion(Term, Terms), Evacuable, VNs) :-
-    '$add_goal_expansion_clause'(Target, goal_expansion(Term, Terms), Evacuable, VNs).
-compile_dispatch((Target:goal_expansion(Term, Terms) :- Body), Evacuable, VNs) :-
-    '$add_goal_expansion_clause'(Target, (goal_expansion(Term, Terms) :- Body), Evacuable, VNs).
+    prolog_load_context(module, user),
+    '$add_goal_expansion_clause'(user, (goal_expansion(Term, Terms) :- Body), Evacuable, VNs).
+compile_dispatch(user:goal_expansion(Term, Terms), Evacuable, VNs) :-
+    '$add_goal_expansion_clause'(user, goal_expansion(Term, Terms), Evacuable, VNs).
+compile_dispatch((user:goal_expansion(Term, Terms) :- Body), Evacuable, VNs) :-
+    '$add_goal_expansion_clause'(user, (goal_expansion(Term, Terms) :- Body), Evacuable, VNs).
 
 
 compile_declaration(use_module(Module), Evacuable) :-
