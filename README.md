@@ -247,7 +247,7 @@ maplist(Goal_1, [L|Ls]) :-
         maplist(Goal_1, Ls).
 ```
 
-In this case, first instantianted argument indexing automatically uses
+In this case, first instantiated argument indexing automatically uses
 the *second* argument for indexing, and thus prevents choicepoints for
 calls with lists of fixed lengths (and deterministic goals).
 Conveniently, no auxiliary predicates with reordered arguments are
