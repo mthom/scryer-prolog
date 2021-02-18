@@ -7590,10 +7590,6 @@ clpz_gcc_occurred:attribute_goals(_) --> [].
 
 clpz_relation:attribute_goals(_) --> [].
 
-attribute_goal(Var, Goal) :-
-        phrase(attribute_goals(Var), Goals),
-        list_goal(Goals, Goal).
-
 attributes_goals([]) --> [].
 attributes_goals([propagator(P, State)|As]) -->
         (   { ground(State) } -> []
