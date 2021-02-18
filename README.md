@@ -238,7 +238,7 @@ indexing for meta-predicates such as `maplist/N` and `foldl/N`, whose
 first argument is a partial goal that is a variable in the definition
 of these predicates and therefore cannot be used for indexing.
 
-For example, a natural definiton of `maplist/2` reads:
+For example, a natural definition of `maplist/2` reads:
 
 ```
 maplist(_, []).
@@ -247,7 +247,7 @@ maplist(Goal_1, [L|Ls]) :-
         maplist(Goal_1, Ls).
 ```
 
-In this case, first instantianted argument indexing automatically uses
+In this case, first instantiated argument indexing automatically uses
 the *second* argument for indexing, and thus prevents choicepoints for
 calls with lists of fixed lengths (and deterministic goals).
 Conveniently, no auxiliary predicates with reordered arguments are
