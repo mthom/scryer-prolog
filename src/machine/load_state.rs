@@ -559,25 +559,20 @@ impl<'a> LoadState<'a> {
                 .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined))
                 .clone(),
             None => {
-                let mut module = Module::new(
-                    ModuleDecl {
-                        name: module_name.clone(),
-                        exports: vec![],
-                    },
-                    ListingSource::DynamicallyGenerated,
-                );
+                self.add_dynamically_generated_module(&module_name);
 
-                let code_index = module
-                    .code_dir
-                    .entry(key)
-                    .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined))
-                    .clone();
-
-                self.retraction_info
-                    .push_record(RetractionRecord::AddedModule(module_name.clone()));
-
-                self.wam.indices.modules.insert(module_name, module);
-                code_index
+                match self.wam.indices.modules.get_mut(&module_name) {
+                    Some(ref mut module) => {
+                        module
+                            .code_dir
+                            .entry(key)
+                            .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined))
+                            .clone()
+                    }
+                    None => {
+                        unreachable!()
+                    }
+                }
             }
         }
     }
