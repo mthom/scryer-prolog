@@ -11,6 +11,10 @@
 
 :- use_module(library(format), [portray_clause/1]).
 
+:- meta_predicate *(0).
+:- meta_predicate $(0).
+:- meta_predicate $-(0).
+
 $-(G_0) :-
    catch(G_0, Ex, ( portray_clause(exception:Ex:G_0), throw(Ex) ) ).
 
