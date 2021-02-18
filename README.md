@@ -238,7 +238,7 @@ indexing for meta-predicates such as `maplist/N` and `foldl/N`, whose
 first argument is a partial goal that is a variable in the definition
 of these predicates and therefore cannot be used for indexing.
 
-For example, a natural definiton of `maplist/2` reads:
+For example, a natural definition of `maplist/2` reads:
 
 ```
 maplist(_, []).
