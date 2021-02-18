@@ -83,6 +83,8 @@ impl fmt::Display for REPLCodePtr {
                 write!(f, "REPLCodePtr::IsConsistentWithTermQueue"),
             REPLCodePtr::FlushTermQueue =>
                 write!(f, "REPLCodePtr::FlushTermQueue"),
+            REPLCodePtr::RemoveModuleExports =>
+                write!(f, "REPLCodePtr::RemoveModuleExports"),
         }
     }
 }

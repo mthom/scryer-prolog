@@ -1922,6 +1922,24 @@ impl Machine {
         self.restore_load_state_payload(result, evacuable_h);
     }
 
+    pub(crate) fn remove_module_exports(&mut self) {
+        let module_name = atom_from!(
+            self.machine_st,
+            self.machine_st
+                .store(self.machine_st.deref(self.machine_st[temp_v!(1)]))
+        );
+
+        let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(2));
+
+        let remove_module_exports = || {
+            loader.load_state.remove_module_exports(module_name);
+            LiveTermStream::evacuate(loader)
+        };
+
+        let result = remove_module_exports();
+        self.restore_load_state_payload(result, evacuable_h);
+    }
+
     pub(crate) fn meta_predicate_property(&mut self) {
         let module_name = atom_from!(
             self.machine_st,

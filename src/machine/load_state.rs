@@ -459,6 +459,94 @@ impl<'a> LoadState<'a> {
         }
     }
 
+    pub(super) fn remove_module_exports(&mut self, module_name: ClauseName) {
+        let removed_module = match self.wam.indices.modules.remove(&module_name) {
+            Some(module) => module,
+            None => return,
+        };
+
+        fn remove_module_exports(
+            removed_module: &Module,
+            code_dir: &mut CodeDir,
+            op_dir: &mut OpDir,
+            retraction_info: &mut RetractionInfo,
+            predicate_retractor: impl Fn(PredicateKey, IndexPtr) -> RetractionRecord,
+            op_retractor: impl Fn(OpDecl, usize, Specifier) -> RetractionRecord,
+        ) {
+            for export in removed_module.module_decl.exports.iter() {
+                match export {
+                    ModuleExport::PredicateKey(ref key) => {
+                        match (removed_module.code_dir.get(key), code_dir.get(key)) {
+                            (Some(module_code_index), Some(target_code_index))
+                                if module_code_index.get() == target_code_index.get() => {
+                                    let old_index_ptr = target_code_index.replace(IndexPtr::Undefined);
+
+                                    retraction_info.push_record(
+                                        predicate_retractor(key.clone(), old_index_ptr),
+                                    );
+                                }
+                            _ => {}
+                        }
+                    }
+                    ModuleExport::OpDecl(op_decl) => {
+                        let op_dir_value_opt = op_dir.remove(&(op_decl.name.clone(), op_decl.fixity()));
+
+                        if let Some(op_dir_value) = op_dir_value_opt {
+                            let (prec, spec) = op_dir_value.shared_op_desc().get();
+
+                            retraction_info.push_record(
+                                op_retractor(op_decl.clone(), prec, spec),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        match &self.compilation_target {
+            CompilationTarget::User => {
+                remove_module_exports(
+                    &removed_module,
+                    &mut self.wam.indices.code_dir,
+                    &mut self.wam.indices.op_dir,
+                    &mut self.retraction_info,
+                    RetractionRecord::ReplacedUserPredicate,
+                    RetractionRecord::ReplacedUserOp,
+                );
+            }
+            CompilationTarget::Module(ref target_module_name)
+                if target_module_name.as_str() != module_name.as_str() => {
+                    let predicate_retractor = |key, index_ptr| {
+                        RetractionRecord::ReplacedModulePredicate(
+                            module_name.clone(), key, index_ptr,
+                        )
+                    };
+
+                    let op_retractor = |op_decl, prec, spec| {
+                        RetractionRecord::ReplacedModuleOp(
+                            module_name.clone(), op_decl, prec, spec,
+                        )
+                    };
+
+                    if let Some(module) = self.wam.indices.modules.get_mut(target_module_name) {
+                        remove_module_exports(
+                            &removed_module,
+                            &mut module.code_dir,
+                            &mut module.op_dir,
+                            &mut self.retraction_info,
+                            predicate_retractor,
+                            op_retractor,
+                        );
+                    } else {
+                        unreachable!()
+                    }
+                }
+            CompilationTarget::Module(_) => {},
+        };
+
+        self.wam.indices.modules.insert(module_name, removed_module);
+    }
+
     fn get_or_insert_local_code_index(
         &mut self,
         module_name: ClauseName,
@@ -787,6 +875,7 @@ impl<'a> LoadState<'a> {
 
     pub(crate) fn add_module(&mut self, module_decl: ModuleDecl, listing_src: ListingSource) {
         let module_name = module_decl.name.clone();
+        self.remove_module_exports(module_name.clone());
 
         match self.wam.indices.modules.get_mut(&module_name) {
             Some(module) => {

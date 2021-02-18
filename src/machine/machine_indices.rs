@@ -448,6 +448,7 @@ pub enum REPLCodePtr {
     Retract,
     IsConsistentWithTermQueue,
     FlushTermQueue,
+    RemoveModuleExports,
 }
 
 #[derive(Debug, Clone, PartialEq)]

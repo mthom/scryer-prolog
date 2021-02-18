@@ -419,6 +419,9 @@ impl SystemClauseType {
             &SystemClauseType::REPL(REPLCodePtr::FlushTermQueue) => {
                 clause_name!("$flush_term_queue")
             }
+            &SystemClauseType::REPL(REPLCodePtr::RemoveModuleExports) => {
+                clause_name!("$remove_module_exports")
+            }
             &SystemClauseType::Close => clause_name!("$close"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
@@ -771,6 +774,9 @@ impl SystemClauseType {
             }
             ("$flush_term_queue", 1) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::FlushTermQueue))
+            }
+            ("$remove_module_exports", 2) => {
+                Some(SystemClauseType::REPL(REPLCodePtr::RemoveModuleExports))
             }
             ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$wam_instructions", 4) => Some(SystemClauseType::WAMInstructions),

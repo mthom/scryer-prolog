@@ -510,6 +510,9 @@ impl Machine {
             REPLCodePtr::FlushTermQueue => {
                 self.flush_term_queue();
             }
+            REPLCodePtr::RemoveModuleExports => {
+                self.remove_module_exports();
+            }
         }
 
         self.machine_st.p = CodePtr::Local(p);

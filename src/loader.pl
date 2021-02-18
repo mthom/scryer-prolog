@@ -246,19 +246,30 @@ compile_dispatch((user:goal_expansion(Term, Terms) :- Body), Evacuable) :-
     '$add_goal_expansion_clause'(user, (goal_expansion(Term, Terms) :- Body), Evacuable).
 
 
+remove_module(Module, Evacuable) :-
+    (  nonvar(Module),
+       Module = library(ModuleName),
+       atom(ModuleName),
+       atom \== [] ->
+       '$remove_module_exports'(ModuleName, Evacuable)
+    ;  atom(Module),
+       atom \== [] ->
+       '$remove_module_exports'(Module, Evacuable)
+    ;  domain_error(module_specifier, Module, use_module/2)
+    ).
+
+
 compile_declaration(use_module(Module), Evacuable) :-
     use_module(Module, [], Evacuable).
 compile_declaration(use_module(Module, Exports), Evacuable) :-
     (  Exports == [] ->
-       '$remove_module_exports'(Module, Evacuable) % TODO: implement this.
-    ;
-    use_module(Module, Exports, Evacuable)
+       remove_module(Module, Evacuable)
+    ;  use_module(Module, Exports, Evacuable)
     ).
 compile_declaration(module(Module, Exports), Evacuable) :-
-    ( atom(Module) ->
-      '$declare_module'(Module, Exports, Evacuable)
-    ;
-    type_error(atom, Module, load/1)
+    (  atom(Module) ->
+       '$declare_module'(Module, Exports, Evacuable)
+    ;  type_error(atom, Module, load/1)
     ).
 compile_declaration(dynamic(Name/Arity), Evacuable) :-
     !,
@@ -375,7 +386,7 @@ use_module(Module) :-
 use_module(Module, Exports) :-
     '$push_load_state_payload'(Evacuable),
     (  Exports == [] ->
-       '$remove_module_exports'(Module, Evacuable)
+       remove_module(Module, Evacuable)
     ;  use_module(Module, Exports, Evacuable)
     ).
 
