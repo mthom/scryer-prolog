@@ -1606,8 +1606,6 @@ impl Machine {
     pub(crate) fn load_context_directory(&mut self) {
         if let Some(load_context) = self.load_contexts.last() {
             if let Some(directory) = load_context.path.parent() {
-                // canonicalize returns the absolute path of the directory.
-                let directory = directory.canonicalize().unwrap();
                 let directory_str = directory.to_str().unwrap();
 
                 let directory_atom =

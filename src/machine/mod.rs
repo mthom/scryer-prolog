@@ -90,8 +90,16 @@ pub(super) struct LoadContext {
 impl LoadContext {
     #[inline]
     fn new(path: &str, stream: Stream) -> Self {
+        let mut path_buf = PathBuf::from(path);
+
+        if path_buf.is_relative() {
+            let mut current_dir = current_dir();
+            current_dir.push(path_buf);
+            path_buf = current_dir;
+        }
+
         LoadContext {
-            path: PathBuf::from(path),
+            path: path_buf,
             stream,
             module: clause_name!("user"),
         }
@@ -111,11 +119,8 @@ pub struct Machine {
 }
 
 #[inline]
-fn current_dir() -> std::path::PathBuf {
-    let mut path_buf = std::path::PathBuf::from(file!());
-
-    path_buf.pop();
-    path_buf
+fn current_dir() -> PathBuf {
+    PathBuf::from("./").canonicalize().unwrap_or(PathBuf::from("./"))
 }
 
 include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
