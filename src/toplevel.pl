@@ -37,8 +37,7 @@ delegate_task([Arg0|Args], Goals0) :-
     ;   member(Arg0, ["-v", "--version"]) -> print_version
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
     ;   atom_chars(Mod, Arg0),
-        catch(use_module(Mod), E, print_exception(E)),
-        nl
+        catch(use_module(Mod), E, print_exception(E))
     ),
     delegate_task(Args, Goals0).
 
