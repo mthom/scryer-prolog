@@ -90,9 +90,9 @@ run_goals([g(Gs0)|Goals]) :-
     ),
     read_term_from_chars(Gs1, Goal),
     (   catch(
-            Goal,
+            user:Goal,
             Exception,
-            (write(Gs0), write(' causes: '), write(Exception), nl) % halt?
+            (write(Goal), write(' causes: '), write(Exception), nl) % halt?
         )
     ;   write('Warning: initialization failed for '),
         write(Gs0), nl
