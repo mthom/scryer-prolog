@@ -24,7 +24,8 @@ impl CodeRepo {
     ) -> RefOrOwned<'a, Line> {
         match p {
             LocalCodePtr::Halt => {
-                unreachable!()
+                // exit with the interrupt exit code.
+                std::process::exit(1);
             }
             LocalCodePtr::DirEntry(p) => {
                 RefOrOwned::Borrowed(&self.code[p as usize])
