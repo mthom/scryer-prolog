@@ -235,6 +235,7 @@ fn import_qualified_module_exports(
     exports: &IndexSet<ModuleExport>,
     code_dir: &mut CodeDir,
     op_dir: &mut OpDir,
+    meta_predicates: &mut MetaPredicateDir,
 ) -> Result<(), SessionError> {
     for export in imported_module.module_decl.exports.iter() {
         if !exports.contains(export) {
@@ -244,6 +245,10 @@ fn import_qualified_module_exports(
         match export {
             ModuleExport::PredicateKey((ref name, arity)) => {
                 let key = (name.clone(), *arity);
+
+                if let Some(meta_specs) = imported_module.meta_predicates.get(&key) {
+                    meta_predicates.insert(key.clone(), meta_specs.clone());
+                }
 
                 if let Some(src_code_index) = imported_module.code_dir.get(&key) {
                     let target_code_index = code_dir
@@ -281,6 +286,7 @@ fn import_qualified_module_exports_into_module(
     exports: &IndexSet<ModuleExport>,
     code_dir: &mut CodeDir,
     op_dir: &mut OpDir,
+    meta_predicates: &mut MetaPredicateDir,
     wam_op_dir: &mut OpDir,
     module_op_exports: &mut ModuleOpExports,
 ) -> Result<(), SessionError> {
@@ -292,6 +298,10 @@ fn import_qualified_module_exports_into_module(
         match export {
             ModuleExport::PredicateKey((ref name, arity)) => {
                 let key = (name.clone(), *arity);
+
+                if let Some(meta_specs) = imported_module.meta_predicates.get(&key) {
+                    meta_predicates.insert(key.clone(), meta_specs.clone());
+                }
 
                 if let Some(src_code_index) = imported_module.code_dir.get(&key) {
                     let target_code_index = code_dir
@@ -1006,7 +1016,7 @@ impl<'a> LoadState<'a> {
         }
     }
 
-    fn import_qualified_module(
+    pub(super) fn import_qualified_module(
         &mut self,
         module_name: ClauseName,
         exports: IndexSet<ModuleExport>,
@@ -1021,6 +1031,7 @@ impl<'a> LoadState<'a> {
                         &exports,
                         &mut self.wam.indices.code_dir,
                         &mut self.wam.indices.op_dir,
+                        &mut self.wam.indices.meta_predicates,
                     )?;
                 }
                 CompilationTarget::Module(ref defining_module_name) => {
@@ -1033,6 +1044,7 @@ impl<'a> LoadState<'a> {
                                 &exports,
                                 &mut target_module.code_dir,
                                 &mut target_module.op_dir,
+                                &mut target_module.meta_predicates,
                                 &mut self.wam.indices.op_dir,
                                 &mut self.module_op_exports,
                             )?;

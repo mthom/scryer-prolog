@@ -1247,10 +1247,17 @@ impl Machine {
                 return;
             }
 
-            let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(2));
+            let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(3));
 
             let import_module = || {
-                loader.load_state.import_module(library)?;
+                let export_list = loader.extract_module_export_list_from_heap(temp_v!(2))?;
+
+                if export_list.is_empty() {
+                    loader.load_state.import_module(library)?;
+                } else {
+                    loader.load_state.import_qualified_module(library, export_list)?;
+                }
+
                 LiveTermStream::evacuate(loader)
             };
 

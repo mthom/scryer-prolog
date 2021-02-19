@@ -428,7 +428,7 @@ use_module(Module, Exports, Evacuable) :-
        instantiation_error(load/1)
     ;  Module = library(Library) ->
        (  path_atom(Library, LibraryPath) ->
-          (  '$load_compiled_library'(LibraryPath, Evacuable) -> %% TODO: What about Exports?
+          (  '$load_compiled_library'(LibraryPath, Exports, Evacuable) ->
              true
           ;  '$load_library_as_stream'(LibraryPath, Stream, Path),
              file_load(Stream, Path, Subevacuable),

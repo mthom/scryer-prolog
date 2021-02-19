@@ -760,7 +760,7 @@ impl SystemClauseType {
             ("$conclude_load", 1) => Some(SystemClauseType::REPL(REPLCodePtr::ConcludeLoad)),
             ("$use_module", 3) => Some(SystemClauseType::REPL(REPLCodePtr::UseModule)),
             ("$declare_module", 3) => Some(SystemClauseType::REPL(REPLCodePtr::DeclareModule)),
-            ("$load_compiled_library", 2) => {
+            ("$load_compiled_library", 3) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::LoadCompiledLibrary))
             }
             ("$push_load_state_payload", 1) => {
