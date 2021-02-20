@@ -679,9 +679,7 @@ dependencies = [
 
 [[package]]
 name = "num-rug-adapter"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7470b6acf85abce0771203112db4181d03f7b8a6be49f0e842a78030192f8a58"
+version = "0.1.5"
 dependencies = [
  "libc",
  "num-bigint",
