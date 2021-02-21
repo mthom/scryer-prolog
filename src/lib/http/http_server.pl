@@ -10,7 +10,7 @@
    Usage
    ==========
    The main predicate of the library is http_listen/2, which needs a port number
-    (usually 80) and a list of handlers. A handler is a compund term with the functor
+    (usually 80) and a list of handlers. A handler is a compound term with the functor
    as one HTTP method (in lowercase) and followed by a Route Match and a predicate
    which will handle the call.
 
