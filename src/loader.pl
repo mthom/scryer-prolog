@@ -245,7 +245,6 @@ compile_dispatch(user:goal_expansion(Term, Terms), Evacuable) :-
 compile_dispatch((user:goal_expansion(Term, Terms) :- Body), Evacuable) :-
     '$add_goal_expansion_clause'(user, (goal_expansion(Term, Terms) :- Body), Evacuable).
 
-
 remove_module(Module, Evacuable) :-
     (  nonvar(Module),
        Module = library(ModuleName),
@@ -307,6 +306,8 @@ compile_declaration(discontiguous(Module:Name/Arity), Evacuable) :-
 compile_declaration(initialization(Goal), Evacuable) :-
     prolog_load_context(module, Module),
     assertz(Module:'$initialization_goals'(Goal)).
+compile_declaration(set_prolog_flag(Flag, Value), _) :-
+    set_prolog_flag(Flag, Value).
 
 
 compile_clause((Target:Head :- Body), Evacuable) :-
@@ -543,7 +544,7 @@ expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars
        )  ->
        (  var(SG),
           pairs:same_key(SG, HeadVars, [_|_], _) ->
-          expand_subgoal(SG, MS, M, ESG, HeadVars)
+          expand_subgoal(SG, MS, M, ESG, HeadVars)  %%TODO: Shortcut this.. set SG = ESG. Or wrap it in '$call', ie. ESG = '$call'(SG).
        ;  expand_subgoal(SG, MS, M, ESG0, HeadVars),
           expand_module_name(ESG0, M, ESG)
        ),
