@@ -10,7 +10,7 @@
    Usage
    ==========
    The main predicate of the library is http_listen/2, which needs a port number
-    (usually 80) and a list of handlers. A handler is created using the http_route/3 predicate
+    (usually 80) and a list of handlers. A handler is a compound term with the functor
    as one HTTP method (in lowercase) and followed by a Route Match and a predicate
    which will handle the call.
 
@@ -21,13 +21,10 @@
    parameter_handler(User, Request, Response) :-
     http_body(Response, text(User)).
 
-   server :-
-       http_route(get(echo), text_handler, TextHandler),
-       http_route(post(user/User), parameter_handler(User), ParameterHandler),
-       http_listen(7890, [
-            TextHandler,           % GET /echo
-            ParameterHandler % POST /user/<User>
-       ]).
+   http_listen(7890, [
+        get(echo, text_handler),           % GET /echo
+        post(user/User, parameter_handler(User)) % POST /user/<User>
+   ]).
 
    Every handler predicate will have at least 2-arity, with Request and Response.
    Although you can work directly with http_request and http_response terms, it is
@@ -52,7 +49,6 @@
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(http_server, [
-    http_route/3,
     http_listen/2,
     http_headers/2,
     http_status_code/2,
@@ -62,7 +58,7 @@
     url_decode//1
 ]).
 
-:- meta_predicate http_route(?, 2, ?).
+:- meta_predicate http_listen(?, 2).
 
 :- use_module(library(sockets)).
 :- use_module(library(dcgs)).
@@ -74,12 +70,17 @@
 :- use_module(library(time)).
 :- use_module(library(crypto)).
 
-http_route(Path, Handler, MetaHandler) :-
-    Path =.. [Method, Pattern],
-    MetaHandler =.. [Method, Pattern, Handler].
+% Module prefix workaround with meta_predicate
+http_listen(Port, Module:Handlers0) :-
+    maplist(module_qualification(Module), Handlers0, Handlers),
+    http_listen_(Port, Handlers).
+
+module_qualification(M, H0, H) :-
+    H0 =.. [Method, Path, Goal],
+    H =.. [Method, Path, M:Goal].
 
 % Server initialization
-http_listen(Port, Handlers) :-
+http_listen_(Port, Handlers) :-
     must_be(integer, Port),
     must_be(list, Handlers),
     once(socket_server_open(Port, Socket)),
