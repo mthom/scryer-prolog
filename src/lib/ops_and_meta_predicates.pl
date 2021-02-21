@@ -59,7 +59,7 @@
 
 :- op(1200, xfx, -->).
 
-% meta_predicate declarations for call/{0, 64}.
+% meta_predicate declarations for call/{1, 66}.
 :- meta_predicate call(0).
 :- meta_predicate call(1, ?).
 :- meta_predicate call(2, ?, ?).
