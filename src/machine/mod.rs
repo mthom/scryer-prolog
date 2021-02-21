@@ -120,7 +120,7 @@ pub struct Machine {
 
 #[inline]
 fn current_dir() -> PathBuf {
-    PathBuf::from("./").canonicalize().unwrap_or(PathBuf::from("./"))
+    std::env::current_dir().unwrap_or(PathBuf::from("./"))
 }
 
 include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
