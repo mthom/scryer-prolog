@@ -10,7 +10,7 @@
    Usage
    ==========
    The main predicate of the library is http_listen/2, which needs a port number
-    (usually 80) and a list of handlers. A handler is a compund term with the functor
+    (usually 80) and a list of handlers. A handler is created using the http_route/3 predicate
    as one HTTP method (in lowercase) and followed by a Route Match and a predicate
    which will handle the call.
 
@@ -21,10 +21,13 @@
    parameter_handler(User, Request, Response) :-
     http_body(Response, text(User)).
 
-   http_listen(7890, [
-        get(echo, text_handler),           % GET /echo
-        post(user/User, parameter_handler(User)) % POST /user/<User>
-   ]).
+   server :-
+       http_route(get(echo), text_handler, TextHandler),
+       http_route(post(user/User), parameter_handler(User), ParameterHandler),
+       http_listen(7890, [
+            TextHandler,           % GET /echo
+            ParameterHandler % POST /user/<User>
+       ]).
 
    Every handler predicate will have at least 2-arity, with Request and Response.
    Although you can work directly with http_request and http_response terms, it is
@@ -49,6 +52,7 @@
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(http_server, [
+    http_route/3,
     http_listen/2,
     http_headers/2,
     http_status_code/2,
@@ -57,6 +61,8 @@
     http_query/3,
     url_decode//1
 ]).
+
+:- meta_predicate http_route(?, 2, ?).
 
 :- use_module(library(sockets)).
 :- use_module(library(dcgs)).
@@ -67,6 +73,10 @@
 :- use_module(library(iso_ext)).
 :- use_module(library(time)).
 :- use_module(library(crypto)).
+
+http_route(Path, Handler, MetaHandler) :-
+    Path =.. [Method, Pattern],
+    MetaHandler =.. [Method, Pattern, Handler].
 
 % Server initialization
 http_listen(Port, Handlers) :-
@@ -99,7 +109,7 @@ accept_loop(Socket, Handlers) :-
                                 HttpResponse = http_response(_, _, _),
                                 (call(Handler, HttpRequest, HttpResponse) ->
                                     send_response(Stream, HttpResponse)
-                                ;   format(Stream, "HTTP/1.0 500 Internal Server Error\r\n\r\n")
+                                ;   format(Stream, "HTTP/1.0 500 Internal Server Error\r\n\r\n", [])
                                 )
                             )
                         ;   format(Stream, "HTTP/1.0 404 Not Found\r\n\r\n", [])
