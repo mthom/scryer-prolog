@@ -1363,7 +1363,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn print_stream(&mut self, iter: &mut HCPreOrderIterator, stream: &Stream, max_depth: usize) {
-        if let Some(alias) = &stream.options.alias {
+        if let Some(alias) = &stream.options().alias {
             self.print_atom(alias);
         } else {
             if self.format_struct(iter, max_depth, 1, clause_name!("$stream")) {

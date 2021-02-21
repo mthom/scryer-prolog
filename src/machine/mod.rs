@@ -387,7 +387,7 @@ impl Machine {
     }
 
     pub fn configure_streams(&mut self) {
-        self.user_input.options.alias = Some(clause_name!("user_input"));
+        self.user_input.options_mut().alias = Some(clause_name!("user_input"));
 
         self.indices
             .stream_aliases
@@ -395,7 +395,7 @@ impl Machine {
 
         self.indices.streams.insert(self.user_input.clone());
 
-        self.user_output.options.alias = Some(clause_name!("user_output"));
+        self.user_output.options_mut().alias = Some(clause_name!("user_output"));
 
         self.indices
             .stream_aliases

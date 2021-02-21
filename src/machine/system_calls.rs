@@ -467,7 +467,7 @@ impl MachineState {
         } else {
             self.p.local() + 1
         };
-
+        
         Ok(self.p = CodePtr::REPL(repl_code_ptr, p))
     }
 
@@ -1319,7 +1319,7 @@ impl MachineState {
                 )?;
 
                 if stream.past_end_of_stream() {
-                    if EOFAction::Reset != stream.options.eof_action {
+                    if EOFAction::Reset != stream.options().eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
                         return Ok(());
@@ -1395,7 +1395,7 @@ impl MachineState {
                                 2,
                             )?;
 
-                            if EOFAction::Reset != stream.options.eof_action {
+                            if EOFAction::Reset != stream.options().eof_action {
                                 return return_from_clause!(self.last_call, self);
                             } else if self.fail {
                                 return Ok(());
@@ -1417,7 +1417,7 @@ impl MachineState {
                 )?;
 
                 if stream.past_end_of_stream() {
-                    if EOFAction::Reset != stream.options.eof_action {
+                    if EOFAction::Reset != stream.options().eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
                         return Ok(());
@@ -1491,7 +1491,7 @@ impl MachineState {
                                 2,
                             )?;
 
-                            if EOFAction::Reset != stream.options.eof_action {
+                            if EOFAction::Reset != stream.options().eof_action {
                                 return return_from_clause!(self.last_call, self);
                             } else if self.fail {
                                 return Ok(());
@@ -1520,7 +1520,7 @@ impl MachineState {
                 )?;
 
                 if stream.past_end_of_stream() {
-                    if EOFAction::Reset != stream.options.eof_action {
+                    if EOFAction::Reset != stream.options().eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
                         return Ok(());
@@ -1610,7 +1610,7 @@ impl MachineState {
                                 2,
                             )?;
 
-                            if EOFAction::Reset != stream.options.eof_action {
+                            if EOFAction::Reset != stream.options().eof_action {
                                 return return_from_clause!(self.last_call, self);
                             } else if self.fail {
                                 return Ok(());
@@ -2027,7 +2027,7 @@ impl MachineState {
                 let mut bytes = Vec::new();
                 let string = self.heap_pstr_iter(self[temp_v!(2)]).to_string();
 
-                if stream.options.stream_type == StreamType::Binary {
+                if stream.options().stream_type == StreamType::Binary {
                     for c in string.chars() {
                         if c as u32 > 255 {
                             let stub = MachineError::functor_stub(clause_name!("$put_chars"), 2);
@@ -2172,7 +2172,7 @@ impl MachineState {
                 if stream.past_end_of_stream() {
                     self.eof_action(self[temp_v!(2)], &mut stream, clause_name!("get_byte"), 2)?;
 
-                    if EOFAction::Reset != stream.options.eof_action {
+                    if EOFAction::Reset != stream.options().eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
                         return Ok(());
@@ -2253,7 +2253,7 @@ impl MachineState {
                 )?;
 
                 if stream.past_end_of_stream() {
-                    if EOFAction::Reset != stream.options.eof_action {
+                    if EOFAction::Reset != stream.options().eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
                         return Ok(());
@@ -2327,7 +2327,7 @@ impl MachineState {
                                 2,
                             )?;
 
-                            if EOFAction::Reset != stream.options.eof_action {
+                            if EOFAction::Reset != stream.options().eof_action {
                                 return return_from_clause!(self.last_call, self);
                             } else if self.fail {
                                 return Ok(());
@@ -2363,7 +2363,7 @@ impl MachineState {
 
                 let mut string = String::new();
 
-                if stream.options.stream_type == StreamType::Binary {
+                if stream.options().stream_type == StreamType::Binary {
                     let mut buf = vec![];
                     let mut chunk = stream.take(num as u64);
                     chunk.read_to_end(&mut buf).ok();
@@ -2402,7 +2402,7 @@ impl MachineState {
                 )?;
 
                 if stream.past_end_of_stream() {
-                    if EOFAction::Reset != stream.options.eof_action {
+                    if EOFAction::Reset != stream.options().eof_action {
                         return return_from_clause!(self.last_call, self);
                     } else if self.fail {
                         return Ok(());
@@ -2490,7 +2490,7 @@ impl MachineState {
                                 2,
                             )?;
 
-                            if EOFAction::Reset != stream.options.eof_action {
+                            if EOFAction::Reset != stream.options().eof_action {
                                 return return_from_clause!(self.last_call, self);
                             } else if self.fail {
                                 return Ok(());
@@ -2664,8 +2664,8 @@ impl MachineState {
                 if !stream.is_stdin() && !stream.is_stdout() {
                     stream.close();
 
-                    if let Some(alias) = stream.options.alias {
-                        indices.stream_aliases.remove(&alias);
+                    if let Some(ref alias) = stream.options().alias {
+                        indices.stream_aliases.remove(alias);
                     }
                 }
             }
@@ -3153,11 +3153,11 @@ impl MachineState {
                     _ => self.stream_from_file_spec(clause_name!(""), indices, &options)?,
                 };
 
-                stream.options = options;
+                *stream.options_mut() = options;
 
                 indices.streams.insert(stream.clone());
 
-                if let Some(ref alias) = &stream.options.alias {
+                if let Some(ref alias) = &stream.options().alias {
                     indices.stream_aliases.insert(alias.clone(), stream.clone());
                 }
 
@@ -4261,9 +4261,9 @@ impl MachineState {
                             }
                         };
 
-                        stream.options = options;
+                        *stream.options_mut() = options;
 
-                        if let Some(ref alias) = &stream.options.alias {
+                        if let Some(ref alias) = &stream.options().alias {
                             indices.stream_aliases.insert(alias.clone(), stream.clone());
                         }
 
@@ -4398,9 +4398,9 @@ impl MachineState {
                                     let mut tcp_stream =
                                         Stream::from_tcp_stream(client.clone(), tcp_stream);
 
-                                    tcp_stream.options = options;
+                                    *tcp_stream.options_mut() = options;
 
-                                    if let Some(ref alias) = &tcp_stream.options.alias {
+                                    if let Some(ref alias) = &tcp_stream.options().alias {
                                         indices
                                             .stream_aliases
                                             .insert(alias.clone(), tcp_stream.clone());
@@ -4467,7 +4467,7 @@ impl MachineState {
                 let mut stream =
                     self.get_stream_or_alias(self[temp_v!(1)], indices, "set_stream_position", 2)?;
 
-                if !stream.options.reposition {
+                if !stream.options().reposition {
                     let stub = MachineError::functor_stub(clause_name!("set_stream_position"), 2);
 
                     let err = MachineError::permission_error(
@@ -4526,7 +4526,7 @@ impl MachineState {
                                 None,
                             ),
                             "alias" => {
-                                if let Some(alias) = &stream.options.alias {
+                                if let Some(alias) = &stream.options().alias {
                                     HeapCellValue::Atom(alias.clone(), None)
                                 } else {
                                     self.fail = true;
@@ -4547,11 +4547,11 @@ impl MachineState {
                                 HeapCellValue::Atom(clause_name!(end_of_stream_pos.as_str()), None)
                             }
                             "eof_action" => HeapCellValue::Atom(
-                                clause_name!(stream.options.eof_action.as_str()),
+                                clause_name!(stream.options().eof_action.as_str()),
                                 None,
                             ),
                             "reposition" => HeapCellValue::Atom(
-                                clause_name!(if stream.options.reposition {
+                                clause_name!(if stream.options().reposition {
                                     "true"
                                 } else {
                                     "false"
@@ -4559,7 +4559,7 @@ impl MachineState {
                                 None,
                             ),
                             "type" => HeapCellValue::Atom(
-                                clause_name!(stream.options.stream_type.as_property_str()),
+                                clause_name!(stream.options().stream_type.as_property_str()),
                                 None,
                             ),
                             _ => {
@@ -4815,7 +4815,7 @@ impl MachineState {
 
                 let opt_err = if !stream.is_output_stream() {
                     Some("stream") // 8.14.2.3 g)
-                } else if stream.options.stream_type == StreamType::Binary {
+                } else if stream.options().stream_type == StreamType::Binary {
                     Some("binary_stream") // 8.14.2.3 h)
                 } else {
                     None
