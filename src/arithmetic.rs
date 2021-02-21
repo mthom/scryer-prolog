@@ -278,6 +278,12 @@ impl<'a> ArithmeticEvaluator<'a> {
             &Constant::Rational(ref n) => self
                 .interm
                 .push(ArithmeticTerm::Number(Number::Rational(n.clone()))),
+            &Constant::Atom(ref name, _) if name.as_str() == "e" => {
+                self.interm
+                    .push(ArithmeticTerm::Number(Number::Float(OrderedFloat(
+                        f64::consts::E,
+                    ))))
+            }
             &Constant::Atom(ref name, _) if name.as_str() == "pi" => {
                 self.interm
                     .push(ArithmeticTerm::Number(Number::Float(OrderedFloat(
