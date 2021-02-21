@@ -1,6 +1,6 @@
 :- module(bimetatran_tests, [test_bimetatrans/0]).
 
-:- use_module('bimetatrans').
+:- use_module(bimetatrans).
 
 :- use_module(library(dcgs)).
 :- use_module(library(iso_ext)).
