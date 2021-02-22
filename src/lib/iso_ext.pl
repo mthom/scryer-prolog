@@ -110,10 +110,10 @@ run_cleaners_without_handling(Cp) :-
 % call_with_inference_limit
 
 :- non_counted_backtracking end_block/4.
-end_block(_, Bb, NBb, L) :-
+end_block(_, Bb, NBb, _L) :-
     '$clean_up_block'(NBb),
     '$reset_block'(Bb).
-end_block(B, Bb, NBb, L) :-
+end_block(B, _Bb, NBb, L) :-
     '$install_inference_counter'(B, L, _),
     '$reset_block'(NBb),
     '$fail'.
