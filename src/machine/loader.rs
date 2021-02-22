@@ -76,6 +76,7 @@ pub(crate) enum RetractionRecord {
     SkeletonClausePopFront(CompilationTarget, PredicateKey),
     SkeletonLocalClauseClausePopBack(CompilationTarget, CompilationTarget, PredicateKey),
     SkeletonLocalClauseClausePopFront(CompilationTarget, CompilationTarget, PredicateKey),
+    SkeletonLocalClauseTruncateBack(CompilationTarget, CompilationTarget, PredicateKey, usize),
     SkeletonClauseTruncateBack(CompilationTarget, PredicateKey, usize),
     SkeletonClauseStartReplaced(CompilationTarget, PredicateKey, usize, usize),
     RemovedSkeletonClause(
@@ -515,6 +516,27 @@ impl<'a> Drop for LoadState<'a> {
                     {
                         Some(skeleton) => {
                             skeleton.clause_clause_locs.pop_back();
+                        }
+                        None => {}
+                    }
+                }
+                RetractionRecord::SkeletonLocalClauseTruncateBack(
+                    src_compilation_target,
+                    local_compilation_target,
+                    key,
+                    len,
+                ) => {
+                    match self
+                        .wam
+                        .indices
+                        .get_local_predicate_skeleton_mut(
+                            &src_compilation_target,
+                            local_compilation_target,
+                            key,
+                        )
+                    {
+                        Some(skeleton) => {
+                            skeleton.clause_clause_locs.truncate_back(len);
                         }
                         None => {}
                     }

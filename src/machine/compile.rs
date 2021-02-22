@@ -1099,14 +1099,39 @@ impl<'a> LoadState<'a> {
                 }
             }
 
-            let mut skeleton = PredicateSkeleton::new();
-            skeleton.clause_clause_locs = clause_clause_locs;
+            match self
+                .wam
+                .indices
+                .get_local_predicate_skeleton_mut(
+                    &self.compilation_target,
+                    predicates.compilation_target.clone(),
+                    key.clone(),
+                )
+            {
+                Some(skeleton) => {
+                    self.retraction_info
+                        .push_record(RetractionRecord::SkeletonLocalClauseTruncateBack(
+                            self.compilation_target.clone(),
+                            predicates.compilation_target.clone(),
+                            key.clone(),
+                            skeleton.clause_clause_locs.len(),
+                        ));
 
-            self.add_local_extensible_predicate(
-                predicates.compilation_target.clone(),
-                key.clone(),
-                skeleton,
-            );
+                    skeleton.clause_clause_locs.extend_from_slice(
+                        &clause_clause_locs[0 ..]
+                    );
+                }
+                None => {
+                    let mut skeleton = PredicateSkeleton::new();
+                    skeleton.clause_clause_locs = clause_clause_locs;
+
+                    self.add_local_extensible_predicate(
+                        predicates.compilation_target.clone(),
+                        key.clone(),
+                        skeleton,
+                    );
+                }
+            }
         }
 
         set_code_index(
