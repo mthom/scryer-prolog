@@ -513,6 +513,9 @@ impl Machine {
             REPLCodePtr::RemoveModuleExports => {
                 self.remove_module_exports();
             }
+            REPLCodePtr::AddNonCountedBacktracking => {
+                self.add_non_counted_backtracking();
+            }
         }
 
         self.machine_st.p = CodePtr::Local(p);

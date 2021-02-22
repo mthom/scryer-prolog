@@ -965,6 +965,12 @@ impl<'a, R: Read> Parser<'a, R> {
         self.lexer.eof()
     }
 
+    #[inline]
+    pub fn num_lines_read(&self) -> usize {
+        self.lexer.line_num
+    }
+
+    // on success, returns the parsed term and the number of lines read.
     pub fn read_term(&mut self, op_dir: &CompositeOpDir) -> Result<Term, ParserError> {
         self.tokens = read_tokens(&mut self.lexer)?;
 
@@ -997,19 +1003,5 @@ impl<'a, R: Read> Parser<'a, R> {
                 self.lexer.col_num,
             )),
         }
-    }
-
-    pub fn read(&mut self, op_dir: &CompositeOpDir) -> Result<Vec<Term>, ParserError> {
-        let mut terms = Vec::new();
-
-        loop {
-            terms.push(self.read_term(op_dir)?);
-
-            if self.lexer.eof()? {
-                break;
-            }
-        }
-
-        Ok(terms)
     }
 }

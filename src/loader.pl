@@ -110,14 +110,55 @@ load(Stream) :-
     false.        %% Clear the heap.
 load(_).
 
+
+print_comma_separated_list([VN=_]) :-
+    write(VN),
+    !.
+print_comma_separated_list([VN=_, VNEq | VNEqs]) :-
+    write(VN),
+    write(', '),
+    print_comma_separated_list([VNEq | VNEqs]).
+
+
+filter_anonymous_vars([], []).
+filter_anonymous_vars([VN=V | VNEqs0], VNEqs) :-
+    (  atom_concat('_', _, VN) ->
+       filter_anonymous_vars(VNEqs0, VNEqs)
+    ;  VNEqs = [VN=V | VNEqs1],
+       filter_anonymous_vars(VNEqs0, VNEqs1)
+    ).
+
+warn_about_singletons([], _).
+warn_about_singletons([Singleton|Singletons], LinesRead) :-
+    (  LinesRead =:= -1 ->
+       true
+    ;  filter_anonymous_vars([Singleton|Singletons], VarEqs),
+       VarEqs \== [] ->
+       write('Warning: singleton variables '),
+       print_comma_separated_list(VarEqs),
+       write(' at line '),
+       write(LinesRead),
+       write(' of '),
+       load_context(Module),
+       write(Module),
+       nl
+    ;  true
+    ).
+
+
 load_loop(Stream, Evacuable) :-
+    (  stream_property(Stream, position(position_and_lines_read(_, LinesRead))) ->
+       true
+    ;  LinesRead = -1
+    ),
     read_term(Stream, Term, [singletons(Singletons)]),
     (  Term == end_of_file ->
        close(Stream),
        '$conclude_load'(Evacuable)
     ;  var(Term) ->
        instantiation_error(load/1)
-    ;  compile_term(Term, Evacuable),
+    ;  warn_about_singletons(Singletons, LinesRead),
+       compile_term(Term, Evacuable),
        load_loop(Stream, Evacuable)
     ).
 
@@ -308,6 +349,13 @@ compile_declaration(initialization(Goal), Evacuable) :-
     assertz(Module:'$initialization_goals'(Goal)).
 compile_declaration(set_prolog_flag(Flag, Value), _) :-
     set_prolog_flag(Flag, Value).
+compile_declaration(non_counted_backtracking(Name/Arity), Evacuable) :-
+    must_be(atom, Name),
+    must_be(integer, Arity),
+    (  Arity >= 0 ->
+       '$add_non_counted_backtracking'(Name, Arity, Evacuable)
+    ;  domain_error(not_less_than_zero, Arity, load/1)
+    ).
 
 
 compile_clause((Target:Head :- Body), Evacuable) :-

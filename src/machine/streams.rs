@@ -202,6 +202,7 @@ struct InnerStream {
     options: StreamOptions,
     stream_inst: StreamInstance,
     past_end_of_stream: bool,
+    lines_read: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -214,7 +215,9 @@ impl WrappedStreamInstance {
             InnerStream {
                 options: StreamOptions::default(),
                 stream_inst,
-                past_end_of_stream }
+                past_end_of_stream,
+                lines_read: 0,
+            }
         )))
     }
 }
@@ -364,6 +367,11 @@ impl Stream {
     }
 
     #[inline]
+    pub(crate) fn add_lines_read(&mut self, incr_num_lines_read: usize) {
+        self.stream_inst.0.borrow_mut().lines_read += incr_num_lines_read;
+    }
+
+    #[inline]
     pub(crate) fn options(&self) -> std::cell::Ref<'_, StreamOptions> {
         std::cell::Ref::map(
             self.stream_inst.0.borrow(),
@@ -380,11 +388,18 @@ impl Stream {
     }
 
     #[inline]
-    pub(crate) fn position(&mut self) -> Option<u64> {
-        match self.stream_inst.0.borrow_mut().stream_inst {
+    pub(crate) fn position(&mut self) -> Option<(u64, usize)> { // returns lines_read, position.
+        let result = match self.stream_inst.0.borrow_mut().stream_inst {
             StreamInstance::InputFile(_, ref mut file) => file.seek(SeekFrom::Current(0)).ok(),
+            StreamInstance::TcpStream(..) |
+            StreamInstance::TlsStream(..) |
+            StreamInstance::ReadlineStream(..) |
+            StreamInstance::StaticStr(..) |
+            StreamInstance::Bytes(..) => Some(0),
             _ => None,
-        }
+        };
+
+        result.map(|position| (position, self.stream_inst.0.borrow().lines_read))
     }
 
     #[inline]
@@ -588,6 +603,7 @@ impl Stream {
     // returns true on success.
     #[inline]
     pub(super) fn reset(&mut self) -> bool {
+        self.stream_inst.0.borrow_mut().lines_read = 0;
         self.stream_inst.0.borrow_mut().past_end_of_stream = false;
 
         loop {

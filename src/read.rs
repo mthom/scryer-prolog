@@ -184,14 +184,18 @@ impl MachineState {
     ) -> Result<TermWriteResult, ParserError> {
         let mut stream = parsing_stream(inner.clone())?;
 
-        let term = {
+        let (term, num_lines_read) = {
             let mut parser = Parser::new(&mut stream, atom_tbl, self.flags);
-            parser.read_term(&CompositeOpDir::new(op_dir, None))?
+            let term = parser.read_term(&CompositeOpDir::new(op_dir, None))?;
+
+            (term, parser.num_lines_read())
         };
 
         // 'pausing' the stream saves the pending top buffer
         // created by the parsing stream, which was created in this
         // scope and is about to be destroyed in it.
+
+        inner.add_lines_read(num_lines_read);
 
         let buf = stream.take_buf();
         inner.pause_stream(buf)?;

@@ -449,6 +449,7 @@ pub enum REPLCodePtr {
     IsConsistentWithTermQueue,
     FlushTermQueue,
     RemoveModuleExports,
+    AddNonCountedBacktracking,
 }
 
 #[derive(Debug, Clone, PartialEq)]

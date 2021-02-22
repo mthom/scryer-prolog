@@ -85,6 +85,8 @@ impl fmt::Display for REPLCodePtr {
                 write!(f, "REPLCodePtr::FlushTermQueue"),
             REPLCodePtr::RemoveModuleExports =>
                 write!(f, "REPLCodePtr::RemoveModuleExports"),
+            REPLCodePtr::AddNonCountedBacktracking =>
+                write!(f, "REPLCodePtr::AddNonCountedBacktracking"),
         }
     }
 }

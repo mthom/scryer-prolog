@@ -4534,8 +4534,17 @@ impl MachineState {
                                 }
                             }
                             "position" => {
-                                if let Some(position) = stream.position() {
-                                    HeapCellValue::Addr(Addr::Usize(position as usize))
+                                if let Some((position, lines_read)) = stream.position() {
+                                    let h = self.heap.h();
+
+                                    let position_term = functor!(
+                                        "position_and_lines_read",
+                                        [integer(position), integer(lines_read)]
+                                    );
+
+                                    self.heap.extend(position_term.into_iter());
+
+                                    HeapCellValue::Addr(Addr::HeapCell(h))
                                 } else {
                                     self.fail = true;
                                     return Ok(());
@@ -4543,7 +4552,6 @@ impl MachineState {
                             }
                             "end_of_stream" => {
                                 let end_of_stream_pos = stream.position_relative_to_end();
-
                                 HeapCellValue::Atom(clause_name!(end_of_stream_pos.as_str()), None)
                             }
                             "eof_action" => HeapCellValue::Atom(

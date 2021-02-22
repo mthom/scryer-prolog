@@ -27,6 +27,7 @@ use std::fmt;
 use std::io::Write;
 use std::mem;
 use std::ops::{Index, IndexMut};
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Ball {
@@ -299,6 +300,30 @@ pub struct MachineState {
 
 impl MachineState {
     pub(crate) fn read_term(&mut self, mut stream: Stream, indices: &mut IndexStore) -> CallResult {
+        fn push_var_eq_functors<'a>(
+            heap: &mut Heap,
+            iter: impl Iterator<Item=(&'a Rc<Var>, &'a Addr)>,
+            op_dir: &OpDir,
+            atom_tbl: TabledData<Atom>,
+        ) -> Vec<Addr> {
+            let mut list_of_var_eqs = vec![];
+
+            for (var, binding) in iter {
+                let var_atom = clause_name!(var.to_string(), atom_tbl);
+
+                let h = heap.h();
+                let spec = fetch_atom_op_spec(clause_name!("="), None, op_dir);
+
+                heap.push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
+                heap.push(HeapCellValue::Atom(var_atom, None));
+                heap.push(HeapCellValue::Addr(*binding));
+
+                list_of_var_eqs.push(Addr::Str(h));
+            }
+
+            list_of_var_eqs
+        }
+
         self.check_stream_properties(
             &mut stream,
             StreamType::Text,
@@ -327,46 +352,39 @@ impl MachineState {
                         return Ok(());
                     }
 
-                    let mut list_of_var_eqs = vec![];
+                    let list_of_var_eqs = push_var_eq_functors(
+                        &mut self.heap,
+                        term_write_result.var_dict.iter(),
+                        &indices.op_dir,
+                        self.atom_tbl.clone(),
+                    );
 
-                    for (var, binding) in term_write_result.var_dict.into_iter() {
-                        let var_atom = clause_name!(var.to_string(), self.atom_tbl);
-
-                        let h = self.heap.h();
-                        let spec = fetch_atom_op_spec(clause_name!("="), None, &indices.op_dir);
-
-                        self.heap
-                            .push(HeapCellValue::NamedStr(2, clause_name!("="), spec));
-                        self.heap.push(HeapCellValue::Atom(var_atom, None));
-                        self.heap.push(HeapCellValue::Addr(binding));
-
-                        list_of_var_eqs.push(Addr::Str(h));
-                    }
-
-                    let mut var_set: IndexMap<Ref, bool> = IndexMap::new();
-
-                    for addr in self.acyclic_pre_order_iter(term) {
-                        if let Some(var) = addr.as_var() {
-                            if !var_set.contains_key(&var) {
-                                var_set.insert(var, true);
-                            } else {
-                                var_set.insert(var, false);
-                            }
-                        }
-                    }
-
+                    let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
                     let mut var_list = vec![];
-                    let mut singleton_var_list = vec![];
 
                     for addr in self.acyclic_pre_order_iter(term) {
                         if let Some(var) = addr.as_var() {
-                            if var_set.get(&var) == Some(&true) {
-                                singleton_var_list.push(var.as_addr());
+                            if !singleton_var_set.contains_key(&var) {
+                                singleton_var_set.insert(var, true);
+                                var_list.push(addr);
+                            } else {
+                                singleton_var_set.insert(var, false);
                             }
-
-                            var_list.push(var.as_addr());
                         }
                     }
+
+                    let singleton_var_list = push_var_eq_functors(
+                        &mut self.heap,
+                        term_write_result.var_dict.iter().filter(|(_, binding)| {
+                            if let Some(r) = binding.as_var() {
+                                *singleton_var_set.get(&r).unwrap_or(&false)
+                            } else {
+                                false
+                            }
+                        }),
+                        &indices.op_dir,
+                        self.atom_tbl.clone(),
+                    );
 
                     let singleton_addr = self[temp_v!(3)];
                     let singletons_offset =

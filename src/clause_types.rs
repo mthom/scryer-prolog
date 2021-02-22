@@ -422,6 +422,9 @@ impl SystemClauseType {
             &SystemClauseType::REPL(REPLCodePtr::RemoveModuleExports) => {
                 clause_name!("$remove_module_exports")
             }
+            &SystemClauseType::REPL(REPLCodePtr::AddNonCountedBacktracking) => {
+                clause_name!("$add_non_counted_backtracking")
+            }
             &SystemClauseType::Close => clause_name!("$close"),
             &SystemClauseType::CopyToLiftedHeap => clause_name!("$copy_to_lh"),
             &SystemClauseType::DeleteAttribute => clause_name!("$del_attr_non_head"),
@@ -777,6 +780,9 @@ impl SystemClauseType {
             }
             ("$remove_module_exports", 2) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::RemoveModuleExports))
+            }
+            ("$add_non_counted_backtracking", 3) => {
+                Some(SystemClauseType::REPL(REPLCodePtr::AddNonCountedBacktracking))
             }
             ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$wam_instructions", 4) => Some(SystemClauseType::WAMInstructions),

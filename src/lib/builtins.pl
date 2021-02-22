@@ -1516,16 +1516,21 @@ peek_char(S, C) :-
     '$peek_char'(S, C).
 
 
+is_stream_position(position_and_lines_read(P, L)) :-
+    ( var(P) ; integer(P), P >= 0 ),
+    ( var(L) ; integer(L), L >= 0 ),
+    !.
+
+check_stream_property(D, direction, D) :-
+    ( var(D) -> true ; lists:member(D, [input, output, input_output]), ! ).
 check_stream_property(file_name(F), file_name, F) :-
     ( var(F) -> true ; atom(F) ).
 check_stream_property(mode(M), mode, M) :-
     ( var(M) -> true ; lists:member(M, [read, write, append]) ).
-check_stream_property(D, direction, D) :-
-    ( var(D) -> true ; lists:member(D, [input, output, input_output]), ! ).
 check_stream_property(alias(A), alias, A) :-
     ( var(A) -> true ; atom(A) ).
 check_stream_property(position(P), position, P) :-
-    ( var(P) -> true ; integer(P), P >= 0 ).
+    ( var(P) -> true ; is_stream_position(P)).
 check_stream_property(end_of_stream(E), end_of_stream, E) :-
     ( var(E) -> true ; lists:member(E, [not, at, past]) ).
 check_stream_property(eof_action(A), eof_action, A) :-
@@ -1576,8 +1581,8 @@ at_end_of_stream :-
 set_stream_position(S_or_a, Position) :-
     (  var(Position) ->
        throw(error(instantiation_error, set_stream_position/2))
-    ;  integer(Position), Position >= 0 ->
-       true
+    ;  Position = position_and_lines_read(P, _),
+       is_stream_position(Position) ->
+       '$set_stream_position'(S_or_a, P)
     ;  throw(error(domain_error(stream_position, Position)))
-    ),
-    '$set_stream_position'(S_or_a, Position).
+    ).

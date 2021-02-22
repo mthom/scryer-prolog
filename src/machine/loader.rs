@@ -1947,6 +1947,18 @@ impl Machine {
         self.restore_load_state_payload(result, evacuable_h);
     }
 
+    pub(crate) fn add_non_counted_backtracking(&mut self) {
+        let key = self
+            .machine_st
+            .read_predicate_key(self.machine_st[temp_v!(1)], self.machine_st[temp_v!(2)]);
+
+        let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(3));
+        loader.non_counted_bt_preds.insert(key);
+
+        let result = LiveTermStream::evacuate(loader);
+        self.restore_load_state_payload(result, evacuable_h);
+    }
+
     pub(crate) fn meta_predicate_property(&mut self) {
         let module_name = atom_from!(
             self.machine_st,
