@@ -130,28 +130,26 @@ filter_anonymous_vars([VN=V | VNEqs0], VNEqs) :-
 
 warn_about_singletons([], _).
 warn_about_singletons([Singleton|Singletons], LinesRead) :-
-    (  LinesRead =:= -1 ->
-       true
-    ;  filter_anonymous_vars([Singleton|Singletons], VarEqs),
+    (  filter_anonymous_vars([Singleton|Singletons], VarEqs),
        VarEqs \== [] ->
        write('Warning: singleton variables '),
        print_comma_separated_list(VarEqs),
        write(' at line '),
        write(LinesRead),
        write(' of '),
-       load_context(Module),
-       write(Module),
+       prolog_load_context(file, File),
+       write(File),
        nl
     ;  true
     ).
 
 
 load_loop(Stream, Evacuable) :-
-    (  stream_property(Stream, position(position_and_lines_read(_, LinesRead))) ->
-       true
-    ;  LinesRead = -1
+    (  '$devour_whitespace'(Stream) ->
+       stream_property(Stream, position(position_and_lines_read(_, LinesRead))),
+       read_term(Stream, Term, [singletons(Singletons)])
+    ;  Term = end_of_file
     ),
-    read_term(Stream, Term, [singletons(Singletons)]),
     (  Term == end_of_file ->
        close(Stream),
        '$conclude_load'(Evacuable)

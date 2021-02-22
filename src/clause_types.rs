@@ -306,6 +306,7 @@ pub enum SystemClauseType {
     SetEnv,
     UnsetEnv,
     CharsBase64,
+    DevourWhitespace,
 }
 
 impl SystemClauseType {
@@ -594,6 +595,7 @@ impl SystemClauseType {
             &SystemClauseType::UnsetEnv => clause_name!("$unsetenv"),
             &SystemClauseType::CharsBase64 => clause_name!("$chars_base64"),
             &SystemClauseType::LoadLibraryAsStream => clause_name!("$load_library_as_stream"),
+            &SystemClauseType::DevourWhitespace => clause_name!("$devour_whitespace"),
         }
     }
 
@@ -840,6 +842,9 @@ impl SystemClauseType {
             }
             ("$cpp_discontiguous_property", 3) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::DiscontiguousProperty))
+            }
+            ("$devour_whitespace", 1) => {
+                Some(SystemClauseType::DevourWhitespace)
             }
             _ => None,
         }

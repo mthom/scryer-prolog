@@ -1612,20 +1612,26 @@ impl Machine {
 
     pub(crate) fn load_context_file(&mut self) {
         if let Some(load_context) = self.load_contexts.last() {
-            if let Some(file_name) = load_context.path.file_name() {
-                let file_name_str = file_name.to_str().unwrap();
-                let file_name_atom =
-                    clause_name!(file_name_str.to_string(), self.machine_st.atom_tbl);
+            match load_context.path.file_name() {
+                Some(file_name) if load_context.path.is_file() => {
+                    let file_name_str = file_name.to_str().unwrap();
+                    let file_name_atom =
+                        clause_name!(file_name_str.to_string(), self.machine_st.atom_tbl);
 
-                let file_name_addr = Addr::Con(
+                    let file_name_addr = Addr::Con(
+                        self.machine_st
+                            .heap
+                            .push(HeapCellValue::Atom(file_name_atom, None)),
+                    );
+
                     self.machine_st
-                        .heap
-                        .push(HeapCellValue::Atom(file_name_atom, None)),
-                );
+                        .unify(file_name_addr, self.machine_st[temp_v!(1)]);
 
-                self.machine_st
-                    .unify(file_name_addr, self.machine_st[temp_v!(1)]);
-                return;
+                    return;
+                }
+                _ => {
+                    return self.load_context_module();
+                }
             }
         }
 

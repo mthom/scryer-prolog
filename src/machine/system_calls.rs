@@ -3888,54 +3888,6 @@ impl MachineState {
 
                 self.unify(a1, a2);
             }
-            /*
-                        &SystemClauseType::GetClause => {
-                            let head = self[temp_v!(1)];
-
-                            let subsection = match self.store(self.deref(head)) {
-                                Addr::Str(s) => match &self.heap[s] {
-                                    &HeapCellValue::NamedStr(arity, ref name, ..) => {
-                                        indices.get_clause_subsection(
-                                            name.owning_module(),
-                                            name.clone(),
-                                            arity,
-                                        )
-                                    }
-                                    _ => {
-                                        unreachable!()
-                                    }
-                                },
-                                Addr::Con(h) if self.heap.atom_at(h) => {
-                                    if let &HeapCellValue::Atom(ref name, _) = &self.heap[h] {
-                                        indices.get_clause_subsection(
-                                            name.owning_module(),
-                                            name.clone(),
-                                            0,
-                                        )
-                                    } else {
-                            unreachable!()
-                                    }
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            };
-
-                            match subsection {
-                                Some(dynamic_predicate_info) => {
-                                    self.execute_at_index(
-                                        2,
-                                        dir_entry!(dynamic_predicate_info.clauses_subsection_p),
-                                    );
-
-                                    return Ok(());
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            }
-                        }
-            */
             &SystemClauseType::GetCutPoint => {
                 let a1 = self[temp_v!(1)];
                 let a2 = Addr::CutPoint(self.b0);
@@ -5493,6 +5445,18 @@ impl MachineState {
                             ),
                             MachineError::functor_stub(clause_name!("load"), 1),
                         ));
+                    }
+                }
+            }
+            &SystemClauseType::DevourWhitespace => {
+                let stream =
+                    self.get_stream_or_alias(self[temp_v!(1)], indices, "$devour_whitespace", 1)?;
+
+                match self.devour_whitespace(stream, self.atom_tbl.clone()) {
+                    Ok(false) => {} // not at EOF.
+                    _ => {
+                        self.fail = true;
+                        return Ok(());
                     }
                 }
             }

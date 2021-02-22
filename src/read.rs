@@ -176,6 +176,24 @@ pub mod readline {
 }
 
 impl MachineState {
+    pub fn devour_whitespace(
+        &mut self,
+        mut inner: Stream,
+        atom_tbl: TabledData<Atom>,
+    ) -> Result<bool, ParserError> {
+        let mut stream = parsing_stream(inner.clone())?;
+        let mut parser = Parser::new(&mut stream, atom_tbl, self.flags);
+
+        parser.devour_whitespace()?;
+        inner.add_lines_read(parser.num_lines_read());
+
+        let result = parser.eof();
+        let buf = stream.take_buf();
+
+        inner.pause_stream(buf)?;
+        result
+    }
+
     pub fn read(
         &mut self,
         mut inner: Stream,
@@ -191,11 +209,11 @@ impl MachineState {
             (term, parser.num_lines_read())
         };
 
+        inner.add_lines_read(num_lines_read);
+
         // 'pausing' the stream saves the pending top buffer
         // created by the parsing stream, which was created in this
         // scope and is about to be destroyed in it.
-
-        inner.add_lines_read(num_lines_read);
 
         let buf = stream.take_buf();
         inner.pause_stream(buf)?;

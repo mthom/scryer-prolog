@@ -395,6 +395,7 @@ impl Stream {
             StreamInstance::TlsStream(..) |
             StreamInstance::ReadlineStream(..) |
             StreamInstance::StaticStr(..) |
+            StreamInstance::PausedPrologStream(..) |
             StreamInstance::Bytes(..) => Some(0),
             _ => None,
         };
