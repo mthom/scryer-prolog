@@ -175,7 +175,6 @@ impl Line {
     #[inline]
     pub fn is_head_instr(&self) -> bool {
         match self {
-            &Line::Cut(_) => true,
             &Line::Fact(_) => true,
             &Line::Query(_) => true,
             _ => false,
