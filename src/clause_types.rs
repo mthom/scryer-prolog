@@ -186,7 +186,6 @@ pub enum SystemClauseType {
     EnqueueAttributeGoal,
     EnqueueAttributedVar,
     FetchGlobalVar,
-    FetchGlobalVarWithOffset,
     FirstStream,
     FlushOutput,
     GetByte,
@@ -240,14 +239,12 @@ pub enum SystemClauseType {
     RemoveCallPolicyCheck,
     RemoveInferenceCounter,
     ResetContinuationMarker,
-    ResetGlobalVarAtKey,
-    ResetGlobalVarAtOffset,
     RestoreCutPolicy,
     SetCutPoint(RegType),
     SetInput,
     SetOutput,
+    StoreBacktrackableGlobalVar,
     StoreGlobalVar,
-    StoreGlobalVarWithOffset,
     StreamProperty,
     SetStreamPosition,
     InferenceLevel,
@@ -434,9 +431,6 @@ impl SystemClauseType {
             &SystemClauseType::EnqueueAttributeGoal => clause_name!("$enqueue_attribute_goal"),
             &SystemClauseType::EnqueueAttributedVar => clause_name!("$enqueue_attr_var"),
             &SystemClauseType::FetchGlobalVar => clause_name!("$fetch_global_var"),
-            &SystemClauseType::FetchGlobalVarWithOffset => {
-                clause_name!("$fetch_global_var_with_offset")
-            }
             &SystemClauseType::FirstStream => clause_name!("$first_stream"),
             &SystemClauseType::FlushOutput => clause_name!("$flush_output"),
             &SystemClauseType::GetByte => clause_name!("$get_byte"),
@@ -527,10 +521,10 @@ impl SystemClauseType {
             &SystemClauseType::SetSeed => clause_name!("$set_seed"),
             &SystemClauseType::StreamProperty => clause_name!("$stream_property"),
             &SystemClauseType::SetStreamPosition => clause_name!("$set_stream_position"),
-            &SystemClauseType::StoreGlobalVar => clause_name!("$store_global_var"),
-            &SystemClauseType::StoreGlobalVarWithOffset => {
-                clause_name!("$store_global_var_with_offset")
+            &SystemClauseType::StoreBacktrackableGlobalVar => {
+                clause_name!("$store_back_trackable_global_var")
             }
+            &SystemClauseType::StoreGlobalVar => clause_name!("$store_global_var"),
             &SystemClauseType::InferenceLevel => clause_name!("$inference_level"),
             &SystemClauseType::CleanUpBlock => clause_name!("$clean_up_block"),
             &SystemClauseType::EraseBall => clause_name!("$erase_ball"),
@@ -539,15 +533,10 @@ impl SystemClauseType {
             &SystemClauseType::GetCutPoint => clause_name!("$get_cp"),
             &SystemClauseType::GetCurrentBlock => clause_name!("$get_current_block"),
             &SystemClauseType::InstallNewBlock => clause_name!("$install_new_block"),
-            // &SystemClauseType::ModuleRetractClause => clause_name!("$module_retract_clause"),
             &SystemClauseType::NextEP => clause_name!("$nextEP"),
             &SystemClauseType::ReadQueryTerm => clause_name!("$read_query_term"),
             &SystemClauseType::ReadTerm => clause_name!("$read_term"),
             &SystemClauseType::ReadTermFromChars => clause_name!("$read_term_from_chars"),
-            &SystemClauseType::ResetGlobalVarAtKey => clause_name!("$reset_global_var_at_key"),
-            &SystemClauseType::ResetGlobalVarAtOffset => {
-                clause_name!("$reset_global_var_at_offset")
-            }
             &SystemClauseType::ResetBlock => clause_name!("$reset_block"),
             &SystemClauseType::ResetContinuationMarker => clause_name!("$reset_cont_marker"),
             &SystemClauseType::ReturnFromVerifyAttr => clause_name!("$return_from_verify_attr"),
@@ -654,9 +643,6 @@ impl SystemClauseType {
             ("$peek_code", 2) => Some(SystemClauseType::PeekCode),
             ("$is_partial_string", 1) => Some(SystemClauseType::IsPartialString),
             ("$fetch_global_var", 2) => Some(SystemClauseType::FetchGlobalVar),
-            ("$fetch_global_var_with_offset", 3) => {
-                Some(SystemClauseType::FetchGlobalVarWithOffset)
-            }
             ("$get_byte", 2) => Some(SystemClauseType::GetByte),
             ("$get_char", 2) => Some(SystemClauseType::GetChar),
             ("$get_n_chars", 3) => Some(SystemClauseType::GetNChars),
@@ -723,8 +709,6 @@ impl SystemClauseType {
             ("$read_term_from_chars", 2) => Some(SystemClauseType::ReadTermFromChars),
             ("$reset_block", 1) => Some(SystemClauseType::ResetBlock),
             ("$reset_cont_marker", 0) => Some(SystemClauseType::ResetContinuationMarker),
-            ("$reset_global_var_at_key", 1) => Some(SystemClauseType::ResetGlobalVarAtKey),
-            ("$reset_global_var_at_offset", 3) => Some(SystemClauseType::ResetGlobalVarAtOffset),
             ("$return_from_verify_attr", 0) => Some(SystemClauseType::ReturnFromVerifyAttr),
             ("$set_ball", 1) => Some(SystemClauseType::SetBall),
             ("$set_cp_by_default", 1) => Some(SystemClauseType::SetCutPointByDefault(temp_v!(1))),
@@ -737,8 +721,8 @@ impl SystemClauseType {
             ("$socket_server_accept", 7) => Some(SystemClauseType::SocketServerAccept),
             ("$socket_server_close", 1) => Some(SystemClauseType::SocketServerClose),
             ("$store_global_var", 2) => Some(SystemClauseType::StoreGlobalVar),
-            ("$store_global_var_with_offset", 2) => {
-                Some(SystemClauseType::StoreGlobalVarWithOffset)
+            ("$store_backtrackable_global_var", 2) => {
+                Some(SystemClauseType::StoreBacktrackableGlobalVar)
             }
             ("$term_attributed_variables", 2) => Some(SystemClauseType::TermAttributedVariables),
             ("$term_variables", 2) => Some(SystemClauseType::TermVariables),

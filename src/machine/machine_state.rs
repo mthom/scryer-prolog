@@ -657,7 +657,12 @@ impl MachineState {
 pub(crate) type CallResult = Result<(), Vec<HeapCellValue>>;
 
 pub(crate) trait CallPolicy: Any + fmt::Debug {
-    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
+    fn retry_me_else(
+        &mut self,
+        machine_st: &mut MachineState,
+        offset: usize,
+        global_variables: &mut GlobalVarDir,
+    ) -> CallResult {
         let b = machine_st.b;
         let n = machine_st
             .stack
@@ -679,7 +684,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
         let curr_tr = machine_st.tr;
 
-        machine_st.unwind_trail(old_tr, curr_tr);
+        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
@@ -708,7 +713,12 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         Ok(())
     }
 
-    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
+    fn retry(
+        &mut self,
+        machine_st: &mut MachineState,
+        offset: usize,
+        global_variables: &mut GlobalVarDir,
+    ) -> CallResult {
         let b = machine_st.b;
         let n = machine_st
             .stack
@@ -730,7 +740,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
         let curr_tr = machine_st.tr;
 
-        machine_st.unwind_trail(old_tr, curr_tr);
+        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
@@ -759,7 +769,12 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         Ok(())
     }
 
-    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
+    fn trust(
+        &mut self,
+        machine_st: &mut MachineState,
+        offset: usize,
+        global_variables: &mut GlobalVarDir,
+    ) -> CallResult {
         let b = machine_st.b;
         let n = machine_st
             .stack
@@ -779,7 +794,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
         let curr_tr = machine_st.tr;
 
-        machine_st.unwind_trail(old_tr, curr_tr);
+        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
@@ -811,7 +826,11 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         Ok(())
     }
 
-    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult {
+    fn trust_me(
+        &mut self,
+        machine_st: &mut MachineState,
+        global_variables: &mut GlobalVarDir,
+    ) -> CallResult {
         let b = machine_st.b;
         let n = machine_st
             .stack
@@ -831,7 +850,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
         let curr_tr = machine_st.tr;
 
-        machine_st.unwind_trail(old_tr, curr_tr);
+        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
         machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
@@ -1225,23 +1244,42 @@ impl CallPolicy for CWILCallPolicy {
         self.increment(machine_st)
     }
 
-    fn retry_me_else(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
-        self.prev_policy.retry_me_else(machine_st, offset)?;
+    fn retry_me_else(
+        &mut self,
+        machine_st: &mut MachineState,
+        offset: usize,
+        global_variables: &mut GlobalVarDir,
+    ) -> CallResult {
+        self.prev_policy.retry_me_else(machine_st, offset, global_variables)?;
         self.increment(machine_st)
     }
 
-    fn retry(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
-        self.prev_policy.retry(machine_st, offset)?;
+    fn retry(
+        &mut self,
+        machine_st: &mut MachineState,
+        offset: usize,
+        global_variables: &mut GlobalVarDir,
+    ) -> CallResult {
+        self.prev_policy.retry(machine_st, offset, global_variables)?;
         self.increment(machine_st)
     }
 
-    fn trust_me(&mut self, machine_st: &mut MachineState) -> CallResult {
-        self.prev_policy.trust_me(machine_st)?;
+    fn trust_me(
+        &mut self,
+        machine_st: &mut MachineState,
+        global_variables: &mut GlobalVarDir,
+    ) -> CallResult {
+        self.prev_policy.trust_me(machine_st, global_variables)?;
         self.increment(machine_st)
     }
 
-    fn trust(&mut self, machine_st: &mut MachineState, offset: usize) -> CallResult {
-        self.prev_policy.trust(machine_st, offset)?;
+    fn trust(
+        &mut self,
+        machine_st: &mut MachineState,
+        offset: usize,
+        global_variables: &mut GlobalVarDir,
+    ) -> CallResult {
+        self.prev_policy.trust(machine_st, offset, global_variables)?;
         self.increment(machine_st)
     }
 

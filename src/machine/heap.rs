@@ -207,6 +207,11 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     }
 
     #[inline]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.h() == 0
+    }
+
+    #[inline]
     pub(crate) fn pop(&mut self) {
         let h = self.h();
 

@@ -9,7 +9,7 @@
                     partial_string_tail/2, setup_call_cleanup/3,
                     call_nth/2, variant/2]).
 
-:- use_module(library(error), [can_be/2,domain_error/3]).
+:- use_module(library(error), [can_be/2, domain_error/3, type_error/3]).
 
 
 :- meta_predicate call_cleanup(0, 0).
@@ -22,34 +22,25 @@ forall(Generate, Test) :-
 
 %% (non-)backtrackable global variables.
 
-bb_put(Key, Value) :- atom(Key), !, '$store_global_var'(Key, Value).
-bb_put(Key, _) :- throw(error(type_error(atom, Key), bb_put/2)).
+bb_put(Key, Value) :-
+    (  atom(Key) ->
+       '$store_global_var'(Key, Value)
+    ;  type_error(atom, Key, bb_put/2)
+    ).
 
 %% backtrackable global variables.
 
-bb_b_put(Key, NewValue) :-
-    (  '$bb_get_with_offset'(Key, OldValue, OldOffset) ->
-       call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
-                    reset_global_var_at_offset(Key, OldValue, OldOffset))
-    ;  call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
-                    reset_global_var_at_key(Key))
+bb_b_put(Key, Value) :-
+    (  atom(Key) ->
+       '$store_backtrackable_global_var'(Key, Value)
+    ;  type_error(atom, Key, bb_b_put/2)
     ).
 
-store_global_var_with_offset(Key, Value) :- '$store_global_var_with_offset'(Key, Value).
-
-store_global_var(Key, Value) :- '$store_global_var'(Key, Value).
-
-reset_global_var_at_key(Key) :- '$reset_global_var_at_key'(Key).
-
-reset_global_var_at_offset(Key, Value, Offset) :- '$reset_global_var_at_offset'(Key, Value, Offset).
-
-'$bb_get_with_offset'(Key, OldValue, Offset) :-
-    atom(Key), !, '$fetch_global_var_with_offset'(Key, OldValue, Offset).
-'$bb_get_with_offset'(Key, _, _) :-
-    throw(error(type_error(atom, Key), bb_b_put/2)).
-
-bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
-bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).
+bb_get(Key, Value) :-
+    (  atom(Key) ->
+       '$fetch_global_var'(Key, Value)
+    ;  type_error(atom, Key, bb_get/2)
+    ).
 
 
 call_cleanup(G, C) :- setup_call_cleanup(true, G, C).

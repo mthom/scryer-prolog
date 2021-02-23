@@ -621,6 +621,14 @@ impl MachineState {
                     self.tr += 1;
                 }
             }
+            TrailRef::BlackboardOffset(key_h, value_h) => {
+                self.trail.push(TrailRef::BlackboardOffset(key_h, value_h));
+                self.tr += 1;
+            }
+            TrailRef::BlackboardEntry(key_h) => {
+                self.trail.push(TrailRef::BlackboardEntry(key_h));
+                self.tr += 1;
+            }
         }
     }
 
@@ -644,7 +652,12 @@ impl MachineState {
         }
     }
 
-    pub(super) fn unwind_trail(&mut self, a1: usize, a2: usize) {
+    pub(super) fn unwind_trail(
+        &mut self,
+        a1: usize,
+        a2: usize,
+        global_variables: &mut GlobalVarDir,
+    ) {
         // the sequence is reversed to respect the chronology of trail
         // additions, now that deleted attributes can be undeleted by
         // backtracking.
@@ -664,6 +677,30 @@ impl MachineState {
                 }
                 TrailRef::AttrVarListLink(h, l) => {
                     self.heap[h] = HeapCellValue::Addr(Addr::Lis(l));
+                }
+                TrailRef::BlackboardOffset(key_h, value_h) => {
+                    let key = atom_from!(
+                        self,
+                        self.store(self.deref(self.heap[key_h].as_addr(key_h)))
+                    );
+
+                    let value_addr = self.heap[value_h].as_addr(value_h);
+
+                    match global_variables.get_mut(&key) {
+                        Some((_, ref mut loc)) => *loc = Some(value_addr),
+                        None => unreachable!(),
+                    }
+                }
+                TrailRef::BlackboardEntry(key_h) => {
+                    let key = atom_from!(
+                        self,
+                        self.store(self.deref(self.heap[key_h].as_addr(key_h)))
+                    );
+
+                    match global_variables.get_mut(&key) {
+                        Some((_, ref mut loc)) => *loc = None,
+                        None => unreachable!(),
+                    }
                 }
             }
         }
@@ -1266,6 +1303,7 @@ impl MachineState {
         &mut self,
         indexing_lines: &Vec<IndexingLine>,
         call_policy: &mut Box<dyn CallPolicy>,
+        global_variables: &mut GlobalVarDir,
     ) {
         let mut index = 0;
         let addr = match &indexing_lines[0] {
@@ -1372,7 +1410,12 @@ impl MachineState {
                         unreachable!()
                     }
 
-                    self.execute_indexed_choice_instr(instrs.first().unwrap(), call_policy);
+                    self.execute_indexed_choice_instr(
+                        instrs.first().unwrap(),
+                        call_policy,
+                        global_variables,
+                    );
+
                     break;
                 }
             }
@@ -2989,6 +3032,7 @@ impl MachineState {
         &mut self,
         instr: &IndexedChoiceInstruction,
         call_policy: &mut Box<dyn CallPolicy>,
+        global_variables: &mut GlobalVarDir,
     ) {
         match instr {
             &IndexedChoiceInstruction::Try(offset) => {
@@ -3018,10 +3062,10 @@ impl MachineState {
                 self.p = CodePtr::Local(dir_entry!(self.p.local().abs_loc() + offset));
             }
             &IndexedChoiceInstruction::Retry(l) => {
-                try_or_fail!(self, call_policy.retry(self, l));
+                try_or_fail!(self, call_policy.retry(self, l, global_variables));
             }
             &IndexedChoiceInstruction::Trust(l) => {
-                try_or_fail!(self, call_policy.trust(self, l));
+                try_or_fail!(self, call_policy.trust(self, l, global_variables));
             }
         };
     }
@@ -3030,6 +3074,7 @@ impl MachineState {
         &mut self,
         instr: &ChoiceInstruction,
         call_policy: &mut Box<dyn CallPolicy>,
+        global_variables: &mut GlobalVarDir,
     ) {
         match instr {
             &ChoiceInstruction::TryMeElse(offset) => {
@@ -3059,17 +3104,17 @@ impl MachineState {
             }
             &ChoiceInstruction::DefaultRetryMeElse(offset) => {
                 let mut call_policy = DefaultCallPolicy {};
-                try_or_fail!(self, call_policy.retry_me_else(self, offset))
+                try_or_fail!(self, call_policy.retry_me_else(self, offset, global_variables))
             }
             &ChoiceInstruction::DefaultTrustMe(_) => {
                 let mut call_policy = DefaultCallPolicy {};
-                try_or_fail!(self, call_policy.trust_me(self))
+                try_or_fail!(self, call_policy.trust_me(self, global_variables))
             }
             &ChoiceInstruction::RetryMeElse(offset) => {
-                try_or_fail!(self, call_policy.retry_me_else(self, offset))
+                try_or_fail!(self, call_policy.retry_me_else(self, offset, global_variables))
             }
             &ChoiceInstruction::TrustMe(_) => {
-                try_or_fail!(self, call_policy.trust_me(self))
+                try_or_fail!(self, call_policy.trust_me(self, global_variables))
             }
         }
     }

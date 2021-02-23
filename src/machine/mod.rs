@@ -560,7 +560,11 @@ impl MachineState {
         match instr {
             &Line::Arithmetic(ref arith_instr) => self.execute_arith_instr(arith_instr),
             &Line::Choice(ref choice_instr) => {
-                self.execute_choice_instr(choice_instr, &mut policies.call_policy)
+                self.execute_choice_instr(
+                    choice_instr,
+                    &mut policies.call_policy,
+                    &mut indices.global_variables,
+                )
             }
             &Line::Cut(ref cut_instr) => {
                 self.execute_cut_instr(cut_instr, &mut policies.cut_policy)
@@ -579,10 +583,18 @@ impl MachineState {
                 self.p += 1;
             }
             &Line::IndexingCode(ref indexing_lines) => {
-                self.execute_indexing_instr(indexing_lines, &mut policies.call_policy)
+                self.execute_indexing_instr(
+                    indexing_lines,
+                    &mut policies.call_policy,
+                    &mut indices.global_variables,
+                )
             }
             &Line::IndexedChoice(ref choice_instr) => {
-                self.execute_indexed_choice_instr(choice_instr, &mut policies.call_policy)
+                self.execute_indexed_choice_instr(
+                    choice_instr,
+                    &mut policies.call_policy,
+                    &mut indices.global_variables,
+                )
             }
             &Line::Query(ref query_instr) => {
                 self.execute_query_instr(&query_instr);

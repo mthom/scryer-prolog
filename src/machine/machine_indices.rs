@@ -12,7 +12,6 @@ use crate::machine::partial_string::*;
 use crate::machine::raw_block::RawBlockTraits;
 use crate::machine::streams::Stream;
 use crate::machine::term_stream::LoadStatePayload;
-use crate::machine::Ball;
 use crate::machine::CompilationTarget;
 use crate::rug::{Integer, Rational};
 use ordered_float::OrderedFloat;
@@ -297,6 +296,8 @@ pub enum TrailRef {
     Ref(Ref),
     AttrVarHeapLink(usize),
     AttrVarListLink(usize, usize),
+    BlackboardEntry(usize),
+    BlackboardOffset(usize, usize), // key atom heap location, key value heap location
 }
 
 impl From<Ref> for TrailRef {
@@ -691,13 +692,7 @@ impl SubAssign<usize> for CodePtr {
 pub type HeapVarDict = IndexMap<Rc<Var>, Addr>;
 pub type AllocVarDict = IndexMap<Rc<Var>, VarData>;
 
-pub type InSituCodeDir = IndexMap<PredicateKey, usize>;
-pub type GlobalVarDir = IndexMap<ClauseName, (Ball, Option<usize>)>;
-
-#[derive(Debug)]
-pub(crate) struct ModuleStub {
-    pub(crate) in_situ_code_dir: InSituCodeDir,
-}
+pub type GlobalVarDir = IndexMap<ClauseName, (Ball, Option<Addr>)>;
 
 pub(crate) type StreamAliasDir = IndexMap<ClauseName, Stream>;
 pub(crate) type StreamDir = BTreeSet<Stream>;
