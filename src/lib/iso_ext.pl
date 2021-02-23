@@ -3,11 +3,19 @@
 
 %% ?- use_module(library(iso_ext)).
 
-:- module(iso_ext, [bb_b_put/2, bb_get/2, bb_put/2, call_cleanup/2,
-                    call_with_inference_limit/3, forall/2,
-                    partial_string/1, partial_string/3,
-                    partial_string_tail/2, setup_call_cleanup/3,
-                    call_nth/2, variant/2]).
+:- module(iso_ext, [bb_b_put/2,
+                    bb_get/2,
+                    bb_put/2,
+                    call_cleanup/2,
+                    call_with_inference_limit/3,
+                    forall/2,
+                    partial_string/1,
+                    partial_string/3,
+                    partial_string_tail/2,
+                    setup_call_cleanup/3,
+                    call_nth/2,
+                    variant/2,
+                    copy_term_nat/2]).
 
 :- use_module(library(error), [can_be/2, domain_error/3, type_error/3]).
 
@@ -195,3 +203,7 @@ call_nth_nesting(ID) :-
     ),
     asserta(i_call_nth_nesting(ID, 0)),
     asserta(i_call_nth_counter(ID)).
+
+
+copy_term_nat(Source, Dest) :-
+    '$copy_term_without_attr_vars'(Source, Dest).
