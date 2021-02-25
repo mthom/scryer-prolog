@@ -25,11 +25,11 @@ use std::rc::Rc;
 use std::vec::Vec;
 
 #[derive(Debug)]
-pub struct ArithInstructionIterator<'a> {
+pub(crate) struct ArithInstructionIterator<'a> {
     state_stack: Vec<TermIterState<'a>>,
 }
 
-pub type ArithCont = (Code, Option<ArithmeticTerm>);
+pub(crate) type ArithCont = (Code, Option<ArithmeticTerm>);
 
 impl<'a> ArithInstructionIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
@@ -71,7 +71,7 @@ impl<'a> ArithInstructionIterator<'a> {
 }
 
 #[derive(Debug)]
-pub enum ArithTermRef<'a> {
+pub(crate) enum ArithTermRef<'a> {
     Constant(&'a Constant),
     Op(ClauseName, usize), // name, arity.
     Var(&'a Cell<VarReg>, Rc<Var>),
@@ -113,13 +113,13 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
 }
 
 #[derive(Debug)]
-pub struct ArithmeticEvaluator<'a> {
+pub(crate) struct ArithmeticEvaluator<'a> {
     bindings: &'a AllocVarDict,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize,
 }
 
-pub trait ArithmeticTermIter<'a> {
+pub(crate) trait ArithmeticTermIter<'a> {
     type Iter: Iterator<Item = Result<ArithTermRef<'a>, ArithmeticError>>;
 
     fn iter(self) -> Result<Self::Iter, ArithmeticError>;
@@ -134,7 +134,7 @@ impl<'a> ArithmeticTermIter<'a> for &'a Term {
 }
 
 impl<'a> ArithmeticEvaluator<'a> {
-    pub fn new(bindings: &'a AllocVarDict, target_int: usize) -> Self {
+    pub(crate) fn new(bindings: &'a AllocVarDict, target_int: usize) -> Self {
         ArithmeticEvaluator {
             bindings,
             interm: Vec::new(),
@@ -296,7 +296,7 @@ impl<'a> ArithmeticEvaluator<'a> {
         Ok(())
     }
 
-    pub fn eval<Iter>(&mut self, src: Iter) -> Result<ArithCont, ArithmeticError>
+    pub(crate) fn eval<Iter>(&mut self, src: Iter) -> Result<ArithCont, ArithmeticError>
     where
         Iter: ArithmeticTermIter<'a>,
     {
@@ -329,7 +329,7 @@ impl<'a> ArithmeticEvaluator<'a> {
 }
 
 // integer division rounding function -- 9.1.3.1.
-pub fn rnd_i<'a>(n: &'a Number) -> RefOrOwned<'a, Number> {
+pub(crate) fn rnd_i<'a>(n: &'a Number) -> RefOrOwned<'a, Number> {
     match n {
         &Number::Integer(_) => RefOrOwned::Borrowed(n),
         &Number::Float(OrderedFloat(f)) => RefOrOwned::Owned(Number::from(
@@ -347,7 +347,7 @@ pub fn rnd_i<'a>(n: &'a Number) -> RefOrOwned<'a, Number> {
 }
 
 // floating point rounding function -- 9.1.4.1.
-pub fn rnd_f(n: &Number) -> f64 {
+pub(crate) fn rnd_f(n: &Number) -> f64 {
     match n {
         &Number::Fixnum(n) => n as f64,
         &Number::Integer(ref n) => n.to_f64(),
@@ -357,7 +357,7 @@ pub fn rnd_f(n: &Number) -> f64 {
 }
 
 // floating point result function -- 9.1.4.2.
-pub fn result_f<Round>(n: &Number, round: Round) -> Result<f64, EvalError>
+pub(crate) fn result_f<Round>(n: &Number, round: Round) -> Result<f64, EvalError>
 where
     Round: Fn(&Number) -> f64,
 {
@@ -752,7 +752,7 @@ impl<'a> From<&'a Integer> for Number {
 }
 
 // Computes n ^ power. Ignores the sign of power.
-pub fn binary_pow(mut n: Integer, power: &Integer) -> Integer {
+pub(crate) fn binary_pow(mut n: Integer, power: &Integer) -> Integer {
     let mut power = Integer::from(power.abs_ref());
 
     if power == 0 {

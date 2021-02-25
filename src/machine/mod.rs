@@ -14,17 +14,17 @@ use crate::read::*;
 
 mod attributed_variables;
 pub(super) mod code_repo;
-pub mod code_walker;
+pub(crate) mod code_walker;
 #[macro_use]
 pub(crate) mod loader;
 mod compile;
 mod copier;
-pub mod heap;
+pub(crate) mod heap;
 mod load_state;
-pub mod machine_errors;
-pub mod machine_indices;
+pub(crate) mod machine_errors;
+pub(crate) mod machine_indices;
 pub(super) mod machine_state;
-pub mod partial_string;
+pub(crate) mod partial_string;
 mod preprocessor;
 mod raw_block;
 mod stack;
@@ -42,7 +42,7 @@ use crate::machine::compile::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
-use crate::machine::streams::*;
+pub use crate::machine::streams::Stream;
 
 use indexmap::IndexMap;
 
@@ -54,13 +54,13 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 
 #[derive(Debug)]
-pub struct MachinePolicies {
+pub(crate) struct MachinePolicies {
     call_policy: Box<dyn CallPolicy>,
     cut_policy: Box<dyn CutPolicy>,
 }
 
 lazy_static! {
-    pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
+    pub(crate) static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
 }
 
 impl MachinePolicies {
@@ -141,7 +141,7 @@ impl Machine {
         unreachable!();
     }
 
-    fn load_file(&mut self, path: String, stream: Stream) {
+    pub fn load_file(&mut self, path: String, stream: Stream) {
         self.machine_st[temp_v!(1)] =
             Addr::Stream(self.machine_st.heap.push(HeapCellValue::Stream(stream)));
 
@@ -224,7 +224,7 @@ impl Machine {
         self.run_module_predicate(clause_name!("$toplevel"), (clause_name!("$repl"), 1));
     }
 
-    fn configure_modules(&mut self) {
+    pub(crate) fn configure_modules(&mut self) {
         fn update_call_n_indices(loader: &Module, target_code_dir: &mut CodeDir) {
             for arity in 1..66 {
                 let key = (clause_name!("call"), arity);
@@ -358,7 +358,7 @@ impl Machine {
         wam
     }
 
-    pub fn configure_streams(&mut self) {
+    pub(crate) fn configure_streams(&mut self) {
         self.user_input.options_mut().alias = Some(clause_name!("user_input"));
 
         self.indices
@@ -493,7 +493,7 @@ impl Machine {
         self.machine_st.p = CodePtr::Local(p);
     }
 
-    pub(super) fn run_query(&mut self) {
+    pub(crate) fn run_query(&mut self) {
         while !self.machine_st.p.is_halt() {
             self.machine_st.query_stepper(
                 &mut self.indices,

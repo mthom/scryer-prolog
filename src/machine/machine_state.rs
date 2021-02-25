@@ -30,7 +30,7 @@ use std::ops::{Index, IndexMut};
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct Ball {
+pub(crate) struct Ball {
     pub(super) boundary: usize,
     pub(super) stub: Heap,
 }
@@ -225,7 +225,7 @@ impl IndexMut<RegType> for MachineState {
     }
 }
 
-pub type Registers = Vec<Addr>;
+pub(crate) type Registers = Vec<Addr>;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum MachineMode {
@@ -276,7 +276,7 @@ pub enum FirstOrNext {
 }
 
 // #[derive(Debug)]
-pub struct MachineState {
+pub(crate) struct MachineState {
     pub(crate) atom_tbl: TabledData<Atom>,
     pub(super) s: HeapPtr,
     pub(super) p: CodePtr,
@@ -347,7 +347,7 @@ impl MachineState {
     pub(crate) fn read_term(&mut self, mut stream: Stream, indices: &mut IndexStore) -> CallResult {
         fn push_var_eq_functors<'a>(
             heap: &mut Heap,
-            iter: impl Iterator<Item=(&'a Rc<Var>, &'a Addr)>,
+            iter: impl Iterator<Item = (&'a Rc<Var>, &'a Addr)>,
             op_dir: &OpDir,
             atom_tbl: TabledData<Atom>,
         ) -> Vec<Addr> {
@@ -1303,7 +1303,8 @@ impl CallPolicy for CWILCallPolicy {
         offset: usize,
         global_variables: &mut GlobalVarDir,
     ) -> CallResult {
-        self.prev_policy.retry_me_else(machine_st, offset, global_variables)?;
+        self.prev_policy
+            .retry_me_else(machine_st, offset, global_variables)?;
         self.increment(machine_st)
     }
 
@@ -1313,7 +1314,8 @@ impl CallPolicy for CWILCallPolicy {
         offset: usize,
         global_variables: &mut GlobalVarDir,
     ) -> CallResult {
-        self.prev_policy.retry(machine_st, offset, global_variables)?;
+        self.prev_policy
+            .retry(machine_st, offset, global_variables)?;
         self.increment(machine_st)
     }
 
@@ -1332,7 +1334,8 @@ impl CallPolicy for CWILCallPolicy {
         offset: usize,
         global_variables: &mut GlobalVarDir,
     ) -> CallResult {
-        self.prev_policy.trust(machine_st, offset, global_variables)?;
+        self.prev_policy
+            .trust(machine_st, offset, global_variables)?;
         self.increment(machine_st)
     }
 

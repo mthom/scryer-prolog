@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
-pub type PrologStream = ParsingStream<Stream>;
+pub(crate) type PrologStream = ParsingStream<Stream>;
 
 pub mod readline {
     use crate::machine::streams::Stream;
@@ -24,7 +24,7 @@ pub mod readline {
 
     const HISTORY_FILE: &'static str = ".scryer_history";
 
-    pub fn set_prompt(value: bool) {
+    pub(crate) fn set_prompt(value: bool) {
         unsafe {
             PROMPT = value;
         }
@@ -49,10 +49,8 @@ pub mod readline {
 
     impl ReadlineStream {
         #[inline]
-        pub fn new(pending_input: String) -> Self {
-            let config = Config::builder()
-                .check_cursor_position(true)
-                .build();
+        pub(crate) fn new(pending_input: String) -> Self {
+            let config = Config::builder().check_cursor_position(true).build();
 
             let mut rl = Editor::<()>::with_config(config); //Editor::<()>::new();
             if let Some(mut path) = dirs_next::home_dir() {
@@ -72,7 +70,7 @@ pub mod readline {
         }
 
         #[inline]
-        pub fn input_stream(pending_input: String) -> Stream {
+        pub(crate) fn input_stream(pending_input: String) -> Stream {
             Stream::from(Self::new(pending_input))
         }
 
@@ -116,7 +114,7 @@ pub mod readline {
             }
         }
 
-        pub fn peek_byte(&mut self) -> std::io::Result<u8> {
+        pub(crate) fn peek_byte(&mut self) -> std::io::Result<u8> {
             set_prompt(false);
 
             loop {
@@ -137,7 +135,7 @@ pub mod readline {
             }
         }
 
-        pub fn peek_char(&mut self) -> std::io::Result<char> {
+        pub(crate) fn peek_char(&mut self) -> std::io::Result<char> {
             set_prompt(false);
 
             loop {
@@ -176,7 +174,7 @@ pub mod readline {
 }
 
 impl MachineState {
-    pub fn devour_whitespace(
+    pub(crate) fn devour_whitespace(
         &mut self,
         mut inner: Stream,
         atom_tbl: TabledData<Atom>,
@@ -196,7 +194,7 @@ impl MachineState {
         result
     }
 
-    pub fn read(
+    pub(crate) fn read(
         &mut self,
         mut inner: Stream,
         atom_tbl: TabledData<Atom>,
@@ -241,7 +239,7 @@ struct TermWriter<'a> {
 }
 
 #[derive(Debug)]
-pub struct TermWriteResult {
+pub(crate) struct TermWriteResult {
     pub(crate) heap_loc: usize,
     pub(crate) var_dict: HeapVarDict,
 }

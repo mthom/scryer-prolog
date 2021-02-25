@@ -30,7 +30,7 @@ pub(crate) enum CutContext {
     HasCutVariable,
 }
 
-pub fn fold_by_str<I>(terms: I, mut term: Term, sym: ClauseName) -> Term
+pub(crate) fn fold_by_str<I>(terms: I, mut term: Term, sym: ClauseName) -> Term
 where
     I: DoubleEndedIterator<Item = Term>,
 {
@@ -46,7 +46,11 @@ where
     term
 }
 
-pub fn to_op_decl(prec: usize, spec: &str, name: ClauseName) -> Result<OpDecl, CompilationError> {
+pub(crate) fn to_op_decl(
+    prec: usize,
+    spec: &str,
+    name: ClauseName,
+) -> Result<OpDecl, CompilationError> {
     match spec {
         "xfx" => Ok(OpDecl::new(prec, XFX, name)),
         "xfy" => Ok(OpDecl::new(prec, XFY, name)),
@@ -825,11 +829,7 @@ impl Preprocessor {
         cut_context: CutContext,
     ) -> Result<Rule, CompilationError> {
         let post_head_terms: Vec<_> = terms.drain(1..).collect();
-        let mut query_terms = self.setup_query(
-            load_state,
-            post_head_terms,
-            cut_context,
-        )?;
+        let mut query_terms = self.setup_query(load_state, post_head_terms, cut_context)?;
 
         let clauses = query_terms.drain(1..).collect();
         let qt = query_terms.pop().unwrap();
@@ -894,11 +894,7 @@ impl Preprocessor {
         let mut results = VecDeque::new();
 
         for term in terms.into_iter() {
-            results.push_back(self.try_term_to_tl(
-                load_state,
-                term,
-                cut_context,
-            )?);
+            results.push_back(self.try_term_to_tl(load_state, term, cut_context)?);
         }
 
         Ok(results)

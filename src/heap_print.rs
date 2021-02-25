@@ -27,7 +27,7 @@ use std::rc::Rc;
 
 /* contains the location, name, precision and Specifier of the parent op. */
 #[derive(Debug, Clone)]
-pub enum DirectedOp {
+pub(crate) enum DirectedOp {
     Left(ClauseName, SharedOpDesc),
     Right(ClauseName, SharedOpDesc),
 }
@@ -190,7 +190,7 @@ enum TokenOrRedirect {
     HeadTailSeparator,
 }
 
-pub trait HCValueOutputter {
+pub(crate) trait HCValueOutputter {
     type Output;
 
     fn new() -> Self;
@@ -207,7 +207,7 @@ pub trait HCValueOutputter {
 }
 
 #[derive(Debug)]
-pub struct PrinterOutputter {
+pub(crate) struct PrinterOutputter {
     contents: String,
 }
 
@@ -306,7 +306,7 @@ fn numbervar(n: Integer) -> Var {
 }
 
 impl MachineState {
-    pub fn numbervar(&self, offset: &Integer, addr: Addr) -> Option<Var> {
+    pub(crate) fn numbervar(&self, offset: &Integer, addr: Addr) -> Option<Var> {
         let addr = self.store(self.deref(addr));
 
         match Number::try_from((addr, &self.heap)) {
@@ -332,7 +332,7 @@ impl MachineState {
 type ReverseHeapVarDict = IndexMap<Addr, Rc<Var>>;
 
 #[derive(Debug)]
-pub struct HCPrinter<'a, Outputter> {
+pub(crate) struct HCPrinter<'a, Outputter> {
     outputter: Outputter,
     machine_st: &'a MachineState,
     op_dir: &'a OpDir,
@@ -363,7 +363,7 @@ macro_rules! push_space_if_amb {
     };
 }
 
-pub fn requires_space(atom: &str, op: &str) -> bool {
+pub(crate) fn requires_space(atom: &str, op: &str) -> bool {
     match atom.chars().last() {
         Some(ac) => op
             .chars()
@@ -473,7 +473,7 @@ fn functor_location(addr: &Addr) -> Option<usize> {
 }
 
 impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
-    pub fn new(machine_st: &'a MachineState, op_dir: &'a OpDir, output: Outputter) -> Self {
+    pub(crate) fn new(machine_st: &'a MachineState, op_dir: &'a OpDir, output: Outputter) -> Self {
         HCPrinter {
             outputter: output,
             machine_st,
@@ -495,7 +495,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
     /*
-        pub fn from_heap_locs(
+        pub(crate) fn from_heap_locs(
             machine_st: &'a MachineState,
             op_dir: &'a OpDir,
             output: Outputter,
@@ -513,13 +513,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     */
     /*
-        pub fn drop_toplevel_spec(&mut self) {
+        pub(crate) fn drop_toplevel_spec(&mut self) {
             self.toplevel_spec = None;
         }
     */
     /*
         #[inline]
-        pub fn see_all_locs(&mut self) {
+        pub(crate) fn see_all_locs(&mut self) {
             for key in self.heap_locs.keys().cloned() {
                 self.printed_vars.insert(key);
             }
@@ -1517,7 +1517,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    pub fn print(mut self, addr: Addr) -> Outputter {
+    pub(crate) fn print(mut self, addr: Addr) -> Outputter {
         let mut iter = self.machine_st.pre_order_iter(addr);
 
         loop {

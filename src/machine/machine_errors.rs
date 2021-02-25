@@ -2,11 +2,11 @@ use prolog_parser::ast::*;
 use prolog_parser::{clause_name, temp_v};
 
 use crate::forms::{ModuleSource, Number}; //, PredicateKey};
-use crate::machine::PredicateKey;
 use crate::machine::heap::*;
 use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
+use crate::machine::PredicateKey;
 use crate::rug::Integer;
 
 use std::rc::Rc;
@@ -321,14 +321,12 @@ impl MachineError {
             // SessionError::InvalidFileName(filename) => {
             //     Self::existence_error(h, ExistenceError::Module(filename))
             // }
-            SessionError::ModuleDoesNotContainExport(..) => {
-                Self::permission_error(
-                    h,
-                    Permission::Access,
-                    "private_procedure",
-                    functor!("module_does_not_contain_claimed_export"),
-                )
-            }
+            SessionError::ModuleDoesNotContainExport(..) => Self::permission_error(
+                h,
+                Permission::Access,
+                "private_procedure",
+                functor!("module_does_not_contain_claimed_export"),
+            ),
             SessionError::ModuleCannotImportSelf(module_name) => Self::permission_error(
                 h,
                 Permission::Modify,
@@ -417,7 +415,7 @@ impl MachineError {
 }
 
 #[derive(Debug)]
-pub enum CompilationError {
+pub(crate) enum CompilationError {
     Arithmetic(ArithmeticError),
     ParserError(ParserError),
     // BadPendingByte,
@@ -454,14 +452,14 @@ impl From<ParserError> for CompilationError {
 }
 
 impl CompilationError {
-    pub fn line_and_col_num(&self) -> Option<(usize, usize)> {
+    pub(crate) fn line_and_col_num(&self) -> Option<(usize, usize)> {
         match self {
             &CompilationError::ParserError(ref err) => err.line_and_col_num(),
             _ => None,
         }
     }
 
-    pub fn as_functor(&self, _h: usize) -> MachineStub {
+    pub(crate) fn as_functor(&self, _h: usize) -> MachineStub {
         match self {
             &CompilationError::Arithmetic(..) => functor!("arithmetic_error"),
             // &CompilationError::BadPendingByte =>
@@ -494,7 +492,7 @@ impl CompilationError {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Permission {
+pub(crate) enum Permission {
     Access,
     Create,
     InputStream,
@@ -506,7 +504,7 @@ pub enum Permission {
 
 impl Permission {
     #[inline]
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Permission::Access => "access",
             Permission::Create => "create",
@@ -521,7 +519,7 @@ impl Permission {
 
 // from 7.12.2 b) of 13211-1:1995
 #[derive(Debug, Clone, Copy)]
-pub enum ValidType {
+pub(crate) enum ValidType {
     Atom,
     Atomic,
     //    Boolean,
@@ -543,7 +541,7 @@ pub enum ValidType {
 }
 
 impl ValidType {
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             ValidType::Atom => "atom",
             ValidType::Atomic => "atomic",
@@ -568,7 +566,7 @@ impl ValidType {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum DomainErrorType {
+pub(crate) enum DomainErrorType {
     IOMode,
     NotLessThanZero,
     Order,
@@ -578,7 +576,7 @@ pub enum DomainErrorType {
 }
 
 impl DomainErrorType {
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             DomainErrorType::IOMode => "io_mode",
             DomainErrorType::NotLessThanZero => "not_less_than_zero",
@@ -592,7 +590,7 @@ impl DomainErrorType {
 
 // from 7.12.2 f) of 13211-1:1995
 #[derive(Debug, Clone, Copy)]
-pub enum RepFlag {
+pub(crate) enum RepFlag {
     Character,
     CharacterCode,
     InCharacterCode,
@@ -602,7 +600,7 @@ pub enum RepFlag {
 }
 
 impl RepFlag {
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             RepFlag::Character => "character",
             RepFlag::CharacterCode => "character_code",
@@ -616,7 +614,7 @@ impl RepFlag {
 
 // from 7.12.2 g) of 13211-1:1995
 #[derive(Debug, Clone, Copy)]
-pub enum EvalError {
+pub(crate) enum EvalError {
     FloatOverflow,
     Undefined,
     //    Underflow,
@@ -624,7 +622,7 @@ pub enum EvalError {
 }
 
 impl EvalError {
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             EvalError::FloatOverflow => "float_overflow",
             EvalError::Undefined => "undefined",
@@ -806,7 +804,7 @@ impl MachineState {
 }
 
 #[derive(Debug)]
-pub enum ExistenceError {
+pub(crate) enum ExistenceError {
     Module(ClauseName),
     ModuleSource(ModuleSource),
     Procedure(ClauseName, usize),
@@ -815,7 +813,7 @@ pub enum ExistenceError {
 }
 
 #[derive(Debug)]
-pub enum SessionError {
+pub(crate) enum SessionError {
     CompilationError(CompilationError),
     // CannotOverwriteBuiltIn(ClauseName),
     // CannotOverwriteImport(ClauseName),
@@ -830,7 +828,7 @@ pub enum SessionError {
 }
 
 #[derive(Debug)]
-pub enum EvalSession {
+pub(crate) enum EvalSession {
     // EntrySuccess,
     Error(SessionError),
 }

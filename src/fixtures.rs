@@ -14,23 +14,23 @@ use std::vec::Vec;
 
 // labeled with chunk numbers.
 #[derive(Debug)]
-pub enum VarStatus {
+pub(crate) enum VarStatus {
     Perm(usize),
     Temp(usize, TempVarData), // Perm(chunk_num) | Temp(chunk_num, _)
 }
 
-pub type OccurrenceSet = BTreeSet<(GenContext, usize)>;
+pub(crate) type OccurrenceSet = BTreeSet<(GenContext, usize)>;
 
 // Perm: 0 initially, a stack register once processed.
 // Temp: labeled with chunk_num and temp offset (unassigned if 0).
 #[derive(Debug)]
-pub enum VarData {
+pub(crate) enum VarData {
     Perm(usize),
     Temp(usize, usize, TempVarData),
 }
 
 impl VarData {
-    pub fn as_reg_type(&self) -> RegType {
+    pub(crate) fn as_reg_type(&self) -> RegType {
         match self {
             &VarData::Temp(_, r, _) => RegType::Temp(r),
             &VarData::Perm(r) => RegType::Perm(r),
@@ -39,15 +39,15 @@ impl VarData {
 }
 
 #[derive(Debug)]
-pub struct TempVarData {
-    pub last_term_arity: usize,
-    pub use_set: OccurrenceSet,
-    pub no_use_set: BTreeSet<usize>,
-    pub conflict_set: BTreeSet<usize>,
+pub(crate) struct TempVarData {
+    pub(crate) last_term_arity: usize,
+    pub(crate) use_set: OccurrenceSet,
+    pub(crate) no_use_set: BTreeSet<usize>,
+    pub(crate) conflict_set: BTreeSet<usize>,
 }
 
 impl TempVarData {
-    pub fn new(last_term_arity: usize) -> Self {
+    pub(crate) fn new(last_term_arity: usize) -> Self {
         TempVarData {
             last_term_arity: last_term_arity,
             use_set: BTreeSet::new(),
@@ -56,7 +56,7 @@ impl TempVarData {
         }
     }
 
-    pub fn uses_reg(&self, reg: usize) -> bool {
+    pub(crate) fn uses_reg(&self, reg: usize) -> bool {
         for &(_, nreg) in self.use_set.iter() {
             if reg == nreg {
                 return true;
@@ -66,7 +66,7 @@ impl TempVarData {
         return false;
     }
 
-    pub fn populate_conflict_set(&mut self) {
+    pub(crate) fn populate_conflict_set(&mut self) {
         if self.last_term_arity > 0 {
             let arity = self.last_term_arity;
             let mut conflict_set: BTreeSet<usize> = (1..arity).collect();
@@ -83,29 +83,29 @@ impl TempVarData {
 type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
 
 #[derive(Debug)]
-pub struct VariableFixtures<'a> {
+pub(crate) struct VariableFixtures<'a> {
     perm_vars: IndexMap<Rc<Var>, VariableFixture<'a>>,
     last_chunk_temp_vars: IndexSet<Rc<Var>>,
 }
 
 impl<'a> VariableFixtures<'a> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         VariableFixtures {
             perm_vars: IndexMap::new(),
             last_chunk_temp_vars: IndexSet::new(),
         }
     }
 
-    pub fn insert(&mut self, var: Rc<Var>, vs: VariableFixture<'a>) {
+    pub(crate) fn insert(&mut self, var: Rc<Var>, vs: VariableFixture<'a>) {
         self.perm_vars.insert(var, vs);
     }
 
-    pub fn insert_last_chunk_temp_var(&mut self, var: Rc<Var>) {
+    pub(crate) fn insert_last_chunk_temp_var(&mut self, var: Rc<Var>) {
         self.last_chunk_temp_vars.insert(var);
     }
 
     // computes no_use and conflict sets for all temp vars.
-    pub fn populate_restricting_sets(&mut self) {
+    pub(crate) fn populate_restricting_sets(&mut self) {
         // three stages:
         // 1. move the use sets of each variable to a local IndexMap, use_set
         // (iterate mutably, swap mutable refs).
@@ -170,7 +170,7 @@ impl<'a> VariableFixtures<'a> {
         };
     }
 
-    pub fn vars_above_threshold(&self, index: usize) -> usize {
+    pub(crate) fn vars_above_threshold(&self, index: usize) -> usize {
         let mut var_count = 0;
 
         for &(ref var_status, _) in self.values() {
@@ -184,7 +184,7 @@ impl<'a> VariableFixtures<'a> {
         var_count
     }
 
-    pub fn mark_vars_in_chunk<I>(&mut self, iter: I, lt_arity: usize, term_loc: GenContext)
+    pub(crate) fn mark_vars_in_chunk<I>(&mut self, iter: I, lt_arity: usize, term_loc: GenContext)
     where
         I: Iterator<Item = TermRef<'a>>,
     {
@@ -218,7 +218,7 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    pub fn into_iter(self) -> indexmap::map::IntoIter<Rc<Var>, VariableFixture<'a>> {
+    pub(crate) fn into_iter(self) -> indexmap::map::IntoIter<Rc<Var>, VariableFixture<'a>> {
         self.perm_vars.into_iter()
     }
 
@@ -226,11 +226,11 @@ impl<'a> VariableFixtures<'a> {
         self.perm_vars.values()
     }
 
-    pub fn size(&self) -> usize {
+    pub(crate) fn size(&self) -> usize {
         self.perm_vars.len()
     }
 
-    pub fn set_perm_vals(&self, has_deep_cuts: bool) {
+    pub(crate) fn set_perm_vals(&self, has_deep_cuts: bool) {
         let mut values_vec: Vec<_> = self
             .values()
             .filter_map(|ref v| match &v.0 {
@@ -252,27 +252,27 @@ impl<'a> VariableFixtures<'a> {
 }
 
 #[derive(Debug)]
-pub struct UnsafeVarMarker {
-    pub unsafe_vars: IndexMap<RegType, usize>,
-    pub safe_vars: IndexSet<RegType>,
+pub(crate) struct UnsafeVarMarker {
+    pub(crate) unsafe_vars: IndexMap<RegType, usize>,
+    pub(crate) safe_vars: IndexSet<RegType>,
 }
 
 impl UnsafeVarMarker {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         UnsafeVarMarker {
             unsafe_vars: IndexMap::new(),
             safe_vars: IndexSet::new(),
         }
     }
 
-    pub fn from_safe_vars(safe_vars: IndexSet<RegType>) -> Self {
+    pub(crate) fn from_safe_vars(safe_vars: IndexSet<RegType>) -> Self {
         UnsafeVarMarker {
             unsafe_vars: IndexMap::new(),
             safe_vars,
         }
     }
 
-    pub fn mark_safe_vars(&mut self, query_instr: &QueryInstruction) -> bool {
+    pub(crate) fn mark_safe_vars(&mut self, query_instr: &QueryInstruction) -> bool {
         match query_instr {
             &QueryInstruction::PutVariable(r @ RegType::Temp(_), _)
             | &QueryInstruction::SetVariable(r) => {
@@ -283,7 +283,7 @@ impl UnsafeVarMarker {
         }
     }
 
-    pub fn mark_phase(&mut self, query_instr: &QueryInstruction, phase: usize) {
+    pub(crate) fn mark_phase(&mut self, query_instr: &QueryInstruction, phase: usize) {
         match query_instr {
             &QueryInstruction::PutValue(r @ RegType::Perm(_), _)
             | &QueryInstruction::SetValue(r) => {
@@ -294,7 +294,7 @@ impl UnsafeVarMarker {
         }
     }
 
-    pub fn mark_unsafe_vars(&mut self, query_instr: &mut QueryInstruction, phase: usize) {
+    pub(crate) fn mark_unsafe_vars(&mut self, query_instr: &mut QueryInstruction, phase: usize) {
         match query_instr {
             &mut QueryInstruction::PutValue(RegType::Perm(i), arg) => {
                 if let Some(p) = self.unsafe_vars.swap_remove(&RegType::Perm(i)) {
