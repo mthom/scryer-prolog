@@ -40,6 +40,8 @@ official policies, either expressed or implied, of Ulrich Neumerkel.
 		   (+\)/2, (+\)/3, (+\)/4, (+\)/5, (+\)/6, (+\)/7, (+\)/8,
 			(+\)/9, op(201,xfx,+\)]).
 
+:- use_module(library(iso_ext)).
+
 /** <module> Lambda expressions
 
 This library provides lambda expressions to simplify higher order
@@ -70,10 +72,10 @@ In the following example the parentheses around X>3 are necessary.
 
 ==
 ?- use_module(library(lambda)).
-?- use_module(library(apply)).
+?- use_module(library(lists)).
 
 ?- maplist(\X^(X>3),[4,5,9]).
-true.
+   true.
 ==
 
 In the following X is a variable that is shared by both instances of
@@ -82,15 +84,14 @@ continuations and lambdas. The lambda expression is in this case a
 continuation expecting a further argument.
 
 ==
+?- use_module(library(dif)).
+   true.
+
 ?- Xs = [A,B], maplist(X+\Y^dif(X,Y), Xs).
-Xs = [A, B],
-dif(X, A),
-dif(X, B).
+   Xs = [A,B], dif:dif(X,A), dif:dif(X,B).
 
 ?- Xs = [A,B], maplist(X+\dif(X), Xs).
-Xs = [A, B],
-dif(X, A),
-dif(X, B).
+   Xs = [A,B], dif:dif(X,A), dif:dif(X,B).
 ==
 
 The following queries are all equivalent. To see this, use
@@ -103,8 +104,7 @@ the fact f(x,y).
 ?- call(call(f, A1),A2).
 ?- call(f(A1),A2).
 ?- f(A1,A2).
-A1 = x,
-A2 = y.
+   A1 = x, A2 = y.
 ==
 
 Further discussions
