@@ -7580,16 +7580,6 @@ attribute_goals(X) -->
         attributes_goals(Ps),
         { del_attr(X, clpz) }.
 
-clpz_aux:attribute_goals(_) --> [].
-
-clpz_gcc_vs:attribute_goals(_) --> [].
-
-clpz_gcc_num:attribute_goals(_) --> [].
-
-clpz_gcc_occurred:attribute_goals(_) --> [].
-
-clpz_relation:attribute_goals(_) --> [].
-
 attributes_goals([]) --> [].
 attributes_goals([propagator(P, State)|As]) -->
         (   { ground(State) } -> []
@@ -7652,7 +7642,9 @@ attribute_goal_(pelement(N,Is,V)) --> [element(N, Is, V)].
 attribute_goal_(pgcc(Vs, Pairs, _))   --> [global_cardinality(Vs, Pairs)].
 attribute_goal_(pgcc_single(_,_))     --> [].
 attribute_goal_(pgcc_check_single(_)) --> [].
-attribute_goal_(pgcc_check(_))        --> [].
+attribute_goal_(pgcc_check(Pairs))    -->
+        { pairs_values(Pairs, Nums),
+          maplist(gcc_done, Nums) }.
 attribute_goal_(pcircuit(Vs))       --> [circuit(Vs)].
 attribute_goal_(pserialized(_,_,_,_,O)) --> original_goal(O).
 attribute_goal_(rel_tuple(R, Tuple)) -->
