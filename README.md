@@ -447,6 +447,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   file, reading lazily only as much as is needed. Due to the compact
   internal string representation, also extremely large files can be
   efficiently processed with Scryer&nbsp;Prolog in this way.
+* [`lambda`](src/lib/lambda.pl)
+  Lambda expressions to simplify higher order programming.
 * [`charsio`](src/lib/charsio.pl) Various predicates that are useful
   for parsing and reasoning about characters, notably `char_type/2` to
   classify characters according to their type, and conversion
