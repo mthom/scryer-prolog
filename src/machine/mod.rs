@@ -60,7 +60,7 @@ pub(crate) struct MachinePolicies {
 }
 
 lazy_static! {
-    pub(crate) static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
+    pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
 }
 
 impl MachinePolicies {
