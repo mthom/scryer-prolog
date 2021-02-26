@@ -28,6 +28,7 @@ pub(crate) enum IndexingCodePtr {
 enum OptArgIndexKeyType {
     Structure,
     Constant,
+    #[allow(dead_code)]
     List,
 }
 
