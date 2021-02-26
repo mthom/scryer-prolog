@@ -28,8 +28,7 @@ pub(crate) enum IndexingCodePtr {
 enum OptArgIndexKeyType {
     Structure,
     Constant,
-    #[allow(dead_code)]
-    List,
+    // List,
 }
 
 impl OptArgIndexKey {
@@ -38,7 +37,8 @@ impl OptArgIndexKey {
         match (self, key_type) {
             (OptArgIndexKey::Constant(..), OptArgIndexKeyType::Constant)
             | (OptArgIndexKey::Structure(..), OptArgIndexKeyType::Structure)
-            | (OptArgIndexKey::List(..), OptArgIndexKeyType::List) => true,
+            // | (OptArgIndexKey::List(..), OptArgIndexKeyType::List) 
+            => true,
             _ => false,
         }
     }
