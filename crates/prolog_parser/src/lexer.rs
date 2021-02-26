@@ -33,7 +33,7 @@ macro_rules! consume_chars_with {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Constant(Constant),
     Var(Rc<Atom>),
